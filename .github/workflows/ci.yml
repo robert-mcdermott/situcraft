@@ -134,10 +134,10 @@ jobs:
         run: node validation/fetch.mjs xenium-lung-2fov
       - name: OpenJPEG, the independent decoder the image tiles are compared with
         run: sudo apt-get update -q && sudo apt-get install -y -q libopenjp2-tools
-      - name: Readers against independent readers, and bundle validation (real, zipped and broken bundles)
+      - name: Readers against independent readers, bundle validation (real, zipped and broken bundles) and the derived-data cache
         env:
           SITUCRAFT_REQUIRE_DATA: xenium-lung-2fov
-        run: go test -v -run 'Real|Readers|Bundle' . ./validation/ ./internal/jp2k/ ./internal/xenium/
+        run: go test -v -run 'Real|Readers|Bundle' . ./validation/ ./internal/jp2k/ ./internal/xenium/ ./internal/cache/
 
   installers:
     name: Installer syntax

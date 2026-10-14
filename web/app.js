@@ -12,6 +12,7 @@ import { plannedMode } from './ui/mode-planned.js';
 import { openPalette } from './ui/palette.js';
 import { WorkerClient } from './ui/workers.js';
 import { createBundles } from './ui/bundles.js';
+import { createJobs } from './ui/jobs.js';
 import { colorVisionFriendly, setColorVisionFriendly } from './lib/colormaps.js';
 import { createProject, isEmptyProject, parseProject, rename, serializeProject } from './lib/project.js';
 
@@ -167,6 +168,7 @@ async function start() {
   // kind → async (item).
   app.importers = new Map();
 
+  app.jobs = createJobs(app);
   app.bundles = createBundles(app);
   app.sidebar = mountSidebar(app);
   app.inspector = mountInspector(app);
@@ -543,13 +545,35 @@ async function start() {
   // --- Status bar --------------------------------------------------------------------------------
 
   const statusbar = document.getElementById('statusbar');
+  // The status bar is redrawn when what it shows changes; a running job's progress is updated in
+  // place, so that clicking it is not lost to a redraw.
+  let statusShape = '';
+  let jobLabel = null;
   function renderStatus() {
-    clear(statusbar);
     const busy = [...store.state.busy.values()];
+    const job = busy.length ? null : app.jobs.running()[0];
+    const jobText = job ? `${job.title}: ${job.state === 'queued' ? 'waiting' : `${Math.round(job.progress * 100)}%`}` : '';
     const { project } = store;
+    const shape = JSON.stringify([busy[0] ?? '', job?.id ?? '', library.location, project.datasets.length, store.ui.drawer.open, app.commit]);
+    if (shape === statusShape) {
+      if (jobLabel) {
+        jobLabel.textContent = jobText;
+        jobLabel.parentElement.title = job?.message ?? '';
+      }
+      return;
+    }
+    statusShape = shape;
+    jobLabel = null;
+    clear(statusbar);
     const version = `SituCraft ${VERSION}${app.commit ? ` (${app.commit.slice(0, 7)})` : ''}`;
+    let state = h('span.item', h(`span.dot${busy.length ? '.busy' : ''}`), busy.length ? busy[0] : 'Ready');
+    if (job) {
+      // A running job: what it is doing, and how far it has got.
+      jobLabel = h('span', jobText);
+      state = h('button.item.statusbar-link', { type: 'button', title: job.message ?? '', onclick: () => app.setMode('data') }, h('span.dot.busy'), jobLabel);
+    }
     statusbar.append(
-      h('span.item', h(`span.dot${busy.length ? '.busy' : ''}`), busy.length ? busy[0] : 'Ready'),
+      state,
       h('span.item', icon('library'), `Library: ${library.location}`),
       h('span.item', `${project.datasets.length} dataset${project.datasets.length === 1 ? '' : 's'}`),
       h('button.item.statusbar-link', { type: 'button', title: `History and log (${modKey}J)`, onclick: () => app.toggleDrawer() }, icon('drawer'), store.ui.drawer.open ? 'Hide the drawer' : 'History and log'),

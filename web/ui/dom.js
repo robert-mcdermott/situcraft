@@ -109,13 +109,15 @@ export function formatCount(n) {
   return Math.round(n).toLocaleString('en-US');
 }
 
+// Sizes in decimal units (1 GB is 10^9 bytes), as the program's --cache-limit reads them and as
+// macOS shows files.
 export function formatBytes(bytes) {
   if (!Number.isFinite(bytes)) return '—';
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   let i = 0;
   let v = bytes;
-  while (v >= 1024 && i < units.length - 1) {
-    v /= 1024;
+  while (v >= 1000 && i < units.length - 1) {
+    v /= 1000;
     i += 1;
   }
   return `${v.toFixed(v >= 100 || i === 0 ? 0 : 1)} ${units[i]}`;

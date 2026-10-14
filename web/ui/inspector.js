@@ -41,6 +41,17 @@ export function mountInspector(app) {
     const v = d.validation ?? {};
     const state = app.bundles.link(d.id)?.state;
     const where = { ok: 'found where recorded', checking: 'looking for it', missing: 'not found where recorded', changed: 'changed since added', 'different-run': 'another run is there' }[state] ?? '';
+    const item = app.bundles.link(d.id)?.item;
+    const job = item ? app.bundles.cacheJob(item) : null;
+    const cached = item ? app.bundles.cache(item.path)?.status : null;
+    let derived = '—';
+    if (job) derived = job.state === 'queued' ? 'waiting to build' : `building, ${Math.round(job.progress * 100)}%`;
+    else if (cached?.ready) derived = `ready (${formatBytes(cached.entries.reduce((n, e) => n + (e.size ?? 0), 0))})`;
+    else if (cached) {
+      const buildable = cached.entries.filter((e) => e.state !== 'unavailable');
+      const built = buildable.filter((e) => e.state === 'ready').length;
+      derived = built ? `${built} of ${buildable.length} built` : 'not built';
+    }
     return h('section.inspector-section',
       h('h3', icon('bundle'), d.name),
       h('dl.kv',
@@ -51,7 +62,8 @@ export function mountInspector(app) {
         h('dt', 'Transcripts'), h('dd', Number(d.transcripts).toLocaleString('en-US')),
         h('dt', 'Channels'), h('dd', String(d.channels?.length ?? 0)),
         h('dt', 'Checked'), h('dd', `${v.fatal ?? 0} fatal, ${v.warnings ?? 0} warnings, ${v.info ?? 0} notes`),
-        h('dt', 'Bundle'), h('dd', where)),
+        h('dt', 'Bundle'), h('dd', where),
+        h('dt', 'Derived data'), h('dd', derived)),
       h('p.muted.mono', { style: { margin: '8px 0 0', fontSize: '11px', wordBreak: 'break-all' } }, d.path));
   }
 
@@ -96,7 +108,7 @@ export function mountInspector(app) {
       render();
     },
     update(topics) {
-      if (topics.has('project') || topics.has('focus') || topics.has('selection') || topics.has('project-loaded') || topics.has('local') || topics.has('bundles')) render();
+      if (topics.has('project') || topics.has('focus') || topics.has('selection') || topics.has('project-loaded') || topics.has('local') || topics.has('bundles') || topics.has('jobs')) render();
     },
   };
 }

@@ -125,6 +125,32 @@ are reproduced exactly (counts) or to 1e-6 (ratios) from the data. Validation re
 Some metrics are empty in both bundles (the polygon counts, `fraction_of_nuclei_without_cell`);
 when a bundle fills them, they are compared too.
 
+### 1.3c The derived data of the development bundles (verified)
+
+What the cache (`internal/cache`, roadmap wave 1 slice 4) builds from each bundle, first build on
+an Apple M4 with 10 cores, reading the source files' checksums included:
+
+| | Lung 2-FOV | Breast 2-FOV |
+| --- | --- | --- |
+| Grid | 5,791 × 3,553 px at 0.2125 µm; 5 levels; 12 × 7 tiles at level 0 | 5,792 × 3,529 px; 5 levels; 12 × 7 tiles |
+| Image pyramid | 1 channel, all 5 levels decoded from the bundle: 29.4 MB | 4 channels, all levels decoded: 132.5 MB |
+| Transcript index | 825,885 transcripts of 537 features (746,475 of quality ≥ 20; 809,249 in a cell): 19.7 MB | 1,113,950 of 529 features (1,036,083; 964,035): 27.1 MB |
+| Cell outlines | 11,898 cells and 11,898 nuclei: 7.4 MB | 7,275 cells and 7,020 nuclei: 5.4 MB |
+| In all | 56.6 MB in 1.9 s | 165.0 MB in 3.8 s |
+
+- Every transcript's cell and every polygon's cell is a row of cells.parquet.
+- **Simplification** (Douglas & Peucker 1973) to half a pixel of each level keeps, of the cell
+  outlines' vertices, 48%, 33%, 26% and 21% at levels 1–4 in Lung (297,356 at level 0) and 68%,
+  45%, 32% and 24% in Breast (181,804): five to six vertices a cell at the coarsest level, the
+  closing one included.
+- **Density grids are as large as the points** before compression: at the finer levels nearly
+  every transcript is alone in its bin (a level-1 bin is 1.7 µm). Deflating every block made the
+  Lung index 42.4 MB → 19.7 MB; the density blocks deflate to 28%, the points to 65%.
+- **Image tiles** deflate to 59% of their 16-bit samples as they are, and to 48% with the low and
+  high bytes in separate planes, at half the time (Breast, deflate at its fastest level).
+- Reopened unchanged, a dataset's status takes under a millisecond: its files are looked at, not
+  read.
+
 ### 1.4 Images (verified)
 
 - BigTIFF; uint16, one sample per pixel; tiles of 1024×1024.
@@ -368,6 +394,12 @@ Notes:
   *IEEE TPAMI* 1989;11:567–585.
 - Umeyama S. Least-squares estimation of transformation parameters between two point patterns.
   *IEEE TPAMI* 1991;13:376–380.
+- Douglas DH, Peucker TK. Algorithms for the reduction of the number of points required to
+  represent a digitized line or its caricature. *Cartographica* 1973;10(2):112–122.
+  doi:10.3138/FM57-6770-U75U-7727 (polygon simplification in the geometry tiles).
+- Deutsch P, Gailly J-L. ZLIB compressed data format specification version 3.3. RFC 1950, 1996;
+  Deutsch P. DEFLATE compressed data format specification version 1.3. RFC 1951, 1996 (the
+  cache's blocks, through Go's standard library).
 
 ## 9. To verify before relying on it
 

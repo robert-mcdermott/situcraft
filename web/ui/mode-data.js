@@ -1,15 +1,31 @@
 // The Data view: the Xenium output bundles of the project and of this computer, each with what it
 // holds, how it validated (fatal problems, warnings and notes, each with the files, region and
-// remedy) and its files by role; a bundle with no fatal problem can be added to the project.
+// remedy), its derived data, and its files by role; a bundle with no fatal problem can be added
+// to the project, which builds its derived data.
 
 import { h, icon, clear, formatCount, formatBytes, relativeTime } from './dom.js';
 import { confirmDialog, promptDialog, toast } from './overlays.js';
-import { countText } from './bundles.js';
+import { cacheJobKey, countText } from './bundles.js';
 
 const SEVERITY = {
   fatal: { label: 'Fatal', badge: 'danger', icon: 'warning', heading: 'Fatal problems', hint: 'The bundle cannot be used until these are fixed.' },
   warning: { label: 'Warning', badge: 'warn', icon: 'warning', heading: 'Warnings', hint: 'The bundle can be used, but these may bias an analysis.' },
   info: { label: 'Note', badge: 'accent', icon: 'info', heading: 'Notes', hint: 'Worth knowing; nothing to fix.' },
+};
+
+// A derived-data entry's state (internal/cache EntryStatus) as a badge.
+const ENTRY_STATES = {
+  ready: ['ok', 'Ready'],
+  missing: ['', 'Not built'],
+  partial: ['warn', 'Partly built'],
+  unchecked: ['', 'Not built'],
+  unavailable: ['danger', 'Cannot be built'],
+};
+
+const ENTRY_HELP = {
+  image: 'The morphology image decoded once into tiles at every zoom level.',
+  transcripts: 'Every transcript placed in its tile, with each gene’s density at every coarser zoom level.',
+  geometry: 'Cell and nucleus outlines placed in tiles and simplified for each zoom level.',
 };
 
 const LINK_STATES = {
@@ -53,6 +69,7 @@ export function mountData(app, container) {
   }
 
   function render() {
+    derived = null;
     clear(body);
     const target = current();
     const others = listOthers(target);
@@ -146,13 +163,112 @@ export function mountData(app, container) {
     if (entry?.state === 'validating' && !report) section.append(h('div.callout.accent', h('span.spinner'), ` Checking ${name}: reading its tables, matrix, boundaries and images…`));
     if (entry?.state === 'error') section.append(callout('danger', `It could not be checked: ${entry.error}`));
     if (!item && dataset) section.append(recordedSummary(dataset));
+    if (report) section.append(statTiles(report));
+    if (item && dataset && link?.state !== 'missing' && link?.state !== 'different-run') section.append(derivedData(item));
     if (report) {
-      section.append(statTiles(report));
       section.append(findings(report));
       section.append(inventory(report));
     }
     return section;
   }
+
+  // The dataset's derived data: what is built, the job building the rest, and the cache. While a
+  // job runs, its progress is updated in place (updateDerived), so that the pane's buttons stay
+  // the same elements and a click on them is not lost to a redraw.
+  let derived = null;
+
+  function jobPhase(job) {
+    if (!job) return 'none';
+    return `${job.id}:${job.state === 'queued' ? 'queued' : 'running'}`;
+  }
+
+  function jobBadgeText(job) {
+    return job.state === 'queued' ? 'Waiting to build' : `Building · ${Math.round(job.progress * 100)}%`;
+  }
+
+  function derivedData(item) {
+    const entry = app.bundles.cache(item.path);
+    if (!entry) app.bundles.cacheStatus(item);
+    if (app.bundles.usage() === null && !usageAsked) {
+      usageAsked = true;
+      app.bundles.refreshUsage();
+    }
+    const status = entry?.status;
+    const job = app.bundles.cacheJob(item);
+    const pane = h('div.pane.derived');
+    let summary;
+    if (job) summary = h('span.badge.accent', jobBadgeText(job));
+    else if (entry?.state === 'error') summary = h('span.badge.danger', 'Not available');
+    else if (!status) summary = h('span.badge', 'Checking…');
+    else if (status.ready) summary = h('span.badge.ok', 'Ready');
+    else summary = h('span.badge', 'Not built');
+    const actions = [];
+    if (job) {
+      actions.push(h('button.btn.small', {
+        type: 'button',
+        onclick: async () => {
+          try {
+            await app.jobs.cancel(job.id);
+            toast('Stopped. What was finished is kept, and building resumes from there.');
+          } catch (error) {
+            toast(error.message, { kind: 'error' });
+          }
+        },
+      }, icon('stop'), 'Stop'));
+    } else if (status && !status.ready) {
+      actions.push(h('button.btn.small', { type: 'button', onclick: () => app.bundles.buildCache(item) }, icon('play'), 'Build now'));
+    }
+    pane.append(h('h3', icon('layers'), 'Derived data', summary, h('span.spacer'), ...actions));
+    pane.append(h('p.muted.derived-intro', 'Built once from the bundle, so that its tissue opens quickly at any zoom, and reused whenever the bundle has not changed. The bundle itself is never changed.'));
+    let bar = null;
+    let message = null;
+    if (job && job.state !== 'queued') {
+      bar = h('div', { style: { width: `${Math.round(job.progress * 100)}%` } });
+      message = h('span.muted', job.message ?? '');
+      pane.append(h('div.derived-progress', h('div.progress', bar), message));
+    }
+    if (entry?.state === 'error') pane.append(callout('danger', `The derived data could not be checked: ${entry.error}`));
+    // The last build's failure, until a build succeeds.
+    const last = app.jobs.list().filter((j) => j.key === cacheJobKey(item.path)).at(-1);
+    if (!job && last && (last.state === 'failed' || last.state === 'invalid')) {
+      pane.append(callout('danger', `The last build ${last.state === 'invalid' ? 'made data that failed their checks' : 'failed'}: ${last.error}`));
+    }
+    if (status) {
+      const rows = status.entries.map((e) => {
+        let [kind, label] = ENTRY_STATES[e.state] ?? ['', e.state];
+        if (job && e.state !== 'ready' && e.state !== 'unavailable') [kind, label] = ['accent', 'Building'];
+        else if (e.state === 'partial') label = 'Partly built: resumes';
+        return h('tr',
+          h('td', h('b', e.title), h('div.muted', ENTRY_HELP[e.kind] ?? '')),
+          h('td', h(`span.badge${kind ? `.${kind}` : ''}`, label), e.reason ? h('div.muted', e.reason) : null),
+          h('td.r', e.size ? formatBytes(e.size) : ''));
+      });
+      pane.append(h('div', { style: { overflowX: 'auto' } }, h('table.data', h('tbody', ...rows))));
+    }
+    const u = app.bundles.usage();
+    if (u) {
+      pane.append(h('p.muted.derived-usage', icon('database'),
+        `The cache holds ${formatBytes(u.size)}${u.limit ? ` of its ${formatBytes(u.limit)} limit` : ''}, in `, h('span.mono', u.dir),
+        '. It can be deleted at any time; what is needed is built again.'));
+    }
+    derived = { item, el: pane, phase: jobPhase(job), summary, bar, message };
+    return pane;
+  }
+
+  // A job's progress changed: update the pane in place, or redraw it when a job starts or ends.
+  function updateDerived() {
+    if (!derived || !derived.el.isConnected) return;
+    const job = app.bundles.cacheJob(derived.item);
+    if (jobPhase(job) !== derived.phase) {
+      derived.el.replaceWith(derivedData(derived.item));
+      return;
+    }
+    if (!job) return;
+    derived.summary.textContent = jobBadgeText(job);
+    if (derived.bar) derived.bar.style.width = `${Math.round(job.progress * 100)}%`;
+    if (derived.message) derived.message.textContent = job.message ?? '';
+  }
+  let usageAsked = false;
 
   async function locate(dataset) {
     const path = await promptDialog({ title: `Locate ${dataset.name}`, label: 'Path on this computer', value: dataset.path ?? '', hint: 'Where the bundle is now: its folder or .zip. SituCraft checks it is the same run before using it.', confirm: 'Locate' });
@@ -169,6 +285,7 @@ export function mountData(app, container) {
   return {
     update(topics) {
       if (topics.has('project') || topics.has('focus') || topics.has('bundles') || topics.has('local') || topics.has('project-loaded')) render();
+      else if (topics.has('jobs')) updateDerived();
     },
     destroy() {
       root.remove();

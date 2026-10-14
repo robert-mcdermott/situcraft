@@ -3,13 +3,16 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -17,6 +20,9 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
+
+	"situcraft/internal/jobs"
 )
 
 func testApp(t *testing.T, files ...string) (*app, http.Handler) {
@@ -429,6 +435,15 @@ func TestParseConfig(t *testing.T) {
 	if noOpen.window != "none" {
 		t.Fatal("--no-open should mean --window none")
 	}
+	if defaults.cacheLimit != 10e9 || defaults.cacheDir == "" {
+		t.Fatalf("the default cache limit is %d", defaults.cacheLimit)
+	}
+	if limited, err := parseConfig([]string{"--cache-limit", "500MB"}); err != nil || limited.cacheLimit != 500e6 {
+		t.Fatalf("--cache-limit 500MB gave %d, %v", limited.cacheLimit, err)
+	}
+	if _, err := parseConfig([]string{"--cache-limit", "lots"}); err == nil {
+		t.Fatal("an invalid --cache-limit was accepted")
+	}
 }
 
 func TestFileKinds(t *testing.T) {
@@ -531,4 +546,160 @@ func TestAnEmptyPathIsNotTheCurrentFolder(t *testing.T) {
 	if len(files.list()) != 0 || len(problems) != 2 {
 		t.Fatalf("empty paths registered %v (problems %v)", files.list(), problems)
 	}
+}
+
+func TestBundleCacheEndpoints(t *testing.T) {
+	root := os.Getenv("SITUCRAFT_DATA")
+	if root == "" {
+		root = filepath.Join("validation", "cache")
+	}
+	bundle := filepath.Join(root, "xenium-lung-2fov")
+	if _, err := os.Stat(filepath.Join(bundle, "experiment.xenium")); err != nil {
+		t.Skip("the Lung bundle is not present (node validation/fetch.mjs xenium-lung-2fov)")
+	}
+	dir := t.TempDir()
+	a, err := newApp(config{dataDir: dir, cacheDir: filepath.Join(dir, "cache"), cacheLimit: 10e9, files: []string{bundle}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.jobs.Close()
+	h, _ := a.handler()
+	handler := protect(h, "127.0.0.1", defaultPort)
+	type answer struct {
+		Status struct {
+			Ready   bool
+			Entries []struct{ Kind, State, Name string }
+		}
+		Job *struct{ ID, State string }
+	}
+	get := func(method string) answer {
+		t.Helper()
+		rec := request(t, handler, method, "/api/local/0/cache", nil, nil)
+		var out answer
+		if err := json.NewDecoder(rec.Body).Decode(&out); err != nil || rec.Code != http.StatusOK {
+			t.Fatalf("%s cache: %d %v", method, rec.Code, err)
+		}
+		return out
+	}
+	first := get(http.MethodGet)
+	if first.Status.Ready || len(first.Status.Entries) != 3 || first.Job != nil {
+		t.Fatalf("before building: %+v", first)
+	}
+	for _, e := range first.Status.Entries {
+		if e.State != "unchecked" {
+			t.Errorf("%s is %s before the bundle's files were read", e.Kind, e.State)
+		}
+	}
+	started := get(http.MethodPost)
+	if started.Job == nil {
+		t.Fatal("no job was started")
+	}
+	if again := get(http.MethodPost); again.Job == nil || again.Job.ID != started.Job.ID {
+		t.Errorf("a second request started another job: %+v", again.Job)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	done, err := a.jobs.Wait(ctx, started.Job.ID)
+	if err != nil || done.State != jobs.Complete {
+		t.Fatalf("the job ended %s: %s (%v)", done.State, done.Error, err)
+	}
+	ready := get(http.MethodGet)
+	if !ready.Status.Ready {
+		t.Fatalf("after the job: %+v", ready.Status)
+	}
+	if after := get(http.MethodPost); after.Job != nil {
+		t.Error("a job was started with everything built")
+	}
+	var usage struct {
+		Size  int64
+		Items []struct{ Name, Kind, State string }
+	}
+	rec := request(t, handler, http.MethodGet, "/api/cache", nil, nil)
+	if err := json.NewDecoder(rec.Body).Decode(&usage); err != nil || len(usage.Items) != 3 || usage.Size < 50e6 {
+		t.Fatalf("usage %+v %v", usage, err)
+	}
+	var list struct{ Jobs []struct{ ID, State string } }
+	rec = request(t, handler, http.MethodGet, "/api/jobs", nil, nil)
+	if err := json.NewDecoder(rec.Body).Decode(&list); err != nil || len(list.Jobs) != 1 || list.Jobs[0].State != "complete" {
+		t.Fatalf("jobs %+v %v", list, err)
+	}
+	rec = request(t, handler, http.MethodGet, "/api/jobs/"+started.Job.ID, nil, nil)
+	var full struct{ Events []struct{ Message string } }
+	if err := json.NewDecoder(rec.Body).Decode(&full); err != nil || len(full.Events) < 4 {
+		t.Fatalf("the job's log %+v %v", full, err)
+	}
+}
+
+func TestJobsOverHTTP(t *testing.T) {
+	a, handler := testApp(t)
+	defer a.jobs.Close()
+	if rec := request(t, handler, http.MethodGet, "/api/cache", nil, nil); rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("without a cache folder: %d", rec.Code)
+	}
+	if rec := request(t, handler, http.MethodPost, "/api/jobs/j99/cancel", nil, nil); rec.Code != http.StatusNotFound {
+		t.Errorf("cancelling an unknown job: %d", rec.Code)
+	}
+	if rec := request(t, handler, http.MethodPost, "/api/jobs/j1/cancel", nil, map[string]string{"Origin": "https://example.com"}); rec.Code != http.StatusForbidden {
+		t.Errorf("a cross-origin cancel: %d", rec.Code)
+	}
+	release := make(chan struct{})
+	job, _, err := a.jobs.Submit("test", "Waits", "", nil, func(ctx context.Context, r *jobs.Run) error {
+		r.Progress(0.5, "halfway")
+		select {
+		case <-release:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The event stream sends the list at once and again when a job changes.
+	server := httptest.NewUnstartedServer(nil)
+	port := server.Listener.Addr().(*net.TCPAddr).Port
+	h, _ := a.handler()
+	server.Config.Handler = protect(h, "127.0.0.1", port)
+	server.Start()
+	defer server.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, server.URL+"/api/jobs/events", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if ct := resp.Header.Get("Content-Type"); ct != "text/event-stream" {
+		t.Fatalf("Content-Type %q", ct)
+	}
+	events := bufio.NewScanner(resp.Body)
+	next := func() []struct{ ID, State string } {
+		t.Helper()
+		for events.Scan() {
+			if line := events.Text(); strings.HasPrefix(line, "data: ") {
+				var list []struct{ ID, State string }
+				if err := json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &list); err != nil {
+					t.Fatal(err)
+				}
+				return list
+			}
+		}
+		t.Fatal("the stream ended")
+		return nil
+	}
+	if list := next(); len(list) != 1 || list[0].ID != job.ID {
+		t.Fatalf("first event %+v", list)
+	}
+	rec := request(t, handler, http.MethodPost, "/api/jobs/"+job.ID+"/cancel", nil, nil)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "true") {
+		t.Fatalf("cancel: %d %s", rec.Code, rec.Body)
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		if list := next(); len(list) == 1 && list[0].State == "cancelled" {
+			return
+		}
+	}
+	t.Fatal("the stream never said the job was cancelled")
 }

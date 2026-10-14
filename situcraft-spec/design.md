@@ -68,7 +68,7 @@ and a segmentation run touches every transcript many times. So:
 
 - **Go owns** file I/O, decoding, indexing, viewport queries, segmentation, comparison over
   transcripts, and any statistic over transcript-scale tables. Go gives us goroutines across all
-  cores, memory-mapped columnar caches, and a single cross-compiled binary.
+  cores, compact columnar caches, and a single cross-compiled binary.
 - **The browser owns** rendering, interaction, and cell-level analytics. Cell tables (10⁴–10⁶
   rows) fit typed arrays and workers, as in the siblings.
 - Unlike the siblings, the web app **needs its host**. There is no static-hosting mode, except the
@@ -77,21 +77,36 @@ and a segmentation run touches every transcript many times. So:
 ### The derived-data cache
 
 Source bundles are read in place and never modified. Everything SituCraft derives lives in its
-cache (`<UserCacheDir>/situcraft/`, with a size cap and an eviction policy):
+cache (`<UserCacheDir>/situcraft/`, kept within `--cache-limit`, 10 GB by default, by removing what
+was used least recently). Every entry of a dataset shares one grid, the morphology image's pyramid:
+level L has pixels 2^L times the full resolution's, and its tile (tx, ty), 512 pixels on a side,
+covers the same tissue in every layer, so the renderer asks for the same tiles of each.
 
-- **Image pyramids.** JPEG 2000 tiles are decoded once into SituCraft's own tile store
-  (uint16, deflate-compressed, 512×512, one file per level per channel, with an index). After
-  that, serving a tile is a read and an inflate. Pyramid levels missing from the source are
-  computed.
-- **Transcript index.** Transcripts are partitioned into a quadtree of spatial tiles. Each tile is
-  stored as columnar arrays: x and y (float32, µm), gene (uint16), qv (uint8), z (float32), and
-  cell (uint32 index into the segmentation's cell table). Each gene has per-level density grids,
-  so the whole-tissue view never touches points.
-- **Geometry tiles.** Cell and nucleus polygons are bucketed by tile and simplified per level.
-- Each cache entry records the source files' sizes, modification times and checksums, plus
-  SituCraft's cache-format version. Entries are built in a temporary directory and renamed into
-  place, so a crash never leaves a half-built entry. They resume where they stopped and are
-  reused on reopen.
+- **Image pyramids.** JPEG 2000 tiles are decoded once into SituCraft's own tile store: one file
+  per channel and level, each tile a zlib stream of its 16-bit samples with the low and high
+  bytes in separate planes (a page can inflate it natively and read the planes as a texture).
+  After that, serving a tile is a read. The bundle's own levels are used where they halve the
+  level above; levels it lacks are computed.
+- **Transcript index.** Each transcript is stored once, in the full-resolution tile holding it.
+  A tile's transcripts are sorted by gene (so one gene is one range) and stored as columns: x, y
+  and z (float32, µm), quality (float32), cell (uint32 row of cells.parquet), the transcript's
+  row in transcripts.parquet (so later segmentations can attach their own assignments), and a
+  nucleus flag. Every coarser level has per-gene density grids (128 × 128 bins a tile, all
+  transcripts and Q20 ones, and every gene together), so the whole-tissue view never touches
+  points. Level 1 counts the points; each coarser level adds up the level below, so every level
+  sums exactly to each gene's count. The levels nest: a complete quadtree.
+- **Geometry tiles.** Cell and nucleus polygons are placed by the centre of their bounding box,
+  once per level; level 0 holds the bundle's vertices exactly, each level above them simplified
+  to half a pixel of that level.
+- **Files.** One layout for every kind: a header, a table of the tiles' blocks with their counts,
+  and the blocks, each deflated, so that a damaged file is refused before its claims are believed.
+- **Entries.** An entry is named for its kind and a key hashing the cache format, its parameters
+  and the SHA-256 of its source files: a bundle that moves or is zipped keeps its entries. Entries
+  are built in a folder of their own under a lock, a finished file at a time, and renamed into
+  place with a manifest of their sources and every file's size and checksum, so a crash never
+  leaves a half-built entry, a build resumes where it stopped, and a resumed build is
+  byte-identical to one that was not interrupted. The SHA-256 of each source file is recorded
+  under its place, size and time, so an unchanged bundle reopens without being read.
 
 ### Segmentation built in
 
@@ -127,6 +142,8 @@ Long computations (indexing, segmentation, comparison, registration, permutation
   resumed or discarded.
 - Progress and logs stream to the page over server-sent events. Cancellation is cooperative and
   checked often.
+- The first version (wave 1, slice 4) runs jobs in memory, one at a time and one per key (a
+  dataset's build); persisting them, orphaned jobs and the warning on closing come in wave 2.
 
 ### The host, from the siblings
 

@@ -20,6 +20,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 )
 
 // ReaderAt is an open file of the bundle.
@@ -41,6 +42,8 @@ type FileInfo struct {
 type source interface {
 	files() []FileInfo
 	open(name string) (ReaderAt, error)
+	// identity names a file's current state cheaply (place, size and time; no reading).
+	identity(name string) (string, error)
 	close() error
 }
 
@@ -125,6 +128,19 @@ func (s *dirSource) open(name string) (ReaderAt, error) {
 	return osFile{f, info.Size()}, nil
 }
 
+func (s *dirSource) identity(name string) (string, error) {
+	clean := path.Clean("/" + name)
+	full, err := filepath.Abs(filepath.Join(s.root, filepath.FromSlash(clean[1:])))
+	if err != nil {
+		return "", err
+	}
+	info, err := os.Stat(full)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("file\x00%s\x00%d\x00%d", full, info.Size(), info.ModTime().UnixNano()), nil
+}
+
 func (s *dirSource) close() error { return nil }
 
 // zipSource is a zipped bundle.
@@ -136,6 +152,8 @@ type zipSource struct {
 	infos   []FileInfo
 	// cache is where compressed members are inflated, under a folder named for the archive.
 	cache string
+	// archive is the zip's own place, size and time, which every member's identity includes.
+	whole string
 	mu    sync.Mutex
 }
 
@@ -190,7 +208,21 @@ func openZip(archivePath, cacheDir string) (*zipSource, error) {
 	sort.Slice(s.infos, func(i, j int) bool { return s.infos[i].Path < s.infos[j].Path })
 	identity := sha256.Sum256([]byte(fmt.Sprintf("%s\x00%d\x00%d", archivePath, info.Size(), info.ModTime().UnixNano())))
 	s.cache = filepath.Join(cacheDir, "unzipped", hex.EncodeToString(identity[:8]))
+	abs, err := filepath.Abs(archivePath)
+	if err != nil {
+		f.Close()
+		return nil, err
+	}
+	s.whole = fmt.Sprintf("zip\x00%s\x00%d\x00%d", abs, info.Size(), info.ModTime().UnixNano())
 	return s, nil
+}
+
+func (s *zipSource) identity(name string) (string, error) {
+	m, ok := s.members[name]
+	if !ok {
+		return "", fs.ErrNotExist
+	}
+	return fmt.Sprintf("%s\x00%s\x00%d\x00%08x", s.whole, name, m.UncompressedSize64, m.CRC32), nil
 }
 
 func (s *zipSource) files() []FileInfo { return s.infos }
@@ -219,6 +251,9 @@ func (s *zipSource) open(name string) (ReaderAt, error) {
 	if err != nil {
 		return nil, err
 	}
+	// The unpacked copy is in use: its time keeps the cache's eviction from taking it first.
+	now := time.Now()
+	_ = os.Chtimes(s.cache, now, now)
 	return osFile{f, int64(m.UncompressedSize64)}, nil
 }
 

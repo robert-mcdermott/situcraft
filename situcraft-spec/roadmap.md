@@ -280,22 +280,96 @@ The data plane built here (readers, codecs, the derived-data cache) carries ever
      - **The path dialog's Enter re-pressed the button that opened it** (in the code shared with
        the siblings), and **an empty path meant the current folder**: both fixed.
 
-4. **The derived-data cache (D5, X4).** `internal/cache` builds three kinds of entry:
-   - image tile pyramids: JPEG 2000 decoded once into 512×512 uint16 deflate tiles per level and
-     channel;
-   - the transcript spatial index: a quadtree of columnar tiles, with per-gene density grids for
-     every level;
-   - geometry tiles: cell and nucleus polygons bucketed and simplified per level.
-
-   Builds run as jobs (`internal/jobs`, first version: spec, state, progress, cancellation,
-   logs). They are atomic, resumable after interruption, keyed to source checksums and the cache
-   format version, and capped in size with an eviction policy.
+4. **The derived-data cache (D5, X4): done.** `internal/cache` builds three kinds of entry on one
+   grid, the morphology image's pyramid: level L has pixels 2^L times the full resolution's, and
+   its tile (tx, ty), 512 pixels on a side, covers the same tissue in every layer.
+   - **Image pyramids:** each morphology-focus channel decoded once into one file per level. Each
+     tile is a zlib stream of its 16-bit samples with their low and high bytes in two planes: about
+     a fifth smaller than deflating the samples as they are, and faster. The bundle's own levels
+     are used where they halve the level above; a level it lacks is averaged from the one above.
+   - **The transcript index:** every transcript stored once, in its full-resolution tile, sorted by
+     gene, with its position, z, quality, cell (a row of cells.parquet), nucleus flag and its row
+     in transcripts.parquet. Every coarser level has per-gene density grids: 128 × 128 bins a
+     tile, counting all transcripts and those of quality 20 or more, and every gene together.
+     Level 1's grids count the points; each coarser level's add up the level below's. The levels
+     nest, so the index is a complete quadtree aligned with the image's tiles.
+   - **Geometry tiles:** cell and nucleus polygons, per level, each in the tile holding the centre
+     of its bounding box. Level 0 holds the bundle's vertices exactly; each level above holds them
+     simplified (Douglas–Peucker) to within half a pixel of that level, keeping at least three.
+   - **One binary layout** for all three (`internal/cache/binfile.go`): a header, a table of the
+     tiles' blocks with their counts, and each block a zlib stream whose size follows from its
+     counts, so a damaged file is refused before anything is allocated for it.
+   - **Entries** are named for their kind and a key hashing the cache format, their parameters and
+     the SHA-256 of their source files. A bundle that moves or is zipped keeps its entries; one
+     whose files change gets new ones.
+     - Each is built in its own folder under a lock (taken over when its program dies), a finished
+       file at a time, then renamed into place with a manifest of its sources and every file's size
+       and SHA-256.
+     - Build times go in a separate file, so two builds of an entry are byte-identical.
+     - Each source file's SHA-256 is recorded under its place, size and time: an unchanged bundle
+       reopens by looking at its files, not reading them.
+   - **Size:** `--cache-limit` (10 GB by default) keeps the cache within a size by removing what
+     was used least recently, never what was used since the program started; zipped bundles'
+     unpacked files count. A build first checks the disk has room.
+   - **Jobs** (`internal/jobs`, first version): an immutable spec; a state (declared, queued,
+     running, validating, then complete, cancelled, failed or invalid); progress; an append-only
+     log; cooperative cancellation; one job at a time and one per key.
+     - Jobs live in memory; persisting them comes with the artifact store (wave 2, slice 2).
+     - A build job ends by checking what it built: every tile present, the transcripts and polygons
+       counted, the coarsest density grid summing to the transcripts.
+   - **Program:**
+     - `--cache-limit`;
+     - `GET` and `POST /api/local/{i}/cache`: what is built, and a job building the rest;
+     - `GET /api/cache`: what the cache holds;
+     - `GET /api/jobs`, `GET /api/jobs/{id}`, `POST /api/jobs/{id}/cancel`, and
+       `GET /api/jobs/events`, server-sent events with the list of jobs whenever one changes.
+     - Stopping the program stops its job where it is; the next build resumes it.
+   - **Page:** a dataset's derived data are built when it is added to the project or found again
+     on reopening. The Data view shows each entry's state and size, the build's progress with
+     **Stop**, **Build now** for what is missing, why the last build failed if it did, and what
+     the cache holds. The status bar and the inspector show a running build.
    - Validation:
-     - Every transcript is in exactly one tile, with values equal to the source.
-     - Density grids sum to the gene's count.
-     - An interrupted build resumes and produces byte-identical entries.
-     - An unchanged project reopens with no rebuild.
-     - Cache sizes and build times are recorded for both bundles, under 500 MB together.
+     - **Both development bundles** (the Lung bundle in CI, both weekly):
+       - every pixel of every tile of every level equals the bundle's own level, decoded directly;
+       - every transcript is in exactly one tile, the one holding it, with its gene, position, z,
+         quality, cell and nucleus flag equal to transcripts.parquet's;
+       - each gene's density grid sums to its count (and its Q20 count) at every level, and every
+         gene together to the transcripts; every bin of level 1 equals a recount of its points;
+       - level 0's polygons equal the boundary files' exactly, and every level holds each polygon
+         once, simplified within its tolerance;
+       - builds stopped in the image, in the transcript index and in the outlines resume to
+         byte-identical entries;
+       - reopened unchanged, nothing is read or built (the status takes under a millisecond);
+       - the zipped Lung bundle finds the folder's entries and only reads its files' checksums;
+       - no bundle file changes.
+     - **Sizes and times** (Apple M4, 10 cores), within the 500 MB budget, which a test keeps:
+       - Lung: 57 MB in 1.9 s (image 29 MB, transcripts 20 MB, outlines 7 MB);
+       - Breast: 165 MB in 3.8 s (133, 27 and 5 MB);
+       - 222 MB together.
+     - **Unit tests on synthetic data:**
+       - pyramids with levels decoded and computed;
+       - an index with transcripts past the edges, unassigned and unknown cells, six groups of
+         rows, and a stop in each phase;
+       - polygons with and without closing vertices;
+       - the grid, entry names, the checksum record, locks, eviction and sizes.
+     - **Fuzzing:** every reader on damaged files; the polygon simplification.
+     - **Jobs:** states, cancelling queued and running jobs, one job per key, the log, a panic
+       turned into a failure; over HTTP, the event stream and cancelling.
+     - **In the window:**
+       - add the Breast bundle and watch it build;
+       - **Stop** partway: the image is kept and the index "partly built";
+       - **Build now** resumes, and the result equals an uninterrupted build;
+       - a cache folder that cannot be written fails the build with that reason shown, and
+         **Build now** succeeds once it can;
+       - no console errors.
+   - Found by slice 4:
+     - **Density grids are as large as the points**, because at fine levels nearly every
+       transcript is alone in its bin. Deflating every block halved the transcript index (Lung:
+       42 MB to 20 MB).
+     - **A whole view redrawn five times a second loses clicks:** the Data view and the status bar
+       now update a running job's progress in place.
+     - **A damaged block could claim a gigabyte:** readers refuse a block claiming more than
+       deflate's largest expansion of its stored bytes.
 5. **The tissue viewer (V1, V2, V3, V4, V5, V9, V10).**
    - **Renderer:** `web/render/`, a WebGL2 renderer for 16-bit image tiles with per-channel
      window, color and gamma in the shader; transcript density and points by zoom; cell and
@@ -346,8 +420,8 @@ other tools can be imported.
 2. **Segmentations as artifacts (D8, S6, S9).**
    - The artifact store: states, lineage, temporary outputs promoted after validation.
    - The instrument's segmentation registered as an artifact.
-   - The job system completed: survives refresh; warns before closing with a job running;
-     marks interrupted jobs orphaned on restart and offers resume or discard.
+   - The job system completed: jobs persisted; a warning before closing with a job running;
+     interrupted jobs marked orphaned on restart, with resume or discard.
    - The Jobs view.
 3. **Nucleus expansion (S1).** `internal/segment/expand`: neighbor-bounded growth of nuclei to a
    chosen distance, transcript assignment and counts; parallel and deterministic.

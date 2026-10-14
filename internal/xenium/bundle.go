@@ -146,6 +146,17 @@ func (b *Bundle) OpenFile(name string) (ReaderAt, error) {
 	return b.src.open(name)
 }
 
+// FileIdentity names the current state of one of the bundle's files without reading it: its
+// place, size and modification time (for a zipped bundle, the archive's, and the member's size
+// and CRC-32). The same identity means the same bytes unless something rewrote the file and
+// reset its time; the derived-data cache keys its record of each file's checksum on it.
+func (b *Bundle) FileIdentity(name string) (string, error) {
+	if !b.Has(name) {
+		return "", fmt.Errorf("%s: %w", name, fs.ErrNotExist)
+	}
+	return b.src.identity(name)
+}
+
 // ReadSmall reads a small file whole.
 func (b *Bundle) ReadSmall(name string) ([]byte, error) {
 	f, err := b.OpenFile(name)

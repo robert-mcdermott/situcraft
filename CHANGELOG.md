@@ -79,6 +79,31 @@ with each.
       changed, another run, or not found; **Locate…** reconnects a bundle that moved, once it is
       shown to be the same run.
   - `--cache-dir` sets where derived data go.
+- **Derived data, built once (wave 1, slice 4).**
+  - **What is built** for each dataset of a project, on one grid of tiles shared with the
+    morphology image's pyramid:
+    - **image tiles** of every channel at every zoom level, decoded once from the bundle's JPEG
+      2000;
+    - **a spatial index of the transcripts:** each one in the tile holding it, grouped by gene,
+      with per-gene density grids for every coarser level;
+    - **cell and nucleus outlines** in tiles, exact at full resolution and simplified for each
+      coarser level.
+  - **When:** a dataset's derived data are built when it is added to a project, or when a project
+    reopens and finds it again. Both development bundles take 2 to 4 seconds and 222 MB together.
+  - **Built to be trusted and reused:**
+    - entries are named for the contents of the files they come from, so a bundle that moves or
+      is zipped keeps them and a changed one gets new ones;
+    - an unchanged bundle reopens without being read;
+    - an interrupted build resumes where it stopped, with the same result to the byte;
+    - a crash never leaves a half-built entry.
+  - **The cache is kept within a size,** `--cache-limit` (10 GB by default), by removing what was
+    used least recently; it can be deleted at any time.
+  - **Jobs:** long work runs in the program as a job with progress, a log and **Stop**. The page
+    follows it live and finds it again after a reload.
+  - **The Data view** shows each dataset's derived data (what is built, the size, a running
+    build's progress, **Build now**, why the last build failed if it did) and what the cache
+    holds; the status bar and inspector show a running build.
+  - Sizes are now shown in decimal units (1 GB is 10^9 bytes), as `--cache-limit` reads them.
 - **The development data.** `node validation/fetch.mjs` downloads 10x Genomics' Xenium human Lung
   and Breast 2-FOV bundles (CC BY 4.0). It checks each archive's MD5, extracts it (each member's
   CRC-32 checked), checks every file's SHA-256, and deletes the archive. Both take about 640 MB;
@@ -129,6 +154,15 @@ with each.
   - the Lung bundle zipped validates as its folder does;
   - 13 broken bundles raise exactly the findings they should;
   - no file of a bundle changes when it is checked.
+- **The derived data of both development bundles** (`internal/cache`):
+  - every pixel of every image tile equals the bundle's own level, decoded directly;
+  - every transcript is in exactly one tile, with its values; every gene's density grid sums to
+    its count at every level;
+  - the outlines at full resolution equal the bundle's, and every level holds each outline once,
+    within its simplification tolerance;
+  - builds stopped partway resume to byte-identical entries; an unchanged bundle reopens with
+    nothing read or built; the zipped Lung bundle reuses the folder's entries;
+  - both stay under the 500 MB budget, and every reader refuses damaged files cleanly (fuzzed).
 - **JPEG 2000 against OpenJPEG on all 918 tiles of both bundles:**
   - the 270 lossless (5/3) tiles are identical;
   - the 648 lossy (9/7) tiles are within ±1 at every pixel (0.74% of samples differ by 1, RMSE

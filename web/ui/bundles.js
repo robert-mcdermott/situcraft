@@ -1,18 +1,24 @@
 // Xenium output bundles on this computer, as the page sees them: the items the program holds
-// (local.go), their validation reports (api_datasets.go), and the project's datasets reconnected
-// to their bundles when a project opens. Reports are kept for the session, not in the project:
-// the project keeps each dataset's summary and findings (lib/datasets.js).
+// (local.go), their validation reports (api_datasets.go), the project's datasets reconnected
+// to their bundles when a project opens, and each dataset's derived data (api_cache.go), built
+// by a job when the dataset is added or found again. Reports are kept for the session, not in the
+// project: the project keeps each dataset's summary and findings (lib/datasets.js).
 
 import { openPaths } from './storage.js';
 import { addDataset, compareFingerprint, datasetRecord, findDataset, relocateDataset, removeDataset } from '../lib/datasets.js';
 
 const BUNDLE_KINDS = new Set(['bundle', 'archive']);
 
-async function getJSON(url) {
-  const response = await fetch(url, { cache: 'no-store' });
+async function getJSON(url, options = {}) {
+  const response = await fetch(url, { cache: 'no-store', ...options });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(body.error ?? `${url}: HTTP ${response.status}`);
   return body;
+}
+
+// The key of the job building a bundle's derived data (api_cache.go).
+export function cacheJobKey(path) {
+  return `cache\u0000${path}`;
 }
 
 export function createBundles(app) {
@@ -20,6 +26,11 @@ export function createBundles(app) {
   const reports = new Map();
   // dataset id → { state: 'checking' | 'ok' | 'missing' | 'changed' | 'different-run', item, files, error }
   const links = new Map();
+  // path → { state: 'loading' | 'done' | 'error', status, job, error }: the bundle's derived data
+  // and the job building them when it was asked.
+  const caches = new Map();
+  // What the cache folder holds (api_cache.go's usage), refreshed after each build.
+  let usage = null;
   const notify = () => app.store.notify(['bundles']);
 
   function items() {
@@ -63,8 +74,51 @@ export function createBundles(app) {
     app.store.commit(addDataset(app.store.project, record), `Add dataset ${record.name}`);
     links.set(record.id, { state: 'ok', item });
     notify();
+    buildCache(item);
     return record;
   }
+
+  // Asks which of the bundle's derived data are built (build: and starts a job building the rest).
+  async function cacheStatus(item, { build = false } = {}) {
+    const entry = caches.get(item.path) ?? { state: 'loading', status: null, job: null, error: null };
+    entry.state = 'loading';
+    caches.set(item.path, entry);
+    notify();
+    try {
+      const body = await getJSON(`${item.url}/cache`, build ? { method: 'POST' } : {});
+      entry.state = 'done';
+      entry.status = body.status;
+      entry.job = body.job ?? null;
+      entry.error = null;
+    } catch (error) {
+      entry.state = 'error';
+      entry.error = error.message;
+    }
+    notify();
+    return entry;
+  }
+
+  function buildCache(item) {
+    return cacheStatus(item, { build: true });
+  }
+
+  async function refreshUsage() {
+    try {
+      usage = await getJSON('/api/cache');
+    } catch {
+      usage = null;
+    }
+    notify();
+    return usage;
+  }
+
+  // A finished build changes what is built and what the cache holds.
+  app.jobs?.onFinished((job) => {
+    if (job.kind !== 'cache') return;
+    const item = app.localItems.find((i) => cacheJobKey(i.path) === job.key);
+    if (item) cacheStatus(item);
+    refreshUsage();
+  });
 
   function remove(id) {
     const dataset = app.store.project.datasets.find((d) => d.id === id);
@@ -101,8 +155,11 @@ export function createBundles(app) {
         notify();
         continue;
       }
-      links.set(d.id, await check(d, item));
+      const link = await check(d, item);
+      links.set(d.id, link);
       notify();
+      // Derived data are keyed by the files' contents, so a changed bundle gets its own.
+      if (link.state === 'ok' || link.state === 'changed') buildCache(item);
     }
   }
 
@@ -131,6 +188,7 @@ export function createBundles(app) {
     app.store.commit(relocateDataset(app.store.project, id, item.path), `Locate dataset ${dataset.name}`);
     links.set(id, link);
     notify();
+    buildCache(item);
     return link;
   }
 
@@ -144,6 +202,21 @@ export function createBundles(app) {
     locate,
     report: (path) => reports.get(path) ?? null,
     link: (id) => links.get(id) ?? null,
+    cache: (path) => caches.get(path) ?? null,
+    cacheStatus,
+    buildCache,
+    usage: () => usage,
+    refreshUsage,
+    // The job building the bundle's derived data, if one is queued or running: as the job list
+    // has it, or as the answer that started it did until the list has it.
+    cacheJob(item) {
+      const live = app.jobs?.forKey(cacheJobKey(item.path));
+      if (live) return live;
+      const asked = caches.get(item.path)?.job;
+      if (!asked) return null;
+      const known = app.jobs?.get(asked.id);
+      return known ? null : asked;
+    },
     // The project's dataset for a bundle on this computer, if it has one.
     datasetFor: (item) => findDataset(app.store.project, { path: item.path }),
   };

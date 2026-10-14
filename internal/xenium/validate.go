@@ -968,17 +968,24 @@ func (v *validator) checkDisk() error {
 		// 16-bit samples, deflated to about half.
 		s.EstimatedCacheBytes = int64(size[0]) * int64(size[1]) * 2 * channels * 4 / 3 / 2
 	}
+	// The transcript index takes about one and a half times transcripts.parquet, the outlines
+	// about four times the boundary files (one copy per zoom level, deflated): research.md §1.3c.
+	for name, factor := range map[string]float64{"transcripts.parquet": 1.5, "cell_boundaries.parquet": 4, "nucleus_boundaries.parquet": 4} {
+		if f, ok := v.b.Stat(name); ok {
+			s.EstimatedCacheBytes += int64(factor * float64(f.Size))
+		}
+	}
 	if v.opts.CacheDir == "" {
 		return nil
 	}
-	free, err := freeBytes(v.opts.CacheDir)
+	free, err := FreeBytes(v.opts.CacheDir)
 	if err != nil {
 		return nil
 	}
 	s.FreeCacheBytes = free
 	if s.EstimatedCacheBytes > 0 && free < 2*s.EstimatedCacheBytes {
 		v.add(Finding{Severity: Warning, Code: "disk.low", Title: "Little free space for SituCraft's cache",
-			Detail: fmt.Sprintf("%s free where SituCraft keeps derived data (%s); this bundle's images need about %s there.", humanBytes(free), v.opts.CacheDir, humanBytes(s.EstimatedCacheBytes)),
+			Detail: fmt.Sprintf("%s free where SituCraft keeps derived data (%s); this bundle's derived data (image tiles, transcript index, cell outlines) need about %s there.", humanBytes(free), v.opts.CacheDir, humanBytes(s.EstimatedCacheBytes)),
 			Remedy: "Free some space, or start SituCraft with its cache elsewhere."})
 	}
 	return nil

@@ -231,6 +231,13 @@ if you no longer need those projects; deleted projects are first moved to its
 `trash` folder. Your Xenium bundles are never copied into the library, moved or
 changed: projects refer to them where they are.
 
+SituCraft also keeps a cache of what it derives from your bundles (image tiles,
+transcript indexes, tiled cell outlines) in `~/Library/Caches/situcraft` on
+macOS, `~/.cache/situcraft` on Linux (or `$XDG_CACHE_HOME/situcraft`), and
+`%LocalAppData%\situcraft` on Windows; `--cache-dir` puts it elsewhere. It stays
+within `--cache-limit` (10 GB by default) and can be deleted at any time: what
+is needed is built again from the bundles.
+
 ## Building from source
 
 With the Go version in `go.mod` or newer:

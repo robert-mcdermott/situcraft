@@ -26,6 +26,9 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"situcraft/internal/cache"
+	"situcraft/internal/jobs"
 )
 
 //go:embed web/index.html web/styles.css web/app.js web/favicon.svg web/lib/*.js web/ui/*.js
@@ -53,6 +56,7 @@ type config struct {
 	keepRunning bool
 	dataDir     string
 	cacheDir    string
+	cacheLimit  int64
 	dev         bool
 	showVersion bool
 	files       []string
@@ -65,9 +69,12 @@ type app struct {
 	assets   fs.FS
 	files    *localFiles
 	store    *store
-	// cacheDir holds derived data: zipped bundles' members, and (wave 1, slice 4) tile pyramids
-	// and spatial indexes.
+	// cacheDir holds derived data: zipped bundles' unpacked members, and the cache of tile
+	// pyramids and spatial indexes (nil when there is no cache folder, as in some tests).
 	cacheDir string
+	cache    *cache.Cache
+	// jobs runs long computations, such as building a dataset's derived data.
+	jobs *jobs.Manager
 }
 
 func init() {
@@ -177,6 +184,17 @@ type runningServer struct {
 }
 
 func (s *runningServer) stop(timeout time.Duration) {
+	// A running job stops where it is (what it finished is kept and resumed next time); a job
+	// slow to notice is not waited for beyond the timeout.
+	closed := make(chan struct{})
+	go func() {
+		s.app.jobs.Close()
+		close(closed)
+	}()
+	select {
+	case <-closed:
+	case <-time.After(timeout):
+	}
 	s.cancel()
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -254,6 +272,7 @@ func parseConfig(args []string) (config, error) {
 	flags.BoolVar(&cfg.keepRunning, "keep-running", false, "keep serving after the app window is closed")
 	flags.StringVar(&cfg.dataDir, "data-dir", "", "folder for the project library (default: <user config dir>/SituCraft)")
 	flags.StringVar(&cfg.cacheDir, "cache-dir", "", "folder for derived data, which can be deleted and made again (default: <user cache dir>/situcraft)")
+	cacheLimit := flags.String("cache-limit", "10GB", "size the cache is kept within, removing what was used least recently (for example 500MB or 20GB; 0 for no limit)")
 	flags.BoolVar(&cfg.dev, "dev", false, "serve web/ from the working directory instead of the embedded copy")
 	flags.BoolVar(&cfg.showVersion, "version", false, "print the version and exit")
 	noOpen := flags.Bool("no-open", false, "same as --window none")
@@ -264,6 +283,11 @@ func parseConfig(args []string) (config, error) {
 	files, err := parseArgs(flags, args)
 	if *noOpen {
 		cfg.window = "none"
+	}
+	if err == nil {
+		if cfg.cacheLimit, err = cache.ParseSize(*cacheLimit); err != nil {
+			fmt.Fprintf(flags.Output(), "--cache-limit: %v\n", err)
+		}
 	}
 	switch cfg.window {
 	case "app", "browser", "none":
@@ -309,11 +333,25 @@ func newApp(cfg config) (*app, error) {
 		assets:   content,
 		files:    newLocalFiles(),
 		cacheDir: cfg.cacheDir,
+		jobs:     jobs.NewManager(),
 	}
 	if a.cacheDir != "" {
-		if err := os.MkdirAll(a.cacheDir, 0o755); err != nil {
+		c, err := cache.Open(a.cacheDir, cfg.cacheLimit)
+		if err != nil {
 			return nil, fmt.Errorf("the cache folder (%s): %w", a.cacheDir, err)
 		}
+		a.cache = c
+		cache.SetProgram("situcraft " + version)
+		// What was left over by earlier runs is trimmed to the limit.
+		go func() {
+			removed, err := c.Evict()
+			if err != nil {
+				log.Printf("trimming the cache: %v", err)
+			}
+			for _, item := range removed {
+				log.Printf("removed %s from the cache (%d bytes), to stay within its limit", item.Name, item.Size)
+			}
+		}()
 	}
 	if problems := a.files.add(cfg.files); len(problems) > 0 {
 		for _, problem := range problems {
@@ -348,7 +386,11 @@ func (a *app) printBanner(out io.Writer, url string) {
 		fmt.Fprintf(out, "Dev mode: serving web/ from disk in %s (no-store)\n", a.assetDir)
 	}
 	fmt.Fprintf(out, "Project library: %s\n", a.store.dir)
-	fmt.Fprintf(out, "Cache: %s\n", a.cacheDir)
+	if a.cache != nil && a.cache.Limit() > 0 {
+		fmt.Fprintf(out, "Cache: %s (kept within %s)\n", a.cacheDir, formatSize(a.cache.Limit()))
+	} else {
+		fmt.Fprintf(out, "Cache: %s\n", a.cacheDir)
+	}
 	if n := len(a.files.list()); n > 0 {
 		fmt.Fprintf(out, "Opening %d item(s) named on the command line\n", n)
 	}
@@ -371,25 +413,33 @@ func (a *app) handler() (http.Handler, error) {
 }
 
 type info struct {
-	Name     string      `json:"name"`
-	Session  string      `json:"session"`
-	Version  string      `json:"version"`
-	Commit   string      `json:"commit,omitempty"`
-	Mode     string      `json:"mode"`
-	DataDir  string      `json:"dataDir"`
-	CacheDir string      `json:"cacheDir"`
-	Files    []localFile `json:"files"`
-	Platform string      `json:"platform"`
+	Name     string `json:"name"`
+	Session  string `json:"session"`
+	Version  string `json:"version"`
+	Commit   string `json:"commit,omitempty"`
+	Mode     string `json:"mode"`
+	DataDir  string `json:"dataDir"`
+	CacheDir string `json:"cacheDir"`
+	// CacheLimit is the size the cache is kept within, in bytes (0: no limit).
+	CacheLimit int64       `json:"cacheLimit"`
+	Files      []localFile `json:"files"`
+	Platform   string      `json:"platform"`
 }
 
 func (a *app) registerAPI(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/info", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, info{Name: "SituCraft", Session: a.session, Version: version, Commit: buildCommit(), Mode: "desktop", DataDir: a.store.dir, CacheDir: a.cacheDir, Files: a.files.list(), Platform: platformName()})
+		limit := int64(0)
+		if a.cache != nil {
+			limit = a.cache.Limit()
+		}
+		writeJSON(w, info{Name: "SituCraft", Session: a.session, Version: version, Commit: buildCommit(), Mode: "desktop", DataDir: a.store.dir, CacheDir: a.cacheDir, CacheLimit: limit, Files: a.files.list(), Platform: platformName()})
 	})
 	mux.HandleFunc("GET /api/local/{index}", a.files.serve)
 	mux.HandleFunc("POST /api/open", a.openPaths)
 	a.store.register(mux)
 	a.registerDatasets(mux)
+	a.registerCache(mux)
+	a.registerJobs(mux)
 	mux.HandleFunc("POST /api/library/local/{index}", func(w http.ResponseWriter, r *http.Request) {
 		file, ok := a.files.get(r.PathValue("index"))
 		if !ok {
