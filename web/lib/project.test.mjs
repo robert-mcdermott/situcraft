@@ -55,3 +55,32 @@ test('a project with a dataset, decision or saved view is worth saving', () => {
     assert.equal(isEmptyProject({ ...empty, [field]: [{ id: 'x' }] }), false, field);
   }
 });
+
+// Projects saved by earlier versions (validation/projects) open with this one, keeping every field,
+// and what they refer to is there: each view's dataset and filter, each filter's dataset and
+// previous version. (The viewer suite reopens them against the data.)
+test('projects saved by earlier versions open', async () => {
+  const { readdirSync, readFileSync } = await import('node:fs');
+  const { join, dirname } = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const dir = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'validation', 'projects');
+  const files = readdirSync(dir).filter((f) => f.endsWith('.situcraft.json'));
+  assert.ok(files.length >= 1);
+  for (const file of files) {
+    const text = readFileSync(join(dir, file), 'utf8');
+    const project = parseProject(text);
+    assert.deepEqual(JSON.parse(serializeProject(project)), JSON.parse(text), `${file} keeps every field`);
+    const datasets = new Set(project.datasets.map((d) => d.id));
+    const filters = new Map(project.artifacts.filter((a) => a.kind === 'filter').map((f) => [f.id, f]));
+    for (const f of filters.values()) {
+      assert.ok(datasets.has(f.dataset), `${file}: filter ${f.name}'s dataset`);
+      if (f.parent) assert.equal(filters.get(f.parent)?.version, f.version - 1, `${file}: filter ${f.name}'s previous version`);
+      assert.match(f.result.sha256, /^[0-9a-f]{64}$/);
+    }
+    for (const v of project.views) {
+      assert.ok(datasets.has(v.dataset), `${file}: view ${v.name}'s dataset`);
+      assert.ok(v.camera.umPerCss > 0, `${file}: view ${v.name}'s zoom`);
+      if (v.qc?.filter) assert.ok(filters.has(v.qc.filter), `${file}: view ${v.name}'s filter`);
+    }
+  }
+});

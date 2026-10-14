@@ -11,7 +11,11 @@
 // - the QC view (wave 1, slice 6): every recomputable run metric agrees with the recorded one;
 //   brushing a range chooses exactly the cells in it, which the Viewer then shows; a saved filter
 //   keeps the cells an independent evaluation here keeps, recorded under the same SHA-256; every
-//   QC map draws.
+//   QC map draws;
+// - the examples and the record (wave 1, slice 7): the examples are listed and none is downloaded
+//   unasked; every step of each example's tour opens with its genes; the project saved by SituCraft
+//   0.1.0 (validation/projects) opens, finds its moved bundle again, its filters keep the cells they
+//   recorded, and its saved views reopen exactly, from the project and from a link.
 //
 // It builds the program, starts it on the bundles with an empty cache and library, builds their
 // derived data, and drives the page through window.situcraft (the app, app.js) and window.situcraftViewer
@@ -19,7 +23,7 @@
 
 import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -271,6 +275,97 @@ export async function viewerSuite({ check, MissingData, verbose }) {
       })()`);
       const bad = maps.filter(([, e]) => e !== 0);
       check('viewer', `${name}: every QC map draws`, bad.length ? bad.map(([id, e]) => `${id}: GL error ${e}`).join('; ') : `${maps.length} maps, no WebGL error`, bad.length === 0, 'no error');
+    }
+
+    // --- The examples and their tours (wave 1, slice 7) ---
+    const examples = await json(`${url}/api/examples`);
+    check('viewer', 'the example datasets are listed, and none is downloaded unasked', examples.examples.map((e) => `${e.name}: ${e.state}`).join(', '), examples.examples.length === 2 && examples.examples.every((e) => e.state === 'absent' && e.download > 0 && e.license), 'two, absent');
+    for (const name of info.files.map((f) => f.name)) {
+      const toured = await chrome.eval(`(async () => {
+        const app = window.situcraft;
+        const { TOURS } = await import('/lib/tours.js');
+        const { startTour } = await import('/ui/tour.js');
+        const tour = TOURS[${JSON.stringify(name)}];
+        const item = app.bundles.items().find((b) => b.name === ${JSON.stringify(name)});
+        const dataset = app.bundles.datasetFor(item);
+        if (!tour || !dataset) return null;
+        const wait = async (f) => { for (let k = 0; k < 300; k += 1) { if (f()) return true; await new Promise((r) => setTimeout(r, 100)); } return false; };
+        const tourCard = startTour(app, { tour, dataset: dataset.id });
+        const problems = [];
+        for (const [i, step] of tour.steps.entries()) {
+          tourCard.go(i);
+          const ok = await wait(() => app.store.ui.mode === step.mode && (step.mode === 'data' || (step.mode === 'viewer' ? window.situcraftViewer : window.situcraftQC)?.desc.name === ${JSON.stringify(name)}) && !app.pendingView);
+          if (!ok) { problems.push(\`step \${i + 1} did not open\`); continue; }
+          if (step.mode === 'viewer') {
+            const genes = window.situcraftViewer.renderer.layers.transcripts.genes.length;
+            if (genes !== (step.transcripts?.genes ?? []).length) problems.push(\`step \${i + 1}: \${genes} genes shown\`);
+          }
+        }
+        tourCard.close();
+        return { steps: tour.steps.length, problems };
+      })()`);
+      check('viewer', `${name}: every step of its tour opens, with its genes`, toured ? (toured.problems.length ? toured.problems.join('; ') : `${toured.steps} steps`) : 'no tour', toured && toured.problems.length === 0, 'every step');
+    }
+
+    // --- A project saved by 0.1.0 reopens exactly (validation/projects) ---
+    if (present.includes('xenium-lung-2fov')) {
+      const text = readFileSync(join(root, 'validation', 'projects', '0.1.0-lung.situcraft.json'), 'utf8');
+      const fixture = JSON.parse(text);
+      const lungIndex = info.files.findIndex((f) => f.name === 'xenium-lung-2fov');
+      const reopened = await chrome.eval(`(async () => {
+        const app = window.situcraft;
+        const wait = async (f) => { for (let k = 0; k < 300; k += 1) { const v = f(); if (v) return v; await new Promise((r) => setTimeout(r, 100)); } return null; };
+        const doc = ${JSON.stringify(text)};
+        const id = JSON.parse(doc).id;
+        await app.library.saveProject(id, doc);
+        await app.openProject(id);
+        const dataset = app.store.project.datasets[0];
+        const before = (await wait(() => { const l = app.bundles.link(dataset.id); return l && l.state !== 'checking' ? l : null; }))?.state;
+        const link = await app.bundles.locate(dataset.id, ${JSON.stringify(join(dataRoot, 'xenium-lung-2fov'))});
+        return { before, after: link?.state, name: app.store.project.name, views: app.store.project.views.length, filters: app.store.project.artifacts.length };
+      })()`);
+      check('viewer', 'the 0.1.0 Lung project opens; its bundle, moved, is located again', reopened ? `${reopened.views} views, ${reopened.filters} filters; the bundle ${reopened.before}, then ${reopened.after}` : 'it did not open', reopened?.before === 'missing' && reopened?.after === 'ok' && reopened.views === fixture.views.length, 'missing, then ok');
+      // Its filters, evaluated here, keep the cells they recorded.
+      const cells = readCells(await fetch(`${url}/api/local/${lungIndex}/cells`).then((r) => r.arrayBuffer()));
+      for (const filter of fixture.artifacts.filter((a) => a.kind === 'filter')) {
+        const bits = Buffer.alloc(4 + Math.ceil(cells.n / 8));
+        bits.writeUInt32LE(cells.n, 0);
+        let kept = 0;
+        for (let i = 0; i < cells.n; i += 1) {
+          const value = (c) => cells[c.attribute][i];
+          if (filter.conditions.every((c) => (c.min === null || value(c) >= c.min) && (c.max === null || value(c) <= c.max))) {
+            kept += 1;
+            bits[4 + (i >> 3)] |= 1 << (i & 7);
+          }
+        }
+        const sum = createHash('sha256').update(bits).digest('hex');
+        check('viewer', `0.1.0 Lung project: filter ${filter.name} version ${filter.version} keeps the cells it recorded`, `${kept} kept (recorded ${filter.result.kept}); SHA-256 ${sum === filter.result.sha256 ? 'the same' : 'different'}`, kept === filter.result.kept && sum === filter.result.sha256, 'the same cells and checksum');
+      }
+      // Its saved views reopen exactly, from the project tree and from a link.
+      for (const view of fixture.views) {
+        const same = await chrome.eval(`(async () => {
+          const app = window.situcraft;
+          const { sameView } = await import('/lib/views.js');
+          const view = app.store.project.views.find((v) => v.id === ${JSON.stringify(view.id)});
+          app.applyView(view);
+          const target = () => (view.mode === 'qc' ? window.situcraftQC : window.situcraftViewer);
+          for (let k = 0; k < 300 && !(app.store.ui.mode === view.mode && target()?.desc && !app.pendingView); k += 1) await new Promise((r) => setTimeout(r, 100));
+          await new Promise((r) => setTimeout(r, 1500));
+          const captured = target().captureView(view.name);
+          return { same: sameView(captured, view), captured: JSON.stringify(captured.camera) + JSON.stringify(captured.cell) };
+        })()`);
+        check('viewer', `0.1.0 Lung project: view "${view.name}" reopens exactly`, same.same ? 'the same' : `differs: ${same.captured}`, same.same, 'the same');
+      }
+      const linked = await chrome.eval(`(async () => {
+        const app = window.situcraft;
+        const { sameView, viewLink } = await import('/lib/views.js');
+        const view = app.store.project.views.find((v) => v.mode === 'viewer' && v.cell);
+        location.hash = new URL(viewLink(location.href, app.store.project.id, view.id)).hash;
+        for (let k = 0; k < 300 && !(app.store.ui.mode === 'viewer' && window.situcraftViewer?.desc && !app.pendingView); k += 1) await new Promise((r) => setTimeout(r, 100));
+        await new Promise((r) => setTimeout(r, 1500));
+        return sameView(window.situcraftViewer.captureView(view.name), view);
+      })()`);
+      check('viewer', '0.1.0 Lung project: a saved view\'s link reopens it exactly', String(linked), linked, 'true');
     }
     check('viewer', 'no uncaught errors in the page', errors.length ? errors.slice(0, 3).join(' | ') : 'none', errors.length === 0, 'none');
   } finally {

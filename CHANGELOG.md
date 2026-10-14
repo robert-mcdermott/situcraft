@@ -1,11 +1,12 @@
 # Changelog
 
-## 0.1.0 (unreleased)
+## 0.1.0 (2026-10-14)
 
 SituCraft's first release, wave 1 of the [roadmap](situcraft-spec/roadmap.md): open a Xenium
 output bundle, check it, and see the tissue, its transcripts and its cells at any zoom, with QC
-linked to the tissue and a project that reopens instantly. Built slice by slice; this section grows
-with each.
+linked to the tissue and a project that reopens exactly. Start with
+[Getting started](docs/GETTING-STARTED.md): its example datasets download in a click, each with a
+guided tour.
 
 ### Added
 
@@ -138,6 +139,31 @@ with each.
     records which cells it keeps and is checked to keep them again when the project reopens.
   - The derived data's format changed (to count the groups of transcripts the maps need), so
     datasets build their derived data once more.
+- **Saved views, the record and examples (wave 1, slice 7).**
+  - **Saved views:** **Save view** in the Viewer or the QC view keeps what it shows: the place and
+    zoom (in µm, so the same tissue on any screen), the channels with their colors and windows,
+    the genes, the layers and cell fill, the selected cell, and the QC map and filter in use.
+    Channels and genes are kept by name, so a view survives its derived data being rebuilt. Views
+    are listed in the project tree and the palette; each can be renamed, removed, or copied as a
+    link that reopens it.
+  - **Project archives (`.scz`):** **Project archive (.scz)…** in the project menu writes the project (datasets,
+    filters, saved views, history; not the bundles) where you say, recording each bundle relative
+    to the archive too, so that a folder holding both can be moved or shared. Opening an archive
+    (by its path, or on the command line) finds each bundle beside it first; an archive whose
+    project is already in the library opens as a copy.
+  - **A methods paragraph** for each dataset (**Methods** in the Data view): the platform, panel
+    and software, the segmentation, the transcripts counted, how SituCraft checked the bundle
+    (with its version and commit), the filters chosen, and the data's source for public data,
+    with references, ready to copy.
+  - **Example datasets:** the start page offers 10x Genomics' Xenium human Lung and Breast 2-FOV
+    bundles (CC BY 4.0), with their source, license and size. Nothing is downloaded until asked;
+    a download runs as a job with progress and **Stop**, its archive checked by size, MD5 and
+    SHA-256 and every file by size and SHA-256, then deleted. `--examples-dir` sets where they go
+    (by default the `examples` folder of the data directory).
+  - **Guided tours** of both examples: seven steps each through the Data view, the Viewer (the
+    section, marker genes where they meet, segmentation methods) and QC (maps and filters).
+  - **Documentation:** [Getting started](docs/GETTING-STARTED.md) and
+    [the formats SituCraft reads and writes](docs/FORMATS.md).
 - **The development data.** `node validation/fetch.mjs` downloads 10x Genomics' Xenium human Lung
   and Breast 2-FOV bundles (CC BY 4.0). It checks each archive's MD5, extracts it (each member's
   CRC-32 checked), checks every file's SHA-256, and deletes the archive. Both take about 640 MB;
@@ -228,6 +254,19 @@ with each.
 - **CI** checks the readers and the Lung bundle's tiles for each commit (`node
   validation/fetch.mjs xenium-lung-2fov`, OpenJPEG installed as the reference); a weekly workflow
   checks both bundles.
+- **The record (wave 1, slice 7):**
+  - a project saved by this release (`validation/projects/0.1.0-lung.situcraft.json`: the Lung
+    dataset, two versions of a filter and three saved views) opens with every field kept; in
+    headless Chrome its moved bundle is located again, its filters keep exactly the cells they
+    recorded (by an evaluation in Node and Node's own SHA-256), and its three views reopen exactly,
+    from the project and from a link;
+  - every step of both tours opens with its genes, and each gene a tour names is in its panel;
+  - an example downloads as a job, is checked and opened as a bundle, and is removed; a damaged
+    archive, a wrong checksum, a member leaving its folder, too little free space and a stopped
+    download each leave nothing behind (Go tests); downloading and removing are refused to other
+    computers;
+  - project archives keep their bundles when their folder moves (Go test);
+  - the methods paragraph says only what was done, and the same inputs give the same text.
 - **A release dry run** built the six binaries with `SHA256SUMS`. The macOS one:
   - printed `situcraft 0.1.0`;
   - served the embedded app with its commit in `/api/info`;

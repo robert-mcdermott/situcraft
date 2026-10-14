@@ -4,6 +4,8 @@
 // 0.8.0 web/ui/inspector.js.
 
 import { h, icon, relativeTime, formatBytes } from './dom.js';
+import { promptDialog, toast } from './overlays.js';
+import { removeView, renameView, viewLink } from '../lib/views.js';
 import { KIND_ICONS, KIND_LABELS } from './sidebar.js';
 
 export function mountInspector(app) {
@@ -80,8 +82,45 @@ export function mountInspector(app) {
       h('p.muted.mono', { style: { margin: '8px 0 0', fontSize: '10.5px', wordBreak: 'break-all' } }, `SHA-256 of the cells kept: ${f.result.sha256}`));
   }
 
+  // A saved view: what it shows, its link, and what can be done with it.
+  function viewSection(v) {
+    const dataset = app.store.project.datasets.find((d) => d.id === v.dataset);
+    const link = viewLink(location.href, app.store.project.id, v.id);
+    return h('section.inspector-section',
+      h('h3', icon('eye'), v.name),
+      h('dl.kv',
+        h('dt', 'Dataset'), h('dd', dataset?.name ?? '—'),
+        h('dt', 'In'), h('dd', v.mode === 'qc' ? 'QC' : 'Viewer'),
+        h('dt', 'Zoom'), h('dd', `${v.camera.umPerCss.toPrecision(3)} µm per pixel`),
+        h('dt', 'Genes'), h('dd', v.transcripts?.all ? 'all transcripts' : v.transcripts?.genes?.join(', ') || '—'),
+        v.qc ? [h('dt', 'Map'), h('dd', v.qc.map)] : null,
+        h('dt', 'Saved'), h('dd', relativeTime(v.updated ?? v.created))),
+      h('div.btn-row', { style: { marginTop: '10px' } },
+        h('button.btn.small.primary', { type: 'button', onclick: () => app.applyView(v) }, icon('eye'), 'Open'),
+        h('button.btn.small', { type: 'button', title: link, onclick: async () => {
+          try {
+            await navigator.clipboard.writeText(link);
+            toast('Link copied: it opens this view while SituCraft runs on this computer.', { kind: 'ok' });
+          } catch {
+            toast(link);
+          }
+        } }, icon('link'), 'Copy link'),
+        h('button.btn.small.ghost', { type: 'button', onclick: async () => {
+          const name = await promptDialog({ title: 'Rename view', label: 'Name', value: v.name });
+          if (name) app.store.commit(renameView(app.store.project, v.id, name), 'Rename view');
+        } }, icon('edit'), 'Rename'),
+        h('button.btn.small.ghost.danger', { type: 'button', onclick: () => {
+          app.store.commit(removeView(app.store.project, v.id), `Remove view ${v.name}`);
+          app.focusItem(null);
+        } }, icon('trash'), 'Remove')));
+  }
+
   function focusSection() {
     const focus = app.store.ui.focus;
+    if (focus?.kind === 'view') {
+      const view = app.store.project.views.find((v) => v.id === focus.id);
+      if (view) return viewSection(view);
+    }
     if (focus?.kind === 'filter') {
       const filter = app.store.project.artifacts.find((a) => a.id === focus.id);
       if (filter) return filterSection(filter);

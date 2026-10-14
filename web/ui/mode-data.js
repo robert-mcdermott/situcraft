@@ -4,8 +4,11 @@
 // to the project, which builds its derived data.
 
 import { h, icon, clear, formatCount, formatBytes, relativeTime } from './dom.js';
-import { confirmDialog, promptDialog, toast } from './overlays.js';
+import { confirmDialog, promptDialog, showDialog, toast } from './overlays.js';
 import { cacheJobKey, countText } from './bundles.js';
+import { methodsParagraph } from '../lib/methods.js';
+import { describeCondition } from '../lib/filters.js';
+import { exampleSource } from '../lib/examples.js';
 
 const SEVERITY = {
   fatal: { label: 'Fatal', badge: 'danger', icon: 'warning', heading: 'Fatal problems', hint: 'The bundle cannot be used until these are fixed.' },
@@ -140,6 +143,7 @@ export function mountData(app, container) {
     if (dataset && (!link || link.state === 'missing' || link.state === 'different-run' || link.state === 'changed')) {
       actions.push(h('button.btn', { type: 'button', onclick: () => locate(dataset) }, icon('folder'), 'Locate…'));
     }
+    if (dataset) actions.push(h('button.btn', { type: 'button', title: 'A methods paragraph for this dataset, from what the project records', onclick: () => showMethods(dataset, report) }, icon('report'), 'Methods'));
     if (dataset) {
       actions.push(h('button.btn.ghost.danger', {
         type: 'button',
@@ -170,6 +174,55 @@ export function mountData(app, container) {
       section.append(inventory(report));
     }
     return section;
+  }
+
+  // A methods paragraph for the dataset (lib/methods.js), with the filters to describe chosen:
+  // by default the latest version of each.
+  async function showMethods(dataset, report) {
+    if (!app.examples.list()) await app.examples.refresh();
+    const source = exampleSource(app.examples.forDataset(dataset));
+    const methods = report?.summary?.segmentationMethods ?? [];
+    const filters = app.store.project.artifacts.filter((a) => a.kind === 'filter' && a.dataset === dataset.id);
+    const latest = new Map();
+    for (const f of filters) if (!latest.has(f.name) || latest.get(f.name).version < f.version) latest.set(f.name, f);
+    const chosen = new Set([...latest.values()].map((f) => f.id));
+    const text = h('p.methods-text');
+    const refs = h('ol.methods-refs');
+    let current = null;
+    function write() {
+      const described = filters.filter((f) => chosen.has(f.id)).map((f) => ({ ...f, conditions: f.conditions.map((c) => ({ ...c, text: describeCondition(c, methods) })) }));
+      current = methodsParagraph({ dataset, report, filters: described, program: { version: app.version, commit: app.commit }, source });
+      text.textContent = current.text;
+      clear(refs).append(...current.references.map((r) => h('li', r.replace(/^\[\d+\]\s*/, ''))));
+    }
+    write();
+    const choices = filters.length ? h('div.methods-filters', h('b', 'Filters to describe'),
+      ...filters.map((f) => h('label.viewer-toggle', h('input', { type: 'checkbox', checked: chosen.has(f.id), onchange: (event) => { if (event.target.checked) chosen.add(f.id); else chosen.delete(f.id); write(); } }),
+        `${f.name}, version ${f.version} (${formatCount(f.result.kept)} of ${formatCount(f.result.cells)} cells)`))) : null;
+    showDialog({
+      title: `Methods: ${dataset.name}`,
+      width: 'wide',
+      content: [
+        h('p.muted', 'Written from what the project records of this dataset and SituCraft\'s version. Check it against what you did, and add what was done elsewhere.'),
+        text,
+        h('div.section-title', 'References'),
+        refs,
+        choices,
+      ],
+      buttons: [
+        { label: 'Close', ghost: true },
+        { label: 'Copy', primary: true, onClick: async () => {
+          try {
+            await navigator.clipboard.writeText(`${current.text}\n\n${current.references.join('\n')}\n`);
+            toast('Copied the paragraph and its references.', { kind: 'ok' });
+          } catch {
+            toast('The clipboard is not available: select the text and copy it.', { kind: 'error' });
+            return false;
+          }
+          return undefined;
+        } },
+      ],
+    });
   }
 
   // The dataset's derived data: what is built, the job building the rest, and the cache. While a

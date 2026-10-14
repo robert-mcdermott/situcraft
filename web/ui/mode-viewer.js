@@ -6,13 +6,15 @@
 // saved views keep it in the project (wave 1, slice 7).
 
 import { h, icon, clear, formatCount } from './dom.js';
-import { toast } from './overlays.js';
+import { promptDialog, toast } from './overlays.js';
+import { addView, captureView, viewCamera, viewLayers } from '../lib/views.js';
 import { TissueRenderer } from '../render/renderer.js';
 import { fitCamera, scaleBar, screenToWorld, visibleRect, worldToScreen } from '../lib/viewport.js';
 import { attachNavigation } from './navigation.js';
 import { readCells, joinSamples, nearestCell } from '../lib/viewer-data.js';
 import { mountViewerPanel, defaultLayers, cellFillColors } from './viewer-panel.js';
 import { hexColor } from '../render/gl.js';
+import { categoricalColor } from '../lib/colormaps.js';
 
 // Per dataset id: { camera, layers, selected } for the session.
 const sessions = new Map();
@@ -27,8 +29,9 @@ async function getJSON(url) {
 export function mountViewer(app, container) {
   const body = h('div.viewer-body');
   const title = h('span.crumbs');
+  const headActions = h('div.btn-row');
   const root = h('div.view.viewer',
-    h('div.workbench-head', h('h1', icon('tissue'), 'Viewer', title)),
+    h('div.workbench-head', h('h1', icon('tissue'), 'Viewer', title), h('span.spacer'), headActions),
     body);
   container.append(root);
 
@@ -40,7 +43,9 @@ export function mountViewer(app, container) {
   // The dataset the view shows: the one in focus, else the first of the project.
   function target() {
     const { project, ui } = app.store;
-    const id = ui.focus?.kind === 'dataset' ? ui.focus.id : project.datasets[0]?.id;
+    // A dataset in focus, or a saved view's, else the first.
+    const view = ui.focus?.kind === 'view' ? project.views.find((v) => v.id === ui.focus.id) : null;
+    const id = ui.focus?.kind === 'dataset' ? ui.focus.id : view?.dataset ?? project.datasets[0]?.id;
     const dataset = project.datasets.find((d) => d.id === id) ?? project.datasets[0];
     if (!dataset) return null;
     const link = app.bundles.link(dataset.id);
@@ -55,6 +60,7 @@ export function mountViewer(app, container) {
   }
 
   function teardown() {
+    clear(headActions);
     if (!current) return;
     sessions.set(current.dataset.id, { camera: current.renderer.camera, layers: current.layers, selected: current.selectedRow });
     current.dispose();
@@ -143,14 +149,20 @@ export function mountViewer(app, container) {
       },
     };
 
-    const panel = mountViewerPanel(panelHost, { desc, layers, cells, app, onChange: (next, what) => {
-      state.layers = next;
-      renderer.setLayers(next);
-      if (what === 'fill') applyFill();
-      if (what === 'channels') drawMinimap();
-      updateLegend();
-    } });
-    state.panel = panel;
+    // The layers panel, mounted again when a saved view replaces every setting.
+    let panel = null;
+    function mountPanel(start) {
+      clear(panelHost);
+      panel = mountViewerPanel(panelHost, { desc, layers: start, cells, app, onChange: (next, what) => {
+        state.layers = next;
+        renderer.setLayers(next);
+        if (what === 'fill') applyFill();
+        if (what === 'channels') drawMinimap();
+        updateLegend();
+      } });
+      state.panel = panel;
+    }
+    mountPanel(layers);
 
     function applyFill() {
       renderer.setCellColors(cellFillColors(state.layers.cells.fill, cells, desc));
@@ -170,7 +182,7 @@ export function mountViewer(app, container) {
       renderer.resize(r.width, r.height);
       if (!state.placed) {
         state.placed = true;
-        if (session?.camera) renderer.setCamera(session.camera);
+        if (session?.camera && !state.wholeSection) renderer.setCamera(session.camera);
         else fitAll();
       }
       drawMinimap();
@@ -389,6 +401,52 @@ export function mountViewer(app, container) {
     };
     state.showChosen();
 
+    // --- Saved views ---
+    function captureNow(name = '') {
+      const detail = state.detail;
+      return captureView({ name, dataset: t.dataset.id, mode: 'viewer', desc,
+        state: { camera: renderer.camera, ratio: window.devicePixelRatio || 1, layers: state.layers, cell: detail ? { row: detail.row, id: detail.id } : null } });
+    }
+
+    function applyView(view) {
+      const { layers: next, missing } = viewLayers(view, desc, defaultLayers(desc));
+      // Each gene in its color, as the panel colors them.
+      next.transcripts.colors = next.transcripts.genes.map((_, i) => categoricalColor(i));
+      state.layers = next;
+      mountPanel(next);
+      renderer.setLayers(next);
+      applyFill();
+      updateLegend();
+      drawMinimap();
+      // A view without a place (a tour's step) shows the whole section.
+      if (view.camera) {
+        state.placed = true;
+        renderer.setCamera(viewCamera(view, window.devicePixelRatio || 1));
+      } else if (state.placed) fitAll();
+      else state.wholeSection = true;
+      if (view.cell) {
+        selectRow(view.cell.row).then(() => {
+          if (state.detail && state.detail.id !== view.cell.id) toast(`The view's cell ${view.cell.id} is now ${state.detail.id}: the cells changed since it was saved.`, { kind: 'error' });
+        });
+      } else selectRow(-1);
+      if (missing.length) toast(`Not in this dataset, so not shown: ${missing.join(', ')}.`, { kind: 'error' });
+    }
+
+    state.takePending = () => {
+      const view = app.pendingView;
+      if (view?.mode !== 'viewer' || view.dataset !== t.dataset.id) return;
+      app.pendingView = null;
+      applyView(view);
+    };
+
+    headActions.append(h('button.btn.small', { type: 'button', title: 'Keep what the viewer shows, to reopen it exactly', onclick: async () => {
+      const name = await promptDialog({ title: 'Save view', label: 'Name', value: `${t.dataset.name}, view ${app.store.project.views.length + 1}`, confirm: 'Save' });
+      if (!name) return;
+      const view = captureNow(name);
+      app.store.commit(addView(app.store.project, view), `Save view ${name}`);
+      toast(`Saved ${name}. It is listed under Saved views; its link reopens it.`, { kind: 'ok' });
+    } }, icon('save'), 'Save view'));
+
     // For the validation harness (validation/viewer.mjs) and the console.
     window.situcraftViewer = {
       renderer,
@@ -401,6 +459,12 @@ export function mountViewer(app, container) {
       setGenes: (genes) => panel.setGenes(genes),
       setTranscripts: (patch) => panel.setTranscripts(patch),
       rawCapture: (spec) => renderer.rawCapture(spec),
+      captureView: (name) => captureNow(name),
+      saveView: (name) => {
+        const view = captureNow(name);
+        app.store.commit(addView(app.store.project, view), `Save view ${name}`);
+        return view;
+      },
       loadedPoints: (rect) => renderer.loadedPoints(rect),
       select: (row) => selectRow(row),
       worldToScreen: (x, y) => worldToScreen(renderer.camera, ...renderer.size(), x, y),
@@ -436,6 +500,8 @@ export function mountViewer(app, container) {
         return performance.now() - t0;
       },
     };
+    // A saved view (or a tour's step) waiting for this dataset.
+    state.takePending();
     return state;
   }
 
@@ -458,6 +524,8 @@ export function mountViewer(app, container) {
       }
       // Cells chosen in the QC view (a brushed plot) show here too.
       if (topics.has('selection') && current) current.showChosen();
+      // A saved view of the dataset shown.
+      if (current && (topics.has('view-pending') || topics.has('focus'))) current.takePending();
     },
     destroy() {
       teardown();

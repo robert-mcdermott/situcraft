@@ -33,7 +33,10 @@ export function openPalette(app) {
       if (artifact.kind === 'filter') app.setMode('qc');
     } });
   }
-  for (const view of project.views) entries.push({ kind: 'Saved view', title: view.name, hint: '', icon: 'eye', run: () => app.focusItem({ kind: 'view', id: view.id }) });
+  for (const view of project.views) entries.push({ kind: 'Saved view', title: view.name, hint: view.mode === 'qc' ? 'QC' : 'Viewer', icon: 'eye', run: () => {
+    app.focusItem({ kind: 'view', id: view.id });
+    app.applyView(view);
+  } });
 
   const input = h('input.palette-input', { placeholder: 'Search datasets, segmentations, saved views, or type a command…', autofocus: true });
   const results = h('div.palette-results');

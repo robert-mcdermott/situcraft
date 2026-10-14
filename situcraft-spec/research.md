@@ -412,10 +412,19 @@ are uncertain.
 | A bundle with post-Xenium H&E and alignment (≤ 3 GB) | chosen in wave 5 planning (candidate: 10x human lymph node preview data, CC BY 4.0 (to verify size and files)) | | | Registration and pathology |
 
 Notes:
-- The 10x CDN answers HTTP 403 to requests without a browser-like User-Agent (verified); the
-  fetcher sends one.
-- Attribution, as CC BY 4.0 requires, appears in the README, the example's card, and any figure
-  made from the data.
+- The two 2-FOV bundles are also SituCraft's example datasets (wave 1, slice 7), downloaded from
+  the same URLs when a user asks.
+- The 10x CDN once answered HTTP 403 to requests without a browser-like User-Agent; in October
+  2026 it accepts any (verified with none, Go's, curl's and SituCraft's). The fetcher and SituCraft
+  name themselves in theirs.
+- Attribution, as CC BY 4.0 requires, appears in the README, the example's card, the methods
+  paragraph's references, and any figure made from the data.
+- **The tours' genes** (`web/lib/tours.js`), among the panel genes with the most Q20 transcripts
+  in each section: Lung: EPCAM (23,071), COL5A2 (6,371), PLVAP (3,472), CD68 (790), VWF (1,326),
+  RGS5 (1,888), PDGFRB (1,240). Breast: KRT7 (14,545), ACTA2 (13,072), LUM (20,388), KRT14 (654),
+  PTPRC (1,729), CD68 (5,253), PECAM1 (1,583), MKI67 (7,823). The Lung panel's alveolar and B-cell
+  markers are scarce in this section (AGER 102, SFTPD 142, MS4A1 29), and PTPRC, ACTA2, PECAM1
+  and COL1A1 are not in it, so the tour does not use them.
 
 ## 8. Other references
 

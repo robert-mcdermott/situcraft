@@ -1,0 +1,377 @@
+{
+  "format": "situcraft-project",
+  "version": 1,
+  "id": "p-86e32482a1f74ad680b2",
+  "name": "Lung example, as SituCraft 0.1.0 saved it",
+  "created": "2026-10-14T18:31:18.778Z",
+  "modified": "2026-10-14T18:31:39.325Z",
+  "datasets": [
+    {
+      "id": "d-0ab2d717f6c64c09",
+      "name": "xenium-lung-2fov",
+      "platform": "Xenium",
+      "path": "/data/examples/xenium-lung-2fov",
+      "zipped": false,
+      "software": "xenium-2.0.0.10",
+      "version": "2.0.0",
+      "experimentUuid": "b3d47512-49f1-4932-8182-577862c181e7",
+      "analysisUuid": "38f7f730-e4f3-4484-ac26-ec89cf061ac5",
+      "panel": "Xenium Human Lung Gene Expression",
+      "organism": "Human",
+      "tissue": "Lung",
+      "run": "run",
+      "region": "region",
+      "runStart": "2023-05-05T20:50:27Z",
+      "cells": 11898,
+      "transcripts": 825885,
+      "pixelSizeUm": 0.2125,
+      "extentUm": [
+        1230.587,
+        755.012
+      ],
+      "channels": [
+        "DAPI (Nuclear)"
+      ],
+      "zPlanes": 11,
+      "fingerprint": [
+        {
+          "path": "analysis.tar.gz",
+          "size": 2499611
+        },
+        {
+          "path": "analysis.zarr.zip",
+          "size": 72566
+        },
+        {
+          "path": "analysis_summary.html",
+          "size": 9162592
+        },
+        {
+          "path": "aux_outputs.tar.gz",
+          "size": 4995907
+        },
+        {
+          "path": "cell_boundaries.csv.gz",
+          "size": 2750450
+        },
+        {
+          "path": "cell_boundaries.parquet",
+          "size": 1022286
+        },
+        {
+          "path": "cell_feature_matrix.h5",
+          "size": 407323
+        },
+        {
+          "path": "cell_feature_matrix.tar.gz",
+          "size": 1390310
+        },
+        {
+          "path": "cell_feature_matrix.zarr.zip",
+          "size": 563383
+        },
+        {
+          "path": "cells.csv.gz",
+          "size": 701012
+        },
+        {
+          "path": "cells.parquet",
+          "size": 233148
+        },
+        {
+          "path": "cells.zarr.zip",
+          "size": 6879546
+        },
+        {
+          "path": "experiment.xenium",
+          "size": 1673,
+          "sha256": "0d52de3573bbf6071bd7edb9a7bdc099672ddae8cddc612d7bec959bb361f380"
+        },
+        {
+          "path": "gene_panel.json",
+          "size": 158827,
+          "sha256": "77a8964e4c4be31473b984bf3a078553a1dc56f626c1b824b2e4ba96ebb05209"
+        },
+        {
+          "path": "metrics_summary.csv",
+          "size": 1818,
+          "sha256": "c4198fb000ed9afb778550b0512a53a81079ada33f265ca82df96c061a716e45"
+        },
+        {
+          "path": "morphology.ome.tif",
+          "size": 164869537
+        },
+        {
+          "path": "morphology_focus/morphology_focus_0000.ome.tif",
+          "size": 17487838
+        },
+        {
+          "path": "nucleus_boundaries.csv.gz",
+          "size": 2619718
+        },
+        {
+          "path": "nucleus_boundaries.parquet",
+          "size": 919858
+        },
+        {
+          "path": "transcripts.csv.gz",
+          "size": 34757095
+        },
+        {
+          "path": "transcripts.parquet",
+          "size": 15254903
+        },
+        {
+          "path": "transcripts.zarr.zip",
+          "size": 17593688
+        }
+      ],
+      "validation": {
+        "checked": "2026-10-14T18:31:19Z",
+        "support": "supported",
+        "fatal": 0,
+        "warnings": 0,
+        "info": 3,
+        "metricsCompared": 22,
+        "metricsAgreeing": 22,
+        "findings": [
+          {
+            "severity": "info",
+            "code": "transcripts.at-edge",
+            "title": "Transcripts just past the images' edge",
+            "count": 7
+          },
+          {
+            "severity": "info",
+            "code": "boundaries.self-intersecting",
+            "title": "Cell boundaries with edges that cross (not a simple polygon)",
+            "count": 44
+          },
+          {
+            "severity": "info",
+            "code": "boundaries.self-intersecting",
+            "title": "Nucleus boundaries with edges that cross (not a simple polygon)",
+            "count": 54
+          }
+        ]
+      },
+      "added": "2026-10-14T18:31:20.874Z"
+    }
+  ],
+  "artifacts": [
+    {
+      "kind": "filter",
+      "id": "f-91b5160712a04ead",
+      "name": "Enough signal",
+      "version": 1,
+      "parent": null,
+      "dataset": "d-0ab2d717f6c64c09",
+      "created": "2026-10-14T18:31:20.977Z",
+      "conditions": [
+        {
+          "attribute": "transcripts",
+          "min": 20,
+          "max": null
+        }
+      ],
+      "result": {
+        "cells": 11898,
+        "kept": 11303,
+        "sha256": "1eeec4bcfe970745f72c385af0988a9b845efe9ca4a12d8daef4c9b6f6edf860"
+      }
+    },
+    {
+      "kind": "filter",
+      "id": "f-9a74e37a63cd4228",
+      "name": "Enough signal",
+      "version": 2,
+      "parent": "f-91b5160712a04ead",
+      "dataset": "d-0ab2d717f6c64c09",
+      "created": "2026-10-14T18:31:21.482Z",
+      "conditions": [
+        {
+          "attribute": "transcripts",
+          "min": 20,
+          "max": null
+        },
+        {
+          "attribute": "area",
+          "min": 15,
+          "max": 400
+        }
+      ],
+      "result": {
+        "cells": 11898,
+        "kept": 11254,
+        "sha256": "eb128cae88e1654e43ee2198db1d46fb44820ae34661024afb1a5fe38360a7c5"
+      }
+    }
+  ],
+  "decisions": [],
+  "views": [
+    {
+      "id": "v-d3f65b89e9784b43",
+      "name": "Epithelium, fibroblasts, vessels and macrophages",
+      "dataset": "d-0ab2d717f6c64c09",
+      "mode": "viewer",
+      "created": "2026-10-14T18:31:35.716Z",
+      "segmentation": "instrument",
+      "camera": {
+        "cx": 750,
+        "cy": 300,
+        "umPerCss": 0.4
+      },
+      "channels": [
+        {
+          "name": "DAPI",
+          "visible": true,
+          "color": "#8c8c8c",
+          "window": [
+            24,
+            3179
+          ],
+          "gamma": 1
+        }
+      ],
+      "transcripts": {
+        "visible": true,
+        "all": false,
+        "genes": [
+          "EPCAM",
+          "COL5A2",
+          "PLVAP",
+          "CD68"
+        ],
+        "minQ": 20,
+        "pointSize": 3,
+        "gain": 1
+      },
+      "cells": {
+        "outlines": true,
+        "nuclei": false,
+        "fill": null,
+        "opacity": 0.55
+      },
+      "cell": {
+        "row": 10867,
+        "id": "neddaiac-1"
+      }
+    },
+    {
+      "id": "v-bb017cedbf4e4c56",
+      "name": "Cells by gene transcripts",
+      "dataset": "d-0ab2d717f6c64c09",
+      "mode": "viewer",
+      "created": "2026-10-14T18:31:37.718Z",
+      "segmentation": "instrument",
+      "camera": {
+        "cx": 615.47435,
+        "cy": 377.50624999999997,
+        "umPerCss": 2.27162600576
+      },
+      "channels": [
+        {
+          "name": "DAPI",
+          "visible": true,
+          "color": "#4f7cff",
+          "window": [
+            24,
+            3179
+          ],
+          "gamma": 1
+        }
+      ],
+      "transcripts": {
+        "visible": true,
+        "all": false,
+        "genes": [],
+        "minQ": 20,
+        "pointSize": 3,
+        "gain": 1
+      },
+      "cells": {
+        "outlines": true,
+        "nuclei": true,
+        "fill": "transcripts",
+        "opacity": 0.7
+      },
+      "cell": null
+    },
+    {
+      "id": "v-270d2df0c6d3498b",
+      "name": "Gene transcripts outside cells, filtered",
+      "dataset": "d-0ab2d717f6c64c09",
+      "mode": "qc",
+      "created": "2026-10-14T18:31:39.324Z",
+      "segmentation": "instrument",
+      "camera": {
+        "cx": 600,
+        "cy": 400,
+        "umPerCss": 1.5
+      },
+      "channels": [
+        {
+          "name": "DAPI",
+          "visible": true,
+          "color": "#4f7cff",
+          "window": [
+            24,
+            3179
+          ],
+          "gamma": 1
+        }
+      ],
+      "transcripts": {
+        "visible": false,
+        "all": false,
+        "genes": [],
+        "minQ": 20,
+        "pointSize": 3,
+        "gain": 1
+      },
+      "cells": {
+        "outlines": true,
+        "nuclei": false,
+        "fill": null,
+        "opacity": 0.75
+      },
+      "cell": null,
+      "qc": {
+        "map": "bin:outside",
+        "filter": "f-9a74e37a63cd4228"
+      }
+    }
+  ],
+  "history": [
+    {
+      "time": "2026-10-14T18:31:20.874Z",
+      "action": "add-dataset",
+      "detail": "xenium-lung-2fov (/data/examples/xenium-lung-2fov)"
+    },
+    {
+      "time": "2026-10-14T18:31:20.979Z",
+      "action": "filter",
+      "detail": "Saved filter Enough signal (version 1): 11303 of 11898 cells kept"
+    },
+    {
+      "time": "2026-10-14T18:31:21.484Z",
+      "action": "filter",
+      "detail": "Saved filter Enough signal (version 2): 11254 of 11898 cells kept"
+    },
+    {
+      "time": "2026-10-14T18:31:35.716Z",
+      "action": "view",
+      "detail": "Saved view Epithelium, fibroblasts, vessels and macrophages"
+    },
+    {
+      "time": "2026-10-14T18:31:37.718Z",
+      "action": "view",
+      "detail": "Saved view Cells by gene transcripts"
+    },
+    {
+      "time": "2026-10-14T18:31:39.325Z",
+      "action": "view",
+      "detail": "Saved view Gene transcripts outside cells, filtered"
+    }
+  ]
+}

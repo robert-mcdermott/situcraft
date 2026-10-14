@@ -3,10 +3,12 @@
 package main
 
 import (
+	"archive/zip"
 	"bufio"
 	"bytes"
 	"compress/zlib"
 	"context"
+	"crypto/md5"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
@@ -25,6 +27,7 @@ import (
 	"testing"
 	"time"
 
+	"situcraft/internal/examples"
 	"situcraft/internal/jobs"
 )
 
@@ -833,5 +836,152 @@ func TestBundleViewEndpoints(t *testing.T) {
 		if rec := get(target); rec.Code != code {
 			t.Errorf("%s answered %d, want %d", target, rec.Code, code)
 		}
+	}
+}
+
+// A project archive records each bundle relative to itself, so a folder holding the archive and
+// its bundles can move and still open.
+func TestProjectArchivesTravelWithTheirBundles(t *testing.T) {
+	root := t.TempDir()
+	bundle := filepath.Join(root, "bundles", "lung")
+	os.MkdirAll(bundle, 0o755)
+	os.WriteFile(filepath.Join(bundle, "experiment.xenium"), []byte("{}"), 0o644)
+	elsewhere := filepath.Join(t.TempDir(), "other")
+	a, handler := testApp(t)
+	defer a.jobs.Close()
+	project := map[string]any{"format": "situcraft-project", "version": 1, "id": "p-archive", "name": "Lung",
+		"datasets": []any{map[string]any{"id": "d1", "name": "lung", "path": bundle}, map[string]any{"id": "d2", "name": "gone", "path": elsewhere}}}
+	write := func(path string, overwrite bool) *httptest.ResponseRecorder {
+		raw, _ := json.Marshal(map[string]any{"path": path, "project": project, "overwrite": overwrite})
+		req := httptest.NewRequest(http.MethodPost, "/api/project-archive", bytes.NewReader(raw))
+		req.Host = "127.0.0.1:8840"
+		req.RemoteAddr = "127.0.0.1:50000"
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		return rec
+	}
+	archive := filepath.Join(root, "lung")
+	if rec := write(archive, false); rec.Code != http.StatusOK {
+		t.Fatalf("writing: %d %s", rec.Code, rec.Body)
+	}
+	if rec := write(archive+".scz", false); rec.Code != http.StatusConflict {
+		t.Errorf("an existing archive was overwritten: %d", rec.Code)
+	}
+	if rec := write("relative.scz", false); rec.Code != http.StatusBadRequest {
+		t.Errorf("a relative path was accepted: %d", rec.Code)
+	}
+	// The folder moves; its archive is opened from the new place.
+	moved := filepath.Join(t.TempDir(), "moved")
+	if err := os.Rename(root, moved); err != nil {
+		t.Fatal(err)
+	}
+	a.files.add([]string{filepath.Join(moved, "lung.scz")})
+	var opened struct {
+		Project struct {
+			ID       string
+			Datasets []struct{ ID, Path, ArchivePath string }
+		}
+	}
+	rec := request(t, handler, http.MethodGet, "/api/local/0/project", nil, nil)
+	if err := json.NewDecoder(rec.Body).Decode(&opened); err != nil || rec.Code != http.StatusOK {
+		t.Fatalf("opening: %d %v", rec.Code, err)
+	}
+	d := opened.Project.Datasets
+	if opened.Project.ID != "p-archive" || len(d) != 2 || d[0].Path != filepath.Join(moved, "bundles", "lung") || d[0].ArchivePath != "bundles/lung" {
+		t.Errorf("opened %+v", opened.Project)
+	}
+	// A bundle not beside the archive keeps its recorded place.
+	if d[1].Path != elsewhere {
+		t.Errorf("the second dataset is at %s", d[1].Path)
+	}
+	// Not a project archive.
+	bad := filepath.Join(t.TempDir(), "bad.scz")
+	os.WriteFile(bad, []byte("not a zip"), 0o644)
+	a.files.add([]string{bad})
+	if rec := request(t, handler, http.MethodGet, "/api/local/1/project", nil, nil); rec.Code != http.StatusUnprocessableEntity {
+		t.Errorf("a broken archive answered %d", rec.Code)
+	}
+}
+
+// The examples: listed from the embedded sources, downloaded as a job only when asked (checked,
+// then opened as a bundle), and removed.
+func TestExamplesDownloadOnlyWhenAsked(t *testing.T) {
+	a, handler := testApp(t)
+	defer a.jobs.Close()
+	var listed struct {
+		Dir      string           `json:"dir"`
+		Examples []examples.State `json:"examples"`
+	}
+	rec := request(t, handler, http.MethodGet, "/api/examples", nil, nil)
+	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil || rec.Code != http.StatusOK {
+		t.Fatalf("listing: %d %s", rec.Code, rec.Body)
+	}
+	if len(listed.Examples) != 2 || listed.Examples[0].State != "absent" || listed.Examples[0].License == "" || !strings.HasPrefix(listed.Dir, a.examples.Dir) {
+		t.Errorf("listed %+v", listed)
+	}
+	// Downloading and removing write on this computer: only it may ask.
+	local := func(method, target string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, target, nil)
+		req.Host = "127.0.0.1:8840"
+		req.RemoteAddr = "127.0.0.1:50000"
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		return rec
+	}
+	if rec := request(t, handler, http.MethodPost, "/api/examples/xenium-lung-2fov", nil, nil); rec.Code != http.StatusForbidden {
+		t.Errorf("another computer started a download: %d", rec.Code)
+	}
+	if rec := local(http.MethodPost, "/api/examples/nothing"); rec.Code != http.StatusNotFound {
+		t.Errorf("an unknown example: %d", rec.Code)
+	}
+
+	// A small example served here in place of the publisher.
+	manifest := []byte(`{"run_name":"tiny"}`)
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	w, _ := zw.Create("tiny_outs/experiment.xenium")
+	w.Write(manifest)
+	zw.Close()
+	raw := buf.Bytes()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write(raw) }))
+	defer server.Close()
+	sum := func(b []byte) string { s := sha256.Sum256(b); return hex.EncodeToString(s[:]) }
+	md := md5.Sum(raw)
+	tiny := examples.Source{Name: "tiny", Title: "A tiny example", License: "CC BY 4.0", Files: []examples.File{{Path: "experiment.xenium", Size: int64(len(manifest)), SHA256: sum(manifest)}}}
+	tiny.Archive.URL, tiny.Archive.Size, tiny.Archive.MD5, tiny.Archive.SHA256 = server.URL+"/tiny.zip", int64(len(raw)), hex.EncodeToString(md[:]), sum(raw)
+	a.examples.Sources = append(a.examples.Sources, tiny)
+
+	rec = local(http.MethodPost, "/api/examples/tiny")
+	var job jobs.Job
+	if err := json.Unmarshal(rec.Body.Bytes(), &job); err != nil || rec.Code != http.StatusOK || job.Kind != "example" {
+		t.Fatalf("downloading: %d %s", rec.Code, rec.Body)
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		j, _ := a.jobs.Get(job.ID)
+		if j.State == jobs.Complete {
+			break
+		}
+		if j.State == jobs.Failed || time.Now().After(deadline) {
+			t.Fatalf("the download ended %s: %s", j.State, j.Error)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	path := filepath.Join(a.examples.Dir, "tiny")
+	found := false
+	for _, f := range a.files.list() {
+		found = found || (f.path == path && f.Kind == "bundle")
+	}
+	if !found {
+		t.Errorf("the downloaded example was not opened as a bundle")
+	}
+	if rec := request(t, handler, http.MethodDelete, "/api/examples/tiny", nil, nil); rec.Code != http.StatusForbidden {
+		t.Errorf("another computer removed an example: %d", rec.Code)
+	}
+	if rec := local(http.MethodDelete, "/api/examples/tiny"); rec.Code != http.StatusOK {
+		t.Errorf("removing: %d %s", rec.Code, rec.Body)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Errorf("the example is still there: %v", err)
 	}
 }

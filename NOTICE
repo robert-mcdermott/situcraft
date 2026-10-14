@@ -7,3 +7,10 @@ web/lib/dmath.js contains the logarithm and exponential of fdlibm 5.3 (Copyright
 Microsystems, Inc. All rights reserved.), written in JavaScript, under fdlibm's notice:
 "Permission to use, copy, modify, and distribute this software is freely granted, provided that
 this notice is preserved."
+
+SituCraft's example datasets are not part of this product. When a user asks, SituCraft downloads
+them from their publisher: "Xenium V1 human Lung, 2 FOVs" and "Xenium V1 human Breast, 2 FOVs",
+10x Genomics, Xenium example data
+(https://www.10xgenomics.com/support/software/xenium-onboard-analysis/latest/resources/xenium-example-data),
+licensed under the Creative Commons Attribution 4.0 International License
+(https://creativecommons.org/licenses/by/4.0/).

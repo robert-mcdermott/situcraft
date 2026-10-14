@@ -1,11 +1,15 @@
 {
-  "about": "Public data the validation suites use, downloaded and checked by node validation/fetch.mjs into validation/cache/<data set>/ (or $SITUCRAFT_DATA/<data set>/). Nothing here is stored in the repository or the SituCraft program. An archive is checked by its MD5 (as its publisher gives it) and SHA-256, extracted, every extracted file checked against the size and SHA-256 recorded here, and the archive deleted, so a bundle takes only its extracted size on disk.",
+  "about": "Public data the validation suites use, downloaded and checked by node validation/fetch.mjs into validation/cache/<data set>/ (or $SITUCRAFT_DATA/<data set>/), and SituCraft's example datasets, which the program downloads the same way when asked (it embeds this list, not the data). Nothing here is stored in the repository or the SituCraft program. An archive is checked by its MD5 (as its publisher gives it) and SHA-256, extracted, every extracted file checked against the size and SHA-256 recorded here, and the archive deleted, so a bundle takes only its extracted size on disk.",
   "datasets": {
     "xenium-lung-2fov": {
       "title": "Xenium V1 human Lung, 2 FOVs (XOA 2.0, nucleus expansion 5 µm)",
       "description": "10x Genomics' example output bundle trimmed to two fields of view: 11,898 cells, 825,885 transcripts, the Xenium Human Lung Gene Expression panel (289 genes). Segmented by nucleus expansion of 5 µm; one morphology-focus image (DAPI). The smaller of the two development bundles, so CI uses it.",
+      "summary": "Two fields of view of a human lung section: 11,898 cells, 825,885 transcripts of the Xenium Human Lung Gene Expression panel (289 genes), with a DAPI morphology image and cells segmented by nucleus expansion.",
       "source": "10x Genomics, Xenium example data (https://www.10xgenomics.com/support/software/xenium-onboard-analysis/latest/resources/xenium-example-data)",
+      "publisher": "10x Genomics",
+      "page": "https://www.10xgenomics.com/support/software/xenium-onboard-analysis/latest/resources/xenium-example-data",
       "license": "CC BY 4.0 (10x Genomics)",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
       "archive": {
         "url": "https://cf.10xgenomics.com/samples/xenium/2.0.0/Xenium_V1_human_Lung_2fov/Xenium_V1_human_Lung_2fov_outs.zip",
         "size": 277997802,
@@ -128,8 +132,12 @@
     "xenium-breast-2fov": {
       "title": "Xenium V1 human Breast, 2 FOVs (XOA 2.0, multimodal cell segmentation)",
       "description": "10x Genomics' example output bundle trimmed to two fields of view, from a sample prepared with the Xenium cell segmentation staining workflow: four morphology-focus images (DAPI, boundary, interior RNA, interior protein) and multimodal cell segmentation. The primary development bundle.",
+      "summary": "Two fields of view of a human breast cancer section prepared with the Xenium cell segmentation staining: 7,275 cells, 1,113,950 transcripts of the Xenium Human Breast Gene Expression panel (280 genes), four morphology images (DAPI, boundary, interior RNA, interior protein) and cells segmented from them.",
       "source": "10x Genomics, Xenium example data (https://www.10xgenomics.com/support/software/xenium-onboard-analysis/latest/resources/xenium-example-data)",
+      "publisher": "10x Genomics",
+      "page": "https://www.10xgenomics.com/support/software/xenium-onboard-analysis/latest/resources/xenium-example-data",
       "license": "CC BY 4.0 (10x Genomics)",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
       "archive": {
         "url": "https://cf.10xgenomics.com/samples/xenium/2.0.0/Xenium_V1_human_Breast_2fov/Xenium_V1_human_Breast_2fov_outs.zip",
         "size": 379018013,

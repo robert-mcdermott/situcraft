@@ -64,7 +64,7 @@ const SECTIONS = [
     kind: 'view', title: 'Saved views', icon: 'eye',
     items: (project) => project.views,
     label: (v) => v.name ?? 'View',
-    meta: () => '',
+    meta: (v) => (v.mode === 'qc' ? 'QC' : 'Viewer'),
     empty: 'A place in the tissue with its layers, genes and colors, reopened exactly.',
   },
 ];
@@ -93,8 +93,9 @@ export function mountSidebar(app) {
             // Bundles and datasets are shown by the Data view; from the start page, go there.
             const bundle = section.kind === 'dataset' || item.kind === 'bundle' || item.kind === 'archive';
             if (bundle && app.store.ui.mode === 'welcome') app.setMode('data');
-            // A filter is edited and compared in the QC view.
+            // A filter is edited and compared in the QC view; a saved view opens.
             if (section.kind === 'filter') app.setMode('qc');
+            if (section.kind === 'view') app.applyView(item);
           },
         }, icon(section.itemIcon?.(item) ?? section.icon), h('span.label', section.label(item)), h('span.meta', section.meta(item, app))));
       }

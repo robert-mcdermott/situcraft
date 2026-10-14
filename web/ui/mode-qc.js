@@ -11,7 +11,8 @@
 //   the same cells. A filter never changes the data.
 
 import { h, icon, clear, formatCount } from './dom.js';
-import { toast } from './overlays.js';
+import { promptDialog, toast } from './overlays.js';
+import { addView, captureView, viewCamera } from '../lib/views.js';
 import { TissueRenderer } from '../render/renderer.js';
 import { fitCamera, scaleBar } from '../lib/viewport.js';
 import { readCells } from '../lib/viewer-data.js';
@@ -55,7 +56,8 @@ async function getJSON(url) {
 export function mountQC(app, container) {
   const body = h('div.qc-body');
   const title = h('span.crumbs');
-  const root = h('div.view.qc', h('div.workbench-head', h('h1', icon('qc'), 'QC', title)), body);
+  const headActions = h('div.btn-row');
+  const root = h('div.view.qc', h('div.workbench-head', h('h1', icon('qc'), 'QC', title), h('span.spacer'), headActions), body);
   container.append(root);
   let current = null;
   let generation = 0;
@@ -63,9 +65,10 @@ export function mountQC(app, container) {
 
   function target() {
     const { project, ui } = app.store;
-    // A dataset in focus, or a filter's dataset, else the first.
+    // A dataset in focus, or a filter's or a saved view's dataset, else the first.
     const filter = ui.focus?.kind === 'filter' ? project.artifacts.find((a) => a.id === ui.focus.id) : null;
-    const id = ui.focus?.kind === 'dataset' ? ui.focus.id : filter?.dataset ?? project.datasets[0]?.id;
+    const view = ui.focus?.kind === 'view' ? project.views.find((v) => v.id === ui.focus.id) : null;
+    const id = ui.focus?.kind === 'dataset' ? ui.focus.id : filter?.dataset ?? view?.dataset ?? project.datasets[0]?.id;
     const dataset = project.datasets.find((d) => d.id === id) ?? project.datasets[0];
     if (!dataset) return null;
     const link = app.bundles.link(dataset.id);
@@ -79,6 +82,7 @@ export function mountQC(app, container) {
   }
 
   function teardown() {
+    clear(headActions);
     if (!current) return;
     current.dispose();
     current = null;
@@ -528,6 +532,29 @@ export function mountQC(app, container) {
     applyMap();
     showChosen();
 
+    // --- Saved views: the map, the filter in use and the place ---
+    const captureNow = (name = '') => captureView({ name, dataset: t.dataset.id, mode: 'qc', desc,
+      state: { camera: renderer.camera, ratio: window.devicePixelRatio || 1, layers, cell: null, qc: { map: session.map, filter: session.active } } });
+    const takePending = () => {
+      const view = app.pendingView;
+      if (view?.mode !== 'qc' || view.dataset !== t.dataset.id) return;
+      app.pendingView = null;
+      session.map = view.qc?.map ?? session.map;
+      mapSelect.value = session.map;
+      session.active = view.qc?.filter && app.store.project.artifacts.some((a) => a.id === view.qc.filter) ? view.qc.filter : null;
+      if (view.camera) {
+        state.placed = true;
+        renderer.setCamera(viewCamera(view, window.devicePixelRatio || 1));
+      }
+      refreshKeep();
+    };
+    headActions.append(h('button.btn.small', { type: 'button', title: 'Keep this map, filter and place, to reopen them exactly', onclick: async () => {
+      const name = await promptDialog({ title: 'Save view', label: 'Name', value: `${t.dataset.name}, QC view ${app.store.project.views.length + 1}`, confirm: 'Save' });
+      if (!name) return;
+      app.store.commit(addView(app.store.project, captureNow(name)), `Save view ${name}`);
+      toast(`Saved ${name}.`, { kind: 'ok' });
+    } }, icon('save'), 'Save view'));
+
     // For the validation harness (validation/viewer.mjs) and the console.
     window.situcraftQC = {
       renderer, desc, cells, report,
@@ -552,11 +579,19 @@ export function mountQC(app, container) {
         return app.store.project.artifacts.filter((a) => a.kind === 'filter' && a.name === name).at(-1);
       },
       settled: () => renderer.settled(),
+      captureView: (name) => captureNow(name),
+      saveView: (name) => {
+        const view = captureNow(name);
+        app.store.commit(addView(app.store.project, view), `Save view ${name}`);
+        return view;
+      },
     };
+    takePending();
 
     return {
       ...state,
       showChosen,
+      takePending,
       projectChanged() {
         keep = keepOf();
         renderSide();
@@ -579,6 +614,7 @@ export function mountQC(app, container) {
       else if (topics.has('project') && current) current.projectChanged();
       else if (topics.has('project')) show();
       if (topics.has('selection') && current) current.showChosen();
+      if (current && (topics.has('view-pending') || topics.has('focus'))) current.takePending();
     },
     destroy() {
       teardown();

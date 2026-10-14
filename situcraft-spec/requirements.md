@@ -27,7 +27,7 @@ Status: **planned (wave N)** until built. Then **done**, **partial** (the gap no
 | --- | --- | --- |
 | P1 | One self-contained program for macOS, Linux and Windows (x64 and ARM64); one-line install with checksum verification; no administrator rights, account, Python, R, containers or GPU | done (wave 1, slice 1: six binaries from the release workflow, installers adapted from MaveScape) |
 | P2 | Opens as a desktop window (a Chromium-family browser in app mode with its own profile), else the default browser | done (wave 1, slice 1) |
-| P3 | Data never leave the computer; loopback only; no telemetry; the only outbound requests are example-data downloads the user starts | done (wave 1, slice 1: no outbound requests; example downloads arrive in slice 7) |
+| P3 | Data never leave the computer; loopback only; no telemetry; the only outbound requests are example-data downloads the user starts | done (wave 1, slices 1 and 7: the only outbound request is an example's download, from its publisher, when the user asks) |
 | P4 | Apache-2.0; no third-party runtime dependencies | done |
 | P5 | A second launch hands its paths to the running SituCraft | done (wave 1, slice 1) |
 | P6 | The 2-FOV development bundles open, index and segment on a laptop with 16 GB of memory; memory needs for larger data are estimated before work starts | planned (waves 1, 3) |
@@ -42,9 +42,9 @@ Status: **planned (wave N)** until built. Then **done**, **partial** (the gap no
 | D4 | Never modify a source bundle | done (wave 1, slice 3: read-only sources; every file's SHA-256 and time checked unchanged by validation) |
 | D5 | Derived data (tile pyramids, transcript index, geometry tiles) built as resumable, atomic, checksummed cache entries; an unchanged project reopens without re-indexing | done (wave 1, slice 4) |
 | D6 | Readers for Parquet (Zstd, Snappy, gzip, uncompressed), Zarr v2/v3 (Blosc LZ4/Zstd, zip and directory stores), BigTIFF/OME-TIFF (JPEG 2000, JPEG, deflate, LZW), Matrix Market, CSV(.gz), GeoJSON | partial (wave 1, slice 2: Parquet, Zarr 2 and 3, TIFF/BigTIFF/OME-TIFF with JPEG 2000, deflate, LZW and PackBits, all identical to independent readers on both bundles; JPEG for H&E in wave 5; Matrix Market, CSV and GeoJSON with the slices that need them) |
-| D7 | Projects: a manifest with stable identifiers, versions, datasets and artifacts; portable (relative paths) and linked (institutional storage) modes | partial (wave 1, slice 3: datasets recorded by place, run identifiers and fingerprint; reconnected on reopening, a moved bundle located again; portable archives in slice 7) |
+| D7 | Projects: a manifest with stable identifiers, versions, datasets and artifacts; portable (relative paths) and linked (institutional storage) modes | partial (wave 1, slices 3 and 7: datasets recorded by place, run identifiers and fingerprint; reconnected on reopening, a moved bundle located again; project archives (`.scz`) record each bundle relative to the archive, so a folder of both can be moved; a project saved by 0.1.0 reopens exactly in the viewer suite. Linked institutional storage is to come) |
 | D8 | Artifact lineage: parents, producing job, parameters, method and software versions, checksums, state, role | planned (waves 1, 2) |
-| D9 | Example data downloaded on request from their source, verified by checksum, attributed | planned (wave 1) |
+| D9 | Example data downloaded on request from their source, verified by checksum, attributed | done (wave 1, slice 7: the two development bundles from 10x Genomics, CC BY 4.0, downloaded only when asked, the archive checked by size, MD5 and SHA-256 and every file by size and SHA-256, the archive then deleted; each with its source, license and a guided tour; cited in the methods paragraph) |
 | D10 | Several datasets (samples) in one project | planned (wave 7) |
 | D11 | CosMx and MERSCOPE outputs | planned (wave 10) |
 
@@ -59,7 +59,7 @@ Status: **planned (wave N)** until built. Then **done**, **partial** (the gap no
 | V5 | Cell inspector: identifiers, geometry, counts and top genes, segmentation, labels, neighbors, provenance, review history | partial (wave 1, slice 5: identifiers, centroid, areas and outline, counts recorded and counted, top genes, segmentation method; the rest in waves 4 and 5) |
 | V6 | Linked selection across the tissue, plots, tables and inspector | partial (wave 1, slice 6: cells chosen in a QC plot show in the tissue, here and in the Viewer, and in the inspector; tables in wave 4) |
 | V7 | Two segmentations compared by overlay, synchronized split view, flicker and disagreement highlighting | planned (wave 2) |
-| V8 | Saved views (dataset, coordinate system, viewport, layers, colors, filters, genes, segmentation, labels, ROIs) that reopen exactly | planned (wave 1) |
+| V8 | Saved views (dataset, coordinate system, viewport, layers, colors, filters, genes, segmentation, labels, ROIs) that reopen exactly | partial (wave 1, slice 7: dataset, place and zoom in µm, channels, genes, layers, cell fill, selected cell, QC map and filter, by name so they survive rebuilt derived data; a link reopens each; three views of a 0.1.0 project reopen exactly in the viewer suite. Segmentations, labels and ROIs join as their waves build them) |
 | V9 | Scale bar, coordinate readout (µm), minimap, legends; an "explain this color" link from every encoding to its artifact and method | partial (wave 1, slice 5: scale bar, readout, minimap, the fill's legend; the links in wave 4) |
 | V10 | Pan and zoom near 30 frames per second; visible-region cell queries within 500 ms once warm | done (wave 1, slice 5: 60 frames per second on an Apple M4, the display's rate; region queries in milliseconds; measured in headless Chrome) |
 
@@ -159,7 +159,7 @@ Status: **planned (wave N)** until built. Then **done**, **partial** (the gap no
 | E1 | SpatialData Zarr export (images optional, shapes, points, AnnData table, transformations) | planned (wave 2) |
 | E2 | AnnData Zarr, Parquet, CSV, Matrix Market and GeoJSON exports | planned (wave 2) |
 | E3 | A command for a user-installed Xenium Ranger `import-segmentation`, prepared with validated inputs | planned (wave 2) |
-| E4 | Methods text written from the actual metadata, citing every method used | planned (waves 1, 8) |
+| E4 | Methods text written from the actual metadata, citing every method used | partial (wave 1, slice 7: a paragraph per dataset from its record, validation and filters, citing the platform, the data's source and SituCraft's version; later waves add their methods, wave 8 the full record) |
 | E5 | Recipes: a job's spec as readable JSON, re-runnable headless | planned (waves 3, 9) |
 | E6 | Figures (SVG, PDF, PNG) with scale bar, legend and provenance | planned (wave 8) |
 | E7 | A certificate that `situcraft verify` checks by recomputing | planned (wave 8) |

@@ -13,8 +13,10 @@ import { openPalette } from './ui/palette.js';
 import { WorkerClient } from './ui/workers.js';
 import { createBundles } from './ui/bundles.js';
 import { createJobs } from './ui/jobs.js';
+import { createExamples } from './ui/examples.js';
 import { colorVisionFriendly, setColorVisionFriendly } from './lib/colormaps.js';
 import { createProject, isEmptyProject, parseProject, rename, serializeProject } from './lib/project.js';
+import { parseViewLink } from './lib/views.js';
 
 const VERSION = '0.1.0';
 
@@ -151,9 +153,14 @@ async function start() {
   // Readers of files opened in the browser by kind, registered by the slices that build them:
   // kind → async (item).
   app.importers = new Map();
+  // A project archive picked in the browser would lose where it is, and so its bundles beside it.
+  app.importers.set('project', async () => {
+    throw new Error('a project archive opens by its path (Open a bundle), so that the bundles beside it are found');
+  });
 
   app.jobs = createJobs(app);
   app.bundles = createBundles(app);
+  app.examples = createExamples(app);
   app.sidebar = mountSidebar(app);
   app.inspector = mountInspector(app);
   app.drawer = mountDrawer(app);
@@ -249,8 +256,11 @@ async function start() {
         toast(problem, { kind: 'error' });
         app.log(problem);
       }
+      const archive = added.find((item) => item.kind === 'project');
       const bundle = added.find((item) => item.kind === 'bundle' || item.kind === 'archive');
-      if (bundle) {
+      if (archive) {
+        await openArchive(archive);
+      } else if (bundle) {
         showBundle(bundle);
       } else if (added.length) {
         toast(`Opened ${added.length === 1 ? added[0].name : `${added.length} items`}; they are listed under On this computer.`, { timeout: 4000 });
@@ -258,7 +268,8 @@ async function start() {
       } else {
         // Already open: show it.
         const known = app.localItems.find((item) => item.path === path || item.path === path.replace(/\/+$/, ''));
-        if (known && (known.kind === 'bundle' || known.kind === 'archive')) showBundle(known);
+        if (known?.kind === 'project') await openArchive(known);
+        else if (known && (known.kind === 'bundle' || known.kind === 'archive')) showBundle(known);
         else if (!(answer.problems ?? []).length) toast('Already open.', { timeout: 1800 });
       }
     } catch (error) {
@@ -369,6 +380,42 @@ async function start() {
   app.saveNow = saveNow;
   const autosave = debounce(saveNow, 1200);
 
+  // Opens a saved view: its dataset in its view (the Viewer or QC), which applies it when it has
+  // the dataset open (app.pendingView). A view not kept in the project (a tour's step) focuses its
+  // dataset.
+  app.applyView = (view) => {
+    if (!view) return;
+    if (!store.project.datasets.some((d) => d.id === view.dataset)) {
+      toast(`The view ${view.name} is of a dataset this project no longer has.`, { kind: 'error' });
+      return;
+    }
+    app.pendingView = view;
+    const kept = store.project.views.some((v) => v.id === view.id);
+    app.focusItem(kept ? { kind: 'view', id: view.id } : { kind: 'dataset', id: view.dataset });
+    if (store.ui.mode === view.mode) store.notify(['view-pending']);
+    else app.setMode(view.mode);
+  };
+
+  // A deep link (#project=…&view=…) opens its project from the library and shows the view.
+  async function openLink(hash) {
+    const link = parseViewLink(hash);
+    if (!link) return false;
+    try {
+      if (store.project.id !== link.project) {
+        await saveNow();
+        await loadProject(parseProject(await library.loadProject(link.project)));
+      }
+      const view = store.project.views.find((v) => v.id === link.view);
+      if (!view) throw new Error('The project has no such view (it may have been removed).');
+      app.applyView(view);
+      return true;
+    } catch (error) {
+      toast(`The link could not be opened: ${error.message}`, { kind: 'error' });
+      return false;
+    }
+  }
+  window.addEventListener('hashchange', () => openLink(location.hash));
+
   app.newProject = async () => {
     await saveNow();
     await loadProject(createProject());
@@ -412,7 +459,58 @@ async function start() {
   }
   app.openLibrary = openLibraryDialog;
 
-  // The project document as JSON (the .scz archive arrives with the record, wave 1, slice 7).
+  // A project archive (.scz) handed to the program: its project opens, its datasets found beside
+  // it first (api_project.go). An archive whose project is already in the library opens as a copy,
+  // so that neither replaces the other.
+  async function openArchive(item) {
+    try {
+      const response = await fetch(`${item.url}/project`, { cache: 'no-store' });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error ?? `HTTP ${response.status}`);
+      let doc = parseProject(JSON.stringify(body.project));
+      const known = (await library.listProjects().catch(() => [])).some((p) => p.id === doc.id);
+      if (known) doc = { ...doc, id: createProject().id, name: `${doc.name} (from ${item.name})` };
+      await saveNow();
+      await loadProject(doc);
+      store.commit({ ...store.project, history: [...store.project.history, { time: new Date().toISOString(), action: 'archive', detail: `Opened from ${item.path}` }] }, 'Open project archive');
+      toast(`Opened ${item.name}${known ? ' as a copy (its project is already in the library)' : ''}.`, { kind: 'ok' });
+    } catch (error) {
+      toast(`${item.name}: ${error.message}`, { kind: 'error' });
+    }
+  }
+  app.openArchive = openArchive;
+
+  // Writes the project as an archive where the user says (by default beside its first bundle).
+  async function exportArchive() {
+    const { project } = store;
+    const first = project.datasets[0]?.path;
+    const dir = first ? first.replace(/[\\/]+$/, '').replace(/[\\/][^\\/]*$/, '') : library.location;
+    const name = project.name.replace(/[^\w.-]+/g, '_') || 'project';
+    const path = await promptDialog({
+      title: 'Save a project archive',
+      label: 'Path of the archive (.scz)',
+      value: `${dir}/${name}.scz`,
+      hint: 'Written on this computer: the project (datasets, filters, saved views, history), not the bundles. Each bundle is also recorded by its place relative to the archive, so a folder holding both can be moved or shared.',
+      confirm: 'Save',
+    });
+    if (!path) return;
+    const post = (overwrite) => fetch('/api/project-archive', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path, project, overwrite }) });
+    try {
+      let response = await post(false);
+      if (response.status === 409) {
+        if (!(await confirmDialog({ title: 'Replace the archive?', message: `${path} already exists.`, confirm: 'Replace', danger: true }))) return;
+        response = await post(true);
+      }
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error ?? `HTTP ${response.status}`);
+      toast(`Saved ${body.path}.`, { kind: 'ok' });
+      app.log(`Project archive written: ${body.path} (${body.bytes} bytes).`);
+    } catch (error) {
+      toast(`The archive was not written: ${error.message}`, { kind: 'error' });
+    }
+  }
+
+  // The project document as JSON.
   function exportProjectJSON() {
     downloadBlob(new Blob([serializeProject(store.project)], { type: 'application/json' }), `${store.project.name.replace(/[^\w.-]+/g, '_') || 'project'}.situcraft.json`);
   }
@@ -432,6 +530,7 @@ async function start() {
       { label: 'Files…', icon: 'file', onSelect: () => app.pickFiles() },
       '-',
       { section: 'Export' },
+      { label: 'Project archive (.scz)…', icon: 'save', onSelect: exportArchive },
       { label: 'Project document (JSON)', icon: 'download', onSelect: exportProjectJSON },
       '-',
       { label: 'Start page', icon: 'grid', onSelect: () => app.setMode('welcome') },
@@ -444,6 +543,7 @@ async function start() {
     ...MODES.filter((m) => m !== 'sep').map((m) => ({ label: `Go to ${m.label}`, icon: m.icon, run: () => app.setMode(m.id), keywords: m.id })),
     { label: 'Open a bundle', icon: 'bundle', hint: `${modKey}O`, run: () => app.openPathDialog(), keywords: 'xenium output folder path import' },
     { label: 'Open files', icon: 'file', run: () => app.pickFiles() },
+    { label: 'Example datasets (download, open, take a tour)', icon: 'download', run: () => app.setMode('welcome'), keywords: 'example demo tour lung breast tutorial' },
     { label: 'New project', icon: 'plus', run: () => app.newProject() },
     { label: 'Open a saved project', icon: 'library', hint: `${modKey}⇧O`, run: openLibraryDialog },
     { label: 'Save project now', icon: 'save', hint: `${modKey}S`, run: saveNow },
@@ -728,10 +828,14 @@ async function start() {
   app.inspector.render();
   app.drawer.render();
   await app.setMode('welcome');
-  if (app.localItems.length) {
+  if (location.hash && (await openLink(location.hash))) {
+    // Opened at a saved view.
+  } else if (app.localItems.length) {
     app.log(`${app.localItems.length} item${app.localItems.length === 1 ? '' : 's'} named on the command line.`);
+    const archive = app.localItems.find((item) => item.kind === 'project');
     const bundle = app.bundles.items()[0];
-    if (bundle) showBundle(bundle);
+    if (archive) await openArchive(archive);
+    else if (bundle) showBundle(bundle);
   }
 
   // A second "situcraft <paths>" launch hands its paths to the program and brings this window
@@ -744,8 +848,10 @@ async function start() {
       const fresh = await detectBackend();
       if (fresh) {
         const added = setLocalItems(fresh.files);
+        const archive = added.find((item) => item.kind === 'project');
         const bundle = added.find((item) => item.kind === 'bundle' || item.kind === 'archive');
-        if (bundle) showBundle(bundle);
+        if (archive) await openArchive(archive);
+        else if (bundle) showBundle(bundle);
       }
     } finally {
       checking = false;

@@ -135,6 +135,42 @@ groups of transcripts, drawn as ratios in the shader. Per-cell attributes, plots
 filters run in the browser on the cells table. Filters are project artifacts that record which
 cells they keep (a SHA-256), so their reproduction can be checked whenever the project opens.
 
+### The record: saved views, methods and archives
+
+- **Saved views** (`lib/views.js`) are project entries, not screenshots: the dataset, the mode,
+  the camera in µm (its center and µm per CSS pixel, to 12 significant digits, so a view shows the
+  same tissue on any screen and survives a round trip through any pixel ratio), and the layers.
+  Stains and genes are kept by name, so a view stays valid when derived data are rebuilt and says
+  what a dataset lacks. A view opens through one path (`app.applyView`): the Viewer or QC applies
+  it when it has its dataset open. A deep link (`#project=…&view=…`) loads the project from the
+  library and applies the view.
+- **The methods paragraph** (`lib/methods.js`) is a pure function of the dataset's record, its
+  validation report, the chosen filters and the program's version and commit: it says only what
+  was done, numbers its references in order of first citation, and gives the same text for the
+  same inputs.
+- **Project archives** (`api_project.go`) are zips of the project document and a README, written
+  where the user says (only from this computer). Each dataset gains its place relative to the
+  archive; on opening, a bundle beside the archive wins over the recorded place. An archive whose
+  project the library already holds opens as a copy.
+- **A project saved by each release** is kept in `validation/projects/`; the viewer suite opens it,
+  locates its moved bundle, re-evaluates its filters and reopens its views exactly.
+
+### Example datasets and tours
+
+The examples are the development bundles, listed in `validation/sources.json` (embedded in the
+program: the list, not the data). `internal/examples` downloads one when asked, as a job: it checks
+free space first; the archive by its size, the publisher's MD5 and its SHA-256; each extracted file
+by its size and SHA-256 (a member claiming more is refused, as is a name leaving the folder); then
+deletes the archive and moves the checked folder into place, so a failed or stopped download
+leaves nothing. A downloaded bundle is opened like any other. A dataset is recognized as an example
+by its manifest's SHA-256, wherever its bundle is, so the methods paragraph can cite the data's
+source.
+
+A tour (`lib/tours.js`) is data: steps that each open a view (a saved view's shape, applied but not
+kept) and say what it shows. The genes are among those the section's transcripts show most, and
+each zoomed step looks where its genes meet (the 300 µm square where their shares of the section's
+transcripts are highest together).
+
 ### Segmentation built in
 
 Segmentation is SituCraft's own code (`internal/segment`), not an external program:
@@ -197,7 +233,8 @@ As in the siblings:
 - Archive extraction is guarded against path traversal and decompression bombs.
 
 The only outbound requests are example-data downloads the user starts, from the URLs in the
-example manifest, checked against their checksums.
+example manifest (`validation/sources.json`), checked against their checksums. Downloading and
+removing examples, like writing a project archive, are accepted only from this computer.
 
 Default port 8840 (8840–8859). The siblings use 8765–8839.
 

@@ -3,6 +3,7 @@
 
 import { h, icon, clear, relativeTime, formatBytes } from './dom.js';
 import { prefs } from './storage.js';
+import { tourFor } from '../lib/tours.js';
 
 // What a researcher brings (situcraft-spec/requirements.md, D1, D6, S10, R1).
 const INPUTS = [
@@ -15,6 +16,7 @@ const INPUTS = [
 export function mountWelcome(app, container) {
   const { library } = app;
   const recent = h('div.welcome-grid');
+  const examples = h('div.welcome-grid.examples');
   const root = h('div.workbench-scroll', h('div.welcome',
     h('div.welcome-hero',
       h('div', { style: { flex: 1 } },
@@ -27,6 +29,8 @@ export function mountWelcome(app, container) {
       h('img', { src: 'favicon.svg', width: 132, height: 132, alt: '', style: { filter: 'drop-shadow(0 18px 40px rgba(31, 138, 158, 0.35))', borderRadius: '28px' } })),
     h('div.section-title', 'Recent projects'),
     recent,
+    h('div.section-title', { style: { marginTop: '22px' } }, 'Examples'),
+    examples,
     h('div.section-title', { style: { marginTop: '22px' } }, 'What to bring'),
     h('div.feature-list', ...INPUTS.map(([glyph, title, text]) => h('div.feature', h('span.glyph', icon(glyph)), h('div', h('b', title), h('span', text))))),
     h('p.muted', { style: { marginTop: '22px', fontSize: '12px' } },
@@ -51,10 +55,73 @@ export function mountWelcome(app, container) {
     }
   }
 
+  // The example datasets: downloaded only when asked, each with its source and license. A card's
+  // progress is updated in place, so that its Stop button is not lost to a redraw.
+  const progress = new Map(); // name → { bar, label }
+  let shape = '';
+  function renderExamples() {
+    const list = app.examples.list();
+    const error = app.examples.error();
+    const next = JSON.stringify([list, error, (list ?? []).map((e) => app.examples.job(e.name)?.id ?? '')]);
+    if (next === shape) {
+      updateProgress();
+      return;
+    }
+    shape = next;
+    clear(examples);
+    progress.clear();
+    if (error) {
+      examples.append(h('div.card', h('p.muted', `The examples could not be listed: ${error}`)));
+      return;
+    }
+    if (!list) {
+      examples.append(h('div.card', h('p.muted', 'Listing the examples…')));
+      return;
+    }
+    for (const example of list) {
+      const job = app.examples.job(example.name);
+      const actions = h('div.btn-row');
+      const card = h('div.card.example', { 'data-example': example.name },
+        h('h4', icon('bundle'), example.title.replace(/\s*\(.*\)$/, '')),
+        h('p', example.summary),
+        h('p.muted.example-source', 'Data: ', example.page ? h('a', { href: example.page, target: '_blank', rel: 'noopener noreferrer' }, example.publisher) : example.publisher, ', ',
+          example.licenseUrl ? h('a', { href: example.licenseUrl, target: '_blank', rel: 'noopener noreferrer' }, example.license.replace(/\s*\(.*\)$/, '')) : example.license,
+          ` · ${formatBytes(example.download)} to download, ${formatBytes(example.size)} on disk`),
+        actions);
+      if (job) {
+        const bar = h('div');
+        const label = h('span.muted');
+        progress.set(example.name, { bar, label });
+        card.insertBefore(h('div.example-progress', h('div.progress', bar), label), actions);
+        actions.append(h('button.btn.small', { type: 'button', onclick: () => app.jobs.cancel(job.id).catch(() => {}) }, icon('close'), 'Stop'));
+      } else if (example.state === 'ready') {
+        if (tourFor(example.name)) actions.append(h('button.btn.small.primary', { type: 'button', onclick: () => app.examples.tour(example.name) }, icon('play'), 'Take the tour'));
+        actions.append(
+          h('button.btn.small', { type: 'button', onclick: () => app.examples.open(example.name) }, icon('bundle'), 'Open'),
+          h('button.btn.small', { type: 'button', title: `Delete it from ${example.path}`, onclick: () => app.examples.remove(example.name) }, icon('trash'), 'Remove'));
+      } else {
+        actions.append(h('button.btn.small.primary', { type: 'button', title: `Download into ${app.examples.dir()}, checking every file`, onclick: () => app.examples.download(example.name) }, icon('download'), example.state === 'incomplete' ? 'Download again' : 'Download'));
+      }
+      examples.append(card);
+    }
+    updateProgress();
+  }
+  function updateProgress() {
+    for (const [name, { bar, label }] of progress) {
+      const job = app.examples.job(name);
+      if (!job) continue;
+      bar.style.width = `${Math.round(job.progress * 100)}%`;
+      label.textContent = job.state === 'queued' ? 'Waiting' : `${job.message ?? 'Downloading'}: ${Math.round(job.progress * 100)}%`;
+    }
+  }
+
   loadRecent();
+  renderExamples();
+  app.examples.refresh();
   return {
     update(topics) {
       if (topics.has('library')) loadRecent();
+      if (topics.has('examples') || topics.has('jobs')) renderExamples();
     },
     destroy() {
       root.remove();

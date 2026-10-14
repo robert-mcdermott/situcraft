@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"situcraft/internal/cache"
+	"situcraft/internal/examples"
 	"situcraft/internal/jobs"
 )
 
@@ -57,6 +58,7 @@ type config struct {
 	dataDir     string
 	cacheDir    string
 	cacheLimit  int64
+	examplesDir string
 	dev         bool
 	showVersion bool
 	files       []string
@@ -77,6 +79,8 @@ type app struct {
 	jobs *jobs.Manager
 	// views are the datasets open in the tissue viewer.
 	views *views
+	// examples are the example datasets, downloaded on request.
+	examples *examples.Library
 }
 
 func init() {
@@ -275,6 +279,7 @@ func parseConfig(args []string) (config, error) {
 	flags.BoolVar(&cfg.keepRunning, "keep-running", false, "keep serving after the app window is closed")
 	flags.StringVar(&cfg.dataDir, "data-dir", "", "folder for the project library (default: <user config dir>/SituCraft)")
 	flags.StringVar(&cfg.cacheDir, "cache-dir", "", "folder for derived data, which can be deleted and made again (default: <user cache dir>/situcraft)")
+	flags.StringVar(&cfg.examplesDir, "examples-dir", "", "folder the example datasets are downloaded into, when asked (default: <data dir>/examples)")
 	cacheLimit := flags.String("cache-limit", "10GB", "size the cache is kept within, removing what was used least recently (for example 500MB or 20GB; 0 for no limit)")
 	flags.BoolVar(&cfg.dev, "dev", false, "serve web/ from the working directory instead of the embedded copy")
 	flags.BoolVar(&cfg.showVersion, "version", false, "print the version and exit")
@@ -339,6 +344,14 @@ func newApp(cfg config) (*app, error) {
 		jobs:     jobs.NewManager(),
 		views:    newViews(),
 	}
+	examplesDir := cfg.examplesDir
+	if examplesDir == "" {
+		examplesDir = filepath.Join(cfg.dataDir, "examples")
+	}
+	if abs, err := filepath.Abs(examplesDir); err == nil {
+		examplesDir = abs
+	}
+	a.examples = newExamples(examplesDir)
 	if a.cacheDir != "" {
 		c, err := cache.Open(a.cacheDir, cfg.cacheLimit)
 		if err != nil {
@@ -395,6 +408,9 @@ func (a *app) printBanner(out io.Writer, url string) {
 	} else {
 		fmt.Fprintf(out, "Cache: %s\n", a.cacheDir)
 	}
+	if a.examples != nil {
+		fmt.Fprintf(out, "Examples: %s (downloaded only when asked)\n", a.examples.Dir)
+	}
 	if n := len(a.files.list()); n > 0 {
 		fmt.Fprintf(out, "Opening %d item(s) named on the command line\n", n)
 	}
@@ -445,6 +461,8 @@ func (a *app) registerAPI(mux *http.ServeMux) {
 	a.registerCache(mux)
 	a.registerJobs(mux)
 	a.registerView(mux)
+	a.registerProject(mux)
+	a.registerExamples(mux)
 	mux.HandleFunc("POST /api/library/local/{index}", func(w http.ResponseWriter, r *http.Request) {
 		file, ok := a.files.get(r.PathValue("index"))
 		if !ok {

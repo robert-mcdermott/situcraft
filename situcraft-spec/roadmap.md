@@ -530,14 +530,79 @@ The data plane built here (readers, codecs, the derived-data cache) carries ever
        `masks/1`'s area is exactly the recorded total cell area.
      - **Four recorded metrics cannot be reproduced** from the bundle (above).
      - **The chosen cells' yellow highlight vanished into viridis's yellow end:** it is magenta.
-7. **Saved views, the record and the release (V8, E4, D9).**
-   - Saved views, with stable deep links.
-   - Projects reopen exactly (a fixture under `validation/projects/`).
-   - A methods paragraph written from the dataset's metadata and SituCraft's version.
-   - The two bundles as examples, downloaded on request with attribution, each with a guided
-     tour.
-   - Documentation: README, the getting-started guide, formats read so far.
-   - Release 0.1.0.
+7. **Saved views, the record and the release (V8, E4, D9, D7): done.**
+   - **Saved views** (`lib/views.js`):
+     - **What a view keeps:** the dataset and mode (Viewer or QC), the camera in µm (center, and µm
+       per CSS pixel to 12 significant digits), each stain by name with its visibility, color,
+       window and gamma, the genes by name, the transcript and cell layers, the selected cell, and
+       in QC the map and filter.
+     - **Where they are:** **Save view** in both views; listed in the project tree and the palette;
+       in the inspector, **Open**, **Copy link**, **Rename**, **Remove**.
+     - **Deep links:** `#project=…&view=…` loads the project from the library and opens the view.
+   - **Project archives (`.scz`, D7):** written where the user says, from this computer only
+     (`api_project.go`). Each dataset gains its place relative to the archive, and a bundle beside
+     the archive wins when it is opened. An archive whose project the library holds opens as a
+     copy. Opened from the command line or **Open a bundle**.
+   - **The methods paragraph** (`lib/methods.js`, **Methods** in the Data view):
+     - **What it says:** the platform, panel and software, the segmentation, the Q20 transcripts
+       counted, how SituCraft read and checked the bundle (version, commit, findings, metrics
+       recomputed), the chosen filters (with their checksums), and the data's source for public
+       data.
+     - **References:** Janesick et al. 2023 for the platform, the data's publisher, and SituCraft's
+       version.
+   - **Examples** (`internal/examples`, `api_examples.go`, the start page):
+     - **What:** the two development bundles, listed from the embedded `validation/sources.json`
+       with their summary, source, license (linked) and sizes.
+     - **Downloaded only when asked,** as a job with progress and **Stop**: free space checked
+       first; the archive by size, MD5 and SHA-256; every extracted file by size and SHA-256; then
+       the archive deleted. A failure or a stop leaves nothing. The bundle then opens like any
+       other.
+     - `--examples-dir` (default `<data dir>/examples`). Downloading and removing are refused to
+       other computers.
+     - A dataset is known as an example by its manifest's SHA-256, so its methods cite the data.
+   - **Guided tours** (`lib/tours.js`, `ui/tour.js`): seven steps per example through the Data
+     view, the Viewer and QC, each opening a view without keeping it. The genes are among the
+     section's most detected, and each zoomed step looks where its genes meet (`research.md` §7).
+   - **Documentation:** `docs/GETTING-STARTED.md`, `docs/FORMATS.md`, the README for the release,
+     and the changelog.
+   - Validation:
+     - **In headless Chrome** (`node validation/run.mjs viewer`, 46 checks):
+       - the examples are listed and none is downloaded unasked;
+       - every step of both tours opens with its genes;
+       - the project saved by 0.1.0 (`validation/projects/0.1.0-lung.situcraft.json`: the Lung
+         dataset, a filter in two versions, three views) opens, finds its moved bundle again
+         (**Locate**), its filters keep exactly the cells they recorded (an evaluation in Node, and
+         Node's own SHA-256), and its three views reopen exactly, from the project and from a link.
+     - **Go tests:**
+       - an example downloads, is checked, extracted and opened, and is removed;
+       - a wrong MD5, a wrong size, a file's wrong SHA-256, a missing file, a server's error, a
+         member leaving the folder, too little free space and a stop each leave nothing behind;
+       - downloading and removing are refused to other computers;
+       - the program's examples are the validation suite's sources;
+       - an archive keeps its bundles when the folder holding them moves; existing archives are
+         not overwritten unasked; relative paths are refused.
+     - **Node tests:**
+       - views capture by name, reopen exactly through any pixel ratio, and report what a dataset
+         lacks; links round trip;
+       - the methods paragraph says what was done and nothing else, the same each time;
+       - every example has a tour whose steps are complete, and each gene a tour names is in its
+         panel;
+       - the 0.1.0 project parses with every field kept, and its views and filters refer to what
+         it holds.
+     - **In the window:**
+       - both examples downloaded from 10x Genomics (the Breast bundle in seconds), checked and
+         toured;
+       - the methods paragraph of the Lung example cites the data;
+       - saved views reopened, and their links copied.
+   - Found by slice 7:
+     - **The first gene's color was nearly the nuclear stain's blue** (`#4c78e0` against
+       `#4f7cff`): tours show nuclei in gray behind colored transcripts.
+     - **The Lung section has few alveolar or B-cell transcripts**, and its panel lacks PTPRC, so
+       its tour shows epithelium, fibroblasts, vessels and macrophages (`research.md` §7).
+     - **The 10x CDN now accepts any User-Agent** (it once refused requests without a
+       browser-like one).
+   - Release 0.1.0: the version agrees across `main.go`, `web/app.js`, `index.html`'s cache keys,
+     `CITATION.cff` (dated) and the changelog.
 
 ## 0.2.0: compare segmentations (wave 2)
 

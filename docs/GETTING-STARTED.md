@@ -1,0 +1,167 @@
+# Getting started with SituCraft
+
+SituCraft opens the output of a 10x Genomics Xenium run (an *output bundle*), checks it, and shows
+the tissue, its transcripts and its cells at any zoom, with quality control linked to the tissue.
+Everything runs on your computer; your data are never uploaded.
+
+This guide takes you from installing SituCraft to a saved, reproducible view of your tissue.
+
+## 1. Install and start it
+
+Install SituCraft with the one-line installer ([Installing](INSTALLING.md)), then run:
+
+```sh
+situcraft
+```
+
+SituCraft opens in its own window: Chrome, Edge, Brave or Chromium in app mode if you have one,
+else your default browser. The terminal shows where it keeps your projects, its cache and the
+example datasets. Closing the window stops SituCraft (`--keep-running` keeps it serving).
+
+The start page offers your recent projects, the example datasets and **Open a bundle**.
+
+## 2. Try an example
+
+Under **Examples**, two public Xenium bundles from 10x Genomics (CC BY 4.0) are ready to download:
+
+| Example | Download | On disk | What it shows |
+| --- | --- | --- | --- |
+| Xenium V1 human Lung, 2 FOVs | 278 MB | 284 MB | 11,898 cells, 825,885 transcripts, 289 genes, a DAPI image, nucleus-expansion segmentation |
+| Xenium V1 human Breast, 2 FOVs | 379 MB | 385 MB | 7,275 cells, 1,113,950 transcripts, 280 genes, four stains, multimodal cell segmentation |
+
+**Download** fetches one from 10x Genomics, checks the archive and every file against recorded
+checksums, keeps only the bundle and deletes the archive. Nothing is downloaded until you ask.
+When it is ready, **Take the tour**: seven steps through the Data view, the Viewer and QC. Use
+**Next** and **Back** on the card at the foot of the window; you can explore at any step, and the
+tour continues from there.
+
+Each example is used under its license; its source and license are linked on its card, and the
+methods paragraph (section 7) cites it.
+
+## 3. Open your own bundle
+
+A Xenium output bundle is the folder the instrument or Xenium Ranger wrote, holding
+`experiment.xenium`, `transcripts.parquet`, `cells.parquet`, the boundaries, the cell-feature
+matrix and the morphology images. SituCraft opens it as:
+
+- its folder, its `experiment.xenium` file, or a `.zip` of it;
+- on the command line, `situcraft /path/to/output-XETG00000__0000000__Region_1__20240101__000000`
+  (several bundles, or a folder of them, at once);
+- or **Open a bundle** in the window (⌘O or Ctrl+O), typing or pasting its path.
+
+SituCraft reads a bundle where it is, and never changes, moves or copies it. Running `situcraft
+<paths>` while SituCraft is open hands them to the open window.
+
+## 4. Check it: the Data view
+
+The Data view says what the bundle is (instrument software and version, panel, tissue, cells,
+transcripts, channels) and how far SituCraft supports it: Xenium Onboard Analysis 2.x fully,
+other versions best-effort, said so.
+
+It then checks the bundle. Each finding is:
+
+- **fatal:** the bundle cannot be used until it is fixed (a missing or unreadable file);
+- **a warning:** usable, but it may bias an analysis;
+- **a note:** worth knowing, nothing to fix.
+
+Each finding names its files, how many records it concerns, where in the tissue, and what to do.
+SituCraft also recomputes 20 of the run's recorded metrics and 2 values of its manifest from the
+data and says whether they agree.
+
+**Add to project** records a bundle with no fatal finding in the current project. SituCraft then
+builds its *derived data* once (image tiles at every zoom, a spatial index of the transcripts, tiled
+cell outlines): a few seconds for the examples, shown with its progress. They are kept in the cache
+and reused whenever the bundle is unchanged; they can be deleted at any time and are rebuilt when
+needed. **View the tissue** opens the Viewer.
+
+## 5. See the tissue: the Viewer
+
+- **Move:** drag to pan; scroll, pinch, **+** and **−**, or double-click to zoom; **0** shows the
+  whole tissue; the minimap (top right) jumps to a place. The scale bar and position are in µm.
+- **Image:** each morphology stain with its color, brightness window (**Low**, **High**, or
+  **Auto**) and gamma; the eye shows or hides it.
+- **Transcripts:** type a gene's name to show its transcripts (up to 16 genes, each in its color),
+  or show all transcripts. Up close each transcript is a dot; farther out, each gene's density.
+  **Quality 20 or more only** keeps the transcripts Xenium counts.
+- **Cells:** cell and nucleus outlines (drawn once cells are large enough to see), and cells filled
+  by their transcripts, area or segmentation method, with a legend.
+- **A cell:** click it to see its ID, position, areas, segmentation method and genes in the
+  inspector (right); **Esc** clears it.
+
+**Save view** keeps exactly what the Viewer shows: the place and zoom, the stains and their
+settings, the genes, the layers and the selected cell. Saved views are listed in the project tree
+(left) and the command palette (⌘K or Ctrl+K). Select one to reopen it; in the inspector, **Copy
+link** gives a link that reopens it, **Rename** and **Remove** change it.
+
+## 6. Check quality: the QC view
+
+- **Run metrics:** every metric the run recorded, explained, with SituCraft's own value beside the
+  recorded one where it can be recomputed (**Reproduced**), or why not.
+- **Maps over the tissue:** cells colored by an attribute (gene transcripts, genes detected,
+  area, negative controls, segmentation method and more), or small regions colored by the share of
+  transcripts outside cells, the share below quality 20, or negative-control density.
+- **Plots:** a histogram, box plots by segmentation method, and a scatter plot. Drag across a plot
+  to choose cells; they light up in the tissue (here and in the Viewer) and the inspector compares
+  them with all cells.
+- **Filters:** conditions on cells (for example, gene transcripts at least 20 and area 15 to 400
+  µm²), each condition's effect counted as you edit it. **Save version** keeps the filter as a numbered
+  version in the project, with the count and a checksum of the cells it keeps; it is checked to
+  keep the same cells whenever the project reopens (**Reproduced**). Filters never change the data.
+
+**Save view** in the QC view keeps the map, the filter in use and the place.
+
+## 7. Keep and share the record
+
+- **Projects save themselves** to the library as you work; the start page and the project menu
+  (the project's name, top left) reopen them. **Undo** and **Redo** (⌘Z, ⇧⌘Z) cover every change,
+  and the drawer (⌘J) shows the project's history and the session's log.
+- **A bundle that moved:** reopening a project finds each bundle where it was recorded. If it is
+  gone, **Locate…** in the Data view points to its new place, once SituCraft has checked it is the
+  same run.
+- **Methods:** **Methods** in the Data view writes a paragraph for the dataset from what the project
+  records: the platform, panel and software, the segmentation, the transcripts counted, how
+  SituCraft checked the bundle (with its version and commit), the filters you choose, and the data's
+  source, with references. **Copy** puts it on the clipboard; read it against what you did and add
+  what was done elsewhere.
+- **Project archives:** **Project archive (.scz)…** in the project menu writes the project
+  (datasets, filters, saved views, history) to a file you name. It does not contain the bundles:
+  it records each one relative to the archive, so a folder holding the archive and its bundles can
+  be moved, copied or shared, and opened with `situcraft project.scz` or **Open a bundle**.
+
+## Keyboard
+
+| Action | Keys |
+| --- | --- |
+| Search and commands | ⌘K |
+| Open a bundle; a saved project | ⌘O; ⇧⌘O |
+| Save now | ⌘S |
+| Undo; redo | ⌘Z; ⇧⌘Z |
+| Go to a view | ⌘1 … ⌘9 |
+| Hide the project tree; the inspector | ⌘\\; ⇧⌘\\ |
+| History and log | ⌘J |
+| Viewer: pan; zoom; whole tissue; clear the cell | arrows; + and −; 0; Esc |
+| All shortcuts | ? |
+
+On Windows and Linux, use Ctrl for ⌘.
+
+## Where things are kept
+
+| What | Where (macOS; Linux; Windows) | Flag |
+| --- | --- | --- |
+| Projects | `~/Library/Application Support/SituCraft`; `~/.config/SituCraft`; `%AppData%\SituCraft` | `--data-dir` |
+| Example datasets | the `examples` folder of the above | `--examples-dir` |
+| Derived data (can be deleted) | `~/Library/Caches/situcraft`; `~/.cache/situcraft`; `%LocalAppData%\situcraft` | `--cache-dir`, `--cache-limit` |
+
+SituCraft listens only on this computer (127.0.0.1) and sends nothing anywhere. Its only request
+to the internet is an example's download, when you ask for it.
+
+## If something goes wrong
+
+- **The window does not open:** `situcraft --window browser` uses your default browser instead;
+  `--window none` prints the address to open yourself.
+- **"Start SituCraft with its program":** the page was opened without SituCraft running; run
+  `situcraft`.
+- **The Viewer needs WebGL2,** which current Chrome, Edge, Firefox and Safari have.
+- **A bundle will not open:** the Data view lists each fatal finding with its remedy.
+
+SituCraft is for research use only. It is not a medical device and makes no diagnostic claims.
