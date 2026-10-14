@@ -4,6 +4,14 @@
 // names (among those still complete). The instrument's segmentation is registered when its
 // dataset is added and promoted then, the dataset's only segmentation, with that reason recorded.
 
+// Where a segmentation comes from: the instrument (a bundle's own, without parameters), an import
+// of another tool's (made from imported files), or SituCraft (computed).
+function sourceOf(lineage) {
+  if (lineage.parents?.some((p) => p.kind === 'import')) return 'imported';
+  if (lineage.parents?.some((p) => p.kind === 'bundle') && !lineage.parameters) return 'instrument';
+  return 'situcraft';
+}
+
 // The project's record of a segmentation artifact (its manifest, as the program answers it).
 export function segmentationRecord(dataset, manifest, now = new Date().toISOString()) {
   const lineage = manifest.lineage ?? {};
@@ -13,7 +21,7 @@ export function segmentationRecord(dataset, manifest, now = new Date().toISOStri
     id: manifest.id,
     name: manifest.name,
     dataset: dataset.id,
-    source: lineage.parents?.some((p) => p.kind === 'bundle') && !lineage.parameters ? 'instrument' : 'situcraft',
+    source: sourceOf(lineage),
     state: manifest.state,
     created: manifest.created,
     registered: now,
@@ -23,6 +31,9 @@ export function segmentationRecord(dataset, manifest, now = new Date().toISOStri
     job: lineage.job ? { id: lineage.job.id, kind: lineage.job.kind } : null,
     parents: lineage.parents ?? [],
     files: (manifest.files ?? []).map(({ path, role, size, sha256, location }) => ({ path, role, size, sha256, location: location ?? '' })),
+    // An import's sources: each path imported, with the number and size of the files read under
+    // it and their digest (the manifest lists every file).
+    sources: (method.detail?.sources ?? []).map(({ path, files, size, sha256 }) => ({ path, files, size, sha256 })),
     summary: manifest.summary ?? null,
     findings: manifest.findings ?? [],
   };

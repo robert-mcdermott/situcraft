@@ -1,9 +1,9 @@
-// The Segmentation view: a dataset's segmentations side by side, by their numbers, and SituCraft's
-// nucleus expansion run from here (api_expansion.go). An expansion is compared with the
-// instrument's segmentation it grew from, cell by cell, pixel by pixel and transcript by
-// transcript, and what differs is described (internal/segment/expand). Comparing any two
-// segmentations, reviewing their differences and promoting one come later in wave 2
-// (situcraft-spec/roadmap.md).
+// The Segmentation view: a dataset's segmentations side by side, by their numbers; SituCraft's
+// nucleus expansion run from here (api_expansion.go); and other tools' segmentations imported
+// (api_import.go). An expansion is compared with the instrument's segmentation it grew from, cell
+// by cell, pixel by pixel and transcript by transcript, and what differs is described
+// (internal/segment/expand). Comparing any two segmentations, reviewing their differences and
+// promoting one come later in wave 2 (situcraft-spec/roadmap.md).
 
 import { h, icon, clear, formatCount } from './dom.js';
 import { toast } from './overlays.js';
@@ -18,8 +18,46 @@ const count = (v) => (Number.isFinite(v) ? formatCount(v) : '—');
 const exact = (v) => (Number.isFinite(v) ? v.toLocaleString('en-US') : '—');
 const um = (v) => (Number.isFinite(v) ? `${v.toFixed(2)} µm` : '—');
 
-// Per dataset id, the segmentation whose agreement is shown and the distance asked, for the session.
+// Per dataset id, the segmentation whose agreement is shown, the distance asked and the import
+// being filled in, for the session.
 const sessions = new Map();
+
+// The formats imported: the files each needs, what it is, and its options worth changing.
+export const IMPORT_FORMATS = {
+  spatialdata: {
+    label: 'SpatialData Zarr',
+    paths: [{ label: 'Store', placeholder: '/data/sample.zarr', hint: 'its .zarr folder, or a zip of it' }],
+    about: 'Cells from a shapes or labels element, each transcript\'s cell from a points element, and a count table, as the spatialdata package writes them (format 2 or 3). spatialdata-io\'s Xenium stores are in the morphology image\'s pixels.',
+    options: ['cells', 'points', 'table', 'coordinate_system', 'cell_column'],
+  },
+  baysor: {
+    label: 'Baysor',
+    paths: [{ label: 'Assignments', placeholder: '/data/baysor/segmentation.csv', hint: 'segmentation.csv' }, { label: 'Polygons', placeholder: '/data/baysor/segmentation_polygons.json', hint: 'segmentation_polygons.json (optional)', optional: true }],
+    about: 'Each transcript\'s cell from Baysor\'s segmentation.csv (by transcript_id when it kept them, else by position and gene) and the cells\' polygons.',
+    options: ['cell_column', 'cell_property'],
+  },
+  geojson: {
+    label: 'GeoJSON polygons',
+    paths: [{ label: 'Polygons', placeholder: '/data/cells.geojson', hint: 'a FeatureCollection of polygons, each naming its cell' }, { label: 'Transcript table', placeholder: '/data/assignments.parquet', hint: 'CSV or Parquet: transcript_id and the cell (optional; else by the polygons)', optional: true }],
+    about: 'Cell polygons, and each transcript\'s cell from a table when there is one, else from the polygon it lies in.',
+    options: ['cell_property', 'cell_column'],
+  },
+  xenium: {
+    label: 'Xenium Ranger output',
+    paths: [{ label: 'Output bundle', placeholder: '/data/ranger/outs', hint: 'its folder, zip or experiment.xenium' }],
+    about: 'A bundle of the same run segmented anew (Xenium Ranger import-segmentation or resegment): its cell mask, cells, boundaries and each transcript\'s cell.',
+    options: [],
+  },
+};
+
+const OPTION_LABELS = {
+  cells: ['Cells element', 'shapes or labels; the table\'s, else one named for cells'],
+  points: ['Points element', 'transcripts, or the only one'],
+  table: ['Table', 'the one annotating the cells'],
+  coordinate_system: ['Coordinate system', 'global'],
+  cell_column: ['Cell column', 'cell_id, cell, assignment…'],
+  cell_property: ['Cell property', 'cell_id, cell, id…'],
+};
 
 export function mountSegmentation(app, container) {
   const title = h('span.crumbs');
@@ -41,8 +79,44 @@ export function mountSegmentation(app, container) {
   }
 
   function sessionOf(dataset) {
-    if (!sessions.has(dataset.id)) sessions.set(dataset.id, { shown: null, distance: DEFAULT_DISTANCE });
+    if (!sessions.has(dataset.id)) sessions.set(dataset.id, { shown: null, distance: DEFAULT_DISTANCE, import: { format: 'spatialdata', paths: ['', ''], units: 'um', fields: {}, tool: '', tool_version: '', citation: '' } });
     return sessions.get(dataset.id);
+  }
+
+  // The import's options, from the form's state.
+  function importOptions(state) {
+    const spec = IMPORT_FORMATS[state.format];
+    const options = { format: state.format, paths: spec.paths.map((_, i) => (state.paths[i] ?? '').trim()).filter(Boolean), units: state.units };
+    for (const key of spec.options) if ((state.fields[key] ?? '').trim()) options[key] = state.fields[key].trim();
+    if (state.format !== 'xenium') {
+      for (const key of ['tool', 'tool_version', 'citation']) if (state[key].trim()) options[key] = state[key].trim();
+    }
+    return options;
+  }
+
+  async function runImport(t, options) {
+    const spec = IMPORT_FORMATS[options.format];
+    if (!spec) throw new Error(`The format is one of ${Object.keys(IMPORT_FORMATS).join(', ')}.`);
+    const needed = spec.paths.filter((p) => !p.optional).length;
+    if ((options.paths ?? []).length < needed) throw new Error(`Name the ${spec.paths.filter((p) => !p.optional).map((p) => p.label.toLowerCase()).join(' and ')}.`);
+    const manifest = await app.bundles.importSegmentation(t.item, t.dataset.id, options);
+    render(true);
+    return manifest;
+  }
+
+  async function importFromForm(t, session) {
+    try {
+      const manifest = await runImport(t, importOptions(session.import));
+      if (manifest.state === 'complete') {
+        toast(`${manifest.name} into ${t.dataset.name}: ${exact(manifest.summary?.cells)} cells.`, { kind: 'ok' });
+      } else {
+        const fatal = manifest.findings.find((f) => f.severity === 'fatal');
+        toast(`${manifest.name} is ${manifest.state}: ${fatal?.message ?? 'its check found fatal problems'}`, { kind: 'error', timeout: 12000 });
+      }
+      app.focusItem({ kind: 'segmentation', id: manifest.id });
+    } catch (error) {
+      toast(`The import into ${t.dataset.name}: ${error.message}`, { kind: 'error', timeout: 12000 });
+    }
   }
 
   async function expand(t, session, distance) {
@@ -80,7 +154,7 @@ export function mountSegmentation(app, container) {
         },
       },
       h('td', h('b', a.name), promoted?.record.id === a.id ? h('span.badge.accent', { style: { marginLeft: '6px' } }, 'default') : null, a.state !== 'complete' ? h('span.badge.danger', { style: { marginLeft: '6px' } }, a.state) : null),
-      h('td', own ? `SituCraft ${a.software.find((x) => x.name === 'situcraft')?.version ?? ''}` : a.method.name.replace(/^Xenium cell segmentation \((.*)\)$/, '$1')),
+      h('td', own ? `SituCraft ${a.software.find((x) => x.name === 'situcraft')?.version ?? ''}` : a.source === 'imported' ? `${a.method.name}${a.method.version ? ` ${a.method.version}` : ''}, imported` : a.method.name.replace(/^Xenium cell segmentation \((.*)\)$/, '$1')),
       h('td.r', exact(s.cells)),
       h('td.r', percent(s.assignedFraction)),
       h('td.r', Number.isFinite(s.medianTranscriptsPerCell) ? String(s.medianTranscriptsPerCell) : '—'),
@@ -145,6 +219,69 @@ export function mountSegmentation(app, container) {
         !t.item ? h('p.muted.seg-note', `${t.dataset.name}'s bundle was not found where the project records it: locate it in the Data view.`) : null,
         ...running,
         h('p.muted.seg-cite', 'Methods: a Voronoi partition of the tissue by the nuclei, clipped at the distance (Okabe et al. 2000), with exact Euclidean distances (Felzenszwalb & Huttenlocher 2012).')));
+  }
+
+  // --- Importing another tool's segmentation ---
+  function importCard(t, list, session) {
+    const state = session.import;
+    const spec = IMPORT_FORMATS[state.format];
+    const instrument = list.find((a) => a.source === 'instrument' && a.state === 'complete');
+    const field = (id, label, input, hint) => h('label.field', { for: id }, h('span', label), input, hint ? h('span.muted.seg-hint', hint) : null);
+    const text = (id, value, placeholder, set) => {
+      const el = h('input.input', { id, type: 'text', value, placeholder, spellcheck: false, autocomplete: 'off' });
+      el.addEventListener('input', () => set(el.value));
+      return el;
+    };
+    const format = h('select.input', { id: 'seg-import-format' }, ...Object.entries(IMPORT_FORMATS).map(([k, f]) => h('option', { value: k }, f.label)));
+    format.value = state.format;
+    format.addEventListener('change', () => {
+      state.format = format.value;
+      render(true);
+    });
+    const units = h('select.input', { id: 'seg-import-units' }, h('option', { value: 'um' }, 'µm'), h('option', { value: 'pixels' }, 'pixels of the morphology image'));
+    units.value = state.units;
+    units.addEventListener('change', () => {
+      state.units = units.value;
+    });
+    const paths = spec.paths.map((p, i) => field(`seg-import-path-${i}`, `${p.label}${p.optional ? ' (optional)' : ''}`, text(`seg-import-path-${i}`, state.paths[i] ?? '', p.placeholder, (v) => {
+      state.paths[i] = v;
+    }), p.hint));
+    const advanced = spec.options.map((key) => field(`seg-import-${key}`, OPTION_LABELS[key][0], text(`seg-import-${key}`, state.fields[key] ?? '', OPTION_LABELS[key][1], (v) => {
+      state.fields[key] = v;
+    })));
+    const tool = state.format === 'xenium' ? [] : [
+      field('seg-import-tool', 'Made by', text('seg-import-tool', state.tool, state.format === 'baysor' ? 'Baysor' : 'the tool\'s name', (v) => {
+        state.tool = v;
+      })),
+      field('seg-import-tool-version', 'Its version', text('seg-import-tool-version', state.tool_version, '0.7.1', (v) => {
+        state.tool_version = v;
+      })),
+      field('seg-import-citation', 'Its citation', text('seg-import-citation', state.citation, 'the paper to cite (optional)', (v) => {
+        state.citation = v;
+      })),
+    ];
+    const go = h('button.btn.primary', { type: 'button', disabled: !instrument || !t.item, onclick: () => importFromForm(t, session) }, icon('upload'), 'Import');
+    const running = app.bundles.imports(t.dataset.id).map((e) => {
+      const job = app.jobs.get(e.job);
+      const bar = h('div', { style: { width: `${Math.round((job?.progress ?? 0) * 100)}%` } });
+      const message = h('span.muted', job?.message ?? 'Starting…');
+      live.set(e.job, { bar, message });
+      return h('div.seg-running', h('div', h('b', e.title), ' ', message), h('div.progress', bar));
+    });
+    return h('section.seg-section',
+      h('div.section-title', 'Import a segmentation'),
+      h('div.seg-card',
+        h('p', 'A segmentation made by another tool, imported to compare with the others: it is checked against the dataset (the transcripts it names, where its cells lie, its ids) and kept with the files it came from, by their SHA-256. Its transcripts are counted as every segmentation\'s are.'),
+        h('div.seg-import-grid',
+          field('seg-import-format', 'Format', format),
+          field('seg-import-units', 'Coordinates in', units, 'SituCraft does not guess them; the check says when they do not fit'),
+          ...paths),
+        h('p.muted.seg-note', spec.about),
+        advanced.length || tool.length ? h('details.seg-advanced', state.open ? { open: true } : {},
+          h('summary', 'How to read it, and what made it'),
+          h('div.seg-import-grid', ...advanced, ...tool)) : null,
+        h('div.btn-row', go, !instrument ? h('span.muted.seg-note', 'An import is checked against the dataset once its instrument segmentation is registered.') : null),
+        ...running));
   }
 
   // --- The agreement with the instrument's segmentation ---
@@ -222,7 +359,7 @@ export function mountSegmentation(app, container) {
     const session = sessionOf(t.dataset);
     if (t.focused && segmentationsOf(app.store.project, t.dataset.id).some((a) => a.id === t.focused && a.source === 'situcraft')) session.shown = t.focused;
     const list = segmentationsOf(app.store.project, t.dataset.id);
-    const next = JSON.stringify([t.dataset.id, Boolean(t.item), list.map((a) => [a.id, a.state]), session.shown, app.bundles.expansions(t.dataset.id), app.bundles.registeringSegmentation(t.dataset.id), promotedSegmentation(app.store.project, t.dataset.id)?.record.id]);
+    const next = JSON.stringify([t.dataset.id, Boolean(t.item), list.map((a) => [a.id, a.state]), session.shown, app.bundles.expansions(t.dataset.id), app.bundles.imports(t.dataset.id), app.bundles.registeringSegmentation(t.dataset.id), promotedSegmentation(app.store.project, t.dataset.id)?.record.id]);
     if (!force && next === shape) {
       updateLive();
       return;
@@ -230,24 +367,40 @@ export function mountSegmentation(app, container) {
     shape = next;
     title.textContent = ` · ${t.dataset.name}`;
     live.clear();
-    // Keep what is being typed when the view redraws.
-    const typing = document.activeElement?.id === 'seg-distance' ? document.activeElement.value : null;
+    // Keep what is being typed when the view redraws (the import's fields keep their values in the
+    // session; the distance its own).
+    const focused = document.activeElement && body.contains(document.activeElement) ? document.activeElement.id : '';
+    const typing = focused === 'seg-distance' ? document.activeElement.value : null;
+    const advancedOpen = body.querySelector('details.seg-advanced')?.open;
+    if (advancedOpen !== undefined) session.import.open = advancedOpen;
     clear(body).append(
       h('p.muted.seg-intro', 'A segmentation decides which transcripts belong to which cell, and so every count, cell type and neighbourhood after it. Each is kept as an artifact with how it was made; none is ever changed or deleted.'),
       table(t, list, session),
       expansionCard(t, list, session),
-      agreementCard(t, list, session));
-    if (typing !== null) {
-      const input = body.querySelector('#seg-distance');
-      input.value = typing;
-      input.focus();
-    }
+      agreementCard(t, list, session),
+      importCard(t, list, session));
+    if (typing !== null) body.querySelector('#seg-distance').value = typing;
+    if (focused) body.querySelector(`#${CSS.escape(focused)}`)?.focus();
     updateLive();
   }
 
   render();
   // The remote action's way in (ui/remote.js).
   app.segmentationView = {
+    importSegmentation: async (dataset, options) => {
+      const t = target();
+      if (!t || t.dataset.id !== dataset.id) app.focusItem({ kind: 'dataset', id: dataset.id });
+      const now = target();
+      if (!now.item) throw new Error(`${dataset.name}'s bundle was not found where the project records it.`);
+      const state = sessionOf(dataset).import;
+      state.format = options.format;
+      state.paths = [...(options.paths ?? []), '', ''].slice(0, 2);
+      state.units = options.units ?? 'um';
+      render(true);
+      const manifest = await runImport(now, options);
+      app.focusItem({ kind: 'segmentation', id: manifest.id });
+      return manifest;
+    },
     expand: async (dataset, distance) => {
       const t = target();
       if (!t || t.dataset.id !== dataset.id) app.focusItem({ kind: 'dataset', id: dataset.id });

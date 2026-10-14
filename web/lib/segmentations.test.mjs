@@ -79,3 +79,25 @@ test("SituCraft's nucleus expansion is recorded as its own, beside the default, 
   assert.equal(record.summary.agreement.pixels.agreement, 0.98);
   assert.equal(promotedSegmentation(p, 'd1').record.id, 'seg-a', 'the instrument\'s stays the default');
 });
+
+test('an imported segmentation is recorded as imported, with its files and findings', () => {
+  const imported = {
+    ...manifest('imp-c'), name: 'Baysor (imported)', state: 'invalid',
+    lineage: {
+      parents: [manifest('seg-a').lineage.parents[0], { kind: 'import', id: 'ab12', name: 'segmentation.csv', sha256: 'ab12cd' }],
+      job: { id: 'j3-1', kind: 'import' },
+      method: { name: 'Baysor', version: '0.7.1', detail: { format: 'baysor', sources: [{ path: '/data/baysor/segmentation.csv', files: 1, size: 1200, sha256: 'ee11' }], files: [{ path: '/data/baysor/segmentation.csv', size: 1200, sha256: 'ee10' }] } },
+      parameters: { format: 'baysor', units: 'um' },
+      software: [{ name: 'Baysor', version: '0.7.1' }, { name: 'situcraft', version: '0.2.0' }],
+    },
+    findings: [{ severity: 'fatal', code: 'coordinates.extent', message: 'Only 3 of 7 cells lie within the image', count: 0 }],
+  };
+  let p = withInstrumentSegmentation(project(), { id: 'd1', name: 'xenium-lung-2fov' }, manifest('seg-a'), NOW);
+  p = addSegmentation(p, segmentationRecord({ id: 'd1' }, imported, NOW), NOW);
+  const record = segmentationsOf(p, 'd1').find((a) => a.id === 'imp-c');
+  assert.equal(record.source, 'imported');
+  assert.equal(record.state, 'invalid');
+  assert.equal(record.findings[0].code, 'coordinates.extent');
+  assert.deepEqual(record.sources, [{ path: '/data/baysor/segmentation.csv', files: 1, size: 1200, sha256: 'ee11' }]);
+  assert.throws(() => promoteSegmentation(p, { dataset: 'd1', segmentation: 'imp-c', rationale: 'x' }), /invalid/);
+});

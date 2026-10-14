@@ -140,6 +140,8 @@ export function mountInspector(app) {
         h('dt', 'Software'), h('dd', a.software.map((x) => `${x.name} ${x.version}`).join('; '))),
       isDefault && promoted.decision ? h('p.muted', { style: { margin: '8px 0 0', fontSize: '12px' } }, `Default since ${new Date(promoted.decision.time).toLocaleString()}, by ${promoted.decision.by}: ${promoted.decision.rationale}`) : null,
       a.method.methods?.length ? h('div.seg-methods', h('div.muted', 'Cells by method'), ...a.method.methods.map((m) => h('div.seg-method', h('span', m.method.replace(/^Segmented /, '')), h('span.mono', m.cells.toLocaleString('en-US'))))) : null,
+      a.sources?.length ? h('div.seg-files', h('div.muted', 'Imported from (by SHA-256 of the files read)'),
+        ...a.sources.map((f) => h('div.seg-file', { title: `${f.path}: ${f.files} files read, SHA-256 of their checksums ${f.sha256}` }, h('div', f.path.split(/[\\/]/).pop()), h('div.muted', `${f.files === 1 ? '1 file' : `${f.files.toLocaleString('en-US')} files`}, ${formatBytes(f.size)} · `, h('span.mono', short(f.sha256)))))) : null,
       h('div.seg-files', h('div.muted', a.files.some((f) => f.location === 'bundle') ? 'Files (in the bundle, by SHA-256)' : 'Files (by SHA-256)'),
         ...a.files.map((f) => h('div.seg-file', { title: `${f.path}: SHA-256 ${f.sha256}` }, h('div', f.path), h('div.muted', f.role, ' · ', h('span.mono', short(f.sha256)))))),
       a.findings.length ? h('div.seg-findings', h('div.muted', 'Its check found'),

@@ -117,8 +117,8 @@ const scrollTo = async (selector, block = 'start') => {
 };
 const clearToasts = () => js(`document.querySelectorAll('.toast').forEach((t) => t.remove())`);
 
-// The places shown in the window, as SHOWN names them: every text node and title that holds this
-// run's temporary folders.
+// The places shown in the window, as SHOWN names them: every text node, title and text field that
+// holds this run's temporary folders.
 async function showPlaces() {
   const pairs = Object.entries(places).map(([k, v]) => [v, SHOWN[k]]).sort((a, c) => c[0].length - a[0].length);
   await js(`(() => {
@@ -127,6 +127,7 @@ async function showPlaces() {
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     for (let node = walker.nextNode(); node; node = walker.nextNode()) if (pairs.some(([from]) => node.nodeValue.includes(from))) node.nodeValue = fix(node.nodeValue);
     for (const el of document.querySelectorAll('[title]')) el.title = fix(el.title);
+    for (const el of document.querySelectorAll('input[type=text]')) el.value = fix(el.value);
     return true;
   })()`);
 }
@@ -213,6 +214,17 @@ const scenes = {
     await act('open_example', { example: 'lung' });
     await act('expand_nuclei', { distance_um: 5 });
     await js(`document.querySelector('.seg-section:last-child')?.scrollIntoView({ block: 'end' })`);
+    await sleep(300);
+  },
+  // The Lung example's segmentation imported from SpatialData (written by spatialdata-io:
+  // validation/spatialdata.py), beside the instrument's, in the Segmentation view and the inspector
+  // (wave 2, slice 4).
+  async import() {
+    const store = join(DATA, 'xenium-lung-2fov.spatialdata.zarr');
+    if (!existsSync(store)) throw new Error(`${store} is missing: uv run --with 'spatialdata-io==0.7.1' --with 'spatialdata==0.8.0' python -I validation/spatialdata.py`);
+    await act('open_example', { example: 'lung' });
+    await act('import_segmentation', { format: 'spatialdata', paths: [store], units: 'pixels', tool: 'spatialdata-io', tool_version: '0.7.1' });
+    await js(`document.querySelector('.workbench-scroll')?.scrollTo(0, 0)`);
     await sleep(300);
   },
   // The Jobs view after both examples were opened: each job's state and times, one's log open.

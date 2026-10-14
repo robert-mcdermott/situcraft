@@ -33,9 +33,13 @@ jobs:
         run: node validation/fetch.mjs
       - name: OpenJPEG, the independent decoder the image tiles are compared with
         run: sudo apt-get update -q && sudo apt-get install -y -q libopenjp2-tools
-      - name: Readers against independent readers, bundle validation (real, zipped and broken bundles) and the derived-data cache
+      - uses: astral-sh/setup-uv@v6
+      - name: The Lung bundle as SpatialData, written by spatialdata-io (for the import test)
+        run: uv run --with 'spatialdata-io==0.7.1' --with 'spatialdata==0.8.0' python -I validation/spatialdata.py
+      - name: Readers against independent readers, bundle validation (real, zipped and broken bundles), the derived-data cache, and segmentations made and imported
         env:
           SITUCRAFT_REQUIRE_DATA: '1'
+          SITUCRAFT_REQUIRE_SPATIALDATA: '1'
           JP2K_ZSTACK_ALL: '1'
         run: go test -v -run 'Real|Readers|Bundle' . ./validation/ ./internal/jp2k/ ./internal/xenium/ ./internal/cache/ ./internal/view/ ./internal/segment/...
       - name: The tissue viewer in headless Chrome against its data (exact samples, points, frame rate)

@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"situcraft/internal/jobs"
@@ -168,6 +169,22 @@ func (a *app) handleJobs() {
 			}
 			b.Close()
 		}
+	})
+	a.jobs.Handle("import", func(spec json.RawMessage) (jobs.Func, error) {
+		if a.cache == nil {
+			return nil, errors.New("SituCraft has no cache folder")
+		}
+		var p importSpec
+		if json.Unmarshal(spec, &p) != nil || p.Bundle == "" {
+			return nil, errors.New("its spec names no bundle")
+		}
+		if err := checkImport(&p.Options); err != nil {
+			return nil, err
+		}
+		// An import starts again: it reads its files anew.
+		return a.importJob(p.Bundle, p.Options), nil
+	}, func(id string, spec json.RawMessage) {
+		a.artifacts.Discard("imp-job-" + strings.ToLower(id))
 	})
 	a.jobs.Handle("example", func(spec json.RawMessage) (jobs.Func, error) {
 		var p struct {

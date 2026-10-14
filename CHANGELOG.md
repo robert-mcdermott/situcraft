@@ -69,7 +69,23 @@ review and choose between. Built slice by slice; this section grows with each.
   - **The Segmentation view:** the dataset's segmentations side by side by their numbers;
     **Expand the nuclei**, run as a job; the comparison.
   - Remote control gains `expand_nuclei` (23 actions).
-- **Screenshots** of the documentation: 14 scenes in both themes, captured through remote control
+- **Importing segmentations (wave 2, slice 4).** Segmentations made by other tools, imported to
+  compare with the others:
+  - **SpatialData Zarr** (format 2 or 3, as spatialdata and spatialdata-io write it): cells from
+    shapes or a label image, each transcript's cell from points, counts from the table;
+  - **Baysor's** `segmentation.csv` with its polygons;
+  - **GeoJSON** polygons, with or without a transcript table (CSV or Parquet);
+  - **Xenium Ranger** output bundles of the same run.
+  - Each is checked against the dataset: its coordinates' units, declared and never guessed (the
+    check says which units fit when the cells lie outside the image); the transcripts it names,
+    by id and position; an output bundle's run; its ids. It becomes a segmentation artifact of
+    SituCraft's own files, kept with the SHA-256 of every file read, and counted as every
+    segmentation is; one whose check finds a fatal problem is kept as invalid, for review.
+  - **Import a segmentation** in the Segmentation view; the inspector shows the files imported.
+  - Remote control gains `import_segmentation` (24 actions).
+  - **Readers:** AnnData in Zarr; Zarr's sharding and text of varying length (as anndata 0.11 and
+    later write); GeoJSON and WKB polygons; CSV, TSV and Parquet tables.
+- **Screenshots** of the documentation: 15 scenes in both themes, captured through remote control
   from the development bundles (`node docs/capture/capture.mjs`), in the README and the
   getting-started guide.
 - **A cell by its ID:** the program finds a cell by its `cell_id` as well as by its row.
@@ -78,6 +94,8 @@ review and choose between. Built slice by slice; this section grows with each.
 
 - **The viewer suite on CI,** which fetches only the Lung bundle: it counted the jobs of two
   bundles.
+- **The documentation's screenshots** no longer show a path of the computer that took them in a
+  text field.
 - **Accessibility, found by the audit of the screenshots** (axe-core, WCAG 2.1 A and AA):
   - the view rail's separators sat inside its tab list;
   - the project tree's sections were marked as lists with no items in them (and its rows,
@@ -86,6 +104,17 @@ review and choose between. Built slice by slice; this section grows with each.
 
 ### Validation
 
+- **Imports (slice 4):**
+  - **The Lung bundle** imported into itself as an output bundle, and as spatialdata-io writes it
+    as SpatialData, gives the instrument's segmentation exactly: the raster identical to the cell
+    mask, every transcript's cell, every cell's count. Its polygons and assignments written as
+    GeoJSON with a table, and as a Baysor-style table without ids, give every assignment. The
+    Breast bundle is refused as another run.
+  - **Fixtures** written by each format's own libraries (spatialdata 0.8.0 and 0.2.6, geopandas,
+    pyarrow, pandas, anndata, zarr-python) import to the pixels and assignments their scene
+    defines, with each planted problem found.
+  - **In headless Chrome** (65 checks): `import_segmentation` by remote control, only with the
+    token; another run's bundle refused.
 - **Nucleus expansion (slice 3):**
   - **The Lung bundle's own 5 µm expansion is reproduced:** 11,898 cells paired one to one with
     the instrument's; 98.06% of pixels and 98.94% of transcripts in the same cells; cell areas'
@@ -140,7 +169,7 @@ review and choose between. Built slice by slice; this section grows with each.
   - the methods cite the data and SituCraft;
   - `export` writes the project only with the token.
 - **Every screenshot scene in both themes** passes axe-core's WCAG 2.1 A and AA rules
-  (`docs/capture/audit.json`, 28 captures, no violation).
+  (`docs/capture/audit.json`, 30 captures, no violation).
 
 ## 0.1.0 (2026-10-14)
 

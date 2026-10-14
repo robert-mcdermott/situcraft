@@ -149,6 +149,35 @@ export function createBundles(app) {
     return entry.promise;
   }
 
+  // A segmentation made by another tool, imported into a dataset (api_import.go): a job reads the
+  // files, checks them against the dataset and records the artifact, which is then recorded in the
+  // project, complete or (when its check found a fatal problem) invalid, with what it found.
+  // Resolves with the artifact; rejects with why none was made.
+  const importing = new Map(); // job id → { dataset, title }
+  async function importSegmentation(item, datasetId, options) {
+    const answer = await getJSON(`${item.url}/import`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(options) });
+    const jobId = answer.job?.id;
+    if (!jobId) throw new Error('no job was started');
+    importing.set(jobId, { dataset: datasetId, title: answer.job.title });
+    notify();
+    try {
+      const job = await app.jobs.finished(jobId);
+      if (job?.state !== 'complete' && job?.state !== 'invalid') throw new Error(`the import ${job?.state ?? 'ended'}${job?.error ? `: ${job.error}` : ''}`);
+      // The job's log names the artifact (an import of files imported before answers that one).
+      const id = [...(job.events ?? []).map((e) => e.message), job.error ?? ''].map((m) => /artifact (imp-[0-9a-f]+)/.exec(m)?.[1]).find(Boolean);
+      if (!id) throw new Error('the import recorded no artifact');
+      const manifest = await getJSON(`/api/artifacts/${encodeURIComponent(id)}`);
+      const dataset = app.store.project.datasets.find((d) => d.id === datasetId);
+      if (!dataset) throw new Error('the dataset is no longer in the project');
+      const next = addSegmentation(app.store.project, segmentationRecord(dataset, manifest));
+      if (next !== app.store.project) app.store.commit(next, `Import ${manifest.name.replace(/ \(imported\)$/, '')} into ${dataset.name}`);
+      return manifest;
+    } finally {
+      importing.delete(jobId);
+      notify();
+    }
+  }
+
   // Asks which of the bundle's derived data are built (build: and starts a job building the rest).
   async function cacheStatus(item, { build = false } = {}) {
     const entry = caches.get(item.path) ?? { state: 'loading', status: null, job: null, error: null };
@@ -284,6 +313,9 @@ export function createBundles(app) {
     buildCache,
     registerSegmentation,
     expandNuclei,
+    importSegmentation,
+    // The imports into a dataset under way: [{ job, title }].
+    imports: (id) => [...importing.entries()].filter(([, v]) => v.dataset === id).map(([job, v]) => ({ job, title: v.title })),
     // The expansions of a dataset under way: [{ distance, job }].
     expansions: (id) => [...expanding.values()].filter((e) => e.dataset === id).map(({ distance, job }) => ({ distance, job })),
     // Whether a dataset's instrument segmentation is being registered.

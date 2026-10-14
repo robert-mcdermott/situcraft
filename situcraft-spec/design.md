@@ -195,9 +195,16 @@ Segmentation is SituCraft's own code (`internal/segment`), not an external progr
   in a fixed update order.
 - **Outputs** are converted to polygons (per z layer and consensus), transcript assignments with
   probabilities, and counts. They enter the artifact system like any other segmentation.
-- **Imported segmentations** come from SpatialData Zarr, Baysor-style CSV plus GeoJSON, Xenium
-  Ranger outputs, or GeoJSON polygons plus an assignment table. This is how results from external
-  tools are compared, without SituCraft running those tools.
+- **Imported segmentations** (`internal/segment/imports`) come from SpatialData Zarr,
+  Baysor-style CSV plus GeoJSON, Xenium Ranger outputs, or GeoJSON polygons plus an assignment
+  table. This is how results from external tools are compared, without SituCraft running those
+  tools. Each becomes SituCraft's own segmentation files: a label image resampled or polygons
+  drawn at the morphology image's resolution, the tool's assignment matched to the dataset's
+  transcripts (by id and position, or by position and gene), counts made as for every
+  segmentation. It is checked against the dataset: coordinates in units the import declares
+  (never guessed from the values), the transcripts it names, an output bundle's run, its ids.
+  The readers it needs are SituCraft's own: AnnData (`internal/anndata`), Zarr's sharding and
+  text, GeoJSON and WKB, CSV and Parquet tables.
 
 ### Jobs
 
@@ -240,7 +247,8 @@ What jobs make, and what they register from a bundle, are artifacts (`internal/a
   hashes its files' checksums, so the same bundle files give the same artifact in any project.
   An artifact SituCraft computes is named by its inputs and parameters (a nucleus expansion: the
   instrument's segmentation, the method's version and the distance), so asking again answers it
-  without a job.
+  without a job. An import is named by the dataset, the SHA-256 of the files it read (not their
+  places) and its options, so importing the same files again answers the same artifact.
 - **In the project:** the project records each artifact it uses (an `artifacts` entry of kind
   `segmentation` mirroring the manifest). A dataset's default segmentation is set by decisions
   (`decisions`, kind `promote-segmentation`, with a reason, by whom, when), never removed; the

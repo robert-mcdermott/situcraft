@@ -814,14 +814,62 @@ other tools can be imported.
      - **Nucleus polygons drawn by pixel centres missed their edge pixels** (92.0% of the mask's
        pixels): the polygons' vertices lie on the edge pixels' own coordinates (98.56%).
      - **The viewer suite counted jobs for two bundles,** failing on CI, which fetches one.
-4. **Importing segmentations (S10, D6).**
-   - SpatialData Zarr (shapes, points with assignments, AnnData table).
-   - Baysor-style assignment CSV plus GeoJSON polygons.
-   - Xenium Ranger output bundles.
-   - GeoJSON plus a transcript-to-cell table.
-   - Each import is validated against the dataset (IDs, coordinate system, extents).
-   - Validation: round trips through SituCraft's own exports (slice 7). Hand-made fixtures for
-     each format.
+4. **Importing segmentations (S10, D6): done.**
+   - **Formats** (`internal/segment/imports`; FORMATS.md):
+     - SpatialData Zarr, format 2 or 3, a folder or a zip: the cells from shapes (GeoParquet
+       polygons) or labels (a label image, named through the table annotating it), each
+       transcript's cell from points, the counts from the table; each element's coordinate
+       transformation;
+     - Baysor's `segmentation.csv` with its polygons (a GeoJSON GeometryCollection);
+     - GeoJSON polygons, with or without a transcript table (CSV, TSV, gzipped, or Parquet);
+     - Xenium Ranger output bundles (and XOA bundles) of the same run: the cell mask, cells,
+       boundaries and assignments.
+   - **Readers of SituCraft's own:** AnnData in Zarr (`internal/anndata`: data frames with text,
+     categorical, nullable and numeric columns; matrices as sparse rows, columns or dense); Zarr's
+     sharding and text of varying length; GeoJSON and WKB polygons; CSV and Parquet tables.
+   - **Each import becomes SituCraft's segmentation files:** a label image resampled, or polygons
+     drawn, at the morphology image's resolution; the tool's assignment matched to the dataset's
+     transcripts; counts of gene transcripts of quality 20 or more, as for every segmentation (a
+     count table the tool wrote is compared with them); the tool's outlines.
+   - **Checked against the dataset:**
+     - units declared (µm, or pixels of the morphology image), never guessed: cells outside the
+       image make the import invalid, and the finding says how many would fit in the other unit;
+     - the transcripts it names, by id and, where it gives them, position (within 0.05 µm), else
+       by position and gene (within 0.01 µm);
+     - an output bundle's run, by its experiment;
+     - ids: cells without polygons, labels without a table row, transcripts named twice.
+   - **A job** (`api_import.go`): only this computer may ask; the import is staged, named by the
+     dataset, the SHA-256 of the files read (not their places) and its options, checked and
+     promoted, invalid when a check is fatal. Its lineage names the bundle, the imported files
+     and the tool, with its version and citation.
+   - **In the project:** imported segmentations recorded as such, with their source files; the
+     Segmentation view's **Import a segmentation**; the inspector shows the files imported.
+   - **Remote control:** `import_segmentation` (24 actions; it reads files, so it needs the token).
+   - **Screenshots:** a segmentation imported from SpatialData beside the instrument's.
+   - Validation:
+     - **The Lung bundle:** imported into itself as an output bundle, and as spatialdata-io 0.7.1
+       writes it (`validation/spatialdata.py`; weekly in CI), it gives the instrument's
+       segmentation exactly: the raster identical to the cell mask, every transcript's cell, every
+       cell's count. Its polygons and assignments written as GeoJSON with a table and as a
+       Baysor-style table without ids give every assignment; drawn, the polygons agree with the
+       mask on 94.33% of pixels (Xenium's polygons pass through their edge pixels' coordinates).
+       The Breast bundle is refused as another run.
+     - **Fixtures:** one hand-made scene written by spatialdata 0.8.0 and 0.2.6 (Zarr formats 3
+       and 2), geopandas, pyarrow, pandas and zarr-python, imported to its pixels and
+       assignments exactly, with each finding planted. AnnData and Zarr text and shards as anndata
+       and zarr-python write them.
+     - **In headless Chrome** (65 checks): `import_segmentation` imports the Lung bundle into
+       itself only with the token; the Breast bundle is refused.
+     - Round trips through SituCraft's own exports come with them (slice 7).
+   - Found by slice 4:
+     - **The development bundles share their run's name, region and transcript ids** (anonymized
+       for sharing): the Breast bundle imported into the Lung dataset as if it were its own. An
+       output bundle's run is now its experiment's UUID, and transcripts named by id must lie
+       where the dataset's do.
+     - **spatialdata-io's global coordinate system is in pixels,** not µm: the units are declared
+       with each import, and the extent check names the unit that fits.
+     - **The documentation's capture showed a path of this computer** in a text field: text fields
+       are now shown with the places a user would see.
 5. **Cell matching and metrics (C1, C2, C3).** `internal/compare`:
    - correspondence by shared nucleus, raster IoU and assignment overlap;
    - difference classes;

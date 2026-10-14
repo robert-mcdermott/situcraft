@@ -627,6 +627,31 @@ export function installRemote(app) {
       };
     },
 
+    async import_segmentation(args) {
+      const dataset = resolveDataset(args.dataset);
+      const format = choose(args.format, ['spatialdata', 'baysor', 'geojson', 'xenium'], 'format');
+      if (!Array.isArray(args.paths) || !args.paths.length || args.paths.some((p) => typeof p !== 'string' || !p.trim())) throw new ActionError('paths is a list of one or two files.');
+      const options = { format, paths: args.paths.map((p) => p.trim()) };
+      if (args.units !== undefined) options.units = choose(args.units, ['um', 'pixels'], 'units');
+      for (const key of ['coordinate_system', 'cells', 'points', 'table', 'cell_column', 'cell_property', 'tool', 'tool_version', 'citation']) {
+        if (args[key] !== undefined && String(args[key]).trim()) options[key] = String(args[key]).trim();
+      }
+      await settleMode('segmentation');
+      let manifest;
+      try {
+        manifest = await app.segmentationView.importSegmentation(dataset, options);
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      await frames();
+      const s = manifest.summary ?? {};
+      const fatal = (manifest.findings ?? []).filter((f) => f.severity === 'fatal');
+      return {
+        message: `${manifest.name} into ${dataset.name} (${manifest.state}): ${plural(s.cells ?? 0, 'cell')}, ${((s.assignedFraction ?? 0) * 100).toFixed(2)}% of gene transcripts assigned${fatal.length ? `; ${fatal.map((f) => f.message).join(' ')}` : ''}.`,
+        data: { id: manifest.id, name: manifest.name, dataset: dataset.name, state: manifest.state, method: manifest.lineage?.method ?? null, parameters: manifest.lineage?.parameters ?? null, summary: s, findings: manifest.findings ?? [] },
+      };
+    },
+
     async jobs(args) {
       if (args.show) await settleMode('jobs');
       if (!args.job) {

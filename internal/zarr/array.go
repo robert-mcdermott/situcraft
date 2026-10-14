@@ -23,7 +23,8 @@ import (
 // DType is an array's element type.
 type DType struct {
 	// Kind is numpy's kind character: 'b' bool, 'i' signed, 'u' unsigned, 'f' float, 'c' complex,
-	// 'S' bytes, 'U' UTF-32 text, 'V' raw.
+	// 'S' bytes, 'U' UTF-32 text, 'V' raw, 'O' UTF-8 text of varying length (Size 0; read with
+	// ReadStrings).
 	Kind byte
 	// Size is the element's size in bytes.
 	Size int
@@ -66,6 +67,16 @@ type Array struct {
 	separator  string
 	v3Prefix   string // "c" for format 3's default chunk keys
 	v3Codecs   []codecSpec
+	// shard is format 3's sharding: each chunk is a shard of inner chunks, encoded on their own.
+	shard *shardSpec
+}
+
+// shardSpec is the sharding_indexed codec's configuration.
+type shardSpec struct {
+	inner        []int       // the inner chunks' shape
+	codecs       []codecSpec // their bytes-to-bytes codecs
+	indexCRC     bool        // the index ends with its CRC-32C
+	indexAtStart bool
 }
 
 type codecSpec struct {
@@ -148,8 +159,12 @@ func openV2(s Store, arrayPath string, raw []byte) (*Array, error) {
 	if err := json.Unmarshal(m.DType, &dtype); err != nil {
 		return nil, fmt.Errorf("zarr: %s: structured dtypes are not read", arrayPath)
 	}
-	d, err := parseDType(dtype)
-	if err != nil {
+	var d DType
+	var err error
+	if dtype == "|O" && len(m.Filters) == 1 && m.Filters[0].ID == "vlen-utf8" {
+		// Text of varying length: numcodecs' VLenUTF8 filter, before the compressor.
+		d, m.Filters = DType{Kind: 'O'}, nil
+	} else if d, err = parseDType(dtype); err != nil {
 		return nil, fmt.Errorf("zarr: %s: %w", arrayPath, err)
 	}
 	a := &Array{Path: arrayPath, ZarrFormat: 2, Shape: m.Shape, Chunks: m.Chunks, DType: d, store: s, compressor: m.Compressor, separator: m.DimensionSeparator, Codec: "none"}
@@ -177,8 +192,10 @@ func openV2(s Store, arrayPath string, raw []byte) (*Array, error) {
 	if m.Compressor != nil {
 		a.Codec = m.Compressor.ID
 	}
-	if a.Fill, err = fillValue(m.FillValue, d); err != nil {
-		return nil, fmt.Errorf("zarr: %s: %w", arrayPath, err)
+	if d.Kind != 'O' {
+		if a.Fill, err = fillValue(m.FillValue, d); err != nil {
+			return nil, fmt.Errorf("zarr: %s: %w", arrayPath, err)
+		}
 	}
 	if raw, err := s.Get(join(arrayPath, ".zattrs")); err == nil {
 		json.Unmarshal(raw, &a.Attrs)
@@ -203,6 +220,9 @@ func openV3(s Store, arrayPath string, raw []byte) (*Array, error) {
 	}
 	name, _ := m.DataType.(string)
 	d, ok := v3Types[name]
+	if name == "string" {
+		d, ok = DType{Kind: 'O'}, true
+	}
 	if !ok {
 		return nil, fmt.Errorf("zarr: %s: data type %v is not read", arrayPath, m.DataType)
 	}
@@ -224,7 +244,63 @@ func openV3(s Store, arrayPath string, raw []byte) (*Array, error) {
 	default:
 		return nil, fmt.Errorf("zarr: %s: chunk key encoding %q", arrayPath, m.ChunkKeyEncoding.Name)
 	}
-	for _, c := range m.Codecs {
+	if len(m.Codecs) == 1 && m.Codecs[0].Name == "sharding_indexed" {
+		var cfg struct {
+			ChunkShape    []int       `json:"chunk_shape"`
+			Codecs        []codecSpec `json:"codecs"`
+			IndexCodecs   []codecSpec `json:"index_codecs"`
+			IndexLocation string      `json:"index_location"`
+		}
+		if err := json.Unmarshal(m.Codecs[0].Configuration, &cfg); err != nil {
+			return nil, fmt.Errorf("zarr: %s: sharding: %w", arrayPath, err)
+		}
+		if len(cfg.ChunkShape) != len(a.Chunks) {
+			return nil, fmt.Errorf("zarr: %s: inner chunks %v of shards %v", arrayPath, cfg.ChunkShape, a.Chunks)
+		}
+		for i, c := range cfg.ChunkShape {
+			if c <= 0 || a.Chunks[i]%c != 0 {
+				return nil, fmt.Errorf("zarr: %s: inner chunks %v do not divide shards %v", arrayPath, cfg.ChunkShape, a.Chunks)
+			}
+		}
+		sh := &shardSpec{inner: cfg.ChunkShape, indexAtStart: cfg.IndexLocation == "start"}
+		for _, c := range cfg.IndexCodecs {
+			switch c.Name {
+			case "bytes":
+			case "crc32c":
+				sh.indexCRC = true
+			default:
+				return nil, fmt.Errorf("zarr: %s: shard index codec %q is not read", arrayPath, c.Name)
+			}
+		}
+		codecs, err := a.parseCodecs(cfg.Codecs)
+		if err != nil {
+			return nil, err
+		}
+		sh.codecs = codecs
+		a.shard = sh
+		a.Codec = "sharded " + a.Codec
+	} else {
+		codecs, err := a.parseCodecs(m.Codecs)
+		if err != nil {
+			return nil, err
+		}
+		a.v3Codecs = codecs
+	}
+	if a.DType.Kind == 'O' {
+		return a, a.check()
+	}
+	var err error
+	if a.Fill, err = fillValue(m.FillValue, a.DType); err != nil {
+		return nil, fmt.Errorf("zarr: %s: %w", arrayPath, err)
+	}
+	return a, a.check()
+}
+
+// parseCodecs reads format 3's codecs: the array-to-bytes codec (bytes, or vlen-utf8 for text)
+// and transpose set the type's byte order and the order; the bytes-to-bytes codecs are answered.
+func (a *Array) parseCodecs(codecs []codecSpec) ([]codecSpec, error) {
+	var out []codecSpec
+	for _, c := range codecs {
 		switch c.Name {
 		case "bytes":
 			var cfg struct {
@@ -233,6 +309,10 @@ func openV3(s Store, arrayPath string, raw []byte) (*Array, error) {
 			json.Unmarshal(c.Configuration, &cfg)
 			c.Endian = cfg.Endian
 			a.DType.BigEndian = cfg.Endian == "big"
+		case "vlen-utf8":
+			if a.DType.Kind != 'O' {
+				return nil, fmt.Errorf("zarr: %s: vlen-utf8 for data type %s", a.Path, a.DType)
+			}
 		case "transpose":
 			var cfg struct {
 				Order []int `json:"order"`
@@ -240,26 +320,25 @@ func openV3(s Store, arrayPath string, raw []byte) (*Array, error) {
 			json.Unmarshal(c.Configuration, &cfg)
 			c.Order = cfg.Order
 			if isReverse(cfg.Order) && len(cfg.Order) > 1 {
+				if a.shard != nil {
+					return nil, fmt.Errorf("zarr: %s: transposed inner chunks are not read", a.Path)
+				}
 				a.Order = 'F'
 			} else if !isIdentity(cfg.Order) {
-				return nil, fmt.Errorf("zarr: %s: transpose order %v is not read", arrayPath, cfg.Order)
+				return nil, fmt.Errorf("zarr: %s: transpose order %v is not read", a.Path, cfg.Order)
 			}
 		case "blosc", "gzip", "zstd", "crc32c":
 			if c.Name != "crc32c" {
 				a.Codec = c.Name
 			}
+			out = append(out, c)
 		case "sharding_indexed":
-			return nil, fmt.Errorf("zarr: %s: sharded arrays are not read", arrayPath)
+			return nil, fmt.Errorf("zarr: %s: shards within shards are not read", a.Path)
 		default:
-			return nil, fmt.Errorf("zarr: %s: codec %q is not read", arrayPath, c.Name)
+			return nil, fmt.Errorf("zarr: %s: codec %q is not read", a.Path, c.Name)
 		}
-		a.v3Codecs = append(a.v3Codecs, c)
 	}
-	var err error
-	if a.Fill, err = fillValue(m.FillValue, a.DType); err != nil {
-		return nil, fmt.Errorf("zarr: %s: %w", arrayPath, err)
-	}
-	return a, a.check()
+	return out, nil
 }
 
 func isIdentity(order []int) bool {
@@ -419,6 +498,9 @@ func (a *Array) chunkKey(idx []int) string {
 // at the array's edges are padded), little-endian, in the array's order. A chunk never written
 // is the fill value.
 func (a *Array) ReadChunk(idx []int) ([]byte, error) {
+	if a.DType.Kind == 'O' {
+		return nil, fmt.Errorf("zarr: %s holds text of varying length (ReadStrings reads it)", a.Path)
+	}
 	if len(idx) != len(a.Shape) {
 		return nil, fmt.Errorf("zarr: %s: chunk index %v for rank %d", a.Path, idx, len(a.Shape))
 	}
@@ -443,9 +525,12 @@ func (a *Array) ReadChunk(idx []int) ([]byte, error) {
 		return nil, err
 	}
 	var data []byte
-	if a.ZarrFormat == 3 {
-		data, err = a.decodeV3(stored, n)
-	} else {
+	switch {
+	case a.shard != nil:
+		data, err = a.decodeShard(stored, n)
+	case a.ZarrFormat == 3:
+		data, err = decodeV3(a.v3Codecs, stored, n)
+	default:
 		data, err = decodeV2(a.compressor, stored, n)
 	}
 	if err != nil {
@@ -483,10 +568,10 @@ func decodeV2(c *codecSpec, stored []byte, n int) ([]byte, error) {
 		return io.ReadAll(io.LimitReader(r, int64(n)+1))
 	case "lz4":
 		// numcodecs' LZ4: the decoded size as 4 little-endian bytes, then one LZ4 block.
-		if len(stored) < 4 || int(binary.LittleEndian.Uint32(stored)) != n {
+		if len(stored) < 4 || int(binary.LittleEndian.Uint32(stored)) > n {
 			return nil, errors.New("lz4 chunk without its size")
 		}
-		out := make([]byte, n)
+		out := make([]byte, binary.LittleEndian.Uint32(stored))
 		got, err := lz4.DecodeBlock(out, stored[4:])
 		return out[:got], err
 	}
@@ -494,11 +579,11 @@ func decodeV2(c *codecSpec, stored []byte, n int) ([]byte, error) {
 }
 
 // decodeV3 runs format 3's bytes-to-bytes codecs in reverse (array-to-bytes and transpose were
-// read into the dtype and order).
-func (a *Array) decodeV3(stored []byte, n int) ([]byte, error) {
+// read into the dtype and order); n bounds the output.
+func decodeV3(codecs []codecSpec, stored []byte, n int) ([]byte, error) {
 	data := stored
-	for i := len(a.v3Codecs) - 1; i >= 0; i-- {
-		switch c := a.v3Codecs[i]; c.Name {
+	for i := len(codecs) - 1; i >= 0; i-- {
+		switch c := codecs[i]; c.Name {
 		case "crc32c":
 			if len(data) < 4 {
 				return nil, errors.New("chunk too short for its checksum")
@@ -557,6 +642,9 @@ func swap(data []byte, d DType) {
 
 // ReadAll decodes the whole array, row-major (C order) and little-endian.
 func (a *Array) ReadAll() ([]byte, error) {
+	if a.DType.Kind == 'O' {
+		return nil, fmt.Errorf("zarr: %s holds text of varying length (ReadStrings reads it)", a.Path)
+	}
 	elements := int64(1)
 	for _, s := range a.Shape {
 		elements *= int64(s)

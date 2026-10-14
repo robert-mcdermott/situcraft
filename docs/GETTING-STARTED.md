@@ -184,8 +184,23 @@ holding the pixel they lie in. It runs as a job (about a second for the Lung exa
 segmentation of its own, kept with its parameters. Below, it is compared with the instrument's
 segmentation pixel by pixel and transcript by transcript, and what differs is described: on the
 Lung example, segmented by the instrument the same way, 98.06% of pixels and 98.94% of transcripts
-are in the same cells. Later releases add comparing any two segmentations, reviewing their
-differences, choosing the default, and importing other tools' segmentations.
+are in the same cells.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/import-dark.webp">
+  <img alt="The Segmentation view of the Lung example: the instrument's segmentation and one imported from a SpatialData store written by spatialdata-io, side by side, and the imported one's lineage in the inspector" src="images/import-light.webp">
+</picture>
+
+**Import a segmentation** brings in one made by another tool: a SpatialData Zarr store, Baysor's
+`segmentation.csv` with its polygons, GeoJSON polygons with an optional transcript table (CSV or
+Parquet), or a Xenium Ranger output bundle of the same run. Say whether its coordinates are in µm
+or in pixels of the morphology image (stores written by spatialdata-io from Xenium data are in
+pixels): SituCraft does not guess, and the import's check says when the cells do not lie within
+the dataset's image. It also checks that the transcripts it names are the dataset's. The import
+runs as a job and becomes a segmentation of its own, kept with the SHA-256 of every file it read,
+its transcripts counted as every segmentation's are; one whose check finds a fatal problem is
+kept as invalid, for review. Later releases add comparing any two segmentations, reviewing their
+differences, and choosing the default.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/jobs-dark.webp">
@@ -193,7 +208,7 @@ differences, choosing the default, and importing other tools' segmentations.
 </picture>
 
 Long work runs as a job: building derived data, downloading an example, registering a
-segmentation, expanding nuclei. The **Jobs** view shows what runs and waits, what finished, and each job's log and
+segmentation, expanding nuclei, importing a segmentation. The **Jobs** view shows what runs and waits, what finished, and each job's log and
 spec. Jobs keep running when the window reloads, and closing the window while one runs asks first.
 If SituCraft stops (or the computer does) in the middle of a job, the job is shown as interrupted
 when SituCraft starts again: **Resume** continues it where it stopped, **Discard** forgets it.

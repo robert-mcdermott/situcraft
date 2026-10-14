@@ -39,19 +39,39 @@ by XOA.
 | Format | Specification | What SituCraft supports |
 | --- | --- | --- |
 | Parquet | Apache Parquet format; Thrift compact protocol | Flat schemas, every physical type; plain, dictionary, RLE, delta and byte-stream-split encodings; data pages v1 and v2; Zstandard, Snappy, gzip, LZ4 or no compression |
-| Zarr | Zarr storage specifications v2 and v3 | Directories and zips; Blosc, Zstandard, zlib, gzip and LZ4 chunks; C and F order; both byte orders; fill values; CRC-32C |
+| Zarr | Zarr storage specifications v2 and v3 | Directories and zips; Blosc, Zstandard, zlib, gzip and LZ4 chunks; C and F order; both byte orders; fill values; CRC-32C; sharding; text of fixed and varying length (VLenUTF8) |
+| AnnData | anndata's on-disk format, in Zarr | Data frames (text, categorical, nullable and numeric columns); matrices as sparse rows, sparse columns or dense |
+| GeoJSON, WKB | RFC 7946; OGC Simple Features | Polygons and MultiPolygons with holes |
 | TIFF | TIFF 6.0, BigTIFF, OME-TIFF | Strips and tiles, SubIFD pyramids, deflate, LZW, PackBits, predictors; OME-XML, multi-file OME-TIFF, z-stacks |
 | JPEG 2000 | ITU-T T.800 (ISO/IEC 15444-1), Part 1 | JP2 files and codestreams; every progression order and code-block style; tiles, layers and precincts; 5/3 and 9/7 wavelets; decoding at reduced resolution |
 | Zstandard | RFC 8878 | Frames with XXH64 checksums |
 | LZ4, Snappy, Blosc | Their projects' format descriptions | Blocks; Blosc byte and bit shuffling |
 | Matrix Market | NIST Matrix Market exchange format | Coordinate matrices, gzip-compressed |
 
+## Segmentations SituCraft imports
+
+The Segmentation view's **Import a segmentation** (and the `import_segmentation` remote action)
+reads a segmentation made by another tool into a dataset:
+
+| Format | Files | What is read |
+| --- | --- | --- |
+| SpatialData Zarr | the store (`.zarr` folder or its zip), format 2 or 3 | the cells from a shapes element (polygons) or a labels element (a label image); each transcript's cell from a points element (a `cell_id`, `cell` or `assignment` column, or one named); the counts from a table annotating the cells; each element's coordinate transformation to a coordinate system (`global` unless named) |
+| Baysor | `segmentation.csv`, and `segmentation_polygons.json` | each transcript's cell (`cell`; `0` and `is_noise` are none), by `transcript_id` when the table has it, else by `x`, `y` and `gene`; the cells' polygons |
+| GeoJSON | polygons (`.geojson`, `.json`), and optionally a table (`.csv`, `.csv.gz`, `.tsv`, `.parquet`) | the polygons, each feature naming its cell (`cell_id`, `cell`, `id`…, or the feature's id); each transcript's cell from the table (`transcript_id` and the cell), else from the polygon it lies in |
+| Xenium Ranger output | the bundle (folder, zip or `experiment.xenium`) of the same run | its cell mask, cells, boundaries, and each transcript's `cell_id` |
+
+Coordinates are read in µm unless the import says they are pixels of the morphology image: they
+are never guessed. A cell of `""`, `UNASSIGNED`, `NA`, `nan`, `None` or `-1` is none. The import is
+checked against the dataset (the transcripts it names, by id and, where it gives them, position;
+where its cells lie; its ids), and becomes a segmentation of SituCraft's own files (below), with
+the SHA-256 of every file it read.
+
 ## Other files
 
 SituCraft recognizes OME-TIFF images, Parquet and CSV tables, GeoJSON polygons and Zarr stores
-(on the command line or by **Open a bundle**) and lists them under **On this computer**. Reading them for analysis arrives with later releases: registered H&E and IF
-images, imported segmentations, labels and annotations (see the
-[roadmap](../situcraft-spec/roadmap.md)).
+(on the command line or by **Open a bundle**) and lists them under **On this computer**. Reading
+them for analysis arrives with later releases: registered H&E and IF images, labels and
+annotations (see the [roadmap](../situcraft-spec/roadmap.md)).
 
 ## What SituCraft writes
 
@@ -107,15 +127,15 @@ What jobs make and register is kept in `<data dir>/artifacts/<id>/`, beside a `m
 
 ### Segmentations SituCraft makes
 
-A segmentation SituCraft makes (nucleus expansion, from 0.2.0) is an artifact of six files of its
-own. Each binary file starts with four magic bytes, a format version (`uint32`) and its body's
+A segmentation SituCraft makes (nucleus expansion, from 0.2.0) or imports is an artifact of six
+files of its own. Each binary file starts with four magic bytes, a format version (`uint32`) and its body's
 length (`uint64`), little-endian, followed by the body compressed with zlib (RFC 1950/1951).
 Readers check every size before reading, and the zlib checksum.
 
 | File | Magic | Holds |
 | --- | --- | --- |
 | `segmentation.json` | | `format` (`"situcraft-segmentation"`), `version`, `method`, `parameters` (every one), the raster's `width`, `height` and `pixelSizeUm`, the numbers of `cells`, `transcripts` and `genes`, the `nuclei` it grew from (`source`, `count`), the gene transcripts of quality 20 or more and those assigned, and the `agreement` with the instrument's segmentation |
-| `cells.bin` | `SCSC` | Each cell's id (`c1`, `c2`, …) and the bundle's id of the cell its nucleus lies in; centroid (µm), area and nucleus area (µm²); its gene transcripts of quality 20 or more, all its transcripts, and its genes detected |
+| `cells.bin` | `SCSC` | Each cell's id (`c1`, `c2`, … for an expansion; the tool's own for an import) and the bundle's id of the cell its nucleus lies in; centroid (µm), area and nucleus area (µm²); its gene transcripts of quality 20 or more, all its transcripts, and its genes detected |
 | `mask.bin` | `SCMK` | The label raster at the morphology image's resolution (label *k* is cell *k*; 0 none), each row as (label, length) runs in unsigned varints |
 | `assignments.bin` | `SCAS` | Each transcript's cell, in the row order of the bundle's `transcripts.parquet` (0: none) |
 | `counts.bin` | `SCCT` | The cell-by-gene counts of gene transcripts of quality 20 or more: the genes' names, then compressed sparse rows (row offsets, gene indices, counts) |

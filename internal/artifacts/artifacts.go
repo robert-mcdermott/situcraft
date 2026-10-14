@@ -176,6 +176,22 @@ func (s *Store) Stage(id string) (string, error) {
 	return dir, os.MkdirAll(dir, 0o755)
 }
 
+// Restage renames a staging folder, for outputs whose artifact id is known only once they are
+// written (an import, named by the checksums of what it read).
+func (s *Store) Restage(from, to string) error {
+	if err := checkID(from); err != nil {
+		return err
+	}
+	if err := checkID(to); err != nil {
+		return err
+	}
+	dst := filepath.Join(s.dir, "staging", to)
+	if err := os.RemoveAll(dst); err != nil {
+		return err
+	}
+	return os.Rename(filepath.Join(s.dir, "staging", from), dst)
+}
+
 // Discard removes an artifact's staging folder (outputs of a job that will not be promoted).
 func (s *Store) Discard(id string) error {
 	if err := checkID(id); err != nil {

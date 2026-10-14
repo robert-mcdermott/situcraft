@@ -24,7 +24,9 @@
 //   exactly, a filter, the methods, and a file written only with the token;
 // - nucleus expansion (wave 2, slice 3): the Lung bundle's nuclei grown by 5 µm by a program, in
 //   the Segmentation view, nearly as the instrument's segmentation; recorded in the project; the
-//   same distance again the same artifact, with no job.
+//   same distance again the same artifact, with no job;
+// - imports (wave 2, slice 4): the Lung bundle imported into itself as an output bundle of its own
+//   run, by remote control and only with the token; another run's refused.
 //
 // It builds the program, starts it on the bundles with an empty cache and library, builds their
 // derived data, and drives the page through window.situcraft (the app, app.js) and window.situcraftViewer
@@ -459,6 +461,20 @@ export async function viewerSuite({ check, MissingData, verbose }) {
         const again = await act('expand_nuclei', { dataset: 'xenium-lung-2fov' });
         const jobsAfter = (await act('jobs')).data?.jobs.length;
         check('viewer', 'expanding by the same distance again answers the same artifact, with no job', `${again.ok ? again.data.id : again.message}; jobs ${jobsBefore} then ${jobsAfter}`, again.ok && again.data.id === expanded.data?.id && jobsAfter === jobsBefore, 'the same artifact, no new job');
+        // Imports (wave 2, slice 4): the Lung bundle, as an output bundle of its own run, imports
+        // as the instrument's segmentation; the Breast bundle, of another run, is refused; an import
+        // needs the token.
+        const lungPath = join(dataRoot, 'xenium-lung-2fov');
+        const refusedImport = await act('import_segmentation', { dataset: 'xenium-lung-2fov', format: 'xenium', paths: [lungPath] }, false);
+        const selfImport = await act('import_segmentation', { dataset: 'xenium-lung-2fov', format: 'xenium', paths: [lungPath] });
+        const si = selfImport.ok ? selfImport.data.summary : null;
+        check('viewer', 'remote control: import_segmentation imports a Xenium output bundle of the same run, only with the token', `${refusedImport.status} without; ${selfImport.message ?? selfImport.error}`, refusedImport.status === 401 && selfImport.ok && selfImport.data.state === 'complete' && si.cells === 11898 && Math.abs(si.assignedFraction - segmentations.data.segmentations[0].summary.assignedFraction) < 1e-6, '401, then 11,898 cells assigning what the instrument\'s do');
+        const importedRow = await chrome.eval(`(() => { const app = window.situcraft; const r = app.store.project.artifacts.find((a) => a.kind === 'segmentation' && a.source === 'imported'); return r ? { id: r.id, parents: r.parents.map((p) => p.kind).join(), files: r.files.length, rows: document.querySelectorAll('.seg-table tbody tr').length } : null; })()`);
+        check('viewer', 'the import is recorded in the project as imported, with its lineage', JSON.stringify(importedRow), importedRow?.id === selfImport.data?.id && importedRow.parents === 'bundle,import' && importedRow.files === 6 && importedRow.rows === 3, 'recorded; three segmentations shown');
+        if (present.includes('xenium-breast-2fov')) {
+          const otherRun = await act('import_segmentation', { dataset: 'xenium-lung-2fov', format: 'xenium', paths: [join(dataRoot, 'xenium-breast-2fov')] });
+          check('viewer', 'an output bundle of another run is refused, saying why', otherRun.message ?? otherRun.error, !otherRun.ok && /another run|of run/.test(otherRun.message ?? otherRun.error ?? ''), 'refused: another run');
+        }
       }
     }
     check('viewer', 'no uncaught errors in the page', errors.length ? errors.slice(0, 3).join(' | ') : 'none', errors.length === 0, 'none');

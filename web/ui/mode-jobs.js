@@ -8,7 +8,7 @@ import { h, icon, clear, relativeTime } from './dom.js';
 import { confirmDialog, toast } from './overlays.js';
 import { isFinished } from './jobs.js';
 
-const KINDS = { cache: 'Derived data', example: 'Example download', segmentation: 'Segmentation', expansion: 'Nucleus expansion' };
+const KINDS = { cache: 'Derived data', example: 'Example download', segmentation: 'Segmentation', expansion: 'Nucleus expansion', import: 'Import' };
 const STATES = {
   queued: ['', 'Waiting'], declared: ['', 'Waiting'], running: ['accent', 'Running'], validating: ['accent', 'Checking its outputs'],
   complete: ['ok', 'Complete'], cancelled: ['', 'Cancelled'], failed: ['danger', 'Failed'], invalid: ['danger', 'Invalid outputs'], orphaned: ['warn', 'Interrupted'],
@@ -25,7 +25,7 @@ export function mountJobs(app, container) {
   const list = h('div.jobs-list');
   const counts = h('span.crumbs');
   const root = h('div.view.jobs', h('div.workbench-head', h('h1', icon('jobs'), 'Jobs', counts)), h('div.workbench-scroll', h('div.jobs-body',
-    h('p.muted.jobs-intro', 'Work that runs in the program: building derived data, downloading examples, registering segmentations, expanding nuclei, and later segmenting and comparing. Jobs keep running when the window reloads, and are kept when SituCraft stops: one it interrupted can be resumed where it stopped, or discarded.'),
+    h('p.muted.jobs-intro', 'Work that runs in the program: building derived data, downloading examples, registering segmentations, expanding nuclei, importing segmentations, and later segmenting and comparing. Jobs keep running when the window reloads, and are kept when SituCraft stops: one it interrupted can be resumed where it stopped, or discarded.'),
     list)));
   container.append(root);
   const open = new Set(); // jobs whose log is shown

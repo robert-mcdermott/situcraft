@@ -1183,4 +1183,57 @@ func TestRealInstrumentSegmentationAndInterruptedJobs(t *testing.T) {
 	if staged, _ := os.ReadDir(filepath.Join(dir, "artifacts", "staging")); len(staged) != 0 {
 		t.Errorf("%d staging folders left", len(staged))
 	}
+
+	// An import: the Lung bundle, as a Xenium output bundle of its own run, imports as the
+	// instrument's segmentation; only this computer may ask; the same files again are the same
+	// artifact.
+	importBody := func() io.Reader {
+		return strings.NewReader(`{"format":"xenium","paths":[` + strconv.Quote(bundle) + `]}`)
+	}
+	if rec := request(t, handler, http.MethodPost, "/api/local/0/import", importBody(), nil); rec.Code != http.StatusForbidden {
+		t.Errorf("an import from another computer: %d", rec.Code)
+	}
+	runImport := func() artifacts.Manifest {
+		req := httptest.NewRequest(http.MethodPost, "/api/local/0/import", importBody())
+		req.Host, req.RemoteAddr = "127.0.0.1:8840", "127.0.0.1:50000"
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		var started struct{ Job *jobs.Job }
+		json.NewDecoder(rec.Body).Decode(&started)
+		if started.Job == nil {
+			t.Fatalf("no import job: %d %s", rec.Code, rec.Body)
+		}
+		j, _ := a.jobs.Wait(ctx, started.Job.ID)
+		if j.State != jobs.Complete {
+			t.Fatalf("the import ended %s: %s", j.State, j.Error)
+		}
+		full, _ := a.jobs.Get(j.ID)
+		var id string
+		for _, e := range full.Events {
+			if i := strings.Index(e.Message, "artifact imp-"); i >= 0 {
+				id = strings.Fields(e.Message[i+len("artifact "):])[0]
+				id = strings.TrimSuffix(id, ":")
+			}
+		}
+		m, err := a.artifacts.Get(id)
+		if err != nil {
+			t.Fatalf("artifact %q: %v", id, err)
+		}
+		return m
+	}
+	first := runImport()
+	if first.State != artifacts.Complete || len(first.Files) != 6 || len(first.Lineage.Parents) != 2 || first.Lineage.Parents[1].Kind != "import" || first.Lineage.Method.Name != "Xenium Onboard Analysis" {
+		t.Errorf("import %+v", first)
+	}
+	var is struct{ Cells int }
+	json.Unmarshal(first.Summary, &is)
+	if is.Cells != 11898 {
+		t.Errorf("import summary %s", first.Summary)
+	}
+	if again := runImport(); again.ID != first.ID {
+		t.Errorf("the same files imported again: %s, then %s", first.ID, again.ID)
+	}
+	if staged, _ := os.ReadDir(filepath.Join(dir, "artifacts", "staging")); len(staged) != 0 {
+		t.Errorf("%d staging folders left after importing", len(staged))
+	}
 }

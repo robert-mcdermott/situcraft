@@ -398,14 +398,65 @@ Limitations to show in the interface: refinement cannot create cells absent from
 segmentation; boundaries of cells with few transcripts, or in regions of homogeneous expression,
 are uncertain.
 
-### 3.3 Importing other segmentations
+### 3.3 Importing other segmentations (verified, wave 2, slice 4)
 
 | Source | Read |
 | --- | --- |
-| SpatialData Zarr (written by several segmentation tools) | shapes (cell boundaries), points (transcripts with assignment), table (AnnData counts) |
-| Baysor-style transcript assignment CSV + cell polygon GeoJSON | assignment, polygons |
-| Xenium Ranger outputs (`import-segmentation`, `resegment`) | a new bundle, read as a bundle |
-| GeoJSON polygons + a transcript-to-cell table | polygons, assignment |
+| SpatialData Zarr (Marconato et al. 2025), format 2 or 3, a folder or a zip | the cells from a shapes element (GeoParquet: WKB polygons, ids in the index) or a labels element (a multiscale label image, its finest level); each transcript's cell from a points element (Parquet parts); the counts from an AnnData table (anndata's on-disk format: X as sparse rows, sparse columns or dense; obs and var data frames) annotating the cells |
+| Baysor (Petukhov et al. 2022): `segmentation.csv` with `segmentation_polygons.json` | each transcript's cell (`cell`; 0 and `is_noise` none), by `transcript_id` when the input kept it, else by position and gene; polygons as a GeoJSON GeometryCollection whose geometries carry their `cell` |
+| GeoJSON polygons (RFC 7946), with or without a transcript table (CSV, gzipped CSV, TSV or Parquet) | polygons and MultiPolygons, each feature naming its cell; each transcript's cell from the table, else from the polygon it lies in |
+| Xenium Ranger outputs (`import-segmentation`, `resegment`), and Xenium Onboard Analysis bundles of the same run | the cell mask (`cells.zarr.zip` masks/1), cells, boundaries, and `transcripts.parquet`'s `cell_id` by `transcript_id` |
+
+**What every import becomes.** The same files as SituCraft's own segmentations (§3.1): a label
+raster at the morphology image's resolution (a label image resampled, nearest pixel; else the
+polygons drawn, a pixel belonging to a polygon whose interior holds its centre), each of the
+dataset's transcripts' cell, counts of gene transcripts of quality 20 or more, and outlines (the
+tool's polygons, else traced). Counting the same way for every segmentation keeps comparisons
+fair; a count table the tool wrote is compared with the counts, cell by cell.
+
+**What is checked against the dataset.**
+
+- **Units are declared, never guessed.** The coordinates are read as µm, or as pixels of the
+  morphology image when the import says so. spatialdata-io's Xenium reader writes its global
+  coordinate system in the morphology image's pixels (its points and shapes carry a scale of
+  1/0.2125 to it, its labels the identity); other tools write µm. When the cells do not lie
+  within the dataset's image, the import is invalid, and the finding says how many would were the
+  coordinates read in the other unit.
+- **The transcripts it names are the dataset's.** By `transcript_id`, and where the import gives
+  positions too (SpatialData points, Xenium bundles) within 0.05 µm of the dataset's transcript of
+  that id: the two development bundles share transcript ids (each run numbers its own), so ids
+  alone would let another run's transcripts pass. Without ids, by position and gene within
+  0.01 µm.
+- **An output bundle is of the same run:** by its experiment UUID; the development bundles both
+  name their run "run" and their region "region" (anonymized for sharing).
+- **Ids:** cells named twice, cells the table names without a polygon, polygons whose cells no
+  transcript names; labels the table has no row for.
+
+**Measured on the Lung bundle** (`internal/segment/imports`, reference numbers of its tests):
+
+- The Lung bundle imported into itself as an output bundle gives the instrument's segmentation
+  exactly: 11,898 cells, the raster identical to `masks/1`, every transcript's cell its `cell_id`,
+  and `cells.parquet`'s counts equal to the assignment's for every cell.
+- Written by spatialdata-io 0.7.1 (spatialdata 0.8.0, Zarr format 3, AnnData's arrays sharded),
+  read in pixels: the cells from `labels/cell_labels`, each label named through the table's
+  `cell_labels` column, the outlines from `shapes/cell_boundaries`. The raster is identical to
+  `masks/1`, every assignment the instrument's, the table's counts equal for every cell. Read as
+  µm, 3 of the 11,898 cells lie within the image, and the import says that 11,898 would in
+  pixels.
+- The instrument's own polygons and assignments, written as GeoJSON with a table (by
+  `transcript_id`), or as a Baysor-style table without ids (by position and gene): every
+  assignment the instrument's. The polygons drawn agree with `masks/1` on 94.33% of pixels: the
+  Xenium polygons pass through their edge pixels' own coordinates (§3.1), half a pixel inside the
+  pixels' areas, so a pixel whose centre lies on the cell's edge is drawn in or out by a hair.
+- The Breast bundle is refused as an import into the Lung run (another experiment).
+
+**Fixtures** (`internal/segment/imports/testdata`), one hand-made scene written by the libraries
+that write each format: spatialdata 0.8.0 (shapes, points, table; a label image with its table
+and shapes in pixels), spatialdata 0.2.6 (Zarr format 2), geopandas and pyarrow (GeoJSON, Parquet
+and CSV tables), pandas (Baysor's tables), pyarrow and zarr-python (a Xenium Ranger-style
+bundle). The scene has a cell with a hole, one of two polygons, one reaching beyond the image, one
+without a polygon, transcripts the tool assigns outside every polygon, noise, and a transcript the
+dataset does not have.
 
 ## 4. Comparing segmentations
 
@@ -516,6 +567,12 @@ Notes:
   2012;8:415–428. doi:10.4086/toc.2012.v008a019 (nucleus expansion's exact distances).
 - Okabe A, Boots B, Sugihara K, Chiu SN. *Spatial Tessellations: Concepts and Applications of
   Voronoi Diagrams*, 2nd ed. Wiley, 2000 (nucleus expansion).
+- Marconato L, Palla G, Yamauchi KA, et al. SpatialData: an open and universal data framework
+  for spatial omics. *Nat Methods* 2025;22:58–62. doi:10.1038/s41592-024-02212-x (imports).
+- Virshup I, Rybakov S, Theis FJ, Angerer P, Wolf FA. anndata: Access and store annotated data
+  matrices. *J Open Source Softw* 2024;9(101):4371. doi:10.21105/joss.04371 (tables).
+- Butler H, Daly M, Doyle A, Gillies S, Hagen S, Schaub T. The GeoJSON Format. RFC 7946, 2016;
+  OGC Simple Features (well-known binary); GeoParquet 1.0 (imports).
 - Hyndman RJ, Fan Y. Sample quantiles in statistical packages. *Am Stat* 1996;50:361–365
   (the QC plots' quantiles, type 7).
 - Tukey JW. *Exploratory Data Analysis*. Addison-Wesley, 1977 (box plots, whiskers at 1.5

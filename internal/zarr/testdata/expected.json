@@ -344,6 +344,80 @@
    ],
    "dtype": "<f4",
    "sha256": "2411ac2d3503c94d91574e10f574547d0f2cc46b95b48784bab44a71ccc7c521"
+  },
+  {
+   "store": "v3.zarr",
+   "path": "sharded",
+   "shape": [
+    37,
+    29
+   ],
+   "dtype": "<f4",
+   "sha256": "2411ac2d3503c94d91574e10f574547d0f2cc46b95b48784bab44a71ccc7c521"
+  },
+  {
+   "store": "v3.zarr",
+   "path": "sharded_index_start",
+   "shape": [
+    37,
+    29
+   ],
+   "dtype": "<f4",
+   "sha256": "2411ac2d3503c94d91574e10f574547d0f2cc46b95b48784bab44a71ccc7c521"
+  }
+ ],
+ "texts": [
+  {
+   "store": "v2.zarr",
+   "path": "vlen_text",
+   "values": [
+    "cell_boundaries",
+    "",
+    "\u00b5m",
+    "aaaiikim-1",
+    "UNASSIGNED",
+    "NegControlProbe_00022",
+    "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+   ]
+  },
+  {
+   "store": "v2.zarr.zip",
+   "path": "vlen_text",
+   "values": [
+    "cell_boundaries",
+    "",
+    "\u00b5m",
+    "aaaiikim-1",
+    "UNASSIGNED",
+    "NegControlProbe_00022",
+    "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+   ]
+  },
+  {
+   "store": "v3.zarr",
+   "path": "strings",
+   "values": [
+    "cell_boundaries",
+    "",
+    "\u00b5m",
+    "aaaiikim-1",
+    "UNASSIGNED",
+    "NegControlProbe_00022",
+    "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+   ]
+  },
+  {
+   "store": "v3.zarr",
+   "path": "strings_sharded",
+   "values": [
+    "cell_boundaries",
+    "",
+    "\u00b5m",
+    "aaaiikim-1",
+    "UNASSIGNED",
+    "NegControlProbe_00022",
+    "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+   ]
   }
  ]
 }
