@@ -684,12 +684,73 @@ other tools can be imported.
        - a hidden stain's name dimmed below WCAG contrast.
      - **A dialog left open** (the methods, say) covered what later actions showed: actions now
        close it first.
-2. **Segmentations as artifacts (D8, S6, S9).**
-   - The artifact store: states, lineage, temporary outputs promoted after validation.
-   - The instrument's segmentation registered as an artifact.
-   - The job system completed: jobs persisted; a warning before closing with a job running;
-     interrupted jobs marked orphaned on restart, with resume or discard.
-   - The Jobs view.
+2. **Segmentations as artifacts (D8, S6, S9): done.**
+   - **The artifact store** (`internal/artifacts`, `<data dir>/artifacts`):
+     - an artifact is a folder with `manifest.json`: its lineage (parents, the job and its spec,
+       the method with its version and citation, the parameters, the software), every file with
+       its role, size and SHA-256, its check's findings, and its state;
+     - a job writes outputs into `staging/<id>`; `Promote` checksums them, refuses unlisted outputs
+       and paths leaving the folder, runs the kind's check, and renames the folder into place,
+       complete or invalid (kept for review, never used); an artifact never changes;
+     - a file of the dataset's bundle is recorded by its path and SHA-256 and never copied;
+     - `Verify` checksums an artifact's files again.
+   - **The instrument's segmentation as an artifact** (`api_segmentations.go`):
+     - a job registers it, from the bundle's cells, cell and nucleus boundaries, transcripts (their
+       assignments), cell-by-gene counts and segmentation masks: each file's SHA-256 (from the
+       cache's record of checksums when it has them);
+     - its check is the bundle's validation, the findings that bear on the segmentation recorded
+       with it; a fatal one makes it invalid;
+     - its lineage names the bundle (analysis UUID, the manifest's SHA-256), the software, and the
+       cells each method segmented;
+     - its id hashes its files' checksums, so the same bundle gives the same artifact in any
+       project.
+   - **In the project** (`lib/segmentations.js`):
+     - a segmentation record mirrors the artifact;
+     - a dataset's default is set by `promote-segmentation` decisions, with a reason, by whom and
+       when, never removed: the latest one naming a complete segmentation holds;
+     - the instrument's is registered and promoted (as the dataset's only segmentation) when a
+       dataset is added, a project reopens (0.1.0 projects included) or a moved bundle is located.
+     - The project tree lists segmentations, the default marked; the inspector shows the lineage,
+       the cells by method, the files by SHA-256, the findings, and the decision that made it the
+       default.
+   - **Jobs completed** (`internal/jobs`):
+     - jobs are kept in `<data dir>/jobs`, one file each, written at each change of state and each
+       line of the log, with ids unique across runs;
+     - a job interrupted by the program stopping, or found running after a crash, is orphaned;
+       resumed by its kind's handler from its spec (same id, its log kept, its runs counted), or
+       discarded with what it left (a partial download);
+     - handlers for derived data, segmentation registration and example downloads.
+   - **Closing:** the window asks before closing with a job running; closed anyway, SituCraft
+     keeps running until the job ends (Ctrl+C stops it).
+   - **The Jobs view** (`ui/mode-jobs.js`):
+     - running and waiting, interrupted, and finished jobs;
+     - each with its state, progress, times and runs, its whole log and its spec;
+     - Stop, Resume and Discard; the status bar's job opens it.
+   - **Remote control:** `segmentations` and `jobs`; `open_example` and `add_dataset` wait for the
+     segmentation's registration; an action's wait for frames is bounded, so a hidden window still
+     answers.
+   - **Screenshots:** two more scenes (a segmentation in the inspector, the Jobs view); every scene
+     passes axe-core.
+   - Validation:
+     - **Go tests:** the artifact store (checked outputs recorded with their SHA-256, an invalid one
+       kept apart, unlisted outputs and escaping paths refused, bundle files referenced and
+       verified, a changed file found); jobs kept, orphaned, resumed and discarded across managers;
+       on the Lung bundle, a build interrupted by stopping resumes after a restart to entries that
+       pass their check, and the segmentation's six files carry the SHA-256 a direct reading gives.
+     - **In headless Chrome** (`node validation/run.mjs viewer`, 59 checks):
+       - both bundles' instrument segmentations registered, every file's SHA-256 as Node computes
+         it, promoted as the default, their methods accounting for every cell;
+       - the 0.1.0 project given its own, the same artifact;
+       - every job complete; `segmentations` and `jobs` by remote control.
+     - **Node tests:** records, promotion (a reason required, only a complete segmentation, the
+       latest decision holding), registering twice changing nothing.
+     - **By hand:** SituCraft killed in the middle of the Breast bundle's build; on restart the
+       build is interrupted, and resuming it continues the image pyramid where it stopped.
+   - Found by slice 2:
+     - **A hidden window draws no frames,** so a remote action waiting for two frames waited until
+       the window was shown: the wait is now bounded.
+     - **The documentation's capture shares one cache across scenes,** so a scene showing jobs
+       needs its own (in the second theme the builds were already done).
 3. **Nucleus expansion (S1).** `internal/segment/expand`: neighbor-bounded growth of nuclei to a
    chosen distance, transcript assignment and counts; parallel and deterministic.
    - Validation: the Lung bundle's own 5 µm expansion is reproduced. The documented tolerance

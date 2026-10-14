@@ -27,6 +27,7 @@ import (
 	"syscall"
 	"time"
 
+	"situcraft/internal/artifacts"
 	"situcraft/internal/cache"
 	"situcraft/internal/examples"
 	"situcraft/internal/jobs"
@@ -76,8 +77,11 @@ type app struct {
 	// pyramids and spatial indexes (nil when there is no cache folder, as in some tests).
 	cacheDir string
 	cache    *cache.Cache
-	// jobs runs long computations, such as building a dataset's derived data.
+	// jobs runs long computations, such as building a dataset's derived data; they are kept in
+	// the data folder, so that they survive the program.
 	jobs *jobs.Manager
+	// artifacts are what jobs make and register (segmentations), with their lineage.
+	artifacts *artifacts.Store
 	// views are the datasets open in the tissue viewer.
 	views *views
 	// examples are the example datasets, downloaded on request.
@@ -153,6 +157,20 @@ func main() {
 	case <-signals:
 		running.stop(3 * time.Second)
 	case <-running.windowClosed:
+		// Work under way is not lost to a closed window: SituCraft keeps running until it ends.
+		if n := running.app.jobs.Running(); n > 0 {
+			fmt.Printf("The SituCraft window was closed while %d job(s) run; SituCraft keeps running until they finish. Ctrl+C stops it now (an interrupted job can be resumed in the Jobs view).\n", n)
+			ticker := time.NewTicker(time.Second)
+		waiting:
+			for running.app.jobs.Running() > 0 {
+				select {
+				case <-signals:
+					break waiting
+				case <-ticker.C:
+				}
+			}
+			ticker.Stop()
+		}
 		fmt.Println("The SituCraft window was closed; stopping.")
 		running.stop(3 * time.Second)
 	}
@@ -358,7 +376,6 @@ func newApp(cfg config) (*app, error) {
 		assets:   content,
 		files:    newLocalFiles(),
 		cacheDir: cfg.cacheDir,
-		jobs:     jobs.NewManager(),
 		views:    newViews(),
 	}
 	examplesDir := cfg.examplesDir
@@ -395,6 +412,14 @@ func newApp(cfg config) (*app, error) {
 			}
 		}()
 	}
+	var err error
+	if a.jobs, err = jobs.Open(filepath.Join(cfg.dataDir, "jobs")); err != nil {
+		return nil, fmt.Errorf("the jobs folder: %w", err)
+	}
+	if a.artifacts, err = artifacts.Open(filepath.Join(cfg.dataDir, "artifacts")); err != nil {
+		return nil, fmt.Errorf("the artifacts folder: %w", err)
+	}
+	a.handleJobs()
 	if problems := a.files.add(cfg.files); len(problems) > 0 {
 		for _, problem := range problems {
 			log.Print(problem)
@@ -499,6 +524,7 @@ func (a *app) registerAPI(mux *http.ServeMux) {
 	a.registerView(mux)
 	a.registerProject(mux)
 	a.registerExamples(mux)
+	a.registerSegmentations(mux)
 	if a.control != nil {
 		a.control.register(mux)
 	}

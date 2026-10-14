@@ -9,6 +9,7 @@ import { toast } from './overlays.js';
 import { cacheJobKey } from './bundles.js';
 import { datasetFilters, methodsMarkdown, showMethods, writeMethods } from './methods.js';
 import { ATTRIBUTES } from '../lib/cell-attributes.js';
+import { promotedSegmentation } from '../lib/segmentations.js';
 import { parseProject, rename, serializeProject } from '../lib/project.js';
 import { removeView, sameView, viewLink } from '../lib/views.js';
 
@@ -16,7 +17,9 @@ export class ActionError extends Error {}
 
 const plural = (n, word) => `${n.toLocaleString('en-US')} ${word}${n === 1 ? '' : 's'}`;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-const frames = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+// Two frames, for what an action changed to be drawn; a hidden window draws no frames, so at most
+// 150 ms.
+const frames = () => Promise.race([new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))), sleep(150)]);
 
 // The views by the names scripts use.
 const MODES = { start: 'welcome', welcome: 'welcome', data: 'data', viewer: 'viewer', tissue: 'viewer', qc: 'qc', segmentation: 'segmentation', celltypes: 'celltypes', 'cell types': 'celltypes', spatial: 'spatial', cohort: 'cohort', reports: 'reports', jobs: 'jobs' };
@@ -223,6 +226,7 @@ export function installRemote(app) {
       const tour = app.tour?.open?.() ? { title: app.tour.tour.title, step: app.tour.step() + 1, steps: app.tour.tour.steps.length, showing: app.tour.tour.steps[app.tour.step()].title } : null;
       const data = {
         project: { id: p.id, name: p.name, created: p.created, modified: p.modified, history: p.history.length },
+        segmentations: p.artifacts.filter((a) => a.kind === 'segmentation').map((a) => ({ id: a.id, name: a.name, dataset: datasetName(a.dataset), state: a.state, default: promotedSegmentation(p, a.dataset)?.record.id === a.id })),
         mode,
         focus: store.ui.focus ?? null,
         datasets: p.datasets.map(datasetData),
@@ -233,7 +237,7 @@ export function installRemote(app) {
         tour,
         local: app.localItems.map((i) => ({ name: i.name, kind: i.kind, path: i.path })),
         examples: (app.examples.list() ?? []).map((e) => ({ name: e.name, title: e.title, state: e.state, download: e.download, size: e.size, license: e.license })),
-        jobs: app.jobs.running().map((j) => ({ title: j.title, state: j.state, progress: j.progress, message: j.message ?? '' })),
+        jobs: app.jobs.list().filter((j) => !['complete', 'cancelled'].includes(j.state)).map((j) => ({ id: j.id, title: j.title, state: j.state, progress: j.progress, message: j.message ?? '', resumable: Boolean(j.resumable) })),
         library: app.library.location,
       };
       return { message: `${p.name}: ${plural(p.datasets.length, 'dataset')}, ${plural(filters.length, 'filter')}, ${plural(p.views.length, 'saved view')}; showing ${mode}.`, data };
@@ -277,6 +281,7 @@ export function installRemote(app) {
           if (args.add && !fatal) {
             const dataset = app.bundles.datasetFor(item) ?? (await app.bundles.add(item));
             await derivedData(item);
+            await app.bundles.registerSegmentation(item, dataset.id);
             entry.dataset = dataset.name;
           }
           opened.push(entry);
@@ -303,7 +308,10 @@ export function installRemote(app) {
       if (fatal.length) throw new ActionError(`${item.name} has ${plural(fatal.length, 'fatal problem')}: ${fatal.map((f) => f.title).join('; ')}.`);
       const known = app.bundles.datasetFor(item);
       const dataset = known ?? (await app.bundles.add(item));
-      if (args.wait !== false) await derivedData(item);
+      if (args.wait !== false) {
+        await derivedData(item);
+        await app.bundles.registerSegmentation(item, dataset.id);
+      }
       app.focusItem({ kind: 'dataset', id: dataset.id });
       return { message: `${known ? `${dataset.name} was already in the project` : `Added ${dataset.name} to the project`}${args.wait !== false ? '; its derived data are built' : ''}.`, data: datasetData(dataset) };
     },
@@ -322,6 +330,7 @@ export function installRemote(app) {
       }
       const { dataset, item } = await app.examples.inProject(example.name);
       await derivedData(item);
+      await app.bundles.registerSegmentation(item, dataset.id);
       app.focusItem({ kind: 'dataset', id: dataset.id });
       await settleMode('data');
       return { message: `Opened ${example.title} in ${project().name}.`, data: { project: project().name, dataset: datasetData(dataset) } };
@@ -576,6 +585,51 @@ export function installRemote(app) {
       const filter = q.saveFilter(name, conditions);
       await frames();
       return { message: `Saved ${filter.name}, version ${filter.version}: it keeps ${plural(filter.result.kept, 'cell')} of ${filter.result.cells.toLocaleString('en-US')}.`, data: filterData(filter) };
+    },
+
+    async segmentations(args) {
+      const p = project();
+      const datasets = args.dataset ? [resolveDataset(args.dataset)] : p.datasets;
+      const list = datasets.flatMap((d) => p.artifacts.filter((a) => a.kind === 'segmentation' && a.dataset === d.id).map((a) => {
+        const promoted = promotedSegmentation(p, d.id);
+        return {
+          id: a.id, name: a.name, dataset: d.name, state: a.state, source: a.source,
+          default: promoted?.record.id === a.id, ...(promoted?.record.id === a.id ? { decision: { by: promoted.decision.by, reason: promoted.decision.rationale, time: promoted.decision.time } } : {}),
+          method: a.method, software: a.software, job: a.job, parents: a.parents, parameters: a.parameters, summary: a.summary, files: a.files, findings: a.findings,
+        };
+      }));
+      const registering = datasets.filter((d) => app.bundles.registeringSegmentation?.(d.id)).map((d) => d.name);
+      if (args.show && list.length) {
+        app.focusItem({ kind: 'segmentation', id: list[0].id });
+        await frames();
+      }
+      return { message: `${plural(list.length, 'segmentation')}${list.length ? `: ${list.map((x) => `${x.name} of ${x.dataset} (${x.state}${x.default ? ', default' : ''})`).join('; ')}` : ''}${registering.length ? `; being registered: ${registering.join(', ')}` : ''}.`, data: { segmentations: list, registering } };
+    },
+
+    async jobs(args) {
+      if (args.show) await settleMode('jobs');
+      if (!args.job) {
+        const list = app.jobs.list().map((j) => ({ id: j.id, kind: j.kind, title: j.title, state: j.state, progress: j.progress, message: j.message ?? '', runs: j.runs ?? 0, created: j.created, started: j.started ?? null, ended: j.ended ?? null, error: j.error ?? null, resumable: Boolean(j.resumable) }));
+        const by = (s) => list.filter((j) => j.state === s).length;
+        return { message: `${plural(list.length, 'job')}: ${list.filter((j) => !['complete', 'cancelled', 'failed', 'invalid', 'orphaned'].includes(j.state)).length} running or waiting, ${by('orphaned')} interrupted, ${by('complete')} complete, ${by('failed') + by('invalid')} failed.`, data: { jobs: list } };
+      }
+      const job = app.jobs.get(String(args.job));
+      if (!job) throw new ActionError(`No job ${args.job}. Jobs: ${app.jobs.list().map((j) => j.id).join(', ') || 'none'}.`);
+      if (args.do !== undefined) {
+        const what = choose(args.do, ['cancel', 'resume', 'discard'], 'thing to do');
+        try {
+          if (what === 'cancel') {
+            if (!(await app.jobs.cancel(job.id))) throw new ActionError(`${job.title} has finished: nothing to stop.`);
+          } else if (what === 'resume') await app.jobs.resume(job.id);
+          else await app.jobs.discard(job.id);
+        } catch (error) {
+          if (error instanceof ActionError) throw error;
+          throw new ActionError(error.message);
+        }
+        return { message: `${job.title}: ${{ cancel: 'asked to stop', resume: 'resumed', discard: 'discarded' }[what]}.`, data: { id: job.id, done: what } };
+      }
+      const full = await app.jobs.full(job.id);
+      return { message: `${full.title}: ${full.state}${full.error ? ` (${full.error})` : ''}.`, data: full };
     },
 
     async methods(args) {

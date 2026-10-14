@@ -25,7 +25,35 @@ review and choose between. Built slice by slice; this section grows with each.
   - **Safety:** it answers this computer only, and only the window opened from this run.
     Opening paths and writing files also need the token, and a file is never written over an
     existing one unless asked.
-- **Screenshots** of the documentation: 11 scenes in both themes, captured through remote control
+- **Segmentations as artifacts (wave 2, slice 2).**
+  - **The artifact store** (`<data dir>/artifacts`): what jobs make and register, each with its
+    lineage (what it was made from, the job and its spec, the method and its version, the
+    software), the SHA-256 of every file, what its check found, and its state.
+    - Outputs are written to a staging folder and checked before they become an artifact.
+    - An artifact is never changed; one whose check finds a fatal problem is kept as invalid, for
+      review, and never used.
+  - **The instrument's segmentation** of each dataset is registered as an artifact by a job, when
+    the dataset is added or a project reopens (so 0.1.0 projects get theirs). It records:
+    - the bundle's files that make it (cells, boundaries, nuclei, transcript assignments, counts,
+      masks) by SHA-256, never copied;
+    - the cells each method segmented, and the software that did it;
+    - the findings of the bundle's validation that bear on it.
+  - **Promotion:** each dataset's default segmentation is promoted by a recorded decision with its
+    reason. The instrument's is promoted when it is the only one, and decisions are never removed.
+  - **The project tree** lists the segmentations, the default marked; the inspector shows a
+    segmentation's lineage, files, findings and the decision that made it the default.
+- **Jobs that survive the program (wave 2, slice 2).**
+  - Jobs are kept in `<data dir>/jobs`. A job SituCraft stopped, or that was running when it
+    crashed, is shown as interrupted when it starts again, and can be resumed or discarded.
+  - Resuming continues the work from where it stopped: a derived-data build keeps what it
+    finished.
+  - Closing the window while a job runs asks first; if it is closed anyway, SituCraft keeps
+    running until the job ends (Ctrl+C stops it, and the job can be resumed).
+  - **The Jobs view:** what runs and waits, what was interrupted, and what finished. Each job has
+    its state, progress, times and runs, its whole log and its spec, and Stop, Resume and Discard.
+  - The status bar's job opens the Jobs view.
+  - Remote control gains `segmentations` and `jobs` (list, read, stop, resume, discard).
+- **Screenshots** of the documentation: 13 scenes in both themes, captured through remote control
   from the development bundles (`node docs/capture/capture.mjs`), in the README and the
   getting-started guide.
 - **A cell by its ID:** the program finds a cell by its `cell_id` as well as by its row.
@@ -40,6 +68,28 @@ review and choose between. Built slice by slice; this section grows with each.
 
 ### Validation
 
+- **Segmentations and jobs (slice 2):**
+  - **Go tests:**
+    - the artifact store records checked outputs with their SHA-256, keeps an invalid one apart,
+      refuses unlisted outputs and paths leaving its folder, references bundle files without
+      copying them, verifies them again, and finds a changed file;
+    - jobs are kept on disk, read back after the program stops or crashes (interrupted ones
+      orphaned), resumed under the same id with their log, and discarded with what they left;
+    - on the Lung bundle, a derived-data build interrupted by the program stopping resumes, after
+      a restart, to entries that pass their check;
+    - the instrument segmentation's six files are recorded with the SHA-256 a direct reading
+      gives, and registering again gives the same artifact without a job.
+  - **In headless Chrome:**
+    - both bundles' instrument segmentations are registered, every file's SHA-256 as Node computes
+      it, promoted as the default;
+    - their methods account for every cell (Breast: 3,300 by boundary stain, 3,913 by interior
+      stain, 62 by nucleus expansion);
+    - the 0.1.0 project gets its own, the same artifact, and still reopens its views exactly;
+    - every job is complete.
+  - **By hand:**
+    - SituCraft killed in the middle of the Breast bundle's build: on restart the build is
+      interrupted, and resuming it continues the image pyramid where it stopped;
+    - every scene, the two new ones included, passes axe-core in both themes.
 - **Go tests of the remote-control hub:** actions reach the window and its answer returns, one at
   a time; no window, a silent one, one that leaves and one of another run are each refused
   plainly; only this computer, and no other site's page, may send actions; opening paths and

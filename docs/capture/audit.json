@@ -108,5 +108,25 @@
   "scene": "tour",
   "theme": "light",
   "violations": []
+ },
+ {
+  "scene": "segmentation",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "segmentation",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "jobs",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "jobs",
+  "theme": "light",
+  "violations": []
  }
 ]

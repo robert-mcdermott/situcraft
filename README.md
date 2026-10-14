@@ -52,7 +52,8 @@ The Breast example's cells, colored by how the instrument found each one.
 More: [checking a bundle](docs/images/data-light.webp), [the tissue's stains](docs/images/viewer-light.webp),
 [transcripts outside cells](docs/images/qc-outside-light.webp), [filters as versions](docs/images/qc-filter-light.webp),
 [saved views](docs/images/saved-views-light.webp), [the methods paragraph](docs/images/methods-light.webp),
-[a guided tour](docs/images/tour-light.webp).
+[a guided tour](docs/images/tour-light.webp), [a segmentation's lineage](docs/images/segmentation-light.webp),
+[the Jobs view](docs/images/jobs-light.webp).
 
 ## Install
 

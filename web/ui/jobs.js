@@ -66,6 +66,44 @@ export function createJobs(app) {
       if (!response.ok) throw new Error(body.error ?? `HTTP ${response.status}`);
       return body.cancelled;
     },
+    async resume(id) {
+      const response = await fetch(`/api/jobs/${encodeURIComponent(id)}/resume`, { method: 'POST' });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error ?? `HTTP ${response.status}`);
+      return body;
+    },
+    async discard(id) {
+      const response = await fetch(`/api/jobs/${encodeURIComponent(id)}/discard`, { method: 'POST' });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error ?? `HTTP ${response.status}`);
+      return body.discarded;
+    },
+    // The job with its whole log.
+    async full(id) {
+      const response = await fetch(`/api/jobs/${encodeURIComponent(id)}`, { cache: 'no-store' });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error ?? `HTTP ${response.status}`);
+      return body;
+    },
+    // Resolves with the job once it has finished (as the program reports it).
+    async finished(id) {
+      for (;;) {
+        const job = await this.full(id).catch(() => null);
+        if (!job || isFinished(job.state)) return job;
+        await new Promise((resolve) => {
+          const stop = this.onFinished((j) => {
+            if (j.id === id) {
+              stop();
+              resolve();
+            }
+          });
+          setTimeout(() => {
+            stop();
+            resolve();
+          }, 2000);
+        });
+      }
+    },
     // Calls listener(job) whenever a job this page saw running finishes.
     onFinished(listener) {
       finishedListeners.add(listener);

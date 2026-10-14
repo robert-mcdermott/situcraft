@@ -6,6 +6,7 @@
 
 import { openPaths } from './storage.js';
 import { addDataset, compareFingerprint, datasetRecord, findDataset, relocateDataset, removeDataset } from '../lib/datasets.js';
+import { segmentationsOf, withInstrumentSegmentation } from '../lib/segmentations.js';
 
 const BUNDLE_KINDS = new Set(['bundle', 'archive']);
 
@@ -75,7 +76,43 @@ export function createBundles(app) {
     links.set(record.id, { state: 'ok', item });
     notify();
     buildCache(item);
+    registerSegmentation(item, record.id);
     return record;
+  }
+
+  // The instrument's segmentation of a dataset's bundle, registered as an artifact by a job
+  // (api_segmentations.go), then recorded in the project (and promoted when the dataset has no
+  // promoted segmentation). Resolves with the artifact, or null.
+  const registering = new Map(); // dataset id → promise
+  function registerSegmentation(item, datasetId) {
+    if (registering.has(datasetId)) return registering.get(datasetId);
+    const promise = (async () => {
+      try {
+        let answer = await getJSON(`${item.url}/segmentation`, { method: 'POST' });
+        if (!answer.artifact && answer.job) {
+          const job = await app.jobs.finished(answer.job.id);
+          if (job?.state !== 'complete') {
+            app.log(`${item.name}: the instrument's segmentation was not registered (${job?.error || job?.state || 'unknown'}).`);
+            return null;
+          }
+          answer = await getJSON(`${item.url}/segmentation`);
+        }
+        const manifest = answer.artifact;
+        const dataset = app.store.project.datasets.find((d) => d.id === datasetId);
+        if (!manifest || !dataset) return manifest ?? null;
+        const next = withInstrumentSegmentation(app.store.project, dataset, manifest);
+        if (next !== app.store.project) app.store.commit(next, `Register ${dataset.name}'s segmentation`);
+        return manifest;
+      } catch (error) {
+        app.log(`${item.name}: the instrument's segmentation could not be registered: ${error.message}`);
+        return null;
+      } finally {
+        registering.delete(datasetId);
+        notify();
+      }
+    })();
+    registering.set(datasetId, promise);
+    return promise;
   }
 
   // Asks which of the bundle's derived data are built (build: and starts a job building the rest).
@@ -159,7 +196,12 @@ export function createBundles(app) {
       links.set(d.id, link);
       notify();
       // Derived data are keyed by the files' contents, so a changed bundle gets its own.
-      if (link.state === 'ok' || link.state === 'changed') buildCache(item);
+      if (link.state === 'ok' || link.state === 'changed') {
+        buildCache(item);
+        // A dataset added before segmentations were artifacts (SituCraft 0.1.0) gets its
+        // instrument segmentation now; one whose bundle changed gets the changed files'.
+        if (link.state === 'changed' || !segmentationsOf(app.store.project, d.id).length) registerSegmentation(item, d.id);
+      }
     }
   }
 
@@ -189,6 +231,7 @@ export function createBundles(app) {
     links.set(id, link);
     notify();
     buildCache(item);
+    if (!segmentationsOf(app.store.project, id).length) registerSegmentation(item, id);
     return link;
   }
 
@@ -205,6 +248,9 @@ export function createBundles(app) {
     cache: (path) => caches.get(path) ?? null,
     cacheStatus,
     buildCache,
+    registerSegmentation,
+    // Whether a dataset's instrument segmentation is being registered.
+    registeringSegmentation: (id) => registering.has(id),
     usage: () => usage,
     refreshUsage,
     // The job building the bundle's derived data, if one is queued or running: as the job list

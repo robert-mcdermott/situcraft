@@ -27,8 +27,10 @@ import (
 	"testing"
 	"time"
 
+	"situcraft/internal/artifacts"
 	"situcraft/internal/examples"
 	"situcraft/internal/jobs"
+	"situcraft/internal/xenium"
 )
 
 func testApp(t *testing.T, files ...string) (*app, http.Handler) {
@@ -994,5 +996,138 @@ func TestExamplesDownloadOnlyWhenAsked(t *testing.T) {
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Errorf("the example is still there: %v", err)
+	}
+}
+
+// The instrument's segmentation is registered as an artifact: its files recorded by SHA-256 (the
+// same as a direct reading of each), never copied; registering again gives the same artifact.
+// A derived-data build interrupted by the program stopping is orphaned when it starts again, and
+// resumes to the derived data a whole build makes.
+func TestRealInstrumentSegmentationAndInterruptedJobs(t *testing.T) {
+	root := os.Getenv("SITUCRAFT_DATA")
+	if root == "" {
+		root = filepath.Join("validation", "cache")
+	}
+	bundle := filepath.Join(root, "xenium-lung-2fov")
+	if _, err := os.Stat(filepath.Join(bundle, "experiment.xenium")); err != nil {
+		t.Skip("the Lung bundle is not present (node validation/fetch.mjs xenium-lung-2fov)")
+	}
+	if testing.Short() {
+		t.Skip("short mode")
+	}
+	dir := t.TempDir()
+	cfg := config{dataDir: dir, cacheDir: filepath.Join(dir, "cache"), cacheLimit: 10e9, files: []string{bundle}}
+	a, err := newApp(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h, _ := a.handler()
+	handler := protect(h, "127.0.0.1", defaultPort)
+	post := func(target string) *httptest.ResponseRecorder {
+		return request(t, handler, http.MethodPost, target, nil, nil)
+	}
+	// Building, interrupted as the program stops while the job runs.
+	var started struct{ Job *jobs.Job }
+	json.NewDecoder(post("/api/local/0/cache").Body).Decode(&started)
+	if started.Job == nil {
+		t.Fatal("no build was started")
+	}
+	for deadline := time.Now().Add(time.Minute); ; time.Sleep(20 * time.Millisecond) {
+		if j, _ := a.jobs.Get(started.Job.ID); j.State == jobs.Running && j.Progress > 0.05 || time.Now().After(deadline) {
+			break
+		}
+	}
+	a.jobs.Close()
+	if j, _ := a.jobs.Get(started.Job.ID); j.State != jobs.Orphaned {
+		t.Fatalf("after stopping, the build is %s", j.State)
+	}
+	// The program again, on the same folders: the build is orphaned, and resumes.
+	a, err = newApp(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.jobs.Close()
+	h, _ = a.handler()
+	handler = protect(h, "127.0.0.1", defaultPort)
+	if j, ok := a.jobs.Get(started.Job.ID); !ok || j.State != jobs.Orphaned || !j.Resumable {
+		t.Fatalf("after starting again: %+v", j)
+	}
+	if rec := post("/api/jobs/" + started.Job.ID + "/resume"); rec.Code != http.StatusOK {
+		t.Fatalf("resume: %d %s", rec.Code, rec.Body)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+	if j, _ := a.jobs.Wait(ctx, started.Job.ID); j.State != jobs.Complete || j.Runs != 2 {
+		t.Fatalf("the resumed build ended %s (%s), runs %d", j.State, j.Error, j.Runs)
+	}
+	b, _ := xenium.Open(bundle, xenium.Options{CacheDir: cfg.cacheDir})
+	status, err := a.cache.Status(b)
+	b.Close()
+	if err != nil || !status.Ready {
+		t.Fatalf("after resuming: %+v %v", status, err)
+	}
+	if err := a.cache.Check(status); err != nil {
+		t.Errorf("the resumed build's entries: %v", err)
+	}
+
+	// The instrument's segmentation.
+	var none struct{ Artifact *artifacts.Manifest }
+	json.NewDecoder(request(t, handler, http.MethodGet, "/api/local/0/segmentation", nil, nil).Body).Decode(&none)
+	var registering struct {
+		Artifact *artifacts.Manifest
+		Job      *jobs.Job
+	}
+	json.NewDecoder(post("/api/local/0/segmentation").Body).Decode(&registering)
+	if registering.Job == nil {
+		t.Fatalf("no registration job: %+v", registering)
+	}
+	if j, _ := a.jobs.Wait(ctx, registering.Job.ID); j.State != jobs.Complete {
+		t.Fatalf("registration ended %s: %s", j.State, j.Error)
+	}
+	var got struct{ Artifact *artifacts.Manifest }
+	json.NewDecoder(request(t, handler, http.MethodGet, "/api/local/0/segmentation", nil, nil).Body).Decode(&got)
+	m := got.Artifact
+	if m == nil || m.State != artifacts.Complete || m.Kind != "segmentation" || len(m.Files) != 6 {
+		t.Fatalf("artifact %s, %v, %d files", m.ID, m.State, len(m.Files))
+	}
+	for _, f := range m.Files {
+		raw, err := os.ReadFile(filepath.Join(bundle, f.Path))
+		if err != nil {
+			t.Fatal(err)
+		}
+		sum := sha256.Sum256(raw)
+		if f.Location != artifacts.InBundle || f.SHA256 != hex.EncodeToString(sum[:]) || f.Size != int64(len(raw)) {
+			t.Errorf("%s recorded as %+v", f.Path, f)
+		}
+	}
+	var summary struct {
+		Cells   int
+		Methods []struct {
+			Method string
+			Cells  int
+		}
+	}
+	json.Unmarshal(m.Summary, &summary)
+	if summary.Cells != 11898 || len(summary.Methods) != 1 || summary.Methods[0].Cells != 11898 || !strings.Contains(summary.Methods[0].Method, "nucleus expansion") {
+		t.Errorf("summary %s", m.Summary)
+	}
+	if m.Lineage.Job == nil || m.Lineage.Job.ID != registering.Job.ID || m.Lineage.Method.Version != "xenium-2.0.0.10" || len(m.Lineage.Parents) != 1 || m.Lineage.Parents[0].ID == "" {
+		t.Errorf("lineage %+v", m.Lineage)
+	}
+	entries, _ := os.ReadDir(filepath.Join(dir, "artifacts", m.ID))
+	if len(entries) != 1 {
+		t.Errorf("the artifact's folder holds %d entries: bundle files were copied", len(entries))
+	}
+	// Registered: asking again answers the artifact at once, without a job.
+	var again struct {
+		Artifact *artifacts.Manifest
+		Job      *jobs.Job
+	}
+	json.NewDecoder(post("/api/local/0/segmentation").Body).Decode(&again)
+	if again.Job != nil || again.Artifact == nil || again.Artifact.ID != m.ID {
+		t.Errorf("registering again: %+v", again)
+	}
+	if none.Artifact != nil {
+		t.Error("an artifact was answered before it was registered")
 	}
 }

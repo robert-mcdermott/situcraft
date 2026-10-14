@@ -63,10 +63,11 @@ let places = {};
 
 // Started per scene on an empty library, so that no scene sees another's projects. examples: the
 // folder of examples (the development bundles by default; an empty one shows them to download).
-async function startSituCraft({ examples = DATA } = {}) {
+// cache: a cache of the scene's own (the jobs scene, whose jobs build what the shared one holds).
+async function startSituCraft({ examples = DATA, cache = CACHE } = {}) {
   const library = mkdtempSync(join(temp, 'library-'));
-  places = { library, examples, cache: CACHE };
-  const flags = ['--remote-control', '--window', 'none', '--port', String(PORT), '--data-dir', library, '--cache-dir', CACHE, '--examples-dir', examples];
+  places = { library, examples, cache };
+  const flags = ['--remote-control', '--window', 'none', '--port', String(PORT), '--data-dir', library, '--cache-dir', cache, '--examples-dir', examples];
   const server = spawn(binary, flags, { cwd: temp, stdio: ['ignore', 'pipe', 'inherit'] });
   let output = '';
   server.stdout.on('data', (chunk) => { output += chunk; });
@@ -200,6 +201,23 @@ const scenes = {
   async tour() {
     await act('tour', { example: 'lung', step: 3 });
   },
+  // The Breast example's instrument segmentation as an artifact: its methods, files by SHA-256
+  // and check, in the inspector (wave 2, slice 2).
+  async segmentation() {
+    await act('open_example', { example: 'breast' });
+    await act('segmentations', { show: true });
+  },
+  // The Jobs view after both examples were opened: each job's state and times, one's log open.
+  async jobs() {
+    await act('open_example', { example: 'lung' });
+    await act('new_project', { name: 'Breast' });
+    await act('open_example', { example: 'breast' });
+    await act('jobs', { show: true });
+    // Its log, once the list has settled (a job finishing redraws it).
+    await sleep(1000);
+    await waitFor(`(() => { const card = [...document.querySelectorAll('.job-card')].find((c) => c.textContent.startsWith('Derived data of xenium-breast')); const toggle = card?.querySelector('.job-foot button.link'); if (!toggle) return false; if (toggle.getAttribute('aria-expanded') !== 'true') toggle.click(); return true; })()`);
+    await waitFor(`document.querySelectorAll('.job-event').length > 3`);
+  },
 };
 
 // --- Run ------------------------------------------------------------------------------------------
@@ -237,7 +255,7 @@ try {
       b = null;
       try {
         // The start page shows the examples as a first run does: not yet downloaded.
-        situcraft = await startSituCraft(name === 'start' ? { examples: mkdtempSync(join(temp, 'examples-')) } : {});
+        situcraft = await startSituCraft(name === 'start' ? { examples: mkdtempSync(join(temp, 'examples-')) } : name === 'jobs' ? { cache: mkdtempSync(join(temp, 'cache-')) } : {});
         // A Chrome that does not start is started again once; a scene that cannot start fails
         // alone, not the scenes after it.
         b = await launch({ width: 1600, height: 1000, scale: 1.25 }).catch(async () => {

@@ -85,6 +85,32 @@ SituCraft reads projects saved by any earlier version; a project saved by a newe
 refused with a message to update. A project saved by 0.1.0 is kept in
 `validation/projects/`, and every later release is checked to reopen it exactly.
 
+A segmentation is recorded in `artifacts` (kind `segmentation`) as the artifact the program keeps:
+its id, name, dataset, state, method (name, version, citation, and the cells each of the
+instrument's methods segmented), software, the job that made or registered it, its parents, its
+files (path, role, size, SHA-256, and `bundle` for a file of the dataset's bundle), its summary and
+its check's findings. `decisions` records each promotion of a dataset's default segmentation:
+`{kind: "promote-segmentation", dataset, artifact, rationale, by, time}`; the latest holds.
+
+### Artifacts
+
+What jobs make and register is kept in `<data dir>/artifacts/<id>/`, beside a `manifest.json`:
+
+| Field | Holds |
+| --- | --- |
+| `format`, `version` | `"situcraft-artifact"`, `1` |
+| `id`, `kind`, `name`, `state`, `created` | Its identity; `state` is `complete` or `invalid` |
+| `lineage` | `parents` (a bundle by its analysis UUID and manifest's SHA-256, or other artifacts), `job` (its id, kind and spec), `method` (name, version, citation, detail), `parameters`, `software` (each program's name, version and commit) |
+| `files` | Each file's `path`, `role`, `size` and `sha256`; `location: "bundle"` for a file of the dataset's bundle, named by its path there and never copied |
+| `findings` | What the kind's check found: `severity`, `code`, `message`, `count` |
+| `summary` | What the kind says of it (a segmentation's cells, gene transcripts and methods) |
+
+### Jobs
+
+Each job is kept in `<data dir>/jobs/<id>.json`: its kind, title, spec (every effective
+parameter), state, times, number of runs, error and log. A job interrupted by SituCraft stopping is
+`orphaned` when it starts again, to be resumed or discarded.
+
 ### Project archives (`.scz`)
 
 A zip holding `project.json` (the project document) and a `README.txt`. Each dataset also records

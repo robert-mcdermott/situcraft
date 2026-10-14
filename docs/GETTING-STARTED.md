@@ -163,6 +163,26 @@ link** gives a link that reopens it, **Rename** and **Remove** change it.
   it records each one relative to the archive, so a folder holding the archive and its bundles can
   be moved, copied or shared, and opened with `situcraft project.scz` or **Open a bundle**.
 
+## Segmentations and jobs
+
+When a dataset is added, SituCraft registers the instrument's segmentation as an artifact: the
+cells, their boundaries, the nuclei, the transcripts' assignments and the counts, each file recorded
+by its SHA-256 (it stays in the bundle). Under **Segmentations** in the project tree, the default
+one is marked; the inspector shows how it was made (the methods and how many cells each found), its
+files, what its check found, and why it is the default. Later releases add SituCraft's own
+segmentations and segmentations from other tools, to compare and choose between.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/jobs-dark.webp">
+  <img alt="The Jobs view: four finished jobs, building derived data and registering segmentations of both examples, one with its log open" src="images/jobs-light.webp">
+</picture>
+
+Long work runs as a job: building derived data, downloading an example, registering a
+segmentation. The **Jobs** view shows what runs and waits, what finished, and each job's log and
+spec. Jobs keep running when the window reloads, and closing the window while one runs asks first.
+If SituCraft stops (or the computer does) in the middle of a job, the job is shown as interrupted
+when SituCraft starts again: **Resume** continues it where it stopped, **Discard** forgets it.
+
 ## Keyboard
 
 | Action | Keys |

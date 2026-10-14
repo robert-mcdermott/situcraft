@@ -206,8 +206,36 @@ Long computations (indexing, segmentation, comparison, registration, permutation
   resumed or discarded.
 - Progress and logs stream to the page over server-sent events. Cancellation is cooperative and
   checked often.
-- The first version (wave 1, slice 4) runs jobs in memory, one at a time and one per key (a
-  dataset's build); persisting them, orphaned jobs and the warning on closing come in wave 2.
+- Jobs run one at a time, one per key (a dataset's build). Each is kept in `<data dir>/jobs` as
+  a file, written at each change of state and each line of its log (not its progress), so that it
+  survives the program (wave 2, slice 2).
+- A job the program stopped, or one that was running when it crashed, is `orphaned` when the
+  program starts again. Its kind's handler makes its work again from its spec, so it resumes under
+  the same id and log; work that keeps what it finished (building derived data) continues from
+  there. Discarding one clears away what its kind leaves (a partial download).
+- Closing the window while a job runs asks first (`beforeunload`); a window closed anyway leaves
+  SituCraft running until the job ends.
+
+### Artifacts
+
+What jobs make, and what they register from a bundle, are artifacts (`internal/artifacts`, in
+`<data dir>/artifacts`), shared by every project of the library.
+- **The manifest** (`manifest.json`, format `situcraft-artifact` 1) records:
+  - the lineage: parents, the job and its spec, the method with its version and citation, the
+    parameters, and the software;
+  - every file with its role, size and SHA-256;
+  - the findings of the kind's check, and the state.
+- **Promotion:** a job writes its outputs into `staging/<id>`; `Promote` checksums them (refusing
+  a file the manifest does not list, or a path leaving the folder), runs the kind's check, and
+  renames the folder into place: `complete`, or `invalid` (kept for review) when the check finds a
+  fatal problem. Only complete artifacts are inputs or defaults; an artifact is never changed.
+- **Files by reference:** a file of the dataset's bundle (location `bundle`) is recorded by its
+  path and SHA-256 and never copied. The instrument's segmentation is such an artifact: its id
+  hashes its files' checksums, so the same bundle files give the same artifact in any project.
+- **In the project:** the project records each artifact it uses (an `artifacts` entry of kind
+  `segmentation` mirroring the manifest). A dataset's default segmentation is set by decisions
+  (`decisions`, kind `promote-segmentation`, with a reason, by whom, when), never removed; the
+  latest decision naming a complete segmentation holds.
 
 ### Remote control
 

@@ -16,6 +16,9 @@
 //   unasked; every step of each example's tour opens with its genes; the project saved by SituCraft
 //   0.1.0 (validation/projects) opens, finds its moved bundle again, its filters keep the cells they
 //   recorded, and its saved views reopen exactly, from the project and from a link;
+// - segmentations as artifacts (wave 2, slice 2): each bundle's instrument segmentation registered,
+//   its files' SHA-256 as Node computes them, promoted as the default; the 0.1.0 project given its
+//   own, the same artifact; the jobs all complete;
 // - remote control (wave 2, slice 1): the window driven by a program through the program's
 //   remote-control hub: the state described, the tissue shown as asked, a view saved and reopened
 //   exactly, a filter, the methods, and a file written only with the token.
@@ -127,6 +130,26 @@ export async function viewerSuite({ check, MissingData, verbose }) {
       })()`);
       check('viewer', `${name}: opens in the viewer`, String(opened), opened, 'true');
       if (!opened) continue;
+      // Its instrument segmentation, registered as an artifact: each file's SHA-256 against Node's.
+      const seg = await chrome.eval(`(async () => {
+        const app = window.situcraft;
+        const dataset = app.store.project.datasets.find((d) => d.name === ${JSON.stringify(name)});
+        for (let k = 0; k < 600; k += 1) {
+          const record = app.store.project.artifacts.find((a) => a.kind === 'segmentation' && a.dataset === dataset.id);
+          if (record) {
+            const { promotedSegmentation } = await import('/lib/segmentations.js');
+            return { record, promoted: promotedSegmentation(app.store.project, dataset.id)?.record.id === record.id };
+          }
+          await new Promise((r) => setTimeout(r, 100));
+        }
+        return null;
+      })()`);
+      if (seg) {
+        const differing = seg.record.files.filter((f) => createHash('sha256').update(readFileSync(join(dataRoot, name, f.path))).digest('hex') !== f.sha256).map((f) => f.path);
+        check('viewer', `${name}: its instrument segmentation is an artifact, every file's SHA-256 as Node computes it`, `${seg.record.id}, ${seg.record.files.length} files${differing.length ? `; differing: ${differing.join(', ')}` : ', all the same'}; ${seg.record.state}${seg.promoted ? ', the default' : ''}`, seg.record.state === 'complete' && seg.promoted && differing.length === 0 && seg.record.files.length >= 6, 'complete, the default, every checksum the same');
+        const cells = seg.record.method.methods.reduce((n, m) => n + m.cells, 0);
+        check('viewer', `${name}: its segmentation's methods count every cell`, seg.record.method.methods.map((m) => `${m.method.replace(/^Segmented /, '')}: ${m.cells}`).join('; '), cells === seg.record.summary.cells && cells > 0, 'their sum is the cells');
+      } else check('viewer', `${name}: its instrument segmentation is an artifact`, 'not registered', false, 'registered');
       const desc = await chrome.eval('window.situcraftViewer.desc');
 
       // --- Every channel's samples, exactly ---
@@ -327,6 +350,19 @@ export async function viewerSuite({ check, MissingData, verbose }) {
         const link = await app.bundles.locate(dataset.id, ${JSON.stringify(join(dataRoot, 'xenium-lung-2fov'))});
         return { before, after: link?.state, name: app.store.project.name, views: app.store.project.views.length, filters: app.store.project.artifacts.length };
       })()`);
+      // A 0.1.0 project gets its datasets' instrument segmentations when its bundles are found: the
+      // same artifact as the same bundle's in another project.
+      const migrated = await chrome.eval(`(async () => {
+        const app = window.situcraft;
+        for (let k = 0; k < 600; k += 1) {
+          const record = app.store.project.artifacts.find((a) => a.kind === 'segmentation');
+          if (record) return record.id;
+          await new Promise((r) => setTimeout(r, 100));
+        }
+        return null;
+      })()`);
+      const lungArtifact = (await json(`${url}/api/local/${lungIndex}/segmentation`)).artifact?.id;
+      check('viewer', 'the 0.1.0 Lung project gets its instrument segmentation, the same artifact as the Lung dataset\'s elsewhere', `${migrated ?? 'none'}${migrated === lungArtifact ? ', the same' : `, not ${lungArtifact}`}`, Boolean(migrated) && migrated === lungArtifact, 'the same artifact');
       check('viewer', 'the 0.1.0 Lung project opens; its bundle, moved, is located again', reopened ? `${reopened.views} views, ${reopened.filters} filters; the bundle ${reopened.before}, then ${reopened.after}` : 'it did not open', reopened?.before === 'missing' && reopened?.after === 'ok' && reopened.views === fixture.views.length, 'missing, then ok');
       // Its filters, evaluated here, keep the cells they recorded.
       const cells = readCells(await fetch(`${url}/api/local/${lungIndex}/cells`).then((r) => r.arrayBuffer()));
@@ -381,6 +417,11 @@ export async function viewerSuite({ check, MissingData, verbose }) {
       await chrome.eval(`(async () => { for (let k = 0; k < 100 && !window.situcraft?.remote; k += 1) await new Promise((r) => setTimeout(r, 100)); return true; })()`);
       const state = await act('get_state');
       check('viewer', 'remote control: get_state describes the open project', state.ok ? state.message : state.message ?? state.error, state.ok && state.data.datasets.length >= 1 && state.data.views.length === 3, 'the 0.1.0 Lung project');
+      const segmentations = await act('segmentations');
+      check('viewer', 'remote control: segmentations lists the default one with its lineage', segmentations.message ?? segmentations.error, segmentations.ok && segmentations.data.segmentations.length === 1 && segmentations.data.segmentations[0].default && segmentations.data.segmentations[0].job?.id, 'one, the default, made by a job');
+      const jobList = await act('jobs');
+      const failedJobs = jobList.ok ? jobList.data.jobs.filter((j) => !['complete'].includes(j.state)) : [];
+      check('viewer', 'remote control: jobs lists every job, all complete', jobList.message ?? jobList.error, jobList.ok && jobList.data.jobs.length >= 4 && failedJobs.length === 0, 'derived data and segmentations of both bundles, complete');
       const lung = present.includes('xenium-lung-2fov');
       if (lung) {
         const shown = await act('show_tissue', { genes: ['EPCAM', 'PLVAP'], center: [750, 300], um_per_pixel: 0.4, cell: 'neddaiac-1', fill: 'transcripts' });
@@ -400,7 +441,7 @@ export async function viewerSuite({ check, MissingData, verbose }) {
         const refused = await act('export', { what: 'project', path: target }, false);
         const exported = await act('export', { what: 'project', path: target });
         const written = existsSync(target) ? JSON.parse(readFileSync(target, 'utf8')) : null;
-        check('viewer', 'remote control: export writes the project only with the token', `${refused.status} without, ${exported.ok ? 'written' : exported.message} with`, refused.status === 401 && exported.ok && written?.views?.length === 4 && written.artifacts.length === 3, '401, then the project written');
+        check('viewer', 'remote control: export writes the project only with the token', `${refused.status} without, ${exported.ok ? 'written' : exported.message} with`, refused.status === 401 && exported.ok && written?.views?.length === 4 && written.artifacts.filter((a) => a.kind === 'filter').length === 3 && written.artifacts.filter((a) => a.kind === 'segmentation').length === 1, '401, then the project written');
       }
     }
     check('viewer', 'no uncaught errors in the page', errors.length ? errors.slice(0, 3).join(' | ') : 'none', errors.length === 0, 'none');

@@ -132,6 +132,15 @@ var remoteActions = []remoteAction{
 		"conditions": map[string]any{"type": "array", "items": map[string]any{"type": "object"}, "description": "The conditions, all of which a cell must meet."},
 		"dataset":    datasetArg,
 	}, "name", "conditions"), long: true},
+	{Name: "segmentations", Title: "List the segmentations", Description: "A dataset's segmentations (all datasets' if none is named), each an artifact with its lineage (method and version, software, the job that made or registered it, what it was made from), its files by SHA-256, what its check found, its state, and whether it is the dataset's default (promoted, with the decision's reason). show: true shows the first in the inspector.", InputSchema: schema(map[string]any{
+		"dataset": textArg("A dataset by name or id; every dataset's if not given."),
+		"show":    flagArg("Show it in the inspector."),
+	})},
+	{Name: "jobs", Title: "List and control jobs", Description: "The program's jobs (building derived data, downloading examples, registering segmentations…): each one's id, kind, state, progress, runs and error, and whether an interrupted one can be resumed. With job, that job with its whole log and its spec; with job and do, stops (cancel), resumes (resume) or forgets (discard) it. show: true shows the Jobs view.", InputSchema: schema(map[string]any{
+		"job":  textArg("A job's id."),
+		"do":   textArg("cancel, resume or discard."),
+		"show": flagArg("Show the Jobs view."),
+	})},
 	{Name: "methods", Title: "Write the methods", Description: "A methods paragraph for a dataset, from what the project records (its bundle's metadata and check, the filters chosen, the data's source for an example) and SituCraft's version, with its references. show: true shows it as the Data view's Methods does.", InputSchema: schema(map[string]any{
 		"dataset": datasetArg,
 		"filters": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Filters to describe, by name (their latest version) or id; the latest version of each if not given; [] for none."},

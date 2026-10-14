@@ -126,6 +126,13 @@ case, then the one name that starts with or contains what was given. An error li
 | `open_view` | `view` (name or id) | Opens a saved view and says whether it shows exactly what was saved |
 | `remove_view` | `view` | Removes a saved view (undoable) |
 
+### Segmentations and jobs
+
+| Action | Arguments | What it does |
+| --- | --- | --- |
+| `segmentations` | `dataset`, `show` | A dataset's segmentations (or every dataset's): each artifact's lineage, files by SHA-256, check findings, state, and whether it is the default (with the decision's reason) |
+| `jobs` | `job` (id), `do` (`cancel`, `resume`, `discard`), `show` | The jobs, or one job with its whole log and spec; stops, resumes or forgets one |
+
 ### Quality control
 
 | Action | Arguments | What it does |

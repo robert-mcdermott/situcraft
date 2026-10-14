@@ -72,14 +72,7 @@ const MODES = [
       steps: ['Analyze.', 'Choose the views, figures and results to report.', 'Export.'],
     }),
   },
-  {
-    id: 'jobs', label: 'Jobs', icon: 'jobs',
-    load: async () => plannedMode({
-      title: 'Jobs', icon: 'jobs',
-      purpose: 'Work that runs in the background (indexing a bundle, segmentation, comparisons, permutation tests): progress, logs and cancellation. Jobs keep running when the window reloads, and their results are checked before they can be used.',
-      steps: ['Start work that takes a while, in any view.', 'Follow it here, or keep working elsewhere.'],
-    }),
-  },
+  { id: 'jobs', label: 'Jobs', icon: 'jobs', load: () => import('./ui/mode-jobs.js').then((m) => m.mountJobs) },
 ];
 
 // --- Theme ---------------------------------------------------------------------------------------
@@ -657,7 +650,7 @@ async function start() {
     if (job) {
       // A running job: what it is doing, and how far it has got.
       jobLabel = h('span', jobText);
-      state = h('button.item.statusbar-link', { type: 'button', title: job.message ?? '', onclick: () => app.setMode('data') }, h('span.dot.busy'), jobLabel);
+      state = h('button.item.statusbar-link', { type: 'button', title: job.message ?? '', onclick: () => app.setMode('jobs') }, h('span.dot.busy'), jobLabel);
     }
     statusbar.append(
       state,
@@ -817,6 +810,9 @@ async function start() {
       saveNow();
       event.preventDefault();
     }
+    // A job under way: closing the window asks first (SituCraft keeps running until the job ends,
+    // and an interrupted job can be resumed, but the user should know).
+    if (app.jobs.running().length) event.preventDefault();
   });
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') saveNow();
