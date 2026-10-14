@@ -115,8 +115,8 @@ The data plane built here (readers, codecs, the derived-data cache) carries ever
    - In the window: opening a bundle by its path lists it under **On this computer**, with its
      kind in the inspector. A project saved in the library reopens from the start page into the
      Data view. No console errors; the page is cross-origin isolated.
-2. **Feasibility: every byte of a bundle (D6, X3, X4).** The riskiest slice, done before any
-   viewer code. It is SituCraft's own code throughout:
+2. **Feasibility: every byte of a bundle (D6, X3, X4): done.** The riskiest slice, done before
+   any viewer code. It is SituCraft's own code throughout:
    - **Codecs:** `internal/codec` (Zstandard per RFC 8878, the LZ4 block format, the Blosc
      container with byte and bit shuffle).
    - **`internal/parquet`:** flat schemas; PLAIN, dictionary and RLE/bit-packed encodings;
@@ -124,8 +124,11 @@ The data plane built here (readers, codecs, the derived-data cache) carries ever
      row-group statistics.
    - **`internal/zarr`:** v2 metadata and chunks, directory and zip stores; v3 metadata read.
    - **`internal/tiff`:** TIFF and BigTIFF IFDs, SubIFD pyramids, tiles, OME-XML.
-   - **`internal/jp2k`:** a JPEG 2000 Part 1 decoder (codestream, tier-2 packets, tier-1 EBCOT
-     with the MQ decoder, 5/3 reversible and 9/7 irreversible wavelets).
+   - **`internal/jp2k`:** a JPEG 2000 Part 1 decoder (JP2 boxes, codestream, tier-2 packets,
+     tier-1 EBCOT with the MQ decoder, 9/7 irreversible and 5/3 reversible wavelets). Every Xenium
+     tile is JP2-wrapped, irreversible 9/7 (lossy), RPCL, one layer (found on the files).
+   - **OME-XML:** multi-file OME-TIFFs (the four morphology-focus channels name each other's
+     files) and z-stacks.
    - **Data:** `validation/sources.json` and `validation/fetch.mjs` download the two 2-FOV
      bundles (browser User-Agent, MD5 check), extract them, record SHA-256 per file and delete
      the zips.
@@ -133,7 +136,8 @@ The data plane built here (readers, codecs, the derived-data cache) carries ever
      by SituCraft equals an independent reader's output:
      - Parquet against DuckDB;
      - Blosc and Zarr against `numcodecs`;
-     - every JPEG 2000 tile pixel for pixel against OpenJPEG.
+     - every JPEG 2000 tile against OpenJPEG: within ±1 at every pixel, as two decoders of a
+       lossy (9/7) stream may differ in the last rounding; exactly for reversible streams.
 
      The comparison scripts are committed under `validation/reference/`, with their outputs
      reduced to checksums.
@@ -142,6 +146,51 @@ The data plane built here (readers, codecs, the derived-data cache) carries ever
    - **Fuzzing:** each decoder fuzzed, with a corpus of small hostile cases.
    - If the JPEG 2000 budget cannot be met, the tile cache (slice 4) still makes viewing fast
      after a one-time decode. The decision is recorded here.
+   - Validation:
+     - **Readers on both bundles** (`validation/readers_test.go`, against
+       `reference/xenium-bundles.json` from DuckDB 1.5, zarr 3.4 and tifffile/imagecodecs):
+       - Parquet: 60 columns over 2.9 million rows, identical to DuckDB's reading;
+       - Zarr: all 492 arrays, identical to zarr-python's;
+       - TIFF: the structure of 135 image levels, identical to tifffile's;
+       - the smallest pyramid level of every image plane, pixel for pixel identical to tifffile
+         with imagecodecs (those levels are lossless).
+     - **JPEG 2000, against OpenJPEG on all 918 tiles:**
+       - the 270 reversible 5/3 tiles are identical;
+       - the 648 irreversible 9/7 tiles are within ±1 (0.74% of samples, RMSE 0.086);
+       - resolution reduction 1, 3 and 5 is also within ±1;
+       - the difference has one cause, OpenJPEG's fixed-point approximation of the high-pass
+         scaling: with that value substituted (a test-only option) the two agree bit for bit.
+     - **Budget:** the largest real tile decodes in about 90 ms on one core (budget 150 ms; OpenJPEG
+       76 ms single-threaded), 15 ms on ten. All 918 tiles of both bundles, through the TIFF
+       reader, decode in 8.5 s on ten cores.
+     - **Unit tests and fixtures** written by independent tools, committed (about 4.5 MB):
+       - zstd: 26 frames, 300 round trips through the zstd tool, 44 hand-built frames, XXH64;
+       - Blosc: 61 chunks from c-blosc 1.21;
+       - Parquet: 12 files from DuckDB and pyarrow (every codec, both page versions, dictionary,
+         delta and byte-stream-split encodings, nulls);
+       - Zarr: 35 arrays in formats 2 and 3, directory and zip;
+       - TIFF: 11 files from tifffile (LZW, deflate, PackBits, both predictors, both byte orders,
+         planar RGB, BigTIFF pyramids, OME);
+       - JPEG 2000: 61 codestreams from OpenJPEG (every progression, code-block style, tiles,
+         tile-parts, layers, precincts, SOP/EPH, PPM/PPT, ROI, RGB, subsampling) and 4,500 random
+         encodings compared on the fly.
+     - **Fuzzing:** every decoder, from 15 seconds (Snappy) to 50 minutes (JPEG 2000), about 100
+       million executions in all. It found five crashers, all from declared sizes a file did not
+       back up; all are fixed, and the four the fuzzer could save are kept as regression cases
+       (the fifth, a TIFF tile size that exhausted memory, is now refused before decoding).
+     - **CI:** each commit checks the readers and every Lung tile against OpenJPEG; a weekly
+       workflow checks both bundles.
+   - Found by slice 2:
+     - **The images are lossy.** Full-resolution tiles are irreversible 9/7; only the pyramid
+       levels are lossless 5/3. Each tile is a JP2 file, not a bare codestream. The criterion
+       became "within ±1 of OpenJPEG", as two conformant decoders of a lossy stream may differ.
+     - **The morphology-focus images are one multi-file OME-TIFF:** each file's XML names every
+       channel's file; channel purposes are MapAnnotations.
+     - **Blosc's chunk format leaves out rules a decoder needs** (when blocks are split, the short
+       last block, stored streams, bit shuffling of partial groups); they were settled by
+       experiment and are written down in `research.md` §1.3.
+     - **No HDF5 is needed,** as planned: the same matrix is in Zarr and MEX.
+
 3. **The bundle and its validation (D1, D2, D3, D4, D7).** `internal/xenium`:
    - opens a directory or a zip;
    - reads `experiment.xenium`, `metrics_summary.csv` and `gene_panel.json`;

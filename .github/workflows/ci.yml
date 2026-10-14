@@ -112,6 +112,33 @@ jobs:
       - name: Validation
         run: node validation/run.mjs --require-data
 
+  data:
+    name: Readers on a real bundle
+    needs: changed
+    if: needs.changed.outputs.test == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Cache the Lung 2-FOV bundle (10x Genomics, CC BY 4.0)
+        uses: actions/cache@v4
+        with:
+          path: validation/cache/xenium-lung-2fov
+          key: xenium-lung-2fov-${{ hashFiles('validation/sources.json') }}
+      - name: Fetch it (checked by its MD5, then every extracted file by its SHA-256)
+        run: node validation/fetch.mjs xenium-lung-2fov
+      - name: OpenJPEG, the independent decoder the image tiles are compared with
+        run: sudo apt-get update -q && sudo apt-get install -y -q libopenjp2-tools
+      - name: Every Parquet column, Zarr array and image tile against independent readers
+        env:
+          SITUCRAFT_REQUIRE_DATA: xenium-lung-2fov
+        run: go test -v -run 'Real|Readers' ./validation/ ./internal/jp2k/
+
   installers:
     name: Installer syntax
     needs: changed

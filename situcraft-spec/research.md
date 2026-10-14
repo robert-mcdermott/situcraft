@@ -65,7 +65,16 @@ Xenium Ranger do.
 
 - Zarr format 2, in zip files stored without zip compression.
 - Chunks are compressed by **Blosc** with **LZ4** (clevel 5, byte shuffle) for most arrays and
-  **Zstd** (clevel 1, byte shuffle) for label masks.
+  **Zstd** (clevel 1, byte shuffle, blocks not split) for label masks.
+- Blosc details settled by experiment (chunks written by c-blosc 1.21 through numcodecs, and every
+  chunk of both bundles), where the format description is silent:
+  - block offsets count from the start of the chunk, and blocks may be stored out of order;
+  - a block is split into one stream per byte of its type only when the "don't split" flag is
+    clear, the type is at most 16 bytes, each stream holds at least 128 elements, and the block is
+    not the chunk's short last one;
+  - a stream whose compressed size equals its decoded size is stored as it is;
+  - format version 2 (Blosc 1) bit-shuffles only blocks of whole groups of eight elements; other
+    blocks are stored unshuffled.
 - Dtypes: `<u4`, `<i4`, `<f4`, `<f8`; C order.
 - `cells.zarr.zip` (format "CellSegmentationDataset" 6.2) holds:
   - `cell_id` (uint32 × 2: a numeric prefix and dataset suffix, which together encode the
@@ -82,8 +91,19 @@ Xenium Ranger do.
 
 - BigTIFF; uint16, one sample per pixel; tiles of 1024×1024.
 - Pyramid levels are stored in **SubIFDs** (four per image in the 2-FOV files).
-- OME-XML is in the first IFD's ImageDescription.
-- Compression code **34712, JPEG 2000** (codestreams per tile).
+- OME-XML is in the first IFD's ImageDescription. The morphology-focus images are a **multi-file
+  OME-TIFF**: each file's XML describes every channel (DAPI, boundary, interior RNA, interior
+  protein in the Breast bundle) and names the file holding each by its UUID; each channel's
+  "Purpose" is a MapAnnotation. `morphology.ome.tif` is a z-stack (11 planes, 3 µm apart, in
+  consecutive IFDs).
+- Compression code **34712, JPEG 2000**. Each tile is a **JP2 file** (signature, `ftyp`, `jp2h`,
+  then the codestream box), not a bare codestream, written by OpenJPEG 2.5.1 (its COM marker says
+  so). Every tile is 1024×1024, one 16-bit unsigned component, one image tile, 64×64 code blocks
+  with no style flags, one quality layer. Two profiles, by level:
+  - **full resolution:** **irreversible 9/7 wavelet with scalar expounded quantization** (lossy), 5
+    decomposition levels, 256×256 precincts, RPCL progression;
+  - **every pyramid (SubIFD) level:** **reversible 5/3** (lossless), LRCP, default precincts, no
+    quantization. (Of the 918 tiles of the two bundles, 648 are 9/7 and 270 are 5/3.)
 - 10x's image-conversion guide recommends ZLIB or lossless JPEG 2000 compression, 1024-pixel tiles
   and a downsampling factor of 2 for images that Xenium Explorer opens. Post-Xenium H&E images
   supplied by users therefore arrive with other compressions, which SituCraft also needs: JPEG
@@ -93,7 +113,7 @@ Xenium Ranger do.
 
 | Format | Specification |
 | --- | --- |
-| Zstandard | RFC 8878, *Zstandard Compression and the application/zstd Media Type* (Collet & Kucherawy 2021) |
+| Zstandard | RFC 8878, *Zstandard Compression and the application/zstd Media Type* (Collet & Kucherawy 2021); frame checksums with XXH64 (Yann Collet, xxHash specification) |
 | LZ4 block | LZ4 Block Format Description (lz4 project) |
 | Blosc | Blosc format description (c-blosc project) |
 | Snappy | Snappy framing and format description |
@@ -109,18 +129,28 @@ Xenium Ranger do.
 
 ### 1.6 JPEG 2000 decoding plan
 
-The decoder follows T.800 in this order: codestream markers (SIZ, COD, COC, QCD, QCC, SOT/SOD),
-tag trees and packet headers (tier 2), EBCOT block decoding with the MQ arithmetic decoder (tier
-1, including the bypass and termination modes), dequantization, the inverse 5/3 reversible
-wavelet (lossless) and 9/7 irreversible wavelet, and the inverse component transform when
-present. SituCraft's choices:
+The decoder follows T.800 in this order: the JP2 boxes (Annex I) around the codestream,
+codestream markers (SIZ, COD, COC, QCD, QCC, SOT/SOD), tag trees and packet headers (tier 2), EBCOT
+block decoding with the MQ arithmetic decoder (tier 1, including the bypass and termination
+modes), dequantization, the inverse 9/7 irreversible and 5/3 reversible wavelets, and the inverse
+component transform when present. Xenium's profile (above) is made fast first. SituCraft's
+choices:
 - Decode whole 1024×1024 tiles once into the tile cache rather than decoding on demand.
 - Run code blocks in parallel.
 - Implement only the Part 1 features that real files use, refusing anything else with a clear
   message.
 
-Correctness is checked pixel for pixel against an independent decoder on every tile of both
-development bundles.
+Correctness is checked against an independent decoder (OpenJPEG) on every tile of both
+development bundles. Reversible streams must match exactly. Irreversible streams, which Xenium's
+are, must match within ±1 at every pixel: the 9/7 transform runs in floating point, and two
+conformant decoders legitimately differ in the last rounding (ISO/IEC 15444-4 states conformance
+for lossy decoding as error bounds, not equality). The maximum difference, the share of differing
+pixels and the RMSE are recorded. Measured on all 918 tiles: the 270 reversible tiles are
+identical; the 648 irreversible tiles are within ±1 (0.74% of samples differ by 1, RMSE 0.086).
+The difference has one cause: OpenJPEG 2.5's output corresponds to a 13-bit fixed-point
+approximation of the 9/7 high-pass scaling (13318/8192 for 2/K), where SituCraft uses the
+standard's 1/K; with that value substituted (a test-only option), the two agree bit for bit on
+every tile.
 
 ## 2. Coordinates and units
 
@@ -308,5 +338,6 @@ Notes:
 - XOA 3.x and 4.x bundle differences (file names, Zarr versions, new files).
 - The H&E alignment matrix orientation on a real file.
 - The MECR reference's identifier.
-- That every JPEG 2000 feature used by real Xenium images is covered (the codestream options of
-  the files in hand: progression order, code-block size, modes, number of levels).
+- JPEG 2000 options of XOA versions other than 2.0 (the bundles in hand were written by OpenJPEG
+  2.5.1; other versions may use other progressions or code-block styles, which the decoder reads
+  but which have not been seen on real Xenium files).

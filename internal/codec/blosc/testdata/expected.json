@@ -1,0 +1,619 @@
+{
+ "numcodecs": "0.17.0",
+ "cases": [
+  {
+   "name": "lz4-noshuffle-u1",
+   "nbytes": 6000,
+   "sha256": "aef8bd737e9694270d47685fa1750789d69aeaff837b18c72b25b8a4f4a8db74",
+   "blosc": {
+    "cname": "lz4",
+    "clevel": 5,
+    "shuffle": 0
+   }
+  },
+  {
+   "name": "lz4-noshuffle-u2",
+   "nbytes": 12000,
+   "sha256": "bffeb9c89d10f720776cf14c8da5e932be59cd5cd229c5e6fd909f91c339cb8f",
+   "blosc": {
+    "cname": "lz4",
+    "clevel": 5,
+    "shuffle": 0
+   }
+  },
+  {
+   "name": "lz4-noshuffle-f4",
+   "nbytes": 24000,
+   "sha256": "abefaf03f3c99b0b7211e59827eb89e70ef91d5293517e3188777e7365e6ae30",
+   "blosc": {
+    "cname": "lz4",
+    "clevel": 5,
+    "shuffle": 0
+   }
+  },
+  {
+   "name": "lz4-noshuffle-u8",
+   "nbytes": 48000,
+   "sha256": "0f1ef5a2b50a421c57a623ea113ed900da6ba3ac75475f6a4eed454e707821a4",
+   "blosc": {
+    "cname": "lz4",
+    "clevel": 5,
+    "shuffle": 0
+   }
+  },
+  {
+   "name": "lz4-shuffle-u1",
+   "nbytes": 6000,
+   "sha256": "aef8bd737e9694270d47685fa1750789d69aeaff837b18c72b25b8a4f4a8db74",
+   "blosc": {
+    "cname": "lz4",
+    "clevel": 5,
+    "shuffle": 1
+   }
+  },
+  {
+   "name": "lz4-shuffle-u2",
+   "nbytes": 12000,
+   "sha256": "bffeb9c89d10f720776cf14c8da5e932be59cd5cd229c5e6fd909f91c339cb8f",
+   "blosc": {
+    "cname": "lz4",
+    "clevel": 5,
+    "shuffle": 1
+   }
+  },
+  {
+   "name": "lz4-shuffle-f4",
+   "nbytes": 24000,
+   "sha256": "886bff35d3e5eec6f6b0a7eaf597b0e01ebfcca348539bc397fde716ab89ed9c",
+   "blosc": {
+    "cname": "lz4",
+    "clevel": 5,
+    "shuffle": 1
+   }
+  },
+  {
+   "name": "lz4-shuffle-u8",
+   "nbytes": 48000,
+   "sha256": "0f1ef5a2b50a421c57a623ea113ed900da6ba3ac75475f6a4eed454e707821a4",
+   "blosc": {
+    "cname": "lz4",
+    "clevel": 5,
+    "shuffle": 1
+   }
+  },
+  {
+   "name": "lz4-bitshuffle-u1",
+   "nbytes": 6000,
+   "sha256": "aef8bd737e9694270d47685fa1750789d69aeaff837b18c72b25b8a4f4a8db74",
+   "blosc": {
+    "cname": "lz4",
+    "clevel": 5,
+    "shuffle": 2
+   }
+  },
+  {
+   "name": "lz4-bitshuffle-u2",
+   "nbytes": 12000,
+   "sha256": "bffeb9c89d10f720776cf14c8da5e932be59cd5cd229c5e6fd909f91c339cb8f",
+   "blosc": {
+    "cname": "lz4",
+    "clevel": 5,
+    "shuffle": 2
+   }
+  },
+  {
+   "name": "lz4-bitshuffle-f4",
+   "nbytes": 24000,
+   "sha256": "93220572b64381580ff8c1bf9b62ebc88b7df89020a592ba6dc5b002faff185a",
+   "blosc": {
+    "cname": "lz4",
+    "clevel": 5,
+    "shuffle": 2
+   }
+  },
+  {
+   "name": "lz4-bitshuffle-u8",
+   "nbytes": 48000,
+   "sha256": "0f1ef5a2b50a421c57a623ea113ed900da6ba3ac75475f6a4eed454e707821a4",
+   "blosc": {
+    "cname": "lz4",
+    "clevel": 5,
+    "shuffle": 2
+   }
+  },
+  {
+   "name": "lz4hc-noshuffle-u1",
+   "nbytes": 6000,
+   "sha256": "aef8bd737e9694270d47685fa1750789d69aeaff837b18c72b25b8a4f4a8db74",
+   "blosc": {
+    "cname": "lz4hc",
+    "clevel": 5,
+    "shuffle": 0
+   }
+  },
+  {
+   "name": "lz4hc-noshuffle-u2",
+   "nbytes": 12000,
+   "sha256": "bffeb9c89d10f720776cf14c8da5e932be59cd5cd229c5e6fd909f91c339cb8f",
+   "blosc": {
+    "cname": "lz4hc",
+    "clevel": 5,
+    "shuffle": 0
+   }
+  },
+  {
+   "name": "lz4hc-noshuffle-f4",
+   "nbytes": 24000,
+   "sha256": "b63f374b8b1042f7bb331a32420a21c7b8031f6f754a6fe63648f02e68cc0e08",
+   "blosc": {
+    "cname": "lz4hc",
+    "clevel": 5,
+    "shuffle": 0
+   }
+  },
+  {
+   "name": "lz4hc-noshuffle-u8",
+   "nbytes": 48000,
+   "sha256": "0f1ef5a2b50a421c57a623ea113ed900da6ba3ac75475f6a4eed454e707821a4",
+   "blosc": {
+    "cname": "lz4hc",
+    "clevel": 5,
+    "shuffle": 0
+   }
+  },
+  {
+   "name": "lz4hc-shuffle-u1",
+   "nbytes": 6000,
+   "sha256": "aef8bd737e9694270d47685fa1750789d69aeaff837b18c72b25b8a4f4a8db74",
+   "blosc": {
+    "cname": "lz4hc",
+    "clevel": 5,
+    "shuffle": 1
+   }
+  },
+  {
+   "name": "lz4hc-shuffle-u2",
+   "nbytes": 12000,
+   "sha256": "bffeb9c89d10f720776cf14c8da5e932be59cd5cd229c5e6fd909f91c339cb8f",
+   "blosc": {
+    "cname": "lz4hc",
+    "clevel": 5,
+    "shuffle": 1
+   }
+  },
+  {
+   "name": "lz4hc-shuffle-f4",
+   "nbytes": 24000,
+   "sha256": "ced4d2c6fb733622679e799eb423aa6b550ccb9d600dacb0d32d73a111b7183b",
+   "blosc": {
+    "cname": "lz4hc",
+    "clevel": 5,
+    "shuffle": 1
+   }
+  },
+  {
+   "name": "lz4hc-shuffle-u8",
+   "nbytes": 48000,
+   "sha256": "0f1ef5a2b50a421c57a623ea113ed900da6ba3ac75475f6a4eed454e707821a4",
+   "blosc": {
+    "cname": "lz4hc",
+    "clevel": 5,
+    "shuffle": 1
+   }
+  },
+  {
+   "name": "lz4hc-bitshuffle-u1",
+   "nbytes": 6000,
+   "sha256": "aef8bd737e9694270d47685fa1750789d69aeaff837b18c72b25b8a4f4a8db74",
+   "blosc": {
+    "cname": "lz4hc",
+    "clevel": 5,
+    "shuffle": 2
+   }
+  },
+  {
+   "name": "lz4hc-bitshuffle-u2",
+   "nbytes": 12000,
+   "sha256": "bffeb9c89d10f720776cf14c8da5e932be59cd5cd229c5e6fd909f91c339cb8f",
+   "blosc": {
+    "cname": "lz4hc",
+    "clevel": 5,
+    "shuffle": 2
+   }
+  },
+  {
+   "name": "lz4hc-bitshuffle-f4",
+   "nbytes": 24000,
+   "sha256": "38ba4060132c3c4793d1e8575f902c54b460277afd8bbbdee42ca58b81f1a28b",
+   "blosc": {
+    "cname": "lz4hc",
+    "clevel": 5,
+    "shuffle": 2
+   }
+  },
+  {
+   "name": "lz4hc-bitshuffle-u8",
+   "nbytes": 48000,
+   "sha256": "0f1ef5a2b50a421c57a623ea113ed900da6ba3ac75475f6a4eed454e707821a4",
+   "blosc": {
+    "cname": "lz4hc",
+    "clevel": 5,
+    "shuffle": 2
+   }
+  },
+  {
+   "name": "zstd-noshuffle-u1",
+   "nbytes": 6000,
+   "sha256": "aef8bd737e9694270d47685fa1750789d69aeaff837b18c72b25b8a4f4a8db74",
+   "blosc": {
+    "cname": "zstd",
+    "clevel": 5,
+    "shuffle": 0
+   }
+  },
+  {
+   "name": "zstd-noshuffle-u2",
+   "nbytes": 12000,
+   "sha256": "bffeb9c89d10f720776cf14c8da5e932be59cd5cd229c5e6fd909f91c339cb8f",
+   "blosc": {
+    "cname": "zstd",
+    "clevel": 5,
+    "shuffle": 0
+   }
+  },
+  {
+   "name": "zstd-noshuffle-f4",
+   "nbytes": 24000,
+   "sha256": "fa3b4d981dcce37f701aaec23ad5a33adc3e5cbe399f1eb402a2765ac93210c2",
+   "blosc": {
+    "cname": "zstd",
+    "clevel": 5,
+    "shuffle": 0
+   }
+  },
+  {
+   "name": "zstd-noshuffle-u8",
+   "nbytes": 48000,
+   "sha256": "0f1ef5a2b50a421c57a623ea113ed900da6ba3ac75475f6a4eed454e707821a4",
+   "blosc": {
+    "cname": "zstd",
+    "clevel": 5,
+    "shuffle": 0
+   }
+  },
+  {
+   "name": "zstd-shuffle-u1",
+   "nbytes": 6000,
+   "sha256": "aef8bd737e9694270d47685fa1750789d69aeaff837b18c72b25b8a4f4a8db74",
+   "blosc": {
+    "cname": "zstd",
+    "clevel": 5,
+    "shuffle": 1
+   }
+  },
+  {
+   "name": "zstd-shuffle-u2",
+   "nbytes": 12000,
+   "sha256": "bffeb9c89d10f720776cf14c8da5e932be59cd5cd229c5e6fd909f91c339cb8f",
+   "blosc": {
+    "cname": "zstd",
+    "clevel": 5,
+    "shuffle": 1
+   }
+  },
+  {
+   "name": "zstd-shuffle-f4",
+   "nbytes": 24000,
+   "sha256": "18bd4ac4de8aacbe58314120d334f9a85ce84a228de18d58d1754a03ec4d98cd",
+   "blosc": {
+    "cname": "zstd",
+    "clevel": 5,
+    "shuffle": 1
+   }
+  },
+  {
+   "name": "zstd-shuffle-u8",
+   "nbytes": 48000,
+   "sha256": "0f1ef5a2b50a421c57a623ea113ed900da6ba3ac75475f6a4eed454e707821a4",
+   "blosc": {
+    "cname": "zstd",
+    "clevel": 5,
+    "shuffle": 1
+   }
+  },
+  {
+   "name": "zstd-bitshuffle-u1",
+   "nbytes": 6000,
+   "sha256": "aef8bd737e9694270d47685fa1750789d69aeaff837b18c72b25b8a4f4a8db74",
+   "blosc": {
+    "cname": "zstd",
+    "clevel": 5,
+    "shuffle": 2
+   }
+  },
+  {
+   "name": "zstd-bitshuffle-u2",
+   "nbytes": 12000,
+   "sha256": "bffeb9c89d10f720776cf14c8da5e932be59cd5cd229c5e6fd909f91c339cb8f",
+   "blosc": {
+    "cname": "zstd",
+    "clevel": 5,
+    "shuffle": 2
+   }
+  },
+  {
+   "name": "zstd-bitshuffle-f4",
+   "nbytes": 24000,
+   "sha256": "5f5c01e3ed25c49c6e48a3725b95ca59d693ed72bb76b47a3edd05431c129f95",
+   "blosc": {
+    "cname": "zstd",
+    "clevel": 5,
+    "shuffle": 2
+   }
+  },
+  {
+   "name": "zstd-bitshuffle-u8",
+   "nbytes": 48000,
+   "sha256": "0f1ef5a2b50a421c57a623ea113ed900da6ba3ac75475f6a4eed454e707821a4",
+   "blosc": {
+    "cname": "zstd",
+    "clevel": 5,
+    "shuffle": 2
+   }
+  },
+  {
+   "name": "zlib-noshuffle-u1",
+   "nbytes": 6000,
+   "sha256": "aef8bd737e9694270d47685fa1750789d69aeaff837b18c72b25b8a4f4a8db74",
+   "blosc": {
+    "cname": "zlib",
+    "clevel": 5,
+    "shuffle": 0
+   }
+  },
+  {
+   "name": "zlib-noshuffle-u2",
+   "nbytes": 12000,
+   "sha256": "bffeb9c89d10f720776cf14c8da5e932be59cd5cd229c5e6fd909f91c339cb8f",
+   "blosc": {
+    "cname": "zlib",
+    "clevel": 5,
+    "shuffle": 0
+   }
+  },
+  {
+   "name": "zlib-noshuffle-f4",
+   "nbytes": 24000,
+   "sha256": "7a45cc26051a4f80756eb9a0d82631fc4701f045ae3b4a39ccef075a67347fdd",
+   "blosc": {
+    "cname": "zlib",
+    "clevel": 5,
+    "shuffle": 0
+   }
+  },
+  {
+   "name": "zlib-noshuffle-u8",
+   "nbytes": 48000,
+   "sha256": "0f1ef5a2b50a421c57a623ea113ed900da6ba3ac75475f6a4eed454e707821a4",
+   "blosc": {
+    "cname": "zlib",
+    "clevel": 5,
+    "shuffle": 0
+   }
+  },
+  {
+   "name": "zlib-shuffle-u1",
+   "nbytes": 6000,
+   "sha256": "aef8bd737e9694270d47685fa1750789d69aeaff837b18c72b25b8a4f4a8db74",
+   "blosc": {
+    "cname": "zlib",
+    "clevel": 5,
+    "shuffle": 1
+   }
+  },
+  {
+   "name": "zlib-shuffle-u2",
+   "nbytes": 12000,
+   "sha256": "bffeb9c89d10f720776cf14c8da5e932be59cd5cd229c5e6fd909f91c339cb8f",
+   "blosc": {
+    "cname": "zlib",
+    "clevel": 5,
+    "shuffle": 1
+   }
+  },
+  {
+   "name": "zlib-shuffle-f4",
+   "nbytes": 24000,
+   "sha256": "843a1ab76dd6b5ffde8ddbcf811c699eabd67e354f9a44b9c2a2185879b5737a",
+   "blosc": {
+    "cname": "zlib",
+    "clevel": 5,
+    "shuffle": 1
+   }
+  },
+  {
+   "name": "zlib-shuffle-u8",
+   "nbytes": 48000,
+   "sha256": "0f1ef5a2b50a421c57a623ea113ed900da6ba3ac75475f6a4eed454e707821a4",
+   "blosc": {
+    "cname": "zlib",
+    "clevel": 5,
+    "shuffle": 1
+   }
+  },
+  {
+   "name": "zlib-bitshuffle-u1",
+   "nbytes": 6000,
+   "sha256": "aef8bd737e9694270d47685fa1750789d69aeaff837b18c72b25b8a4f4a8db74",
+   "blosc": {
+    "cname": "zlib",
+    "clevel": 5,
+    "shuffle": 2
+   }
+  },
+  {
+   "name": "zlib-bitshuffle-u2",
+   "nbytes": 12000,
+   "sha256": "bffeb9c89d10f720776cf14c8da5e932be59cd5cd229c5e6fd909f91c339cb8f",
+   "blosc": {
+    "cname": "zlib",
+    "clevel": 5,
+    "shuffle": 2
+   }
+  },
+  {
+   "name": "zlib-bitshuffle-f4",
+   "nbytes": 24000,
+   "sha256": "6cc3081fd3b9d4b583865cb6f87114a2bedfabe2a292e29acfb5d106a51db5f5",
+   "blosc": {
+    "cname": "zlib",
+    "clevel": 5,
+    "shuffle": 2
+   }
+  },
+  {
+   "name": "zlib-bitshuffle-u8",
+   "nbytes": 48000,
+   "sha256": "0f1ef5a2b50a421c57a623ea113ed900da6ba3ac75475f6a4eed454e707821a4",
+   "blosc": {
+    "cname": "zlib",
+    "clevel": 5,
+    "shuffle": 2
+   }
+  },
+  {
+   "name": "lz4-shuffle-f4-blocks",
+   "nbytes": 80012,
+   "sha256": "2dca59297f0aaecfb2cd6e6b45283774d12ced6b0dc49c8b0bf0f7eae8969550",
+   "blosc": {
+    "cname": "lz4",
+    "clevel": 5,
+    "shuffle": 1,
+    "blocksize": 16384
+   }
+  },
+  {
+   "name": "zstd-shuffle-u2-blocks",
+   "nbytes": 40002,
+   "sha256": "4f925249d09f61d7b60844397ccd9d55ff9bda512c2754cbc366332c16643477",
+   "blosc": {
+    "cname": "zstd",
+    "clevel": 3,
+    "shuffle": 1,
+    "blocksize": 8192
+   }
+  },
+  {
+   "name": "lz4-shuffle-f8-small",
+   "nbytes": 104,
+   "sha256": "fcd3f0049753d05b76213e538da1fca36545526ae9f122a80d109a9eced86dbe",
+   "blosc": {
+    "cname": "lz4",
+    "clevel": 5,
+    "shuffle": 1
+   }
+  },
+  {
+   "name": "lz4-bitshuffle-f4-blocks",
+   "nbytes": 80012,
+   "sha256": "073bfb5cfc8e985322630f0ade3e3d29b029085c0a8db6f314ae465154cd5990",
+   "blosc": {
+    "cname": "lz4",
+    "clevel": 5,
+    "shuffle": 2,
+    "blocksize": 16384
+   }
+  },
+  {
+   "name": "zstd-bitshuffle-u2-blocks",
+   "nbytes": 40002,
+   "sha256": "4f925249d09f61d7b60844397ccd9d55ff9bda512c2754cbc366332c16643477",
+   "blosc": {
+    "cname": "zstd",
+    "clevel": 3,
+    "shuffle": 2,
+    "blocksize": 8192
+   }
+  },
+  {
+   "name": "lz4-bitshuffle-f8-small",
+   "nbytes": 104,
+   "sha256": "3c4597dfb8eebda3ca8058945bc286e0bdbcf6ef6fe0b785267f1c3d4e397256",
+   "blosc": {
+    "cname": "lz4",
+    "clevel": 5,
+    "shuffle": 2
+   }
+  },
+  {
+   "name": "lz4-shuffle-V20",
+   "nbytes": 60020,
+   "sha256": "6afc9ab6f35db94d97d1a3535dfadceacb8ca736785e037dab3c618325a1e2cc",
+   "blosc": {
+    "cname": "lz4",
+    "clevel": 5,
+    "shuffle": 1
+   }
+  },
+  {
+   "name": "lz4-shuffle-V32",
+   "nbytes": 64000,
+   "sha256": "c88739beb67ce6ee0e5e1bec05fd831f5f29d7089249b99063906b2fbc34687a",
+   "blosc": {
+    "cname": "lz4",
+    "clevel": 5,
+    "shuffle": 1
+   }
+  },
+  {
+   "name": "lz4-bitshuffle-V20",
+   "nbytes": 60020,
+   "sha256": "568c7dd84217bae0d559222c3ee150f555eabb1afd210130d38d6baeffdd2a31",
+   "blosc": {
+    "cname": "lz4",
+    "clevel": 5,
+    "shuffle": 2
+   }
+  },
+  {
+   "name": "lz4-shuffle-noise",
+   "nbytes": 12000,
+   "sha256": "45ab553116ebd0c93d47ee8436f597d8fb4dd77765e59518519ba6b4d6219d15",
+   "blosc": {
+    "cname": "lz4",
+    "clevel": 5,
+    "shuffle": 1
+   }
+  },
+  {
+   "name": "zstd-noshuffle-noise",
+   "nbytes": 12000,
+   "sha256": "45ab553116ebd0c93d47ee8436f597d8fb4dd77765e59518519ba6b4d6219d15",
+   "blosc": {
+    "cname": "zstd",
+    "clevel": 5,
+    "shuffle": 0
+   }
+  },
+  {
+   "name": "lz4-clevel0",
+   "nbytes": 20000,
+   "sha256": "a206aff5c06140ebd5ebbbfc3ce4c2d8bfb1b813a473f7d2b2ea0b42d0082340",
+   "blosc": {
+    "cname": "lz4",
+    "clevel": 0,
+    "shuffle": 1
+   }
+  },
+  {
+   "name": "lz4-empty",
+   "nbytes": 0,
+   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "blosc": {
+    "cname": "lz4",
+    "clevel": 5,
+    "shuffle": 1
+   }
+  }
+ ]
+}

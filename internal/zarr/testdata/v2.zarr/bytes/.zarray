@@ -1,0 +1,15 @@
+{
+  "shape": [
+    2
+  ],
+  "chunks": [
+    2
+  ],
+  "dtype": "|S10",
+  "fill_value": "",
+  "order": "C",
+  "filters": null,
+  "dimension_separator": ".",
+  "compressor": null,
+  "zarr_format": 2
+}

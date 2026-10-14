@@ -1,19 +1,36 @@
 # Validation
 
-`node validation/run.mjs [suite …] [--verbose] [--require-data]` runs the validation suites and
-exits with status 1 when a check fails. Each check states what is compared, the value found and
-the tolerance required.
+SituCraft's results are checked against independent references and known truth. Unit tests
+(`go test ./...`, `node --test "web/lib/**/*.test.mjs"`) check functions in isolation; the checks
+here run on real data or whole interfaces.
 
-| Suite | What it checks | Data |
+| Check | What it compares | Data |
 | --- | --- | --- |
-| `accessibility` | WCAG AA contrast of every text-on-surface pair in both themes, with color-vision-friendly colors off and on; palettes, status colors and diverging maps apart in protanopia, deuteranopia and tritanopia (Machado et al. 2009, CIEDE2000) | `web/styles.css` |
+| `node validation/run.mjs accessibility` | WCAG AA contrast of every text-on-surface pair in both themes, with color-vision-friendly colors off and on; palettes, status colors and diverging maps apart in protanopia, deuteranopia and tritanopia (Machado et al. 2009, CIEDE2000) | `web/styles.css` |
+| `go test ./validation/` (readers) | Every Parquet column of the development bundles as DuckDB reads it; every Zarr array as zarr-python and numcodecs read it; every TIFF's structure (images, pyramid levels, tiles, compression) and the pixels of each plane's smallest (lossless) level as tifffile and imagecodecs read them; and every image tile decoded, with the time taken | the two 2-FOV bundles |
+| `go test ./internal/jp2k/` (real tiles) | The JPEG 2000 tiles of the development bundles against OpenJPEG (`opj_decompress`): identical for lossless 5/3 tiles, within ±1 at every pixel for lossy 9/7 ones (every tile of the morphology-focus images and every 25th of the z-stacks; `JP2K_ZSTACK_ALL=1` for all) | the two 2-FOV bundles, OpenJPEG |
 
-Later slices add the checks against independent references:
-- the readers against independent readers on every file of the development bundles (wave 1,
-  slice 2);
-- segmentation against simulated truth and recorded reference numbers (waves 2–3).
+## Data
 
-Reference outputs are committed in `validation/reference/` with the script and tool version that
-produced them. Public datasets are fetched and checksummed by `validation/fetch.mjs` into
-`validation/cache/`, which is never stored in the repository (situcraft-spec/design.md,
-"Development data").
+`node validation/fetch.mjs [data set …]` downloads the public data sets in `sources.json` into
+`validation/cache/` (or `$SITUCRAFT_DATA`):
+- a bundle's zip is checked by its publisher's MD5;
+- it is extracted, each member's CRC-32 checked, and every extracted file checked against the
+  SHA-256 recorded in `sources.json`;
+- then the zip is deleted.
+
+Nothing here is stored in the repository. The two Xenium 2-FOV bundles take about 640 MB
+extracted. They are 10x Genomics example data under CC BY 4.0.
+
+A check whose data are missing is skipped, unless `SITUCRAFT_REQUIRE_DATA` names the data set (a
+comma-separated list, or `1` for all).
+- Each commit's CI requires `xenium-lung-2fov`.
+- The weekly run (`.github/workflows/data.yml`) requires both bundles.
+
+## References
+
+`reference/` holds what independent tools report, with the script that produced it:
+- `generate_bundles.py` → `xenium-bundles.json`: DuckDB 1.5, zarr 3.4 and tifffile with
+  imagecodecs on both bundles, as sizes and SHA-256 digests.
+
+Regenerate a reference only when its data set or the tool changes, and say why in the commit.

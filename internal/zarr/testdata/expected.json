@@ -1,0 +1,349 @@
+{
+ "zarr": "3.4.1",
+ "numcodecs": "0.17.0",
+ "arrays": [
+  {
+   "store": "v2.zarr",
+   "path": "blosc_lz4_shuffle",
+   "shape": [
+    37,
+    29
+   ],
+   "dtype": "<f4",
+   "sha256": "2411ac2d3503c94d91574e10f574547d0f2cc46b95b48784bab44a71ccc7c521"
+  },
+  {
+   "store": "v2.zarr",
+   "path": "blosc_zstd_bitshuffle",
+   "shape": [
+    37,
+    29
+   ],
+   "dtype": "<f4",
+   "sha256": "2411ac2d3503c94d91574e10f574547d0f2cc46b95b48784bab44a71ccc7c521"
+  },
+  {
+   "store": "v2.zarr",
+   "path": "zstd",
+   "shape": [
+    37,
+    29
+   ],
+   "dtype": "<f4",
+   "sha256": "2411ac2d3503c94d91574e10f574547d0f2cc46b95b48784bab44a71ccc7c521"
+  },
+  {
+   "store": "v2.zarr",
+   "path": "zlib",
+   "shape": [
+    37,
+    29
+   ],
+   "dtype": "<f4",
+   "sha256": "2411ac2d3503c94d91574e10f574547d0f2cc46b95b48784bab44a71ccc7c521"
+  },
+  {
+   "store": "v2.zarr",
+   "path": "gzip",
+   "shape": [
+    37,
+    29
+   ],
+   "dtype": "<f4",
+   "sha256": "2411ac2d3503c94d91574e10f574547d0f2cc46b95b48784bab44a71ccc7c521"
+  },
+  {
+   "store": "v2.zarr",
+   "path": "lz4",
+   "shape": [
+    37,
+    29
+   ],
+   "dtype": "<f4",
+   "sha256": "2411ac2d3503c94d91574e10f574547d0f2cc46b95b48784bab44a71ccc7c521"
+  },
+  {
+   "store": "v2.zarr",
+   "path": "none",
+   "shape": [
+    37,
+    29
+   ],
+   "dtype": "<f4",
+   "sha256": "2411ac2d3503c94d91574e10f574547d0f2cc46b95b48784bab44a71ccc7c521"
+  },
+  {
+   "store": "v2.zarr",
+   "path": "order_f",
+   "shape": [
+    37,
+    29
+   ],
+   "dtype": "<f4",
+   "sha256": "2411ac2d3503c94d91574e10f574547d0f2cc46b95b48784bab44a71ccc7c521"
+  },
+  {
+   "store": "v2.zarr",
+   "path": "big_endian",
+   "shape": [
+    200
+   ],
+   "dtype": ">i4",
+   "sha256": "e74ea8b421ebcbf7a2b340e7ea9b9fdfb523f4d3cac98eadbc91ac23bd1bb190"
+  },
+  {
+   "store": "v2.zarr",
+   "path": "three_d",
+   "shape": [
+    5,
+    7,
+    9
+   ],
+   "dtype": "<u2",
+   "sha256": "56dd659a83e38193fa721d9d5e42d7fb6d92906eb210724182f9a42a9e3780fa"
+  },
+  {
+   "store": "v2.zarr",
+   "path": "slash_separator",
+   "shape": [
+    37,
+    29
+   ],
+   "dtype": "<f4",
+   "sha256": "2411ac2d3503c94d91574e10f574547d0f2cc46b95b48784bab44a71ccc7c521"
+  },
+  {
+   "store": "v2.zarr",
+   "path": "bools",
+   "shape": [
+    100
+   ],
+   "dtype": "|b1",
+   "sha256": "8d6c8c9545f2640bf1d1ff5c0972f16ae296e9a357ac93a82617f63f10fa8608"
+  },
+  {
+   "store": "v2.zarr",
+   "path": "text",
+   "shape": [
+    4
+   ],
+   "dtype": "<U12",
+   "sha256": "b7db922ccab956f8748e4733cd91cb3e04235858ee3c118c71799ed551c3c3b6"
+  },
+  {
+   "store": "v2.zarr",
+   "path": "bytes",
+   "shape": [
+    2
+   ],
+   "dtype": "|S10",
+   "sha256": "e27c6aeb784397f6e016837dabf780c8a6de3e366ccc830f73071d380bd48a36"
+  },
+  {
+   "store": "v2.zarr",
+   "path": "fill_value",
+   "shape": [
+    30,
+    30
+   ],
+   "dtype": "<f8",
+   "sha256": "02156d1b0fa22ea3cbe16d7938a557309f16538f22fd606c9bb567b7f7adf221"
+  },
+  {
+   "store": "v2.zarr.zip",
+   "path": "blosc_lz4_shuffle",
+   "shape": [
+    37,
+    29
+   ],
+   "dtype": "<f4",
+   "sha256": "2411ac2d3503c94d91574e10f574547d0f2cc46b95b48784bab44a71ccc7c521"
+  },
+  {
+   "store": "v2.zarr.zip",
+   "path": "blosc_zstd_bitshuffle",
+   "shape": [
+    37,
+    29
+   ],
+   "dtype": "<f4",
+   "sha256": "2411ac2d3503c94d91574e10f574547d0f2cc46b95b48784bab44a71ccc7c521"
+  },
+  {
+   "store": "v2.zarr.zip",
+   "path": "zstd",
+   "shape": [
+    37,
+    29
+   ],
+   "dtype": "<f4",
+   "sha256": "2411ac2d3503c94d91574e10f574547d0f2cc46b95b48784bab44a71ccc7c521"
+  },
+  {
+   "store": "v2.zarr.zip",
+   "path": "zlib",
+   "shape": [
+    37,
+    29
+   ],
+   "dtype": "<f4",
+   "sha256": "2411ac2d3503c94d91574e10f574547d0f2cc46b95b48784bab44a71ccc7c521"
+  },
+  {
+   "store": "v2.zarr.zip",
+   "path": "gzip",
+   "shape": [
+    37,
+    29
+   ],
+   "dtype": "<f4",
+   "sha256": "2411ac2d3503c94d91574e10f574547d0f2cc46b95b48784bab44a71ccc7c521"
+  },
+  {
+   "store": "v2.zarr.zip",
+   "path": "lz4",
+   "shape": [
+    37,
+    29
+   ],
+   "dtype": "<f4",
+   "sha256": "2411ac2d3503c94d91574e10f574547d0f2cc46b95b48784bab44a71ccc7c521"
+  },
+  {
+   "store": "v2.zarr.zip",
+   "path": "none",
+   "shape": [
+    37,
+    29
+   ],
+   "dtype": "<f4",
+   "sha256": "2411ac2d3503c94d91574e10f574547d0f2cc46b95b48784bab44a71ccc7c521"
+  },
+  {
+   "store": "v2.zarr.zip",
+   "path": "order_f",
+   "shape": [
+    37,
+    29
+   ],
+   "dtype": "<f4",
+   "sha256": "2411ac2d3503c94d91574e10f574547d0f2cc46b95b48784bab44a71ccc7c521"
+  },
+  {
+   "store": "v2.zarr.zip",
+   "path": "big_endian",
+   "shape": [
+    200
+   ],
+   "dtype": ">i4",
+   "sha256": "e74ea8b421ebcbf7a2b340e7ea9b9fdfb523f4d3cac98eadbc91ac23bd1bb190"
+  },
+  {
+   "store": "v2.zarr.zip",
+   "path": "three_d",
+   "shape": [
+    5,
+    7,
+    9
+   ],
+   "dtype": "<u2",
+   "sha256": "56dd659a83e38193fa721d9d5e42d7fb6d92906eb210724182f9a42a9e3780fa"
+  },
+  {
+   "store": "v2.zarr.zip",
+   "path": "slash_separator",
+   "shape": [
+    37,
+    29
+   ],
+   "dtype": "<f4",
+   "sha256": "2411ac2d3503c94d91574e10f574547d0f2cc46b95b48784bab44a71ccc7c521"
+  },
+  {
+   "store": "v2.zarr.zip",
+   "path": "bools",
+   "shape": [
+    100
+   ],
+   "dtype": "|b1",
+   "sha256": "8d6c8c9545f2640bf1d1ff5c0972f16ae296e9a357ac93a82617f63f10fa8608"
+  },
+  {
+   "store": "v2.zarr.zip",
+   "path": "text",
+   "shape": [
+    4
+   ],
+   "dtype": "<U12",
+   "sha256": "b7db922ccab956f8748e4733cd91cb3e04235858ee3c118c71799ed551c3c3b6"
+  },
+  {
+   "store": "v2.zarr.zip",
+   "path": "bytes",
+   "shape": [
+    2
+   ],
+   "dtype": "|S10",
+   "sha256": "e27c6aeb784397f6e016837dabf780c8a6de3e366ccc830f73071d380bd48a36"
+  },
+  {
+   "store": "v2.zarr.zip",
+   "path": "fill_value",
+   "shape": [
+    30,
+    30
+   ],
+   "dtype": "<f8",
+   "sha256": "02156d1b0fa22ea3cbe16d7938a557309f16538f22fd606c9bb567b7f7adf221"
+  },
+  {
+   "store": "v3.zarr",
+   "path": "zstd",
+   "shape": [
+    37,
+    29
+   ],
+   "dtype": "<f4",
+   "sha256": "2411ac2d3503c94d91574e10f574547d0f2cc46b95b48784bab44a71ccc7c521"
+  },
+  {
+   "store": "v3.zarr",
+   "path": "blosc",
+   "shape": [
+    37,
+    29
+   ],
+   "dtype": "<f4",
+   "sha256": "2411ac2d3503c94d91574e10f574547d0f2cc46b95b48784bab44a71ccc7c521"
+  },
+  {
+   "store": "v3.zarr",
+   "path": "gzip_crc32c",
+   "shape": [
+    37,
+    29
+   ],
+   "dtype": "<f4",
+   "sha256": "2411ac2d3503c94d91574e10f574547d0f2cc46b95b48784bab44a71ccc7c521"
+  },
+  {
+   "store": "v3.zarr",
+   "path": "big_endian",
+   "shape": [
+    300
+   ],
+   "dtype": ">i8",
+   "sha256": "fcd6ea90ff5c9356a84e50d09a2ea67bce2fcc774c8128305eec23e3d8e633b7"
+  },
+  {
+   "store": "v3.zarr",
+   "path": "transposed",
+   "shape": [
+    37,
+    29
+   ],
+   "dtype": "<f4",
+   "sha256": "2411ac2d3503c94d91574e10f574547d0f2cc46b95b48784bab44a71ccc7c521"
+  }
+ ]
+}

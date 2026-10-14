@@ -41,7 +41,7 @@ Status: **planned (wave N)** until built. Then **done**, **partial** (the gap no
 | D3 | Validate a bundle: required and optional files, schemas, matrix dimensions, identifiers consistent across files, coordinate ranges, geometry validity, image metadata, transforms, free disk. Fatal errors, scientific warnings and informational differences kept apart, each linked to files, regions and a remedy | planned (wave 1) |
 | D4 | Never modify a source bundle | planned (wave 1) |
 | D5 | Derived data (tile pyramids, transcript index, geometry tiles) built as resumable, atomic, checksummed cache entries; an unchanged project reopens without re-indexing | planned (wave 1) |
-| D6 | Readers for Parquet (Zstd, Snappy, gzip, uncompressed), Zarr v2/v3 (Blosc LZ4/Zstd, zip and directory stores), BigTIFF/OME-TIFF (JPEG 2000, JPEG, deflate, LZW), Matrix Market, CSV(.gz), GeoJSON | planned (waves 1, 2, 5) |
+| D6 | Readers for Parquet (Zstd, Snappy, gzip, uncompressed), Zarr v2/v3 (Blosc LZ4/Zstd, zip and directory stores), BigTIFF/OME-TIFF (JPEG 2000, JPEG, deflate, LZW), Matrix Market, CSV(.gz), GeoJSON | partial (wave 1, slice 2: Parquet, Zarr 2 and 3, TIFF/BigTIFF/OME-TIFF with JPEG 2000, deflate, LZW and PackBits, all identical to independent readers on both bundles; JPEG for H&E in wave 5; Matrix Market, CSV and GeoJSON with the slices that need them) |
 | D7 | Projects: a manifest with stable identifiers, versions, datasets and artifacts; portable (relative paths) and linked (institutional storage) modes | planned (wave 1) |
 | D8 | Artifact lineage: parents, producing job, parameters, method and software versions, checksums, state, role | planned (waves 1, 2) |
 | D9 | Example data downloaded on request from their source, verified by checksum, attributed | planned (wave 1) |
@@ -183,7 +183,7 @@ Status: **planned (wave N)** until built. Then **done**, **partial** (the gap no
 | --- | --- | --- |
 | X1 | Loopback only, Host-header check, same-origin API, strict CSP, path allowlist, safe archive extraction | partial (wave 1, slice 1: loopback, Host check, same-origin API, CSP, only named paths served; archive extraction with slice 3) |
 | X2 | Keyboard workflows; color-vision-friendly palettes with non-color encodings; text equivalents for status; contrast audited | planned (wave 1, every wave) |
-| X3 | Every reader and decoder fuzzed; hostile files refused with a message, never a crash | planned (waves 1–2) |
-| X4 | Performance budgets checked automatically (tile decode, indexing, viewport queries, segmentation) | planned (wave 1, every wave) |
+| X3 | Every reader and decoder fuzzed; hostile files refused with a message, never a crash | partial (wave 1, slice 2: every codec and reader fuzzed, crashers fixed and kept; later readers as they arrive) |
+| X4 | Performance budgets checked automatically (tile decode, indexing, viewport queries, segmentation) | partial (wave 1, slice 2: a JPEG 2000 tile in about 90 ms on one core, budget 150 ms, benchmarked; indexing and queries in slices 4–5) |
 | X5 | Stable, versioned project and export formats; later versions open earlier projects | planned (every wave; promised at 1.0) |
 | X6 | Documentation and site: installing, a guide per feature, formats, network, MCP | planned (every wave) |

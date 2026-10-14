@@ -206,7 +206,7 @@ reference JSON.
 | --- | --- |
 | Product and executable | **SituCraft**, `situcraft`; Go module `situcraft` |
 | Go version | The siblings' minimum (`go 1.24` in `go.mod`); releases built with the current stable Go |
-| Image codec | Our own JPEG 2000 Part 1 decoder in Go (lossless 5/3 path first, irreversible 9/7 next), validated tile by tile against an independent decoder; decoded once into the tile cache |
+| Image codec | Our own JPEG 2000 Part 1 decoder in Go, Xenium's profile first (JP2-wrapped, irreversible 9/7), validated tile by tile against an independent decoder (within ±1, as lossy decoding allows); decoded once into the tile cache |
 | HDF5 | Not read or written: Xenium's matrix is also in Zarr and MEX; AnnData export uses its Zarr layout |
 | Internal store | Our own cache and project manifests; SpatialData Zarr and AnnData Zarr are exports |
 | Renderer | Our own WebGL2 renderer (images, points, polygons); Canvas 2D for figures and fallbacks |
