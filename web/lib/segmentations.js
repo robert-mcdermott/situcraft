@@ -94,3 +94,44 @@ export function withInstrumentSegmentation(project, dataset, manifest, now = new
   }
   return next;
 }
+
+// --- Comparisons of two segmentations (artifacts of kind 'comparison', internal/compare) ---------
+
+// The project's record of a comparison artifact: the two segmentations (A and B), its headline
+// numbers, how it was made.
+export function comparisonRecord(dataset, manifest, now = new Date().toISOString()) {
+  const lineage = manifest.lineage ?? {};
+  const [a, b] = (lineage.parents ?? []).filter((p) => p.kind === 'segmentation');
+  return {
+    kind: 'comparison',
+    id: manifest.id,
+    name: manifest.name,
+    dataset: dataset.id,
+    a: a?.id ?? null,
+    b: b?.id ?? null,
+    state: manifest.state,
+    created: manifest.created,
+    registered: now,
+    method: { name: lineage.method?.name ?? '', version: lineage.method?.version ?? '', citation: lineage.method?.citation ?? '' },
+    parameters: lineage.parameters ?? null,
+    job: lineage.job ? { id: lineage.job.id, kind: lineage.job.kind } : null,
+    summary: manifest.summary ?? null,
+    findings: manifest.findings ?? [],
+  };
+}
+
+export function comparisonsOf(project, datasetId) {
+  return project.artifacts.filter((a) => a.kind === 'comparison' && a.dataset === datasetId);
+}
+
+// The project with a comparison recorded (unchanged when it already is).
+export function addComparison(project, record, now = new Date().toISOString()) {
+  if (project.artifacts.some((a) => a.kind === 'comparison' && a.id === record.id && a.dataset === record.dataset)) return project;
+  const names = (id) => project.artifacts.find((a) => a.kind === 'segmentation' && a.id === id)?.name ?? id;
+  return {
+    ...project,
+    modified: now,
+    artifacts: [...project.artifacts, record],
+    history: [...project.history, { time: now, action: 'comparison', detail: `Compared ${names(record.a)} (A) with ${names(record.b)} (B) (artifact ${record.id})` }],
+  };
+}

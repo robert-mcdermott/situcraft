@@ -143,6 +143,15 @@ Readers check every size before reading, and the zlib checksum.
 
 These files are SituCraft's own; the open formats for exchange come later in wave 2.
 
+### Comparisons
+
+A comparison of two segmentations is an artifact of two files:
+
+| File | Magic | Holds |
+| --- | --- | --- |
+| `comparison.json` | | `format` (`"situcraft-comparison"`), `version`, `method`; the two segmentations (`a`, `b`: artifact id and name); `params` (the correspondence's and co-expression's thresholds, the regions' size, the seed); each segmentation's measures (`metricsA`, `metricsB`); the differences by class (`classes`, and each side's cells in each: `cellsA`, `cellsB`); the transcripts that changed cell (`changes`, `changesQ20`: gained, lost, moved); `iou` and `displacement` of the cells the same in both; `pixelAgreement`; the co-expression reference (`coexpression`) and the MECR's gene pairs (`mecrPairs`); and the same counts by region (`regions`: squares of `sizeUm`, row-major). A measure not taken is `null` |
+| `groups.bin` | `SCCG` | Each difference: its class (by its index in one-to-one, expanded, contracted, split, merged, rearranged, only in A, only in B, assignment-only), its cells in A and in B (indices into each segmentation's cells), the IoU, the transcripts' Jaccard and the boundary displacement (µm) of one cell in each, the gene transcripts whose cell changed, and where it lies (µm) |
+
 ### Jobs
 
 Each job is kept in `<data dir>/jobs/<id>.json`: its kind, title, spec (every effective

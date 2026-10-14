@@ -94,9 +94,9 @@ Status: **planned (wave N)** until built. Then **done**, **partial** (the gap no
 
 | # | Requirement | Status |
 | --- | --- | --- |
-| C1 | Cells matched across segmentations by shared nucleus, overlap and transcript assignment, by a documented strategy | planned (wave 2) |
-| C2 | Differences classified: one-to-one, expanded/contracted, split, merge, unmatched, assignment-only | planned (wave 2) |
-| C3 | Metrics, globally and per region: cells, nuclei, assigned fraction, transcripts per cell, areas, geometry validity, changed assignments, IoU and boundary displacement, spurious co-expression, runtime and size | planned (wave 2) |
+| C1 | Cells matched across segmentations by shared nucleus, overlap and transcript assignment, by a documented strategy | done (wave 2, slice 5: two cells correspond when they share a nucleus, when at least half of one lies within the other, or, without area, by their transcripts; the Lung bundle's instrument segmentation and 5 µm expansion pair one to one, as the expansion's own comparison counted) |
+| C2 | Differences classified: one-to-one, expanded/contracted, split, merge, unmatched, assignment-only | done (wave 2, slice 5: and rearranged, several to several; hand-drawn fixtures of each class) |
+| C3 | Metrics, globally and per region: cells, nuclei, assigned fraction, transcripts per cell, areas, geometry validity, changed assignments, IoU and boundary displacement, spurious co-expression, runtime and size | done (wave 2, slice 5: each segmentation's cells, nuclei, assigned fraction, transcripts per cell, areas, cells in pieces, job time and size; between two the pixels that agree, the transcripts that changed cell, IoU and boundary displacement; spurious co-expression after Jones et al. 2025 and the mutually exclusive co-expression rate of Hartman and Satija 2024; by regions of 50 µm too) |
 | C4 | A ranked review queue by reassignment, contamination, disagreement, low counts or reviewer rules | planned (wave 2) |
 | C5 | Promotion of one segmentation as the project default, with a rationale, as an append-only event; alternatives never deleted | planned (wave 2) |
 | C6 | Downstream impact: composition, marker mixing, labels and neighborhoods under each segmentation | planned (waves 4, 6) |

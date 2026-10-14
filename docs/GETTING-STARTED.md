@@ -191,6 +191,22 @@ are in the same cells.
   <img alt="The Segmentation view of the Lung example: the instrument's segmentation and one imported from a SpatialData store written by spatialdata-io, side by side, and the imported one's lineage in the inspector" src="images/import-light.webp">
 </picture>
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/comparison-dark.webp">
+  <img alt="The Segmentation view of the Breast example comparing the instrument's segmentation with a 5 µm nucleus expansion: the differences by class, each segmentation's measures, and the pixels and transcripts that changed" src="images/comparison-light.webp">
+</picture>
+
+**Compare two segmentations** chooses an A and a B and shows which cells correspond and how each
+differs: one-to-one, expanded or contracted (by more than 25% of its area), split, merged,
+rearranged, or only in one. Two cells correspond when they share a nucleus, or when at least half
+of one lies within the other. Beside each segmentation's own numbers (cells, cells with a nucleus,
+assigned transcripts, transcripts per cell, areas), two measure transcripts given to the wrong
+cell: the spurious co-expression of gene pairs relative to nuclei alone (Jones et al. 2025; 1 is
+as in nuclei), and how often markers of different lineages are found in the same cell (the
+mutually exclusive co-expression rate of Hartman and Satija). Between the two, the pixels that
+agree, the transcripts that changed cell, and how far the boundaries moved. The comparison runs
+as a job and is kept with the project.
+
 **Import a segmentation** brings in one made by another tool: a SpatialData Zarr store, Baysor's
 `segmentation.csv` with its polygons, GeoJSON polygons with an optional transcript table (CSV or
 Parquet), or a Xenium Ranger output bundle of the same run. Say whether its coordinates are in µm
@@ -199,8 +215,8 @@ pixels): SituCraft does not guess, and the import's check says when the cells do
 the dataset's image. It also checks that the transcripts it names are the dataset's. The import
 runs as a job and becomes a segmentation of its own, kept with the SHA-256 of every file it read,
 its transcripts counted as every segmentation's are; one whose check finds a fatal problem is
-kept as invalid, for review. Later releases add comparing any two segmentations, reviewing their
-differences, and choosing the default.
+kept as invalid, for review. Later releases add the two segmentations side by side on the tissue,
+a queue of the differences to review, and choosing the default.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/jobs-dark.webp">
@@ -208,7 +224,7 @@ differences, and choosing the default.
 </picture>
 
 Long work runs as a job: building derived data, downloading an example, registering a
-segmentation, expanding nuclei, importing a segmentation. The **Jobs** view shows what runs and waits, what finished, and each job's log and
+segmentation, expanding nuclei, importing or comparing segmentations. The **Jobs** view shows what runs and waits, what finished, and each job's log and
 spec. Jobs keep running when the window reloads, and closing the window while one runs asks first.
 If SituCraft stops (or the computer does) in the middle of a job, the job is shown as interrupted
 when SituCraft starts again: **Resume** continues it where it stopped, **Discard** forgets it.

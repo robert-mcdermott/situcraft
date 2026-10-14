@@ -870,14 +870,52 @@ other tools can be imported.
        with each import, and the extent check names the unit that fits.
      - **The documentation's capture showed a path of this computer** in a text field: text fields
        are now shown with the places a user would see.
-5. **Cell matching and metrics (C1, C2, C3).** `internal/compare`:
-   - correspondence by shared nucleus, raster IoU and assignment overlap;
-   - difference classes;
-   - global and per-region metrics, including the spurious co-expression score of Jones et al.
-     (2025) and MECR.
-   - Validation: hand-auditable fixtures (two-cell splits, merges, shifted boundaries) with
-     expected classes and metrics. Instrument versus expansion on both bundles, with recorded
-     reference numbers.
+5. **Cell matching and metrics (C1, C2, C3): done.**
+   - **Correspondence** (`internal/compare`; research.md §4): two cells correspond when they share
+     a nucleus of the dataset, or when at least half of one lies within the other; cells without
+     area by their transcripts. Each connected set is one difference: one-to-one, expanded or
+     contracted (area beyond 1.25 times), split, merged, rearranged, only in A or B,
+     assignment-only.
+   - **Measures:** each segmentation's cells, nuclei, assigned fraction, transcripts per cell,
+     areas, cells in pieces, job time and size; between two, the pixels that agree, the
+     transcripts that changed cell (gained, lost, moved), the IoU and boundary displacement of the
+     cells the same in both; by regions of 50 µm.
+   - **Spurious co-expression** after Jones et al. (2025): the gene pairs co-expressed at least 1.5
+     times as often once nuclei grow by 10 µm, each segmentation's co-expression of them relative
+     to the nuclei's, cells down-sampled to 50 transcripts; **the mutually exclusive co-expression
+     rate** of Hartman and Satija (2024), over pairs of lineage markers.
+   - **Every segmentation as SituCraft's files:** the instrument's written from its bundle (row by
+     row, so bundles without transcript ids too), with the nuclei and the coarse expansion, as
+     derived data in the cache (listed, counted and evicted as the cache's others).
+   - **A job** (`api_compare.go`) and an artifact of kind `comparison`: its measures, regions and
+     differences (`groups.bin`), checked (every cell in one difference whose class fits it, the
+     counts consistent); named by the two segmentations and the parameters, so asking again
+     answers it. An artifact's own files are served for the page.
+   - **The Segmentation view's Compare two segmentations:** A and B, the comparisons made, and a
+     comparison's differences by class, each segmentation's measures, and what changed.
+   - **Remote control:** `compare_segmentations` (25 actions).
+   - **Screenshots:** the Breast example's instrument segmentation compared with its expansion.
+   - Validation:
+     - **Hand-drawn fixtures** of each class, every count and measure worked out by hand: a cell
+       shifted one pixel (IoU 0.5, the boundary moved 0.5 µm on average), a boundary between
+       neighbours moved (contracted and expanded), a split, a merge, columns become rows, a cell in
+       one only, a cell without outline, two cells joined by a nucleus. A planted leak of
+       transcripts raises the spurious co-expression (the nuclei score 1); the MECR by hand.
+     - **The instrument's segmentation and the 5 µm expansion:** on Lung, 11,898 cells one to one,
+       98.0629% of pixels and 8,724 transcripts changed, as the expansion's own comparison counted
+       independently (slice 3); on Breast, every cell of both in its classes (3,599 one-to-one, 263
+       splits into 550 cells, 128 merges of 259, 119 only the instrument's), the expansion's
+       spurious co-expression 2.04 against the instrument's 1.77. Reference numbers in
+       research.md §4.
+     - **In headless Chrome** (67 checks): `compare_segmentations` by remote control, as the
+       expansion counted, recorded and shown.
+   - Found by slice 5:
+     - **A fifth of either cell was too little to correspond:** neighbours whose shared boundary
+       moved one column joined into one "rearranged" difference. Cells now correspond when half of
+       one lies within the other: fragments of a split still do, neighbours do not.
+     - **The MECR's reference** had a wrong identifier in research.md: it is
+       doi:10.1101/2024.01.11.575135.
+     - **A segmentation's cost:** the instrument's showed its registration's time; it shows none.
 6. **The comparison workspace (V7, C4, C5).**
    - Synchronized A/B canvases, overlay and flicker; a whole-tissue disagreement heatmap;
      difference-class filters.

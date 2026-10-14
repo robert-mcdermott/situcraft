@@ -6,7 +6,7 @@
 
 import { openPaths } from './storage.js';
 import { addDataset, compareFingerprint, datasetRecord, findDataset, relocateDataset, removeDataset } from '../lib/datasets.js';
-import { addSegmentation, segmentationRecord, segmentationsOf, withInstrumentSegmentation } from '../lib/segmentations.js';
+import { addComparison, addSegmentation, comparisonRecord, segmentationRecord, segmentationsOf, withInstrumentSegmentation } from '../lib/segmentations.js';
 
 const BUNDLE_KINDS = new Set(['bundle', 'archive']);
 
@@ -178,6 +178,50 @@ export function createBundles(app) {
     }
   }
 
+  // A comparison of two segmentations of a dataset (api_compare.go), made by a job and recorded as
+  // an artifact, then in the project. Resolves with the artifact.
+  const comparing = new Map(); // `${dataset}|${a}|${b}` → { dataset, a, b, job, promise }
+  function compareSegmentations(item, datasetId, a, b) {
+    const key = `${datasetId}|${a}|${b}`;
+    if (comparing.has(key)) return comparing.get(key).promise;
+    const entry = { dataset: datasetId, a, b, job: null, promise: null };
+    entry.promise = (async () => {
+      try {
+        const answer = await getJSON(`${item.url}/compare`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ a, b }) });
+        let manifest = answer.artifact;
+        if (!manifest) {
+          entry.job = answer.job?.id ?? null;
+          notify();
+          const job = await app.jobs.finished(entry.job);
+          if (job?.state !== 'complete') throw new Error(`the comparison ${job?.state ?? 'ended'}${job?.error ? `: ${job.error}` : ''}`);
+          manifest = await getJSON(`/api/artifacts/${encodeURIComponent(answer.id)}`);
+        }
+        const dataset = app.store.project.datasets.find((d) => d.id === datasetId);
+        if (!dataset) throw new Error('the dataset is no longer in the project');
+        const next = addComparison(app.store.project, comparisonRecord(dataset, manifest));
+        if (next !== app.store.project) app.store.commit(next, `Compare segmentations of ${dataset.name}`);
+        return manifest;
+      } finally {
+        comparing.delete(key);
+        notify();
+      }
+    })();
+    comparing.set(key, entry);
+    notify();
+    return entry.promise;
+  }
+
+  // A comparison's full description (comparison.json), read once.
+  const descriptions = new Map();
+  function comparisonDescription(id) {
+    if (!descriptions.has(id)) {
+      const p = getJSON(`/api/artifacts/${encodeURIComponent(id)}/files/comparison.json`);
+      p.catch(() => descriptions.delete(id));
+      descriptions.set(id, p);
+    }
+    return descriptions.get(id);
+  }
+
   // Asks which of the bundle's derived data are built (build: and starts a job building the rest).
   async function cacheStatus(item, { build = false } = {}) {
     const entry = caches.get(item.path) ?? { state: 'loading', status: null, job: null, error: null };
@@ -314,6 +358,10 @@ export function createBundles(app) {
     registerSegmentation,
     expandNuclei,
     importSegmentation,
+    compareSegmentations,
+    comparisonDescription,
+    // The comparisons of a dataset under way: [{ a, b, job }].
+    comparisons: (id) => [...comparing.values()].filter((e) => e.dataset === id).map(({ a, b, job }) => ({ a, b, job })),
     // The imports into a dataset under way: [{ job, title }].
     imports: (id) => [...importing.entries()].filter(([, v]) => v.dataset === id).map(([job, v]) => ({ job, title: v.title })),
     // The expansions of a dataset under way: [{ distance, job }].

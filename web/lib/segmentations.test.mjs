@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createProject } from './project.js';
-import { addSegmentation, INSTRUMENT_DEFAULT, promoteSegmentation, promotedSegmentation, segmentationRecord, segmentationsOf, withInstrumentSegmentation } from './segmentations.js';
+import { addComparison, addSegmentation, comparisonRecord, comparisonsOf, INSTRUMENT_DEFAULT, promoteSegmentation, promotedSegmentation, segmentationRecord, segmentationsOf, withInstrumentSegmentation } from './segmentations.js';
 
 const NOW = '2026-10-14T12:00:00.000Z';
 const manifest = (id, state = 'complete') => ({
@@ -100,4 +100,26 @@ test('an imported segmentation is recorded as imported, with its files and findi
   assert.equal(record.findings[0].code, 'coordinates.extent');
   assert.deepEqual(record.sources, [{ path: '/data/baysor/segmentation.csv', files: 1, size: 1200, sha256: 'ee11' }]);
   assert.throws(() => promoteSegmentation(p, { dataset: 'd1', segmentation: 'imp-c', rationale: 'x' }), /invalid/);
+});
+
+test('a comparison is recorded with its two segmentations, once', () => {
+  let p = withInstrumentSegmentation(project(), { id: 'd1', name: 'xenium-lung-2fov' }, manifest('seg-a'), NOW);
+  const cmp = {
+    id: 'cmp-1', kind: 'comparison', name: 'Instrument segmentation and Nucleus expansion, 5 µm', state: 'complete', created: NOW,
+    lineage: {
+      parents: [manifest('seg-a').lineage.parents[0], { kind: 'segmentation', id: 'seg-a' }, { kind: 'segmentation', id: 'exp-b' }],
+      job: { id: 'j4-1', kind: 'comparison' }, method: { name: 'SituCraft segmentation comparison', version: '1' }, parameters: { within: 0.5 },
+    },
+    summary: { classes: { 'one-to-one': 11898 }, pixelAgreement: 0.980629 },
+    findings: [],
+  };
+  const record = comparisonRecord({ id: 'd1' }, cmp, NOW);
+  assert.equal(record.a, 'seg-a');
+  assert.equal(record.b, 'exp-b');
+  assert.equal(record.summary.classes['one-to-one'], 11898);
+  p = addComparison(p, record, NOW);
+  assert.equal(comparisonsOf(p, 'd1').length, 1);
+  assert.match(p.history.at(-1).detail, /Compared Instrument segmentation \(A\) with exp-b \(B\)/);
+  assert.equal(addComparison(p, record, NOW), p);
+  assert.equal(segmentationsOf(p, 'd1').length, 1, 'a comparison is not a segmentation');
 });

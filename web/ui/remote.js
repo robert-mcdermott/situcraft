@@ -652,6 +652,36 @@ export function installRemote(app) {
       };
     },
 
+    async compare_segmentations(args) {
+      const dataset = resolveDataset(args.dataset);
+      const segs = project().artifacts.filter((a) => a.kind === 'segmentation' && a.dataset === dataset.id && a.state === 'complete');
+      if (segs.length < 2) throw new ActionError(`${dataset.name} has ${plural(segs.length, 'complete segmentation')}; a comparison needs two.`);
+      const find = (ref, what) => {
+        const ids = segs.map((x) => x.id);
+        if (ids.includes(ref)) return ref;
+        const name = choose(ref, segs.map((x) => x.name), what);
+        return segs.find((x) => x.name === name).id;
+      };
+      const a = args.a !== undefined ? find(args.a, 'segmentation A') : (promotedSegmentation(project(), dataset.id)?.record.id ?? segs[0].id);
+      const b = args.b !== undefined ? find(args.b, 'segmentation B') : [...segs].reverse().find((x) => x.id !== a)?.id;
+      if (a === b) throw new ActionError('A and B are the same segmentation.');
+      await settleMode('segmentation');
+      let result;
+      try {
+        result = await app.segmentationView.compare(dataset, a, b);
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      await frames();
+      const d = result.description;
+      const nameOf = (id) => segs.find((x) => x.id === id)?.name ?? id;
+      const classes = Object.entries(d.classes ?? {}).map(([c, n]) => `${n.toLocaleString('en-US')} ${c}`).join(', ');
+      return {
+        message: `${nameOf(a)} (A) and ${nameOf(b)} (B): ${classes}; ${(100 * d.pixelAgreement).toFixed(2)}% of pixels in the same cell, ${(100 * d.changesQ20.fraction).toFixed(2)}% of gene transcripts changed cell.`,
+        data: { id: result.manifest.id, a: { id: a, name: nameOf(a), ...d.metricsA }, b: { id: b, name: nameOf(b), ...d.metricsB }, classes: d.classes, cellsA: d.cellsA, cellsB: d.cellsB, changes: d.changes, changesQ20: d.changesQ20, iou: d.iou, displacement: d.displacement, pixelAgreement: d.pixelAgreement, coexpression: d.coexpression, params: d.params },
+      };
+    },
+
     async jobs(args) {
       if (args.show) await settleMode('jobs');
       if (!args.job) {

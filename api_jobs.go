@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"situcraft/internal/compare"
 	"situcraft/internal/jobs"
 	"situcraft/internal/xenium"
 )
@@ -185,6 +186,21 @@ func (a *app) handleJobs() {
 		return a.importJob(p.Bundle, p.Options), nil
 	}, func(id string, spec json.RawMessage) {
 		a.artifacts.Discard("imp-job-" + strings.ToLower(id))
+	})
+	a.jobs.Handle("comparison", func(spec json.RawMessage) (jobs.Func, error) {
+		if a.cache == nil {
+			return nil, errors.New("SituCraft has no cache folder")
+		}
+		var p compareSpec
+		if json.Unmarshal(spec, &p) != nil || p.Bundle == "" || p.A == "" || p.B == "" {
+			return nil, errors.New("its spec names no bundle and segmentations")
+		}
+		return a.comparisonJob(p.Bundle, p.A, p.B), nil
+	}, func(id string, spec json.RawMessage) {
+		var p compareSpec
+		if json.Unmarshal(spec, &p) == nil && p.A != "" && p.B != "" {
+			a.artifacts.Discard(comparisonID(p.A, p.B, compare.DefaultParams()))
+		}
 	})
 	a.jobs.Handle("example", func(spec json.RawMessage) (jobs.Func, error) {
 		var p struct {

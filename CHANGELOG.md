@@ -85,7 +85,22 @@ review and choose between. Built slice by slice; this section grows with each.
   - Remote control gains `import_segmentation` (24 actions).
   - **Readers:** AnnData in Zarr; Zarr's sharding and text of varying length (as anndata 0.11 and
     later write); GeoJSON and WKB polygons; CSV, TSV and Parquet tables.
-- **Screenshots** of the documentation: 15 scenes in both themes, captured through remote control
+- **Comparing segmentations (wave 2, slice 5).** Any two segmentations of a dataset compared,
+  cell by cell:
+  - **Which cells correspond:** a shared nucleus, or at least half of one within the other (or, for
+    cells without outlines, of their transcripts). Each set of corresponding cells is a
+    difference: one-to-one, expanded, contracted, split, merged, rearranged, only in one, or
+    assignment-only.
+  - **Measures:** each segmentation's cells, cells with a nucleus or several, assigned fraction,
+    transcripts per cell, areas, cells in pieces, job time and size; between the two, the pixels
+    that agree, the transcripts that changed cell (gained, lost, moved), the overlap (IoU) and how
+    far boundaries moved; and by regions of 50 µm.
+  - **Transcripts given to the wrong cell:** spurious co-expression of gene pairs relative to
+    nuclei alone, after Jones et al. (2025), and the mutually exclusive co-expression rate of
+    Hartman and Satija (2024).
+  - **Compare two segmentations** in the Segmentation view; each comparison is an artifact kept
+    with the project. Remote control gains `compare_segmentations` (25 actions).
+- **Screenshots** of the documentation: 16 scenes in both themes, captured through remote control
   from the development bundles (`node docs/capture/capture.mjs`), in the README and the
   getting-started guide.
 - **A cell by its ID:** the program finds a cell by its `cell_id` as well as by its row.
@@ -104,6 +119,13 @@ review and choose between. Built slice by slice; this section grows with each.
 
 ### Validation
 
+- **Comparisons (slice 5):**
+  - **Hand-drawn segmentations** of every class, each count and measure worked out by hand; a
+    planted leak of transcripts raises the spurious co-expression; the MECR by hand.
+  - **The instrument's segmentation against the 5 µm expansion:** on Lung every cell one-to-one,
+    with the 98.0629% of pixels and 8,724 changed transcripts that the expansion's own comparison
+    counted; on Breast every cell of both accounted for by class.
+  - **In headless Chrome** (67 checks): `compare_segmentations` by remote control.
 - **Imports (slice 4):**
   - **The Lung bundle** imported into itself as an output bundle, and as spatialdata-io writes it
     as SpatialData, gives the instrument's segmentation exactly: the raster identical to the cell
@@ -169,7 +191,7 @@ review and choose between. Built slice by slice; this section grows with each.
   - the methods cite the data and SituCraft;
   - `export` writes the project only with the token.
 - **Every screenshot scene in both themes** passes axe-core's WCAG 2.1 A and AA rules
-  (`docs/capture/audit.json`, 30 captures, no violation).
+  (`docs/capture/audit.json`, 32 captures, no violation).
 
 ## 0.1.0 (2026-10-14)
 

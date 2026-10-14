@@ -674,3 +674,40 @@ func ParseSize(s string) (int64, error) {
 	}
 	return int64(v * scale), nil
 }
+
+// Derived answers the folder of an entry made of files that make writes (a segmentation written
+// from a bundle, for comparisons), named kind and a hash of key, making it when it is not there.
+// Such entries are listed, counted and evicted as the cache's others; one removed is made again
+// when asked for.
+func (c *Cache) Derived(kind, key string, make func(dir string) error) (string, error) {
+	sum := sha256.Sum256([]byte(key))
+	name := kind + "-" + hex.EncodeToString(sum[:8])
+	dir := c.EntryDir(name)
+	if _, err := os.Stat(filepath.Join(dir, derivedMarker)); err == nil {
+		now := time.Now()
+		os.Chtimes(dir, now, now)
+		return dir, nil
+	}
+	tmp := filepath.Join(c.buildingDir(), name)
+	if err := os.RemoveAll(tmp); err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(tmp, 0o755); err != nil {
+		return "", err
+	}
+	if err := make(tmp); err != nil {
+		os.RemoveAll(tmp)
+		return "", err
+	}
+	if err := os.WriteFile(filepath.Join(tmp, derivedMarker), []byte(key+"\n"), 0o644); err != nil {
+		os.RemoveAll(tmp)
+		return "", err
+	}
+	if err := os.RemoveAll(dir); err != nil {
+		return "", err
+	}
+	return dir, os.Rename(tmp, dir)
+}
+
+// derivedMarker marks a derived entry complete (and names its key).
+const derivedMarker = "derived.txt"

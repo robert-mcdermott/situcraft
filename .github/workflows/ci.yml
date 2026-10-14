@@ -137,7 +137,7 @@ jobs:
       - name: Readers against independent readers, bundle validation (real, zipped and broken bundles) and the derived-data cache
         env:
           SITUCRAFT_REQUIRE_DATA: xenium-lung-2fov
-        run: go test -v -run 'Real|Readers|Bundle' . ./validation/ ./internal/jp2k/ ./internal/xenium/ ./internal/cache/ ./internal/view/ ./internal/segment/...
+        run: go test -v -run 'Real|Readers|Bundle' . ./validation/ ./internal/jp2k/ ./internal/xenium/ ./internal/cache/ ./internal/view/ ./internal/segment/... ./internal/compare/
       - name: The tissue viewer in headless Chrome against its data (exact samples, points, frame rate)
         env:
           SITUCRAFT_REQUIRE_DATA: xenium-lung-2fov

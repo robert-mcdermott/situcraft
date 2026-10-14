@@ -458,24 +458,74 @@ bundle). The scene has a cell with a hole, one of two polygons, one reaching bey
 without a polygon, transcripts the tool assigns outside every polygon, noise, and a transcript the
 dataset does not have.
 
-## 4. Comparing segmentations
+## 4. Comparing segmentations (verified, wave 2, slice 5)
 
-- **Cell correspondence:** by shared nucleus where both derive from the same nuclei; otherwise by
-  polygon overlap (intersection over union on a raster at 0.25 µm, SituCraft's choice, which keeps
-  non-convex polygons exact enough and fast) and by transcript-assignment overlap (Jaccard). Pairs
-  are classified as one-to-one, expanded/contracted, split, merge, unmatched, or assignment-only.
-- **Spurious co-expression** (Jones et al. 2025): gene pairs whose conditional co-expression rises
-  at least 1.5-fold under a broader segmentation than under nuclei alone are flagged. The score is
-  normalized to nuclear segmentation. Cells are down-sampled to a fixed transcript count (50,
-  multinomial) so that discarding transcripts is not rewarded.
-- **Mutually exclusive co-expression rate (MECR)** for gene pairs known not to co-occur (Hartman &
-  Satija 2024, bioRxiv, doi:10.1101/2024.04.03.586404 (to verify the identifier)).
-- **Also reported:**
-  - cell and nucleus counts; assigned/unassigned fractions; transcripts per cell; areas;
-  - geometry validity;
-  - changed-assignment fraction; IoU and boundary displacement on matched cells;
-  - cell-type composition changes (after wave 4);
-  - runtime, peak memory and output size.
+Every segmentation is compared as SituCraft's own files (§3.1, §3.3): the instrument's is written
+from its bundle (the cell mask, and each transcript's `cell_id` row by row), identical to the
+bundle's; the two rasters share the morphology image's pixels.
+
+**Correspondence** (SituCraft's documented strategy, `internal/compare`). Two cells, one of each,
+correspond when they share a nucleus of the dataset (a nucleus whose pixels lie mostly in each),
+or when at least half of one lies within the other; cells without area (an import without
+outlines) correspond the same way by their transcripts. A fragment split off a cell lies within
+it, a neighbour whose boundary moved does not: with a lower share (a fifth of either, first
+tried), two neighbours whose shared boundary moved one column became one "rearranged" difference.
+Each connected set of corresponding cells is one difference: one cell in each is one-to-one, or
+expanded (B's area over 1.25 times A's) or contracted (under 1/1.25); assignment-only when one has
+no area; one of A to several of B a split, several to one merged, several to several
+rearranged; a cell with none only in A or only in B. Hand-drawn fixtures check each class, and
+the numbers below by hand (`compare_test.go`).
+
+**Measures.** For each segmentation: cells, cells with a nucleus and with several, the assigned
+fraction and transcripts per cell (gene transcripts of quality 20 or more), median area, cells in
+several pieces, the job's time and the files' size. Between them: the pixels that agree (in the
+same cell, of those either gives a cell); the transcripts whose cell changed (gained, lost, moved
+between cells that are not the same cell); for cells the same in both, the intersection over
+union and the boundary displacement, the area between the two outlines over their mean perimeter
+(the mean distance the boundary moved: a cell shifted 1 µm sideways moves its two sides 1 µm and
+its top and bottom 0, 0.5 µm on average). The same counts by region (squares of 50 µm).
+
+**Spurious co-expression** (Jones DC, Elz AE, Hadadianpour A, et al. Cell simulation as cell
+segmentation. *Nat Methods* 2025;22:1331–1342, Methods, "Testing for spurious co-expression"):
+
+- co-expression of gene *i* given gene *j*: the share of cells expressing *j* (one transcript or
+  more) that also express *i*;
+- spurious pairs: those whose co-expression rises at least 1.5-fold (log₂ ratio ≥ log₂ 1.5) from
+  nuclear segmentation to an intentionally coarse expansion of the nuclei;
+- a segmentation's score for a pair: its co-expression divided by the nuclei's;
+- every cell down-sampled to 50 transcripts (cells with fewer left out), a multinomial draw in its
+  own proportions, so that assigning fewer transcripts, or splitting cells, is not rewarded.
+
+Where the paper leaves a choice open, SituCraft's: the nuclei are the dataset's nucleus mask (each
+transcript by its pixel), the coarse expansion grows them by 10 µm; pairs need 20 cells expressing
+the conditioning gene in both; the pairs are found on the down-sampled cells too; a
+segmentation's score is the median over its pairs (the paper shows the pairs' distribution; 1 is
+as in nuclei alone); each cell draws from its own seeded stream, so scores are reproducible.
+
+**Mutually exclusive co-expression rate** (Hartman A, Satija R. Comparative analysis of
+multiplexed in situ gene expression profiling technologies. bioRxiv 2024,
+doi:10.1101/2024.01.11.575135; reviewed in eLife as 96949): for two genes that mark different
+cell types, MECR = P(both) / P(either) over cells (expressed: one transcript or more), averaged
+over the pairs. The paper takes its pairs from single-cell references; without one, SituCraft
+pairs canonical markers of different lineages (its own table: epithelial, T cell, B cell,
+myeloid, endothelial, fibroblast, smooth muscle, plasma cell, mast cell), as far as the panel has
+them; a reference's pairs can be given instead.
+
+**Measured: the instrument's segmentation (A) and SituCraft's 5 µm expansion (B).**
+
+| | Lung | Breast |
+| --- | --- | --- |
+| Differences | 11,898 one-to-one | 3,599 one-to-one, 2,829 expanded, 194 contracted, 263 split (into 550 cells), 128 merged (of 259), 6 rearranged, 119 only in A |
+| Pixels in the same cell | 98.0629% (as §3.1 counted, independently) | 66.50% |
+| Gene transcripts (Q20) that changed cell | 1.063% (all transcripts: 8,724, as §3.1: 2,534 gained, 6,190 moved) | 26.12% (94,904 gained, 10,540 lost, 165,082 moved) |
+| Median IoU, cells the same in both | 0.979 (11,898) | 0.719 (6,622) |
+| Boundary displacement, median | 0.027 µm | 0.60 µm |
+| Spurious co-expression, A and B | 1.870 and 1.886 (2,344 pairs, 1,376 nuclei of 50 transcripts or more) | 1.772 and 2.040 (10,235 pairs, 3,950 nuclei) |
+| MECR, A and B | 0.0091 and 0.0091 (251 pairs) | 0.0455 and 0.0501 (337 pairs) |
+
+On Breast, whose cells the instrument drew mostly from stains, the expansion assigns more
+transcripts (94.7% against 86.6%) at the cost of more spurious co-expression, as Jones et al.
+found of expansions; on Lung, segmented by the instrument the same way, the two are alike.
 
 ## 5. Cell typing (wave 4)
 
@@ -571,6 +621,9 @@ Notes:
   for spatial omics. *Nat Methods* 2025;22:58–62. doi:10.1038/s41592-024-02212-x (imports).
 - Virshup I, Rybakov S, Theis FJ, Angerer P, Wolf FA. anndata: Access and store annotated data
   matrices. *J Open Source Softw* 2024;9(101):4371. doi:10.21105/joss.04371 (tables).
+- Hartman A, Satija R. Comparative analysis of multiplexed in situ gene expression profiling
+  technologies. bioRxiv 2024. doi:10.1101/2024.01.11.575135 (the mutually exclusive
+  co-expression rate).
 - Butler H, Daly M, Doyle A, Gillies S, Hagen S, Schaub T. The GeoJSON Format. RFC 7946, 2016;
   OGC Simple Features (well-known binary); GeoParquet 1.0 (imports).
 - Hyndman RJ, Fan Y. Sample quantiles in statistical packages. *Am Stat* 1996;50:361–365
@@ -588,7 +641,6 @@ Notes:
 - Control-codeword prefixes across XOA versions (1.x, 2.x, 3.x, Prime 5K).
 - XOA 3.x and 4.x bundle differences (file names, Zarr versions, new files).
 - The H&E alignment matrix orientation on a real file.
-- The MECR reference's identifier.
 - JPEG 2000 options of XOA versions other than 2.0 (the bundles in hand were written by OpenJPEG
   2.5.1; other versions may use other progressions or code-block styles, which the decoder reads
   but which have not been seen on real Xenium files).

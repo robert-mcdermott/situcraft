@@ -55,6 +55,7 @@ More: [checking a bundle](docs/images/data-light.webp), [the tissue's stains](do
 [a guided tour](docs/images/tour-light.webp), [a segmentation's lineage](docs/images/segmentation-light.webp),
 [nucleus expansion compared with the instrument's segmentation](docs/images/expansion-light.webp),
 [a segmentation imported from SpatialData](docs/images/import-light.webp),
+[two segmentations compared](docs/images/comparison-light.webp),
 [the Jobs view](docs/images/jobs-light.webp).
 
 ## Install

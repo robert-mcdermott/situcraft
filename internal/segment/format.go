@@ -483,3 +483,46 @@ func ReadDescription(dir string) (*Description, error) {
 	}
 	return &d, nil
 }
+
+// --- The same envelope for other SituCraft files ------------------------------------------------
+
+// Buffer builds a body of little-endian values.
+type Buffer struct{ b buffer }
+
+func (b *Buffer) U32(v uint32)    { b.b.u32(v) }
+func (b *Buffer) F32(v float32)   { b.b.f32(v) }
+func (b *Buffer) U32s(v []uint32) { b.b.u32s(v) }
+func (b *Buffer) Byte(v byte)     { b.b.WriteByte(v) }
+func (b *Buffer) Bytes() []byte   { return b.b.Bytes() }
+
+// WriteBinary writes a body in the envelope of SituCraft's binary files (magic, version, length,
+// zlib).
+func WriteBinary(path, magic string, b *Buffer) error { return writeFile(path, magic, b.Bytes()) }
+
+// Reader reads a body written by WriteBinary.
+type Reader struct{ r *reader }
+
+// ReadBinary reads a file written by WriteBinary, checking its magic, version and checksum.
+func ReadBinary(path, magic string) (*Reader, error) {
+	r, err := readFile(path, magic)
+	if err != nil {
+		return nil, err
+	}
+	return &Reader{r}, nil
+}
+
+func (r *Reader) U32() uint32  { return r.r.u32() }
+func (r *Reader) F32() float32 { return r.r.f32() }
+func (r *Reader) Byte() byte {
+	if b := r.r.take(1); b != nil {
+		return b[0]
+	}
+	return 0
+}
+
+// Count reads a count of elements of size bytes, refusing one the rest cannot hold.
+func (r *Reader) Count(size int) int  { return r.r.count(size) }
+func (r *Reader) U32s(n int) []uint32 { return r.r.u32s(n) }
+
+// Done reports a reading error, or bytes left over.
+func (r *Reader) Done(name string) error { return done(r.r, name) }

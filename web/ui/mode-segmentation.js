@@ -7,7 +7,7 @@
 
 import { h, icon, clear, formatCount } from './dom.js';
 import { toast } from './overlays.js';
-import { promotedSegmentation, segmentationsOf } from '../lib/segmentations.js';
+import { comparisonsOf, promotedSegmentation, segmentationsOf } from '../lib/segmentations.js';
 
 const DEFAULT_DISTANCE = 5;
 const MAX_DISTANCE = 100;
@@ -50,6 +50,19 @@ export const IMPORT_FORMATS = {
   },
 };
 
+// The classes of differences (internal/compare), with what each means.
+const CLASSES = [
+  ['one-to-one', 'The same cell in both, its area within 25%'],
+  ['expanded', 'The same cell, more than 25% larger in B'],
+  ['contracted', 'The same cell, more than 25% smaller in B'],
+  ['split', 'One cell of A is several of B'],
+  ['merged', 'Several cells of A are one of B'],
+  ['rearranged', 'Several cells of each overlap one another'],
+  ['only in A', 'A cell of A with no counterpart in B'],
+  ['only in B', 'A cell of B with no counterpart in A'],
+  ['assignment-only', 'Matched by their transcripts; one has no outline'],
+];
+
 const OPTION_LABELS = {
   cells: ['Cells element', 'shapes or labels; the table\'s, else one named for cells'],
   points: ['Points element', 'transcripts, or the only one'],
@@ -79,7 +92,7 @@ export function mountSegmentation(app, container) {
   }
 
   function sessionOf(dataset) {
-    if (!sessions.has(dataset.id)) sessions.set(dataset.id, { shown: null, distance: DEFAULT_DISTANCE, import: { format: 'spatialdata', paths: ['', ''], units: 'um', fields: {}, tool: '', tool_version: '', citation: '' } });
+    if (!sessions.has(dataset.id)) sessions.set(dataset.id, { shown: null, distance: DEFAULT_DISTANCE, compare: { a: '', b: '', shown: null }, import: { format: 'spatialdata', paths: ['', ''], units: 'um', fields: {}, tool: '', tool_version: '', citation: '' } });
     return sessions.get(dataset.id);
   }
 
@@ -221,6 +234,126 @@ export function mountSegmentation(app, container) {
         h('p.muted.seg-cite', 'Methods: a Voronoi partition of the tissue by the nuclei, clipped at the distance (Okabe et al. 2000), with exact Euclidean distances (Felzenszwalb & Huttenlocher 2012).')));
   }
 
+  // --- Comparing two segmentations ---
+  async function runComparison(t, a, b) {
+    const manifest = await app.bundles.compareSegmentations(t.item, t.dataset.id, a, b);
+    sessionOf(t.dataset).compare.shown = manifest.id;
+    render(true);
+    return manifest;
+  }
+
+  function comparisonCard(t, list, session) {
+    const state = session.compare;
+    const complete = list.filter((a) => a.state === 'complete');
+    const promoted = promotedSegmentation(app.store.project, t.dataset.id)?.record.id;
+    if (!complete.some((x) => x.id === state.a)) state.a = promoted ?? complete[0]?.id ?? '';
+    if (!complete.some((x) => x.id === state.b) || state.b === state.a) state.b = [...complete].reverse().find((x) => x.id !== state.a)?.id ?? '';
+    const pick = (id, label, key) => {
+      const el = h('select.input', { id }, ...complete.map((x) => h('option', { value: x.id }, x.name)));
+      el.value = state[key];
+      el.addEventListener('change', () => {
+        state[key] = el.value;
+        render(true);
+      });
+      return h('label.field', { for: id }, h('span', label), el);
+    };
+    const go = h('button.btn.primary', { type: 'button', disabled: complete.length < 2 || !state.a || !state.b || state.a === state.b || !t.item, onclick: async () => {
+      try {
+        const m = await runComparison(t, state.a, state.b);
+        toast(`Compared: ${exact(m.summary?.classes?.['one-to-one'] ?? 0)} cells one-to-one, ${percent(m.summary?.changedFraction, 2)} of gene transcripts changed cell.`, { kind: 'ok' });
+      } catch (error) {
+        toast(`The comparison: ${error.message}`, { kind: 'error', timeout: 12000 });
+      }
+    } }, icon('compare'), 'Compare');
+    const running = app.bundles.comparisons(t.dataset.id).map((e) => {
+      const job = e.job ? app.jobs.get(e.job) : null;
+      const bar = h('div', { style: { width: `${Math.round((job?.progress ?? 0) * 100)}%` } });
+      const message = h('span.muted', job?.message ?? 'Starting…');
+      if (e.job) live.set(e.job, { bar, message });
+      return h('div.seg-running', h('div', h('b', 'Comparing'), ' ', message), h('div.progress', bar));
+    });
+    const done = comparisonsOf(app.store.project, t.dataset.id);
+    const nameOf = (id) => list.find((x) => x.id === id)?.name ?? id;
+    if (!done.some((c) => c.id === state.shown)) state.shown = done.at(-1)?.id ?? null;
+    const rows = done.map((c) => {
+      const s = c.summary ?? {};
+      return h(`tr${state.shown === c.id ? '.selected' : ''}`, { tabIndex: 0, style: { cursor: 'pointer' }, 'data-comparison': c.id, onclick: () => {
+        state.shown = c.id;
+        render(true);
+      }, onkeydown: (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          state.shown = c.id;
+          render(true);
+        }
+      } },
+      h('td', nameOf(c.a)), h('td', nameOf(c.b)),
+      h('td.r', exact(s.classes?.['one-to-one'] ?? 0)),
+      h('td.r', percent(s.pixelAgreement, 2)),
+      h('td.r', percent(s.changedFraction, 2)),
+      h('td.r', Number.isFinite(s.medianIoU) ? s.medianIoU.toFixed(3) : '—'));
+    });
+    const detail = h('div.seg-compare-detail');
+    const shown = done.find((c) => c.id === state.shown);
+    if (shown) {
+      detail.append(h('p.muted.seg-note', 'Reading the comparison…'));
+      app.bundles.comparisonDescription(shown.id).then((d) => {
+        clear(detail).append(...comparisonDetail(d, nameOf(shown.a), nameOf(shown.b)));
+      }).catch((error) => {
+        clear(detail).append(h('p.muted.seg-note', `The comparison could not be read: ${error.message}`));
+      });
+    }
+    return h('section.seg-section',
+      h('div.section-title', 'Compare two segmentations'),
+      h('div.seg-card',
+        h('p', 'Which cells correspond, how each differs, and what changes: a cell corresponds to another when they share a nucleus, or when at least half of one lies within the other. Each segmentation\'s transcripts are counted the same way, and the share of gene pairs co-expressed more than in nuclei alone, and of mutually exclusive markers co-expressed, show transcripts given to the wrong cell.'),
+        h('div.seg-import-grid', pick('seg-compare-a', 'A', 'a'), pick('seg-compare-b', 'B', 'b')),
+        h('div.btn-row', go, complete.length < 2 ? h('span.muted.seg-note', 'Expand the nuclei, or import a segmentation, to have two to compare.') : null),
+        ...running,
+        done.length ? h('div', { style: { overflowX: 'auto' } }, h('table.data.seg-table.seg-comparisons',
+          h('thead', h('tr', h('th', 'A'), h('th', 'B'), h('th.r', 'One-to-one'), h('th.r', { title: 'Pixels in the same cell, of those either gives a cell' }, 'Pixels agree'), h('th.r', { title: 'Gene transcripts (quality 20+) whose cell changed' }, 'Changed'), h('th.r', { title: 'Median intersection over union of the one-to-one cells' }, 'IoU'))),
+          h('tbody', ...rows))) : null,
+        detail));
+  }
+
+  // A comparison's measures, from its description.
+  function comparisonDetail(d, nameA, nameB) {
+    const A = d.metricsA ?? {};
+    const B = d.metricsB ?? {};
+    const num = (v, digits = 1) => (Number.isFinite(v) ? v.toLocaleString('en-US', { maximumFractionDigits: digits }) : '—');
+    const row = (label, f, help) => h('tr', h('th', { title: help ?? '' }, label), h('td.r', f(A)), h('td.r', f(B)));
+    const classes = h('table.data.seg-tally',
+      h('thead', h('tr', h('th', 'Difference'), h('th', ''), h('th.r', 'Count'), h('th.r', 'Cells of A'), h('th.r', 'Cells of B'))),
+      h('tbody', ...CLASSES.filter(([c]) => d.classes?.[c] || ['one-to-one', 'split', 'merged'].includes(c)).map(([c, what]) => h('tr', h('th', c), h('td.muted', what), h('td.r', exact(d.classes?.[c] ?? 0)), h('td.r', exact(d.cellsA?.[c] ?? 0)), h('td.r', exact(d.cellsB?.[c] ?? 0))))));
+    const each = h('table.data.seg-tally',
+      h('thead', h('tr', h('th', ''), h('th.r', `A: ${nameA}`), h('th.r', `B: ${nameB}`))),
+      h('tbody',
+        row('Cells', (m) => exact(m.cells)),
+        row('With a nucleus', (m) => (m.cellsWithNucleus >= 0 ? exact(m.cellsWithNucleus) : '—'), 'Cells holding most of a nucleus of the dataset'),
+        row('With several nuclei', (m) => (m.cellsWithSeveralNuclei >= 0 ? exact(m.cellsWithSeveralNuclei) : '—')),
+        row('Gene transcripts assigned', (m) => percent(m.assignedFraction, 2), 'Of gene transcripts of quality 20 or more'),
+        row('Transcripts per cell', (m) => num(m.medianTranscriptsPerCell), 'Median, gene transcripts of quality 20 or more'),
+        row('Area (µm²)', (m) => num(m.medianAreaUm2), 'Median'),
+        row('Cells in several pieces', (m) => exact(m.multipieceCells)),
+        row('Spurious co-expression', (m) => num(m.spuriousCoexpression, 3), 'Co-expression of the dataset\'s spurious gene pairs relative to nuclei alone (1); median over the pairs (Jones et al. 2025)'),
+        row('Mutually exclusive co-expression', (m) => num(m.mecr, 4), 'Share of cells expressing either of two markers of different lineages that express both; mean over the pairs (Hartman and Satija 2024)'),
+        row('Job time', (m) => (m.runtimeSeconds ? `${num(m.runtimeSeconds, 1)} s` : '—'), 'The time SituCraft\'s job took to make or import it (the instrument\'s own segmentation was made on the instrument)'),
+        row('Files', (m) => (m.sizeBytes ? `${num(m.sizeBytes / 1e6, 1)} MB` : 'in the bundle'))));
+    const c = d.changesQ20 ?? {};
+    const between = h('dl.kv.seg-kv',
+      h('dt', 'Pixels'), h('dd', percent(d.pixelAgreement, 2), h('span.muted', ' in the same cell, of those either gives a cell')),
+      h('dt', 'Transcripts'), h('dd', percent(c.fraction, 2), h('span.muted', ` of gene transcripts changed cell: ${exact(c.gained)} gained, ${exact(c.lost)} lost, ${exact(c.moved)} moved`)),
+      h('dt', 'Overlap'), h('dd', Number.isFinite(d.iou?.median) ? d.iou.median.toFixed(3) : '—', h('span.muted', ` median IoU of ${exact(d.iou?.pairs ?? 0)} cells the same in both`)),
+      h('dt', 'Boundaries'), h('dd', Number.isFinite(d.displacement?.medianUm) ? `${d.displacement.medianUm.toFixed(2)} µm` : '—', h('span.muted', ' moved, median (the area between the outlines over their perimeter)')));
+    return [
+      h('h3.seg-card-title', `${nameA} (A) and ${nameB} (B)`),
+      classes,
+      each,
+      between,
+      h('p.muted.seg-cite', `The spurious co-expression rests on ${exact(d.coexpression?.pairs ?? 0)} gene pairs co-expressed at least 1.5 times as often once nuclei grow by 10 µm, measured on ${exact(d.coexpression?.nuclearCells ?? 0)} nuclei of 50 gene transcripts or more, every cell down-sampled to 50 (Jones et al. 2025). The mutually exclusive co-expression uses ${exact(d.mecrPairs?.length ?? 0)} pairs of lineage markers in the panel (Hartman and Satija 2024).`),
+    ];
+  }
+
   // --- Importing another tool's segmentation ---
   function importCard(t, list, session) {
     const state = session.import;
@@ -359,7 +492,7 @@ export function mountSegmentation(app, container) {
     const session = sessionOf(t.dataset);
     if (t.focused && segmentationsOf(app.store.project, t.dataset.id).some((a) => a.id === t.focused && a.source === 'situcraft')) session.shown = t.focused;
     const list = segmentationsOf(app.store.project, t.dataset.id);
-    const next = JSON.stringify([t.dataset.id, Boolean(t.item), list.map((a) => [a.id, a.state]), session.shown, app.bundles.expansions(t.dataset.id), app.bundles.imports(t.dataset.id), app.bundles.registeringSegmentation(t.dataset.id), promotedSegmentation(app.store.project, t.dataset.id)?.record.id]);
+    const next = JSON.stringify([t.dataset.id, Boolean(t.item), list.map((a) => [a.id, a.state]), session.shown, comparisonsOf(app.store.project, t.dataset.id).map((c) => c.id), session.compare, app.bundles.comparisons(t.dataset.id), app.bundles.expansions(t.dataset.id), app.bundles.imports(t.dataset.id), app.bundles.registeringSegmentation(t.dataset.id), promotedSegmentation(app.store.project, t.dataset.id)?.record.id]);
     if (!force && next === shape) {
       updateLive();
       return;
@@ -378,6 +511,7 @@ export function mountSegmentation(app, container) {
       table(t, list, session),
       expansionCard(t, list, session),
       agreementCard(t, list, session),
+      comparisonCard(t, list, session),
       importCard(t, list, session));
     if (typing !== null) body.querySelector('#seg-distance').value = typing;
     if (focused) body.querySelector(`#${CSS.escape(focused)}`)?.focus();
@@ -387,6 +521,18 @@ export function mountSegmentation(app, container) {
   render();
   // The remote action's way in (ui/remote.js).
   app.segmentationView = {
+    compare: async (dataset, a, b) => {
+      const t = target();
+      if (!t || t.dataset.id !== dataset.id) app.focusItem({ kind: 'dataset', id: dataset.id });
+      const now = target();
+      if (!now.item) throw new Error(`${dataset.name}'s bundle was not found where the project records it.`);
+      Object.assign(sessionOf(dataset).compare, { a, b });
+      render(true);
+      const manifest = await runComparison(now, a, b);
+      const d = await app.bundles.comparisonDescription(manifest.id);
+      document.querySelector(`[data-comparison="${CSS.escape(manifest.id)}"]`)?.scrollIntoView({ block: 'center' });
+      return { manifest, description: d };
+    },
     importSegmentation: async (dataset, options) => {
       const t = target();
       if (!t || t.dataset.id !== dataset.id) app.focusItem({ kind: 'dataset', id: dataset.id });

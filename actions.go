@@ -155,6 +155,11 @@ var remoteActions = []remoteAction{
 		"tool_version":      textArg("Its version."),
 		"citation":          textArg("The paper to cite for it."),
 	}, "format", "paths"), long: true, reads: true},
+	{Name: "compare_segmentations", Title: "Compare two segmentations", Description: "Compares two segmentations of a dataset (by name or artifact id; A the default segmentation and B the latest other if not given), as a job, in the Segmentation view: which cells correspond (a shared nucleus, or half of one within the other), each difference's class (one-to-one, expanded, contracted, split, merged, rearranged, only in A or B, assignment-only), each segmentation's cells, nuclei, assigned fraction, transcripts per cell, areas, spurious co-expression (Jones et al. 2025) and mutually exclusive co-expression (Hartman and Satija 2024), and between them the pixels that agree, the transcripts whose cell changed, the IoU and the boundary displacement. Recorded as a comparison artifact; asking again answers it.", InputSchema: schema(map[string]any{
+		"dataset": datasetArg,
+		"a":       textArg("Segmentation A, by name or artifact id."),
+		"b":       textArg("Segmentation B, by name or artifact id."),
+	}), long: true},
 	{Name: "jobs", Title: "List and control jobs", Description: "The program's jobs (building derived data, downloading examples, registering segmentations…): each one's id, kind, state, progress, runs and error, and whether an interrupted one can be resumed. With job, that job with its whole log and its spec; with job and do, stops (cancel), resumes (resume) or forgets (discard) it. show: true shows the Jobs view.", InputSchema: schema(map[string]any{
 		"job":  textArg("A job's id."),
 		"do":   textArg("cancel, resume or discard."),

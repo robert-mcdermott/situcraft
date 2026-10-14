@@ -37,6 +37,32 @@ func (a *app) registerSegmentations(mux *http.ServeMux) {
 		}
 		writeJSON(w, map[string]any{"artifacts": list})
 	})
+	// An artifact's own file (one of its manifest's, in its folder): a comparison's description, say.
+	mux.HandleFunc("GET /api/artifacts/{id}/files/{file}", func(w http.ResponseWriter, r *http.Request) {
+		m, err := a.artifacts.Get(r.PathValue("id"))
+		if err != nil {
+			writeError(w, http.StatusNotFound, "No such artifact.")
+			return
+		}
+		name := r.PathValue("file")
+		for _, f := range m.Files {
+			if f.Path != name || f.Location == artifacts.InBundle {
+				continue
+			}
+			p, err := a.artifacts.Path(m.ID, f.Path)
+			if err != nil {
+				break
+			}
+			if strings.HasSuffix(name, ".json") {
+				w.Header().Set("Content-Type", "application/json")
+			} else {
+				w.Header().Set("Content-Type", "application/octet-stream")
+			}
+			http.ServeFile(w, r, p)
+			return
+		}
+		writeError(w, http.StatusNotFound, "The artifact has no file "+name+" of its own.")
+	})
 	mux.HandleFunc("GET /api/artifacts/{id}", func(w http.ResponseWriter, r *http.Request) {
 		m, err := a.artifacts.Get(r.PathValue("id"))
 		if errors.Is(err, artifacts.ErrNotFound) {

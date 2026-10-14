@@ -216,6 +216,16 @@ const scenes = {
     await js(`document.querySelector('.seg-section:last-child')?.scrollIntoView({ block: 'end' })`);
     await sleep(300);
   },
+  // The Breast example's instrument segmentation compared with its nuclei grown by 5 µm: the
+  // differences by class and each segmentation's measures (wave 2, slice 5).
+  async comparison() {
+    await act('open_example', { example: 'breast' });
+    await act('expand_nuclei', { distance_um: 5 });
+    await act('compare_segmentations', {});
+    await waitFor(`document.querySelectorAll('.seg-compare-detail table').length === 2`);
+    await js(`document.querySelector('.seg-compare-detail')?.scrollIntoView({ block: 'start' })`);
+    await sleep(300);
+  },
   // The Lung example's segmentation imported from SpatialData (written by spatialdata-io:
   // validation/spatialdata.py), beside the instrument's, in the Segmentation view and the inspector
   // (wave 2, slice 4).

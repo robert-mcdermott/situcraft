@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"situcraft/internal/artifacts"
+	"situcraft/internal/segment"
 	"situcraft/internal/xenium"
 )
 
@@ -31,21 +32,45 @@ func readXenium(ctx context.Context, ds Dataset, opt Options) (*source, error) {
 		return nil, err
 	}
 	defer b.Close()
-	src := newSource()
-	e := b.Experiment
 	if mine, theirs := runOf(b), ds.Run(); !mine.Same(theirs) {
 		return nil, fmt.Errorf("%s is of %s; %s is of %s: an output bundle imports into the run it segments, of another run it does not", b.Name, mine, ds.Name(), theirs)
 	}
+	src, err := readBundle(ctx, b, false)
+	if err != nil {
+		return nil, err
+	}
+	if opt.Tool != "" {
+		src.toolName, src.toolVer = opt.Tool, opt.ToolVersion
+	}
+	src.citation = opt.Citation
+	return src, nil
+}
+
+// Instrument writes a bundle's own segmentation, the instrument's, as SituCraft's segmentation
+// files (so that it compares with any other on the same terms): each transcript's cell is its
+// transcripts.parquet's, row by row.
+func Instrument(ctx context.Context, b *xenium.Bundle, dir string, workers int) (*segment.Description, error) {
+	ds, err := BundleDataset(b)
+	if err != nil {
+		return nil, err
+	}
+	src, err := readBundle(ctx, b, true)
+	if err != nil {
+		return nil, err
+	}
+	return build(ctx, ds, Options{Format: Xenium, Paths: []string{b.Path}, Units: "um"}, src, dir, workers, func(float64, string) {})
+}
+
+// readBundle reads a bundle's segmentation; own: its transcripts are the dataset's, row by row.
+func readBundle(ctx context.Context, b *xenium.Bundle, own bool) (*source, error) {
+	src := newSource()
+	e := b.Experiment
 	software := e.AnalysisSoftware
 	src.toolName = "Xenium Onboard Analysis"
 	if strings.Contains(strings.ToLower(software), "ranger") {
 		src.toolName = "Xenium Ranger"
 	}
 	src.toolVer = software
-	if opt.Tool != "" {
-		src.toolName, src.toolVer = opt.Tool, opt.ToolVersion
-	}
-	src.citation = opt.Citation
 	src.software = append(src.software, artifacts.Software{Name: src.toolName, Version: software})
 	src.read["bundle"] = b.Name
 	src.read["analysis_uuid"] = e.AnalysisUUID
@@ -107,18 +132,20 @@ func readXenium(ctx context.Context, ds Dataset, opt Options) (*source, error) {
 		return nil, err
 	}
 	defer tr.Close()
-	r := &records{byID: true, hasXY: true}
+	r := &records{byID: !own, byRow: own, hasXY: !own}
 	unknown := 0
 	err = tr.Each(func(batch *xenium.TranscriptBatch) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if batch.TranscriptID == nil {
+		if batch.TranscriptID == nil && !own {
 			return errors.New("its transcripts.parquet has no transcript_id to match the dataset's")
 		}
 		for i := 0; i < batch.Rows; i++ {
-			r.id = append(r.id, batch.TranscriptID[i])
-			r.x, r.y = append(r.x, float64(batch.X[i])), append(r.y, float64(batch.Y[i]))
+			if !own {
+				r.id = append(r.id, batch.TranscriptID[i])
+				r.x, r.y = append(r.x, float64(batch.X[i])), append(r.y, float64(batch.Y[i]))
+			}
 			k := int32(-1)
 			if id := string(batch.CellID[i]); !unassignedValues[id] {
 				if c, ok := src.index[id]; ok {

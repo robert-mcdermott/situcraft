@@ -349,3 +349,32 @@ func TestRealAnotherRunIsRefused(t *testing.T) {
 		t.Errorf("the Breast bundle into the Lung dataset: %v", err)
 	}
 }
+
+// The bundle's own segmentation, written as SituCraft's files row by row, is the instrument's.
+func TestRealInstrumentAsSegmentationFiles(t *testing.T) {
+	dirLung := bundleDir(t, "xenium-lung-2fov")
+	b, err := xenium.Open(dirLung, xenium.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer b.Close()
+	in := readInstrument(t, b)
+	dir := t.TempDir()
+	d, err := Instrument(context.Background(), b, dir, runtime.NumCPU())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m artifacts.Manifest
+	for _, f := range segment.Check(dir, &m) {
+		if f.Severity == "fatal" {
+			t.Fatalf("fatal: %+v", f)
+		}
+	}
+	if d.Cells != 11898 {
+		t.Errorf("%d cells", d.Cells)
+	}
+	if a := rasterAgreement(t, dir, in); a != 1 {
+		t.Errorf("the raster agrees with the mask on %.6f", a)
+	}
+	sameAssignments(t, dir, in)
+}

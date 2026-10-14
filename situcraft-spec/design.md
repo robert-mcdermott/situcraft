@@ -254,6 +254,17 @@ What jobs make, and what they register from a bundle, are artifacts (`internal/a
   (`decisions`, kind `promote-segmentation`, with a reason, by whom, when), never removed; the
   latest decision naming a complete segmentation holds.
 
+### Comparing segmentations
+
+`internal/compare` compares two segmentations as SituCraft's segmentation files (the instrument's
+written once from its bundle into the cache, beside the dataset's nuclei and a coarse expansion of
+them for the co-expression reference). Rasters are compared run by run, without decoding pixels;
+correspondences are the connected sets of a graph whose edges are shared nuclei and overlaps
+holding half of a cell; each set is one difference with a class. A comparison is an artifact of
+kind `comparison` (its measures, its regions, and every difference with its cells), named by the
+two segmentations, the method's version and its parameters. The comparison workspace (slice 6)
+draws on it: the regions for the disagreement map, the differences for the review queue.
+
 ### Remote control
 
 With `--remote-control`, programs on this computer drive the open window (`remote.go`, adapted from

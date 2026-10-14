@@ -678,3 +678,32 @@ func distance(spans []span, x, y int) float64 {
 }
 
 func round6(v float64) float64 { return math.Round(v*1e6) / 1e6 }
+
+// NucleusRaster is the bundle's nuclei as a label raster at the morphology image's resolution: its
+// nucleus mask, or its nucleus polygons drawn (labels are the mask's, or the polygons' order).
+func NucleusRaster(b *xenium.Bundle) (*segment.Raster, error) {
+	cells, err := b.ReadCells()
+	if err != nil {
+		return nil, err
+	}
+	nuc, err := nucleiOf(b, cells)
+	if err != nil {
+		return nil, err
+	}
+	defer nuc.close()
+	src := nuc.labels()
+	w, h := src.Size()
+	r := &segment.Raster{Width: w, Height: h, PixelSize: nuc.pixelSize, Rows: make([][]segment.Run, h)}
+	band := max(1, (64<<20)/(4*w))
+	buf := make([]uint32, band*w)
+	for y0 := 0; y0 < h; y0 += band {
+		y1 := min(h, y0+band)
+		if err := src.Rows(y0, y1, buf[:(y1-y0)*w]); err != nil {
+			return nil, err
+		}
+		for y := y0; y < y1; y++ {
+			r.Rows[y] = segment.EncodeRow(buf[(y-y0)*w : (y-y0+1)*w])
+		}
+	}
+	return r, nil
+}

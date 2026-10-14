@@ -604,6 +604,8 @@ button.link { background: none; border: 0; padding: 0; color: var(--accent-text)
 .field > span.seg-hint { font-size: 11.5px; font-weight: 400; }
 .seg-advanced { font-size: 12.5px; }
 .seg-advanced summary { cursor: pointer; color: var(--text-2); margin-bottom: 8px; }
+.seg-compare-detail { display: flex; flex-direction: column; gap: 12px; }
+.seg-compare-detail .seg-tally td.muted { font-size: 12px; }
 .seg-differs { font-size: 12.5px; line-height: 1.5; }
 .seg-differs ul { margin: 4px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
 .jobs-body { max-width: 980px; margin: 0 auto; padding: 18px 24px 40px; }

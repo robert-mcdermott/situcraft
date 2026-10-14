@@ -1236,4 +1236,40 @@ func TestRealInstrumentSegmentationAndInterruptedJobs(t *testing.T) {
 	if staged, _ := os.ReadDir(filepath.Join(dir, "artifacts", "staging")); len(staged) != 0 {
 		t.Errorf("%d staging folders left after importing", len(staged))
 	}
+
+	// A comparison of the instrument's segmentation and the expansion: every cell one-to-one; asked
+	// again, the same artifact without a job.
+	for _, bad := range []string{`{"a":"` + m.ID + `"}`, `{"a":"` + m.ID + `","b":"` + m.ID + `"}`, `{"a":"` + m.ID + `","b":"seg-0000000000000000000000"}`} {
+		if rec := request(t, handler, http.MethodPost, "/api/local/0/compare", strings.NewReader(bad), nil); rec.Code != http.StatusBadRequest {
+			t.Errorf("comparison %s: %d", bad, rec.Code)
+		}
+	}
+	type comparison struct {
+		ID       string
+		Artifact *artifacts.Manifest
+		Job      *jobs.Job
+	}
+	var cmpStarted comparison
+	cmpBody := `{"a":"` + m.ID + `","b":"` + e.ID + `"}`
+	json.NewDecoder(request(t, handler, http.MethodPost, "/api/local/0/compare", strings.NewReader(cmpBody), nil).Body).Decode(&cmpStarted)
+	if cmpStarted.Job == nil {
+		t.Fatalf("no comparison job: %+v", cmpStarted)
+	}
+	if j, _ := a.jobs.Wait(ctx, cmpStarted.Job.ID); j.State != jobs.Complete {
+		t.Fatalf("the comparison ended %s: %s", j.State, j.Error)
+	}
+	var cmpAgain comparison
+	json.NewDecoder(request(t, handler, http.MethodPost, "/api/local/0/compare", strings.NewReader(cmpBody), nil).Body).Decode(&cmpAgain)
+	cm := cmpAgain.Artifact
+	if cmpAgain.Job != nil || cm == nil || cm.ID != cmpStarted.ID || cm.Kind != "comparison" || cm.State != artifacts.Complete || len(cm.Lineage.Parents) != 3 {
+		t.Fatalf("the comparison again: %+v", cmpAgain)
+	}
+	var cs struct {
+		Classes        map[string]int
+		PixelAgreement float64
+	}
+	json.Unmarshal(cm.Summary, &cs)
+	if cs.Classes["one-to-one"] != 11898 || cs.PixelAgreement != 0.980629 {
+		t.Errorf("comparison summary %s", cm.Summary)
+	}
 }

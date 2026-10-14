@@ -166,6 +166,7 @@ func (s *source) find(severity, code, message string, count int) {
 // transcript (of another dataset).
 type records struct {
 	byID  bool
+	byRow bool // the dataset's own: record k is the dataset's transcript k
 	hasXY bool
 	id    []uint64
 	x, y  []float64 // µm
@@ -322,7 +323,9 @@ func build(ctx context.Context, ds Dataset, opt Options, src *source, dir string
 	}
 	if src.records != nil {
 		rec.Assignment = "the tool's assignment, matched to the dataset's transcripts by their ids"
-		if !src.records.byID {
+		if src.records.byRow {
+			rec.Assignment = "the bundle's own assignment of each transcript (transcripts.parquet's cell_id)"
+		} else if !src.records.byID {
 			rec.Assignment = "the tool's assignment, matched to the dataset's transcripts by position and gene (within 0.01 µm)"
 		}
 	} else {
@@ -335,6 +338,7 @@ func build(ctx context.Context, ds Dataset, opt Options, src *source, dir string
 	pairs := map[uint64]uint32{}
 	var q20, q20Assigned int64
 	noID := false
+	row := 0
 	err = ds.Transcripts(func(b *xenium.TranscriptBatch) error {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -343,11 +347,16 @@ func build(ctx context.Context, ds Dataset, opt Options, src *source, dir string
 			noID = true
 			return errors.New("the dataset's transcripts have no ids to match the import's")
 		}
-		for i := 0; i < b.Rows; i++ {
+		for i := 0; i < b.Rows; i, row = i+1, row+1 {
 			label := uint32(0)
 			if src.records != nil {
 				var k int32 = -1
-				if src.records.byID {
+				if src.records.byRow {
+					if row < src.records.len() {
+						k = src.records.cell[row]
+						match.used[row] = true
+					}
+				} else if src.records.byID {
 					k = match.byID(b.TranscriptID[i], float64(b.X[i]), float64(b.Y[i]))
 				} else {
 					k = match.byPosition(float64(b.X[i]), float64(b.Y[i]), string(b.Feature[i]))
@@ -631,6 +640,9 @@ func newMatcher(r *records) (*matcher, error) {
 		return m, nil
 	}
 	m.used = make([]bool, r.len())
+	if r.byRow {
+		return m, nil
+	}
 	if r.byID {
 		order := make([]int32, r.len())
 		for i := range order {
