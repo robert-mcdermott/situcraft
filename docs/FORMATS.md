@@ -103,7 +103,25 @@ What jobs make and register is kept in `<data dir>/artifacts/<id>/`, beside a `m
 | `lineage` | `parents` (a bundle by its analysis UUID and manifest's SHA-256, or other artifacts), `job` (its id, kind and spec), `method` (name, version, citation, detail), `parameters`, `software` (each program's name, version and commit) |
 | `files` | Each file's `path`, `role`, `size` and `sha256`; `location: "bundle"` for a file of the dataset's bundle, named by its path there and never copied |
 | `findings` | What the kind's check found: `severity`, `code`, `message`, `count` |
-| `summary` | What the kind says of it (a segmentation's cells, gene transcripts and methods) |
+| `summary` | What the kind says of it (a segmentation's cells, gene transcripts, medians and methods; for one SituCraft made, its agreement with the instrument's segmentation) |
+
+### Segmentations SituCraft makes
+
+A segmentation SituCraft makes (nucleus expansion, from 0.2.0) is an artifact of six files of its
+own. Each binary file starts with four magic bytes, a format version (`uint32`) and its body's
+length (`uint64`), little-endian, followed by the body compressed with zlib (RFC 1950/1951).
+Readers check every size before reading, and the zlib checksum.
+
+| File | Magic | Holds |
+| --- | --- | --- |
+| `segmentation.json` | | `format` (`"situcraft-segmentation"`), `version`, `method`, `parameters` (every one), the raster's `width`, `height` and `pixelSizeUm`, the numbers of `cells`, `transcripts` and `genes`, the `nuclei` it grew from (`source`, `count`), the gene transcripts of quality 20 or more and those assigned, and the `agreement` with the instrument's segmentation |
+| `cells.bin` | `SCSC` | Each cell's id (`c1`, `c2`, …) and the bundle's id of the cell its nucleus lies in; centroid (µm), area and nucleus area (µm²); its gene transcripts of quality 20 or more, all its transcripts, and its genes detected |
+| `mask.bin` | `SCMK` | The label raster at the morphology image's resolution (label *k* is cell *k*; 0 none), each row as (label, length) runs in unsigned varints |
+| `assignments.bin` | `SCAS` | Each transcript's cell, in the row order of the bundle's `transcripts.parquet` (0: none) |
+| `counts.bin` | `SCCT` | The cell-by-gene counts of gene transcripts of quality 20 or more: the genes' names, then compressed sparse rows (row offsets, gene indices, counts) |
+| `outlines.bin` | `SCOL` | Each cell's outline in µm (its largest piece, simplified to half a pixel), with its pixels, pieces and holes counted |
+
+These files are SituCraft's own; the open formats for exchange come later in wave 2.
 
 ### Jobs
 

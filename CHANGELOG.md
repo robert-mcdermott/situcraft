@@ -53,13 +53,31 @@ review and choose between. Built slice by slice; this section grows with each.
     its state, progress, times and runs, its whole log and its spec, and Stop, Resume and Discard.
   - The status bar's job opens the Jobs view.
   - Remote control gains `segmentations` and `jobs` (list, read, stop, resume, discard).
-- **Screenshots** of the documentation: 13 scenes in both themes, captured through remote control
+- **Nucleus expansion (wave 2, slice 3).** SituCraft's first segmentation of its own.
+  - **The method:** each nucleus grows into a cell of its own by up to a chosen distance (5 µm to
+    start), every pixel going to the nearest nucleus within it, by exact Euclidean distances. It
+    runs on every core in bands of rows, and gives the same cells however the work is split.
+    Transcripts belong to the cell holding the pixel they lie in; the counts are of gene
+    transcripts of quality 20 or more. Bundles without a nucleus mask have their nucleus polygons
+    drawn instead.
+  - **An artifact of its own:** its cells, label raster, transcript assignments, counts and
+    outlines ([docs/FORMATS.md](docs/FORMATS.md)), checked before it is recorded (geometry,
+    assignments, counts, metadata), with every parameter in its lineage. The same dataset and
+    distance give the same artifact.
+  - **Compared with the instrument's segmentation:** pixels and transcripts in the same cell, in
+    another or in only one; cell areas; the assigned fractions; and what differs, described.
+  - **The Segmentation view:** the dataset's segmentations side by side by their numbers;
+    **Expand the nuclei**, run as a job; the comparison.
+  - Remote control gains `expand_nuclei` (23 actions).
+- **Screenshots** of the documentation: 14 scenes in both themes, captured through remote control
   from the development bundles (`node docs/capture/capture.mjs`), in the README and the
   getting-started guide.
 - **A cell by its ID:** the program finds a cell by its `cell_id` as well as by its row.
 
 ### Fixed
 
+- **The viewer suite on CI,** which fetches only the Lung bundle: it counted the jobs of two
+  bundles.
 - **Accessibility, found by the audit of the screenshots** (axe-core, WCAG 2.1 A and AA):
   - the view rail's separators sat inside its tab list;
   - the project tree's sections were marked as lists with no items in them (and its rows,
@@ -68,6 +86,23 @@ review and choose between. Built slice by slice; this section grows with each.
 
 ### Validation
 
+- **Nucleus expansion (slice 3):**
+  - **The Lung bundle's own 5 µm expansion is reproduced:** 11,898 cells paired one to one with
+    the instrument's; 98.06% of pixels and 98.94% of transcripts in the same cells; cell areas'
+    median difference +0.25%, 97.0% within 5%; 98.28% of gene transcripts assigned (the
+    instrument: 97.97%). Every transcript given differently is explained: 2,534 on the
+    expansion's rim, 4.56–4.98 µm from their nucleus, which the instrument's cells do not reach;
+    6,182 where neighbouring cells meet, within 0.34 µm of equally near both nuclei; 8 the
+    instrument records in a cell other than its own mask's at their pixel.
+  - **Breast,** whose cells the instrument drew mostly from stains: 7,312 nuclei grown into cells,
+    and the instrument's 7,275 cells accounted for (6,752 holding one nucleus, 255 none, 268
+    several).
+  - **Go tests:** the distance transform against brute force; the same cells for any split of the
+    work; polygons drawn; the files read back as written, and the check finding each kind of
+    damage; masks read in bands; on Lung, drawn nucleus polygons agreeing with the mask on 98.56%
+    of pixels; the job and its artifact through the program's API.
+  - **In headless Chrome** (62 checks): `expand_nuclei` by remote control reproduces the Lung
+    expansion in the Segmentation view, and asking again answers the same artifact without a job.
 - **Segmentations and jobs (slice 2):**
   - **Go tests:**
     - the artifact store records checked outputs with their SHA-256, keeps an invalid one apart,
@@ -105,7 +140,7 @@ review and choose between. Built slice by slice; this section grows with each.
   - the methods cite the data and SituCraft;
   - `export` writes the project only with the token.
 - **Every screenshot scene in both themes** passes axe-core's WCAG 2.1 A and AA rules
-  (`docs/capture/audit.json`, 22 captures, no violation).
+  (`docs/capture/audit.json`, 28 captures, no violation).
 
 ## 0.1.0 (2026-10-14)
 

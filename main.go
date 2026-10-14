@@ -525,6 +525,7 @@ func (a *app) registerAPI(mux *http.ServeMux) {
 	a.registerProject(mux)
 	a.registerExamples(mux)
 	a.registerSegmentations(mux)
+	a.registerExpansion(mux)
 	if a.control != nil {
 		a.control.register(mux)
 	}

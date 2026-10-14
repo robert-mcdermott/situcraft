@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"situcraft/internal/jobs"
+	"situcraft/internal/xenium"
 )
 
 // jobLogLines is how many of each job's last log lines the list and the stream carry.
@@ -145,6 +146,29 @@ func (a *app) handleJobs() {
 		}
 		return a.segmentationJob(path), nil
 	}, nil)
+	a.jobs.Handle("expansion", func(spec json.RawMessage) (jobs.Func, error) {
+		if a.cache == nil {
+			return nil, errors.New("SituCraft has no cache folder")
+		}
+		p, err := expansionOf(spec)
+		if err != nil {
+			return nil, err
+		}
+		// An expansion starts again: it takes seconds, not hours.
+		return a.expansionJob(p.Bundle, p.DistanceUm), nil
+	}, func(id string, spec json.RawMessage) {
+		// Its staged files go with it.
+		p, err := expansionOf(spec)
+		if err != nil {
+			return
+		}
+		if b, err := xenium.Open(p.Bundle, xenium.Options{CacheDir: a.cacheDir}); err == nil {
+			if instrument := a.knownSegmentation(b); instrument != nil {
+				a.artifacts.Discard(expansionID(instrument.ID, p.DistanceUm))
+			}
+			b.Close()
+		}
+	})
 	a.jobs.Handle("example", func(spec json.RawMessage) (jobs.Func, error) {
 		var p struct {
 			Example string `json:"example"`

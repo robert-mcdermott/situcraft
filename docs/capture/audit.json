@@ -120,6 +120,16 @@
   "violations": []
  },
  {
+  "scene": "expansion",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "expansion",
+  "theme": "light",
+  "violations": []
+ },
+ {
   "scene": "jobs",
   "theme": "dark",
   "violations": []

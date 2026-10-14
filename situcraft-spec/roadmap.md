@@ -751,12 +751,69 @@ other tools can be imported.
        the window was shown: the wait is now bounded.
      - **The documentation's capture shares one cache across scenes,** so a scene showing jobs
        needs its own (in the second theme the builds were already done).
-3. **Nucleus expansion (S1).** `internal/segment/expand`: neighbor-bounded growth of nuclei to a
-   chosen distance, transcript assignment and counts; parallel and deterministic.
-   - Validation: the Lung bundle's own 5 µm expansion is reproduced. The documented tolerance
-     covers cell count (exact), per-cell area, the assigned fraction, and per-transcript
-     assignment agreement, with every disagreement explained (e.g. vertex simplification in the
-     bundle's polygons).
+3. **Nucleus expansion (S1, S9): done.**
+   - **The method** (`internal/segment/expand`; research.md §3.1):
+     - each nucleus grows into a cell of its own by up to the distance, every pixel going to the
+       nearest nucleus within it (a Voronoi partition clipped at the distance, Okabe et al. 2000),
+       by exact Euclidean distances between pixel centres (Felzenszwalb and Huttenlocher 2012);
+       ties broken by position;
+     - in bands of rows with a margin of the distance, on every core; the same result for any band
+       height and number of workers;
+     - the nuclei are the bundle's nucleus mask, or its nucleus polygons drawn when it has none;
+     - a transcript belongs to the cell holding its pixel, as the instrument assigns them; counts
+       of gene transcripts of quality 20 or more; outlines traced and simplified to half a pixel.
+   - **Segmentations as files** (`internal/segment`; FORMATS.md): a description, the cells, the
+     label raster in runs, each transcript's cell, the counts in sparse rows, and the outlines;
+     zlib-compressed with sizes checked on reading.
+   - **The check (S9)** before an expansion becomes an artifact: its files read and agree (the
+     raster's labels are cells, areas and centroids are the pixels', outlines lie in the raster,
+     every cell's assigned transcripts and counts add up); a fatal finding makes it invalid.
+   - **The comparison with the instrument's segmentation:**
+     - each nucleus is paired with the instrument's cell holding most of its pixels (a cell drawn
+       from a stain may hold none, or several);
+     - pixels and transcripts in the same cell, in another, or in only one segmentation; areas of
+       the cells paired one to one; the assigned fractions;
+     - what differs, described: how far from their nucleus the pixels only one gives a cell lie,
+       how near to equidistant the pixels given to different cells are, the instrument's cells
+       holding no nucleus, and transcripts the instrument records off its own mask.
+   - **A job** (`api_expansion.go`): staged, checked and promoted; the artifact's lineage names
+     the bundle and the instrument's segmentation it grew from, the method and its version, every
+     parameter and the software. Its id hashes the instrument's segmentation, the method's version
+     and the distance, so the same request answers the same artifact without a job.
+   - **The Segmentation view** (`ui/mode-segmentation.js`): the dataset's segmentations side by
+     side (cells, assigned fraction, transcripts per cell, area); **Expand the nuclei** with a
+     distance, its job's progress shown; the comparison with the instrument's segmentation.
+   - **Remote control:** `expand_nuclei` (23 actions).
+   - **Screenshots:** the Segmentation view after expanding the Lung example's nuclei.
+   - Validation:
+     - **The Lung bundle's 5 µm expansion reproduced** (`TestRealExpansionReproducesTheInstruments`):
+       11,898 cells paired one to one (exact); 98.06% of pixels and 98.94% of transcripts in the
+       same cells (at least 98% and 98.5%); cell areas' median difference +0.25% (under 0.5%),
+       97.0% within 5% and 99.95% within 10% (at least 96% and 99.5%); 98.28% of gene transcripts
+       assigned, the instrument 97.97% (at most 0.5 points more). Every transcript given
+       differently is explained, one by one: 2,534 on the rim (4.56–4.98 µm from their nucleus,
+       which the instrument's cells do not reach), 6,182 on boundaries between neighbours (within
+       0.34 µm of equidistant), 8 the instrument records off its own mask.
+     - **Breast:** 7,312 nuclei grown into cells; the instrument's 7,275 cells accounted for (6,752
+       with one nucleus, 255 with none, 268 with several).
+     - **Go tests:** the distance transform against brute force; expansion geometry; any band and
+       worker count the same; polygons drawn; counts; the files read back as written; the check
+       finding each kind of damage (truncation, sizes, areas, centroids, assignments, counts,
+       outlines); masks read in bands in either order; on Lung, the drawn polygons agree with the
+       mask on 98.56% of pixels; the job, its artifact and its lineage through the program's API.
+     - **In headless Chrome** (62 checks): `expand_nuclei` by remote control reproduces the Lung
+       expansion, recorded in the project and shown with what differs; the same distance again
+       answers the same artifact with no job.
+   - Found by slice 3:
+     - **Breast's nucleus labels are not its cells'.** Cells drawn from stains hold no nucleus or
+       several, and the nucleus mask numbers its nuclei on its own; the first expansion of Breast
+       failed. Each nucleus now grows into a cell of its own, paired with the instrument's cell it
+       lies in.
+     - **A truncated file read without error,** its last bytes (the zlib checksum) never read: each
+       file is now read to its end.
+     - **Nucleus polygons drawn by pixel centres missed their edge pixels** (92.0% of the mask's
+       pixels): the polygons' vertices lie on the edge pixels' own coordinates (98.56%).
+     - **The viewer suite counted jobs for two bundles,** failing on CI, which fetches one.
 4. **Importing segmentations (S10, D6).**
    - SpatialData Zarr (shapes, points with assignments, AnnData table).
    - Baysor-style assignment CSV plus GeoJSON polygons.

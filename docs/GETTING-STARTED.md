@@ -169,8 +169,23 @@ When a dataset is added, SituCraft registers the instrument's segmentation as an
 cells, their boundaries, the nuclei, the transcripts' assignments and the counts, each file recorded
 by its SHA-256 (it stays in the bundle). Under **Segmentations** in the project tree, the default
 one is marked; the inspector shows how it was made (the methods and how many cells each found), its
-files, what its check found, and why it is the default. Later releases add SituCraft's own
-segmentations and segmentations from other tools, to compare and choose between.
+files, what its check found, and why it is the default.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/expansion-dark.webp">
+  <img alt="The Segmentation view of the Lung example: its nuclei expanded by 5 µm, compared with the instrument's segmentation, 98.06% of pixels and 98.94% of transcripts in the same cells, with what differs described" src="images/expansion-light.webp">
+</picture>
+
+The **Segmentation** view lists the dataset's segmentations side by side, with their cells, the
+share of gene transcripts each assigns, transcripts per cell and cell area. **Expand the nuclei**
+grows each nucleus by the distance you choose (5 µm, Xenium's default, to start) into a cell of its
+own: every pixel goes to the nearest nucleus within the distance, and transcripts to the cell
+holding the pixel they lie in. It runs as a job (about a second for the Lung example) and becomes a
+segmentation of its own, kept with its parameters. Below, it is compared with the instrument's
+segmentation pixel by pixel and transcript by transcript, and what differs is described: on the
+Lung example, segmented by the instrument the same way, 98.06% of pixels and 98.94% of transcripts
+are in the same cells. Later releases add comparing any two segmentations, reviewing their
+differences, choosing the default, and importing other tools' segmentations.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/jobs-dark.webp">
@@ -178,7 +193,7 @@ segmentations and segmentations from other tools, to compare and choose between.
 </picture>
 
 Long work runs as a job: building derived data, downloading an example, registering a
-segmentation. The **Jobs** view shows what runs and waits, what finished, and each job's log and
+segmentation, expanding nuclei. The **Jobs** view shows what runs and waits, what finished, and each job's log and
 spec. Jobs keep running when the window reloads, and closing the window while one runs asks first.
 If SituCraft stops (or the computer does) in the middle of a job, the job is shown as interrupted
 when SituCraft starts again: **Resume** continues it where it stopped, **Discard** forgets it.

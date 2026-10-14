@@ -273,15 +273,77 @@ from OpenJPEG 2.5.4.
 
 ## 3. Segmentation
 
-### 3.1 Nucleus expansion
+### 3.1 Nucleus expansion (verified, wave 2, slice 3)
 
-Each nucleus polygon is grown by up to *d* µm (Xenium's default 5 µm), and no point is assigned to
-more than one cell: a point belongs to the nearest nucleus within *d*. That is a Voronoi
-partition of the plane by nuclei, clipped at distance *d* (Okabe et al., *Spatial Tessellations*,
-2nd ed., Wiley 2000). Transcripts are assigned by point in polygon (or by label lookup in a
-raster at a resolution chosen to bound the error). Validation: the Lung 2-FOV was segmented this
-way by XOA 2.0 ("Segmented by nucleus expansion of 5.0 µm"), so SituCraft's expansion is checked
-against its cells, areas and assignments.
+**The method.** Each nucleus grows into a cell of its own by up to *d* µm (Xenium's default
+5 µm), and no pixel belongs to two cells: a pixel belongs to the nearest nucleus within *d*,
+measured between pixel centres to the nucleus's nearest pixel. That is a Voronoi partition of
+the plane by the nuclei, clipped at distance *d* (Okabe et al., *Spatial Tessellations*, 2nd ed.,
+Wiley 2000). Distances are exact: the distance transform of Felzenszwalb and Huttenlocher (2012),
+which also gives each pixel its nearest nucleus pixel. A pixel equally near two nuclei goes to the
+upper one in its column, else the left one in its row. The image is processed in bands of rows
+with a margin of *d*, on every core; the result is the same for any band height and number of
+workers (`internal/segment/expand`, tested against brute force). A transcript belongs to the cell
+holding the pixel it lies in. Each cell's outline follows its largest 4-connected piece's pixel
+edges, simplified to 0.5 pixel (Douglas and Peucker 1973).
+
+**What the bundles hold** (measured on the development bundles):
+
+- `cells.zarr.zip` holds `masks/0` (nuclei) and `masks/1` (cells), 32-bit labels at the
+  morphology image's resolution (Lung: 5,791 × 3,553 pixels in chunks of 445 × 724), with
+  `masks/homogeneous_transform` scaling µm to pixels by 4.705882 (1/0.2125). Label *k* of
+  `masks/1` is `cells.parquet`'s row *k*−1.
+- The instrument assigns a transcript to the cell holding pixel (⌊*x*/0.2125⌋, ⌊*y*/0.2125⌋) of
+  `masks/1`: on Lung that gives 825,869 of the 825,878 transcripts inside the mask their
+  `cell_id`; the other 9 lie on a pixel's exact edge, and 7 more lie outside the mask. `overlaps_nucleus` follows `masks/0` the same way
+  (17 such edge cases).
+- In Lung, segmented wholly by nucleus expansion, `masks/0` label *k* is cell *k*'s nucleus. In
+  Breast, whose cells were mostly drawn from cell stains, the nucleus mask has 7,312 labels for
+  7,275 cells and its labels are not the cells': 255 cells hold no nucleus and 268 several. So
+  SituCraft pairs each nucleus with the instrument's cell holding most of its pixels, and grows
+  every nucleus into a cell of its own.
+- The nucleus polygons (`nucleus_boundaries.parquet`) outline the mask, simplified; their
+  vertices lie on their edge pixels' own coordinates (pixel (*i*, *j*) at (*i*, *j*) × 0.2125 µm).
+  A bundle without `cells.zarr.zip` has its polygons drawn instead, a pixel belonging to a nucleus
+  when that point is inside the polygon or on its edge: on Lung the drawn nuclei agree with the
+  mask on 98.56% of their pixels (the rest where a simplified edge cuts a corner), and the cells
+  grown from them with the instrument's on 97.88%.
+
+**The Lung bundle's 5 µm expansion, reproduced** (5 µm = 23.53 pixels; reference numbers of
+`TestRealExpansionReproducesTheInstruments`, whose tolerances are in brackets):
+
+| | SituCraft | The instrument | Agreement [tolerance] |
+| --- | --- | --- | --- |
+| Cells | 11,898, one for each nucleus | 11,898 | paired one to one [exact] |
+| Pixels in the same cell | | | 98.06% of the 14,367,793 either gives a cell [≥ 98%] |
+| Transcripts in the same cell, or in none in both | | | 98.94% of 825,885 [≥ 98.5%] |
+| Cell area | median 48.7 µm² | | median difference +0.25%; 97.0% within 5% [≥ 96%], 99.95% within 10% [≥ 99.5%] |
+| Gene transcripts (Q20) assigned | 98.28% | 97.97% | SituCraft 0.31 points more [0 to 0.5] |
+
+Every difference is one of three kinds, and the test requires each to be:
+
+1. **The rim** (156,308 pixels, 2,534 transcripts): pixels within 5 µm of their nucleus that the
+   instrument's cells do not reach, each 4.56 to 4.98 µm (21.5 to 23.4 pixels) from it [4.5 to
+   5 µm]. The instrument's cells reach 23 pixels from their nucleus along the image's axes and
+   (16, 16) pixels along its diagonals, less far than 23.53 pixels in the directions between; no
+   pixel of an instrument cell lies more than 23 pixels from its nucleus. SituCraft keeps the
+   method's definition, an exact Euclidean distance, and records the difference.
+2. **Boundaries between neighbours** (122,016 pixels, 6,182 transcripts): pixels the two give
+   neighbouring cells, each at most 0.34 µm (1.6 pixels) nearer to SituCraft's cell's nucleus than
+   to the instrument's [0.4 µm]: almost equally far from both, where ties and near-ties are broken
+   differently.
+3. **The instrument's records** (8 transcripts): transcripts whose `cell_id` is not the cell the
+   instrument's own mask holds at their pixel.
+
+No pixel or transcript is in an instrument's cell and in none of SituCraft's. 68 cells are in more
+than one piece (the largest is outlined). The whole expansion of Lung (growing, assigning 825,885
+transcripts, counting, outlining 11,898 cells, comparing) takes about a second on an Apple M4.
+
+**Breast** (5 µm): 7,312 cells; of the instrument's 7,275, 6,752 hold one nucleus, 255 none and
+268 several. 72.1% of pixels and 80.7% of transcripts are in the same cells, and 94.7% of gene
+transcripts are assigned (the instrument: 86.6%): there the instrument drew most cells from their
+stains (3,300 by boundary stain, 3,913 by interior stain, 62 by nucleus expansion), so an expansion
+is another segmentation, not a reproduction.
 
 ### 3.2 Transcript-informed segmentation (after Jones et al. 2025)
 
@@ -448,7 +510,12 @@ Notes:
   *IEEE TPAMI* 1991;13:376–380.
 - Douglas DH, Peucker TK. Algorithms for the reduction of the number of points required to
   represent a digitized line or its caricature. *Cartographica* 1973;10(2):112–122.
-  doi:10.3138/FM57-6770-U75U-7727 (polygon simplification in the geometry tiles).
+  doi:10.3138/FM57-6770-U75U-7727 (polygon simplification in the geometry tiles and segmentation
+  outlines).
+- Felzenszwalb PF, Huttenlocher DP. Distance transforms of sampled functions. *Theory Comput*
+  2012;8:415–428. doi:10.4086/toc.2012.v008a019 (nucleus expansion's exact distances).
+- Okabe A, Boots B, Sugihara K, Chiu SN. *Spatial Tessellations: Concepts and Applications of
+  Voronoi Diagrams*, 2nd ed. Wiley, 2000 (nucleus expansion).
 - Hyndman RJ, Fan Y. Sample quantiles in statistical packages. *Am Stat* 1996;50:361–365
   (the QC plots' quantiles, type 7).
 - Tukey JW. *Exploratory Data Analysis*. Addison-Wesley, 1977 (box plots, whiskers at 1.5

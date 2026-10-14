@@ -21,7 +21,10 @@
 //   own, the same artifact; the jobs all complete;
 // - remote control (wave 2, slice 1): the window driven by a program through the program's
 //   remote-control hub: the state described, the tissue shown as asked, a view saved and reopened
-//   exactly, a filter, the methods, and a file written only with the token.
+//   exactly, a filter, the methods, and a file written only with the token;
+// - nucleus expansion (wave 2, slice 3): the Lung bundle's nuclei grown by 5 µm by a program, in
+//   the Segmentation view, nearly as the instrument's segmentation; recorded in the project; the
+//   same distance again the same artifact, with no job.
 //
 // It builds the program, starts it on the bundles with an empty cache and library, builds their
 // derived data, and drives the page through window.situcraft (the app, app.js) and window.situcraftViewer
@@ -421,7 +424,7 @@ export async function viewerSuite({ check, MissingData, verbose }) {
       check('viewer', 'remote control: segmentations lists the default one with its lineage', segmentations.message ?? segmentations.error, segmentations.ok && segmentations.data.segmentations.length === 1 && segmentations.data.segmentations[0].default && segmentations.data.segmentations[0].job?.id, 'one, the default, made by a job');
       const jobList = await act('jobs');
       const failedJobs = jobList.ok ? jobList.data.jobs.filter((j) => !['complete'].includes(j.state)) : [];
-      check('viewer', 'remote control: jobs lists every job, all complete', jobList.message ?? jobList.error, jobList.ok && jobList.data.jobs.length >= 4 && failedJobs.length === 0, 'derived data and segmentations of both bundles, complete');
+      check('viewer', 'remote control: jobs lists every job, all complete', jobList.message ?? jobList.error, jobList.ok && jobList.data.jobs.length >= 2 * info.files.length && failedJobs.length === 0, 'derived data and a segmentation for each bundle, complete');
       const lung = present.includes('xenium-lung-2fov');
       if (lung) {
         const shown = await act('show_tissue', { genes: ['EPCAM', 'PLVAP'], center: [750, 300], um_per_pixel: 0.4, cell: 'neddaiac-1', fill: 'transcripts' });
@@ -442,6 +445,20 @@ export async function viewerSuite({ check, MissingData, verbose }) {
         const exported = await act('export', { what: 'project', path: target });
         const written = existsSync(target) ? JSON.parse(readFileSync(target, 'utf8')) : null;
         check('viewer', 'remote control: export writes the project only with the token', `${refused.status} without, ${exported.ok ? 'written' : exported.message} with`, refused.status === 401 && exported.ok && written?.views?.length === 4 && written.artifacts.filter((a) => a.kind === 'filter').length === 3 && written.artifacts.filter((a) => a.kind === 'segmentation').length === 1, '401, then the project written');
+        // Nucleus expansion (wave 2, slice 3), run by a program in the Segmentation view.
+        const expanded = await act('expand_nuclei', { dataset: 'xenium-lung-2fov', distance_um: 5 });
+        const g = expanded.ok ? expanded.data.summary.agreement : null;
+        check('viewer', 'remote control: expand_nuclei grows the Lung bundle\'s nuclei by 5 µm, nearly as the instrument did', expanded.message ?? expanded.error, expanded.ok && expanded.data.state === 'complete' && expanded.data.summary.cells === 11898 && g.cells.paired === 11898 && g.pixels.agreement >= 0.98 && g.transcripts.agreement >= 0.985, '11,898 cells, paired one to one; at least 98% of pixels and 98.5% of transcripts in the same cells');
+        const shownExpansion = await chrome.eval(`(() => {
+          const app = window.situcraft;
+          const record = app.store.project.artifacts.find((a) => a.kind === 'segmentation' && a.source === 'situcraft');
+          return { mode: app.store.ui.mode, record: record ? { id: record.id, files: record.files.length, parents: record.parents.map((p) => p.kind).join(), distance: record.parameters?.distance_um } : null, rows: document.querySelectorAll('.seg-table tbody tr').length, differs: document.querySelectorAll('.seg-differs li').length };
+        })()`);
+        check('viewer', 'the expansion is recorded in the project and shown with what differs', JSON.stringify(shownExpansion), shownExpansion.mode === 'segmentation' && shownExpansion.record?.id === expanded.data?.id && shownExpansion.record.files === 6 && shownExpansion.record.parents === 'bundle,segmentation' && shownExpansion.record.distance === 5 && shownExpansion.rows === 2 && shownExpansion.differs >= 2, 'recorded with its files and lineage; two segmentations; the differences described');
+        const jobsBefore = (await act('jobs')).data?.jobs.length;
+        const again = await act('expand_nuclei', { dataset: 'xenium-lung-2fov' });
+        const jobsAfter = (await act('jobs')).data?.jobs.length;
+        check('viewer', 'expanding by the same distance again answers the same artifact, with no job', `${again.ok ? again.data.id : again.message}; jobs ${jobsBefore} then ${jobsAfter}`, again.ok && again.data.id === expanded.data?.id && jobsAfter === jobsBefore, 'the same artifact, no new job');
       }
     }
     check('viewer', 'no uncaught errors in the page', errors.length ? errors.slice(0, 3).join(' | ') : 'none', errors.length === 0, 'none');

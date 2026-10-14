@@ -606,6 +606,27 @@ export function installRemote(app) {
       return { message: `${plural(list.length, 'segmentation')}${list.length ? `: ${list.map((x) => `${x.name} of ${x.dataset} (${x.state}${x.default ? ', default' : ''})`).join('; ')}` : ''}${registering.length ? `; being registered: ${registering.join(', ')}` : ''}.`, data: { segmentations: list, registering } };
     },
 
+    async expand_nuclei(args) {
+      const dataset = resolveDataset(args.dataset);
+      const distance = args.distance_um === undefined ? 5 : finite(args.distance_um, 'distance_um');
+      if (distance < 0 || distance > 100) throw new ActionError('distance_um is from 0 to 100.');
+      await settleMode('segmentation');
+      let manifest;
+      try {
+        manifest = await app.segmentationView.expand(dataset, distance);
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      await frames();
+      const s = manifest.summary ?? {};
+      const g = s.agreement;
+      const pc = (v) => `${(100 * v).toFixed(2)}%`;
+      return {
+        message: `${manifest.name} of ${dataset.name} (${manifest.state}): ${plural(s.cells ?? 0, 'cell')}, ${pc(s.assignedFraction ?? 0)} of gene transcripts assigned${g ? `; the same cells as the instrument's segmentation for ${pc(g.pixels.agreement)} of pixels and ${pc(g.transcripts.agreement)} of transcripts` : ''}.`,
+        data: { id: manifest.id, name: manifest.name, dataset: dataset.name, state: manifest.state, parameters: manifest.lineage?.parameters ?? null, summary: s, findings: manifest.findings ?? [] },
+      };
+    },
+
     async jobs(args) {
       if (args.show) await settleMode('jobs');
       if (!args.job) {

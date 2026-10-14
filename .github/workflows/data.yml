@@ -37,7 +37,7 @@ jobs:
         env:
           SITUCRAFT_REQUIRE_DATA: '1'
           JP2K_ZSTACK_ALL: '1'
-        run: go test -v -run 'Real|Readers|Bundle' . ./validation/ ./internal/jp2k/ ./internal/xenium/ ./internal/cache/ ./internal/view/
+        run: go test -v -run 'Real|Readers|Bundle' . ./validation/ ./internal/jp2k/ ./internal/xenium/ ./internal/cache/ ./internal/view/ ./internal/segment/...
       - name: The tissue viewer in headless Chrome against its data (exact samples, points, frame rate)
         env:
           SITUCRAFT_REQUIRE_DATA: '1'

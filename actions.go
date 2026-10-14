@@ -136,6 +136,10 @@ var remoteActions = []remoteAction{
 		"dataset": textArg("A dataset by name or id; every dataset's if not given."),
 		"show":    flagArg("Show it in the inspector."),
 	})},
+	{Name: "expand_nuclei", Title: "Expand the nuclei", Description: "SituCraft's nucleus expansion of a dataset: each nucleus of the instrument's segmentation grows by up to distance_um (5 if not given), every pixel going to the nearest nucleus within it, and transcripts to the cell holding their pixel. Runs as a job (seconds) in the Segmentation view, which shows it; the result is a segmentation artifact recorded in the project, compared with the instrument's segmentation. Answers its summary and that comparison.", InputSchema: schema(map[string]any{
+		"dataset":     datasetArg,
+		"distance_um": map[string]any{"type": "number", "minimum": 0, "maximum": 100, "description": "How far each nucleus grows, in µm (5 if not given)."},
+	}), long: true},
 	{Name: "jobs", Title: "List and control jobs", Description: "The program's jobs (building derived data, downloading examples, registering segmentations…): each one's id, kind, state, progress, runs and error, and whether an interrupted one can be resumed. With job, that job with its whole log and its spec; with job and do, stops (cancel), resumes (resume) or forgets (discard) it. show: true shows the Jobs view.", InputSchema: schema(map[string]any{
 		"job":  textArg("A job's id."),
 		"do":   textArg("cancel, resume or discard."),

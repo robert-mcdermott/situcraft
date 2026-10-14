@@ -6,7 +6,7 @@
 
 import { openPaths } from './storage.js';
 import { addDataset, compareFingerprint, datasetRecord, findDataset, relocateDataset, removeDataset } from '../lib/datasets.js';
-import { segmentationsOf, withInstrumentSegmentation } from '../lib/segmentations.js';
+import { addSegmentation, segmentationRecord, segmentationsOf, withInstrumentSegmentation } from '../lib/segmentations.js';
 
 const BUNDLE_KINDS = new Set(['bundle', 'archive']);
 
@@ -113,6 +113,40 @@ export function createBundles(app) {
     })();
     registering.set(datasetId, promise);
     return promise;
+  }
+
+  // SituCraft's nucleus expansion of a dataset's bundle (api_expansion.go): a job grows its nuclei
+  // by distance µm and records the segmentation as an artifact, which is then recorded in the
+  // project. Resolves with the artifact; rejects with why it was not made.
+  const expanding = new Map(); // `${dataset id}|${distance}` → { dataset, distance, job, promise }
+  function expandNuclei(item, datasetId, distance = 5) {
+    const key = `${datasetId}|${distance}`;
+    if (expanding.has(key)) return expanding.get(key).promise;
+    const entry = { dataset: datasetId, distance, job: null, promise: null };
+    entry.promise = (async () => {
+      try {
+        const answer = await getJSON(`${item.url}/expansion`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ distance_um: distance }) });
+        let manifest = answer.artifact;
+        if (!manifest) {
+          entry.job = answer.job?.id ?? null;
+          notify();
+          const job = await app.jobs.finished(entry.job);
+          if (job?.state !== 'complete') throw new Error(`the expansion ${job?.state ?? 'ended'}${job?.error ? `: ${job.error}` : ''}`);
+          manifest = await getJSON(`/api/artifacts/${encodeURIComponent(answer.id)}`);
+        }
+        const dataset = app.store.project.datasets.find((d) => d.id === datasetId);
+        if (!dataset) throw new Error('the dataset is no longer in the project');
+        const next = addSegmentation(app.store.project, segmentationRecord(dataset, manifest));
+        if (next !== app.store.project) app.store.commit(next, `Add ${manifest.name.toLowerCase()} of ${dataset.name}`);
+        return manifest;
+      } finally {
+        expanding.delete(key);
+        notify();
+      }
+    })();
+    expanding.set(key, entry);
+    notify();
+    return entry.promise;
   }
 
   // Asks which of the bundle's derived data are built (build: and starts a job building the rest).
@@ -249,6 +283,9 @@ export function createBundles(app) {
     cacheStatus,
     buildCache,
     registerSegmentation,
+    expandNuclei,
+    // The expansions of a dataset under way: [{ distance, job }].
+    expansions: (id) => [...expanding.values()].filter((e) => e.dataset === id).map(({ distance, job }) => ({ distance, job })),
     // Whether a dataset's instrument segmentation is being registered.
     registeringSegmentation: (id) => registering.has(id),
     usage: () => usage,

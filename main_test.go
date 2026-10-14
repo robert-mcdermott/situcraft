@@ -1070,6 +1070,10 @@ func TestRealInstrumentSegmentationAndInterruptedJobs(t *testing.T) {
 		t.Errorf("the resumed build's entries: %v", err)
 	}
 
+	// Nucleus expansion starts from the instrument's segmentation, not registered yet.
+	if rec := post("/api/local/0/expansion"); rec.Code != http.StatusConflict {
+		t.Errorf("expansion before the instrument's segmentation: %d %s", rec.Code, rec.Body)
+	}
 	// The instrument's segmentation.
 	var none struct{ Artifact *artifacts.Manifest }
 	json.NewDecoder(request(t, handler, http.MethodGet, "/api/local/0/segmentation", nil, nil).Body).Decode(&none)
@@ -1129,5 +1133,54 @@ func TestRealInstrumentSegmentationAndInterruptedJobs(t *testing.T) {
 	}
 	if none.Artifact != nil {
 		t.Error("an artifact was answered before it was registered")
+	}
+
+	// Nucleus expansion by 5 µm, an artifact made from the instrument's segmentation.
+	for _, bad := range []string{`{"distance_um":-1}`, `{"distance_um":101}`, `{"distance_um":"5"}`} {
+		if rec := request(t, handler, http.MethodPost, "/api/local/0/expansion", strings.NewReader(bad), nil); rec.Code != http.StatusBadRequest {
+			t.Errorf("expansion %s: %d", bad, rec.Code)
+		}
+	}
+	type expansion struct {
+		ID       string
+		Artifact *artifacts.Manifest
+		Job      *jobs.Job
+	}
+	var started5 expansion
+	json.NewDecoder(request(t, handler, http.MethodPost, "/api/local/0/expansion", strings.NewReader(`{"distance_um":5}`), nil).Body).Decode(&started5)
+	if started5.Job == nil || !strings.HasPrefix(started5.ID, "exp-") {
+		t.Fatalf("no expansion job: %+v", started5)
+	}
+	if j, _ := a.jobs.Wait(ctx, started5.Job.ID); j.State != jobs.Complete {
+		t.Fatalf("expansion ended %s: %s", j.State, j.Error)
+	}
+	var expanded expansion
+	json.NewDecoder(post("/api/local/0/expansion").Body).Decode(&expanded) // 5 µm when not given
+	e := expanded.Artifact
+	if expanded.Job != nil || e == nil || e.ID != started5.ID || e.State != artifacts.Complete || len(e.Files) != 6 {
+		t.Fatalf("expanding again: %+v", expanded)
+	}
+	if len(e.Lineage.Parents) != 2 || e.Lineage.Parents[0].Kind != "bundle" || e.Lineage.Parents[1].ID != m.ID || len(e.Lineage.Parameters) == 0 || e.Lineage.Job.ID != started5.Job.ID {
+		t.Errorf("expansion lineage %+v", e.Lineage)
+	}
+	for _, f := range e.Files {
+		info, err := os.Stat(filepath.Join(dir, "artifacts", e.ID, f.Path))
+		if f.Location != "" || err != nil || info.Size() != f.Size {
+			t.Errorf("expansion file %+v: %v", f, err)
+		}
+	}
+	var es struct {
+		Cells            int
+		AssignedFraction float64
+		Agreement        struct {
+			Transcripts struct{ Agreement float64 }
+		}
+	}
+	json.Unmarshal(e.Summary, &es)
+	if es.Cells != 11898 || es.AssignedFraction < 0.98 || es.Agreement.Transcripts.Agreement < 0.985 {
+		t.Errorf("expansion summary %s", e.Summary)
+	}
+	if staged, _ := os.ReadDir(filepath.Join(dir, "artifacts", "staging")); len(staged) != 0 {
+		t.Errorf("%d staging folders left", len(staged))
 	}
 }

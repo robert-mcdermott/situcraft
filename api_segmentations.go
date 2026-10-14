@@ -226,7 +226,14 @@ func (a *app) segmentationJob(path string) jobs.Func {
 			}
 		}
 		detail, _ := json.Marshal(map[string]any{"methods": methods})
-		summary, _ := json.Marshal(map[string]any{"cells": s.Cells, "q20GeneTranscripts": s.Q20GeneTranscripts, "assignedFraction": s.AssignedFraction, "medianTranscriptsPerCell": s.MedianPerCell, "methods": methods})
+		fields := map[string]any{"cells": s.Cells, "q20GeneTranscripts": s.Q20GeneTranscripts, "assignedFraction": s.AssignedFraction, "medianTranscriptsPerCell": s.MedianPerCell, "methods": methods}
+		if cells, err := b.ReadCells(); err == nil && len(cells.CellArea) > 0 {
+			areas := append([]float64(nil), cells.CellArea...)
+			sort.Float64s(areas)
+			n := len(areas)
+			fields["medianAreaUm2"] = (areas[(n-1)/2] + areas[n/2]) / 2
+		}
+		summary, _ := json.Marshal(fields)
 		manifestSum := ""
 		if id, err := b.FileIdentity("experiment.xenium"); err == nil {
 			manifestSum, _ = a.cache.KnownChecksum(id)

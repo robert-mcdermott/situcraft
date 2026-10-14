@@ -55,3 +55,27 @@ test('promotion needs a complete segmentation and a reason, and the latest decis
   assert.equal(segmentationsOf(r, 'd2').length, 1);
   assert.equal(promotedSegmentation(r, 'd2'), null);
 });
+
+test("SituCraft's nucleus expansion is recorded as its own, beside the default, with its parameters", () => {
+  let p = withInstrumentSegmentation(project(), { id: 'd1', name: 'xenium-lung-2fov' }, manifest('seg-a'), NOW);
+  const expansion = {
+    ...manifest('exp-b'), name: 'Nucleus expansion, 5 µm',
+    lineage: {
+      parents: [manifest('seg-a').lineage.parents[0], { kind: 'segmentation', id: 'seg-a', name: 'Instrument segmentation' }],
+      job: { id: 'j2-1', kind: 'expansion', spec: { bundle: '/data/lung', distance_um: 5 } },
+      method: { name: 'SituCraft nucleus expansion', version: '1', citation: 'Okabe A, et al. 2000' },
+      parameters: { distance_um: 5, distance_px: 23.53 },
+      software: [{ name: 'situcraft', version: '0.2.0' }],
+    },
+    files: [{ path: 'cells.bin', role: 'cells', size: 1000, sha256: 'cc' }],
+    summary: { cells: 11898, agreement: { pixels: { agreement: 0.98 } } },
+  };
+  p = addSegmentation(p, segmentationRecord({ id: 'd1' }, expansion, NOW), NOW);
+  const record = segmentationsOf(p, 'd1').find((a) => a.id === 'exp-b');
+  assert.equal(record.source, 'situcraft');
+  assert.equal(record.parameters.distance_um, 5);
+  assert.deepEqual(record.parents.map((x) => x.kind), ['bundle', 'segmentation']);
+  assert.equal(record.files[0].location, '', 'its files are its own, not the bundle\'s');
+  assert.equal(record.summary.agreement.pixels.agreement, 0.98);
+  assert.equal(promotedSegmentation(p, 'd1').record.id, 'seg-a', 'the instrument\'s stays the default');
+});

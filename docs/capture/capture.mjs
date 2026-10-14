@@ -207,6 +207,14 @@ const scenes = {
     await act('open_example', { example: 'breast' });
     await act('segmentations', { show: true });
   },
+  // The Lung example's nuclei grown by 5 µm, compared with the instrument's segmentation, in the
+  // Segmentation view (wave 2, slice 3).
+  async expansion() {
+    await act('open_example', { example: 'lung' });
+    await act('expand_nuclei', { distance_um: 5 });
+    await js(`document.querySelector('.seg-section:last-child')?.scrollIntoView({ block: 'end' })`);
+    await sleep(300);
+  },
   // The Jobs view after both examples were opened: each job's state and times, one's log open.
   async jobs() {
     await act('open_example', { example: 'lung' });

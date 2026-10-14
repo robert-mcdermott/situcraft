@@ -30,15 +30,7 @@ const MODES = [
   { id: 'data', label: 'Data', icon: 'database', load: () => import('./ui/mode-data.js').then((m) => m.mountData) },
   { id: 'viewer', label: 'Viewer', icon: 'tissue', load: () => import('./ui/mode-viewer.js').then((m) => m.mountViewer) },
   { id: 'qc', label: 'QC', icon: 'qc', load: () => import('./ui/mode-qc.js').then((m) => m.mountQC) },
-  {
-    id: 'segmentation', label: 'Segmentation', icon: 'segment',
-    load: async () => plannedMode({
-      title: 'Segmentation', icon: 'segment',
-      purpose: 'Cell boundaries as a decision: the instrument\'s segmentation, nucleus expansion, SituCraft\'s own transcript-informed segmentation, and segmentations imported from other tools, compared side by side and by their numbers (assigned transcripts, cell sizes, spurious co-expression, changed assignments). One is promoted with a recorded reason; none is ever deleted.',
-      steps: ['Open a bundle and check it.', 'Segment, or import another tool\'s result.', 'Compare, review the differences, and promote one.'],
-      actions: [toOpen],
-    }),
-  },
+  { id: 'segmentation', label: 'Segmentation', icon: 'segment', load: () => import('./ui/mode-segmentation.js').then((m) => m.mountSegmentation) },
   'sep',
   {
     id: 'celltypes', label: 'Cell types', icon: 'tag',

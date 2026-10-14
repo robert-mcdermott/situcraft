@@ -176,10 +176,16 @@ transcripts are highest together).
 
 Segmentation is SituCraft's own code (`internal/segment`), not an external program:
 
-- **Nucleus expansion.** Nuclei are grown up to a distance, bounded by their neighbors (a
-  distance-limited Voronoi partition), and transcripts are assigned by point in polygon. It is the
-  baseline, and the Lung example bundle lets us check it against the instrument's own 5 µm
-  expansion.
+- **Nucleus expansion** (`internal/segment/expand`). Each nucleus grows into a cell of its own,
+  up to a distance and bounded by its neighbors (a distance-limited Voronoi partition), on a label
+  raster at the morphology image's resolution: an exact Euclidean distance transform gives each
+  pixel its nearest nucleus, in bands of rows on every core, with the same result for any split.
+  Transcripts are assigned by the pixel they lie in, as the instrument assigns them. It is the
+  baseline; the Lung example reproduces the instrument's own 5 µm expansion (`research.md` §3.1).
+- **Segmentations as files** (`internal/segment`): a raster of cell labels in runs (lookups by
+  pixel or µm, per-label statistics, outlines traced and simplified), each transcript's cell, the
+  counts in sparse rows, and the cells, written zlib-compressed with checked sizes and checked
+  together (geometry, assignments, counts, metadata) before they become an artifact.
 - **Transcript-informed segmentation** follows the generative model and sampler of Jones et al.
   (2025): a voxel lattice, Poisson transcript likelihoods with per-gene background, a
   gamma–negative-binomial mixture of expression states, hard morphology and connectivity
@@ -232,6 +238,9 @@ What jobs make, and what they register from a bundle, are artifacts (`internal/a
 - **Files by reference:** a file of the dataset's bundle (location `bundle`) is recorded by its
   path and SHA-256 and never copied. The instrument's segmentation is such an artifact: its id
   hashes its files' checksums, so the same bundle files give the same artifact in any project.
+  An artifact SituCraft computes is named by its inputs and parameters (a nucleus expansion: the
+  instrument's segmentation, the method's version and the distance), so asking again answers it
+  without a job.
 - **In the project:** the project records each artifact it uses (an `artifacts` entry of kind
   `segmentation` mirroring the manifest). A dataset's default segmentation is set by decisions
   (`decisions`, kind `promote-segmentation`, with a reason, by whom, when), never removed; the
