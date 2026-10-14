@@ -24,7 +24,15 @@ export function openPalette(app) {
   for (const command of app.commands()) entries.push({ kind: 'Command', title: command.label, hint: command.hint ?? '', icon: command.icon ?? 'terminal', run: command.run, keywords: command.keywords ?? '' });
   for (const item of app.localItems) entries.push({ kind: 'Opened', title: item.name, hint: item.folder ?? '', icon: 'folder', run: () => app.focusItem({ kind: 'local', id: item.url }) });
   for (const dataset of project.datasets) entries.push({ kind: 'Dataset', title: dataset.name, hint: dataset.platform ?? '', icon: 'bundle', run: () => app.focusItem({ kind: 'dataset', id: dataset.id }) });
-  for (const artifact of project.artifacts) entries.push({ kind: artifact.kind === 'labels' ? 'Label set' : 'Segmentation', title: artifact.name ?? artifact.id, hint: artifact.method ?? '', icon: artifact.kind === 'labels' ? 'tag' : 'segment', run: () => app.focusItem({ kind: artifact.kind, id: artifact.id }) });
+  const ARTIFACT_KINDS = { labels: ['Label set', 'tag'], filter: ['Filter', 'filter'], segmentation: ['Segmentation', 'segment'] };
+  for (const artifact of project.artifacts) {
+    const [kind, iconName] = ARTIFACT_KINDS[artifact.kind] ?? ARTIFACT_KINDS.segmentation;
+    const title = artifact.kind === 'filter' ? `${artifact.name} · version ${artifact.version}` : artifact.name ?? artifact.id;
+    entries.push({ kind, title, hint: artifact.method ?? '', icon: iconName, run: () => {
+      app.focusItem({ kind: artifact.kind, id: artifact.id });
+      if (artifact.kind === 'filter') app.setMode('qc');
+    } });
+  }
   for (const view of project.views) entries.push({ kind: 'Saved view', title: view.name, hint: '', icon: 'eye', run: () => app.focusItem({ kind: 'view', id: view.id }) });
 
   const input = h('input.palette-input', { placeholder: 'Search datasets, segmentations, saved views, or type a command…', autofocus: true });

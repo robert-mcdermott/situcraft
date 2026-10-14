@@ -166,9 +166,13 @@ test('points, density and cells answers are read in place', () => {
   assert.equal(densityGrid(density, 5), null);
   const method = new Uint8Array([0, 255]);
   method.pad = true;
-  const cells = readCells(encode('SCVC', [2, 1, 0], [new Float32Array([1, 2]), new Float32Array([3, 4]), new Float32Array([50, NaN]), new Float32Array([20, 30]), new Uint32Array([10, 11]), new Uint32Array([12, 13]), method]));
+  const u = (a, b) => new Uint32Array([a, b]);
+  const cells = readCells(encode('SCVC', [2, 1, 8], [new Float32Array([1, 2]), new Float32Array([3, 4]), new Float32Array([50, NaN]), new Float32Array([20, 30]), u(10, 11), u(12, 13), u(1, 0), u(0, 2), u(7, 8), u(5, 6), method]));
   assert.equal(cells.n, 2);
   assert.deepEqual([...cells.method], [0, 255]);
+  assert.deepEqual([...cells.genes], [7, 8]);
+  assert.deepEqual([...cells.nuclear], [5, 6]);
+  assert.deepEqual([...cells.controlCodewords], [0, 2]);
   assert.ok(Number.isNaN(cells.area[1]));
   assert.equal(nearestCell(cells, 1.2, 3.1, 1), 0);
   assert.equal(nearestCell(cells, 10, 10, 1), -1);

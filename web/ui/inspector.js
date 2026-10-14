@@ -67,8 +67,25 @@ export function mountInspector(app) {
       h('p.muted.mono', { style: { margin: '8px 0 0', fontSize: '11px', wordBreak: 'break-all' } }, d.path));
   }
 
+  // A filter version: its conditions and the cells it keeps.
+  function filterSection(f) {
+    const dataset = app.store.project.datasets.find((d) => d.id === f.dataset);
+    return h('section.inspector-section',
+      h('h3', icon('filter'), `${f.name} · version ${f.version}`),
+      h('dl.kv',
+        h('dt', 'Dataset'), h('dd', dataset?.name ?? '—'),
+        h('dt', 'Keeps'), h('dd', `${f.result.kept.toLocaleString('en-US')} of ${f.result.cells.toLocaleString('en-US')} cells`),
+        h('dt', 'Conditions'), h('dd', String(f.conditions.length)),
+        h('dt', 'Saved'), h('dd', relativeTime(f.created))),
+      h('p.muted.mono', { style: { margin: '8px 0 0', fontSize: '10.5px', wordBreak: 'break-all' } }, `SHA-256 of the cells kept: ${f.result.sha256}`));
+  }
+
   function focusSection() {
     const focus = app.store.ui.focus;
+    if (focus?.kind === 'filter') {
+      const filter = app.store.project.artifacts.find((a) => a.id === focus.id);
+      if (filter) return filterSection(filter);
+    }
     if (focus?.kind === 'dataset') {
       const dataset = app.store.project.datasets.find((d) => d.id === focus.id);
       if (dataset) return datasetSection(dataset);

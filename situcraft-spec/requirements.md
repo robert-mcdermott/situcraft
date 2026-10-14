@@ -57,7 +57,7 @@ Status: **planned (wave N)** until built. Then **done**, **partial** (the gap no
 | V3 | Scale-dependent representation: density rasters for whole tissue, simplified polygons at intermediate zoom, exact boundaries and molecules at cellular zoom | done (wave 1, slice 5) |
 | V4 | Genes: search; single-gene points; several genes in distinct colors; gene-set scores; per-cell expression fills | partial (wave 1, slice 5: search, points and density of up to 16 genes in distinct colors; gene-set scores and expression fills in wave 4) |
 | V5 | Cell inspector: identifiers, geometry, counts and top genes, segmentation, labels, neighbors, provenance, review history | partial (wave 1, slice 5: identifiers, centroid, areas and outline, counts recorded and counted, top genes, segmentation method; the rest in waves 4 and 5) |
-| V6 | Linked selection across the tissue, plots, tables and inspector | planned (waves 1, 4) |
+| V6 | Linked selection across the tissue, plots, tables and inspector | partial (wave 1, slice 6: cells chosen in a QC plot show in the tissue, here and in the Viewer, and in the inspector; tables in wave 4) |
 | V7 | Two segmentations compared by overlay, synchronized split view, flicker and disagreement highlighting | planned (wave 2) |
 | V8 | Saved views (dataset, coordinate system, viewport, layers, colors, filters, genes, segmentation, labels, ROIs) that reopen exactly | planned (wave 1) |
 | V9 | Scale bar, coordinate readout (µm), minimap, legends; an "explain this color" link from every encoding to its artifact and method | partial (wave 1, slice 5: scale bar, readout, minimap, the fill's legend; the links in wave 4) |
@@ -67,10 +67,10 @@ Status: **planned (wave N)** until built. Then **done**, **partial** (the gap no
 
 | # | Requirement | Status |
 | --- | --- | --- |
-| Q1 | Run metrics from the bundle, explained | planned (wave 1) |
-| Q2 | Spatial QC maps: transcripts per cell, negative-control density, unassigned fraction, cell and nuclear area, segmentation method, Q-score | planned (wave 1) |
-| Q3 | Distributions (histograms, box plots, scatter plots) with brushing linked to the tissue | planned (wave 1) |
-| Q4 | Non-destructive cell filters saved as named versions; their effects compared | planned (wave 1) |
+| Q1 | Run metrics from the bundle, explained | done (wave 1, slice 6: every recorded metric explained; 20 recomputed from the data and shown beside it, 4 shown as recorded with why) |
+| Q2 | Spatial QC maps: transcripts per cell, negative-control density, unassigned fraction, cell and nuclear area, segmentation method, Q-score | done (wave 1, slice 6) |
+| Q3 | Distributions (histograms, box plots, scatter plots) with brushing linked to the tissue | done (wave 1, slice 6) |
+| Q4 | Non-destructive cell filters saved as named versions; their effects compared | done (wave 1, slice 6) |
 | Q5 | Metrics compared across samples, outliers flagged, no opaque pass/fail thresholds | planned (wave 7) |
 
 ## Segmentation

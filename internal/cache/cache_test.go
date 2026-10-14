@@ -608,8 +608,12 @@ func checkDensity(t *testing.T, idx *Transcripts) {
 	t.Helper()
 	g, bins := idx.Params.Grid, idx.Params.DensityBins
 	genes := len(idx.Summary.Genes)
+	if len(idx.Summary.Pseudo) != PseudoCount {
+		t.Fatalf("%d pseudo-genes", len(idx.Summary.Pseudo))
+	}
+	var pseudo []int
 	for _, l := range idx.Summary.DensityLevels {
-		n, q := make([]int64, genes+1), make([]int64, genes+1)
+		n, q := make([]int64, genes+PseudoCount), make([]int64, genes+PseudoCount)
 		for ty := 0; ty < g.Down(l); ty++ {
 			for tx := 0; tx < g.Across(l); tx++ {
 				d, err := idx.Density(l, tx, ty)
@@ -640,7 +644,12 @@ func checkDensity(t *testing.T, idx *Transcripts) {
 							for at := pt.Starts[k]; at < pt.Starts[k+1]; at++ {
 								bx := clampInt(int(math.Floor((float64(pt.X[at])-float64(tx)*side)*float64(bins)/side)), 0, bins-1)
 								by := clampInt(int(math.Floor((float64(pt.Y[at])-float64(ty)*side)*float64(bins)/side)), 0, bins-1)
-								for _, gg := range []int{int(gene), genes} {
+								pseudo = pseudoOf(idx.Summary.Genes[gene].Kind, pt.Cell[at] != NoCell, pseudo)
+								groups := []int{int(gene)}
+								for _, k := range pseudo {
+									groups = append(groups, genes+k)
+								}
+								for _, gg := range groups {
 									c := want[[2]int{gg, by*bins + bx}]
 									c[0]++
 									if pt.QV[at] >= 20 {
@@ -676,6 +685,26 @@ func checkDensity(t *testing.T, idx *Transcripts) {
 		}
 		if n[genes] != total || q[genes] != totalQ || total != idx.Summary.Transcripts || totalQ != idx.Summary.Q20 {
 			t.Errorf("level %d: every gene together sums to %d (Q20 %d), the transcripts are %d (%d)", l, n[genes], q[genes], idx.Summary.Transcripts, idx.Summary.Q20)
+		}
+		for k, p := range idx.Summary.Pseudo {
+			if n[genes+k] != p.Count || q[genes+k] != p.Q20 {
+				t.Errorf("level %d: %s sums to %d (Q20 %d), its count is %d (%d)", l, p.Name, n[genes+k], q[genes+k], p.Count, p.Q20)
+			}
+		}
+		// The pseudo-genes' counts follow from the genes'.
+		var geneN, geneQ, controlN int64
+		for _, gene := range idx.Summary.Genes {
+			switch gene.Kind {
+			case xenium.KindGene:
+				geneN += gene.Count
+				geneQ += gene.Q20
+			case xenium.KindNegControlProbe, xenium.KindNegControlCode:
+				controlN += gene.Count
+			}
+		}
+		ps := idx.Summary.Pseudo
+		if ps[PseudoAll].Count != total || ps[PseudoGenes].Count != geneN || ps[PseudoGenes].Q20 != geneQ || ps[PseudoControls].Count != controlN || ps[PseudoInCells].Count > ps[PseudoGenes].Count {
+			t.Errorf("pseudo-gene counts %+v; genes %d (Q20 %d), controls %d", ps, geneN, geneQ, controlN)
 		}
 	}
 }

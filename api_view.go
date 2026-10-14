@@ -171,7 +171,12 @@ func (a *app) viewCells(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	writeBinary(w, d.CellTable(), false)
+	table, err := d.CellTable()
+	if err != nil {
+		writeError(w, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+	writeBinary(w, table, false)
 }
 
 func (a *app) viewCell(w http.ResponseWriter, r *http.Request) {

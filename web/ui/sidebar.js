@@ -54,6 +54,13 @@ const SECTIONS = [
     empty: 'Cell identities: predicted, curated and consensus, side by side.',
   },
   {
+    kind: 'filter', title: 'Filters', icon: 'filter',
+    items: (project) => project.artifacts.filter((a) => a.kind === 'filter'),
+    label: (a) => `${a.name} · v${a.version}`,
+    meta: (a) => `${formatCount(a.result.kept)} cells`,
+    empty: 'Cell filters from the QC view, each version kept with the cells it keeps.',
+  },
+  {
     kind: 'view', title: 'Saved views', icon: 'eye',
     items: (project) => project.views,
     label: (v) => v.name ?? 'View',
@@ -86,6 +93,8 @@ export function mountSidebar(app) {
             // Bundles and datasets are shown by the Data view; from the start page, go there.
             const bundle = section.kind === 'dataset' || item.kind === 'bundle' || item.kind === 'archive';
             if (bundle && app.store.ui.mode === 'welcome') app.setMode('data');
+            // A filter is edited and compared in the QC view.
+            if (section.kind === 'filter') app.setMode('qc');
           },
         }, icon(section.itemIcon?.(item) ?? section.icon), h('span.label', section.label(item)), h('span.meta', section.meta(item, app))));
       }

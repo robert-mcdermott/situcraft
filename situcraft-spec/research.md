@@ -109,21 +109,42 @@ Xenium Ranger do.
 ### 1.3b The run's metrics (verified)
 
 On both bundles, these metrics of `metrics_summary.csv` (and two values of `experiment.xenium`)
-are reproduced exactly (counts) or to 1e-6 (ratios) from the data. Validation recomputes them all:
+are reproduced exactly (counts) or to 1e-6 (ratios) from the data. Validation recomputes them all,
+and the QC view shows each beside its recorded value:
 
 | Metric | Definition |
 | --- | --- |
 | `num_cells_detected`, `experiment.num_cells` | rows of cells.parquet |
 | `total_high_quality_decoded_transcripts` | gene transcripts with qv ≥ 20 |
-| `fraction_transcripts_assigned` | of those, the share assigned to a cell |
-| `total_cell_area` | the sum of cells.parquet's `cell_area` (µm²) |
+| `fraction_transcripts_decoded_q20` | gene transcripts with qv ≥ 20 ÷ all gene transcripts |
+| `fraction_transcripts_assigned` | of the Q20 gene transcripts, the share assigned to a cell |
+| `total_cell_area` | the sum of cells.parquet's `cell_area` (µm²); the cell mask's (`masks/1`) pixels give the same |
 | `decoded_transcripts_per_100um2` | Q20 gene transcripts per 100 µm² of **cell area** (also `experiment.transcripts_per_100um`) |
+| `nuclear_transcripts_per_100um2` | Q20 gene transcripts overlapping a nucleus (`overlaps_nucleus`) per 100 µm² of the **nucleus mask** (cells.zarr.zip `masks/0`, its non-zero pixels × 0.2125² µm²; cells.parquet's `nucleus_area` agrees only in Lung, and the nuclei's polygons give 5–8% more) |
 | `median_transcripts_per_cell`, `experiment.transcripts_per_cell` | the median of `transcript_counts` |
+| `median_genes_per_cell` | the median over cells of their genes with a Q20 transcript (the matrix's non-zero genes) |
+| `fraction_empty_cells` | cells whose `transcript_counts` is 0 ÷ cells |
+| `negative_control_probe_counts_per_control_per_cell` | the sum of `control_probe_counts` ÷ the panel's negative control probes ÷ cells |
+| `estimated_number_of_false_positive_transcripts_per_cell` | the previous × the panel's genes |
 | `cells_per_100um2` | cells per 100 µm² of `region_area` |
 | `segmented_cell_boundary_count`, `…_interior_count`, `…_nuc_expansion_count` | cells by segmentation method (cells.zarr.zip's `polygon_sets/1/method`, indexing its `segmentation_methods`) |
+| `segmented_cell_boundary_frac`, `…_interior_frac`, `…_nuc_expansion_frac` | those counts ÷ cells |
+| `segmented_cell_stain_frac` | (boundary-stain + interior-stain cells) ÷ cells |
 
-Some metrics are empty in both bundles (the polygon counts, `fraction_of_nuclei_without_cell`);
-when a bundle fills them, they are compared too.
+Four recorded metrics are not reproduced, and the QC view shows them as recorded, saying why:
+
+- `region_area`: the area of the region chosen on the slide, which the bundle does not describe.
+- `adjusted_negative_control_probe_rate` and `adjusted_negative_control_codeword_rate`: the
+  plain per-feature rate of control detections against gene detections (Q20) is about 7% below
+  the recorded probe rate and about half the recorded codeword rate, and no simple variant tried
+  (all qualities, counts in cells) gives the recorded values. The adjustment is not described in
+  the bundle.
+- `thickness_transcripts_high_quality`: the 5th-to-95th percentile range of the Q20 gene
+  transcripts' z is 4.84 µm in Breast (recorded 4.836) but 8.26 µm in Lung (recorded 7.61), per
+  field of view or not. Its definition is not in the bundle.
+
+Some metrics are empty in both bundles (the polygon counts, `fraction_of_nuclei_without_cell`,
+the predesigned and custom panel splits); when a bundle fills them, they are shown as recorded.
 
 ### 1.3c The derived data of the development bundles (verified)
 
@@ -134,9 +155,12 @@ an Apple M4 with 10 cores, reading the source files' checksums included:
 | --- | --- | --- |
 | Grid | 5,791 × 3,553 px at 0.2125 µm; 5 levels; 12 × 7 tiles at level 0 | 5,792 × 3,529 px; 5 levels; 12 × 7 tiles |
 | Image pyramid | 1 channel, all 5 levels decoded from the bundle: 29.4 MB | 4 channels, all levels decoded: 132.5 MB |
-| Transcript index | 825,885 transcripts of 537 features (746,475 of quality ≥ 20; 809,249 in a cell): 19.7 MB | 1,113,950 of 529 features (1,036,083; 964,035): 27.1 MB |
+| Transcript index | 825,885 transcripts of 537 features (746,475 of quality ≥ 20; 809,249 in a cell): 21.8 MB | 1,113,950 of 529 features (1,036,083; 964,035): 29.7 MB |
 | Cell outlines | 11,898 cells and 11,898 nuclei: 7.4 MB | 7,275 cells and 7,020 nuclei: 5.4 MB |
-| In all | 56.6 MB in 1.9 s | 165.0 MB in 3.8 s |
+| In all | 58.6 MB in 2.0 s | 167.5 MB in 4.1 s |
+
+(Sizes since wave 1, slice 6, whose QC maps added three groups of transcripts to the density grids:
+2 MB more each. Slice 4 measured 56.6 and 165.0 MB.)
 
 - Every transcript's cell and every polygon's cell is a row of cells.parquet.
 - **Simplification** (Douglas & Peucker 1973) to half a pixel of each level keeps, of the cell
@@ -413,6 +437,10 @@ Notes:
 - Douglas DH, Peucker TK. Algorithms for the reduction of the number of points required to
   represent a digitized line or its caricature. *Cartographica* 1973;10(2):112–122.
   doi:10.3138/FM57-6770-U75U-7727 (polygon simplification in the geometry tiles).
+- Hyndman RJ, Fan Y. Sample quantiles in statistical packages. *Am Stat* 1996;50:361–365
+  (the QC plots' quantiles, type 7).
+- Tukey JW. *Exploratory Data Analysis*. Addison-Wesley, 1977 (box plots, whiskers at 1.5
+  interquartile ranges).
 - Deutsch P, Gailly J-L. ZLIB compressed data format specification version 3.3. RFC 1950, 1996;
   Deutsch P. DEFLATE compressed data format specification version 1.3. RFC 1951, 1996 (the
   cache's blocks, through Go's standard library).

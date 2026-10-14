@@ -456,18 +456,80 @@ The data plane built here (readers, codecs, the derived-data cache) carries ever
      - **Outlines drawn at whole-tissue zoom only grey the image:** they are drawn once a cell
        spans about ten pixels.
      - **XOA 2.0 records each cell's segmentation method only in cells.zarr.zip.**
-6. **QC (Q1, Q2, Q3, Q4, V6).**
-   - **QC view:** run metrics, with explanations of what each means and where it comes from.
-   - **Spatial maps:** transcripts per cell, negative-control density, unassigned fraction, cell
-     and nuclear area, segmentation method, Q-score.
-   - **Distributions:** histograms, box plots and scatter plots whose brushing selects cells in
-     the tissue.
-   - **Named filters:** non-destructive cell filters, saved as named versions and compared by
-     their effects.
-   - Validation: each metric recomputed from the transcripts and cells equals the bundle's
-     `metrics_summary.csv` where XOA defines it (e.g. Q20 fraction, transcripts per cell,
-     fraction assigned), with any definitional difference documented. Filter versions are exact
-     and reproducible.
+6. **QC (Q1, Q2, Q3, Q4, V6): done.** The QC view (`ui/mode-qc.js`) has four parts.
+   - **Run metrics:** every recorded metric of `metrics_summary.csv`, explained
+     (`lib/metrics.js`).
+     - **Recomputed:** validation (`internal/xenium`) now recomputes 20 of them from the data (10
+       more than slice 3), plus two values of the manifest. The view shows SituCraft's value
+       beside the recorded one.
+     - **New definitions found:**
+       - nuclear transcripts are counted per area of the nucleus *mask*, not of the polygons;
+       - the false-positive estimate is controls per control and cell × genes;
+       - the Q20 fraction is over gene transcripts;
+       - empty cells, median genes per cell and the segmentation methods' shares.
+     - **Not reproduced:** four metrics (the region's area, the two "adjusted" control rates, the
+       transcript layer's thickness) are shown as recorded, with why (`research.md` §1.3b).
+   - **The tissue with a QC map:**
+     - **Per cell:** gene transcripts, genes detected, all transcripts, negative controls, cell
+       and nucleus area, the nucleus's share of the cell, transcript density, the share of
+       transcripts in the nucleus, segmentation method.
+     - **Per density bin:** the share of gene transcripts outside cells (unassigned), the share
+       below quality 20 (Q-score), negative-control density and gene transcript density. These
+       read three new groups of transcripts the density grids now count, so the cache format
+       went to version 2: gene transcripts, gene transcripts in a cell, and negative controls.
+       Ratio maps leave out bins of fewer than four transcripts.
+     - **The cells table** gains control counts, genes detected and nuclear transcripts, the last
+       two counted from the transcript index.
+   - **Plots** (Canvas 2D): a histogram (linear or log), box plots by segmentation method, and a
+     scatter plot of any two attributes.
+     - **Brushing:** dragging chooses cells, shown in the plots, in the tissue (magenta, here and
+       in the Viewer) and in the inspector (counts and medians against all cells).
+     - **To a filter:** a brushed range becomes a filter condition in one click.
+   - **Filters** (`lib/filters.js`):
+     - **Conditions** on the attributes (bounds included; a cell without a value fails). Each
+       condition's effect is counted as it is edited: cells failing it, and failing only it.
+     - **Effects:** the cells and the share of transcripts kept, the median per cell, and the
+       removed cells shown in the tissue.
+     - **Saved as versions:** project artifacts of kind `filter`, never replaced. Each records the
+       count and the SHA-256 of which cells it keeps, and on reopening is checked to keep them
+       again ("Reproduced").
+     - **Compared:** kept by both, by one or by neither, with the difference shown in the
+       tissue.
+     - **Used in plots and maps,** and listed in the project tree and the palette.
+   - **Viewer navigation** moved to `ui/navigation.js`, shared by both views.
+   - Validation:
+     - **Run metrics** (`internal/xenium`, both bundles): 22 of 22 recorded values reproduced
+       (20 of `metrics_summary.csv`, 2 of the manifest); the recorded metrics are carried whole
+       in the report.
+     - **The QC maps' data** (`internal/view`): the whole tissue's bins give exactly the run's
+       share of gene transcripts in cells and its Q20 share. The cells table's genes per cell give
+       the recorded median (25 and 46).
+     - **Cache:** each group's density grid sums to its count at every level, and the groups'
+       counts follow from the genes'.
+     - **In headless Chrome** (`node validation/run.mjs viewer`, both bundles):
+       - all recomputable metrics agree in the view (20 of 20);
+       - brushing gene transcripts 20–100 chooses exactly the cells a count in Node finds (9,926
+         and 2,995);
+       - the choice shows in the Viewer;
+       - a saved filter keeps the cells an independent evaluation in Node keeps, under the same
+         SHA-256 (from Node's own hash);
+       - all six kinds of map draw without a WebGL error.
+     - **Node tests:**
+       - the attributes and NaN handling;
+       - filter evaluation (bounds, categories, missing values);
+       - the checksum's layout, versions, removal and comparison;
+       - histograms, quantiles, box statistics and brushing;
+       - the metrics' explanations (every one says how it is computed or why not).
+     - **In the window:**
+       - metrics explained, 20 of 20 reproduced;
+       - a cell map and a bin map;
+       - brushing the histogram and the scatter plot;
+       - two filter versions saved, compared, and both reproduced after a reload.
+   - Found by slice 6:
+     - **Nuclear transcript density divides by the nucleus mask's area**, not the polygons'.
+       `masks/1`'s area is exactly the recorded total cell area.
+     - **Four recorded metrics cannot be reproduced** from the bundle (above).
+     - **The chosen cells' yellow highlight vanished into viridis's yellow end:** it is magenta.
 7. **Saved views, the record and the release (V8, E4, D9).**
    - Saved views, with stable deep links.
    - Projects reopen exactly (a fixture under `validation/projects/`).

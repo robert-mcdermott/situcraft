@@ -34,6 +34,10 @@ type Dataset struct {
 	once  sync.Once
 	desc  *Descriptor
 	dErr  error
+
+	countsOnce sync.Once
+	counts     *cellCounts
+	countsErr  error
 }
 
 // Open opens a bundle's dataset for viewing; its entries must be built (status Ready).
@@ -147,17 +151,17 @@ func (p *pointTiles) get(t *cache.Transcripts, tx, ty int) (*cache.PointTile, er
 
 // --- Gene selections -----------------------------------------------------------------------------
 
-// Genes is a selection of genes by index (nil: every gene). The index equal to the number of
-// genes is every gene together, which only density grids have.
+// Genes is a selection of genes by index (nil: every gene). Indexes from the number of genes on
+// are pseudo-genes (cache.PseudoAll…), which only density grids have.
 type Genes []int
 
 func (g Genes) mask(n int) ([]bool, error) {
 	if g == nil {
 		return nil, nil
 	}
-	m := make([]bool, n+1)
+	m := make([]bool, n+cache.PseudoCount)
 	for _, i := range g {
-		if i < 0 || i > n {
+		if i < 0 || i >= len(m) {
 			return nil, fmt.Errorf("no gene %d", i)
 		}
 		m[i] = true
@@ -185,9 +189,15 @@ func (d *Dataset) TilePoints(tx, ty int, genes Genes, minQ float32) (*Points, er
 	if d.Transcripts == nil {
 		return nil, ErrNotReady
 	}
-	mask, err := genes.mask(len(d.Transcripts.Summary.Genes))
+	n := len(d.Transcripts.Summary.Genes)
+	mask, err := genes.mask(n)
 	if err != nil {
 		return nil, err
+	}
+	for _, g := range genes {
+		if g >= n {
+			return nil, fmt.Errorf("gene %d is a group of transcripts, which only density grids have", g)
+		}
 	}
 	tile, err := d.tiles.get(d.Transcripts, tx, ty)
 	if err != nil {
@@ -310,8 +320,8 @@ type Density struct {
 	Count  []uint32
 }
 
-// TileDensity is a tile's density grids for the selected genes (nil: every gene together only),
-// counting all transcripts or (q20) those of quality 20 or more.
+// TileDensity is a tile's density grids for the selected genes and pseudo-genes (nil: every
+// transcript together only), counting all transcripts or (q20) those of quality 20 or more.
 func (d *Dataset) TileDensity(level, tx, ty int, genes Genes, q20 bool) (*Density, error) {
 	if d.Transcripts == nil {
 		return nil, ErrNotReady
@@ -368,14 +378,80 @@ func (g *Density) Encode() []byte {
 
 // --- Cells ---------------------------------------------------------------------------------------
 
-// CellTable encodes the cells ("SCVC"; cells, segmentation methods, 0), for coloring cells by an
-// attribute and finding them:
+// CellColumns are what the cells table holds of each cell, in order, beyond its centroid (QC
+// attributes for maps, plots and filters).
+var CellColumns = []string{"area", "nucleusArea", "transcripts", "total", "controlProbes", "controlCodewords", "genes", "nuclear"}
+
+// cellCounts are per-cell counts from the transcript index: genes detected (with a Q20
+// transcript) and Q20 gene transcripts overlapping the nucleus.
+type cellCounts struct {
+	genes, nuclear []uint32
+}
+
+// countCells counts, for every cell, its genes detected and its nuclear transcripts, in one pass
+// over the transcript index (computed once).
+func (d *Dataset) countCells() (*cellCounts, error) {
+	d.countsOnce.Do(func() {
+		n := len(d.Cells.IDs)
+		out := &cellCounts{genes: make([]uint32, n), nuclear: make([]uint32, n)}
+		t := d.Transcripts
+		if t == nil {
+			d.counts = out
+			return
+		}
+		// (cell, gene) pairs of Q20 gene transcripts, made unique to count genes per cell.
+		var pairs []uint64
+		for ty := 0; ty < d.Grid.Down(0); ty++ {
+			for tx := 0; tx < d.Grid.Across(0); tx++ {
+				tile, err := t.Points(tx, ty)
+				if err != nil {
+					d.countsErr = err
+					return
+				}
+				for k, gene := range tile.Genes {
+					if t.Summary.Genes[gene].Kind != xenium.KindGene {
+						continue
+					}
+					for i := tile.Starts[k]; i < tile.Starts[k+1]; i++ {
+						c := tile.Cell[i]
+						if c == cache.NoCell || int(c) >= n || tile.QV[i] < 20 {
+							continue
+						}
+						pairs = append(pairs, uint64(c)<<16|uint64(gene))
+						if tile.Flags[i]&1 != 0 {
+							out.nuclear[c]++
+						}
+					}
+				}
+			}
+		}
+		sort.Slice(pairs, func(i, j int) bool { return pairs[i] < pairs[j] })
+		for i, p := range pairs {
+			if i == 0 || p != pairs[i-1] {
+				out.genes[p>>16]++
+			}
+		}
+		d.counts = out
+	})
+	return d.counts, d.countsErr
+}
+
+// CellTable encodes the cells ("SCVC"; cells, segmentation methods, columns), for coloring cells
+// by an attribute, plotting and filtering them, and finding them:
 //
-//	x f32[n] | y f32[n] | area f32[n] | nucleus area f32[n] | gene transcripts u32[n] |
-//	all transcripts u32[n] | method u8[n] (255: unknown) | padding
+//	x f32[n] | y f32[n] | area f32[n] | nucleus area f32[n] (µm²) |
+//	transcripts u32[n] (Q20 gene transcripts, cells.parquet's transcript_counts) |
+//	total u32[n] (all its Q20 transcripts, total_counts) | control probes u32[n] |
+//	control codewords u32[n] | genes u32[n] (genes detected) |
+//	nuclear u32[n] (Q20 gene transcripts overlapping the nucleus) |
+//	method u8[n] (255: unknown) | padding
 //
 // Areas a bundle does not record are NaN; counts it does not record are 0.
-func (d *Dataset) CellTable() []byte {
+func (d *Dataset) CellTable() ([]byte, error) {
+	counts, err := d.countCells()
+	if err != nil {
+		return nil, err
+	}
 	c := d.Cells
 	n := len(c.IDs)
 	methods := 0
@@ -383,7 +459,7 @@ func (d *Dataset) CellTable() []byte {
 		methods = len(d.Methods.Methods)
 	}
 	var w writer
-	w.header("SCVC", uint32(n), uint32(methods), 0)
+	w.header("SCVC", uint32(n), uint32(methods), uint32(len(CellColumns)))
 	floats := func(v []float64) []float32 {
 		out := make([]float32, n)
 		for i := range out {
@@ -394,7 +470,7 @@ func (d *Dataset) CellTable() []byte {
 		}
 		return out
 	}
-	counts := func(v []int64) []uint32 {
+	ints := func(v []int64) []uint32 {
 		out := make([]uint32, n)
 		for i := range out {
 			if i < len(v) && v[i] > 0 {
@@ -407,8 +483,12 @@ func (d *Dataset) CellTable() []byte {
 	w.f32(floats(c.Y))
 	w.f32(floats(c.CellArea))
 	w.f32(floats(c.NucleusArea))
-	w.u32(counts(c.TranscriptCounts))
-	w.u32(counts(c.TotalCounts))
+	w.u32(ints(c.TranscriptCounts))
+	w.u32(ints(c.TotalCounts))
+	w.u32(ints(c.ControlProbeCounts))
+	w.u32(ints(c.ControlCodewordCounts))
+	w.u32(counts.genes)
+	w.u32(counts.nuclear)
 	method := make([]uint8, n)
 	for i := range method {
 		method[i] = xenium.NoMethod
@@ -418,7 +498,7 @@ func (d *Dataset) CellTable() []byte {
 	}
 	w.u8(method)
 	w.pad()
-	return w.buf
+	return w.buf, nil
 }
 
 // --- Encoding ------------------------------------------------------------------------------------

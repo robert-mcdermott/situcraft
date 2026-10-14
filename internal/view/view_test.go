@@ -282,7 +282,7 @@ func TestRealDescriptor(t *testing.T) {
 			t.Errorf("%s: range %v, max %v", ch.Name, ch.Range, ch.Max)
 		}
 	}
-	if desc.Transcripts == nil || desc.Transcripts.Count != 1113950 || len(desc.Transcripts.Scale) != len(desc.Transcripts.Genes)+1 {
+	if desc.Transcripts == nil || desc.Transcripts.Count != 1113950 || len(desc.Transcripts.Scale) != len(desc.Transcripts.Genes)+cache.PseudoCount {
 		t.Fatalf("transcripts %+v", desc.Transcripts)
 	}
 	if strings.Join(desc.Cells.Methods, "|") == "" || desc.Cells.MethodCounts[0] != 3300 || desc.Cells.MethodCounts[1] != 3913 || desc.Cells.MethodCounts[2] != 62 {
@@ -319,5 +319,98 @@ func TestEncodings(t *testing.T) {
 	r, m := displayRange(hist)
 	if r != [2]float64{2, 199} || m != 200 {
 		t.Errorf("display range %v, max %v", r, m)
+	}
+}
+
+// The QC maps' groups of transcripts, summed over the tissue, give the run's metrics: the share
+// of gene transcripts in cells (the unassigned-fraction map's complement) and the share of
+// quality 20 or more (the Q-score map). The cells table's genes per cell give the median.
+func TestRealQCMapsAndColumns(t *testing.T) {
+	for _, name := range []string{"xenium-lung-2fov", "xenium-breast-2fov"} {
+		t.Run(name, func(t *testing.T) {
+			d, b := openReal(t, name)
+			tr := d.Transcripts
+			n := len(tr.Summary.Genes)
+			levels := tr.Summary.DensityLevels
+			top := levels[len(levels)-1]
+			sum := func(gene int, q20 bool) float64 {
+				var total float64
+				for ty := 0; ty < d.Grid.Down(top); ty++ {
+					for tx := 0; tx < d.Grid.Across(top); tx++ {
+						g, err := d.TileDensity(top, tx, ty, Genes{gene}, q20)
+						if err != nil {
+							t.Fatal(err)
+						}
+						for _, c := range g.Count {
+							total += float64(c)
+						}
+					}
+				}
+				return total
+			}
+			genesQ := sum(n+cache.PseudoGenes, true)
+			assigned := sum(n+cache.PseudoInCells, true)
+			genesAll := sum(n+cache.PseudoGenes, false)
+			metric := func(name string) float64 {
+				v, ok := b.Metrics.Number(name)
+				if !ok {
+					t.Fatalf("no %s", name)
+				}
+				return v
+			}
+			near := func(a, b float64) bool { return math.Abs(a-b) <= 1e-9*math.Max(1, math.Abs(b)) }
+			if !near(assigned/genesQ, metric("fraction_transcripts_assigned")) || !near(genesQ/genesAll, metric("fraction_transcripts_decoded_q20")) || genesQ != metric("total_high_quality_decoded_transcripts") {
+				t.Errorf("assigned %v of %v (Q20 of %v): %v and %v; recorded %v and %v", assigned, genesQ, genesAll, assigned/genesQ, genesQ/genesAll, metric("fraction_transcripts_assigned"), metric("fraction_transcripts_decoded_q20"))
+			}
+			if _, err := d.TilePoints(0, 0, Genes{n + cache.PseudoGenes}, 0); err == nil {
+				t.Error("points of a pseudo-gene were answered")
+			}
+			// The cells table's columns.
+			raw, err := d.CellTable()
+			if err != nil {
+				t.Fatal(err)
+			}
+			cells := len(d.Cells.IDs)
+			le := binary.LittleEndian
+			if string(raw[:4]) != "SCVC" || int(le.Uint32(raw[4:])) != cells || int(le.Uint32(raw[12:])) != len(CellColumns) || len(raw) != 16+4*10*cells+(cells+3)/4*4 {
+				t.Fatalf("the cells table has %d bytes", len(raw))
+			}
+			column := func(k int) []uint32 {
+				out := make([]uint32, cells)
+				for i := range out {
+					out[i] = le.Uint32(raw[16+4*k*cells+4*i:])
+				}
+				return out
+			}
+			transcripts, genes, nuclear := column(4), column(8), column(9)
+			sorted := make([]int, cells)
+			var nuclearSum, transcriptSum int64
+			for i := range sorted {
+				sorted[i] = int(genes[i])
+				nuclearSum += int64(nuclear[i])
+				transcriptSum += int64(transcripts[i])
+				if genes[i] > transcripts[i] || nuclear[i] > transcripts[i] || int64(transcripts[i]) != d.Cells.TranscriptCounts[i] {
+					t.Fatalf("cell %d: %d genes, %d nuclear, %d transcripts", i, genes[i], nuclear[i], transcripts[i])
+				}
+			}
+			sort.Ints(sorted)
+			median := float64(sorted[cells/2])
+			if cells%2 == 0 {
+				median = float64(sorted[cells/2-1]+sorted[cells/2]) / 2
+			}
+			if median != metric("median_genes_per_cell") {
+				t.Errorf("median genes per cell %v, recorded %v", median, metric("median_genes_per_cell"))
+			}
+			if nuclearSum == 0 || nuclearSum >= transcriptSum {
+				t.Errorf("%d nuclear of %d transcripts", nuclearSum, transcriptSum)
+			}
+			desc, err := d.Describe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(desc.Transcripts.Pseudo) != cache.PseudoCount || len(desc.Transcripts.Scale) != n+cache.PseudoCount {
+				t.Errorf("descriptor pseudo-genes %+v", desc.Transcripts.Pseudo)
+			}
+		})
 	}
 }

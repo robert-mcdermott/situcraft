@@ -35,12 +35,14 @@ type ChannelInfo struct {
 
 // TranscriptInfo describes the transcript index.
 type TranscriptInfo struct {
-	Count         int64        `json:"count"`
-	Q20           int64        `json:"q20"`
-	Genes         []cache.Gene `json:"genes"`
+	Count int64        `json:"count"`
+	Q20   int64        `json:"q20"`
+	Genes []cache.Gene `json:"genes"`
+	// Pseudo are the groups of transcripts with density grids at indexes after the genes'.
+	Pseudo        []cache.Gene `json:"pseudo"`
 	DensityLevels []int        `json:"densityLevels"`
 	DensityBins   int          `json:"densityBins"`
-	// Scale is, for each gene and then every gene together, the 99th percentile of its non-empty
+	// Scale is, for each gene and then each pseudo-gene, the 99th percentile of its non-empty
 	// Q20 bins at the coarsest density level: a level L finer holds about a 4^L-th of that in a
 	// bin, which sets the density's color scale.
 	Scale  []float64  `json:"scale"`
@@ -84,8 +86,8 @@ func (d *Dataset) describe() (*Descriptor, error) {
 		}
 	}
 	if t := d.Transcripts; t != nil {
-		info := &TranscriptInfo{Count: t.Summary.Transcripts, Q20: t.Summary.Q20, Genes: t.Summary.Genes, DensityLevels: t.Summary.DensityLevels, DensityBins: t.Params.DensityBins, Bounds: t.Summary.Bounds}
-		info.Scale = make([]float64, len(t.Summary.Genes)+1)
+		info := &TranscriptInfo{Count: t.Summary.Transcripts, Q20: t.Summary.Q20, Genes: t.Summary.Genes, Pseudo: t.Summary.Pseudo, DensityLevels: t.Summary.DensityLevels, DensityBins: t.Params.DensityBins, Bounds: t.Summary.Bounds}
+		info.Scale = make([]float64, len(t.Summary.Genes)+cache.PseudoCount)
 		for i := range info.Scale {
 			info.Scale[i] = 1
 		}

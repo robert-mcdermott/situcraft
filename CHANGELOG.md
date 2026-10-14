@@ -120,6 +120,24 @@ with each.
   - **View the tissue** in the Data view opens a dataset once its derived data are built.
   - Tiles are served from the cache and kept by the browser, so a view you return to is drawn at
     once.
+- **QC (wave 1, slice 6).** A QC view of whether the run supports analysis, and where it does
+  not.
+  - **Run metrics explained:** every metric the run recorded, with what it measures. For 20 of
+    them, SituCraft's own value from the bundle's data is shown beside it; the rest are shown as
+    recorded, with why.
+  - **QC maps over the tissue:**
+    - per cell: transcripts, genes, area, nucleus area, transcript density, transcripts in the
+      nucleus, segmentation method and more;
+    - per small region: the share of gene transcripts outside cells, the share below quality 20,
+      and negative-control density.
+  - **Plots:** a histogram, box plots by segmentation method and a scatter plot. Dragging across
+    one chooses those cells, which the tissue shows (in the QC view and in the Viewer) and the
+    inspector summarizes.
+  - **Filters:** conditions on the cells, their effects counted as you edit them. They are saved
+    as named versions in the project and compared, and never change the data. Each version
+    records which cells it keeps and is checked to keep them again when the project reopens.
+  - The derived data's format changed (to count the groups of transcripts the maps need), so
+    datasets build their derived data once more.
 - **The development data.** `node validation/fetch.mjs` downloads 10x Genomics' Xenium human Lung
   and Breast 2-FOV bundles (CC BY 4.0). It checks each archive's MD5, extracts it (each member's
   CRC-32 checked), checks every file's SHA-256, and deletes the archive. Both take about 640 MB;
@@ -179,6 +197,13 @@ with each.
   - builds stopped partway resume to byte-identical entries; an unchanged bundle reopens with
     nothing read or built; the zipped Lung bundle reuses the folder's entries;
   - both stay under the 500 MB budget, and every reader refuses damaged files cleanly (fuzzed).
+- **QC** (`internal/xenium`, `internal/view`, `node validation/run.mjs viewer`):
+  - 22 of the runs' recorded values reproduced from the data on both bundles (20 metrics of
+    metrics_summary.csv, 2 of the manifest);
+  - the QC maps' data, summed over the tissue, give the runs' share of gene transcripts in cells
+    and of quality 20 or more exactly;
+  - brushing chooses exactly the cells in range;
+  - a saved filter keeps the same cells, under the same SHA-256, as an independent evaluation.
 - **The tissue viewer in headless Chrome** (`node validation/run.mjs viewer`):
   - every channel of both bundles, drawn at full resolution, at half and at the coarsest level
     and read back before any window or color, equals the derived data sample for sample (1.35

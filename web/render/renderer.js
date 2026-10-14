@@ -9,7 +9,10 @@
 //   view, and otherwise density grids at the level whose bins are a few pixels wide.
 // - Cell and nucleus outlines come from the geometry level matching the image level (simplified
 //   to half a pixel there); cells can be filled by an attribute; the selected cell is outlined
-//   from its full-resolution polygons.
+//   from its full-resolution polygons, and cells chosen elsewhere (a brushed plot) highlighted.
+// - A QC map colors each density bin by a ratio of two groups of transcripts (the share of gene
+//   transcripts outside cells, of quality below 20) or by a count (negative controls), through a
+//   colormap.
 //
 // Coordinates are µm; the camera (lib/viewport.js) maps them to the canvas.
 
@@ -71,6 +74,40 @@ void main() {
   if (c <= 0.0) discard;
   float t = clamp(u_gain * log(1.0 + c) / log(1.0 + u_scale), 0.0, 1.0);
   o = vec4(u_color * t, 1.0);
+}`;
+
+// A QC map: a bin's value is num / den, or 1 − num / den (ratio maps), or
+// log(1 + num) / log(1 + scale) (count maps), shown through a colormap; bins with fewer than minDen transcripts in the denominator
+// are left out (a ratio of few transcripts is noise).
+const QCMAP_FS = `#version 300 es
+precision highp float;
+uniform sampler2D u_num;
+uniform sampler2D u_den;
+uniform sampler2D u_lut;
+uniform int u_ratio;
+uniform int u_complement;
+uniform float u_minDen;
+uniform float u_scale;
+uniform vec2 u_range;
+uniform float u_opacity;
+in vec2 v_tex;
+out vec4 o;
+void main() {
+  vec2 uv = v_tex / 128.0;
+  float num = texture(u_num, uv).r;
+  float t;
+  if (u_ratio == 1) {
+    float den = texture(u_den, uv).r;
+    if (den < u_minDen || den <= 0.0) discard;
+    t = num / den;
+    if (u_complement == 1) t = 1.0 - t;
+  } else {
+    if (num <= 0.0) discard;
+    t = log(1.0 + num) / log(1.0 + u_scale);
+  }
+  t = clamp((t - u_range.x) / max(u_range.y - u_range.x, 1e-9), 0.0, 1.0);
+  vec3 color = texture(u_lut, vec2(t * 255.0 / 256.0 + 0.5 / 256.0, 0.5)).rgb;
+  o = vec4(color, u_opacity);
 }`;
 
 const POINTS_VS = `#version 300 es
@@ -154,6 +191,8 @@ export class TissueRenderer {
     this.camera = { cx: 0, cy: 0, scale: 1 };
     this.layers = null;
     this.cells = null; // the cells table (lib/viewer-data.js readCells)
+    this.qcMap = null; // { ratio, num, den, q20Num, q20Den, minDen, scale, range, lut, opacity }
+    this.highlight = null; // { texture }: cells chosen elsewhere, drawn over the tissue
     this.selected = null; // { row, boundaries: [Float32Array], nuclei: [Float32Array] }
     this.frameRequested = false;
     this.lastFrame = { ms: 0, at: 0 };
@@ -175,6 +214,7 @@ export class TissueRenderer {
     this.programs = {
       image: createProgram(gl, IMAGE_VS, IMAGE_FS),
       density: createProgram(gl, IMAGE_VS, DENSITY_FS),
+      qcmap: createProgram(gl, IMAGE_VS, QCMAP_FS),
       points: createProgram(gl, POINTS_VS, POINTS_FS),
       shape: createProgram(gl, SHAPE_VS, SHAPE_FS),
     };
@@ -182,6 +222,7 @@ export class TissueRenderer {
     this.quadVAO = {
       image: vertexArray(gl, [{ location: this.programs.image.a.a_pos, buffer: this.quad, size: 2 }]),
       density: vertexArray(gl, [{ location: this.programs.density.a.a_pos, buffer: this.quad, size: 2 }]),
+      qcmap: vertexArray(gl, [{ location: this.programs.qcmap.a.a_pos, buffer: this.quad, size: 2 }]),
     };
     this.cellColors = null;
     this.selectionBuffer = null;
@@ -206,6 +247,8 @@ export class TissueRenderer {
     this.cells = cells;
     this.selected = null;
     this.setCellColors(null);
+    this.setHighlight(null);
+    this.setQCMap(null);
     this.request();
   }
 
@@ -226,12 +269,46 @@ export class TissueRenderer {
     const gl = this.gl;
     if (this.cellColors) gl.deleteTexture(this.cellColors.texture);
     this.cellColors = null;
-    if (rgba && this.cells) {
-      const width = 4096;
-      const height = Math.max(1, Math.ceil(this.cells.n / width));
-      const data = new Uint8Array(width * height * 4);
-      data.set(rgba.subarray(0, Math.min(rgba.length, data.length)));
-      this.cellColors = { texture: colorTexture(gl, width, height, data) };
+    if (rgba && this.cells) this.cellColors = { texture: this.cellTexture(rgba) };
+    this.request();
+  }
+
+  // A per-cell RGBA texture (4096 cells a row).
+  cellTexture(rgba) {
+    const width = 4096;
+    const height = Math.max(1, Math.ceil(this.cells.n / width));
+    const data = new Uint8Array(width * height * 4);
+    data.set(rgba.subarray(0, Math.min(rgba.length, data.length)));
+    return colorTexture(this.gl, width, height, data);
+  }
+
+  // Cells to highlight (a Uint8Array mask, 1 for highlighted) in a color, or null for none.
+  setHighlight(mask, color = '#ffffff', alpha = 0.6) {
+    if (this.highlight) this.gl.deleteTexture(this.highlight.texture);
+    this.highlight = null;
+    if (mask && this.cells) {
+      const [r, g, b] = hexColor(color).map((v) => Math.round(255 * v));
+      const rgba = new Uint8Array(4 * this.cells.n);
+      for (let i = 0; i < this.cells.n; i += 1) if (mask[i]) rgba.set([r, g, b, Math.round(255 * alpha)], 4 * i);
+      this.highlight = { texture: this.cellTexture(rgba) };
+    }
+    this.request();
+  }
+
+  // A QC map ({ ratio: true, num, den, q20Num, q20Den, minDen, range, lut, opacity } with gene
+  // indexes of density grids, or { ratio: false, num, q20Num, scale, range, lut, opacity }; lut
+  // 256 × 3 bytes), or null.
+  setQCMap(map) {
+    const gl = this.gl;
+    if (this.qcMap?.lutTexture) gl.deleteTexture(this.qcMap.lutTexture);
+    this.qcMap = null;
+    if (map) {
+      const rgba = new Uint8Array(256 * 4);
+      for (let i = 0; i < 256; i += 1) rgba.set([map.lut[3 * i], map.lut[3 * i + 1], map.lut[3 * i + 2], 255], 4 * i);
+      const lutTexture = colorTexture(gl, 256, 1, rgba);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      this.qcMap = { ...map, lutTexture };
     }
     this.request();
   }
@@ -316,9 +393,9 @@ export class TissueRenderer {
   }
 
   async loadDensity(key, signal) {
-    // key: den:<genes>:<level>:<tx>:<ty>
-    const [, genes, level, tx, ty] = key.split(':');
-    const { buffer } = await this.fetch(`/api/cache/${this.dataset.entries.transcripts}/density/${level}/${tx}/${ty}?genes=${genes}&q20=1`, signal);
+    // key: den:<genes>:<q20: 1 or 0>:<level>:<tx>:<ty>
+    const [, genes, q20, level, tx, ty] = key.split(':');
+    const { buffer } = await this.fetch(`/api/cache/${this.dataset.entries.transcripts}/density/${level}/${tx}/${ty}?genes=${genes}&q20=${q20}`, signal);
     const d = readDensity(buffer);
     const gl = this.gl;
     const textures = new Map();
@@ -394,7 +471,13 @@ export class TissueRenderer {
     // fills at any zoom.
     const shapesVisible = (this.layers?.cells?.outlines || this.layers?.cells?.nuclei) && umPerCss <= 1.2;
     const fillVisible = Boolean(this.layers?.cells?.fill && this.cellColors);
-    return { rect, level, umPerCss, transcripts, shapesVisible, fillVisible };
+    // QC maps use bins about six pixels wide: a ratio over fewer transcripts is noise.
+    let qc = null;
+    if (this.qcMap && d.transcripts?.densityLevels.length) {
+      const ql = densityLevel(grid, d.transcripts.densityBins, d.transcripts.densityLevels, umPerCss, 6);
+      qc = { level: ql, range: gridTileRange(grid, ql, rect) };
+    }
+    return { rect, level, umPerCss, transcripts, shapesVisible, fillVisible, qc };
   }
 
   draw() {
@@ -410,7 +493,9 @@ export class TissueRenderer {
     const view = viewMatrix(this.camera, w, h);
     for (const c of Object.values(this.caches)) c.begin();
     this.drawImage(plan, view);
+    if (plan.qc) this.drawQCMap(plan, view);
     if (plan.fillVisible) this.drawShapes(plan, view, 'fill');
+    if (this.highlight) this.drawShapes(plan, view, 'highlight');
     if (plan.transcripts?.mode === 'density') this.drawDensity(plan, view);
     if (plan.shapesVisible) this.drawShapes(plan, view, 'lines');
     if (plan.transcripts?.mode === 'points') this.drawPoints(plan, view);
@@ -513,7 +598,7 @@ export class TissueRenderer {
       const list = [];
       for (let ty = r.ty0; ty <= r.ty1; ty += 1) {
         for (let tx = r.tx0; tx <= r.tx1; tx += 1) {
-          const key = `den:${genes}:${l}:${tx}:${ty}`;
+          const key = `den:${genes}:1:${l}:${tx}:${ty}`;
           const tile = l === level ? this.caches.density.want(key, priority(plan.rect, side, tx, ty)) : this.caches.density.peek(key);
           if (tile) list.push({ tile, tx, ty, l });
         }
@@ -539,6 +624,73 @@ export class TissueRenderer {
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
       });
     });
+    gl.disable(gl.BLEND);
+    gl.bindVertexArray(null);
+  }
+
+  // The QC map: its bins at the plan's level (coarser loaded levels standing in), through the
+  // map's colormap.
+  drawQCMap(plan, view) {
+    const d = this.dataset;
+    const m = this.qcMap;
+    const gl = this.gl;
+    const prog = this.programs.qcmap;
+    const levels = d.transcripts.densityLevels;
+    const level = plan.qc.level;
+    const genes = m.ratio ? `${m.num},${m.den}` : String(m.num);
+    gl.useProgram(prog.program);
+    gl.uniformMatrix3fv(prog.u.u_view, false, view);
+    gl.bindVertexArray(this.quadVAO.qcmap);
+    gl.uniform1i(prog.u.u_num, 0);
+    gl.uniform1i(prog.u.u_den, 1);
+    gl.uniform1i(prog.u.u_lut, 2);
+    gl.activeTexture(gl.TEXTURE2);
+    gl.bindTexture(gl.TEXTURE_2D, m.lutTexture);
+    gl.uniform1i(prog.u.u_ratio, m.ratio ? 1 : 0);
+    gl.uniform1i(prog.u.u_complement, m.complement ? 1 : 0);
+    gl.uniform1f(prog.u.u_minDen, m.minDen ?? 1);
+    gl.uniform2f(prog.u.u_range, m.range[0], m.range[1]);
+    gl.uniform1f(prog.u.u_opacity, m.opacity ?? 0.85);
+    const top = levels[levels.length - 1];
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    // A ratio's two grids may count all transcripts or Q20 ones: one tile request for each.
+    const keys = (l, tx, ty) => {
+      const num = `den:${genes}:${m.q20Num ? 1 : 0}:${l}:${tx}:${ty}`;
+      const den = m.ratio ? `den:${genes}:${m.q20Den ? 1 : 0}:${l}:${tx}:${ty}` : num;
+      return [num, den];
+    };
+    const tiers = levels.filter((l) => l >= level).map((l) => {
+      const r = l === level ? plan.qc.range : gridTileRange(d.grid, l, plan.rect);
+      const side = tileUm(d.grid, l);
+      const list = [];
+      for (let ty = r.ty0; ty <= r.ty1; ty += 1) {
+        for (let tx = r.tx0; tx <= r.tx1; tx += 1) {
+          const [kn, kd] = keys(l, tx, ty);
+          const get = (k) => (l === level ? this.caches.density.want(k, priority(plan.rect, side, tx, ty)) : this.caches.density.peek(k));
+          const num = get(kn);
+          const den = kd === kn ? num : get(kd);
+          if (num && den) list.push({ num, den, tx, ty, l });
+        }
+      }
+      return { level: l, list };
+    });
+    this.stencilled(tiers, ({ num, den, tx, ty, l }) => {
+      const tn = num.textures.get(m.num);
+      const td = m.ratio ? den.textures.get(m.den) : tn;
+      if (!tn || !td) return;
+      const side = tileUm(d.grid, l);
+      gl.uniform1f(prog.u.u_scale, Math.max(1, (m.scale ?? 1) / 4 ** (top - l)));
+      gl.uniform2f(prog.u.u_origin, tx * side, ty * side);
+      gl.uniform2f(prog.u.u_size, side, side);
+      gl.uniform2f(prog.u.u_texels, 128, 128);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, tn);
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, td);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    });
+    gl.activeTexture(gl.TEXTURE0);
     gl.disable(gl.BLEND);
     gl.bindVertexArray(null);
   }
@@ -605,12 +757,13 @@ export class TissueRenderer {
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     gl.uniform1i(prog.u.u_colors, 1);
     gl.activeTexture(gl.TEXTURE1);
-    gl.bindTexture(gl.TEXTURE_2D, kind === 'fill' ? this.cellColors.texture : this.noColors);
+    const texture = { fill: this.cellColors?.texture, highlight: this.highlight?.texture }[kind] ?? this.noColors;
+    gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.activeTexture(gl.TEXTURE0);
-    if (kind === 'fill') {
+    if (kind === 'fill' || kind === 'highlight') {
       gl.uniform1i(prog.u.u_fill, 1);
       gl.uniform1f(prog.u.u_count, this.cells.n);
-      gl.uniform4f(prog.u.u_tint, 1, 1, 1, c.opacity ?? 0.6);
+      gl.uniform4f(prog.u.u_tint, 1, 1, 1, kind === 'fill' ? (c.opacity ?? 0.6) : 1);
       for (const tile of this.shapeTiles(plan, 'cells')) {
         const f = tile.fill();
         gl.bindVertexArray(f.vao);
@@ -785,6 +938,8 @@ export class TissueRenderer {
   destroy() {
     for (const c of Object.values(this.caches)) c.clear();
     if (this.cellColors) this.gl.deleteTexture(this.cellColors.texture);
+    if (this.highlight) this.gl.deleteTexture(this.highlight.texture);
+    if (this.qcMap?.lutTexture) this.gl.deleteTexture(this.qcMap.lutTexture);
     this.gl.deleteTexture(this.noColors);
     this.gl.getExtension('WEBGL_lose_context')?.loseContext();
   }

@@ -20,7 +20,10 @@ reads every byte of it with its own readers, validates it (fatal problems, warni
 the run's own metrics recomputed from its data) and records it in a project. It builds the
 dataset's derived data once (image tiles at every zoom, a spatial index of the transcripts, tiled
 cell outlines), and its tissue viewer shows the morphology channels, transcripts of chosen genes
-and cells at any zoom, each sample of the images exactly as recorded. QC comes next. See the
+and cells at any zoom, each sample of the images exactly as recorded. Its QC view explains the
+run's metrics (recomputing 20 of them from the data), maps quality over the tissue, links plots to
+the tissue, and keeps cell filters as reproducible versions. Saved views and the 0.1.0 release
+come next. See the
 [roadmap](situcraft-spec/roadmap.md) and the [changelog](CHANGELOG.md).
 
 ## Install

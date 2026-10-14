@@ -20,7 +20,9 @@ package cache
 // Density ("density-<level>.bin", magic SCTD) exists for levels 1 and up. Fields: level, tiles
 // across, tiles down, bins per tile side, number of genes. Each tile is divided into bins × bins
 // bins; table entries: A is the tile's number of non-empty (gene, bin) pairs, B the number of
-// genes present. A gene index equal to the number of genes is every gene together. Block:
+// genes present. Indexes past the genes are pseudo-genes, groups of transcripts counted together
+// (Pseudo*: every transcript, gene transcripts, gene transcripts in a cell, negative controls),
+// which the QC maps draw. Block:
 //
 //	starts u32[B+1]   entries of the i-th gene present
 //	n u32[A]          transcripts in the bin
@@ -61,9 +63,37 @@ const (
 	// maxGroups bounds the spill files open at once while scanning.
 	maxGroups   = 64
 	spillRecord = 28
-	// maxGenes leaves room for the "every gene" index in 16 bits.
-	maxGenes = math.MaxUint16 - 1
+	// maxGenes leaves room for the pseudo-genes' indexes in 16 bits.
+	maxGenes = math.MaxUint16 + 1 - PseudoCount
 )
+
+// The pseudo-genes: density grids of groups of transcripts, at the indexes following the genes
+// (the number of genes plus these offsets).
+const (
+	PseudoAll      = iota // every transcript
+	PseudoGenes           // transcripts of genes (not controls or codewords)
+	PseudoInCells         // transcripts of genes assigned to a cell
+	PseudoControls        // negative control probes and negative control codewords
+	PseudoCount
+)
+
+// PseudoNames name the pseudo-genes, in order.
+var PseudoNames = [PseudoCount]string{"All transcripts", "Gene transcripts", "Gene transcripts in a cell", "Negative controls"}
+
+// pseudoOf is the pseudo-genes a transcript of a kind, assigned to a cell or not, counts in.
+func pseudoOf(kind string, inCell bool, out []int) []int {
+	out = append(out[:0], PseudoAll)
+	switch kind {
+	case xenium.KindGene:
+		out = append(out, PseudoGenes)
+		if inCell {
+			out = append(out, PseudoInCells)
+		}
+	case xenium.KindNegControlProbe, xenium.KindNegControlCode:
+		out = append(out, PseudoControls)
+	}
+	return out
+}
 
 // TranscriptInput is what the index is built from.
 type TranscriptInput struct {
@@ -109,6 +139,8 @@ type TranscriptSummary struct {
 	UnknownCells int64 `json:"unknownCells"`
 	// Genes are in index order: genes, then the controls and codewords by kind, each by name.
 	Genes []Gene `json:"genes"`
+	// Pseudo are the pseudo-genes' counts (PseudoAll…), whose density grids follow the genes'.
+	Pseudo []Gene `json:"pseudo"`
 	// Bounds are the points' extent: min x, min y, max x, max y (µm).
 	Bounds     [4]float32 `json:"bounds"`
 	HasNucleus bool       `json:"hasNucleus"`
@@ -128,6 +160,8 @@ type scanState struct {
 	Features     []string   `json:"features"`
 	Counts       []int64    `json:"counts"`
 	Q20          []int64    `json:"q20"`
+	PseudoCounts []int64    `json:"pseudoCounts"`
+	PseudoQ20    []int64    `json:"pseudoQ20"`
 	Rows         int64      `json:"rows"`
 	Assigned     int64      `json:"assigned"`
 	UnknownCells int64      `json:"unknownCells"`
@@ -194,6 +228,12 @@ func buildTranscripts(ctx context.Context, b *building, p TranscriptParams, in T
 		sum.Genes = append(sum.Genes, Gene{Name: scan.Features[i], Kind: xenium.FeatureKind(scan.Features[i]), Count: scan.Counts[i], Q20: scan.Q20[i]})
 		sum.Q20 += scan.Q20[i]
 	}
+	if len(scan.PseudoCounts) != PseudoCount || len(scan.PseudoQ20) != PseudoCount {
+		return nil, errDamaged
+	}
+	for k, name := range PseudoNames {
+		sum.Pseudo = append(sum.Pseudo, Gene{Name: name, Kind: "pseudo", Count: scan.PseudoCounts[k], Q20: scan.PseudoQ20[k]})
+	}
 	// Phase 2: each group's points.
 	for g := 0; g < groups; g++ {
 		if err := ctx.Err(); err != nil {
@@ -215,7 +255,7 @@ func buildTranscripts(ctx context.Context, b *building, p TranscriptParams, in T
 			return nil, err
 		}
 		if !b.done(densityFile(l)) {
-			if err := writeDensityLevel(ctx, b, p, l, len(sum.Genes)); err != nil {
+			if err := writeDensityLevel(ctx, b, p, l, sum.Genes); err != nil {
 				return nil, fmt.Errorf("density of level %d: %w", l, err)
 			}
 		}
@@ -229,7 +269,10 @@ func buildTranscripts(ctx context.Context, b *building, p TranscriptParams, in T
 // scanTranscripts reads every transcript once, writing each to its group's spill file.
 func scanTranscripts(ctx context.Context, b *building, p TranscriptParams, in TranscriptInput, progress func(float64)) (scanState, error) {
 	groups := p.groups()
-	s := scanState{Bounds: [4]float32{float32(math.Inf(1)), float32(math.Inf(1)), float32(math.Inf(-1)), float32(math.Inf(-1))}}
+	s := scanState{Bounds: [4]float32{float32(math.Inf(1)), float32(math.Inf(1)), float32(math.Inf(-1)), float32(math.Inf(-1))},
+		PseudoCounts: make([]int64, PseudoCount), PseudoQ20: make([]int64, PseudoCount)}
+	var kinds []string // by provisional gene
+	var pseudo []int
 	files := make([]*os.File, groups)
 	writers := make([]*bufio.Writer, groups)
 	closeAll := func() {
@@ -267,6 +310,7 @@ func scanTranscripts(ctx context.Context, b *building, p TranscriptParams, in Tr
 				features[string(name)] = gene
 				s.Features = append(s.Features, string(name))
 				s.Counts, s.Q20 = append(s.Counts, 0), append(s.Q20, 0)
+				kinds = append(kinds, xenium.FeatureKind(string(name)))
 			}
 			x, y, z, qv := batch.X[i], batch.Y[i], batch.Z[i], batch.QV[i]
 			cell := uint32(NoCell)
@@ -285,6 +329,13 @@ func scanTranscripts(ctx context.Context, b *building, p TranscriptParams, in Tr
 			s.Counts[gene]++
 			if qv >= 20 {
 				s.Q20[gene]++
+			}
+			pseudo = pseudoOf(kinds[gene], cell != NoCell, pseudo)
+			for _, k := range pseudo {
+				s.PseudoCounts[k]++
+				if qv >= 20 {
+					s.PseudoQ20[k]++
+				}
 			}
 			s.Bounds[0], s.Bounds[1] = min(s.Bounds[0], x), min(s.Bounds[1], y)
 			s.Bounds[2], s.Bounds[3] = max(s.Bounds[2], x), max(s.Bounds[3], y)
@@ -504,7 +555,8 @@ type counts struct{ n, q20 uint32 }
 
 // writeDensityLevel writes one level's density grids: level 1 from the points, coarser levels
 // from the level below.
-func writeDensityLevel(ctx context.Context, b *building, p TranscriptParams, level, genes int) error {
+func writeDensityLevel(ctx context.Context, b *building, p TranscriptParams, level int, geneList []Gene) error {
+	genes := len(geneList)
 	across, down, bins := p.Grid.Across(level), p.Grid.Down(level), p.DensityBins
 	var points []*tableFile
 	var below *tableFile
@@ -540,7 +592,11 @@ func writeDensityLevel(ctx context.Context, b *building, p TranscriptParams, lev
 		f.Close()
 		return err
 	}
-	all := uint16(genes)
+	kinds := make([]string, genes)
+	for i, g := range geneList {
+		kinds[i] = g.Kind
+	}
+	var pseudo []int
 	side := p.Grid.TileUm(level)
 	for ty := 0; ty < down; ty++ {
 		if err := ctx.Err(); err != nil {
@@ -577,11 +633,16 @@ func writeDensityLevel(ctx context.Context, b *building, p TranscriptParams, lev
 								if pts.QV[at] >= 20 {
 									q = 1
 								}
-								for _, key := range [2]uint32{densityKey(gene, bin), densityKey(all, bin)} {
+								add := func(key uint32) {
 									c := acc[key]
 									c.n++
 									c.q20 += q
 									acc[key] = c
+								}
+								add(densityKey(gene, bin))
+								pseudo = pseudoOf(kinds[gene], pts.Cell[at] != NoCell, pseudo)
+								for _, k := range pseudo {
+									add(densityKey(uint16(genes+k), bin))
 								}
 							}
 						}
@@ -669,8 +730,8 @@ func encodeDensity(acc map[uint32]counts) ([]byte, int) {
 
 // DensityTile is one tile's density grids.
 type DensityTile struct {
-	// Genes are the genes present (the number of genes means every gene); the bins of Genes[i]
-	// are entries Starts[i] to Starts[i+1].
+	// Genes are the genes present (indexes from the number of genes on are pseudo-genes); the bins
+	// of Genes[i] are entries Starts[i] to Starts[i+1].
 	Genes  []uint16
 	Starts []uint32
 	Bins   []uint16 // by*bins + bx
@@ -701,7 +762,7 @@ func decodeDensity(block []byte, e tableEntry, genes, bins int) (*DensityTile, e
 		return nil, errDamaged
 	}
 	for i, gene := range d.Genes {
-		if int(gene) > genes || (i > 0 && gene <= d.Genes[i-1]) || d.Starts[i] == d.Starts[i+1] {
+		if int(gene) >= genes+PseudoCount || (i > 0 && gene <= d.Genes[i-1]) || d.Starts[i] == d.Starts[i+1] {
 			return nil, errDamaged
 		}
 	}

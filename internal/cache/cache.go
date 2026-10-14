@@ -33,7 +33,7 @@ import (
 
 // FormatVersion is the version of every file format the cache writes. Changing a format changes
 // it, and with it every entry's key, so old entries are never read (they age out by eviction).
-const FormatVersion = 1
+const FormatVersion = 2
 
 // Cache is the derived-data cache in one folder.
 type Cache struct {

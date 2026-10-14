@@ -93,8 +93,9 @@ covers the same tissue in every layer, so the renderer asks for the same tiles o
   and z (float32, µm), quality (float32), cell (uint32 row of cells.parquet), the transcript's
   row in transcripts.parquet (so later segmentations can attach their own assignments), and a
   nucleus flag. Every coarser level has per-gene density grids (128 × 128 bins a tile, all
-  transcripts and Q20 ones, and every gene together), so the whole-tissue view never touches
-  points. Level 1 counts the points; each coarser level adds up the level below, so every level
+  transcripts and Q20 ones), so the whole-tissue view never touches points. Groups of
+  transcripts have grids too (every transcript, gene transcripts, gene transcripts in a cell,
+  negative controls), from which the QC maps compute per-bin shares. Level 1 counts the points; each coarser level adds up the level below, so every level
   sums exactly to each gene's count. The levels nest: a complete quadtree.
 - **Geometry tiles.** Cell and nucleus polygons are placed by the centre of their bounding box,
   once per level; level 0 holds the bundle's vertices exactly, each level above them simplified
@@ -125,6 +126,14 @@ The viewer draws with WebGL2 (`web/render/`), from the derived data's tiles:
   texture, and the selected cell drawn from its full-resolution polygon.
 - **Tiles** are addressed by cache entry, whose name hashes its sources. They never change, so
   the browser caches them for good, and the renderer keeps the GPU's copies within a budget.
+
+### QC
+
+QC is computed where its data are. The run's metrics are recomputed in Go during validation,
+against the transcripts, cells, matrix and masks. Per-bin maps come from the density grids'
+groups of transcripts, drawn as ratios in the shader. Per-cell attributes, plots, brushing and
+filters run in the browser on the cells table. Filters are project artifacts that record which
+cells they keep (a SHA-256), so their reproduction can be checked whenever the project opens.
 
 ### Segmentation built in
 

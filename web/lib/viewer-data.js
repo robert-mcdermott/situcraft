@@ -56,16 +56,23 @@ export function densityGrid(density, gene) {
   return grid;
 }
 
-// The cells table (SCVC): { n, methods, x, y, area, nucleusArea, transcripts, total, method }.
+// The cells table (SCVC; internal/view CellTable): { n, methods, x, y, area, nucleusArea,
+// transcripts, total, controlProbes, controlCodewords, genes, nuclear, method }.
 export function readCells(buffer) {
-  const [n, methods] = header(buffer, 'SCVC');
+  const [n, methods, columns] = header(buffer, 'SCVC');
+  if (columns !== 8) throw new Error(`a cells table of ${columns} columns, not 8 (an older program?)`);
   let at = 16;
   const take = (Type) => {
     const a = new Type(buffer, at, n);
     at += Type.BYTES_PER_ELEMENT * n;
     return a;
   };
-  const out = { n, methods, x: take(Float32Array), y: take(Float32Array), area: take(Float32Array), nucleusArea: take(Float32Array), transcripts: take(Uint32Array), total: take(Uint32Array), method: take(Uint8Array) };
+  const out = {
+    n, methods,
+    x: take(Float32Array), y: take(Float32Array), area: take(Float32Array), nucleusArea: take(Float32Array),
+    transcripts: take(Uint32Array), total: take(Uint32Array), controlProbes: take(Uint32Array), controlCodewords: take(Uint32Array),
+    genes: take(Uint32Array), nuclear: take(Uint32Array), method: take(Uint8Array),
+  };
   if (pad4(at) !== buffer.byteLength) throw new Error('a cells answer of the wrong length');
   return out;
 }

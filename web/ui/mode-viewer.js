@@ -8,7 +8,8 @@
 import { h, icon, clear, formatCount } from './dom.js';
 import { toast } from './overlays.js';
 import { TissueRenderer } from '../render/renderer.js';
-import { fitCamera, scaleBar, screenToWorld, visibleRect, zoomAt, worldToScreen } from '../lib/viewport.js';
+import { fitCamera, scaleBar, screenToWorld, visibleRect, worldToScreen } from '../lib/viewport.js';
+import { attachNavigation } from './navigation.js';
 import { readCells, joinSamples, nearestCell } from '../lib/viewer-data.js';
 import { mountViewerPanel, defaultLayers, cellFillColors } from './viewer-panel.js';
 import { hexColor } from '../render/gl.js';
@@ -135,6 +136,7 @@ export function mountViewer(app, container) {
       dataset: t.dataset, item: t.item, desc, cells, renderer, layers, selectedRow: -1, detail: null,
       dispose() {
         observer.disconnect();
+        navigation.dispose();
         renderer.destroy();
         window.removeEventListener('keydown', onKey);
         if (window.situcraftViewer?.renderer === renderer) delete window.situcraftViewer;
@@ -188,56 +190,15 @@ export function mountViewer(app, container) {
       renderer.setCamera(fitCamera(tissueRect(), w, h2));
     }
 
-    function zoomBy(factor, sx, sy) {
-      const [w, h2] = renderer.size();
-      renderer.setCamera(zoomAt(renderer.camera, w, h2, sx ?? w / 2, sy ?? h2 / 2, factor, limits()));
-    }
-
     // --- Pointer ---
-    let drag = null;
-    const devicePoint = (event) => {
-      const r = canvas.getBoundingClientRect();
-      const ratio = renderer.ratio || 1;
-      return [(event.clientX - r.left) * ratio, (event.clientY - r.top) * ratio];
-    };
-    canvas.addEventListener('pointerdown', (event) => {
-      if (event.button !== 0) return;
-      canvas.setPointerCapture(event.pointerId);
-      const [x, y] = devicePoint(event);
-      drag = { x, y, camera: renderer.camera, moved: false };
+    const navigation = attachNavigation(canvas, renderer, {
+      limits,
+      onClick: (sx, sy) => select(sx, sy),
+      onMove: (x, y) => {
+        readout.textContent = x === null ? '' : `x ${x.toFixed(1)} µm  y ${y.toFixed(1)} µm`;
+      },
     });
-    canvas.addEventListener('pointermove', (event) => {
-      const [x, y] = devicePoint(event);
-      const [w, h2] = renderer.size();
-      const [wx, wy] = screenToWorld(renderer.camera, w, h2, x, y);
-      readout.textContent = `x ${wx.toFixed(1)} µm  y ${wy.toFixed(1)} µm`;
-      if (!drag) return;
-      const dx = x - drag.x;
-      const dy = y - drag.y;
-      if (Math.hypot(dx, dy) > 3) drag.moved = true;
-      if (drag.moved) renderer.setCamera({ ...drag.camera, cx: drag.camera.cx - dx / drag.camera.scale, cy: drag.camera.cy - dy / drag.camera.scale });
-    });
-    canvas.addEventListener('pointerup', (event) => {
-      if (!drag) return;
-      const moved = drag.moved;
-      drag = null;
-      if (!moved) select(...devicePoint(event));
-    });
-    canvas.addEventListener('pointercancel', () => {
-      drag = null;
-    });
-    canvas.addEventListener('pointerleave', () => {
-      readout.textContent = '';
-    });
-    canvas.addEventListener('wheel', (event) => {
-      event.preventDefault();
-      const [x, y] = devicePoint(event);
-      // A pinch on a trackpad comes as a wheel with ctrl held, in smaller steps.
-      const speed = event.ctrlKey ? 0.01 : 0.0018;
-      const delta = event.deltaMode === 1 ? event.deltaY * 16 : event.deltaY;
-      zoomBy(Math.exp(-delta * speed), x, y);
-    }, { passive: false });
-    canvas.addEventListener('dblclick', (event) => zoomBy(2, ...devicePoint(event)));
+    const zoomBy = (factor, sx, sy) => navigation.zoomBy(factor, sx, sy);
 
     function onKey(event) {
       if (document.activeElement !== canvas) return;
@@ -422,6 +383,11 @@ export function mountViewer(app, container) {
     applyFill();
     updateLegend();
     if (session?.selected >= 0) selectRow(session.selected);
+    state.showChosen = () => {
+      const chosen = app.selection?.dataset === t.dataset.id ? app.selection : null;
+      renderer.setHighlight(chosen?.mask ?? null, '#ff4fd8', 0.6);
+    };
+    state.showChosen();
 
     // For the validation harness (validation/viewer.mjs) and the console.
     window.situcraftViewer = {
@@ -490,6 +456,8 @@ export function mountViewer(app, container) {
       if (topics.has('colors') && current) {
         current.panel.recolor?.();
       }
+      // Cells chosen in the QC view (a brushed plot) show here too.
+      if (topics.has('selection') && current) current.showChosen();
     },
     destroy() {
       teardown();

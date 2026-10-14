@@ -222,8 +222,26 @@ func TestDevelopmentBundles(t *testing.T) {
 			if s.Cells != c.cells || s.Transcripts != c.transcripts || s.Q20GeneTranscripts != c.q20 || len(s.Channels) != c.channels || s.MedianPerCell != c.medianPerCell {
 				t.Errorf("summary %+v", s)
 			}
-			if s.MetricsCompared != 12 || s.MetricsAgreeing != 12 {
+			// The run's metrics (and two values of the manifest) recomputed from the data: research.md
+			// §1.3b lists them with their definitions.
+			if s.MetricsCompared != 22 || s.MetricsAgreeing != 22 || len(s.Metrics) != 22 {
 				t.Errorf("%d of %d metrics agree", s.MetricsAgreeing, s.MetricsCompared)
+			}
+			names := map[string]bool{}
+			for _, m := range s.Metrics {
+				names[m.Name] = true
+				if !m.Agrees {
+					t.Errorf("%s: recorded %v, computed %v", m.Name, m.Recorded, m.Computed)
+				}
+			}
+			for _, name := range []string{"fraction_transcripts_decoded_q20", "nuclear_transcripts_per_100um2", "median_genes_per_cell", "fraction_empty_cells",
+				"negative_control_probe_counts_per_control_per_cell", "estimated_number_of_false_positive_transcripts_per_cell", "segmented_cell_stain_frac"} {
+				if !names[name] {
+					t.Errorf("%s was not recomputed", name)
+				}
+			}
+			if len(s.RunMetrics) != 48 || s.RunMetrics[0].Name != "run_name" {
+				t.Errorf("%d recorded metrics, the first %+v", len(s.RunMetrics), s.RunMetrics[0])
 			}
 			if s.ObservedGenes != s.PanelGenes || s.ZPlanes != 11 || r.Support != "supported" || r.Version != "2.0.0" {
 				t.Errorf("genes %d of %d, z planes %d, support %s %s", s.ObservedGenes, s.PanelGenes, s.ZPlanes, r.Support, r.Version)
@@ -296,7 +314,7 @@ func TestZippedBundle(t *testing.T) {
 	if got := codes(zipped); strings.Join(got, "; ") != strings.Join(want, "; ") {
 		t.Errorf("zipped findings %v, want %v", got, want)
 	}
-	if zipped.Summary.Cells != folder.Summary.Cells || zipped.Summary.Q20GeneTranscripts != folder.Summary.Q20GeneTranscripts || zipped.Summary.MetricsAgreeing != 12 || !zipped.Summary.Zipped {
+	if zipped.Summary.Cells != folder.Summary.Cells || zipped.Summary.Q20GeneTranscripts != folder.Summary.Q20GeneTranscripts || zipped.Summary.MetricsAgreeing != 22 || !zipped.Summary.Zipped {
 		t.Errorf("zipped summary %+v", zipped.Summary)
 	}
 }

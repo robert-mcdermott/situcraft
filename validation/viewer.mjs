@@ -7,18 +7,24 @@
 //   for that region, for chosen genes and for all transcripts;
 // - frames per second while panning at cellular and whole-tissue zoom, and the time for a new and
 //   a revisited view to be drawn whole (budgets: 30 frames per second, where the browser has a GPU;
-//   500 ms for a revisited view; 500 ms for a region query).
+//   500 ms for a revisited view; 500 ms for a region query);
+// - the QC view (wave 1, slice 6): every recomputable run metric agrees with the recorded one;
+//   brushing a range chooses exactly the cells in it, which the Viewer then shows; a saved filter
+//   keeps the cells an independent evaluation here keeps, recorded under the same SHA-256; every
+//   QC map draws.
 //
 // It builds the program, starts it on the bundles with an empty cache and library, builds their
 // derived data, and drives the page through window.situcraft (the app, app.js) and window.situcraftViewer
 // (ui/mode-viewer.js). Run by validation/run.mjs's "viewer" suite.
 
 import { execFileSync, spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { findChrome, launch, sleep } from './cdp.mjs';
+import { readCells } from '../web/lib/viewer-data.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const BUNDLES = ['xenium-lung-2fov', 'xenium-breast-2fov'];
@@ -208,6 +214,63 @@ export async function viewerSuite({ check, MissingData, verbose }) {
       check('viewer', `${name}: a new view drawn whole`, `${perf.newView.toFixed(0)} ms`, true, 'reported');
       check('viewer', `${name}: a revisited view drawn whole`, `${perf.revisit.toFixed(0)} ms`, perf.revisit <= BUDGET.revisitMs, `≤ ${BUDGET.revisitMs} ms`);
       if (verbose) console.log(name, JSON.stringify(perf));
+
+      // --- The QC view ---
+      const qc = await chrome.eval(`(async () => {
+        window.situcraft.setMode('qc');
+        for (let k = 0; k < 300 && window.situcraftQC?.desc.name !== ${JSON.stringify(name)}; k += 1) await new Promise((r) => setTimeout(r, 100));
+        const q = window.situcraftQC;
+        if (!q) return null;
+        const rows = q.metricRows();
+        return { checked: rows.filter((r) => r.agrees !== null).length, agree: rows.filter((r) => r.agrees === true).length, differing: rows.filter((r) => r.agrees === false).map((r) => r.name) };
+      })()`);
+      check('viewer', `${name}: run metrics in the QC view, recomputed from the data`, qc ? `${qc.agree} of ${qc.checked} agree${qc.differing.length ? `; differing: ${qc.differing.join(', ')}` : ''}` : 'the QC view did not open', qc && qc.checked >= 20 && qc.agree === qc.checked, 'all agree (at least 20)');
+      if (!qc) continue;
+      // The cells table, read here to evaluate brushes and filters independently of the page.
+      const cells = readCells(await fetch(`${url}/api/local/${index}/cells`).then((r) => r.arrayBuffer()));
+      const chosen = await chrome.eval('window.situcraftQC.brush("transcripts", 20, 100)');
+      let direct = 0;
+      for (let i = 0; i < cells.n; i += 1) if (cells.transcripts[i] >= 20 && cells.transcripts[i] <= 100) direct += 1;
+      check('viewer', `${name}: brushing gene transcripts 20–100 chooses`, `${chosen} cells; counted here, ${direct}`, chosen === direct && direct > 0, 'the same');
+      const linked = await chrome.eval(`(async () => {
+        window.situcraft.setMode('viewer');
+        for (let k = 0; k < 100 && !window.situcraftViewer; k += 1) await new Promise((r) => setTimeout(r, 100));
+        await new Promise((r) => setTimeout(r, 300));
+        return Boolean(window.situcraftViewer?.renderer.highlight);
+      })()`);
+      check('viewer', `${name}: the cells chosen in the QC view show in the Viewer`, String(linked), linked, 'true');
+      const conditions = [{ attribute: 'transcripts', min: 20, max: null }, { attribute: 'area', min: 15, max: 400 }];
+      const saved = await chrome.eval(`(async () => {
+        window.situcraft.setMode('qc');
+        for (let k = 0; k < 300 && window.situcraftQC?.desc.name !== ${JSON.stringify(name)}; k += 1) await new Promise((r) => setTimeout(r, 100));
+        return window.situcraftQC.saveFilter('Harness filter', ${JSON.stringify(conditions)});
+      })()`);
+      // The same filter evaluated here: one bit per cell, the first cell in the lowest bit, after
+      // the count of cells (lib/filters.js keepChecksum), hashed by Node's own SHA-256.
+      const bits = Buffer.alloc(4 + Math.ceil(cells.n / 8));
+      bits.writeUInt32LE(cells.n, 0);
+      let kept = 0;
+      for (let i = 0; i < cells.n; i += 1) {
+        const area = cells.area[i];
+        if (cells.transcripts[i] >= 20 && area >= 15 && area <= 400) {
+          kept += 1;
+          bits[4 + (i >> 3)] |= 1 << (i & 7);
+        }
+      }
+      const sum = createHash('sha256').update(bits).digest('hex');
+      check('viewer', `${name}: a saved filter's cells against an evaluation here`, `${saved.result.kept} kept (here ${kept}); SHA-256 ${saved.result.sha256 === sum ? 'the same' : 'different'}`, saved.result.kept === kept && saved.result.sha256 === sum, 'the same cells and checksum');
+      const maps = await chrome.eval(`(async () => {
+        const q = window.situcraftQC;
+        const out = [];
+        for (const id of ['cell:transcripts', 'cell:method', 'bin:outside', 'bin:quality', 'bin:controls', 'bin:density']) {
+          q.setMap(id);
+          await q.settled();
+          out.push([id, q.renderer.gl.getError()]);
+        }
+        return out;
+      })()`);
+      const bad = maps.filter(([, e]) => e !== 0);
+      check('viewer', `${name}: every QC map draws`, bad.length ? bad.map(([id, e]) => `${id}: GL error ${e}`).join('; ') : `${maps.length} maps, no WebGL error`, bad.length === 0, 'no error');
     }
     check('viewer', 'no uncaught errors in the page', errors.length ? errors.slice(0, 3).join(' | ') : 'none', errors.length === 0, 'none');
   } finally {

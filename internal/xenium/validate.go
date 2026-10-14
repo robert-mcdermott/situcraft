@@ -43,38 +43,60 @@ type Finding struct {
 
 // Summary is what the bundle holds, as validation counted it.
 type Summary struct {
-	Run                 string    `json:"run,omitempty"`
-	Region              string    `json:"region,omitempty"`
-	RunStart            string    `json:"runStart,omitempty"`
-	Software            string    `json:"software,omitempty"`
-	Panel               string    `json:"panel,omitempty"`
-	Organism            string    `json:"organism,omitempty"`
-	Tissue              string    `json:"tissue,omitempty"`
-	Preservation        string    `json:"preservation,omitempty"`
-	PixelSize           float64   `json:"pixelSizeUm,omitempty"`
-	ExtentUm            []float64 `json:"extentUm,omitempty"`
-	ImageSize           []int     `json:"imageSizePx,omitempty"`
-	Channels            []string  `json:"channels,omitempty"`
-	ZPlanes             int       `json:"zPlanes,omitempty"`
-	Cells               int       `json:"cells"`
-	Transcripts         int64     `json:"transcripts"`
-	Q20GeneTranscripts  int64     `json:"q20GeneTranscripts"`
-	AssignedFraction    float64   `json:"assignedFraction"`
-	MedianPerCell       float64   `json:"medianTranscriptsPerCell"`
-	PanelGenes          int       `json:"panelGenes"`
-	ObservedGenes       int       `json:"observedGenes"`
-	ControlTranscripts  int64     `json:"controlTranscripts"`
-	MetricsCompared     int       `json:"metricsCompared"`
-	MetricsAgreeing     int       `json:"metricsAgreeing"`
-	FreeCacheBytes      int64     `json:"freeCacheBytes,omitempty"`
-	EstimatedCacheBytes int64     `json:"estimatedCacheBytes,omitempty"`
-	BundleBytes         int64     `json:"bundleBytes"`
-	Zipped              bool      `json:"zipped,omitempty"`
-	SegmentationMethods []string  `json:"segmentationMethods,omitempty"`
+	Run                string    `json:"run,omitempty"`
+	Region             string    `json:"region,omitempty"`
+	RunStart           string    `json:"runStart,omitempty"`
+	Software           string    `json:"software,omitempty"`
+	Panel              string    `json:"panel,omitempty"`
+	Organism           string    `json:"organism,omitempty"`
+	Tissue             string    `json:"tissue,omitempty"`
+	Preservation       string    `json:"preservation,omitempty"`
+	PixelSize          float64   `json:"pixelSizeUm,omitempty"`
+	ExtentUm           []float64 `json:"extentUm,omitempty"`
+	ImageSize          []int     `json:"imageSizePx,omitempty"`
+	Channels           []string  `json:"channels,omitempty"`
+	ZPlanes            int       `json:"zPlanes,omitempty"`
+	Cells              int       `json:"cells"`
+	Transcripts        int64     `json:"transcripts"`
+	Q20GeneTranscripts int64     `json:"q20GeneTranscripts"`
+	AssignedFraction   float64   `json:"assignedFraction"`
+	MedianPerCell      float64   `json:"medianTranscriptsPerCell"`
+	PanelGenes         int       `json:"panelGenes"`
+	ObservedGenes      int       `json:"observedGenes"`
+	ControlTranscripts int64     `json:"controlTranscripts"`
+	MetricsCompared    int       `json:"metricsCompared"`
+	MetricsAgreeing    int       `json:"metricsAgreeing"`
+	// Metrics are the run's recorded values recomputed from the data, each with both values.
+	Metrics []MetricCheck `json:"metrics,omitempty"`
+	// RunMetrics are metrics_summary.csv's values as recorded, in its order.
+	RunMetrics          []RecordedMetric `json:"runMetrics,omitempty"`
+	FreeCacheBytes      int64            `json:"freeCacheBytes,omitempty"`
+	EstimatedCacheBytes int64            `json:"estimatedCacheBytes,omitempty"`
+	BundleBytes         int64            `json:"bundleBytes"`
+	Zipped              bool             `json:"zipped,omitempty"`
+	SegmentationMethods []string         `json:"segmentationMethods,omitempty"`
 	// SegmentationCounts are the cells each method segmented (from cells.zarr.zip), in order.
 	SegmentationCounts   []int64 `json:"segmentationCounts,omitempty"`
 	TranscriptRowGroups  int     `json:"transcriptRowGroups,omitempty"`
 	CheckDurationSeconds float64 `json:"checkDurationSeconds"`
+}
+
+// MetricCheck is one recorded value recomputed from the data.
+type MetricCheck struct {
+	Name     string  `json:"name"`
+	Source   string  `json:"source"` // metrics_summary.csv or experiment.xenium
+	Recorded float64 `json:"recorded"`
+	Computed float64 `json:"computed"`
+	Agrees   bool    `json:"agrees"`
+	// Exact is true when the two must be equal, false when they may differ by 1e-6 (relatively).
+	Exact bool `json:"exact"`
+}
+
+// RecordedMetric is one value of metrics_summary.csv.
+type RecordedMetric struct {
+	Name  string   `json:"name"`
+	Text  string   `json:"text"`
+	Value *float64 `json:"value,omitempty"`
 }
 
 // Report is a bundle's validation.
@@ -133,6 +155,12 @@ type validator struct {
 	extentY float64
 	// stats are the transcripts' totals, for the metrics.
 	stats transcriptStats
+	// genesPerCell are the genes with transcripts in each cell (from the matrix; nil without one),
+	// and featureKinds the matrix's features by kind.
+	genesPerCell []int
+	featureKinds map[string]int
+	// nucleusPixels is the nucleus mask's non-zero pixels (cells.zarr.zip masks/0; 0 unknown).
+	nucleusPixels int64
 }
 
 func (v *validator) add(f Finding) { v.report.Findings = append(v.report.Findings, f) }
@@ -451,6 +479,7 @@ func (v *validator) checkTranscripts() error {
 	}
 	observed := map[string]bool{}
 	var total, q20Genes, q20GenesAssigned, q20Decoded, controls, far, near, unknownCell, notInPanel, badQV int64
+	var genes, q20GenesNuclear int64
 	var farBox, unknownBox bounds
 	notInPanelNames := map[string]bool{}
 	groups := len(t.File.RowGroups)
@@ -493,10 +522,16 @@ func (v *validator) checkTranscripts() error {
 			}
 			cell := batch.CellID[i]
 			assigned := string(cell) != unassignedCellMarker && len(cell) > 0
+			if kind == KindGene {
+				genes++
+			}
 			if q20 && kind == KindGene {
 				q20Genes++
 				if assigned {
 					q20GenesAssigned++
+				}
+				if batch.OverlapsNucleus != nil && batch.OverlapsNucleus[i] == 1 {
+					q20GenesNuclear++
 				}
 			}
 			if !assigned || perCell == nil {
@@ -527,7 +562,10 @@ func (v *validator) checkTranscripts() error {
 		s.AssignedFraction = round6(float64(q20GenesAssigned) / float64(q20Genes))
 	}
 	s.ObservedGenes = len(observed)
-	v.stats = transcriptStats{total: total, q20Genes: q20Genes, q20GenesAssigned: q20GenesAssigned, q20Decoded: q20Decoded}
+	v.stats = transcriptStats{total: total, q20Genes: q20Genes, q20GenesAssigned: q20GenesAssigned, q20Decoded: q20Decoded, genes: genes, q20GenesNuclear: q20GenesNuclear}
+	if batchNuclear := t.idx["overlaps_nucleus"]; batchNuclear < 0 {
+		v.stats.q20GenesNuclear = -1
+	}
 	if total == 0 {
 		v.add(Finding{Severity: Fatal, Code: "transcripts.none", Title: "No transcripts", Files: []string{"transcripts.parquet"}})
 		return nil
@@ -637,9 +675,17 @@ func (v *validator) checkMatrix() error {
 	sums := make([][countKinds]float64, len(v.cells.IDs))
 	aggregate := make([]float64, len(v.cells.IDs))
 	hasAggregate := false
+	v.genesPerCell = make([]int, len(v.cells.IDs))
+	v.featureKinds = map[string]int{}
+	for _, feature := range m.Features {
+		v.featureKinds[feature.Kind]++
+	}
 	for f, feature := range m.Features {
 		for k := m.Indptr[f]; k < m.Indptr[f+1]; k++ {
 			cell := v.cells.Index[m.CellIDs[m.Indices[k]]]
+			if feature.Kind == KindGene && m.Data[k] > 0 {
+				v.genesPerCell[cell]++
+			}
 			if feature.Kind == KindAggregate {
 				aggregate[cell] += m.Data[k]
 				hasAggregate = true
@@ -738,6 +784,9 @@ func (v *validator) checkCellsZarr() error {
 		v.add(Finding{Severity: Warning, Code: "cells-zarr.cells-differ", Title: "cells.zarr.zip and cells.parquet list different cells", Files: []string{"cells.zarr.zip", "cells.parquet"},
 			Detail: "Xenium Explorer's copy of the segmentation does not match the cells table, as it does when Xenium Ranger replaced the segmentation without rewriting it."})
 	}
+	if pixels, err := nonZero(store, "masks/0"); err == nil {
+		v.nucleusPixels = pixels
+	}
 	if size := v.report.Summary.ImageSize; size != nil {
 		for _, mask := range []string{"masks/0", "masks/1"} {
 			m, err := zarr.OpenArray(store, mask)
@@ -751,6 +800,47 @@ func (v *validator) checkCellsZarr() error {
 		}
 	}
 	return nil
+}
+
+// nonZero counts a 2-D array's non-zero elements a chunk at a time (a whole slide's mask does not
+// fit in memory at once).
+func nonZero(store zarr.Store, name string) (int64, error) {
+	a, err := zarr.OpenArray(store, name)
+	if err != nil {
+		return 0, err
+	}
+	if len(a.Shape) != 2 || len(a.Chunks) != 2 || a.Chunks[0] <= 0 || a.Chunks[1] <= 0 {
+		return 0, fmt.Errorf("%s is not a 2-D array", name)
+	}
+	size := a.DType.Size
+	var n int64
+	for r := 0; r*a.Chunks[0] < a.Shape[0]; r++ {
+		for c := 0; c*a.Chunks[1] < a.Shape[1]; c++ {
+			chunk, err := a.ReadChunk([]int{r, c})
+			if err != nil {
+				return 0, err
+			}
+			// The part of the chunk inside the array (edge chunks are padded): h × w elements, in
+			// runs of `run` elements `stride` apart (rows in C order, columns in F order).
+			h, w := min(a.Chunks[0], a.Shape[0]-r*a.Chunks[0]), min(a.Chunks[1], a.Shape[1]-c*a.Chunks[1])
+			runs, run, stride := h, w, a.Chunks[1]
+			if a.Order == 'F' {
+				runs, run, stride = w, h, a.Chunks[0]
+			}
+			for k := 0; k < runs; k++ {
+				part := chunk[k*stride*size : (k*stride+run)*size]
+				for i := 0; i < len(part); i += size {
+					for b := 0; b < size; b++ {
+						if part[i+b] != 0 {
+							n++
+							break
+						}
+					}
+				}
+			}
+		}
+	}
+	return n, nil
 }
 
 // segmentationCounts counts the cells of each segmentation method (cells.zarr.zip's
@@ -872,7 +962,7 @@ func (v *validator) checkBoundaries() error {
 // compareMetric records a metric the data reproduce, or a finding when they do not.
 func (v *validator) compareMetric(name string, computed float64, exact bool) {
 	recorded, ok := v.b.Metrics.Number(name)
-	if !ok {
+	if !ok || !finite(recorded) || !finite(computed) {
 		return
 	}
 	s := &v.report.Summary
@@ -881,6 +971,7 @@ func (v *validator) compareMetric(name string, computed float64, exact bool) {
 	if !exact {
 		agree = math.Abs(recorded-computed) <= relativeTolerance*math.Max(1, math.Abs(recorded))
 	}
+	s.Metrics = append(s.Metrics, MetricCheck{Name: name, Source: "metrics_summary.csv", Recorded: recorded, Computed: computed, Agrees: agree, Exact: exact})
 	if agree {
 		s.MetricsAgreeing++
 		return
@@ -892,10 +983,24 @@ func (v *validator) compareMetric(name string, computed float64, exact bool) {
 
 type transcriptStats struct {
 	total, q20Genes, q20GenesAssigned, q20Decoded int64
+	// genes counts gene transcripts of any quality; q20GenesNuclear those of Q20 overlapping a
+	// nucleus.
+	genes, q20GenesNuclear int64
 }
+
+func finite(x float64) bool { return !math.IsNaN(x) && !math.IsInf(x, 0) }
 
 func (v *validator) checkMetrics() error {
 	s := &v.report.Summary
+	if m := v.b.Metrics; m != nil {
+		for _, name := range m.Order {
+			rm := RecordedMetric{Name: name, Text: m.Strings[name]}
+			if f, ok := m.Values[name]; ok && finite(f) {
+				rm.Value = &f
+			}
+			s.RunMetrics = append(s.RunMetrics, rm)
+		}
+	}
 	if v.cells != nil && v.cells.TranscriptCounts != nil {
 		counts := append([]int64(nil), v.cells.TranscriptCounts...)
 		sort.Slice(counts, func(i, j int) bool { return counts[i] < counts[j] })
@@ -942,13 +1047,76 @@ func (v *validator) checkMetrics() error {
 	if region, ok := v.b.Metrics.Number("region_area"); ok && region > 0 {
 		v.compareMetric("cells_per_100um2", float64(len(v.cells.IDs))/region*100, false)
 	}
+	cells := float64(len(v.cells.IDs))
+	if st.genes > 0 {
+		v.compareMetric("fraction_transcripts_decoded_q20", float64(st.q20Genes)/float64(st.genes), false)
+	}
+	// Per 100 µm² of the nucleus mask's pixels (not of the polygons' areas): research.md §1.3b.
+	if pixel := v.b.Experiment.PixelSize; v.nucleusPixels > 0 && pixel > 0 && st.q20GenesNuclear >= 0 {
+		v.compareMetric("nuclear_transcripts_per_100um2", float64(st.q20GenesNuclear)/(float64(v.nucleusPixels)*pixel*pixel)*100, false)
+	}
+	if v.cells.TranscriptCounts != nil && cells > 0 {
+		empty := 0
+		for _, c := range v.cells.TranscriptCounts {
+			if c == 0 {
+				empty++
+			}
+		}
+		v.compareMetric("fraction_empty_cells", float64(empty)/cells, false)
+	}
+	if probes := v.featureKinds[KindNegControlProbe]; probes > 0 && v.cells.ControlProbeCounts != nil && cells > 0 {
+		var counts float64
+		for _, c := range v.cells.ControlProbeCounts {
+			counts += float64(c)
+		}
+		perControl := counts / float64(probes) / cells
+		v.compareMetric("negative_control_probe_counts_per_control_per_cell", perControl, false)
+		if genes := v.featureKinds[KindGene]; genes > 0 {
+			v.compareMetric("estimated_number_of_false_positive_transcripts_per_cell", perControl*float64(genes), false)
+		}
+	}
+	if v.genesPerCell != nil {
+		v.compareMetric("median_genes_per_cell", median(v.genesPerCell), false)
+	}
+	// The segmentation methods' shares of the cells.
+	if counts, methods := v.report.Summary.SegmentationCounts, v.report.Summary.SegmentationMethods; counts != nil && cells > 0 {
+		var boundary, interior float64
+		for i, method := range methods {
+			lower := strings.ToLower(method)
+			switch {
+			case strings.Contains(lower, "boundary stain"):
+				boundary = float64(counts[i])
+				v.compareMetric("segmented_cell_boundary_frac", boundary/cells, false)
+			case strings.Contains(lower, "interior stain"):
+				interior = float64(counts[i])
+				v.compareMetric("segmented_cell_interior_frac", interior/cells, false)
+			case strings.Contains(lower, "nucleus expansion"):
+				v.compareMetric("segmented_cell_nuc_expansion_frac", float64(counts[i])/cells, false)
+			}
+		}
+		v.compareMetric("segmented_cell_stain_frac", (boundary+interior)/cells, false)
+	}
 	return nil
+}
+
+func median(v []int) float64 {
+	s := append([]int(nil), v...)
+	sort.Ints(s)
+	n := len(s)
+	switch {
+	case n == 0:
+		return 0
+	case n%2 == 1:
+		return float64(s[n/2])
+	}
+	return float64(s[n/2-1]+s[n/2]) / 2
 }
 
 // compareManifest checks a value experiment.xenium records.
 func (v *validator) compareManifest(name string, recorded, computed float64) {
 	s := &v.report.Summary
 	s.MetricsCompared++
+	s.Metrics = append(s.Metrics, MetricCheck{Name: name, Source: manifestName, Recorded: recorded, Computed: computed, Agrees: recorded == computed, Exact: true})
 	if recorded == computed {
 		s.MetricsAgreeing++
 		return
