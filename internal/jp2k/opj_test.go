@@ -304,10 +304,10 @@ func checkAgainstOPJ(t *testing.T, c encCase, data []byte, ref []refComp, worker
 		return
 	}
 	se, _ := compareRef(emu, ref)
-	if se.differing > 0 {
-		t.Errorf("%v: with OpenJPEG's high-pass constant, decode differs from OpenJPEG: %v", c, se)
-	} else {
+	if se.differing == 0 {
 		st.emulatedExact++
+	} else if opjExact() {
+		t.Errorf("%v: with OpenJPEG's high-pass constant, decode differs from OpenJPEG: %v", c, se)
 	}
 	if tol := opjTolerance(c.im.prec); s.maxAbs > tol {
 		t.Errorf("%v: standard decode differs from OpenJPEG by more than %d: %v", c, tol, s)

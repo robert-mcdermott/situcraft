@@ -12,8 +12,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -175,6 +177,42 @@ var opjDecompress, opjCompress string
 func init() {
 	opjDecompress, _ = exec.LookPath("opj_decompress")
 	opjCompress, _ = exec.LookPath("opj_compress")
+}
+
+// opjVersion is the openjp2 library version opj_decompress reports ("2.5.4"), or "".
+func opjVersion() string {
+	if opjDecompress == "" {
+		return ""
+	}
+	out, _ := exec.Command(opjDecompress, "-h").CombinedOutput()
+	m := regexp.MustCompile(`library v(\d+\.\d+\.\d+)`).FindSubmatch(out)
+	if m == nil {
+		return ""
+	}
+	return string(m[1])
+}
+
+// opjExact reports whether opj_decompress is an OpenJPEG whose 9/7 decode SituCraft matches bit for
+// bit with OpenJPEG's high-pass constant (opjHighpass): 2.5.4, the version this was verified with,
+// and later. Older versions (2.5.0, Ubuntu 24.04's) are held to the ±1 tolerance alone.
+var opjExact = sync.OnceValue(func() bool { return versionAtLeast(opjVersion(), 2, 5, 4) })
+
+// versionAtLeast reports whether a dotted version is at least min.
+func versionAtLeast(version string, min ...int) bool {
+	parts := strings.Split(version, ".")
+	for i, want := range min {
+		if i >= len(parts) {
+			return false
+		}
+		got, err := strconv.Atoi(parts[i])
+		if err != nil {
+			return false
+		}
+		if got != want {
+			return got > want
+		}
+	}
+	return true
 }
 
 // opjDecode decodes data (a JP2 file or a codestream) with opj_decompress into PGX files, one per
@@ -508,4 +546,15 @@ func opjEncode(t testing.TB, im *synthImage, args []string, jp2 bool) ([]byte, e
 		return nil, fmt.Errorf("opj_compress %s: %v: %s", strings.Join(args, " "), err, msg)
 	}
 	return os.ReadFile(out)
+}
+
+func TestVersionAtLeast(t *testing.T) {
+	for _, c := range []struct {
+		version string
+		want    bool
+	}{{"2.5.4", true}, {"2.5.10", true}, {"2.6.0", true}, {"3.0.0", true}, {"2.5.0", false}, {"2.5.3", false}, {"2.4.9", false}, {"", false}, {"2.5", false}} {
+		if got := versionAtLeast(c.version, 2, 5, 4); got != c.want {
+			t.Errorf("versionAtLeast(%q, 2.5.4) = %v", c.version, got)
+		}
+	}
 }

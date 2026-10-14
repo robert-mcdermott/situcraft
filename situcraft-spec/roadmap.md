@@ -159,7 +159,8 @@ The data plane built here (readers, codecs, the derived-data cache) carries ever
        - the 648 irreversible 9/7 tiles are within ±1 (0.74% of samples, RMSE 0.086);
        - resolution reduction 1, 3 and 5 is also within ±1;
        - the difference has one cause, OpenJPEG's fixed-point approximation of the high-pass
-         scaling: with that value substituted (a test-only option) the two agree bit for bit.
+         scaling: with that value substituted (a test-only option) the two agree bit for bit
+         (OpenJPEG 2.5.4; CI's 2.5.0 is held to ±1 alone, `research.md` §1.6).
      - **Budget:** the largest real tile decodes in about 90 ms on one core (budget 150 ms; OpenJPEG
        76 ms single-threaded), 15 ms on ten. All 918 tiles of both bundles, through the TIFF
        reader, decode in 8.5 s on ten cores.

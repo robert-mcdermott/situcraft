@@ -251,10 +251,13 @@ conformant decoders legitimately differ in the last rounding (ISO/IEC 15444-4 st
 for lossy decoding as error bounds, not equality). The maximum difference, the share of differing
 pixels and the RMSE are recorded. Measured on all 918 tiles: the 270 reversible tiles are
 identical; the 648 irreversible tiles are within ±1 (0.74% of samples differ by 1, RMSE 0.086).
-The difference has one cause: OpenJPEG 2.5's output corresponds to a 13-bit fixed-point
+The difference has one cause: OpenJPEG 2.5.4's output corresponds to a 13-bit fixed-point
 approximation of the 9/7 high-pass scaling (13318/8192 for 2/K), where SituCraft uses the
 standard's 1/K; with that value substituted (a test-only option), the two agree bit for bit on
-every tile.
+every tile. OpenJPEG 2.5.0 (Ubuntu 24.04's, which CI installs) is within ±1 too but follows
+neither constant exactly (on the Lung bundle's tiles, 1.03% of samples differ by 1 with the
+standard's constant, about 1.3% with 2.5.4's), so the tests require the bit-for-bit match only
+from OpenJPEG 2.5.4.
 
 ## 2. Coordinates and units
 

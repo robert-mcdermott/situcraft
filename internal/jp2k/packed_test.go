@@ -154,7 +154,9 @@ func TestPackedHeaders(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if s, err := compareRef(emu, ref); err != nil || s.differing > 0 {
+			// Bit for bit with the OpenJPEG versions whose 9/7 decode is matched (opjExact);
+			// within one level otherwise.
+			if s, err := compareRef(emu, ref); err != nil || (opjExact() && s.differing > 0) || s.maxAbs > 1 {
 				t.Errorf("%v ppm %v: differs from OpenJPEG: %v %v", c.args, ppm, s, err)
 			}
 		}

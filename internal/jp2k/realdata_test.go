@@ -84,9 +84,12 @@ func needOPJ(t testing.TB) {
 }
 
 // TestRealTiles decodes every tile of every IFD and SubIFD of the morphology_focus files (and every
-// 25th tile of the z-stacks, or all with JP2K_ZSTACK_ALL=1) and compares each with opj_decompress: within ±1 with the standard's
-// 9/7 constants, and bit for bit with OpenJPEG's approximate high-pass constant (see invK97OPJ),
-// which shows that the ±1 differences come from that constant alone.
+// 25th tile of the z-stacks, or all with JP2K_ZSTACK_ALL=1) and compares each with opj_decompress:
+// within ±1 with the standard's 9/7 constants, whatever OpenJPEG's version (the requirement); and,
+// with OpenJPEG 2.5.4 or later, bit for bit with its approximate high-pass constant (see
+// invK97OPJ), which shows that the ±1 differences come from that constant alone. Older OpenJPEG
+// (2.5.0, Ubuntu 24.04's, which CI installs) follows neither constant exactly; with it, that
+// comparison is only reported.
 func TestRealTiles(t *testing.T) {
 	if testing.Short() {
 		t.Skip("short mode")
@@ -115,6 +118,7 @@ func TestRealTiles(t *testing.T) {
 	if len(jobs) == 0 {
 		t.Skip("no development bundle is present (node validation/fetch.mjs)")
 	}
+	version, exact := opjVersion(), opjExact()
 	var mu sync.Mutex
 	var total, totalEmu diffStats
 	reversible := 0
@@ -150,7 +154,7 @@ func TestRealTiles(t *testing.T) {
 				return
 			}
 			se, _ := compareRef(emu, ref)
-			if se.differing > 0 {
+			if se.differing > 0 && exact {
 				t.Errorf("%s %s: with OpenJPEG's high-pass constant: %v", j.file, j.tile.label, se)
 			}
 			d, _ := newDecoder(mustCS(j.tile.data), Options{})
@@ -181,7 +185,7 @@ func TestRealTiles(t *testing.T) {
 	wg.Wait()
 	t.Logf("%d tiles (%d reversible 5/3, %d irreversible 9/7)", len(jobs), reversible, len(jobs)-reversible)
 	t.Logf("standard decode vs OpenJPEG: %v", total)
-	t.Logf("with OpenJPEG's high-pass constant: %v", totalEmu)
+	t.Logf("with OpenJPEG's high-pass constant: %v (OpenJPEG %s; %s)", totalEmu, version, map[bool]string{true: "required to be identical", false: "reported only: identical from OpenJPEG 2.5.4"}[exact])
 }
 
 // TestRealTilesReduced checks resolution reduction on a few real tiles.
