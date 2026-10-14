@@ -41,6 +41,7 @@ see `conventions.md`. For the methods, formats and datasets behind these choices
 │   internal/jp2k      JPEG 2000 Part 1 decoder (TIFF compression 34712)                                │
 │   internal/xenium    bundle scanner, version detection, validation, typed access                      │
 │   internal/cache     derived data: image tile pyramids, transcript spatial index, geometry tiles      │
+│   internal/view      the viewer's queries: points and density by gene, cells, one cell                 │
 │   api_*.go           viewport queries: tiles, points, polygons, cells (binary, columnar responses)     │
 │ compute (new, goroutines)                                                                             │
 │   internal/segment   nucleus expansion; transcript-informed segmentation (sampler, outputs)           │
@@ -107,6 +108,23 @@ covers the same tissue in every layer, so the renderer asks for the same tiles o
   leaves a half-built entry, a build resumes where it stopped, and a resumed build is
   byte-identical to one that was not interrupted. The SHA-256 of each source file is recorded
   under its place, size and time, so an unchanged bundle reopens without being read.
+
+### The tissue renderer
+
+The viewer draws with WebGL2 (`web/render/`), from the derived data's tiles:
+
+- **Image channels** arrive as stored, a zlib stream the browser inflates, and go to the GPU as
+  an integer texture of two byte planes. The shader reads each 16-bit sample exactly with
+  `texelFetch`, then applies the channel's window, gamma and color, and channels add up. Reading
+  the samples back before the window is how the validation harness proves the image is exactly
+  the data.
+- **The level drawn** is the coarsest whose pixels are no larger than the screen's. Coarser loaded
+  tiles stand in until its tiles arrive, with a stencil so each pixel is drawn once per channel.
+- **Transcripts** are points while few tiles are in view, and density grids farther out.
+  **Cells** are outlines from the matching geometry level, fills colored through a per-cell color
+  texture, and the selected cell drawn from its full-resolution polygon.
+- **Tiles** are addressed by cache entry, whose name hashes its sources. They never change, so
+  the browser caches them for good, and the renderer keeps the GPU's copies within a budget.
 
 ### Segmentation built in
 

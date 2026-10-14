@@ -151,6 +151,22 @@ an Apple M4 with 10 cores, reading the source files' checksums included:
 - Reopened unchanged, a dataset's status takes under a millisecond: its files are looked at, not
   read.
 
+### 1.3d The development bundles in the viewer (verified)
+
+- **Cell counts from the transcripts:** for every one of the 19,173 cells of both bundles, the
+  Q20 gene transcripts assigned to the cell in transcripts.parquet are exactly cells.parquet's
+  `transcript_counts`. A cell's top genes can therefore be counted from the transcript index
+  without the matrix.
+- **Segmentation method per cell:** XOA 2.0's cells.parquet has no `segmentation_method` column.
+  cells.zarr.zip's `polygon_sets/1/method` indexes its `segmentation_methods` for each cell of its
+  `cell_id` array, which lists the cells in cells.parquet's order.
+- **Default display windows** (the 1st and 99.5th percentiles of the coarsest level's non-zero
+  samples), Breast: DAPI 73–4,337 (largest 7,698), ATP1A1/CD45/E-Cadherin 109–2,272, 18S
+  91–2,763, alphaSMA/Vimentin 33–2,782. The four stains added together are nearly white, so the
+  viewer shows the nuclear and boundary stains at first.
+- **Density scale:** at the coarsest density level (bins of 13.6 µm), the 99th percentile of
+  every gene's bins together is 377 Q20 transcripts in Breast.
+
 ### 1.4 Images (verified)
 
 - BigTIFF; uint16, one sample per pixel; tiles of 1024×1024.

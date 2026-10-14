@@ -104,6 +104,22 @@ with each.
     build's progress, **Build now**, why the last build failed if it did) and what the cache
     holds; the status bar and inspector show a running build.
   - Sizes are now shown in decimal units (1 GB is 10^9 bytes), as `--cache-limit` reads them.
+- **The tissue viewer (wave 1, slice 5).**
+  - **The tissue at any zoom**, drawn with WebGL2 from the derived data:
+    - the morphology channels, each with its own color, contrast window and gamma, every 16-bit
+      sample exactly as recorded;
+    - transcripts of chosen genes, up to 16 in distinct colors, or all transcripts: as points up
+      close, and as each gene's density farther out;
+    - cell and nucleus outlines, and cells filled by transcripts, area or segmentation method,
+      with a legend.
+  - **Finding your way:** pan and zoom by dragging, scrolling, pinching or the keyboard; a scale
+    bar, the position in µm, and a minimap of the whole tissue.
+  - **Finding genes** by typing their names, with each one's count.
+  - **Clicking a cell** shows it in the inspector: its ID, position, areas, segmentation method,
+    transcripts and top genes. Clicking one of its genes shows that gene.
+  - **View the tissue** in the Data view opens a dataset once its derived data are built.
+  - Tiles are served from the cache and kept by the browser, so a view you return to is drawn at
+    once.
 - **The development data.** `node validation/fetch.mjs` downloads 10x Genomics' Xenium human Lung
   and Breast 2-FOV bundles (CC BY 4.0). It checks each archive's MD5, extracts it (each member's
   CRC-32 checked), checks every file's SHA-256, and deletes the archive. Both take about 640 MB;
@@ -163,6 +179,16 @@ with each.
   - builds stopped partway resume to byte-identical entries; an unchanged bundle reopens with
     nothing read or built; the zipped Lung bundle reuses the folder's entries;
   - both stay under the 500 MB budget, and every reader refuses damaged files cleanly (fuzzed).
+- **The tissue viewer in headless Chrome** (`node validation/run.mjs viewer`):
+  - every channel of both bundles, drawn at full resolution, at half and at the coarsest level
+    and read back before any window or color, equals the derived data sample for sample (1.35
+    million samples);
+  - the transcripts it loads for a region equal the program's query of the index;
+  - it pans and zooms at 60 frames per second on an Apple M4, and a view it returns to is drawn
+    at once.
+- **The viewer's queries** (`internal/view`): a region's transcripts equal a scan of
+  transcripts.parquet; every cell's gene transcripts counted from the index equal cells.parquet's
+  count, for all 19,173 cells of both bundles.
 - **JPEG 2000 against OpenJPEG on all 918 tiles of both bundles:**
   - the 270 lossless (5/3) tiles are identical;
   - the 648 lossy (9/7) tiles are within ±1 at every pixel (0.74% of samples differ by 1, RMSE

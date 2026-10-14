@@ -5,8 +5,10 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"compress/zlib"
 	"context"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -18,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -702,4 +705,133 @@ func TestJobsOverHTTP(t *testing.T) {
 		}
 	}
 	t.Fatal("the stream never said the job was cancelled")
+}
+
+func TestBundleViewEndpoints(t *testing.T) {
+	root := os.Getenv("SITUCRAFT_DATA")
+	if root == "" {
+		root = filepath.Join("validation", "cache")
+	}
+	bundle := filepath.Join(root, "xenium-lung-2fov")
+	if _, err := os.Stat(filepath.Join(bundle, "experiment.xenium")); err != nil {
+		t.Skip("the Lung bundle is not present (node validation/fetch.mjs xenium-lung-2fov)")
+	}
+	dir := t.TempDir()
+	a, err := newApp(config{dataDir: dir, cacheDir: filepath.Join(dir, "cache"), files: []string{bundle}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.jobs.Close()
+	defer a.views.closeAll()
+	h, _ := a.handler()
+	handler := protect(h, "127.0.0.1", defaultPort)
+	get := func(target string) *httptest.ResponseRecorder {
+		t.Helper()
+		return request(t, handler, http.MethodGet, target, nil, nil)
+	}
+	if rec := get("/api/local/0/view"); rec.Code != http.StatusConflict {
+		t.Fatalf("before building, the view answered %d", rec.Code)
+	}
+	rec := request(t, handler, http.MethodPost, "/api/local/0/cache", nil, nil)
+	var started struct{ Job struct{ ID string } }
+	json.NewDecoder(rec.Body).Decode(&started)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	if job, err := a.jobs.Wait(ctx, started.Job.ID); err != nil || job.State != jobs.Complete {
+		t.Fatalf("building: %v %v", job.State, err)
+	}
+	rec = get("/api/local/0/view")
+	var desc struct {
+		Grid     struct{ Levels int }
+		Entries  map[string]string
+		Channels []struct {
+			Name  string
+			Range [2]float64
+		}
+		Transcripts struct {
+			Count int
+			Genes []struct{ Name string }
+		}
+		Cells struct{ Count int }
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&desc); err != nil || rec.Code != http.StatusOK {
+		t.Fatalf("view: %d %v", rec.Code, err)
+	}
+	if desc.Grid.Levels != 5 || len(desc.Channels) != 1 || desc.Transcripts.Count != 825885 || desc.Cells.Count != 11898 || len(desc.Entries) != 3 {
+		t.Fatalf("descriptor %+v", desc)
+	}
+	image, points, geometry := desc.Entries["image"], desc.Entries["transcripts"], desc.Entries["geometry"]
+	// An image tile as stored: deflated, the browser inflates it; its samples split in two planes.
+	rec = get(fmt.Sprintf("/api/cache/%s/image/0/1/2/1", image))
+	if rec.Code != http.StatusOK || rec.Header().Get("Content-Encoding") != "deflate" || !strings.Contains(rec.Header().Get("Cache-Control"), "immutable") {
+		t.Fatalf("image tile: %d %v", rec.Code, rec.Header())
+	}
+	zr, err := zlib.NewReader(rec.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	split, _ := io.ReadAll(zr)
+	width, _ := strconv.Atoi(rec.Header().Get("X-Tile-Width"))
+	height, _ := strconv.Atoi(rec.Header().Get("X-Tile-Height"))
+	d, _ := a.views.entry(image)
+	want, w, hgt, err := d.Image.Tile(0, 1, 2, 1)
+	if err != nil || w != width || hgt != height || len(split) != 2*w*hgt {
+		t.Fatalf("image tile %d×%d (%d bytes), want %d×%d: %v", width, height, len(split), w, hgt, err)
+	}
+	for i, v := range want {
+		if uint16(split[i])|uint16(split[w*hgt+i])<<8 != v {
+			t.Fatalf("image tile sample %d differs", i)
+		}
+	}
+	// Points of two genes with quality 20 or more.
+	rec = get(fmt.Sprintf("/api/cache/%s/points/3/2?genes=0,4&minq=20", points))
+	body := rec.Body.Bytes()
+	if rec.Code != http.StatusOK || string(body[:4]) != "SCVP" {
+		t.Fatalf("points: %d", rec.Code)
+	}
+	tile, _ := d.TilePoints(3, 2, []int{0, 4}, 20)
+	if int(binary.LittleEndian.Uint32(body[4:])) != tile.Len() || !bytes.Equal(body, tile.Encode()) {
+		t.Error("the points answer differs from the index's")
+	}
+	// Density of every gene together, and polygons as stored.
+	if rec = get(fmt.Sprintf("/api/cache/%s/density/2/1/1?q20=1", points)); rec.Code != http.StatusOK || string(rec.Body.Bytes()[:4]) != "SCVD" {
+		t.Errorf("density: %d", rec.Code)
+	}
+	rec = get(fmt.Sprintf("/api/cache/%s/polygons/cells/0/3/2", geometry))
+	if rec.Code != http.StatusOK || rec.Header().Get("X-Polygons") == "" || rec.Header().Get("Content-Encoding") != "deflate" {
+		t.Errorf("polygons: %d %v", rec.Code, rec.Header())
+	}
+	// The cells table and one cell.
+	rec = get("/api/local/0/cells")
+	if rec.Code != http.StatusOK || string(rec.Body.Bytes()[:4]) != "SCVC" || binary.LittleEndian.Uint32(rec.Body.Bytes()[4:]) != 11898 {
+		t.Errorf("cells table: %d", rec.Code)
+	}
+	rec = get("/api/local/0/cells/42?top=5")
+	var cell struct {
+		ID      string
+		Genes   []struct{ Name string }
+		Counted struct{ Q20Genes int }
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&cell); err != nil || cell.ID == "" || len(cell.Genes) > 5 || cell.Counted.Q20Genes == 0 {
+		t.Errorf("cell 42: %+v %v", cell, err)
+	}
+	// A region's points.
+	rec = get("/api/local/0/points?x0=100&y0=100&x1=300&y1=250&minq=20")
+	if rec.Code != http.StatusOK || binary.LittleEndian.Uint32(rec.Body.Bytes()[4:]) == 0 {
+		t.Errorf("region points: %d", rec.Code)
+	}
+	// Refusals.
+	for target, code := range map[string]int{
+		"/api/cache/image-000000000000000000000000/image/0/0/0/0":   http.StatusNotFound,
+		fmt.Sprintf("/api/cache/%s/image/0/9/0/0", image):           http.StatusNotFound,
+		fmt.Sprintf("/api/cache/%s/image/0/x/0/0", image):           http.StatusBadRequest,
+		fmt.Sprintf("/api/cache/%s/points/0/0?genes=a", points):     http.StatusBadRequest,
+		fmt.Sprintf("/api/cache/%s/points/0/0?genes=99999", points): http.StatusNotFound,
+		"/api/local/0/cells/99999":                                  http.StatusNotFound,
+		"/api/local/0/points?x0=1":                                  http.StatusBadRequest,
+	} {
+		if rec := get(target); rec.Code != code {
+			t.Errorf("%s answered %d, want %d", target, rec.Code, code)
+		}
+	}
 }

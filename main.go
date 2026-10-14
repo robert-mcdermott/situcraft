@@ -31,7 +31,7 @@ import (
 	"situcraft/internal/jobs"
 )
 
-//go:embed web/index.html web/styles.css web/app.js web/favicon.svg web/lib/*.js web/ui/*.js
+//go:embed web/index.html web/styles.css web/app.js web/favicon.svg web/lib/*.js web/ui/*.js web/render/*.js
 var content embed.FS
 
 var version = "0.1.0"
@@ -75,6 +75,8 @@ type app struct {
 	cache    *cache.Cache
 	// jobs runs long computations, such as building a dataset's derived data.
 	jobs *jobs.Manager
+	// views are the datasets open in the tissue viewer.
+	views *views
 }
 
 func init() {
@@ -199,6 +201,7 @@ func (s *runningServer) stop(timeout time.Duration) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	s.server.Shutdown(ctx)
+	s.app.views.closeAll()
 }
 
 func (s *runningServer) serve() error {
@@ -334,6 +337,7 @@ func newApp(cfg config) (*app, error) {
 		files:    newLocalFiles(),
 		cacheDir: cfg.cacheDir,
 		jobs:     jobs.NewManager(),
+		views:    newViews(),
 	}
 	if a.cacheDir != "" {
 		c, err := cache.Open(a.cacheDir, cfg.cacheLimit)
@@ -440,6 +444,7 @@ func (a *app) registerAPI(mux *http.ServeMux) {
 	a.registerDatasets(mux)
 	a.registerCache(mux)
 	a.registerJobs(mux)
+	a.registerView(mux)
 	mux.HandleFunc("POST /api/library/local/{index}", func(w http.ResponseWriter, r *http.Request) {
 		file, ok := a.files.get(r.PathValue("index"))
 		if !ok {

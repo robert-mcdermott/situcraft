@@ -704,3 +704,71 @@ table.data tr.selected td { background: var(--active); }
 .derived td .muted { font-size: 12px; }
 .derived-usage { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 10px 0 0; font-size: 12px; }
 .derived-usage .mono { word-break: break-all; }
+
+/* Tissue viewer (ui/mode-viewer.js, ui/viewer-panel.js) */
+.viewer .viewer-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 286px 1fr; }
+.viewer .viewer-body > .planned { grid-column: 1 / -1; }
+.viewer-panel { border-right: 1px solid var(--line); background: var(--panel); overflow-y: auto; min-height: 0; }
+.viewer-section { padding: 12px 14px; border-bottom: 1px solid var(--line); }
+.viewer-section h3 { margin: 0 0 10px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-2); display: flex; gap: 6px; align-items: center; }
+.viewer-section h3 svg { width: 14px; height: 14px; }
+.viewer-channel { padding: 6px 0; border-top: 1px solid var(--line); }
+.viewer-channel:first-child { border-top: 0; padding-top: 0; }
+.viewer-channel .row { display: flex; align-items: center; gap: 6px; }
+.viewer-channel .name { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 12.5px; line-height: 1.25; }
+.viewer-channel .name b, .viewer-channel .name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.viewer-channel .name span { font-size: 11px; }
+.viewer-channel.off .name, .viewer-channel.off .ranges { opacity: 0.55; }
+.viewer-channel .ranges { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; margin: 6px 0 0 32px; font-size: 11px; color: var(--text-3); align-items: center; }
+.viewer-channel .ranges label { display: contents; }
+.viewer-channel .ranges input { width: 100%; margin: 0; }
+.viewer-channel .ranges > span { grid-column: 1 / -1; font-size: 11px; }
+.viewer-swatch { width: 18px; height: 18px; border-radius: 5px; border: 1px solid var(--line-strong); cursor: pointer; flex: none; padding: 0; }
+.viewer-toggle { display: flex; align-items: center; gap: 8px; font-size: 12.5px; margin: 6px 0; cursor: pointer; }
+.viewer-slider { display: grid; grid-template-columns: 1fr 1.3fr; gap: 8px; align-items: center; font-size: 12px; color: var(--text-2); margin: 6px 0; }
+.viewer-slider input, .viewer-slider select { width: 100%; margin: 0; }
+.viewer-hint { font-size: 11.5px; margin: 6px 0; line-height: 1.4; }
+.viewer-gene-find { position: relative; margin: 8px 0 6px; }
+.viewer-gene-search { width: 100%; height: 30px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--bg-elev); color: var(--text); padding: 0 10px; font: inherit; font-size: 12.5px; }
+.viewer-suggestions { position: absolute; z-index: 30; left: 0; right: 0; top: 34px; max-height: 300px; overflow-y: auto; background: var(--bg-elev); border: 1px solid var(--line-strong); border-radius: 8px; box-shadow: var(--shadow); padding: 4px; }
+.viewer-suggestion { display: flex; gap: 8px; align-items: center; width: 100%; border: 0; background: none; color: var(--text); padding: 5px 8px; border-radius: 6px; font: inherit; font-size: 12.5px; text-align: left; cursor: pointer; }
+.viewer-suggestion .spacer { flex: 1; }
+.viewer-suggestion:hover, .viewer-suggestion.active { background: var(--active); }
+.viewer-gene-chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 6px; }
+.viewer-gene-chip { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--line); border-radius: 999px; padding: 1px 2px 1px 8px; font-size: 12px; background: var(--panel-2); }
+.viewer-gene-chip .muted { font-size: 11px; }
+.viewer-gene-chip .icon-button { width: 20px; height: 20px; }
+.viewer-gene-chip .icon-button svg { width: 12px; height: 12px; }
+.viewer-gene-chip .dot, .viewer-legend-item .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.viewer-stage { position: relative; overflow: hidden; background: #000; min-width: 0; min-height: 0; }
+.viewer-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; outline: none; }
+.viewer-canvas:active { cursor: grabbing; }
+.viewer-canvas:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
+.viewer-tools { position: absolute; top: 10px; left: 10px; display: flex; flex-direction: column; gap: 4px; }
+.viewer-tools .icon-button, .viewer-tools .icon-button:hover { background: rgba(18, 22, 32, 0.78); color: #f2f4f8; border: 1px solid rgba(255, 255, 255, 0.16); }
+.viewer-tools .icon-button:hover { background: rgba(40, 46, 64, 0.9); }
+.viewer-minimap { position: absolute; top: 10px; right: 10px; border: 1px solid rgba(255, 255, 255, 0.28); border-radius: 6px; cursor: pointer; background: #000; }
+.viewer-legend { position: absolute; right: 10px; bottom: 40px; width: 200px; padding: 8px 10px; border-radius: 8px; background: rgba(18, 22, 32, 0.82); color: #f2f4f8; font-size: 11.5px; line-height: 1.5; }
+.viewer-legend .muted { color: #b9bfcc; }
+.viewer-legend-bar { height: 8px; border-radius: 3px; margin: 4px 0 2px; }
+.viewer-legend-range { display: flex; justify-content: space-between; }
+.viewer-legend-item { display: flex; align-items: center; gap: 6px; }
+.viewer-legend-item .muted { margin-left: auto; }
+.viewer-foot { position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: flex-end; gap: 14px; padding: 8px 12px; color: #f2f4f8; font-size: 11.5px; pointer-events: none; background: linear-gradient(0deg, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0)); }
+.viewer-scale { display: flex; flex-direction: column; gap: 3px; }
+.viewer-scale .bar { height: 4px; border: 1px solid #f2f4f8; border-top: 0; min-width: 10px; }
+.viewer-readout { min-width: 170px; }
+.viewer-status { margin-left: auto; color: #c9ceda; }
+.viewer-cell .callout { margin-top: 8px; font-size: 12px; }
+.viewer-genes { display: flex; flex-direction: column; gap: 2px; }
+.viewer-gene-bar { display: grid; grid-template-columns: 76px 1fr 34px; gap: 6px; align-items: center; border: 0; background: none; padding: 2px 4px; border-radius: 5px; font: inherit; font-size: 12px; color: var(--text); cursor: pointer; text-align: left; }
+.viewer-gene-bar:hover { background: var(--hover); }
+.viewer-gene-bar .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.viewer-gene-bar .bar { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; }
+.viewer-gene-bar .bar span { display: block; height: 100%; background: var(--accent); }
+.viewer-gene-bar .n { text-align: right; color: var(--text-2); font-variant-numeric: tabular-nums; }
+@media (max-width: 760px) {
+  .viewer .viewer-body { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  .viewer-panel { max-height: 40vh; border-right: 0; border-bottom: 1px solid var(--line); }
+  .viewer-minimap { display: none; }
+}

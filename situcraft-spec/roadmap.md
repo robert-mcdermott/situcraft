@@ -370,21 +370,92 @@ The data plane built here (readers, codecs, the derived-data cache) carries ever
        now update a running job's progress in place.
      - **A damaged block could claim a gigabyte:** readers refuse a block claiming more than
        deflate's largest expansion of its stored bytes.
-5. **The tissue viewer (V1, V2, V3, V4, V5, V9, V10).**
-   - **Renderer:** `web/render/`, a WebGL2 renderer for 16-bit image tiles with per-channel
-     window, color and gamma in the shader; transcript density and points by zoom; cell and
-     nucleus outlines and fills.
-   - **API:** binary columnar responses from `api_tiles.go`, `api_points.go`,
-     `api_cells.go`.
-   - **Viewer controls:** the layer panel, gene search, several genes in distinct colors, scale
-     bar, µm coordinate readout, minimap, and a cell inspector (IDs, area, counts, top genes,
-     segmentation method).
+5. **The tissue viewer (V1, V2, V3, V4, V5, V9, V10): done.**
+   - **Renderer** (`web/render/`, WebGL2):
+     - **Channels:** 16-bit tiles kept as two byte planes in an integer texture and read with
+       `texelFetch`, so the shader sees every sample exactly. Each channel's window, gamma and
+       color are applied there, and channels add up.
+     - **Levels:** the level drawn has pixels no larger than a device pixel. Until its tiles
+       arrive, coarser loaded tiles stand in, and a stencil keeps each pixel drawn once per channel.
+     - **Transcripts** are points from the full-resolution tiles, of the chosen genes or of all,
+       while few enough tiles are in view (64 for chosen genes, 24 for all). Farther out they are
+       density grids at the level whose bins are a few pixels wide, on a logarithmic scale set by
+       the coarsest level's 99th percentile.
+     - **Outlines:** cell and nucleus outlines from the geometry level matching the image level,
+       once a cell spans about ten pixels.
+     - **Fills:** cells by an attribute, through a per-cell color texture; rings triangulated by
+       ear clipping, with a fan for rings that cross themselves.
+     - **The selected cell** is drawn from its full-resolution polygons.
+     - **Tiles** are fetched nearest the centre of the view first, a few at a time; those no
+       longer wanted are not fetched, and the GPU's copies are kept within a budget.
+   - **Program** (`internal/view`, `api_view.go`):
+     - `GET /api/local/{i}/view`: what can be shown, with each channel's default window (the 1st
+       and 99.5th percentiles of its coarsest level) and the density scales.
+     - **Tiles by entry:** `GET /api/cache/{entry}/image|points|density|polygons/…`. Image and
+       polygon tiles are sent as stored (`Content-Encoding: deflate`); points and density are cut
+       to the chosen genes and quality. An entry's name hashes its sources, so tiles are marked
+       immutable and the browser keeps them.
+     - `GET /api/local/{i}/cells`: the cells table, binary.
+     - `GET /api/local/{i}/cells/{row}`: one cell, with its transcripts counted from the index.
+     - `GET /api/local/{i}/points?x0&y0&x1&y1`: a region's transcripts.
+     - Each segmentation method comes from cells.parquet or, in XOA 2.0, from cells.zarr.zip.
+   - **The Viewer** (`ui/mode-viewer.js`, `ui/viewer-panel.js`):
+     - **Navigation:** drag, scroll, pinch, double-click and the keyboard to pan and zoom.
+     - **The layers panel:**
+       - channels: shown or not, color, window, gamma;
+       - transcripts: gene search, up to 16 genes in distinct colors, or all transcripts; the
+         quality floor, point size and density brightness;
+       - cells: outlines, nucleus outlines, a fill by an attribute with its legend.
+     - **Around the tissue:** a scale bar, the µm readout and a minimap.
+     - **Clicking a cell** puts it in the inspector: its ID, centroid, areas, segmentation method,
+       Q20 gene transcripts counted from the index, and top genes (a click shows one).
+     - **Defaults:** at first only the nuclear and boundary stains show, since four stains added
+       together wash out.
+     - **From the Data view:** **View the tissue** opens a dataset whose derived data are ready.
    - Validation:
-     - Every channel of the Breast bundle renders against reference crops made from the decoded
-       tiles (the pixel-difference budget is 0 before color mapping).
-     - The points in a viewport equal a direct query of the index.
-     - A performance harness in headless Chrome records frames per second while panning both
-       bundles and the viewport-query latency (budgets: 30 FPS; 500 ms warm).
+     - **In headless Chrome** (`validation/viewer.mjs`, `node validation/run.mjs viewer`; the
+       Lung bundle in CI with software WebGL, both weekly):
+       - **Exact samples:** every channel drawn at levels 0, 1 and the coarsest is read back
+         before any window or color, across tile edges and at the image's edges. All samples
+         equal the derived data's tiles: 271,214 in Lung and 1,082,848 in Breast, with a GPU and
+         with software WebGL.
+       - **Points:** the transcripts loaded for a region equal the program's query of the index,
+         for three genes and for all transcripts (4,208 to 46,153 points).
+       - **Speed on an Apple M4:**
+         - panning at cellular zoom and zooming over the whole tissue, while data arrive and once
+           loaded: 60 frames per second (the display's rate), a frame drawn in about 0.4 ms;
+         - region queries in 3–23 ms;
+         - a new view drawn whole in 14–30 ms, a revisited one at once.
+       - **Software WebGL** (as on CI): the same exactness, and 23–31 frames per second, reported
+         but not held to the budget.
+     - **In Go** (`internal/view`):
+       - region queries equal a scan of transcripts.parquet, for genes, quality floors, regions
+         across tile edges and past the image;
+       - density by gene sums to each gene's Q20 count;
+       - every cell's Q20 gene transcripts counted from the index equal cells.parquet's
+         `transcript_counts`, for all 19,173 cells of both bundles;
+       - a cell's detail has its boundary exactly;
+       - the methods' counts equal validation's.
+     - **Endpoints:** tiles as stored, points and density as the index has them, cells,
+       refusals.
+     - **Node tests:** the camera, levels and tile ranges, the scale bar, triangulation (concave,
+       crossing and degenerate rings), point in ring, and the binary answers.
+     - **In the window:**
+       - open a dataset from the Data view;
+       - find genes by typing;
+       - points up close, density farther out;
+       - click a cell to inspect it;
+       - fill by segmentation method;
+       - no WebGL or console errors.
+   - Found by slice 5:
+     - **Four stains added together wash out the image:** the nuclear and boundary stains show at
+       first.
+     - **A sampler must always have a texture of its kind bound:** the outline shader's
+       per-cell color lookup, unused for plain outlines, made WebGL refuse the draw while an
+       integer image tile was bound. It now has its own texture unit with a placeholder.
+     - **Outlines drawn at whole-tissue zoom only grey the image:** they are drawn once a cell
+       spans about ten pixels.
+     - **XOA 2.0 records each cell's segmentation method only in cells.zarr.zip.**
 6. **QC (Q1, Q2, Q3, Q4, V6).**
    - **QC view:** run metrics, with explanations of what each means and where it comes from.
    - **Spatial maps:** transcripts per cell, negative-control density, unassigned fraction, cell

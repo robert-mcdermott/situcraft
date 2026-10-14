@@ -164,7 +164,7 @@ export function mountData(app, container) {
     if (entry?.state === 'error') section.append(callout('danger', `It could not be checked: ${entry.error}`));
     if (!item && dataset) section.append(recordedSummary(dataset));
     if (report) section.append(statTiles(report));
-    if (item && dataset && link?.state !== 'missing' && link?.state !== 'different-run') section.append(derivedData(item));
+    if (item && dataset && link?.state !== 'missing' && link?.state !== 'different-run') section.append(derivedData(item, dataset));
     if (report) {
       section.append(findings(report));
       section.append(inventory(report));
@@ -186,7 +186,7 @@ export function mountData(app, container) {
     return job.state === 'queued' ? 'Waiting to build' : `Building · ${Math.round(job.progress * 100)}%`;
   }
 
-  function derivedData(item) {
+  function derivedData(item, dataset) {
     const entry = app.bundles.cache(item.path);
     if (!entry) app.bundles.cacheStatus(item);
     if (app.bundles.usage() === null && !usageAsked) {
@@ -217,6 +217,14 @@ export function mountData(app, container) {
       }, icon('stop'), 'Stop'));
     } else if (status && !status.ready) {
       actions.push(h('button.btn.small', { type: 'button', onclick: () => app.bundles.buildCache(item) }, icon('play'), 'Build now'));
+    } else if (status?.ready) {
+      actions.push(h('button.btn.small.primary', {
+        type: 'button',
+        onclick: () => {
+          app.focusItem({ kind: 'dataset', id: dataset.id });
+          app.setMode('viewer');
+        },
+      }, icon('tissue'), 'View the tissue'));
     }
     pane.append(h('h3', icon('layers'), 'Derived data', summary, h('span.spacer'), ...actions));
     pane.append(h('p.muted.derived-intro', 'Built once from the bundle, so that its tissue opens quickly at any zoom, and reused whenever the bundle has not changed. The bundle itself is never changed.'));
@@ -251,7 +259,7 @@ export function mountData(app, container) {
         `The cache holds ${formatBytes(u.size)}${u.limit ? ` of its ${formatBytes(u.limit)} limit` : ''}, in `, h('span.mono', u.dir),
         '. It can be deleted at any time; what is needed is built again.'));
     }
-    derived = { item, el: pane, phase: jobPhase(job), summary, bar, message };
+    derived = { item, dataset, el: pane, phase: jobPhase(job), summary, bar, message };
     return pane;
   }
 
@@ -260,7 +268,7 @@ export function mountData(app, container) {
     if (!derived || !derived.el.isConnected) return;
     const job = app.bundles.cacheJob(derived.item);
     if (jobPhase(job) !== derived.phase) {
-      derived.el.replaceWith(derivedData(derived.item));
+      derived.el.replaceWith(derivedData(derived.item, derived.dataset));
       return;
     }
     if (!job) return;

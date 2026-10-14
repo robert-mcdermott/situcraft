@@ -52,16 +52,16 @@ Status: **planned (wave N)** until built. Then **done**, **partial** (the gap no
 
 | # | Requirement | Status |
 | --- | --- | --- |
-| V1 | Multiscale, multichannel 16-bit images rendered progressively, with per-channel contrast, color and visibility; never a whole slide decoded in the browser | planned (wave 1) |
-| V2 | Layers: morphology channels, transcripts (density and points), cell and nucleus boundaries, cell fills by any attribute, labels, ROIs, registered H&E/IF | planned (waves 1, 4, 5) |
-| V3 | Scale-dependent representation: density rasters for whole tissue, simplified polygons at intermediate zoom, exact boundaries and molecules at cellular zoom | planned (wave 1) |
-| V4 | Genes: search; single-gene points; several genes in distinct colors; gene-set scores; per-cell expression fills | planned (waves 1, 4) |
-| V5 | Cell inspector: identifiers, geometry, counts and top genes, segmentation, labels, neighbors, provenance, review history | planned (waves 1, 4, 5) |
+| V1 | Multiscale, multichannel 16-bit images rendered progressively, with per-channel contrast, color and visibility; never a whole slide decoded in the browser | done (wave 1, slice 5) |
+| V2 | Layers: morphology channels, transcripts (density and points), cell and nucleus boundaries, cell fills by any attribute, labels, ROIs, registered H&E/IF | partial (wave 1, slice 5: channels, transcripts, cell and nucleus boundaries, fills by the cells table's attributes; labels in wave 4, ROIs and H&E in wave 5) |
+| V3 | Scale-dependent representation: density rasters for whole tissue, simplified polygons at intermediate zoom, exact boundaries and molecules at cellular zoom | done (wave 1, slice 5) |
+| V4 | Genes: search; single-gene points; several genes in distinct colors; gene-set scores; per-cell expression fills | partial (wave 1, slice 5: search, points and density of up to 16 genes in distinct colors; gene-set scores and expression fills in wave 4) |
+| V5 | Cell inspector: identifiers, geometry, counts and top genes, segmentation, labels, neighbors, provenance, review history | partial (wave 1, slice 5: identifiers, centroid, areas and outline, counts recorded and counted, top genes, segmentation method; the rest in waves 4 and 5) |
 | V6 | Linked selection across the tissue, plots, tables and inspector | planned (waves 1, 4) |
 | V7 | Two segmentations compared by overlay, synchronized split view, flicker and disagreement highlighting | planned (wave 2) |
 | V8 | Saved views (dataset, coordinate system, viewport, layers, colors, filters, genes, segmentation, labels, ROIs) that reopen exactly | planned (wave 1) |
-| V9 | Scale bar, coordinate readout (µm), minimap, legends; an "explain this color" link from every encoding to its artifact and method | planned (waves 1, 4) |
-| V10 | Pan and zoom near 30 frames per second; visible-region cell queries within 500 ms once warm | planned (wave 1) |
+| V9 | Scale bar, coordinate readout (µm), minimap, legends; an "explain this color" link from every encoding to its artifact and method | partial (wave 1, slice 5: scale bar, readout, minimap, the fill's legend; the links in wave 4) |
+| V10 | Pan and zoom near 30 frames per second; visible-region cell queries within 500 ms once warm | done (wave 1, slice 5: 60 frames per second on an Apple M4, the display's rate; region queries in milliseconds; measured in headless Chrome) |
 
 ## Quality control
 
@@ -184,6 +184,6 @@ Status: **planned (wave N)** until built. Then **done**, **partial** (the gap no
 | X1 | Loopback only, Host-header check, same-origin API, strict CSP, path allowlist, safe archive extraction | partial (wave 1, slice 1: loopback, Host check, same-origin API, CSP, only named paths served; archive extraction with slice 3) |
 | X2 | Keyboard workflows; color-vision-friendly palettes with non-color encodings; text equivalents for status; contrast audited | planned (wave 1, every wave) |
 | X3 | Every reader and decoder fuzzed; hostile files refused with a message, never a crash | partial (wave 1, slice 2: every codec and reader fuzzed, crashers fixed and kept; later readers as they arrive) |
-| X4 | Performance budgets checked automatically (tile decode, indexing, viewport queries, segmentation) | partial (wave 1, slice 2: a JPEG 2000 tile in about 90 ms on one core, budget 150 ms, benchmarked; slice 4: each development bundle's derived data built within a budget of two minutes (about 2 and 4 s on ten cores) and within 500 MB together, tested; viewport queries in slice 5) |
+| X4 | Performance budgets checked automatically (tile decode, indexing, viewport queries, segmentation) | partial (wave 1, slice 2: a JPEG 2000 tile in about 90 ms on one core, budget 150 ms, benchmarked; slice 4: each development bundle's derived data built within a budget of two minutes (about 2 and 4 s on ten cores) and within 500 MB together, tested; slice 5: frames per second while panning, region queries and the time to draw a view, measured in headless Chrome against budgets (30 fps where there is a GPU; 500 ms)) |
 | X5 | Stable, versioned project and export formats; later versions open earlier projects | planned (every wave; promised at 1.0) |
 | X6 | Documentation and site: installing, a guide per feature, formats, network, MCP | planned (every wave) |

@@ -26,15 +26,7 @@ const toOpen = { label: 'Open a bundle', icon: 'bundle', run: (app) => app.openP
 const MODES = [
   { id: 'welcome', label: 'Start', icon: 'grid', hidden: true, load: () => import('./ui/mode-welcome.js').then((m) => m.mountWelcome) },
   { id: 'data', label: 'Data', icon: 'database', load: () => import('./ui/mode-data.js').then((m) => m.mountData) },
-  {
-    id: 'viewer', label: 'Viewer', icon: 'tissue',
-    load: async () => plannedMode({
-      title: 'Tissue viewer', icon: 'tissue',
-      purpose: 'The tissue at any zoom: morphology channels with their own contrast and colors, transcripts as density over the whole tissue and as molecules up close, cell and nucleus boundaries, and any gene or cell attribute as a color. Select a cell to see its counts, geometry and labels.',
-      steps: ['Open a bundle.', 'Pan and zoom; choose channels, genes and layers.', 'Save the view to come back to it exactly.'],
-      actions: [toOpen],
-    }),
-  },
+  { id: 'viewer', label: 'Viewer', icon: 'tissue', load: () => import('./ui/mode-viewer.js').then((m) => m.mountViewer) },
   {
     id: 'qc', label: 'QC', icon: 'qc',
     load: async () => plannedMode({
@@ -592,6 +584,10 @@ async function start() {
       ['Go to a view', `${modKey}1 … ${modKey}9`],
       ['Toggle project tree / inspector', `${modKey}\\ / ${modKey}⇧\\`],
       ['Drawer (history, log)', `${modKey}J`],
+      ['Viewer: pan', 'Drag, or the arrow keys'],
+      ['Viewer: zoom', 'Scroll or pinch; + and −; double-click'],
+      ['Viewer: the whole tissue', '0'],
+      ['Viewer: select a cell; clear', 'Click; Esc'],
       ['Close a menu or dialog', 'Esc'],
     ];
     showDialog({

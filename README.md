@@ -17,9 +17,10 @@ window, needs no other software, and keeps your data on your computer.
 
 **Status:** in development toward 0.1.0. SituCraft opens a Xenium output bundle (folder or zip),
 reads every byte of it with its own readers, validates it (fatal problems, warnings and notes, and
-the run's own metrics recomputed from its data) and records it in a project. It then builds the
+the run's own metrics recomputed from its data) and records it in a project. It builds the
 dataset's derived data once (image tiles at every zoom, a spatial index of the transcripts, tiled
-cell outlines) for the tissue viewer, which comes next. See the
+cell outlines), and its tissue viewer shows the morphology channels, transcripts of chosen genes
+and cells at any zoom, each sample of the images exactly as recorded. QC comes next. See the
 [roadmap](situcraft-spec/roadmap.md) and the [changelog](CHANGELOG.md).
 
 ## Install
@@ -78,6 +79,7 @@ Running `situcraft <paths>` again hands them to the SituCraft already running.
 go test -race ./...                      # the Go host
 node --test "web/lib/**/*.test.mjs"      # the browser modules
 node validation/run.mjs                  # checks against references (validation/README.md)
+node validation/run.mjs viewer           # the tissue viewer in headless Chrome against its data
 go run . --dev --window none             # serve web/ from disk at http://127.0.0.1:8840
 ```
 

@@ -6,7 +6,9 @@
 //
 //   node validation/run.mjs [suite …] [--verbose] [--require-data]
 //
-// Suites: accessibility (all by default). Exits with status 1 when a check fails.
+// Suites: accessibility (run by default); viewer (external data and Chrome: the tissue viewer in
+// headless Chrome against its data, validation/viewer.mjs; run only when named). Exits with status
+// 1 when a check fails.
 //
 // Suites marked "external data" need files that node validation/fetch.mjs downloads into
 // validation/cache/ (wave 1, slice 2); without them the suite is skipped, and fails with
@@ -16,6 +18,7 @@ import { readFileSync } from 'node:fs';
 import { textPairs, themeTokens } from './accessibility-cases.mjs';
 import { VISIONS, lab as labOf, paletteReport, simulate } from '../web/lib/colorvision.js';
 import { CATEGORICAL, CATEGORICAL_CVD, colormapColor } from '../web/lib/colormaps.js';
+import { viewerSuite } from './viewer.mjs';
 
 const args = process.argv.slice(2);
 const verbose = args.includes('--verbose');
@@ -34,6 +37,9 @@ const fmt = (v, d = 3) => (Number.isFinite(v) ? Number(v.toFixed(d)).toString() 
 class MissingData extends Error {}
 
 const suites = {
+  // External data and Chrome: run only when named.
+  viewer: () => viewerSuite({ check, MissingData, verbose }),
+
   // Every text-on-surface pair of the interface reaches WCAG AA contrast (4.5:1), in both themes
   // with color-vision-friendly colors off and on; the palettes stay apart with protanopia,
   // deuteranopia and tritanopia (Machado et al. 2009; CIEDE2000); and the sequential map read as
@@ -79,7 +85,8 @@ const suites = {
 
 // --- Run ------------------------------------------------------------------------------------------
 
-const names = requested.length ? requested : Object.keys(suites);
+const explicitOnly = new Set(['viewer']);
+const names = requested.length ? requested : Object.keys(suites).filter((name) => !explicitOnly.has(name));
 const skipped = [];
 const started = performance.now();
 for (const name of names) {
