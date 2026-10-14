@@ -1,0 +1,135 @@
+{
+  "tool": "*** Zstandard CLI (64-bit) v1.5.7, by Yann Collet ***",
+  "fixtures": {
+    "empty": {
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "zstd": "-3"
+    },
+    "fcs1": {
+      "size": 100,
+      "sha256": "fd85e83abe31fc119d916ec570efe132e70061424e77905deeaa5095c153c4ea",
+      "zstd": "-3"
+    },
+    "fcs2": {
+      "size": 1000,
+      "sha256": "02e9e5230e7760aa92a22b2883d3dc81ddc022b2c02eb60b8e8988809c2a8dba",
+      "zstd": "-3"
+    },
+    "fcs4": {
+      "size": 100000,
+      "sha256": "4de942841d8921c6ef2742893f0b7b670d6c6f4d66e04669f840738694815beb",
+      "zstd": "-3"
+    },
+    "floats-l19": {
+      "size": 204800,
+      "sha256": "8627d4664438370e2a0a92c8296a1580c9ca5880256eec86593bd13ab5b06a7e",
+      "zstd": "-19"
+    },
+    "floats-l3": {
+      "size": 204800,
+      "sha256": "8627d4664438370e2a0a92c8296a1580c9ca5880256eec86593bd13ab5b06a7e",
+      "zstd": "-3"
+    },
+    "letters": {
+      "size": 1000,
+      "sha256": "02ec25677e79648f81019acb2fde3819f1a56415122fa19572f3bdd619fb844d",
+      "zstd": "-1"
+    },
+    "long27": {
+      "size": 9437184,
+      "sha256": "b5a40560f7af24b497b2b337c51e5bb099b70763e4dbc51ce1e0c03c702b6faa",
+      "zstd": "-3 --long=27 (from a pipe)"
+    },
+    "mixed-fast": {
+      "size": 204800,
+      "sha256": "f34a5a49bd4d8620f983ee72331f5c801fc5f659308c7bfc67fe2801e457ad0b",
+      "zstd": "--fast=3"
+    },
+    "multi": {
+      "size": 66560,
+      "sha256": "6171568b134338d0387852eec096f8bf2a8b58629bdbc9e3ea78e625d6f6da14",
+      "zstd": "-3 + -19 --no-check + -1 (from a pipe)"
+    },
+    "nibbles": {
+      "size": 51200,
+      "sha256": "6cf3e8c65c602e71ab3a5817b98941c10b1e2db664d171d9f3a3b210609a4911",
+      "zstd": "-3"
+    },
+    "random": {
+      "size": 102400,
+      "sha256": "8b2a016499cabdf99cf9484513f084a8d552fd1d1209ca1cb9f498c6e5d5f550",
+      "zstd": "-3"
+    },
+    "records": {
+      "size": 307200,
+      "sha256": "7e458aebe9aa7e923037442d9da11be471ca4cff1480143c9d67d9b6ea21ec48",
+      "zstd": "-3"
+    },
+    "repeats-l19": {
+      "size": 307200,
+      "sha256": "69160e4eaf4ac999259165029482a7b61b744322f2da8eddb12ce569cc22b8e8",
+      "zstd": "-19"
+    },
+    "rle": {
+      "size": 307200,
+      "sha256": "4e015e8df8f6b66648c4d304d043fb1b6fbb51a57ba03e2ee1fb9b9034c3dd7e",
+      "zstd": "-3"
+    },
+    "rle-literals": {
+      "size": 307361,
+      "sha256": "e39230193a2fea7259a11ea6a1d5c868f7caa86c7f02a1981180b598199f3968",
+      "zstd": "-19"
+    },
+    "runs-l3": {
+      "size": 102400,
+      "sha256": "db9b67ad07c47d9d1c6f3c0164fc51916a8dba6e3bf5b5e80b0e4ff244c5bec1",
+      "zstd": "-3"
+    },
+    "skippable": {
+      "size": 20480,
+      "sha256": "5c7c18d354c1f364f768305a397abf40bd0be1f63261ddbcfc559045d85616c1",
+      "zstd": "(skippable frame) + -3 + (skippable frame)"
+    },
+    "smallwindow": {
+      "size": 40960,
+      "sha256": "5d3fed05c583c92803b3e05f85ad2a3f5f304fb25713ae98ddebbb166e29f1f8",
+      "zstd": "-19 --zstd=wlog=10"
+    },
+    "text-l1": {
+      "size": 307200,
+      "sha256": "63cb555dd986561fb257b3c7956b2be8e25a67036f3debb45879972e74e4e8c4",
+      "zstd": "-1"
+    },
+    "text-l19": {
+      "size": 307200,
+      "sha256": "63cb555dd986561fb257b3c7956b2be8e25a67036f3debb45879972e74e4e8c4",
+      "zstd": "-19"
+    },
+    "text-l3": {
+      "size": 307200,
+      "sha256": "63cb555dd986561fb257b3c7956b2be8e25a67036f3debb45879972e74e4e8c4",
+      "zstd": "-3"
+    },
+    "text-l9": {
+      "size": 307200,
+      "sha256": "63cb555dd986561fb257b3c7956b2be8e25a67036f3debb45879972e74e4e8c4",
+      "zstd": "-9"
+    },
+    "text-nocheck": {
+      "size": 51200,
+      "sha256": "3a054531a7c3da23407c4a5aafcc1ad6f80d53f1f3b47a5601f5704ea964c743",
+      "zstd": "-3 --no-check"
+    },
+    "text-nosize": {
+      "size": 51200,
+      "sha256": "bdcaef99be4140d9025e3ac5e94bc5f6d84f9ccbcc19ba2682664df8cc70f954",
+      "zstd": "-3 --no-content-size (from a pipe)"
+    },
+    "text-ultra22": {
+      "size": 307200,
+      "sha256": "63cb555dd986561fb257b3c7956b2be8e25a67036f3debb45879972e74e4e8c4",
+      "zstd": "--ultra -22"
+    }
+  }
+}

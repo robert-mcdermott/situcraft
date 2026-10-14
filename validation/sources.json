@@ -1,0 +1,276 @@
+{
+  "about": "Public data the validation suites use, downloaded and checked by node validation/fetch.mjs into validation/cache/<data set>/ (or $SITUCRAFT_DATA/<data set>/), and SituCraft's example datasets, which the program downloads the same way when asked (it embeds this list, not the data). Nothing here is stored in the repository or the SituCraft program. An archive is checked by its MD5 (as its publisher gives it) and SHA-256, extracted, every extracted file checked against the size and SHA-256 recorded here, and the archive deleted, so a bundle takes only its extracted size on disk.",
+  "datasets": {
+    "xenium-lung-2fov": {
+      "title": "Xenium V1 human Lung, 2 FOVs (XOA 2.0, nucleus expansion 5 µm)",
+      "description": "10x Genomics' example output bundle trimmed to two fields of view: 11,898 cells, 825,885 transcripts, the Xenium Human Lung Gene Expression panel (289 genes). Segmented by nucleus expansion of 5 µm; one morphology-focus image (DAPI). The smaller of the two development bundles, so CI uses it.",
+      "summary": "Two fields of view of a human lung section: 11,898 cells, 825,885 transcripts of the Xenium Human Lung Gene Expression panel (289 genes), with a DAPI morphology image and cells segmented by nucleus expansion.",
+      "source": "10x Genomics, Xenium example data (https://www.10xgenomics.com/support/software/xenium-onboard-analysis/latest/resources/xenium-example-data)",
+      "publisher": "10x Genomics",
+      "page": "https://www.10xgenomics.com/support/software/xenium-onboard-analysis/latest/resources/xenium-example-data",
+      "license": "CC BY 4.0 (10x Genomics)",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "archive": {
+        "url": "https://cf.10xgenomics.com/samples/xenium/2.0.0/Xenium_V1_human_Lung_2fov/Xenium_V1_human_Lung_2fov_outs.zip",
+        "size": 277997802,
+        "md5": "bf9c5e6762681b81eab0a19d3d590381",
+        "sha256": "acc353069871eeda9977fc80f0d11e81eef8b7a683212819cd892d983c4e4d91"
+      },
+      "files": [
+        {
+          "path": "analysis.tar.gz",
+          "size": 2499611,
+          "sha256": "a0a31910327bcce38ca57658fbb92c468d68e3f1df1c0dc1ab44583117962a8d"
+        },
+        {
+          "path": "analysis.zarr.zip",
+          "size": 72566,
+          "sha256": "42ca1989749f6d904365a453d8d0d5f36dbac8b9b27f4b6a0ad7de40d5269b23"
+        },
+        {
+          "path": "analysis_summary.html",
+          "size": 9162592,
+          "sha256": "ca40bb4e8d274e1da14637d2c4c438be253fe57bb42c0f80bc0c8d65472c52d5"
+        },
+        {
+          "path": "aux_outputs.tar.gz",
+          "size": 4995907,
+          "sha256": "d48d20f66f3474c46f289c6b5db8197b59632782d665968ef0f08139366dd334"
+        },
+        {
+          "path": "cell_boundaries.csv.gz",
+          "size": 2750450,
+          "sha256": "75d3155c018494697ea054d5770f8bc87f896edda012b6923b866b709a879d8f"
+        },
+        {
+          "path": "cell_boundaries.parquet",
+          "size": 1022286,
+          "sha256": "c95d4fe79b80b8d92261437245190bb5dec76abdbab340bc2f17dec27cf8330a"
+        },
+        {
+          "path": "cell_feature_matrix.h5",
+          "size": 407323,
+          "sha256": "a8eaa71704f199f520e18f4bc1dc7772eaeb97066d376f1e38b12c354d5f87b4"
+        },
+        {
+          "path": "cell_feature_matrix.tar.gz",
+          "size": 1390310,
+          "sha256": "4ef219171fbf8c928b0c36007d84f48a5a69e1f1b416718be402580f9bc97f64"
+        },
+        {
+          "path": "cell_feature_matrix.zarr.zip",
+          "size": 563383,
+          "sha256": "853dac57a9b052564749f799d48f2908259d4431340695a2914c9416286e1916"
+        },
+        {
+          "path": "cells.csv.gz",
+          "size": 701012,
+          "sha256": "e267dbbcdfa3fd6e17b0c8aca8ab1d7e21fd17d7761a1c78c56ba528510302f6"
+        },
+        {
+          "path": "cells.parquet",
+          "size": 233148,
+          "sha256": "b24a6cc4b176f76d16f3a153a44fbd86214a7a6a03b5a5c6bcf776c0cac2568a"
+        },
+        {
+          "path": "cells.zarr.zip",
+          "size": 6879546,
+          "sha256": "d6b8d0e503ea115f2b56122614f4aa7258d10f7c3d3bd714f4117a4d081fe320"
+        },
+        {
+          "path": "experiment.xenium",
+          "size": 1673,
+          "sha256": "0d52de3573bbf6071bd7edb9a7bdc099672ddae8cddc612d7bec959bb361f380"
+        },
+        {
+          "path": "gene_panel.json",
+          "size": 158827,
+          "sha256": "77a8964e4c4be31473b984bf3a078553a1dc56f626c1b824b2e4ba96ebb05209"
+        },
+        {
+          "path": "metrics_summary.csv",
+          "size": 1818,
+          "sha256": "c4198fb000ed9afb778550b0512a53a81079ada33f265ca82df96c061a716e45"
+        },
+        {
+          "path": "morphology.ome.tif",
+          "size": 164869537,
+          "sha256": "a1fe72f084d8b161bca833106bd154a8a2e0e01e0255de6a2d6b05ee5e619681"
+        },
+        {
+          "path": "morphology_focus/morphology_focus_0000.ome.tif",
+          "size": 17487838,
+          "sha256": "0b51895d5353ee99d56d2bf070d822cdd846ecd7b9d0a214d8be82dca2c30d76"
+        },
+        {
+          "path": "nucleus_boundaries.csv.gz",
+          "size": 2619718,
+          "sha256": "ad5e439283680e7e34e363f9298fb589ab832704bdba59bc34a301389852b211"
+        },
+        {
+          "path": "nucleus_boundaries.parquet",
+          "size": 919858,
+          "sha256": "b34dc28366cf476fbb6e020db96fe5a929ba272aad96957cb95da9084b2ddf9b"
+        },
+        {
+          "path": "transcripts.csv.gz",
+          "size": 34757095,
+          "sha256": "76b28f7ca89d21f5eae743c09a6428e09c5d925416ec3f47c7dd5ed23dbde017"
+        },
+        {
+          "path": "transcripts.parquet",
+          "size": 15254903,
+          "sha256": "9e41a0fbf11520a15e59957ffa21dca17ccf08a66dfdeb663e16b813075a4cf9"
+        },
+        {
+          "path": "transcripts.zarr.zip",
+          "size": 17593688,
+          "sha256": "e04274a30330e7c8b32837941ff950357f4fc2ac2e9957546f9ea07b4ba1a28e"
+        }
+      ]
+    },
+    "xenium-breast-2fov": {
+      "title": "Xenium V1 human Breast, 2 FOVs (XOA 2.0, multimodal cell segmentation)",
+      "description": "10x Genomics' example output bundle trimmed to two fields of view, from a sample prepared with the Xenium cell segmentation staining workflow: four morphology-focus images (DAPI, boundary, interior RNA, interior protein) and multimodal cell segmentation. The primary development bundle.",
+      "summary": "Two fields of view of a human breast cancer section prepared with the Xenium cell segmentation staining: 7,275 cells, 1,113,950 transcripts of the Xenium Human Breast Gene Expression panel (280 genes), four morphology images (DAPI, boundary, interior RNA, interior protein) and cells segmented from them.",
+      "source": "10x Genomics, Xenium example data (https://www.10xgenomics.com/support/software/xenium-onboard-analysis/latest/resources/xenium-example-data)",
+      "publisher": "10x Genomics",
+      "page": "https://www.10xgenomics.com/support/software/xenium-onboard-analysis/latest/resources/xenium-example-data",
+      "license": "CC BY 4.0 (10x Genomics)",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "archive": {
+        "url": "https://cf.10xgenomics.com/samples/xenium/2.0.0/Xenium_V1_human_Breast_2fov/Xenium_V1_human_Breast_2fov_outs.zip",
+        "size": 379018013,
+        "md5": "4632914eca973a1d532231ea646e10cc",
+        "sha256": "cc1e987b06aa748a6b24d3d6f51fc0d6765daa4836c483f14ec4f1bd18b1779b"
+      },
+      "files": [
+        {
+          "path": "analysis.tar.gz",
+          "size": 1769054,
+          "sha256": "20a905def0c8079b71a538ef14242c6c5064e715dcca46e268cf9fb875766b18"
+        },
+        {
+          "path": "analysis.zarr.zip",
+          "size": 74311,
+          "sha256": "14d7fadf1daa987388b4f79564a6349054fb99491a5b4ae339ce30999750cc59"
+        },
+        {
+          "path": "analysis_summary.html",
+          "size": 9113057,
+          "sha256": "d09527fe7de09c2492eee5ef4c5e63003f73b98ad2b2dbd012defca08e967318"
+        },
+        {
+          "path": "aux_outputs.tar.gz",
+          "size": 6612850,
+          "sha256": "6d371a13cf3f1d4724a1e2ea14bebc30c569eb229a33876e159e1401a849fbc9"
+        },
+        {
+          "path": "cell_boundaries.csv.gz",
+          "size": 1801833,
+          "sha256": "d898df8a45f8ae79822da51a826a1baa772b02ede1fc0f1249ba0388bd8109bd"
+        },
+        {
+          "path": "cell_boundaries.parquet",
+          "size": 700126,
+          "sha256": "fc2270113150d17fd5a5f7f56b3c9ab1c0563824fd6eb91116489b90cfca2a64"
+        },
+        {
+          "path": "cell_feature_matrix.h5",
+          "size": 415952,
+          "sha256": "119c7bcd7da398f20cf2f83ff3699d44a0e610285f1cd1a9596a54354fed316d"
+        },
+        {
+          "path": "cell_feature_matrix.tar.gz",
+          "size": 1499672,
+          "sha256": "31a161202b2dd9bba7ff7de00878255b121d593fd34a8a7a27344b0d9d91b157"
+        },
+        {
+          "path": "cell_feature_matrix.zarr.zip",
+          "size": 602745,
+          "sha256": "f31fd3ea976e5f0b272f0a895062b0cff7e3a599e8e4ca41a22ed4a6094af64c"
+        },
+        {
+          "path": "cells.csv.gz",
+          "size": 461057,
+          "sha256": "f78ec6e53e949849c6b6a425b72beda5bf476b179d77309bb83b70e15896ca0f"
+        },
+        {
+          "path": "cells.parquet",
+          "size": 166771,
+          "sha256": "acffe492528de8bf2effcf8b759f97df4e1133108ddd97390dc4222ea7b69430"
+        },
+        {
+          "path": "cells.zarr.zip",
+          "size": 5891872,
+          "sha256": "06a30091f862f990a227c14abbaf5ddc403607e958fbf26da55587cb201e2d02"
+        },
+        {
+          "path": "experiment.xenium",
+          "size": 1701,
+          "sha256": "5951e6f328daff8b987ec8ffb68aaf7e7e02dfb1161e1c8a0de32c0b1529a245"
+        },
+        {
+          "path": "gene_panel.json",
+          "size": 153362,
+          "sha256": "aef65acbe10e6837631ffb63ce978a4767d771bc3c603c868757122bb12257ee"
+        },
+        {
+          "path": "metrics_summary.csv",
+          "size": 1919,
+          "sha256": "d3dca989f255d9a0812811a029d6a7ca12311a2b6986f36cf2ad090601d70dbc"
+        },
+        {
+          "path": "morphology.ome.tif",
+          "size": 189031711,
+          "sha256": "df518db9552cfde0c3dc6a73bc93149bc8e98c06db7f094d88d6fc9c5bb312cd"
+        },
+        {
+          "path": "morphology_focus/morphology_focus_0000.ome.tif",
+          "size": 19991291,
+          "sha256": "c6b257a933a7332ab04627076ab200b76b3ea95731ee360724c932edd20fa15f"
+        },
+        {
+          "path": "morphology_focus/morphology_focus_0001.ome.tif",
+          "size": 16937049,
+          "sha256": "47fb7bb8af1054d6b72ab4d88e5de6348a653783b1788572e0648d93c7b13a28"
+        },
+        {
+          "path": "morphology_focus/morphology_focus_0002.ome.tif",
+          "size": 17724603,
+          "sha256": "711a1d4dbe74fd1ad70f9faa7af10d33af44d1ef329de703a03ca2182859f445"
+        },
+        {
+          "path": "morphology_focus/morphology_focus_0003.ome.tif",
+          "size": 17705361,
+          "sha256": "25ebbd6ce0464a193af475329c59e65b304ce4d3bc883e8ed0d3ca7b09de75b0"
+        },
+        {
+          "path": "nucleus_boundaries.csv.gz",
+          "size": 1746336,
+          "sha256": "98668e3d7d6c732b68eb2876888879e5babadcc1b539f3af987ce96ce6519830"
+        },
+        {
+          "path": "nucleus_boundaries.parquet",
+          "size": 657067,
+          "sha256": "d0c9a1abc023c44e8b8952b2546dc454d1507578d4d42ac357a27857f8bf8abf"
+        },
+        {
+          "path": "transcripts.csv.gz",
+          "size": 46568066,
+          "sha256": "3ea5fa93530fff9c84ec6b029ab8f46d0a56730827cb151a4e0d140f9f532e44"
+        },
+        {
+          "path": "transcripts.parquet",
+          "size": 20923989,
+          "sha256": "ab76b8bc3c05de0bf36a8091b4f38bc54425c54b1ce69a897944d1ec19714cdb"
+        },
+        {
+          "path": "transcripts.zarr.zip",
+          "size": 24811019,
+          "sha256": "595697ccd55d9a0e45ec6cc9badd6fd32f70a680ec85e0c837bf124739e08b3c"
+        }
+      ]
+    }
+  }
+}

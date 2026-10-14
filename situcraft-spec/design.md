@@ -41,6 +41,7 @@ see `conventions.md`. For the methods, formats and datasets behind these choices
 │   internal/jp2k      JPEG 2000 Part 1 decoder (TIFF compression 34712)                                │
 │   internal/xenium    bundle scanner, version detection, validation, typed access                      │
 │   internal/cache     derived data: image tile pyramids, transcript spatial index, geometry tiles      │
+│   internal/view      the viewer's queries: points and density by gene, cells, one cell                 │
 │   api_*.go           viewport queries: tiles, points, polygons, cells (binary, columnar responses)     │
 │ compute (new, goroutines)                                                                             │
 │   internal/segment   nucleus expansion; transcript-informed segmentation (sampler, outputs)           │
@@ -68,7 +69,7 @@ and a segmentation run touches every transcript many times. So:
 
 - **Go owns** file I/O, decoding, indexing, viewport queries, segmentation, comparison over
   transcripts, and any statistic over transcript-scale tables. Go gives us goroutines across all
-  cores, memory-mapped columnar caches, and a single cross-compiled binary.
+  cores, compact columnar caches, and a single cross-compiled binary.
 - **The browser owns** rendering, interaction, and cell-level analytics. Cell tables (10⁴–10⁶
   rows) fit typed arrays and workers, as in the siblings.
 - Unlike the siblings, the web app **needs its host**. There is no static-hosting mode, except the
@@ -77,21 +78,98 @@ and a segmentation run touches every transcript many times. So:
 ### The derived-data cache
 
 Source bundles are read in place and never modified. Everything SituCraft derives lives in its
-cache (`<UserCacheDir>/situcraft/`, with a size cap and an eviction policy):
+cache (`<UserCacheDir>/situcraft/`, kept within `--cache-limit`, 10 GB by default, by removing what
+was used least recently). Every entry of a dataset shares one grid, the morphology image's pyramid:
+level L has pixels 2^L times the full resolution's, and its tile (tx, ty), 512 pixels on a side,
+covers the same tissue in every layer, so the renderer asks for the same tiles of each.
 
-- **Image pyramids.** JPEG 2000 tiles are decoded once into SituCraft's own tile store
-  (uint16, deflate-compressed, 512×512, one file per level per channel, with an index). After
-  that, serving a tile is a read and an inflate. Pyramid levels missing from the source are
-  computed.
-- **Transcript index.** Transcripts are partitioned into a quadtree of spatial tiles. Each tile is
-  stored as columnar arrays: x and y (float32, µm), gene (uint16), qv (uint8), z (float32), and
-  cell (uint32 index into the segmentation's cell table). Each gene has per-level density grids,
-  so the whole-tissue view never touches points.
-- **Geometry tiles.** Cell and nucleus polygons are bucketed by tile and simplified per level.
-- Each cache entry records the source files' sizes, modification times and checksums, plus
-  SituCraft's cache-format version. Entries are built in a temporary directory and renamed into
-  place, so a crash never leaves a half-built entry. They resume where they stopped and are
-  reused on reopen.
+- **Image pyramids.** JPEG 2000 tiles are decoded once into SituCraft's own tile store: one file
+  per channel and level, each tile a zlib stream of its 16-bit samples with the low and high
+  bytes in separate planes (a page can inflate it natively and read the planes as a texture).
+  After that, serving a tile is a read. The bundle's own levels are used where they halve the
+  level above; levels it lacks are computed.
+- **Transcript index.** Each transcript is stored once, in the full-resolution tile holding it.
+  A tile's transcripts are sorted by gene (so one gene is one range) and stored as columns: x, y
+  and z (float32, µm), quality (float32), cell (uint32 row of cells.parquet), the transcript's
+  row in transcripts.parquet (so later segmentations can attach their own assignments), and a
+  nucleus flag. Every coarser level has per-gene density grids (128 × 128 bins a tile, all
+  transcripts and Q20 ones), so the whole-tissue view never touches points. Groups of
+  transcripts have grids too (every transcript, gene transcripts, gene transcripts in a cell,
+  negative controls), from which the QC maps compute per-bin shares. Level 1 counts the points; each coarser level adds up the level below, so every level
+  sums exactly to each gene's count. The levels nest: a complete quadtree.
+- **Geometry tiles.** Cell and nucleus polygons are placed by the centre of their bounding box,
+  once per level; level 0 holds the bundle's vertices exactly, each level above them simplified
+  to half a pixel of that level.
+- **Files.** One layout for every kind: a header, a table of the tiles' blocks with their counts,
+  and the blocks, each deflated, so that a damaged file is refused before its claims are believed.
+- **Entries.** An entry is named for its kind and a key hashing the cache format, its parameters
+  and the SHA-256 of its source files: a bundle that moves or is zipped keeps its entries. Entries
+  are built in a folder of their own under a lock, a finished file at a time, and renamed into
+  place with a manifest of their sources and every file's size and checksum, so a crash never
+  leaves a half-built entry, a build resumes where it stopped, and a resumed build is
+  byte-identical to one that was not interrupted. The SHA-256 of each source file is recorded
+  under its place, size and time, so an unchanged bundle reopens without being read.
+
+### The tissue renderer
+
+The viewer draws with WebGL2 (`web/render/`), from the derived data's tiles:
+
+- **Image channels** arrive as stored, a zlib stream the browser inflates, and go to the GPU as
+  an integer texture of two byte planes. The shader reads each 16-bit sample exactly with
+  `texelFetch`, then applies the channel's window, gamma and color, and channels add up. Reading
+  the samples back before the window is how the validation harness proves the image is exactly
+  the data.
+- **The level drawn** is the coarsest whose pixels are no larger than the screen's. Coarser loaded
+  tiles stand in until its tiles arrive, with a stencil so each pixel is drawn once per channel.
+- **Transcripts** are points while few tiles are in view, and density grids farther out.
+  **Cells** are outlines from the matching geometry level, fills colored through a per-cell color
+  texture, and the selected cell drawn from its full-resolution polygon.
+- **Tiles** are addressed by cache entry, whose name hashes its sources. They never change, so
+  the browser caches them for good, and the renderer keeps the GPU's copies within a budget.
+
+### QC
+
+QC is computed where its data are. The run's metrics are recomputed in Go during validation,
+against the transcripts, cells, matrix and masks. Per-bin maps come from the density grids'
+groups of transcripts, drawn as ratios in the shader. Per-cell attributes, plots, brushing and
+filters run in the browser on the cells table. Filters are project artifacts that record which
+cells they keep (a SHA-256), so their reproduction can be checked whenever the project opens.
+
+### The record: saved views, methods and archives
+
+- **Saved views** (`lib/views.js`) are project entries, not screenshots: the dataset, the mode,
+  the camera in µm (its center and µm per CSS pixel, to 12 significant digits, so a view shows the
+  same tissue on any screen and survives a round trip through any pixel ratio), and the layers.
+  Stains and genes are kept by name, so a view stays valid when derived data are rebuilt and says
+  what a dataset lacks. A view opens through one path (`app.applyView`): the Viewer or QC applies
+  it when it has its dataset open. A deep link (`#project=…&view=…`) loads the project from the
+  library and applies the view.
+- **The methods paragraph** (`lib/methods.js`) is a pure function of the dataset's record, its
+  validation report, the chosen filters and the program's version and commit: it says only what
+  was done, numbers its references in order of first citation, and gives the same text for the
+  same inputs.
+- **Project archives** (`api_project.go`) are zips of the project document and a README, written
+  where the user says (only from this computer). Each dataset gains its place relative to the
+  archive; on opening, a bundle beside the archive wins over the recorded place. An archive whose
+  project the library already holds opens as a copy.
+- **A project saved by each release** is kept in `validation/projects/`; the viewer suite opens it,
+  locates its moved bundle, re-evaluates its filters and reopens its views exactly.
+
+### Example datasets and tours
+
+The examples are the development bundles, listed in `validation/sources.json` (embedded in the
+program: the list, not the data). `internal/examples` downloads one when asked, as a job: it checks
+free space first; the archive by its size, the publisher's MD5 and its SHA-256; each extracted file
+by its size and SHA-256 (a member claiming more is refused, as is a name leaving the folder); then
+deletes the archive and moves the checked folder into place, so a failed or stopped download
+leaves nothing. A downloaded bundle is opened like any other. A dataset is recognized as an example
+by its manifest's SHA-256, wherever its bundle is, so the methods paragraph can cite the data's
+source.
+
+A tour (`lib/tours.js`) is data: steps that each open a view (a saved view's shape, applied but not
+kept) and say what it shows. The genes are among those the section's transcripts show most, and
+each zoomed step looks where its genes meet (the 300 µm square where their shares of the section's
+transcripts are highest together).
 
 ### Segmentation built in
 
@@ -127,6 +205,8 @@ Long computations (indexing, segmentation, comparison, registration, permutation
   resumed or discarded.
 - Progress and logs stream to the page over server-sent events. Cancellation is cooperative and
   checked often.
+- The first version (wave 1, slice 4) runs jobs in memory, one at a time and one per key (a
+  dataset's build); persisting them, orphaned jobs and the warning on closing come in wave 2.
 
 ### The host, from the siblings
 
@@ -153,7 +233,8 @@ As in the siblings:
 - Archive extraction is guarded against path traversal and decompression bombs.
 
 The only outbound requests are example-data downloads the user starts, from the URLs in the
-example manifest, checked against their checksums.
+example manifest (`validation/sources.json`), checked against their checksums. Downloading and
+removing examples, like writing a project archive, are accepted only from this computer.
 
 Default port 8840 (8840–8859). The siblings use 8765–8839.
 
@@ -206,7 +287,7 @@ reference JSON.
 | --- | --- |
 | Product and executable | **SituCraft**, `situcraft`; Go module `situcraft` |
 | Go version | The siblings' minimum (`go 1.24` in `go.mod`); releases built with the current stable Go |
-| Image codec | Our own JPEG 2000 Part 1 decoder in Go (lossless 5/3 path first, irreversible 9/7 next), validated tile by tile against an independent decoder; decoded once into the tile cache |
+| Image codec | Our own JPEG 2000 Part 1 decoder in Go, Xenium's profile first (JP2-wrapped, irreversible 9/7), validated tile by tile against an independent decoder (within ±1, as lossy decoding allows); decoded once into the tile cache |
 | HDF5 | Not read or written: Xenium's matrix is also in Zarr and MEX; AnnData export uses its Zarr layout |
 | Internal store | Our own cache and project manifests; SpatialData Zarr and AnnData Zarr are exports |
 | Renderer | Our own WebGL2 renderer (images, points, polygons); Canvas 2D for figures and fallbacks |

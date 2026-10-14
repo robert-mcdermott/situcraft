@@ -1,0 +1,630 @@
+{
+  "generator": "internal/jp2k/fixtures_test.go TestRegenerateFixtures (JP2K_REGEN=1)",
+  "openjpeg": "openjp2 library v2.5.4",
+  "entries": [
+    {
+      "name": "gray8-lossless",
+      "file": "gray8-lossless.j2k",
+      "image": "gradient 64x48, 1 components, 8-bit",
+      "prec": 8,
+      "sha256": "7c305683f21cf5d6986b362f23ba73ff125f2f9cc005de9ebc0f2ceda364b3de"
+    },
+    {
+      "name": "gray8-lossless",
+      "file": "gray8-lossless.j2k",
+      "image": "gradient 64x48, 1 components, 8-bit",
+      "reduce": 1,
+      "prec": 8,
+      "sha256": "2d3fef58757341cd928e0c31f4d44f871b977223c371630bc87a565270ae446d"
+    },
+    {
+      "name": "gray8-lossless",
+      "file": "gray8-lossless.j2k",
+      "image": "gradient 64x48, 1 components, 8-bit",
+      "reduce": 3,
+      "prec": 8,
+      "sha256": "c9702a4d9dbb20a3164756172ec89bfd78a3ad96608a7a73fcb831a534d647d3"
+    },
+    {
+      "name": "gray8-97",
+      "file": "gray8-97.j2k",
+      "image": "blobs 64x48, 1 components, 8-bit",
+      "encoder": "-I -r 12",
+      "irreversible": true,
+      "prec": 8,
+      "sha256": "9c737e28426990eaceb451b34bd6c012bc8569d3f112447fcf3c31a08fde5d08",
+      "ref": "gray8-97-r0.ref.gz"
+    },
+    {
+      "name": "gray8-97",
+      "file": "gray8-97.j2k",
+      "image": "blobs 64x48, 1 components, 8-bit",
+      "encoder": "-I -r 12",
+      "reduce": 2,
+      "irreversible": true,
+      "prec": 8,
+      "sha256": "5420f07d1bebfdd8f011ceea8bcfd39434fea88ac801682e7edfba68fae5460c",
+      "ref": "gray8-97-r2.ref.gz"
+    },
+    {
+      "name": "gray8-53-lossy",
+      "file": "gray8-53-lossy.j2k",
+      "image": "blobs 64x48, 1 components, 8-bit",
+      "encoder": "-r 12",
+      "prec": 8,
+      "sha256": "1d5b01200c4191b99d08848d34712b7be2159edf8f6f60a7dc7a3b2c55b88c91"
+    },
+    {
+      "name": "gray16-lossless",
+      "file": "gray16-lossless.j2k",
+      "image": "blobs 48x40, 1 components, 16-bit",
+      "encoder": "-n 4",
+      "prec": 16,
+      "sha256": "f1182a8b9ab242cedcd4098f5c06a171d9ee1a81fa105d94337c395fd2c8cfb3"
+    },
+    {
+      "name": "gray16-97",
+      "file": "gray16-97.j2k",
+      "image": "blobs 48x40, 1 components, 16-bit",
+      "encoder": "-I -r 8 -n 4",
+      "irreversible": true,
+      "prec": 16,
+      "sha256": "c9d94d7ecb22c56c582bd1870a9ea20e86a09c0f256f3dfc967a8d706393f98c",
+      "ref": "gray16-97-r0.ref.gz"
+    },
+    {
+      "name": "xenium-profile",
+      "file": "xenium-profile.jp2",
+      "image": "blobs 256x256, 1 components, 16-bit",
+      "encoder": "-I -r 6 -p RPCL -c [256,256] -b 64,64 -n 6",
+      "irreversible": true,
+      "prec": 16,
+      "sha256": "6aebfa68463287b898457bad019f09e552f2f47f207a4aeb4a98bc3f229ac516",
+      "ref": "xenium-profile-r0.ref.gz"
+    },
+    {
+      "name": "xenium-profile",
+      "file": "xenium-profile.jp2",
+      "image": "blobs 256x256, 1 components, 16-bit",
+      "encoder": "-I -r 6 -p RPCL -c [256,256] -b 64,64 -n 6",
+      "reduce": 1,
+      "irreversible": true,
+      "prec": 16,
+      "sha256": "8b734da625921fc7e2d5a9372fab53d53de8b6dbfec812c2495f6b3137290c61",
+      "ref": "xenium-profile-r1.ref.gz"
+    },
+    {
+      "name": "xenium-profile",
+      "file": "xenium-profile.jp2",
+      "image": "blobs 256x256, 1 components, 16-bit",
+      "encoder": "-I -r 6 -p RPCL -c [256,256] -b 64,64 -n 6",
+      "reduce": 5,
+      "irreversible": true,
+      "prec": 16,
+      "sha256": "bb2b124c3ab57f8d66203295e78f744096717ed60a4e410d66827338e19e55dc",
+      "ref": "xenium-profile-r5.ref.gz"
+    },
+    {
+      "name": "rgb8-rct",
+      "file": "rgb8-rct.j2k",
+      "image": "edges 48x40, 3 components, 8-bit",
+      "encoder": "-n 4",
+      "prec": 8,
+      "sha256": "092b0ce2aaebd2d27421590e03e302263b71fe22f348928cef621141b8f8b573"
+    },
+    {
+      "name": "rgb8-ict",
+      "file": "rgb8-ict.j2k",
+      "image": "blobs 48x40, 3 components, 8-bit",
+      "encoder": "-I -r 15 -n 4",
+      "irreversible": true,
+      "prec": 8,
+      "sha256": "dee97f1355a16b2b5ede874ae22aa6e9263b9c55db28845d0e66e3e45fe5cefa",
+      "ref": "rgb8-ict-r0.ref.gz"
+    },
+    {
+      "name": "rgb8-no-mct",
+      "file": "rgb8-no-mct.j2k",
+      "image": "noise 32x24, 3 components, 8-bit",
+      "encoder": "-mct 0 -n 3",
+      "prec": 8,
+      "sha256": "e9793ddbbc0db74ab7b1338cc3d6b269b09f9e655377f033912ee23b2afb925c"
+    },
+    {
+      "name": "gray12",
+      "file": "gray12.j2k",
+      "image": "gradient 40x30, 1 components, 12-bit",
+      "encoder": "-n 3",
+      "prec": 12,
+      "sha256": "adacdbdbcd474fc915a8f8d81c0d47b3eba72acd75bb93bd950167fb9fa74f36"
+    },
+    {
+      "name": "gray20-lossless",
+      "file": "gray20-lossless.j2k",
+      "image": "blobs 40x30, 1 components, 20-bit",
+      "encoder": "-n 3",
+      "prec": 20,
+      "sha256": "59414747159a6c6a75736e588ae75acc3106bf952f7cceaf548739c5ac3ad9ce"
+    },
+    {
+      "name": "gray24-97",
+      "file": "gray24-97.j2k",
+      "image": "blobs 40x30, 1 components, 24-bit",
+      "encoder": "-I -r 4 -n 3",
+      "irreversible": true,
+      "prec": 24,
+      "sha256": "ed475f0089b3ab9f9fece4075b319c46764814ebecd142a756bc941ba625db48",
+      "ref": "gray24-97-r0.ref.gz"
+    },
+    {
+      "name": "signed20-97",
+      "file": "signed20-97.j2k",
+      "image": "gradient 30x20, 1 components, 20-bit signed",
+      "encoder": "-I -n 2",
+      "irreversible": true,
+      "prec": 20,
+      "sha256": "6d932ae23b8bba2a21bedd41aba603c0537e5af64d6b33a0c2529085ca7d98d0",
+      "ref": "signed20-97-r0.ref.gz"
+    },
+    {
+      "name": "gray1",
+      "file": "gray1.j2k",
+      "image": "checker 33x17, 1 components, 1-bit",
+      "encoder": "-n 2",
+      "prec": 1,
+      "sha256": "8e9f281c99f785136893e395f42200ad395c152e7b131e29b970ce6fcd828b17"
+    },
+    {
+      "name": "signed12-97",
+      "file": "signed12-97.j2k",
+      "image": "blobs 40x36, 1 components, 12-bit signed",
+      "encoder": "-I -r 5 -n 3",
+      "irreversible": true,
+      "prec": 12,
+      "sha256": "21f80735e1f6ad99e7a7e72d1d29870a6b50fd1ed8daff63a2777b608b04cef8",
+      "ref": "signed12-97-r0.ref.gz"
+    },
+    {
+      "name": "signed8-lossless",
+      "file": "signed8-lossless.j2k",
+      "image": "noise 30x26, 2 components, 8-bit signed",
+      "encoder": "-n 3",
+      "prec": 8,
+      "sha256": "d7e309c039b49e5c1405545e5d7c770f8ea5ec7e293f938a16e48e95be55f40f"
+    },
+    {
+      "name": "prog-LRCP",
+      "file": "prog-LRCP.j2k",
+      "image": "blobs 56x44, 3 components, 8-bit",
+      "encoder": "-p LRCP -r 30,10,3 -c [32,32],[16,16] -n 4",
+      "prec": 8,
+      "sha256": "e91dbbebcb954c947b7c505c3ccfa627f7fd9e48675ee58151a684246de2884b"
+    },
+    {
+      "name": "prog-LRCP",
+      "file": "prog-LRCP.j2k",
+      "image": "blobs 56x44, 3 components, 8-bit",
+      "encoder": "-p LRCP -r 30,10,3 -c [32,32],[16,16] -n 4",
+      "reduce": 1,
+      "prec": 8,
+      "sha256": "4d432f17c09be19e57200912920754efd4fc0ba0289087f65121ec15b15ff228"
+    },
+    {
+      "name": "prog-RLCP",
+      "file": "prog-RLCP.j2k",
+      "image": "blobs 56x44, 3 components, 8-bit",
+      "encoder": "-p RLCP -r 30,10,3 -c [32,32],[16,16] -n 4",
+      "prec": 8,
+      "sha256": "009524a6c454360ecebc03c511513774d84c3ed89124b8682ff0859f5e9811d1"
+    },
+    {
+      "name": "prog-RPCL",
+      "file": "prog-RPCL.j2k",
+      "image": "blobs 56x44, 3 components, 8-bit",
+      "encoder": "-p RPCL -r 30,10,3 -c [32,32],[16,16] -n 4",
+      "prec": 8,
+      "sha256": "d86a79ab1c739ecfd92caad90e3c5eb39925f59f30cc843ff3d2a4d281512ab9"
+    },
+    {
+      "name": "prog-RPCL",
+      "file": "prog-RPCL.j2k",
+      "image": "blobs 56x44, 3 components, 8-bit",
+      "encoder": "-p RPCL -r 30,10,3 -c [32,32],[16,16] -n 4",
+      "reduce": 2,
+      "prec": 8,
+      "sha256": "62da133c02a56dcdd26fbccea423bbbb49367ca65062d0f6b12e786a212e71ed"
+    },
+    {
+      "name": "prog-PCRL",
+      "file": "prog-PCRL.j2k",
+      "image": "blobs 56x44, 3 components, 8-bit",
+      "encoder": "-p PCRL -r 30,10,3 -c [32,32],[16,16] -n 4",
+      "prec": 8,
+      "sha256": "c2d0b0883e9e9cbbe4281ead978d88a783b116fae0c06a511fcfb8f0dcab0087"
+    },
+    {
+      "name": "prog-CPRL",
+      "file": "prog-CPRL.j2k",
+      "image": "blobs 56x44, 3 components, 8-bit",
+      "encoder": "-p CPRL -r 30,10,3 -c [32,32],[16,16] -n 4",
+      "prec": 8,
+      "sha256": "7d385ea85825cee630de5a56bcb4dc83f27ec5091847796eead4be24ffbf1438"
+    },
+    {
+      "name": "prog-POC",
+      "file": "prog-POC.j2k",
+      "image": "edges 56x44, 3 components, 8-bit",
+      "encoder": "-r 20,5 -n 4 -POC T0=0,0,1,2,3,CPRL/T0=0,0,2,4,3,RLCP",
+      "prec": 8,
+      "sha256": "1fe8de228358b81dc670e1002bc8c5020c34cca22006c7aee5646271628dd848"
+    },
+    {
+      "name": "tiles",
+      "file": "tiles.j2k",
+      "image": "gradient 61x47, 1 components, 8-bit",
+      "encoder": "-t 24,20 -n 3",
+      "prec": 8,
+      "sha256": "b229fe4561c2e50ed9060f7b6341ab1d375268cdc71962decb2e9093355a7d5c"
+    },
+    {
+      "name": "tiles-offsets",
+      "file": "tiles-offsets.j2k",
+      "image": "edges 61x47, 3 components, 8-bit",
+      "encoder": "-t 24,20 -d 5,3 -T 2,1 -n 3",
+      "prec": 8,
+      "sha256": "39e384195cb8792c5dd7382a2e618873fe5b0194f5fd787ace5fa46fdd33b7e6"
+    },
+    {
+      "name": "tiles-offsets",
+      "file": "tiles-offsets.j2k",
+      "image": "edges 61x47, 3 components, 8-bit",
+      "encoder": "-t 24,20 -d 5,3 -T 2,1 -n 3",
+      "reduce": 1,
+      "prec": 8,
+      "sha256": "ace26016a76c2d5a5eb7409091cb7be9979ac21b73270683e16e7223102824b3"
+    },
+    {
+      "name": "image-offset-97",
+      "file": "image-offset-97.j2k",
+      "image": "blobs 50x41, 1 components, 8-bit",
+      "encoder": "-I -r 8 -d 7,11 -n 4",
+      "irreversible": true,
+      "prec": 8,
+      "sha256": "c34dabbf17632f9f0ce292a3c7fea255f9b3fc5cf01816e03dc74c55e4d888ca",
+      "ref": "image-offset-97-r0.ref.gz"
+    },
+    {
+      "name": "tiles-97-16bit",
+      "file": "tiles-97-16bit.j2k",
+      "image": "blobs 80x70, 1 components, 16-bit",
+      "encoder": "-I -r 10 -t 32,32 -n 3",
+      "irreversible": true,
+      "prec": 16,
+      "sha256": "f5337833a19f019a9bc1805a32caa2ae5c3f17e44916333af5041620ba349760",
+      "ref": "tiles-97-16bit-r0.ref.gz"
+    },
+    {
+      "name": "tileparts-R",
+      "file": "tileparts-R.j2k",
+      "image": "blobs 64x48, 3 components, 8-bit",
+      "encoder": "-r 20,5 -t 32,32 -TP R -n 3",
+      "prec": 8,
+      "sha256": "8ef6e20121d174b5aba7cb35f42d7f7d098cf766d8d2cf19ba51c729927e47ba"
+    },
+    {
+      "name": "tileparts-L",
+      "file": "tileparts-L.j2k",
+      "image": "blobs 64x48, 3 components, 8-bit",
+      "encoder": "-r 20,5 -t 32,32 -TP L -n 3",
+      "prec": 8,
+      "sha256": "866d934f00a232a2def2f5b56538622d8e50b0501d795381d0abac1d85329040"
+    },
+    {
+      "name": "tileparts-C",
+      "file": "tileparts-C.j2k",
+      "image": "blobs 64x48, 3 components, 8-bit",
+      "encoder": "-r 20,5 -t 32,32 -TP C -n 3",
+      "prec": 8,
+      "sha256": "d2a74056e672c05990ee093702ca12a970a7726d4abd7b7c57b06243c3f2aa3f"
+    },
+    {
+      "name": "cblk-4x4",
+      "file": "cblk-4x4.j2k",
+      "image": "noise 30x22, 1 components, 8-bit",
+      "encoder": "-b 4,4 -n 3",
+      "prec": 8,
+      "sha256": "361797f0b183b993df2a23dfef97d953fa4e8b6932b0abbc35c058596f9a2ffa"
+    },
+    {
+      "name": "cblk-8x64",
+      "file": "cblk-8x64.j2k",
+      "image": "blobs 70x90, 1 components, 8-bit",
+      "encoder": "-b 8,64 -r 6 -n 3",
+      "prec": 8,
+      "sha256": "1ad5fa0f1fbf3d0f50428cc1fd5467db87ad9ee1a9aad93bb496e4022eecdf26"
+    },
+    {
+      "name": "cblk-64x4",
+      "file": "cblk-64x4.j2k",
+      "image": "edges 90x50, 1 components, 8-bit",
+      "encoder": "-b 64,4 -I -r 6 -n 3",
+      "irreversible": true,
+      "prec": 8,
+      "sha256": "ad71033da74f5aa6a95bfee82d01252bbac7a3efac528fae48db58bb887a1d81",
+      "ref": "cblk-64x4-r0.ref.gz"
+    },
+    {
+      "name": "precincts-small",
+      "file": "precincts-small.j2k",
+      "image": "blobs 60x52, 1 components, 8-bit",
+      "encoder": "-c [8,8],[4,8],[4,4] -b 4,4 -r 8,2 -n 3",
+      "prec": 8,
+      "sha256": "0ced3f12960e8d7358a7563284e3c6260795f0b93b41f029956d70992087d3b5"
+    },
+    {
+      "name": "mode-bypass",
+      "file": "mode-bypass.j2k",
+      "image": "noise 48x40, 1 components, 12-bit",
+      "encoder": "-M 1 -r 6,2,1 -n 3",
+      "prec": 12,
+      "sha256": "0643bd5ca64c2742fe6e762f23d4e1bf4349c4246bfb4792863c1a35150bca3d"
+    },
+    {
+      "name": "mode-reset",
+      "file": "mode-reset.j2k",
+      "image": "blobs 48x40, 1 components, 8-bit",
+      "encoder": "-M 2 -r 6,2 -n 3",
+      "prec": 8,
+      "sha256": "03521a9e9bbf64b2d68a3e9571c3dab1fd6f5da7193af9cd4eab7fd3d8e64353"
+    },
+    {
+      "name": "mode-termall",
+      "file": "mode-termall.j2k",
+      "image": "blobs 48x40, 1 components, 8-bit",
+      "encoder": "-M 4 -r 6,2 -n 3",
+      "prec": 8,
+      "sha256": "b48f078f6646fa68bea2674583380e4b55b0d4d93780eadd9cc7bcb5c791b94d"
+    },
+    {
+      "name": "mode-vcausal",
+      "file": "mode-vcausal.j2k",
+      "image": "edges 48x40, 1 components, 8-bit",
+      "encoder": "-M 8 -r 6,2 -n 3",
+      "prec": 8,
+      "sha256": "8b51209581167ba6bce279330961c8e1c73be21308cbfd1ae6924f92c1053697"
+    },
+    {
+      "name": "mode-pterm",
+      "file": "mode-pterm.j2k",
+      "image": "blobs 48x40, 1 components, 8-bit",
+      "encoder": "-M 16 -r 6,2 -n 3",
+      "prec": 8,
+      "sha256": "e88b4aea644de824d8e1bb5a4c35d24f815c4a0954d9754f9ab94fa6b67fb523"
+    },
+    {
+      "name": "mode-segsym",
+      "file": "mode-segsym.j2k",
+      "image": "blobs 48x40, 1 components, 8-bit",
+      "encoder": "-M 32 -r 6,2 -n 3",
+      "prec": 8,
+      "sha256": "08dd338998c69431d3f440e3bde3963050c7489e5a887c0863f7a88e76aa71ab"
+    },
+    {
+      "name": "mode-all-97",
+      "file": "mode-all-97.j2k",
+      "image": "blobs 48x40, 3 components, 8-bit",
+      "encoder": "-M 63 -I -r 8,3 -n 3",
+      "irreversible": true,
+      "prec": 8,
+      "sha256": "5a7db135e913a61a2aab891ce754fbd93023864f87913215b5e1ce7b32e89e1c",
+      "ref": "mode-all-97-r0.ref.gz"
+    },
+    {
+      "name": "mode-bypass-termall",
+      "file": "mode-bypass-termall.j2k",
+      "image": "noise 48x40, 1 components, 10-bit",
+      "encoder": "-M 5 -r 6,2,1 -n 3",
+      "prec": 10,
+      "sha256": "87dc46d5df32d84534fd756ad97813b328cc6c423e793f3f75aea217eb3a352a"
+    },
+    {
+      "name": "sop",
+      "file": "sop.j2k",
+      "image": "blobs 48x40, 1 components, 8-bit",
+      "encoder": "-SOP -r 10,3 -n 3",
+      "prec": 8,
+      "sha256": "31785d53184fc7deecd6a6f501b0b1cf3f7997082c779fd5c1c4da8763f99978"
+    },
+    {
+      "name": "eph",
+      "file": "eph.j2k",
+      "image": "blobs 48x40, 1 components, 8-bit",
+      "encoder": "-EPH -r 10,3 -n 3",
+      "prec": 8,
+      "sha256": "4a9ad1bc6432fe17d5649f1418cdf12d60c9c1ed1a8bea3050502f58a6fa01be"
+    },
+    {
+      "name": "sop-eph-tiles",
+      "file": "sop-eph-tiles.j2k",
+      "image": "edges 60x44, 3 components, 8-bit",
+      "encoder": "-SOP -EPH -t 32,24 -r 10,3 -n 3",
+      "prec": 8,
+      "sha256": "c3133cfb164b51abf60a3829ac6bd8e7069d8489c325c9217d2d306cd682e951"
+    },
+    {
+      "name": "plt-tlm",
+      "file": "plt-tlm.j2k",
+      "image": "blobs 60x44, 1 components, 8-bit",
+      "encoder": "-PLT -TLM -t 32,24 -TP R -n 3",
+      "prec": 8,
+      "sha256": "e2c2d989d20696a41e316dd7520894d9501100744bb699346427a05aded1a2f5"
+    },
+    {
+      "name": "roi-lossless",
+      "file": "roi-lossless.j2k",
+      "image": "gradient 48x40, 1 components, 8-bit",
+      "encoder": "-ROI c=0,U=5 -n 3",
+      "prec": 8,
+      "sha256": "1e35d0258926391a7cb2c34c43c6a2a42da771a6bf88b9dd210fa3aafe3d2bb5"
+    },
+    {
+      "name": "roi-97",
+      "file": "roi-97.j2k",
+      "image": "blobs 48x40, 3 components, 8-bit",
+      "encoder": "-ROI c=1,U=3 -I -r 10 -n 3",
+      "irreversible": true,
+      "prec": 8,
+      "sha256": "faad0b94e81d4d9921304a740480f81e40fb97fc9609dc45c3718dee0857c4a2",
+      "ref": "roi-97-r0.ref.gz"
+    },
+    {
+      "name": "subsampled",
+      "file": "subsampled.j2k",
+      "image": "blobs 48x40, 3 components, 8-bit, subsampling [1 1 2]",
+      "encoder": "-n 3",
+      "prec": 8,
+      "sha256": "e31884639f382e824cbf3b6e628a311439f6cf19408f413d5529016d8844cff0"
+    },
+    {
+      "name": "subsampled",
+      "file": "subsampled.j2k",
+      "image": "blobs 48x40, 3 components, 8-bit, subsampling [1 1 2]",
+      "encoder": "-n 3",
+      "reduce": 1,
+      "prec": 8,
+      "sha256": "0729d49f96b6464734ceb28d2937119a7a8a7aea12aa8b013bd7984d652095fc"
+    },
+    {
+      "name": "subsampled-97",
+      "file": "subsampled-97.j2k",
+      "image": "blobs 48x40, 4 components, 8-bit, subsampling [1 2 2 1]",
+      "encoder": "-I -r 8 -n 3",
+      "irreversible": true,
+      "prec": 8,
+      "sha256": "019499a6e3a772229cfcd316525e4510312dc7297ff4598f42832dc31c06809a",
+      "ref": "subsampled-97-r0.ref.gz"
+    },
+    {
+      "name": "guard1",
+      "file": "guard1.j2k",
+      "image": "blobs 48x40, 1 components, 16-bit",
+      "encoder": "-GuardBits 1 -I -r 10 -n 3",
+      "irreversible": true,
+      "prec": 16,
+      "sha256": "34a7744585e4d91110c033e855cdb6364bf7fe36c2704126ce44bb97aad1b78b",
+      "ref": "guard1-r0.ref.gz"
+    },
+    {
+      "name": "guard4",
+      "file": "guard4.j2k",
+      "image": "blobs 48x40, 1 components, 16-bit",
+      "encoder": "-GuardBits 4 -n 3",
+      "prec": 16,
+      "sha256": "5eea7d4f90d3314ae3dfcab9279084c420244e20c5211ca3c5f65bcae3dfdbed"
+    },
+    {
+      "name": "levels0-97",
+      "file": "levels0-97.j2k",
+      "image": "blobs 40x30, 1 components, 8-bit",
+      "encoder": "-n 1 -I -r 5",
+      "irreversible": true,
+      "prec": 8,
+      "sha256": "398dfee99787a32d0ec7b6bd24aa96ec9bd5a4319b52c05993f5f535774ca84e",
+      "ref": "levels0-97-r0.ref.gz"
+    },
+    {
+      "name": "levels7",
+      "file": "levels7.j2k",
+      "image": "blobs 160x130, 1 components, 8-bit",
+      "encoder": "-n 8 -I -r 40",
+      "irreversible": true,
+      "prec": 8,
+      "sha256": "edf4411c2988d6b03e26651e96b398b62eda8ddc31fec5696bfa75c090420230",
+      "ref": "levels7-r0.ref.gz"
+    },
+    {
+      "name": "levels7",
+      "file": "levels7.j2k",
+      "image": "blobs 160x130, 1 components, 8-bit",
+      "encoder": "-n 8 -I -r 40",
+      "reduce": 4,
+      "irreversible": true,
+      "prec": 8,
+      "sha256": "c42bd70d9309dae1ed514c42e2a914c78c408d93cf284b5dca7252e079fbc4dd",
+      "ref": "levels7-r4.ref.gz"
+    },
+    {
+      "name": "levels7",
+      "file": "levels7.j2k",
+      "image": "blobs 160x130, 1 components, 8-bit",
+      "encoder": "-n 8 -I -r 40",
+      "reduce": 7,
+      "irreversible": true,
+      "prec": 8,
+      "sha256": "e991138c0b42817138d9064f18da3f367172b340fc688d74f64b2dc5cd1f4d14",
+      "ref": "levels7-r7.ref.gz"
+    },
+    {
+      "name": "tiny-1x1",
+      "file": "tiny-1x1.j2k",
+      "image": "gradient 1x1, 1 components, 8-bit",
+      "encoder": "-n 1",
+      "prec": 8,
+      "sha256": "ff31941baf63b66c1ebdd402726e43f67baf2b3c6cd77dc1014a8d8f1d4e15d5"
+    },
+    {
+      "name": "tiny-3x2-rgb",
+      "file": "tiny-3x2-rgb.j2k",
+      "image": "noise 3x2, 3 components, 8-bit",
+      "encoder": "-n 2",
+      "prec": 8,
+      "sha256": "fb19fa3877eae5f7ceb197c4a22c93241cc18615e94dbede669107a70c1179c7"
+    },
+    {
+      "name": "tiny-5x1-97",
+      "file": "tiny-5x1-97.j2k",
+      "image": "gradient 5x1, 1 components, 16-bit",
+      "encoder": "-n 1 -I",
+      "irreversible": true,
+      "prec": 16,
+      "sha256": "951d32cf4392273c1f9710aa094a9440103f83395143dfdeaed19be74599c733",
+      "ref": "tiny-5x1-97-r0.ref.gz"
+    },
+    {
+      "name": "jp2-gray16",
+      "file": "jp2-gray16.jp2",
+      "image": "blobs 40x32, 1 components, 16-bit",
+      "encoder": "-I -r 6 -n 3",
+      "irreversible": true,
+      "prec": 16,
+      "sha256": "86b18af75fcbc6c71c105123e05f419d0885e9207efc1c4b79fadd706a53392a",
+      "ref": "jp2-gray16-r0.ref.gz"
+    },
+    {
+      "name": "jp2-rgb",
+      "file": "jp2-rgb.jp2",
+      "image": "edges 40x32, 3 components, 8-bit",
+      "encoder": "-n 3",
+      "prec": 8,
+      "sha256": "4c4c0722ee43c66cebf219faff2667395a601f1688613c7efcde6c33f9396dd4"
+    },
+    {
+      "name": "ppm",
+      "file": "ppm.j2k",
+      "image": "blobs 64x48, 3 components, 8-bit, packet headers in PPM",
+      "encoder": "-I -r 10,4 -t 32,24 -n 3",
+      "irreversible": true,
+      "prec": 8,
+      "sha256": "2982fd1a36f9ebf839433367f95a762e91d4b7560b484b0e068f00935de6e855",
+      "ref": "ppm-r0.ref.gz"
+    },
+    {
+      "name": "ppt",
+      "file": "ppt.j2k",
+      "image": "edges 64x48, 1 components, 8-bit, packet headers in PPT",
+      "encoder": "-r 10,4,1 -EPH -n 3",
+      "prec": 8,
+      "sha256": "8bd4ee692ba6dee3fc23b2e6defca4c1f34a1bf4a9ec8479f828440c816f2d7d"
+    }
+  ]
+}

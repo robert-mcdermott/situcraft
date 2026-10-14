@@ -1,0 +1,5 @@
+{
+  "private": true,
+  "type": "module",
+  "description": "Marks web/ as ES modules for Node (tests and syntax checks); the browser loads these files directly."
+}

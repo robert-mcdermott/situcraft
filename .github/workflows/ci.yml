@@ -1,0 +1,161 @@
+name: CI
+
+# Once for each commit pushed, on any branch. A pull request shows its branch's checks, so it is
+# tested again only when it comes from a fork; a merge whose files are its branch's, tested when the
+# branch was pushed, tests nothing again (job `changed` decides both); and the release checks that
+# CI passed on the files it tags instead of testing them again (release.yml). A newer push to the
+# same branch cancels a run not yet finished. Not for a change of documentation alone: no check
+# reads the Markdown files, the spec, the license, the notice or the citation. Actions' "Run
+# workflow" button runs it all by hand. Every check here is on fixed data; anything large or slow
+# (the full development bundles, scale tests, regenerating reference numbers) runs weekly or by
+# hand instead, never for each commit (situcraft-spec/design.md, "Testing and CI").
+# Adapted from MaveScape 0.8.0 .github/workflows/ci.yml.
+on:
+  push:
+    branches: ['**']
+    paths-ignore:
+      - '**.md'
+      - 'situcraft-spec/**'
+      - 'LICENSE'
+      - 'NOTICE'
+      - 'CITATION.cff'
+  pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'situcraft-spec/**'
+      - 'LICENSE'
+      - 'NOTICE'
+      - 'CITATION.cff'
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  changed:
+    name: Anything new to test
+    runs-on: ubuntu-latest
+    outputs:
+      test: ${{ steps.decide.outputs.test }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          FORK: ${{ github.event.pull_request.head.repo.fork }}
+        run: |
+          test=true
+          if [ "$EVENT" = pull_request ] && [ "$FORK" != true ]; then
+            echo "A branch of this repository: tested when it was pushed, its checks shown on the pull request."
+            test=false
+          elif [ "$EVENT" = push ] && git rev-parse -q --verify 'HEAD^2' > /dev/null && [ "$(git rev-parse 'HEAD^{tree}')" = "$(git rev-parse 'HEAD^2^{tree}')" ]; then
+            echo "A merge whose files are those of $(git rev-parse --short 'HEAD^2'), tested when it was pushed."
+            test=false
+          fi
+          echo "test=$test" >> "$GITHUB_OUTPUT"
+
+  go:
+    name: Go host
+    needs: changed
+    if: needs.changed.outputs.test == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: gofmt
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "Files need gofmt:"
+            echo "$unformatted"
+            exit 1
+          fi
+      - name: go vet
+        run: go vet ./...
+      - name: go test
+        run: go test -race ./...
+      - name: Cross-compile
+        env:
+          CGO_ENABLED: '0'
+        run: |
+          GOOS=darwin GOARCH=arm64 go build -o /dev/null .
+          GOOS=darwin GOARCH=amd64 go build -o /dev/null .
+          GOOS=linux GOARCH=amd64 go build -o /dev/null .
+          GOOS=linux GOARCH=arm64 go build -o /dev/null .
+          GOOS=windows GOARCH=amd64 go build -o /dev/null .
+          GOOS=windows GOARCH=arm64 go build -o /dev/null .
+
+  web:
+    name: Browser modules
+    needs: changed
+    if: needs.changed.outputs.test == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Syntax check
+        run: |
+          shopt -s nullglob
+          for file in web/app.js web/ui/*.js web/lib/*.js web/workers/*.js validation/*.mjs; do node --check "$file"; done
+      - name: node --test
+        run: node --test "web/lib/**/*.test.mjs"
+      - name: Validation
+        run: node validation/run.mjs --require-data
+
+  data:
+    name: Readers on a real bundle
+    needs: changed
+    if: needs.changed.outputs.test == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Cache the Lung 2-FOV bundle (10x Genomics, CC BY 4.0)
+        uses: actions/cache@v4
+        with:
+          path: validation/cache/xenium-lung-2fov
+          key: xenium-lung-2fov-${{ hashFiles('validation/sources.json') }}
+      - name: Fetch it (checked by its MD5, then every extracted file by its SHA-256)
+        run: node validation/fetch.mjs xenium-lung-2fov
+      - name: OpenJPEG, the independent decoder the image tiles are compared with
+        run: sudo apt-get update -q && sudo apt-get install -y -q libopenjp2-tools
+      - name: Readers against independent readers, bundle validation (real, zipped and broken bundles) and the derived-data cache
+        env:
+          SITUCRAFT_REQUIRE_DATA: xenium-lung-2fov
+        run: go test -v -run 'Real|Readers|Bundle' . ./validation/ ./internal/jp2k/ ./internal/xenium/ ./internal/cache/ ./internal/view/
+      - name: The tissue viewer in headless Chrome against its data (exact samples, points, frame rate)
+        env:
+          SITUCRAFT_REQUIRE_DATA: xenium-lung-2fov
+          # A runner has no GPU: Chrome's software WebGL, and no sandbox on the throwaway machine.
+          SITUCRAFT_CHROME_ARGS: --use-angle=swiftshader --enable-unsafe-swiftshader --no-sandbox
+        run: node validation/run.mjs viewer --require-data
+
+  installers:
+    name: Installer syntax
+    needs: changed
+    if: needs.changed.outputs.test == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sh -n install.sh
+      - name: PowerShell parses install.ps1
+        shell: pwsh
+        run: |
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile("$PWD/install.ps1", [ref]$null, [ref]$errors) | Out-Null
+          if ($errors) { $errors | ForEach-Object { Write-Error $_ }; exit 1 }

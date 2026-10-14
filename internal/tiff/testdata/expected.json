@@ -1,0 +1,167 @@
+{
+ "tifffile": "2026.9.20",
+ "cases": [
+  {
+   "name": "u8-lzw-strips",
+   "levels": [
+    {
+     "shape": [
+      29,
+      37
+     ],
+     "dtype": "uint8",
+     "sha256": "a9139ab7c74304b3a42ce4218168b7ac9c7b5d72e86da69d0ff3c0c4d9a16c3b"
+    }
+   ]
+  },
+  {
+   "name": "u16-lzw-predictor",
+   "levels": [
+    {
+     "shape": [
+      29,
+      37
+     ],
+     "dtype": "uint16",
+     "sha256": "833ac8d0418f46cc637404b8b6ddb21b25f2602c0e93b6cc70df5746ff6aa4d4"
+    }
+   ]
+  },
+  {
+   "name": "u16-deflate-predictor-be-tiles",
+   "levels": [
+    {
+     "shape": [
+      29,
+      37
+     ],
+     "dtype": "uint16",
+     "sha256": "833ac8d0418f46cc637404b8b6ddb21b25f2602c0e93b6cc70df5746ff6aa4d4"
+    }
+   ]
+  },
+  {
+   "name": "rgb-lzw-predictor",
+   "levels": [
+    {
+     "shape": [
+      29,
+      37,
+      3
+     ],
+     "dtype": "uint8",
+     "sha256": "44ffdcb1dbeaf02cadfefbb579aa40e2a767feae751c8bb41a22374c4ca75bcc"
+    }
+   ]
+  },
+  {
+   "name": "rgb-deflate-planar",
+   "levels": [
+    {
+     "shape": [
+      29,
+      37,
+      3
+     ],
+     "dtype": "uint8",
+     "sha256": "44ffdcb1dbeaf02cadfefbb579aa40e2a767feae751c8bb41a22374c4ca75bcc"
+    }
+   ]
+  },
+  {
+   "name": "f32-deflate-floatpredictor",
+   "levels": [
+    {
+     "shape": [
+      29,
+      37
+     ],
+     "dtype": "float32",
+     "sha256": "a8d938692119090812eaf939397ae78a8ef893a762e29e1e3f637ac03899af79"
+    }
+   ]
+  },
+  {
+   "name": "f32-deflate-floatpredictor-be",
+   "levels": [
+    {
+     "shape": [
+      29,
+      37
+     ],
+     "dtype": "float32",
+     "sha256": "b5c1f935c5e7ff1e0f92f864d06e0c3e0be70face9e85f8180a52b6c47d25a59"
+    }
+   ]
+  },
+  {
+   "name": "u8-packbits",
+   "levels": [
+    {
+     "shape": [
+      29,
+      37
+     ],
+     "dtype": "uint8",
+     "sha256": "a9139ab7c74304b3a42ce4218168b7ac9c7b5d72e86da69d0ff3c0c4d9a16c3b"
+    }
+   ]
+  },
+  {
+   "name": "u16-none-be",
+   "levels": [
+    {
+     "shape": [
+      29,
+      37
+     ],
+     "dtype": "uint16",
+     "sha256": "833ac8d0418f46cc637404b8b6ddb21b25f2602c0e93b6cc70df5746ff6aa4d4"
+    }
+   ]
+  },
+  {
+   "name": "bigtiff-pyramid",
+   "levels": [
+    {
+     "shape": [
+      70,
+      90
+     ],
+     "dtype": "uint16",
+     "sha256": "ea47caa4a8b0795fab3a98d8001bb86e3743578b1bfffcd11fa08dd86333abcc"
+    },
+    {
+     "shape": [
+      35,
+      45
+     ],
+     "dtype": "uint16",
+     "sha256": "4ff1f54ee042eba0bcbfc94c096bed1ca46cf74d3d605bcb91e6c005bd975c31"
+    },
+    {
+     "shape": [
+      18,
+      23
+     ],
+     "dtype": "uint16",
+     "sha256": "8212094404ebcb6a6b049a9afd027f9685ffe5f940e27ec94833b1e28cdc11b5"
+    }
+   ]
+  },
+  {
+   "name": "ome-3channels",
+   "levels": [
+    {
+     "shape": [
+      3,
+      29,
+      37
+     ],
+     "dtype": "uint16",
+     "sha256": "d0e829168eff2ac635bfc637e47026028af9394ce2477a2f872a7e138a2a1861"
+    }
+   ]
+  }
+ ]
+}

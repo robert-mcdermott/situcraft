@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="description" content="SituCraft: open-source, local-first workbench for imaging-based spatial transcriptomics" />
+    <title>SituCraft</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css?v=0.1.0" />
+  </head>
+  <body>
+    <div id="app" class="app" data-mode="welcome">
+      <header class="topbar">
+        <div class="brand" title="SituCraft">
+          <img src="favicon.svg" alt="" width="26" height="26" />
+          <span class="brand-name">Situ<b>Craft</b></span>
+        </div>
+        <button id="project-menu" class="workspace-title" type="button" title="Project menu">
+          <span id="project-name">Untitled project</span>
+          <span id="save-state" class="save-state" title="Saved" role="img" aria-label="Saved"></span>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5" /></svg>
+        </button>
+        <span class="topbar-spacer"></span>
+        <div class="topbar-actions">
+          <button id="command-button" class="command-button" type="button" title="Search datasets, segmentations, saved views and commands (⌘K)">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" /><path d="M16 16l4.5 4.5" /></svg>
+            <span>Search or run a command</span>
+            <kbd>⌘K</kbd>
+          </button>
+          <button id="undo-button" class="icon-button" type="button" title="Undo (⌘Z)" aria-label="Undo"></button>
+          <button id="redo-button" class="icon-button" type="button" title="Redo (⇧⌘Z)" aria-label="Redo"></button>
+          <button id="theme-button" class="icon-button" type="button" title="Appearance: theme and color-vision-friendly colors" aria-label="Appearance" aria-haspopup="menu"></button>
+          <button id="help-button" class="icon-button" type="button" title="Help and keyboard shortcuts (?)" aria-label="Help"></button>
+        </div>
+      </header>
+
+      <nav id="view-rail" class="view-rail" role="tablist" aria-label="Views" aria-orientation="vertical"></nav>
+
+      <aside id="sidebar" class="sidebar" aria-label="Project"></aside>
+
+      <main id="workbench" class="workbench" aria-live="polite"></main>
+
+      <section id="drawer" class="drawer" aria-label="Drawer" hidden></section>
+
+      <aside id="inspector" class="inspector" aria-label="Inspector"></aside>
+
+      <footer id="statusbar" class="statusbar"></footer>
+
+      <div id="drop-overlay" class="drop-overlay" hidden>
+        <div class="drop-card">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 19h14" /></svg>
+          <strong>Drop images, tables, polygons or projects</strong>
+          <span>Files are read on this computer and never uploaded. Open bundles by their path.</span>
+        </div>
+      </div>
+    </div>
+    <div id="overlay-root"></div>
+    <input id="file-input" type="file" multiple hidden />
+    <script type="module" src="app.js?v=0.1.0"></script>
+  </body>
+</html>

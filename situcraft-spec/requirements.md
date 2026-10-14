@@ -25,26 +25,26 @@ Status: **planned (wave N)** until built. Then **done**, **partial** (the gap no
 
 | # | Requirement | Status |
 | --- | --- | --- |
-| P1 | One self-contained program for macOS, Linux and Windows (x64 and ARM64); one-line install with checksum verification; no administrator rights, account, Python, R, containers or GPU | planned (wave 1) |
-| P2 | Opens as a desktop window (a Chromium-family browser in app mode with its own profile), else the default browser | planned (wave 1) |
-| P3 | Data never leave the computer; loopback only; no telemetry; the only outbound requests are example-data downloads the user starts | planned (wave 1) |
-| P4 | Apache-2.0; no third-party runtime dependencies | planned (wave 1) |
-| P5 | A second launch hands its paths to the running SituCraft | planned (wave 1) |
+| P1 | One self-contained program for macOS, Linux and Windows (x64 and ARM64); one-line install with checksum verification; no administrator rights, account, Python, R, containers or GPU | done (wave 1, slice 1: six binaries from the release workflow, installers adapted from MaveScape) |
+| P2 | Opens as a desktop window (a Chromium-family browser in app mode with its own profile), else the default browser | done (wave 1, slice 1) |
+| P3 | Data never leave the computer; loopback only; no telemetry; the only outbound requests are example-data downloads the user starts | done (wave 1, slices 1 and 7: the only outbound request is an example's download, from its publisher, when the user asks) |
+| P4 | Apache-2.0; no third-party runtime dependencies | done |
+| P5 | A second launch hands its paths to the running SituCraft | done (wave 1, slice 1) |
 | P6 | The 2-FOV development bundles open, index and segment on a laptop with 16 GB of memory; memory needs for larger data are estimated before work starts | planned (waves 1, 3) |
 
 ## Data and import
 
 | # | Requirement | Status |
 | --- | --- | --- |
-| D1 | Open a Xenium output bundle as a directory or a zip | planned (wave 1) |
-| D2 | Detect the XOA version and which files are present; say what is supported | planned (wave 1) |
-| D3 | Validate a bundle: required and optional files, schemas, matrix dimensions, identifiers consistent across files, coordinate ranges, geometry validity, image metadata, transforms, free disk. Fatal errors, scientific warnings and informational differences kept apart, each linked to files, regions and a remedy | planned (wave 1) |
-| D4 | Never modify a source bundle | planned (wave 1) |
-| D5 | Derived data (tile pyramids, transcript index, geometry tiles) built as resumable, atomic, checksummed cache entries; an unchanged project reopens without re-indexing | planned (wave 1) |
-| D6 | Readers for Parquet (Zstd, Snappy, gzip, uncompressed), Zarr v2/v3 (Blosc LZ4/Zstd, zip and directory stores), BigTIFF/OME-TIFF (JPEG 2000, JPEG, deflate, LZW), Matrix Market, CSV(.gz), GeoJSON | planned (waves 1, 2, 5) |
-| D7 | Projects: a manifest with stable identifiers, versions, datasets and artifacts; portable (relative paths) and linked (institutional storage) modes | planned (wave 1) |
+| D1 | Open a Xenium output bundle as a directory or a zip | done (wave 1, slice 3: a folder, its experiment.xenium, or a zip with the bundle at its root or in a folder; links followed) |
+| D2 | Detect the XOA version and which files are present; say what is supported | done (wave 1, slice 3: XOA 2.x supported, other versions best-effort and said so; every file by role) |
+| D3 | Validate a bundle: required and optional files, schemas, matrix dimensions, identifiers consistent across files, coordinate ranges, geometry validity, image metadata, transforms, free disk. Fatal errors, scientific warnings and informational differences kept apart, each linked to files, regions and a remedy | done (wave 1, slice 3: 13 broken bundles raise exactly their findings; both development bundles reproduce 12 recorded metrics) |
+| D4 | Never modify a source bundle | done (wave 1, slice 3: read-only sources; every file's SHA-256 and time checked unchanged by validation) |
+| D5 | Derived data (tile pyramids, transcript index, geometry tiles) built as resumable, atomic, checksummed cache entries; an unchanged project reopens without re-indexing | done (wave 1, slice 4) |
+| D6 | Readers for Parquet (Zstd, Snappy, gzip, uncompressed), Zarr v2/v3 (Blosc LZ4/Zstd, zip and directory stores), BigTIFF/OME-TIFF (JPEG 2000, JPEG, deflate, LZW), Matrix Market, CSV(.gz), GeoJSON | partial (wave 1, slice 2: Parquet, Zarr 2 and 3, TIFF/BigTIFF/OME-TIFF with JPEG 2000, deflate, LZW and PackBits, all identical to independent readers on both bundles; JPEG for H&E in wave 5; Matrix Market, CSV and GeoJSON with the slices that need them) |
+| D7 | Projects: a manifest with stable identifiers, versions, datasets and artifacts; portable (relative paths) and linked (institutional storage) modes | partial (wave 1, slices 3 and 7: datasets recorded by place, run identifiers and fingerprint; reconnected on reopening, a moved bundle located again; project archives (`.scz`) record each bundle relative to the archive, so a folder of both can be moved; a project saved by 0.1.0 reopens exactly in the viewer suite. Linked institutional storage is to come) |
 | D8 | Artifact lineage: parents, producing job, parameters, method and software versions, checksums, state, role | planned (waves 1, 2) |
-| D9 | Example data downloaded on request from their source, verified by checksum, attributed | planned (wave 1) |
+| D9 | Example data downloaded on request from their source, verified by checksum, attributed | done (wave 1, slice 7: the two development bundles from 10x Genomics, CC BY 4.0, downloaded only when asked, the archive checked by size, MD5 and SHA-256 and every file by size and SHA-256, the archive then deleted; each with its source, license and a guided tour; cited in the methods paragraph) |
 | D10 | Several datasets (samples) in one project | planned (wave 7) |
 | D11 | CosMx and MERSCOPE outputs | planned (wave 10) |
 
@@ -52,25 +52,25 @@ Status: **planned (wave N)** until built. Then **done**, **partial** (the gap no
 
 | # | Requirement | Status |
 | --- | --- | --- |
-| V1 | Multiscale, multichannel 16-bit images rendered progressively, with per-channel contrast, color and visibility; never a whole slide decoded in the browser | planned (wave 1) |
-| V2 | Layers: morphology channels, transcripts (density and points), cell and nucleus boundaries, cell fills by any attribute, labels, ROIs, registered H&E/IF | planned (waves 1, 4, 5) |
-| V3 | Scale-dependent representation: density rasters for whole tissue, simplified polygons at intermediate zoom, exact boundaries and molecules at cellular zoom | planned (wave 1) |
-| V4 | Genes: search; single-gene points; several genes in distinct colors; gene-set scores; per-cell expression fills | planned (waves 1, 4) |
-| V5 | Cell inspector: identifiers, geometry, counts and top genes, segmentation, labels, neighbors, provenance, review history | planned (waves 1, 4, 5) |
-| V6 | Linked selection across the tissue, plots, tables and inspector | planned (waves 1, 4) |
+| V1 | Multiscale, multichannel 16-bit images rendered progressively, with per-channel contrast, color and visibility; never a whole slide decoded in the browser | done (wave 1, slice 5) |
+| V2 | Layers: morphology channels, transcripts (density and points), cell and nucleus boundaries, cell fills by any attribute, labels, ROIs, registered H&E/IF | partial (wave 1, slice 5: channels, transcripts, cell and nucleus boundaries, fills by the cells table's attributes; labels in wave 4, ROIs and H&E in wave 5) |
+| V3 | Scale-dependent representation: density rasters for whole tissue, simplified polygons at intermediate zoom, exact boundaries and molecules at cellular zoom | done (wave 1, slice 5) |
+| V4 | Genes: search; single-gene points; several genes in distinct colors; gene-set scores; per-cell expression fills | partial (wave 1, slice 5: search, points and density of up to 16 genes in distinct colors; gene-set scores and expression fills in wave 4) |
+| V5 | Cell inspector: identifiers, geometry, counts and top genes, segmentation, labels, neighbors, provenance, review history | partial (wave 1, slice 5: identifiers, centroid, areas and outline, counts recorded and counted, top genes, segmentation method; the rest in waves 4 and 5) |
+| V6 | Linked selection across the tissue, plots, tables and inspector | partial (wave 1, slice 6: cells chosen in a QC plot show in the tissue, here and in the Viewer, and in the inspector; tables in wave 4) |
 | V7 | Two segmentations compared by overlay, synchronized split view, flicker and disagreement highlighting | planned (wave 2) |
-| V8 | Saved views (dataset, coordinate system, viewport, layers, colors, filters, genes, segmentation, labels, ROIs) that reopen exactly | planned (wave 1) |
-| V9 | Scale bar, coordinate readout (µm), minimap, legends; an "explain this color" link from every encoding to its artifact and method | planned (waves 1, 4) |
-| V10 | Pan and zoom near 30 frames per second; visible-region cell queries within 500 ms once warm | planned (wave 1) |
+| V8 | Saved views (dataset, coordinate system, viewport, layers, colors, filters, genes, segmentation, labels, ROIs) that reopen exactly | partial (wave 1, slice 7: dataset, place and zoom in µm, channels, genes, layers, cell fill, selected cell, QC map and filter, by name so they survive rebuilt derived data; a link reopens each; three views of a 0.1.0 project reopen exactly in the viewer suite. Segmentations, labels and ROIs join as their waves build them) |
+| V9 | Scale bar, coordinate readout (µm), minimap, legends; an "explain this color" link from every encoding to its artifact and method | partial (wave 1, slice 5: scale bar, readout, minimap, the fill's legend; the links in wave 4) |
+| V10 | Pan and zoom near 30 frames per second; visible-region cell queries within 500 ms once warm | done (wave 1, slice 5: 60 frames per second on an Apple M4, the display's rate; region queries in milliseconds; measured in headless Chrome) |
 
 ## Quality control
 
 | # | Requirement | Status |
 | --- | --- | --- |
-| Q1 | Run metrics from the bundle, explained | planned (wave 1) |
-| Q2 | Spatial QC maps: transcripts per cell, negative-control density, unassigned fraction, cell and nuclear area, segmentation method, Q-score | planned (wave 1) |
-| Q3 | Distributions (histograms, box plots, scatter plots) with brushing linked to the tissue | planned (wave 1) |
-| Q4 | Non-destructive cell filters saved as named versions; their effects compared | planned (wave 1) |
+| Q1 | Run metrics from the bundle, explained | done (wave 1, slice 6: every recorded metric explained; 20 recomputed from the data and shown beside it, 4 shown as recorded with why) |
+| Q2 | Spatial QC maps: transcripts per cell, negative-control density, unassigned fraction, cell and nuclear area, segmentation method, Q-score | done (wave 1, slice 6) |
+| Q3 | Distributions (histograms, box plots, scatter plots) with brushing linked to the tissue | done (wave 1, slice 6) |
+| Q4 | Non-destructive cell filters saved as named versions; their effects compared | done (wave 1, slice 6) |
 | Q5 | Metrics compared across samples, outliers flagged, no opaque pass/fail thresholds | planned (wave 7) |
 
 ## Segmentation
@@ -82,7 +82,7 @@ Status: **planned (wave N)** until built. Then **done**, **partial** (the gap no
 | S3 | Presets (Balanced, Conservative boundary, Flexible morphology, Low memory, ROI pilot, Expert) showing their effective settings; plain-language help on what each setting does and costs; constraint checks (e.g. burn-in voxel size an integer multiple of the final size) | planned (wave 3) |
 | S4 | Preflight: transcripts, Q-score policy, prior assignments, regions, memory and disk estimates, threads | planned (wave 3) |
 | S5 | Whole tissue or chosen regions; unrelated sections segmented separately | planned (wave 3) |
-| S6 | Background jobs with progress, logs and cancellation that survive browser refresh; a warning before closing with a job running | planned (wave 2) |
+| S6 | Background jobs with progress, logs and cancellation that survive browser refresh; a warning before closing with a job running | partial (wave 1, slice 4: jobs in the program with progress, logs and cancellation, followed by the page over server-sent events, so they survive a reload; persisting them and the warning before closing in wave 2) |
 | S7 | Common failures (memory, malformed input, missing prior, storage) classified, with remedies | planned (wave 3) |
 | S8 | Deterministic for a seed, on any number of threads; the seed recorded | planned (wave 3) |
 | S9 | Outputs validated (geometry, counts, assignments, metadata) before they can be used | planned (waves 2, 3) |
@@ -159,7 +159,7 @@ Status: **planned (wave N)** until built. Then **done**, **partial** (the gap no
 | E1 | SpatialData Zarr export (images optional, shapes, points, AnnData table, transformations) | planned (wave 2) |
 | E2 | AnnData Zarr, Parquet, CSV, Matrix Market and GeoJSON exports | planned (wave 2) |
 | E3 | A command for a user-installed Xenium Ranger `import-segmentation`, prepared with validated inputs | planned (wave 2) |
-| E4 | Methods text written from the actual metadata, citing every method used | planned (waves 1, 8) |
+| E4 | Methods text written from the actual metadata, citing every method used | partial (wave 1, slice 7: a paragraph per dataset from its record, validation and filters, citing the platform, the data's source and SituCraft's version; later waves add their methods, wave 8 the full record) |
 | E5 | Recipes: a job's spec as readable JSON, re-runnable headless | planned (waves 3, 9) |
 | E6 | Figures (SVG, PDF, PNG) with scale bar, legend and provenance | planned (wave 8) |
 | E7 | A certificate that `situcraft verify` checks by recomputing | planned (wave 8) |
@@ -181,9 +181,9 @@ Status: **planned (wave N)** until built. Then **done**, **partial** (the gap no
 
 | # | Requirement | Status |
 | --- | --- | --- |
-| X1 | Loopback only, Host-header check, same-origin API, strict CSP, path allowlist, safe archive extraction | planned (wave 1) |
+| X1 | Loopback only, Host-header check, same-origin API, strict CSP, path allowlist, safe archive extraction | partial (wave 1, slice 1: loopback, Host check, same-origin API, CSP, only named paths served; archive extraction with slice 3) |
 | X2 | Keyboard workflows; color-vision-friendly palettes with non-color encodings; text equivalents for status; contrast audited | planned (wave 1, every wave) |
-| X3 | Every reader and decoder fuzzed; hostile files refused with a message, never a crash | planned (waves 1–2) |
-| X4 | Performance budgets checked automatically (tile decode, indexing, viewport queries, segmentation) | planned (wave 1, every wave) |
+| X3 | Every reader and decoder fuzzed; hostile files refused with a message, never a crash | partial (wave 1, slice 2: every codec and reader fuzzed, crashers fixed and kept; later readers as they arrive) |
+| X4 | Performance budgets checked automatically (tile decode, indexing, viewport queries, segmentation) | partial (wave 1, slice 2: a JPEG 2000 tile in about 90 ms on one core, budget 150 ms, benchmarked; slice 4: each development bundle's derived data built within a budget of two minutes (about 2 and 4 s on ten cores) and within 500 MB together, tested; slice 5: frames per second while panning, region queries and the time to draw a view, measured in headless Chrome against budgets (30 fps where there is a GPU; 500 ms)) |
 | X5 | Stable, versioned project and export formats; later versions open earlier projects | planned (every wave; promised at 1.0) |
 | X6 | Documentation and site: installing, a guide per feature, formats, network, MCP | planned (every wave) |

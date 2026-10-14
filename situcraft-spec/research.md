@@ -65,7 +65,16 @@ Xenium Ranger do.
 
 - Zarr format 2, in zip files stored without zip compression.
 - Chunks are compressed by **Blosc** with **LZ4** (clevel 5, byte shuffle) for most arrays and
-  **Zstd** (clevel 1, byte shuffle) for label masks.
+  **Zstd** (clevel 1, byte shuffle, blocks not split) for label masks.
+- Blosc details settled by experiment (chunks written by c-blosc 1.21 through numcodecs, and every
+  chunk of both bundles), where the format description is silent:
+  - block offsets count from the start of the chunk, and blocks may be stored out of order;
+  - a block is split into one stream per byte of its type only when the "don't split" flag is
+    clear, the type is at most 16 bytes, each stream holds at least 128 elements, and the block is
+    not the chunk's short last one;
+  - a stream whose compressed size equals its decoded size is stored as it is;
+  - format version 2 (Blosc 1) bit-shuffles only blocks of whole groups of eight elements; other
+    blocks are stored unshuffled.
 - Dtypes: `<u4`, `<i4`, `<f4`, `<f8`; C order.
 - `cells.zarr.zip` (format "CellSegmentationDataset" 6.2) holds:
   - `cell_id` (uint32 × 2: a numeric prefix and dataset suffix, which together encode the
@@ -75,15 +84,130 @@ Xenium Ranger do.
   - `masks/{0,1}` (uint32 label images at image resolution) and `masks/homogeneous_transform`
     (4×4);
   - `cell_summary` (centroids, areas, z level, nucleus count).
-- The string form of cell IDs (e.g. `aiaafdpo-1`) and its relation to the uint32 pair follow 10x's
-  documentation of cell IDs (to verify against the documentation before relying on it).
+- **Cell IDs (verified):** the string form (`aaafiiei-1`) is the uint32 prefix written as eight
+  hexadecimal digits shifted to the letters a–p (0 → a, …, f → p), a hyphen, and the suffix: the
+  pair [362568, 1] is `aaafiiei-1`. Every copy of the cell list in both bundles (cells.parquet,
+  cells.zarr.zip, the Zarr matrix's cell_id, the MEX barcodes) agrees under this encoding.
+
+### 1.3a The cell-by-feature matrix (verified)
+
+- `cell_feature_matrix.zarr.zip`: group `cell_features` with `indptr`, `indices`, `data` (uint32;
+  compressed by **feature**: `indptr` has one entry per feature plus one) and `cell_id` (the cells'
+  uint32 pairs); the group's attributes list `feature_ids`, `feature_keys` (names) and
+  `feature_types` (`gene`, `negative_control_probe`, `negative_control_codeword`,
+  `unassigned_codeword`, `deprecated_codeword`), and **one more feature, `Total transcripts` of type
+  `aggregate_gene`**, each cell's gene total. That is why the Zarr form has one feature more than
+  the MEX form (542 and 541 in the Lung bundle) and why its counts sum to about twice the cells'.
+- `cell_feature_matrix.tar.gz` (MEX): `matrix.mtx.gz` (features × cells, 1-based), `features.tsv.gz`
+  (ID, name, type in words: "Gene Expression", "Negative Control Probe", …) and `barcodes.tsv.gz`
+  (cell IDs).
+- Each cell's matrix counts, summed by feature type, equal cells.parquet's `transcript_counts`,
+  `control_probe_counts`, `control_codeword_counts`, `unassigned_codeword_counts` and
+  `deprecated_codeword_counts`, and `total_counts` is their sum; all are counts of transcripts with
+  a quality score of at least 20 assigned to the cell.
+
+### 1.3b The run's metrics (verified)
+
+On both bundles, these metrics of `metrics_summary.csv` (and two values of `experiment.xenium`)
+are reproduced exactly (counts) or to 1e-6 (ratios) from the data. Validation recomputes them all,
+and the QC view shows each beside its recorded value:
+
+| Metric | Definition |
+| --- | --- |
+| `num_cells_detected`, `experiment.num_cells` | rows of cells.parquet |
+| `total_high_quality_decoded_transcripts` | gene transcripts with qv ≥ 20 |
+| `fraction_transcripts_decoded_q20` | gene transcripts with qv ≥ 20 ÷ all gene transcripts |
+| `fraction_transcripts_assigned` | of the Q20 gene transcripts, the share assigned to a cell |
+| `total_cell_area` | the sum of cells.parquet's `cell_area` (µm²); the cell mask's (`masks/1`) pixels give the same |
+| `decoded_transcripts_per_100um2` | Q20 gene transcripts per 100 µm² of **cell area** (also `experiment.transcripts_per_100um`) |
+| `nuclear_transcripts_per_100um2` | Q20 gene transcripts overlapping a nucleus (`overlaps_nucleus`) per 100 µm² of the **nucleus mask** (cells.zarr.zip `masks/0`, its non-zero pixels × 0.2125² µm²; cells.parquet's `nucleus_area` agrees only in Lung, and the nuclei's polygons give 5–8% more) |
+| `median_transcripts_per_cell`, `experiment.transcripts_per_cell` | the median of `transcript_counts` |
+| `median_genes_per_cell` | the median over cells of their genes with a Q20 transcript (the matrix's non-zero genes) |
+| `fraction_empty_cells` | cells whose `transcript_counts` is 0 ÷ cells |
+| `negative_control_probe_counts_per_control_per_cell` | the sum of `control_probe_counts` ÷ the panel's negative control probes ÷ cells |
+| `estimated_number_of_false_positive_transcripts_per_cell` | the previous × the panel's genes |
+| `cells_per_100um2` | cells per 100 µm² of `region_area` |
+| `segmented_cell_boundary_count`, `…_interior_count`, `…_nuc_expansion_count` | cells by segmentation method (cells.zarr.zip's `polygon_sets/1/method`, indexing its `segmentation_methods`) |
+| `segmented_cell_boundary_frac`, `…_interior_frac`, `…_nuc_expansion_frac` | those counts ÷ cells |
+| `segmented_cell_stain_frac` | (boundary-stain + interior-stain cells) ÷ cells |
+
+Four recorded metrics are not reproduced, and the QC view shows them as recorded, saying why:
+
+- `region_area`: the area of the region chosen on the slide, which the bundle does not describe.
+- `adjusted_negative_control_probe_rate` and `adjusted_negative_control_codeword_rate`: the
+  plain per-feature rate of control detections against gene detections (Q20) is about 7% below
+  the recorded probe rate and about half the recorded codeword rate, and no simple variant tried
+  (all qualities, counts in cells) gives the recorded values. The adjustment is not described in
+  the bundle.
+- `thickness_transcripts_high_quality`: the 5th-to-95th percentile range of the Q20 gene
+  transcripts' z is 4.84 µm in Breast (recorded 4.836) but 8.26 µm in Lung (recorded 7.61), per
+  field of view or not. Its definition is not in the bundle.
+
+Some metrics are empty in both bundles (the polygon counts, `fraction_of_nuclei_without_cell`,
+the predesigned and custom panel splits); when a bundle fills them, they are shown as recorded.
+
+### 1.3c The derived data of the development bundles (verified)
+
+What the cache (`internal/cache`, roadmap wave 1 slice 4) builds from each bundle, first build on
+an Apple M4 with 10 cores, reading the source files' checksums included:
+
+| | Lung 2-FOV | Breast 2-FOV |
+| --- | --- | --- |
+| Grid | 5,791 × 3,553 px at 0.2125 µm; 5 levels; 12 × 7 tiles at level 0 | 5,792 × 3,529 px; 5 levels; 12 × 7 tiles |
+| Image pyramid | 1 channel, all 5 levels decoded from the bundle: 29.4 MB | 4 channels, all levels decoded: 132.5 MB |
+| Transcript index | 825,885 transcripts of 537 features (746,475 of quality ≥ 20; 809,249 in a cell): 21.8 MB | 1,113,950 of 529 features (1,036,083; 964,035): 29.7 MB |
+| Cell outlines | 11,898 cells and 11,898 nuclei: 7.4 MB | 7,275 cells and 7,020 nuclei: 5.4 MB |
+| In all | 58.6 MB in 2.0 s | 167.5 MB in 4.1 s |
+
+(Sizes since wave 1, slice 6, whose QC maps added three groups of transcripts to the density grids:
+2 MB more each. Slice 4 measured 56.6 and 165.0 MB.)
+
+- Every transcript's cell and every polygon's cell is a row of cells.parquet.
+- **Simplification** (Douglas & Peucker 1973) to half a pixel of each level keeps, of the cell
+  outlines' vertices, 48%, 33%, 26% and 21% at levels 1–4 in Lung (297,356 at level 0) and 68%,
+  45%, 32% and 24% in Breast (181,804): five to six vertices a cell at the coarsest level, the
+  closing one included.
+- **Density grids are as large as the points** before compression: at the finer levels nearly
+  every transcript is alone in its bin (a level-1 bin is 1.7 µm). Deflating every block made the
+  Lung index 42.4 MB → 19.7 MB; the density blocks deflate to 28%, the points to 65%.
+- **Image tiles** deflate to 59% of their 16-bit samples as they are, and to 48% with the low and
+  high bytes in separate planes, at half the time (Breast, deflate at its fastest level).
+- Reopened unchanged, a dataset's status takes under a millisecond: its files are looked at, not
+  read.
+
+### 1.3d The development bundles in the viewer (verified)
+
+- **Cell counts from the transcripts:** for every one of the 19,173 cells of both bundles, the
+  Q20 gene transcripts assigned to the cell in transcripts.parquet are exactly cells.parquet's
+  `transcript_counts`. A cell's top genes can therefore be counted from the transcript index
+  without the matrix.
+- **Segmentation method per cell:** XOA 2.0's cells.parquet has no `segmentation_method` column.
+  cells.zarr.zip's `polygon_sets/1/method` indexes its `segmentation_methods` for each cell of its
+  `cell_id` array, which lists the cells in cells.parquet's order.
+- **Default display windows** (the 1st and 99.5th percentiles of the coarsest level's non-zero
+  samples), Breast: DAPI 73–4,337 (largest 7,698), ATP1A1/CD45/E-Cadherin 109–2,272, 18S
+  91–2,763, alphaSMA/Vimentin 33–2,782. The four stains added together are nearly white, so the
+  viewer shows the nuclear and boundary stains at first.
+- **Density scale:** at the coarsest density level (bins of 13.6 µm), the 99th percentile of
+  every gene's bins together is 377 Q20 transcripts in Breast.
 
 ### 1.4 Images (verified)
 
 - BigTIFF; uint16, one sample per pixel; tiles of 1024×1024.
 - Pyramid levels are stored in **SubIFDs** (four per image in the 2-FOV files).
-- OME-XML is in the first IFD's ImageDescription.
-- Compression code **34712, JPEG 2000** (codestreams per tile).
+- OME-XML is in the first IFD's ImageDescription. The morphology-focus images are a **multi-file
+  OME-TIFF**: each file's XML describes every channel (DAPI, boundary, interior RNA, interior
+  protein in the Breast bundle) and names the file holding each by its UUID; each channel's
+  "Purpose" is a MapAnnotation. `morphology.ome.tif` is a z-stack (11 planes, 3 µm apart, in
+  consecutive IFDs).
+- Compression code **34712, JPEG 2000**. Each tile is a **JP2 file** (signature, `ftyp`, `jp2h`,
+  then the codestream box), not a bare codestream, written by OpenJPEG 2.5.1 (its COM marker says
+  so). Every tile is 1024×1024, one 16-bit unsigned component, one image tile, 64×64 code blocks
+  with no style flags, one quality layer. Two profiles, by level:
+  - **full resolution:** **irreversible 9/7 wavelet with scalar expounded quantization** (lossy), 5
+    decomposition levels, 256×256 precincts, RPCL progression;
+  - **every pyramid (SubIFD) level:** **reversible 5/3** (lossless), LRCP, default precincts, no
+    quantization. (Of the 918 tiles of the two bundles, 648 are 9/7 and 270 are 5/3.)
 - 10x's image-conversion guide recommends ZLIB or lossless JPEG 2000 compression, 1024-pixel tiles
   and a downsampling factor of 2 for images that Xenium Explorer opens. Post-Xenium H&E images
   supplied by users therefore arrive with other compressions, which SituCraft also needs: JPEG
@@ -93,7 +217,7 @@ Xenium Ranger do.
 
 | Format | Specification |
 | --- | --- |
-| Zstandard | RFC 8878, *Zstandard Compression and the application/zstd Media Type* (Collet & Kucherawy 2021) |
+| Zstandard | RFC 8878, *Zstandard Compression and the application/zstd Media Type* (Collet & Kucherawy 2021); frame checksums with XXH64 (Yann Collet, xxHash specification) |
 | LZ4 block | LZ4 Block Format Description (lz4 project) |
 | Blosc | Blosc format description (c-blosc project) |
 | Snappy | Snappy framing and format description |
@@ -109,18 +233,31 @@ Xenium Ranger do.
 
 ### 1.6 JPEG 2000 decoding plan
 
-The decoder follows T.800 in this order: codestream markers (SIZ, COD, COC, QCD, QCC, SOT/SOD),
-tag trees and packet headers (tier 2), EBCOT block decoding with the MQ arithmetic decoder (tier
-1, including the bypass and termination modes), dequantization, the inverse 5/3 reversible
-wavelet (lossless) and 9/7 irreversible wavelet, and the inverse component transform when
-present. SituCraft's choices:
+The decoder follows T.800 in this order: the JP2 boxes (Annex I) around the codestream,
+codestream markers (SIZ, COD, COC, QCD, QCC, SOT/SOD), tag trees and packet headers (tier 2), EBCOT
+block decoding with the MQ arithmetic decoder (tier 1, including the bypass and termination
+modes), dequantization, the inverse 9/7 irreversible and 5/3 reversible wavelets, and the inverse
+component transform when present. Xenium's profile (above) is made fast first. SituCraft's
+choices:
 - Decode whole 1024×1024 tiles once into the tile cache rather than decoding on demand.
 - Run code blocks in parallel.
 - Implement only the Part 1 features that real files use, refusing anything else with a clear
   message.
 
-Correctness is checked pixel for pixel against an independent decoder on every tile of both
-development bundles.
+Correctness is checked against an independent decoder (OpenJPEG) on every tile of both
+development bundles. Reversible streams must match exactly. Irreversible streams, which Xenium's
+are, must match within ±1 at every pixel: the 9/7 transform runs in floating point, and two
+conformant decoders legitimately differ in the last rounding (ISO/IEC 15444-4 states conformance
+for lossy decoding as error bounds, not equality). The maximum difference, the share of differing
+pixels and the RMSE are recorded. Measured on all 918 tiles: the 270 reversible tiles are
+identical; the 648 irreversible tiles are within ±1 (0.74% of samples differ by 1, RMSE 0.086).
+The difference has one cause: OpenJPEG 2.5.4's output corresponds to a 13-bit fixed-point
+approximation of the 9/7 high-pass scaling (13318/8192 for 2/K), where SituCraft uses the
+standard's 1/K; with that value substituted (a test-only option), the two agree bit for bit on
+every tile. OpenJPEG 2.5.0 (Ubuntu 24.04's, which CI installs) is within ±1 too but follows
+neither constant exactly (on the Lung bundle's tiles, 1.03% of samples differ by 1 with the
+standard's constant, about 1.3% with 2.5.4's), so the tests require the bit-for-bit match only
+from OpenJPEG 2.5.4.
 
 ## 2. Coordinates and units
 
@@ -278,10 +415,19 @@ are uncertain.
 | A bundle with post-Xenium H&E and alignment (≤ 3 GB) | chosen in wave 5 planning (candidate: 10x human lymph node preview data, CC BY 4.0 (to verify size and files)) | | | Registration and pathology |
 
 Notes:
-- The 10x CDN answers HTTP 403 to requests without a browser-like User-Agent (verified); the
-  fetcher sends one.
-- Attribution, as CC BY 4.0 requires, appears in the README, the example's card, and any figure
-  made from the data.
+- The two 2-FOV bundles are also SituCraft's example datasets (wave 1, slice 7), downloaded from
+  the same URLs when a user asks.
+- The 10x CDN once answered HTTP 403 to requests without a browser-like User-Agent; in October
+  2026 it accepts any (verified with none, Go's, curl's and SituCraft's). The fetcher and SituCraft
+  name themselves in theirs.
+- Attribution, as CC BY 4.0 requires, appears in the README, the example's card, the methods
+  paragraph's references, and any figure made from the data.
+- **The tours' genes** (`web/lib/tours.js`), among the panel genes with the most Q20 transcripts
+  in each section: Lung: EPCAM (23,071), COL5A2 (6,371), PLVAP (3,472), CD68 (790), VWF (1,326),
+  RGS5 (1,888), PDGFRB (1,240). Breast: KRT7 (14,545), ACTA2 (13,072), LUM (20,388), KRT14 (654),
+  PTPRC (1,729), CD68 (5,253), PECAM1 (1,583), MKI67 (7,823). The Lung panel's alveolar and B-cell
+  markers are scarce in this section (AGER 102, SFTPD 142, MS4A1 29), and PTPRC, ACTA2, PECAM1
+  and COL1A1 are not in it, so the tour does not use them.
 
 ## 8. Other references
 
@@ -300,13 +446,25 @@ Notes:
   *IEEE TPAMI* 1989;11:567–585.
 - Umeyama S. Least-squares estimation of transformation parameters between two point patterns.
   *IEEE TPAMI* 1991;13:376–380.
+- Douglas DH, Peucker TK. Algorithms for the reduction of the number of points required to
+  represent a digitized line or its caricature. *Cartographica* 1973;10(2):112–122.
+  doi:10.3138/FM57-6770-U75U-7727 (polygon simplification in the geometry tiles).
+- Hyndman RJ, Fan Y. Sample quantiles in statistical packages. *Am Stat* 1996;50:361–365
+  (the QC plots' quantiles, type 7).
+- Tukey JW. *Exploratory Data Analysis*. Addison-Wesley, 1977 (box plots, whiskers at 1.5
+  interquartile ranges).
+- Deutsch P, Gailly J-L. ZLIB compressed data format specification version 3.3. RFC 1950, 1996;
+  Deutsch P. DEFLATE compressed data format specification version 1.3. RFC 1951, 1996 (the
+  cache's blocks, through Go's standard library).
 
 ## 9. To verify before relying on it
 
-- The cell-ID string encoding against 10x's documentation.
+- The metrics left empty in the bundles in hand (polygon counts, nuclei without cells), when a
+  bundle fills them: whether "non-simple polygon" means what SituCraft's check (and GEOS) means.
 - Control-codeword prefixes across XOA versions (1.x, 2.x, 3.x, Prime 5K).
 - XOA 3.x and 4.x bundle differences (file names, Zarr versions, new files).
 - The H&E alignment matrix orientation on a real file.
 - The MECR reference's identifier.
-- That every JPEG 2000 feature used by real Xenium images is covered (the codestream options of
-  the files in hand: progression order, code-block size, modes, number of levels).
+- JPEG 2000 options of XOA versions other than 2.0 (the bundles in hand were written by OpenJPEG
+  2.5.1; other versions may use other progressions or code-block styles, which the decoder reads
+  but which have not been seen on real Xenium files).
