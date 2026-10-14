@@ -47,6 +47,13 @@ func defaultDataDir() string {
 	return ".situcraft"
 }
 
+func defaultCacheDir() string {
+	if dir, err := os.UserCacheDir(); err == nil && dir != "" {
+		return filepath.Join(dir, "situcraft")
+	}
+	return filepath.Join(os.TempDir(), "situcraft-cache")
+}
+
 func platformName() string {
 	return runtime.GOOS + "/" + runtime.GOARCH
 }

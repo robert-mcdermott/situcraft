@@ -159,6 +159,7 @@ export function showDialog({ title, content, buttons = [{ label: 'Close' }], wid
       event.stopPropagation();
       close();
     } else if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+      event.preventDefault();
       const primary = foot?.querySelector('.btn.primary');
       primary?.click();
     }
@@ -212,6 +213,9 @@ export function promptDialog({ title, label, value = '', placeholder = '', confi
     });
     input.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') {
+        // Handled here: closing gives focus back to the control that opened the dialog, and an
+        // Enter left to the browser would press it, opening the dialog again.
+        event.preventDefault();
         result = input.value.trim();
         close();
       }

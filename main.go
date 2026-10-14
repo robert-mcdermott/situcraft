@@ -52,6 +52,7 @@ type config struct {
 	window      string
 	keepRunning bool
 	dataDir     string
+	cacheDir    string
 	dev         bool
 	showVersion bool
 	files       []string
@@ -64,6 +65,9 @@ type app struct {
 	assets   fs.FS
 	files    *localFiles
 	store    *store
+	// cacheDir holds derived data: zipped bundles' members, and (wave 1, slice 4) tile pyramids
+	// and spatial indexes.
+	cacheDir string
 }
 
 func init() {
@@ -249,6 +253,7 @@ func parseConfig(args []string) (config, error) {
 	flags.StringVar(&cfg.window, "window", "app", "how to show SituCraft: app (a desktop window from Chrome, Edge, Brave or Chromium, else the default browser), browser (the default browser) or none")
 	flags.BoolVar(&cfg.keepRunning, "keep-running", false, "keep serving after the app window is closed")
 	flags.StringVar(&cfg.dataDir, "data-dir", "", "folder for the project library (default: <user config dir>/SituCraft)")
+	flags.StringVar(&cfg.cacheDir, "cache-dir", "", "folder for derived data, which can be deleted and made again (default: <user cache dir>/situcraft)")
 	flags.BoolVar(&cfg.dev, "dev", false, "serve web/ from the working directory instead of the embedded copy")
 	flags.BoolVar(&cfg.showVersion, "version", false, "print the version and exit")
 	noOpen := flags.Bool("no-open", false, "same as --window none")
@@ -270,6 +275,9 @@ func parseConfig(args []string) (config, error) {
 	}
 	if cfg.dataDir == "" && err == nil {
 		cfg.dataDir = defaultDataDir()
+	}
+	if cfg.cacheDir == "" && err == nil {
+		cfg.cacheDir = defaultCacheDir()
 	}
 	cfg.files = files
 	return cfg, err
@@ -296,10 +304,16 @@ func parseArgs(flags *flag.FlagSet, args []string) ([]string, error) {
 
 func newApp(cfg config) (*app, error) {
 	a := &app{
-		session: strconv.FormatInt(time.Now().UnixNano(), 36),
-		dev:     cfg.dev,
-		assets:  content,
-		files:   newLocalFiles(),
+		session:  strconv.FormatInt(time.Now().UnixNano(), 36),
+		dev:      cfg.dev,
+		assets:   content,
+		files:    newLocalFiles(),
+		cacheDir: cfg.cacheDir,
+	}
+	if a.cacheDir != "" {
+		if err := os.MkdirAll(a.cacheDir, 0o755); err != nil {
+			return nil, fmt.Errorf("the cache folder (%s): %w", a.cacheDir, err)
+		}
 	}
 	if problems := a.files.add(cfg.files); len(problems) > 0 {
 		for _, problem := range problems {
@@ -334,6 +348,7 @@ func (a *app) printBanner(out io.Writer, url string) {
 		fmt.Fprintf(out, "Dev mode: serving web/ from disk in %s (no-store)\n", a.assetDir)
 	}
 	fmt.Fprintf(out, "Project library: %s\n", a.store.dir)
+	fmt.Fprintf(out, "Cache: %s\n", a.cacheDir)
 	if n := len(a.files.list()); n > 0 {
 		fmt.Fprintf(out, "Opening %d item(s) named on the command line\n", n)
 	}
@@ -362,17 +377,19 @@ type info struct {
 	Commit   string      `json:"commit,omitempty"`
 	Mode     string      `json:"mode"`
 	DataDir  string      `json:"dataDir"`
+	CacheDir string      `json:"cacheDir"`
 	Files    []localFile `json:"files"`
 	Platform string      `json:"platform"`
 }
 
 func (a *app) registerAPI(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/info", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, info{Name: "SituCraft", Session: a.session, Version: version, Commit: buildCommit(), Mode: "desktop", DataDir: a.store.dir, Files: a.files.list(), Platform: platformName()})
+		writeJSON(w, info{Name: "SituCraft", Session: a.session, Version: version, Commit: buildCommit(), Mode: "desktop", DataDir: a.store.dir, CacheDir: a.cacheDir, Files: a.files.list(), Platform: platformName()})
 	})
 	mux.HandleFunc("GET /api/local/{index}", a.files.serve)
 	mux.HandleFunc("POST /api/open", a.openPaths)
 	a.store.register(mux)
+	a.registerDatasets(mux)
 	mux.HandleFunc("POST /api/library/local/{index}", func(w http.ResponseWriter, r *http.Request) {
 		file, ok := a.files.get(r.PathValue("index"))
 		if !ok {

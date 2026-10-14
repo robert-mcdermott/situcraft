@@ -36,13 +36,13 @@ Status: **planned (wave N)** until built. Then **done**, **partial** (the gap no
 
 | # | Requirement | Status |
 | --- | --- | --- |
-| D1 | Open a Xenium output bundle as a directory or a zip | planned (wave 1) |
-| D2 | Detect the XOA version and which files are present; say what is supported | planned (wave 1) |
-| D3 | Validate a bundle: required and optional files, schemas, matrix dimensions, identifiers consistent across files, coordinate ranges, geometry validity, image metadata, transforms, free disk. Fatal errors, scientific warnings and informational differences kept apart, each linked to files, regions and a remedy | planned (wave 1) |
-| D4 | Never modify a source bundle | planned (wave 1) |
+| D1 | Open a Xenium output bundle as a directory or a zip | done (wave 1, slice 3: a folder, its experiment.xenium, or a zip with the bundle at its root or in a folder; links followed) |
+| D2 | Detect the XOA version and which files are present; say what is supported | done (wave 1, slice 3: XOA 2.x supported, other versions best-effort and said so; every file by role) |
+| D3 | Validate a bundle: required and optional files, schemas, matrix dimensions, identifiers consistent across files, coordinate ranges, geometry validity, image metadata, transforms, free disk. Fatal errors, scientific warnings and informational differences kept apart, each linked to files, regions and a remedy | done (wave 1, slice 3: 13 broken bundles raise exactly their findings; both development bundles reproduce 12 recorded metrics) |
+| D4 | Never modify a source bundle | done (wave 1, slice 3: read-only sources; every file's SHA-256 and time checked unchanged by validation) |
 | D5 | Derived data (tile pyramids, transcript index, geometry tiles) built as resumable, atomic, checksummed cache entries; an unchanged project reopens without re-indexing | planned (wave 1) |
 | D6 | Readers for Parquet (Zstd, Snappy, gzip, uncompressed), Zarr v2/v3 (Blosc LZ4/Zstd, zip and directory stores), BigTIFF/OME-TIFF (JPEG 2000, JPEG, deflate, LZW), Matrix Market, CSV(.gz), GeoJSON | partial (wave 1, slice 2: Parquet, Zarr 2 and 3, TIFF/BigTIFF/OME-TIFF with JPEG 2000, deflate, LZW and PackBits, all identical to independent readers on both bundles; JPEG for H&E in wave 5; Matrix Market, CSV and GeoJSON with the slices that need them) |
-| D7 | Projects: a manifest with stable identifiers, versions, datasets and artifacts; portable (relative paths) and linked (institutional storage) modes | planned (wave 1) |
+| D7 | Projects: a manifest with stable identifiers, versions, datasets and artifacts; portable (relative paths) and linked (institutional storage) modes | partial (wave 1, slice 3: datasets recorded by place, run identifiers and fingerprint; reconnected on reopening, a moved bundle located again; portable archives in slice 7) |
 | D8 | Artifact lineage: parents, producing job, parameters, method and software versions, checksums, state, role | planned (waves 1, 2) |
 | D9 | Example data downloaded on request from their source, verified by checksum, attributed | planned (wave 1) |
 | D10 | Several datasets (samples) in one project | planned (wave 7) |

@@ -56,6 +56,29 @@ with each.
     wavelets with both component transforms; decoding at reduced resolution; code blocks decoded
     in parallel with the same result on any number of cores. Wired into the TIFF reader for
     Xenium's tiles (34712) and whole-slide images' (33003, 33005).
+- **Opening and checking a bundle (wave 1, slice 3).**
+  - **Opening:** a Xenium output bundle opens by its folder, its `experiment.xenium` or its zip, on
+    the command line or by **Open a bundle**. SituCraft never writes to it. A zipped bundle's
+    compressed members are unpacked into the cache once.
+  - **What it describes:** which software and version wrote the bundle and how far SituCraft reads
+    it (XOA 2.x supported, others best-effort, said so), and every file by role, required or
+    optional.
+  - **Checks, each finding fatal, a warning or a note, with its files, count, tissue region and
+    remedy:**
+    - files present and readable;
+    - images against the manifest;
+    - cells, transcripts, the matrix, cells.zarr and boundaries against one another;
+    - genes against the panel;
+    - polygon validity;
+    - free space for the cache.
+    - It also recomputes twelve of the run's own recorded metrics from the data.
+  - **The Data view** shows each bundle's facts, summary, findings and files.
+    - **Add to project** records a bundle with no fatal problem: its place, run identifiers,
+      summary, findings and a fingerprint of its files.
+    - Reopening a project finds each dataset's bundle again and says whether it is the same,
+      changed, another run, or not found; **Locate…** reconnects a bundle that moved, once it is
+      shown to be the same run.
+  - `--cache-dir` sets where derived data go.
 - **The development data.** `node validation/fetch.mjs` downloads 10x Genomics' Xenium human Lung
   and Breast 2-FOV bundles (CC BY 4.0). It checks each archive's MD5, extracts it (each member's
   CRC-32 checked), checks every file's SHA-256, and deletes the archive. Both take about 640 MB;
@@ -98,6 +121,14 @@ with each.
   - the structure of 135 image levels, identical to tifffile's;
   - the smallest pyramid level of every image plane, pixel for pixel identical to tifffile with
     imagecodecs.
+- **Bundle validation** (`internal/xenium`):
+  - both development bundles validate with no fatal finding and no warning, and reproduce all 12 of
+    their recorded metrics;
+  - their notes are exactly the expected ones (polygons with crossing edges, the same counts GEOS
+    finds; transcripts just past the images' edge; Breast cells without a nucleus);
+  - the Lung bundle zipped validates as its folder does;
+  - 13 broken bundles raise exactly the findings they should;
+  - no file of a bundle changes when it is checked.
 - **JPEG 2000 against OpenJPEG on all 918 tiles of both bundles:**
   - the 270 lossless (5/3) tiles are identical;
   - the 648 lossy (9/7) tiles are within ±1 at every pixel (0.74% of samples differ by 1, RMSE

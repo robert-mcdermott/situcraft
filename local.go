@@ -24,7 +24,10 @@ type localFile struct {
 	Folder string `json:"folder,omitempty"`
 	Kind   string `json:"kind"`
 	// Dir: a folder, read where it is by the bundle reader (wave 1, slice 3), never served whole.
-	Dir   bool `json:"dir,omitempty"`
+	Dir bool `json:"dir,omitempty"`
+	// Path is where it is on this computer (the page records datasets by it; it never leaves
+	// this computer).
+	Path  string `json:"path"`
 	path  string
 	isDir bool
 }
@@ -121,6 +124,11 @@ func (l *localFiles) add(paths []string) []string {
 	var problems []string
 	var found []localFile
 	for _, raw := range paths {
+		if strings.TrimSpace(raw) == "" {
+			// An empty path would silently mean the current folder: refuse it.
+			problems = append(problems, "skipping an empty path")
+			continue
+		}
 		path, err := absPath(raw)
 		if err != nil {
 			problems = append(problems, fmt.Sprintf("skipping %s: %v", raw, err))
@@ -170,6 +178,7 @@ func (l *localFiles) add(paths []string) []string {
 		}
 		index := len(l.files)
 		file.URL = "/api/local/" + strconv.Itoa(index)
+		file.Path = file.path
 		l.index[file.path] = index
 		l.files = append(l.files, file)
 	}

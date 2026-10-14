@@ -469,3 +469,66 @@ func TestPortsStayClearOfTheSiblings(t *testing.T) {
 		}
 	}
 }
+
+// A bundle named on the command line is described and validated through the API; other items are
+// refused.
+func TestBundleEndpoints(t *testing.T) {
+	root := os.Getenv("SITUCRAFT_DATA")
+	if root == "" {
+		root = filepath.Join("validation", "cache")
+	}
+	bundle := filepath.Join(root, "xenium-lung-2fov")
+	if _, err := os.Stat(filepath.Join(bundle, "experiment.xenium")); err != nil {
+		t.Skip("the Lung bundle is not present (node validation/fetch.mjs xenium-lung-2fov)")
+	}
+	image := filepath.Join(t.TempDir(), "he.ome.tif")
+	os.WriteFile(image, []byte("not really"), 0o644)
+	dir := t.TempDir()
+	a, err := newApp(config{dataDir: dir, cacheDir: filepath.Join(dir, "cache"), files: []string{bundle, image}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h, _ := a.handler()
+	handler := protect(h, "127.0.0.1", defaultPort)
+	var described struct {
+		Name, Version, Support string
+		Inventory              []struct{ Role string }
+		Fingerprint            []struct{ Path, SHA256 string }
+	}
+	rec := request(t, handler, http.MethodGet, "/api/local/0/bundle", nil, nil)
+	if err := json.NewDecoder(rec.Body).Decode(&described); err != nil || rec.Code != http.StatusOK {
+		t.Fatalf("describe: %d %v", rec.Code, err)
+	}
+	if described.Name != "xenium-lung-2fov" || described.Version != "2.0.0" || described.Support != "supported" || len(described.Inventory) < 10 || len(described.Fingerprint) != 22 {
+		t.Fatalf("described %+v", described)
+	}
+	var validated struct {
+		Report struct {
+			Findings []struct{ Severity string }
+			Summary  struct{ Cells int }
+		}
+	}
+	rec = request(t, handler, http.MethodGet, "/api/local/0/validation", nil, nil)
+	if err := json.NewDecoder(rec.Body).Decode(&validated); err != nil || rec.Code != http.StatusOK || validated.Report.Summary.Cells != 11898 {
+		t.Fatalf("validate: %d %v %+v", rec.Code, err, validated)
+	}
+	for _, f := range validated.Report.Findings {
+		if f.Severity == "fatal" {
+			t.Fatal("the Lung bundle has a fatal finding")
+		}
+	}
+	if rec := request(t, handler, http.MethodGet, "/api/local/1/validation", nil, nil); rec.Code != http.StatusBadRequest {
+		t.Fatalf("an image validated as a bundle: %d", rec.Code)
+	}
+	if rec := request(t, handler, http.MethodGet, "/api/local/9/bundle", nil, nil); rec.Code != http.StatusNotFound {
+		t.Fatalf("an unknown item: %d", rec.Code)
+	}
+}
+
+func TestAnEmptyPathIsNotTheCurrentFolder(t *testing.T) {
+	files := newLocalFiles()
+	problems := files.add([]string{"", "   "})
+	if len(files.list()) != 0 || len(problems) != 2 {
+		t.Fatalf("empty paths registered %v (problems %v)", files.list(), problems)
+	}
+}

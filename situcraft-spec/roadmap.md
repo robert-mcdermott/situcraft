@@ -191,29 +191,95 @@ The data plane built here (readers, codecs, the derived-data cache) carries ever
        experiment and are written down in `research.md` §1.3.
      - **No HDF5 is needed,** as planned: the same matrix is in Zarr and MEX.
 
-3. **The bundle and its validation (D1, D2, D3, D4, D7).** `internal/xenium`:
-   - opens a directory or a zip;
-   - reads `experiment.xenium`, `metrics_summary.csv` and `gene_panel.json`;
-   - detects the XOA version and inventories required and optional files;
-   - gives typed access to transcripts, cells, polygons, matrix (Zarr or MEX) and images.
+3. **The bundle and its validation (D1, D2, D3, D4, D7): done.** `internal/xenium`:
+   - **Opening:** a bundle folder, its `experiment.xenium`, or a zip (with the bundle at its root or
+     in one folder). The source is read-only. Links are followed, so bundles behind links on shared
+     storage open. In a zip, stored members are read in place; compressed ones are unpacked once
+     into the cache, CRC-checked.
+   - **Description:** the run manifest, metrics and gene panel; the XOA version, with what SituCraft
+     makes of it (2.x supported; others best-effort, said so).
+   - **Inventory:** every file by role, required or optional, with the form found. A form SituCraft
+     does not read (CSV only, HDF5 only) is named.
+   - **Typed access:**
+     - cells;
+     - transcripts, a row group at a time;
+     - cell and nucleus polygons;
+     - the matrix, from Zarr or Matrix Market (folder or `.tar.gz`), with feature kinds;
+     - the morphology channels through the multi-file OME-XML, with each channel's purpose and
+       pyramid.
+     - The Xenium cell-ID codec.
+   - **Validation** (`validate.go`): findings that are fatal, warnings or notes, each with a stable
+     code, the files, a count, the tissue region (µm) and a remedy. It checks:
+     - files present and readable;
+     - the pixel size;
+     - the images' sizes, compression and pixel size against the manifest, and the z-stack;
+     - cells: centroids on the images, areas, nuclei larger than cells, totals equal to the sum of
+       their parts;
+     - every transcript's cell in the cells table;
+     - per-cell Q20 counts by kind against cells.parquet;
+     - genes against the panel;
+     - the matrix's cells and per-cell counts by kind against cells.parquet, and its aggregate
+       against its genes;
+     - cells.zarr against cells.parquet, and the masks against the images;
+     - polygon validity and coverage;
+     - twelve of the run's recorded metrics recomputed from the data;
+     - free space for the cache.
+   - **Program:** `--cache-dir`; `GET /api/local/{i}/bundle` (inventory and fingerprint) and
+     `GET /api/local/{i}/validation` (the report). Empty paths are refused.
+   - **The Data view** (`ui/mode-data.js`, `ui/bundles.js`): the bundles of the project and of this
+     computer; for each, its facts, summary tiles, the findings grouped by severity, and its files
+     by role.
+     - **Add to project** is refused while a fatal problem stands.
+     - **Check again**; **Remove**; **Locate…** for a moved bundle (checked to be the same run
+       first).
+   - **Datasets in the project** (`lib/datasets.js`): where each bundle is, the run's identifiers,
+     its summary, its findings, and a fingerprint (every file's size; the description files'
+     SHA-256).
+     - A project reopening reconnects each dataset and says whether it is there, the same bundle
+       (a copy is), changed, or another run.
+     - An untitled project takes its first dataset's name.
+   - Portable projects (paths relative to an archive) come with the project archive in slice 7.
+   - Validation:
+     - **Both development bundles:**
+       - no fatal finding and no warning;
+       - all 12 recorded metrics reproduced, among them the cells of each segmentation method
+         (Breast: 3,300 by boundary stain, 3,913 by interior stain, 62 by nucleus expansion);
+       - exactly the expected notes: polygons with crossing edges (44 and 54 in Lung, 10 and 308 in
+         Breast, the same counts Shapely 2 (GEOS) finds invalid in the same files); 7 Lung
+         transcripts up to 5 µm past the images; 255 Breast cells without a nucleus;
+       - checked in 0.2 s each.
+     - **The Lung bundle zipped** (in a folder, images stored, the rest deflated) validates as the
+       folder does, plus a note that it is zipped.
+     - **Thirteen broken bundles** (the Lung bundle with one change each, in a folder of links)
+       raise exactly the findings they should:
+       - a missing table, missing images, or a matrix only in HDF5;
+       - a cut-off Parquet file;
+       - transcripts, a matrix, boundaries or a panel from the other run;
+       - no pixel size, or a wrong one;
+       - a disagreeing metric;
+       - an untested version.
+     - **No source file changes:** the SHA-256 and time of every file are the same before and
+       after.
+     - **Unit tests** of the cell-ID codec, feature kinds, versions, polygons (bow tie, pinch,
+       degenerate, collinear, non-finite), metrics and Matrix Market parsing.
+     - **Fuzzing:** the Matrix Market reader and the polygon check.
+     - **Endpoints:** describe and validate through the API.
+     - **Datasets:** `lib/datasets.js`'s tests.
+     - **In the window:**
+       - open a bundle by its path, see its report, add it;
+       - reopen the project: the dataset is found and the same;
+       - a dataset with no place is "Not found" and **Locate…** reconnects it;
+       - no console errors.
+   - Found by slice 3:
+     - **The Zarr matrix has one feature more than the MEX one:** an aggregate "Total transcripts"
+       per cell (`research.md` §1.3a).
+     - **The recorded metrics' definitions** hold exactly on both bundles, among them a density per
+       cell area rather than per region (§1.3b), so they can be checked, not only shown.
+     - **Some boundary polygons cross themselves** in both bundles (up to 4% of nuclei in Breast).
+       They are noted, not treated as errors; slice 5's renderer must draw them.
+     - **The path dialog's Enter re-pressed the button that opened it** (in the code shared with
+       the siblings), and **an empty path meant the current folder**: both fixed.
 
-   The validator checks:
-   - schemas and dtypes;
-   - identifiers consistent across Parquet, Zarr and matrix;
-   - coordinate ranges against image extents and pixel size;
-   - polygon validity;
-   - control-codeword accounting;
-   - free disk for the cache.
-
-   Each finding is fatal, a warning or information, and names files, regions and a remedy. The
-   project manifest (`store.go`) records datasets by path, size and checksums of key files; it
-   offers portable and linked modes. The Data view shows the inventory and report.
-   - Validation: both bundles validate with zero fatal findings; their counts (cells,
-     transcripts, genes, controls) equal `experiment.xenium` and `metrics_summary.csv` where
-     those state them. A fixture set of broken bundles (missing files, truncated Parquet,
-     mismatched IDs, wrong pixel size), made by a script from the Lung bundle in a temporary
-     directory, raises exactly the expected findings. No file under a source bundle changes
-     (checked by checksums before and after every test).
 4. **The derived-data cache (D5, X4).** `internal/cache` builds three kinds of entry:
    - image tile pyramids: JPEG 2000 decoded once into 512×512 uint16 deflate tiles per level and
      channel;

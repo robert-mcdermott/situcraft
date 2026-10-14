@@ -3,7 +3,7 @@
 // Selecting an item focuses it (store.ui.focus): the inspector describes it, and the views that
 // use it open on it. Adapted from MaveScape 0.8.0 web/ui/sidebar.js.
 
-import { h, icon, clear, formatBytes } from './dom.js';
+import { h, icon, clear, formatBytes, formatCount } from './dom.js';
 
 // The icon of an item handed to the program, by its kind (local.go, fileKind and dirKind).
 export const KIND_ICONS = {
@@ -19,7 +19,8 @@ export const KIND_LABELS = {
 const SECTIONS = [
   {
     kind: 'local', title: 'On this computer', icon: 'folder',
-    items: (project, app) => app.localItems,
+    // Items not in the project yet.
+    items: (project, app) => app.localItems.filter((item) => !project.datasets.some((d) => d.path === item.path)),
     label: (item) => item.name,
     itemIcon: (item) => KIND_ICONS[item.kind] ?? 'file',
     meta: (item) => (item.dir ? KIND_LABELS[item.kind] ?? item.kind : formatBytes(item.size)),
@@ -29,7 +30,12 @@ const SECTIONS = [
     kind: 'dataset', title: 'Datasets', icon: 'bundle',
     items: (project) => project.datasets,
     label: (d) => d.name ?? 'Dataset',
-    meta: (d) => d.platform ?? '',
+    meta: (d, app) => {
+      const state = app.bundles.link(d.id)?.state;
+      if (state === 'missing') return 'not found';
+      if (state === 'changed' || state === 'different-run') return 'changed';
+      return Number.isFinite(d.cells) ? `${formatCount(d.cells)} cells` : d.platform ?? '';
+    },
     empty: 'Xenium output bundles you open appear here, each checked before it is used.',
     action: { label: 'Open a bundle', run: (app) => app.openPathDialog() },
   },
@@ -75,8 +81,13 @@ export function mountSidebar(app) {
           role: 'listitem',
           'aria-current': selected ? 'true' : null,
           title: section.label(item),
-          onclick: () => app.focusItem({ kind: section.kind, id }),
-        }, icon(section.itemIcon?.(item) ?? section.icon), h('span.label', section.label(item)), h('span.meta', section.meta(item))));
+          onclick: () => {
+            app.focusItem({ kind: section.kind, id });
+            // Bundles and datasets are shown by the Data view; from the start page, go there.
+            const bundle = section.kind === 'dataset' || item.kind === 'bundle' || item.kind === 'archive';
+            if (bundle && app.store.ui.mode === 'welcome') app.setMode('data');
+          },
+        }, icon(section.itemIcon?.(item) ?? section.icon), h('span.label', section.label(item)), h('span.meta', section.meta(item, app))));
       }
       if (!items.length) {
         list.append(h('p.tree-empty', section.empty));
@@ -92,7 +103,7 @@ export function mountSidebar(app) {
   return {
     render,
     update(topics) {
-      if (topics.has('project') || topics.has('focus') || topics.has('project-loaded') || topics.has('local')) render();
+      if (topics.has('project') || topics.has('focus') || topics.has('project-loaded') || topics.has('local') || topics.has('bundles')) render();
     },
   };
 }

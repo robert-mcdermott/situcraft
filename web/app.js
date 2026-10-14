@@ -11,6 +11,7 @@ import { mountDrawer } from './ui/drawer.js';
 import { plannedMode } from './ui/mode-planned.js';
 import { openPalette } from './ui/palette.js';
 import { WorkerClient } from './ui/workers.js';
+import { createBundles } from './ui/bundles.js';
 import { colorVisionFriendly, setColorVisionFriendly } from './lib/colormaps.js';
 import { createProject, isEmptyProject, parseProject, rename, serializeProject } from './lib/project.js';
 
@@ -23,15 +24,7 @@ const toOpen = { label: 'Open a bundle', icon: 'bundle', run: (app) => app.openP
 // (mode-planned.js) until the slice that builds them (situcraft-spec/roadmap.md).
 const MODES = [
   { id: 'welcome', label: 'Start', icon: 'grid', hidden: true, load: () => import('./ui/mode-welcome.js').then((m) => m.mountWelcome) },
-  {
-    id: 'data', label: 'Data', icon: 'database',
-    load: async () => plannedMode({
-      title: 'Data', icon: 'database',
-      purpose: 'What each bundle holds and whether to trust it: the instrument\'s version, every file found or missing, and a validation report that keeps fatal errors, scientific warnings and informational differences apart, each linked to the files and tissue regions it concerns, with a remedy.',
-      steps: ['Open a Xenium output bundle (its folder, its .zip, or its experiment.xenium).', 'Read the report; SituCraft never changes the bundle.', 'Go on to the Viewer and QC.'],
-      actions: [toOpen],
-    }),
-  },
+  { id: 'data', label: 'Data', icon: 'database', load: () => import('./ui/mode-data.js').then((m) => m.mountData) },
   {
     id: 'viewer', label: 'Viewer', icon: 'tissue',
     load: async () => plannedMode({
@@ -174,6 +167,7 @@ async function start() {
   // kind → async (item).
   app.importers = new Map();
 
+  app.bundles = createBundles(app);
   app.sidebar = mountSidebar(app);
   app.inspector = mountInspector(app);
   app.drawer = mountDrawer(app);
@@ -243,6 +237,13 @@ async function start() {
     if (added.length) store.notify(['local']);
     return added;
   }
+  app.setLocalItems = setLocalItems;
+
+  // Shows a bundle handed to the program in the Data view, which checks it.
+  function showBundle(item) {
+    app.focusItem({ kind: 'local', id: item.url });
+    app.setMode('data');
+  }
 
   // A browser does not tell a page where a folder is, so a bundle is named by its path (or on the
   // situcraft command line); the program reads it where it is.
@@ -262,11 +263,17 @@ async function start() {
         toast(problem, { kind: 'error' });
         app.log(problem);
       }
-      if (added.length) {
-        toast(`Opened ${added.length === 1 ? added[0].name : `${added.length} items`}. Reading bundles arrives in a coming release; the item is listed under On this computer.`, { timeout: 5000 });
+      const bundle = added.find((item) => item.kind === 'bundle' || item.kind === 'archive');
+      if (bundle) {
+        showBundle(bundle);
+      } else if (added.length) {
+        toast(`Opened ${added.length === 1 ? added[0].name : `${added.length} items`}; they are listed under On this computer.`, { timeout: 4000 });
         app.focusItem({ kind: 'local', id: added[0].url });
-      } else if (!(answer.problems ?? []).length) {
-        toast('Already open.', { timeout: 1800 });
+      } else {
+        // Already open: show it.
+        const known = app.localItems.find((item) => item.path === path || item.path === path.replace(/\/+$/, ''));
+        if (known && (known.kind === 'bundle' || known.kind === 'archive')) showBundle(known);
+        else if (!(answer.problems ?? []).length) toast('Already open.', { timeout: 1800 });
       }
     } catch (error) {
       toast(error.message, { kind: 'error' });
@@ -326,6 +333,8 @@ async function start() {
     store.setUI({ focus: null, selection: null }, ['focus', 'selection']);
     app.setMode(isEmptyProject(doc) ? 'welcome' : 'data');
     updateTitle();
+    // Each dataset's bundle, where the project recorded it.
+    app.bundles.reconnect();
   }
   app.loadProject = loadProject;
 
@@ -707,7 +716,11 @@ async function start() {
   app.inspector.render();
   app.drawer.render();
   await app.setMode('welcome');
-  if (app.localItems.length) app.log(`${app.localItems.length} item${app.localItems.length === 1 ? '' : 's'} named on the command line.`);
+  if (app.localItems.length) {
+    app.log(`${app.localItems.length} item${app.localItems.length === 1 ? '' : 's'} named on the command line.`);
+    const bundle = app.bundles.items()[0];
+    if (bundle) showBundle(bundle);
+  }
 
   // A second "situcraft <paths>" launch hands its paths to the program and brings this window
   // forward, so checking on focus (and now and then) is enough.
@@ -717,7 +730,11 @@ async function start() {
     checking = true;
     try {
       const fresh = await detectBackend();
-      if (fresh) setLocalItems(fresh.files);
+      if (fresh) {
+        const added = setLocalItems(fresh.files);
+        const bundle = added.find((item) => item.kind === 'bundle' || item.kind === 'archive');
+        if (bundle) showBundle(bundle);
+      }
     } finally {
       checking = false;
     }

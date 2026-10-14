@@ -84,8 +84,46 @@ Xenium Ranger do.
   - `masks/{0,1}` (uint32 label images at image resolution) and `masks/homogeneous_transform`
     (4×4);
   - `cell_summary` (centroids, areas, z level, nucleus count).
-- The string form of cell IDs (e.g. `aiaafdpo-1`) and its relation to the uint32 pair follow 10x's
-  documentation of cell IDs (to verify against the documentation before relying on it).
+- **Cell IDs (verified):** the string form (`aaafiiei-1`) is the uint32 prefix written as eight
+  hexadecimal digits shifted to the letters a–p (0 → a, …, f → p), a hyphen, and the suffix: the
+  pair [362568, 1] is `aaafiiei-1`. Every copy of the cell list in both bundles (cells.parquet,
+  cells.zarr.zip, the Zarr matrix's cell_id, the MEX barcodes) agrees under this encoding.
+
+### 1.3a The cell-by-feature matrix (verified)
+
+- `cell_feature_matrix.zarr.zip`: group `cell_features` with `indptr`, `indices`, `data` (uint32;
+  compressed by **feature**: `indptr` has one entry per feature plus one) and `cell_id` (the cells'
+  uint32 pairs); the group's attributes list `feature_ids`, `feature_keys` (names) and
+  `feature_types` (`gene`, `negative_control_probe`, `negative_control_codeword`,
+  `unassigned_codeword`, `deprecated_codeword`), and **one more feature, `Total transcripts` of type
+  `aggregate_gene`**, each cell's gene total. That is why the Zarr form has one feature more than
+  the MEX form (542 and 541 in the Lung bundle) and why its counts sum to about twice the cells'.
+- `cell_feature_matrix.tar.gz` (MEX): `matrix.mtx.gz` (features × cells, 1-based), `features.tsv.gz`
+  (ID, name, type in words: "Gene Expression", "Negative Control Probe", …) and `barcodes.tsv.gz`
+  (cell IDs).
+- Each cell's matrix counts, summed by feature type, equal cells.parquet's `transcript_counts`,
+  `control_probe_counts`, `control_codeword_counts`, `unassigned_codeword_counts` and
+  `deprecated_codeword_counts`, and `total_counts` is their sum; all are counts of transcripts with
+  a quality score of at least 20 assigned to the cell.
+
+### 1.3b The run's metrics (verified)
+
+On both bundles, these metrics of `metrics_summary.csv` (and two values of `experiment.xenium`)
+are reproduced exactly (counts) or to 1e-6 (ratios) from the data. Validation recomputes them all:
+
+| Metric | Definition |
+| --- | --- |
+| `num_cells_detected`, `experiment.num_cells` | rows of cells.parquet |
+| `total_high_quality_decoded_transcripts` | gene transcripts with qv ≥ 20 |
+| `fraction_transcripts_assigned` | of those, the share assigned to a cell |
+| `total_cell_area` | the sum of cells.parquet's `cell_area` (µm²) |
+| `decoded_transcripts_per_100um2` | Q20 gene transcripts per 100 µm² of **cell area** (also `experiment.transcripts_per_100um`) |
+| `median_transcripts_per_cell`, `experiment.transcripts_per_cell` | the median of `transcript_counts` |
+| `cells_per_100um2` | cells per 100 µm² of `region_area` |
+| `segmented_cell_boundary_count`, `…_interior_count`, `…_nuc_expansion_count` | cells by segmentation method (cells.zarr.zip's `polygon_sets/1/method`, indexing its `segmentation_methods`) |
+
+Some metrics are empty in both bundles (the polygon counts, `fraction_of_nuclei_without_cell`);
+when a bundle fills them, they are compared too.
 
 ### 1.4 Images (verified)
 
@@ -333,7 +371,8 @@ Notes:
 
 ## 9. To verify before relying on it
 
-- The cell-ID string encoding against 10x's documentation.
+- The metrics left empty in the bundles in hand (polygon counts, nuclei without cells), when a
+  bundle fills them: whether "non-simple polygon" means what SituCraft's check (and GEOS) means.
 - Control-codeword prefixes across XOA versions (1.x, 2.x, 3.x, Prime 5K).
 - XOA 3.x and 4.x bundle differences (file names, Zarr versions, new files).
 - The H&E alignment matrix orientation on a real file.

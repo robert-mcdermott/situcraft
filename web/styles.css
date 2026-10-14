@@ -667,3 +667,32 @@ table.data tr.selected td { background: var(--active); }
 /* ---------- SituCraft: the page without its program (app.js) ---------- */
 
 .empty pre { margin: 6px 0 0; padding: 8px 12px; background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--radius-sm); color: var(--text); }
+
+/* ---------- SituCraft: the Data view (ui/mode-data.js) ---------- */
+
+.bundle-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+.bundle-chips .chip { display: inline-flex; align-items: center; gap: 6px; }
+.bundle-chips .chip svg { width: 13px; height: 13px; }
+.bundle { display: flex; flex-direction: column; gap: 12px; max-width: 1200px; }
+.bundle > .pane + .pane { margin-top: 0; }
+.bundle-head { display: flex; gap: 16px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
+.bundle-head h2 { margin: 0; font-size: 17px; font-weight: 700; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; letter-spacing: -0.01em; }
+.bundle-path { margin: 4px 0 0; font-size: 11.5px; word-break: break-all; }
+.bundle-facts { margin: 4px 0 0; color: var(--text-2); }
+.bundle-stats { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); margin-top: 0; }
+.finding-group { margin-top: 12px; }
+.finding-group-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; font-size: 12px; }
+.finding { border: 1px solid var(--line); border-left-width: 3px; border-radius: 8px; padding: 8px 10px; margin-bottom: 6px; background: var(--panel); }
+.finding.fatal { border-left-color: var(--danger); }
+.finding.warning { border-left-color: var(--warn); }
+.finding.info { border-left-color: var(--accent); }
+.finding p { margin: 4px 0 0; color: var(--text-2); }
+.finding-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.finding-title svg { width: 15px; height: 15px; color: var(--text-3); }
+.finding-code { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--text-3); }
+.finding-where { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; }
+.finding-where span { display: inline-flex; align-items: center; gap: 4px; }
+.finding-where svg, .finding-remedy svg { width: 13px; height: 13px; flex: none; }
+.finding-remedy { display: flex; gap: 6px; align-items: flex-start; }
+.spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--accent-soft); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: -2px; }
+@keyframes spin { to { transform: rotate(360deg); } }

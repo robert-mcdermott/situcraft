@@ -36,8 +36,31 @@ export function mountInspector(app) {
         : 'Read on this computer; nothing is uploaded.'));
   }
 
+  // A dataset of the project: what it is, where, and how it validated.
+  function datasetSection(d) {
+    const v = d.validation ?? {};
+    const state = app.bundles.link(d.id)?.state;
+    const where = { ok: 'found where recorded', checking: 'looking for it', missing: 'not found where recorded', changed: 'changed since added', 'different-run': 'another run is there' }[state] ?? '';
+    return h('section.inspector-section',
+      h('h3', icon('bundle'), d.name),
+      h('dl.kv',
+        h('dt', 'Platform'), h('dd', `${d.platform} (XOA ${d.version})`),
+        h('dt', 'Panel'), h('dd', d.panel || '—'),
+        h('dt', 'Tissue'), h('dd', [d.organism, d.tissue].filter(Boolean).join(' ') || '—'),
+        h('dt', 'Cells'), h('dd', Number(d.cells).toLocaleString('en-US')),
+        h('dt', 'Transcripts'), h('dd', Number(d.transcripts).toLocaleString('en-US')),
+        h('dt', 'Channels'), h('dd', String(d.channels?.length ?? 0)),
+        h('dt', 'Checked'), h('dd', `${v.fatal ?? 0} fatal, ${v.warnings ?? 0} warnings, ${v.info ?? 0} notes`),
+        h('dt', 'Bundle'), h('dd', where)),
+      h('p.muted.mono', { style: { margin: '8px 0 0', fontSize: '11px', wordBreak: 'break-all' } }, d.path));
+  }
+
   function focusSection() {
     const focus = app.store.ui.focus;
+    if (focus?.kind === 'dataset') {
+      const dataset = app.store.project.datasets.find((d) => d.id === focus.id);
+      if (dataset) return datasetSection(dataset);
+    }
     if (focus?.kind === 'local') {
       const item = app.localItems.find((f) => f.url === focus.id);
       if (item) return localSection(item);
@@ -73,7 +96,7 @@ export function mountInspector(app) {
       render();
     },
     update(topics) {
-      if (topics.has('project') || topics.has('focus') || topics.has('selection') || topics.has('project-loaded') || topics.has('local')) render();
+      if (topics.has('project') || topics.has('focus') || topics.has('selection') || topics.has('project-loaded') || topics.has('local') || topics.has('bundles')) render();
     },
   };
 }

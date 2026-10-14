@@ -15,8 +15,10 @@ tissue-level spatial analysis one reproducible workflow:
 SituCraft runs as one self-contained program on macOS, Linux and Windows. It opens as a desktop
 window, needs no other software, and keeps your data on your computer.
 
-**Status:** in development toward 0.1.0. The program, its window, its project library and the
-workbench shell are built; reading bundles and the tissue viewer come next. See the
+**Status:** in development toward 0.1.0. SituCraft opens a Xenium output bundle (folder or zip),
+reads every byte of it with its own readers, validates it (fatal problems, warnings and notes, and
+the run's own metrics recomputed from its data) and records it in a project; the derived-data cache
+and the tissue viewer come next. See the
 [roadmap](situcraft-spec/roadmap.md) and the [changelog](CHANGELOG.md).
 
 ## Install
@@ -52,6 +54,7 @@ Running `situcraft <paths>` again hands them to the SituCraft already running.
 | `--window` | `app` | `app` (a desktop window), `browser` (the default browser) or `none` |
 | `--keep-running` | off | Keep serving after the window is closed |
 | `--data-dir` | `<user config dir>/SituCraft` | Where the project library is kept |
+| `--cache-dir` | `<user cache dir>/situcraft` | Where derived data go (a zipped bundle's unpacked members; later, tile pyramids and indexes); can be deleted at any time |
 | `--host` | 127.0.0.1 | Interface to bind |
 | `--dev` | off | Serve `web/` from the working directory (development) |
 | `--version` | | Print `situcraft X.Y.Z` and exit |

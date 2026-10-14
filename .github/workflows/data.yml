@@ -33,8 +33,8 @@ jobs:
         run: node validation/fetch.mjs
       - name: OpenJPEG, the independent decoder the image tiles are compared with
         run: sudo apt-get update -q && sudo apt-get install -y -q libopenjp2-tools
-      - name: Every Parquet column, Zarr array and image tile against independent readers
+      - name: Readers against independent readers, and bundle validation (real, zipped and broken bundles)
         env:
           SITUCRAFT_REQUIRE_DATA: '1'
           JP2K_ZSTACK_ALL: '1'
-        run: go test -v -run 'Real|Readers' ./validation/ ./internal/jp2k/
+        run: go test -v -run 'Real|Readers|Bundle' . ./validation/ ./internal/jp2k/ ./internal/xenium/
