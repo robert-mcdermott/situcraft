@@ -1,2 +1,11 @@
 .DS_Store
-product_research/
+/product_research/
+/.claude/
+/dist/
+/situcraft
+*.exe
+*.test
+/validation/cache/
+__pycache__/
+/*.zip
+/*.scz
