@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use SituCraft in your research, please cite it as below."
+title: "SituCraft"
+abstract: "A local-first workbench for imaging-based spatial transcriptomics, starting with 10x Genomics Xenium: bundle validation, a larger-than-memory tissue viewer, quality control, built-in transcript-informed cell segmentation and the comparison of segmentations, pathology registration and review, cell typing, spatial neighborhood analysis and cohort comparison, with every decision recorded. It runs locally as one self-contained program, needs no other software, and keeps the user's data on their computer."
+type: software
+authors:
+  - family-names: McDermott
+    given-names: Robert
+repository-code: "https://github.com/robert-mcdermott/situcraft"
+license: Apache-2.0
+version: 0.1.0
+keywords:
+  - spatial transcriptomics
+  - imaging-based spatial transcriptomics
+  - Xenium
+  - cell segmentation
+  - spatial omics
+  - tissue analysis

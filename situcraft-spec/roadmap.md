@@ -63,28 +63,58 @@ The data plane built here (readers, codecs, the derived-data cache) carries ever
 
 ### Wave 1
 
-1. **Repository foundation (P1, P2, P3, P4, P5, X1).** Ported from MaveScape 0.8 with renames:
+1. **Repository foundation (P1, P2, P3, P4, P5, X1): done.** Ported from MaveScape 0.8, starting
+   from MaveScape's own slice-1 files plus the host fixes it made later (a window handed to a
+   browser already running keeps the server up; an upload already stored is read before the
+   answer):
    - **Go host:** `main.go`, `security.go`, `local.go`, `store.go`, `records.go`, `window.go`
      and their Go tests.
-   - **Web shell:** `index.html`, `styles.css`, `app.js`, `ui/dom.js`, `overlays.js`,
-     `store.js`, `palette.js`, `icons.js`. It has the left rail (Projects, Data, Viewer, QC,
-     Segmentation, Cell types, Spatial, Cohort, Reports, Jobs), each view saying what it will do
-     until its slice builds it. Also the inspector, the bottom drawer, the status bar, light and
-     dark themes, and color-vision-friendly colors.
-   - **Pure modules:** `web/lib/random.js`, `sha256.js`, `colormaps.js`, `colorvision.js` with
-     tests.
+     - The library holds projects, and is always on disk: projects refer to bundles by their
+       place on this computer, which a browser's storage cannot do, so the page needs its
+       program and says so without it.
+     - `local.go` recognizes Xenium bundles (a folder holding `experiment.xenium`, or that file),
+       Zarr stores, images, tables, polygons and projects, and treats a bundle as one item that
+       is never walked into, served or copied.
+     - Ports 8840–8859, clear of the siblings' (checked by a test).
+   - **Web shell:** `index.html`, `styles.css`, `app.js`, and `ui/` (`dom.js`, `overlays.js`,
+     `store.js`, `storage.js`, `palette.js`, `icons.js`, `sidebar.js`, `inspector.js`,
+     `drawer.js`, `mode-welcome.js`, `mode-planned.js`, `workers.js`).
+     - A view rail (Data, Viewer, QC, Segmentation | Cell types, Spatial, Cohort, Reports, Jobs),
+       each view saying what it will do until its slice builds it.
+     - The start page with recent projects, the project tree (with **On this computer**), the
+       inspector, the bottom drawer, the status bar, light and dark themes, and
+       color-vision-friendly colors.
+     - **Open a bundle** takes a path and hands it to the program, as a second launch does.
+   - **Pure modules:** `web/lib/random.js`, `sha256.js`, `dmath.js`, `memory.js`,
+     `colormaps.js`, `colorvision.js`, with their tests; `project.js` (the project envelope,
+     `situcraft-project` version 1) with its tests; `determinism.test.mjs`.
+   - **Validation:** `validation/run.mjs` with the `accessibility` suite.
    - **CI:** the single-run policy (`design.md`), with jobs Go (gofmt, vet, race tests,
-     six-platform cross-compile), web modules (`node --check`, `node --test`) and installer
-     syntax.
+     six-platform cross-compile), browser modules (`node --check`, `node --test`, validation) and
+     installers (`sh -n`, PowerShell's parser).
    - **Release workflow:** the tag, `main.go`, `web/app.js`, `index.html`'s cache keys,
      `CITATION.cff` and `CHANGELOG.md` must agree; it checks CI passed on the tagged tree; it
      embeds the commit with `-ldflags -X main.commit`.
    - **Repository files:** `install.sh` and `install.ps1`, `LICENSE`, `NOTICE`, `CITATION.cff`,
-     `README.md`, `docs/INSTALLING.md`, `.gitignore`, `.claude/launch.json` (port 8840).
+     `CHANGELOG.md`, `README.md`, `docs/INSTALLING.md`, `.gitattributes`, `.gitignore`;
+     `.claude/launch.json` (port 8840), kept locally as in the siblings.
    - `--version` prints one line, `situcraft X.Y.Z`, which the installers compare.
-   - Validation: Go tests (security headers, foreign hosts and cross-origin requests refused,
-     library round trips, every web module embedded, the commit reported); a release dry run
-     builds six binaries with `SHA256SUMS`.
+   - Validation:
+     - 17 Go tests: security headers; foreign hosts and cross-origin requests refused; library
+       round trips; content addressing; range requests; bundles and files found in folders in
+       natural order, a bundle never listed inside, served or copied; every web module
+       embedded; the commit reported; ports clear of the siblings'.
+     - 23 `node --test` tests.
+     - `accessibility` 14/14.
+   - The release dry run:
+     - It built six binaries (about 7 MB each) with `SHA256SUMS`.
+     - The macOS one printed `situcraft 0.1.0`, served the embedded app with its commit in
+       `/api/info`, sent the CSP and cross-origin-isolation headers, refused a foreign Host
+       (403), and found a bundle in a folder named on its command line.
+     - A second launch handed an image to the running program.
+   - In the window: opening a bundle by its path lists it under **On this computer**, with its
+     kind in the inspector. A project saved in the library reopens from the start page into the
+     Data view. No console errors; the page is cross-origin isolated.
 2. **Feasibility: every byte of a bundle (D6, X3, X4).** The riskiest slice, done before any
    viewer code. It is SituCraft's own code throughout:
    - **Codecs:** `internal/codec` (Zstandard per RFC 8878, the LZ4 block format, the Blosc

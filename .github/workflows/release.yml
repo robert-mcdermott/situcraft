@@ -1,0 +1,91 @@
+name: Release
+
+# Pushing a tag such as v0.1.0 builds the binaries and attaches them, with their checksums and the
+# CHANGELOG.md section of that version, to a draft release. Review the draft and publish it. The
+# tests are not run again: the tagged files must be ones a CI run passed on, every job of it run
+# (ci.yml), which is usually the merged branch's last push. Adapted from MaveScape 0.8.0
+# .github/workflows/release.yml.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  release:
+    name: Build and draft the release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Every commit, so that the commits CI ran on can be compared with the tag's files.
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          # Release binaries are built with a Go release that still gets security fixes; CI tests
+          # the minimum version in go.mod.
+          go-version: stable
+      - name: The tag matches the version
+        run: |
+          version="$(sed -n 's/^var version = "\(.*\)"$/\1/p' main.go)"
+          web="$(sed -n "s/^const VERSION = '\(.*\)';$/\1/p" web/app.js)"
+          cff="$(sed -n 's/^version: //p' CITATION.cff)"
+          if [ "v$version" != "$GITHUB_REF_NAME" ] || [ "$web" != "$version" ] || [ "$cff" != "$version" ]; then
+            echo "Tag $GITHUB_REF_NAME, main.go $version, web/app.js $web, CITATION.cff $cff: they must agree."
+            exit 1
+          fi
+          if ! grep -q "styles.css?v=$version\"" web/index.html || ! grep -q "app.js?v=$version\"" web/index.html; then
+            echo "web/index.html must load styles.css and app.js with ?v=$version (the browser's cache key)."
+            exit 1
+          fi
+          if ! grep -q "^## $version " CHANGELOG.md; then
+            echo "CHANGELOG.md has no section for $version."
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+      - name: CI passed on the tagged files
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # A successful CI run whose commit has exactly these files, and none of whose jobs was
+          # skipped (a merge's run that skipped them, its branch tested before, does not count).
+          tree="$(git rev-parse 'HEAD^{tree}')"
+          gh run list --workflow ci.yml --status success --limit 200 --json databaseId,headSha --jq '.[] | "\(.databaseId) \(.headSha)"' > runs.txt
+          while read -r id sha; do
+            [ "$(git rev-parse -q --verify "$sha^{tree}" 2> /dev/null)" = "$tree" ] || continue
+            if [ "$(gh run view "$id" --json jobs --jq '[.jobs[] | select(.conclusion != "success")] | length')" = 0 ]; then
+              echo "CI run $id passed on these files (commit $sha)."
+              exit 0
+            fi
+          done < runs.txt
+          echo "No CI run has passed on the tagged files (tree $tree): push them to a branch, let CI pass, then tag."
+          exit 1
+      - name: Build
+        env:
+          CGO_ENABLED: '0'
+        run: |
+          mkdir dist
+          # The commit is embedded so that methods paragraphs and exports name the exact source.
+          for target in darwin/arm64 darwin/amd64 linux/amd64 linux/arm64 windows/amd64 windows/arm64; do
+            os="${target%/*}"
+            arch="${target#*/}"
+            suffix=""
+            if [ "$os" = windows ]; then suffix=".exe"; fi
+            GOOS="$os" GOARCH="$arch" go build -trimpath -ldflags "-s -w -X main.commit=$GITHUB_SHA" -o "dist/situcraft-$os-$arch$suffix" .
+          done
+          cd dist && sha256sum situcraft-* > SHA256SUMS && cat SHA256SUMS
+      - name: Draft the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Relative links in the changelog point into the repository; on a release page they
+          # would resolve against the release URL, so they become links to the tagged files.
+          awk -v heading="## $VERSION " 'index($0, heading) == 1 { found = 1; next } /^## / && found { exit } found' CHANGELOG.md |
+            sed -E "s#\]\(([^):#]+)\)#](https://github.com/$GITHUB_REPOSITORY/blob/$GITHUB_REF_NAME/\1)#g" > notes.md
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" dist/* --draft --title "SituCraft $VERSION" --notes-file notes.md
+          fi

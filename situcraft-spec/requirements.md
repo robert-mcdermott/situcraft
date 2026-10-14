@@ -25,11 +25,11 @@ Status: **planned (wave N)** until built. Then **done**, **partial** (the gap no
 
 | # | Requirement | Status |
 | --- | --- | --- |
-| P1 | One self-contained program for macOS, Linux and Windows (x64 and ARM64); one-line install with checksum verification; no administrator rights, account, Python, R, containers or GPU | planned (wave 1) |
-| P2 | Opens as a desktop window (a Chromium-family browser in app mode with its own profile), else the default browser | planned (wave 1) |
-| P3 | Data never leave the computer; loopback only; no telemetry; the only outbound requests are example-data downloads the user starts | planned (wave 1) |
-| P4 | Apache-2.0; no third-party runtime dependencies | planned (wave 1) |
-| P5 | A second launch hands its paths to the running SituCraft | planned (wave 1) |
+| P1 | One self-contained program for macOS, Linux and Windows (x64 and ARM64); one-line install with checksum verification; no administrator rights, account, Python, R, containers or GPU | done (wave 1, slice 1: six binaries from the release workflow, installers adapted from MaveScape) |
+| P2 | Opens as a desktop window (a Chromium-family browser in app mode with its own profile), else the default browser | done (wave 1, slice 1) |
+| P3 | Data never leave the computer; loopback only; no telemetry; the only outbound requests are example-data downloads the user starts | done (wave 1, slice 1: no outbound requests; example downloads arrive in slice 7) |
+| P4 | Apache-2.0; no third-party runtime dependencies | done |
+| P5 | A second launch hands its paths to the running SituCraft | done (wave 1, slice 1) |
 | P6 | The 2-FOV development bundles open, index and segment on a laptop with 16 GB of memory; memory needs for larger data are estimated before work starts | planned (waves 1, 3) |
 
 ## Data and import
@@ -181,7 +181,7 @@ Status: **planned (wave N)** until built. Then **done**, **partial** (the gap no
 
 | # | Requirement | Status |
 | --- | --- | --- |
-| X1 | Loopback only, Host-header check, same-origin API, strict CSP, path allowlist, safe archive extraction | planned (wave 1) |
+| X1 | Loopback only, Host-header check, same-origin API, strict CSP, path allowlist, safe archive extraction | partial (wave 1, slice 1: loopback, Host check, same-origin API, CSP, only named paths served; archive extraction with slice 3) |
 | X2 | Keyboard workflows; color-vision-friendly palettes with non-color encodings; text equivalents for status; contrast audited | planned (wave 1, every wave) |
 | X3 | Every reader and decoder fuzzed; hostile files refused with a message, never a crash | planned (waves 1–2) |
 | X4 | Performance budgets checked automatically (tile decode, indexing, viewport queries, segmentation) | planned (wave 1, every wave) |

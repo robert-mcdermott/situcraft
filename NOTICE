@@ -1,0 +1,9 @@
+SituCraft
+Copyright 2026 Robert McDermott
+
+This product is licensed under the Apache License, Version 2.0 (LICENSE).
+
+web/lib/dmath.js contains the logarithm and exponential of fdlibm 5.3 (Copyright (C) 1993 by Sun
+Microsystems, Inc. All rights reserved.), written in JavaScript, under fdlibm's notice:
+"Permission to use, copy, modify, and distribute this software is freely granted, provided that
+this notice is preserved."
