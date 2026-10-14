@@ -79,13 +79,13 @@ export function mountSidebar(app) {
     for (const section of SECTIONS) {
       const items = section.items(project, app);
       if (!items.length && section.hideWhenEmpty) continue;
-      const list = h('div', { role: 'list' });
+      // A list of its items (each a button in a list item), or what the section will hold.
+      const list = items.length ? h('div', { role: 'list' }) : h('div');
       for (const item of items) {
         const id = item.id ?? item.url;
         const selected = ui.focus?.kind === section.kind && ui.focus?.id === id;
-        list.append(h(`button.dataset-row${selected ? '.selected' : ''}`, {
+        list.append(h('div', { role: 'listitem' }, h(`button.dataset-row${selected ? '.selected' : ''}`, {
           type: 'button',
-          role: 'listitem',
           'aria-current': selected ? 'true' : null,
           title: section.label(item),
           onclick: () => {
@@ -97,7 +97,7 @@ export function mountSidebar(app) {
             if (section.kind === 'filter') app.setMode('qc');
             if (section.kind === 'view') app.applyView(item);
           },
-        }, icon(section.itemIcon?.(item) ?? section.icon), h('span.label', section.label(item)), h('span.meta', section.meta(item, app))));
+        }, icon(section.itemIcon?.(item) ?? section.icon), h('span.label', section.label(item)), h('span.meta', section.meta(item, app)))));
       }
       if (!items.length) {
         list.append(h('p.tree-empty', section.empty));

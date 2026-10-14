@@ -15,7 +15,10 @@
 // - the examples and the record (wave 1, slice 7): the examples are listed and none is downloaded
 //   unasked; every step of each example's tour opens with its genes; the project saved by SituCraft
 //   0.1.0 (validation/projects) opens, finds its moved bundle again, its filters keep the cells they
-//   recorded, and its saved views reopen exactly, from the project and from a link.
+//   recorded, and its saved views reopen exactly, from the project and from a link;
+// - remote control (wave 2, slice 1): the window driven by a program through the program's
+//   remote-control hub: the state described, the tissue shown as asked, a view saved and reopened
+//   exactly, a filter, the methods, and a file written only with the token.
 //
 // It builds the program, starts it on the bundles with an empty cache and library, builds their
 // derived data, and drives the page through window.situcraft (the app, app.js) and window.situcraftViewer
@@ -83,7 +86,7 @@ export async function viewerSuite({ check, MissingData, verbose }) {
   const work = mkdtempSync(join(tmpdir(), 'situcraft-viewer-'));
   const bin = join(work, process.platform === 'win32' ? 'situcraft.exe' : 'situcraft');
   execFileSync('go', ['build', '-o', bin, '.'], { cwd: root, stdio: 'inherit' });
-  const { program, url: started } = startProgram(bin, ['--window', 'none', '--port', '8857', '--data-dir', join(work, 'library'), '--cache-dir', join(work, 'cache'), ...present.map((b) => join(dataRoot, b))]);
+  const { program, url: started } = startProgram(bin, ['--remote-control', '--window', 'none', '--port', '8857', '--data-dir', join(work, 'library'), '--cache-dir', join(work, 'cache'), ...present.map((b) => join(dataRoot, b))]);
   let chrome = null;
   try {
     const url = await started;
@@ -366,6 +369,39 @@ export async function viewerSuite({ check, MissingData, verbose }) {
         return sameView(window.situcraftViewer.captureView(view.name), view);
       })()`);
       check('viewer', '0.1.0 Lung project: a saved view\'s link reopens it exactly', String(linked), linked, 'true');
+    }
+    // --- Remote control (wave 2, slice 1): the same window driven by a program ---
+    {
+      const { token } = JSON.parse(readFileSync(join(work, 'library', 'remote.json'), 'utf8'));
+      const act = async (action, args = {}, withToken = true) => {
+        const response = await fetch(`${url}/api/remote/action`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(withToken ? { 'X-SituCraft-Token': token } : {}) }, body: JSON.stringify({ action, args, client: 'validation' }) });
+        const body = await response.json();
+        return { status: response.status, ...body };
+      };
+      await chrome.eval(`(async () => { for (let k = 0; k < 100 && !window.situcraft?.remote; k += 1) await new Promise((r) => setTimeout(r, 100)); return true; })()`);
+      const state = await act('get_state');
+      check('viewer', 'remote control: get_state describes the open project', state.ok ? state.message : state.message ?? state.error, state.ok && state.data.datasets.length >= 1 && state.data.views.length === 3, 'the 0.1.0 Lung project');
+      const lung = present.includes('xenium-lung-2fov');
+      if (lung) {
+        const shown = await act('show_tissue', { genes: ['EPCAM', 'PLVAP'], center: [750, 300], um_per_pixel: 0.4, cell: 'neddaiac-1', fill: 'transcripts' });
+        const page = await chrome.eval('(() => { const v = window.situcraftViewer; const c = v.captureView(""); return { genes: c.transcripts.genes, camera: c.camera, cell: v.detail()?.id, fill: c.cells.fill }; })()');
+        const agrees = shown.ok && page.genes.join() === 'EPCAM,PLVAP' && page.camera.cx === 750 && page.camera.cy === 300 && page.camera.umPerCss === 0.4 && page.cell === 'neddaiac-1' && page.fill === 'transcripts';
+        check('viewer', 'remote control: show_tissue shows what it was asked, as the page has it', shown.ok ? JSON.stringify(page) : shown.message, agrees, 'the genes, place, zoom, cell and fill asked for');
+        const saved = await act('save_view', { name: 'By remote control' });
+        await act('show_tissue', { whole: true, genes: [] });
+        const reopened = await act('open_view', { view: 'By remote control' });
+        check('viewer', 'remote control: a view saved by a program reopens exactly', reopened.message ?? reopened.error, saved.ok && reopened.ok && reopened.data.exact === true, 'exactly as saved');
+        const filter = await act('save_filter', { name: 'By remote control', conditions: [{ attribute: 'transcripts', min: 20 }, { attribute: 'area', min: 15, max: 400 }] });
+        const recorded = JSON.parse(readFileSync(join(root, 'validation', 'projects', '0.1.0-lung.situcraft.json'), 'utf8')).artifacts.find((a) => a.version === 2).result;
+        check('viewer', 'remote control: a filter saved by a program keeps the cells the 0.1.0 project\'s identical filter recorded', filter.ok ? `${filter.data.kept} kept, SHA-256 ${filter.data.sha256 === recorded.sha256 ? 'the same' : 'different'}` : filter.message, filter.ok && filter.data.kept === recorded.kept && filter.data.sha256 === recorded.sha256, 'the same cells and checksum');
+        const methods = await act('methods', { dataset: 'xenium-lung-2fov' });
+        check('viewer', 'remote control: the methods paragraph, citing the data and SituCraft', methods.ok ? `${methods.data.references.length} references` : methods.message, methods.ok && /SituCraft 0\.1\.0/.test(methods.data.text) && methods.data.references.some((r) => r.includes('10x Genomics')), 'the version and the data cited');
+        const target = join(work, 'project.json');
+        const refused = await act('export', { what: 'project', path: target }, false);
+        const exported = await act('export', { what: 'project', path: target });
+        const written = existsSync(target) ? JSON.parse(readFileSync(target, 'utf8')) : null;
+        check('viewer', 'remote control: export writes the project only with the token', `${refused.status} without, ${exported.ok ? 'written' : exported.message} with`, refused.status === 401 && exported.ok && written?.views?.length === 4 && written.artifacts.length === 3, '401, then the project written');
+      }
     }
     check('viewer', 'no uncaught errors in the page', errors.length ? errors.slice(0, 3).join(' | ') : 'none', errors.length === 0, 'none');
   } finally {

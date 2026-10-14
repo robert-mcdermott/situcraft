@@ -1,5 +1,10 @@
 # SituCraft
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/viewer-genes-dark.webp">
+  <img alt="SituCraft's Viewer: transcripts of four genes over the DAPI stain and cell outlines of 10x Genomics' Xenium human Lung example, one cell's transcripts by gene in the inspector" src="docs/images/viewer-genes-light.webp">
+</picture>
+
 SituCraft is an open-source, local-first workbench for imaging-based spatial transcriptomics,
 starting with 10x Genomics Xenium output bundles. It makes cell segmentation, pathology review and
 tissue-level spatial analysis one reproducible workflow:
@@ -26,6 +31,28 @@ link; a methods paragraph is written from what the project records; projects tra
 with their bundles. Two public example datasets download in a click, each with a guided tour.
 Segmentation comes next (0.2.0 compares segmentations, 0.3.0 builds one in): see the
 [roadmap](situcraft-spec/roadmap.md) and the [changelog](CHANGELOG.md).
+
+## A look around
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/qc-dark.webp">
+  <img alt="SituCraft's QC view of the Lung example: the run's metrics, 20 recomputed from the data and reproduced, cells colored by their gene transcripts, and their distribution" src="docs/images/qc-light.webp">
+</picture>
+
+The QC view: every metric the run recorded, explained, with SituCraft's own value beside it where
+it can be recomputed from the data; quality mapped over the tissue; plots linked to the tissue.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/viewer-methods-dark.webp">
+  <img alt="SituCraft's Viewer: cells of the Breast example colored by the method that found them, from the boundary or interior stains or by expanding a nucleus, with a legend counting each" src="docs/images/viewer-methods-light.webp">
+</picture>
+
+The Breast example's cells, colored by how the instrument found each one.
+
+More: [checking a bundle](docs/images/data-light.webp), [the tissue's stains](docs/images/viewer-light.webp),
+[transcripts outside cells](docs/images/qc-outside-light.webp), [filters as versions](docs/images/qc-filter-light.webp),
+[saved views](docs/images/saved-views-light.webp), [the methods paragraph](docs/images/methods-light.webp),
+[a guided tour](docs/images/tour-light.webp).
 
 ## Install
 
@@ -71,6 +98,7 @@ QC, saved views and the methods paragraph.
 | `--cache-dir` | `<user cache dir>/situcraft` | Where derived data go (image tiles, transcript indexes, tiled outlines, a zipped bundle's unpacked members); can be deleted at any time |
 | `--cache-limit` | `10GB` | The size the cache is kept within, removing what was used least recently (`500MB`, `20GB`; `0` for no limit) |
 | `--examples-dir` | `<data dir>/examples` | Where example datasets are downloaded, when you ask |
+| `--remote-control` | off | Let programs on this computer drive the window ([remote control](docs/REMOTE-CONTROL.md)) |
 | `--host` | 127.0.0.1 | Interface to bind |
 | `--dev` | off | Serve `web/` from the working directory (development) |
 | `--version` | | Print `situcraft X.Y.Z` and exit |
@@ -79,6 +107,7 @@ QC, saved views and the methods paragraph.
 
 - [Getting started](docs/GETTING-STARTED.md): from the examples to a saved, reproducible view.
 - [Formats](docs/FORMATS.md): what SituCraft reads and writes.
+- [Remote control](docs/REMOTE-CONTROL.md): driving the window from scripts and notebooks.
 - [Installing](docs/INSTALLING.md): release files, installers, upgrading, uninstalling.
 - [Requirements](situcraft-spec/requirements.md): what SituCraft must do.
 - [Design](situcraft-spec/design.md): how it is built and why.
@@ -95,6 +124,7 @@ go test -race ./...                      # the Go host
 node --test "web/lib/**/*.test.mjs"      # the browser modules
 node validation/run.mjs                  # checks against references (validation/README.md)
 node validation/run.mjs viewer           # the tissue viewer in headless Chrome against its data
+node docs/capture/capture.mjs --audit    # the screenshots, through remote control, checked by axe-core
 go run . --dev --window none             # serve web/ from disk at http://127.0.0.1:8840
 ```
 
@@ -108,7 +138,7 @@ The example datasets are 10x Genomics' Xenium human Lung and Breast 2-FOV output
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) from
 [10x Genomics' example data](https://www.10xgenomics.com/support/software/xenium-onboard-analysis/latest/resources/xenium-example-data).
 SituCraft downloads them from 10x Genomics only when asked; they are not part of SituCraft or this
-repository.
+repository. The screenshots in this documentation show these data.
 
 ## Research use
 

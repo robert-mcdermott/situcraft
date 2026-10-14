@@ -22,6 +22,11 @@ The start page offers your recent projects, the example datasets and **Open a bu
 
 ## 2. Try an example
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/start-dark.webp">
+  <img alt="SituCraft's start page: recent projects, and the two example datasets with their size, source and license, each with a Download button" src="images/start-light.webp">
+</picture>
+
 Under **Examples**, two public Xenium bundles from 10x Genomics (CC BY 4.0) are ready to download:
 
 | Example | Download | On disk | What it shows |
@@ -34,6 +39,11 @@ checksums, keeps only the bundle and deletes the archive. Nothing is downloaded 
 When it is ready, **Take the tour**: seven steps through the Data view, the Viewer and QC. Use
 **Next** and **Back** on the card at the foot of the window; you can explore at any step, and the
 tour continues from there.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/tour-dark.webp">
+  <img alt="The Lung example's guided tour at its third step, a card over the Viewer saying what the four genes mark" src="images/tour-light.webp">
+</picture>
 
 Each example is used under its license; its source and license are linked on its card, and the
 methods paragraph (section 7) cites it.
@@ -53,6 +63,11 @@ SituCraft reads a bundle where it is, and never changes, moves or copies it. Run
 <paths>` while SituCraft is open hands them to the open window.
 
 ## 4. Check it: the Data view
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/data-dark.webp">
+  <img alt="The Data view of the Lung example: the run's facts, its derived data built, and the check's three notes" src="images/data-light.webp">
+</picture>
 
 The Data view says what the bundle is (instrument software and version, panel, tissue, cells,
 transcripts, channels) and how far SituCraft supports it: Xenium Onboard Analysis 2.x fully,
@@ -76,6 +91,11 @@ needed. **View the tissue** opens the Viewer.
 
 ## 5. See the tissue: the Viewer
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/viewer-genes-dark.webp">
+  <img alt="The Viewer: transcripts of EPCAM, COL5A2, PLVAP and CD68 over the gray DAPI stain and the cell outlines, a selected cell's transcripts by gene in the inspector" src="images/viewer-genes-light.webp">
+</picture>
+
 - **Move:** drag to pan; scroll, pinch, **+** and **−**, or double-click to zoom; **0** shows the
   whole tissue; the minimap (top right) jumps to a place. The scale bar and position are in µm.
 - **Image:** each morphology stain with its color, brightness window (**Low**, **High**, or
@@ -95,6 +115,11 @@ link** gives a link that reopens it, **Rename** and **Remove** change it.
 
 ## 6. Check quality: the QC view
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/qc-dark.webp">
+  <img alt="The QC view: the run's metrics with SituCraft's recomputed values, cells colored by their gene transcripts, and a histogram" src="images/qc-light.webp">
+</picture>
+
 - **Run metrics:** every metric the run recorded, explained, with SituCraft's own value beside the
   recorded one where it can be recomputed (**Reproduced**), or why not.
 - **Maps over the tissue:** cells colored by an attribute (gene transcripts, genes detected,
@@ -108,9 +133,19 @@ link** gives a link that reopens it, **Rename** and **Remove** change it.
   version in the project, with the count and a checksum of the cells it keeps; it is checked to
   keep the same cells whenever the project reopens (**Reproduced**). Filters never change the data.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/qc-filter-dark.webp">
+  <img alt="The QC view's Filters tab: a filter's two conditions with their effects, and two saved versions, each reproduced" src="images/qc-filter-light.webp">
+</picture>
+
 **Save view** in the QC view keeps the map, the filter in use and the place.
 
 ## 7. Keep and share the record
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/saved-views-dark.webp">
+  <img alt="Three saved views in the project tree, one open in the Viewer, its details and Copy link in the inspector" src="images/saved-views-light.webp">
+</picture>
 
 - **Projects save themselves** to the library as you work; the start page and the project menu
   (the project's name, top left) reopen them. **Undo** and **Redo** (⌘Z, ⇧⌘Z) cover every change,

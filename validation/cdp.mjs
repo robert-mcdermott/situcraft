@@ -1,9 +1,11 @@
-// A minimal Chrome DevTools Protocol driver for the validation harness (validation/viewer.mjs):
-// starts headless Chrome (or Chromium, Edge, Brave; set CHROME to choose) and evaluates scripts in
-// a page. No dependencies beyond Node 22. Adapted from MaveScape 0.8.0 docs/capture/cdp.mjs.
+// A minimal Chrome DevTools Protocol driver for the validation harness (validation/viewer.mjs) and
+// the documentation's screenshots (docs/capture/capture.mjs): starts headless Chrome (or Chromium,
+// Edge, Brave; set CHROME to choose), evaluates scripts in a page, emulates the color scheme and
+// captures the page. No dependencies beyond Node 22. Adapted from MaveScape 0.8.0
+// docs/capture/cdp.mjs.
 
 import { spawn } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -89,6 +91,14 @@ export async function launch({ width = 1600, height = 1000, scale = 1, args = []
       const result = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
       if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description ?? result.exceptionDetails.text);
       return result.result.value;
+    },
+    async theme(dark) {
+      await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: dark ? 'dark' : 'light' }] });
+    },
+    // format: 'jpeg', 'webp' or 'png'; quality for the first two.
+    async capture(file, { format = 'jpeg', quality = 86 } = {}) {
+      const { data } = await send('Page.captureScreenshot', { format, ...(format === 'png' ? {} : { quality }), captureBeyondViewport: false });
+      writeFileSync(file, Buffer.from(data, 'base64'));
     },
     async close() {
       const exited = new Promise((resolve) => chrome.once('exit', resolve));

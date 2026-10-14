@@ -818,6 +818,15 @@ func TestBundleViewEndpoints(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&cell); err != nil || cell.ID == "" || len(cell.Genes) > 5 || cell.Counted.Q20Genes == 0 {
 		t.Errorf("cell 42: %+v %v", cell, err)
 	}
+	// The same cell by its ID.
+	var byID struct {
+		Row int
+		ID  string
+	}
+	rec = get("/api/local/0/cells/id:" + cell.ID + "?top=1")
+	if err := json.NewDecoder(rec.Body).Decode(&byID); err != nil || byID.Row != 42 || byID.ID != cell.ID {
+		t.Errorf("cell %s by its ID: %d %+v %v", cell.ID, rec.Code, byID, err)
+	}
 	// A region's points.
 	rec = get("/api/local/0/points?x0=100&y0=100&x1=300&y1=250&minq=20")
 	if rec.Code != http.StatusOK || binary.LittleEndian.Uint32(rec.Body.Bytes()[4:]) == 0 {
@@ -831,6 +840,8 @@ func TestBundleViewEndpoints(t *testing.T) {
 		fmt.Sprintf("/api/cache/%s/points/0/0?genes=a", points):     http.StatusBadRequest,
 		fmt.Sprintf("/api/cache/%s/points/0/0?genes=99999", points): http.StatusNotFound,
 		"/api/local/0/cells/99999":                                  http.StatusNotFound,
+		"/api/local/0/cells/id:no-such-cell":                        http.StatusNotFound,
+		"/api/local/0/cells/x":                                      http.StatusBadRequest,
 		"/api/local/0/points?x0=1":                                  http.StatusBadRequest,
 	} {
 		if rec := get(target); rec.Code != code {

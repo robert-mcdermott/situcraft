@@ -737,7 +737,9 @@ table.data tr.selected td { background: var(--active); }
 .viewer-channel .name { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 12.5px; line-height: 1.25; }
 .viewer-channel .name b, .viewer-channel .name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .viewer-channel .name span { font-size: 11px; }
-.viewer-channel.off .name, .viewer-channel.off .ranges { opacity: 0.55; }
+/* A hidden stain: its name in the muted color (text keeps its contrast), its controls faded. */
+.viewer-channel.off .name b { color: var(--text-3); }
+.viewer-channel.off .ranges input { opacity: 0.55; }
 .viewer-channel .ranges { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; margin: 6px 0 0 32px; font-size: 11px; color: var(--text-3); align-items: center; }
 .viewer-channel .ranges label { display: contents; }
 .viewer-channel .ranges input { width: 100%; margin: 0; }

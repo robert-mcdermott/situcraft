@@ -231,7 +231,8 @@ if you no longer need those projects; deleted projects are first moved to its
 `trash` folder. Your Xenium bundles are never copied into the library, moved or
 changed: projects refer to them where they are. Example datasets you downloaded
 are in its `examples` folder (or `--examples-dir`); **Remove** on the start page
-deletes one, and it can be downloaded again.
+deletes one, and it can be downloaded again. With `--remote-control`, SituCraft also
+keeps `remote.json` there while it runs ([remote control](REMOTE-CONTROL.md)).
 
 SituCraft also keeps a cache of what it derives from your bundles (image tiles,
 transcript indexes, tiled cell outlines) in `~/Library/Caches/situcraft` on

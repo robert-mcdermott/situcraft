@@ -86,25 +86,33 @@ export function createExamples(app) {
     }
   }
 
-  // Tours an example: in this project if it has the example's dataset (or is empty), else in a
-  // new project named after it.
-  async function tour(name) {
+  // The example's dataset in this project if it has it (or is empty), else in a new project named
+  // after it: { example, item, dataset }.
+  async function inProject(name) {
     const example = byName(name);
-    const steps = tourFor(name);
-    if (!example || !steps) return;
-    try {
-      const it = await item(name);
-      let dataset = app.bundles.datasetFor(it);
-      if (!dataset) {
-        if (app.store.project.datasets.length) {
-          await app.newProject();
-          app.store.commit({ ...app.store.project, name: `${example.title.replace(/\s*\(.*\)$/, '')} example` }, 'Name project');
-        }
-        dataset = await app.bundles.add(it);
+    if (!example) throw new Error(`No example "${name}".`);
+    const it = await item(name);
+    let dataset = app.bundles.datasetFor(it);
+    if (!dataset) {
+      if (app.store.project.datasets.length) {
+        await app.newProject();
+        app.store.commit({ ...app.store.project, name: `${example.title.replace(/\s*\(.*\)$/, '')} example` }, 'Name project');
       }
-      startTour(app, { tour: steps, dataset: dataset.id });
-    } catch (e) {
-      toast(`The tour could not start: ${e.message}`, { kind: 'error' });
+      dataset = await app.bundles.add(it);
+    }
+    return { example, item: it, dataset };
+  }
+
+  // Tours an example (lib/tours.js) in the project inProject chooses; answers the tour's card.
+  async function tour(name) {
+    const steps = tourFor(name);
+    if (!byName(name) || !steps) return null;
+    try {
+      const { dataset } = await inProject(name);
+      return startTour(app, { tour: steps, dataset: dataset.id });
+    } catch (error) {
+      toast(`The tour could not start: ${error.message}`, { kind: 'error' });
+      return null;
     }
   }
 
@@ -129,6 +137,7 @@ export function createExamples(app) {
     remove,
     open,
     tour,
+    inProject,
     job: (name) => app.jobs.forKey(exampleJobKey(name)),
     // The example a project's dataset is, if it is one (once the list is known).
     forDataset: (dataset) => exampleFor(dataset, list),

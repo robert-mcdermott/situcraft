@@ -184,9 +184,19 @@ func (a *app) viewCell(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	row, err := strconv.Atoi(r.PathValue("row"))
+	// A cell by its row, or by its ID as "id:<cell_id>".
+	name := r.PathValue("row")
+	row, err := strconv.Atoi(name)
+	if id, byID := strings.CutPrefix(name, "id:"); byID {
+		found := false
+		if row, found = d.CellRow(id); !found {
+			writeError(w, http.StatusNotFound, "No cell "+id+" in this dataset.")
+			return
+		}
+		err = nil
+	}
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "A cell is named by its row.")
+		writeError(w, http.StatusBadRequest, "A cell is named by its row, or by its ID as id:<cell_id>.")
 		return
 	}
 	top := 12

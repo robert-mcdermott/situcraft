@@ -1,5 +1,5 @@
 {
-  "about": "Public data the validation suites use, downloaded and checked by node validation/fetch.mjs into validation/cache/<data set>/ (or $SITUCRAFT_DATA/<data set>/), and SituCraft's example datasets, which the program downloads the same way when asked (it embeds this list, not the data). Nothing here is stored in the repository or the SituCraft program. An archive is checked by its MD5 (as its publisher gives it) and SHA-256, extracted, every extracted file checked against the size and SHA-256 recorded here, and the archive deleted, so a bundle takes only its extracted size on disk.",
+  "about": "Public data the validation suites use, and SituCraft's example datasets: downloaded and checked by node validation/fetch.mjs into validation/cache/<name>/ (or $SITUCRAFT_DATA/<name>/); the program embeds this list (not the data) and downloads an example, with the same checks, when a user asks. tools are what the checks use, never part of SituCraft (axe-core, for the documentation's accessibility audit). Nothing here is stored in the repository or the SituCraft program. An archive is checked by its MD5 (as its publisher gives it) and SHA-256, extracted, every extracted file checked against the size and SHA-256 recorded here, and the archive deleted, so a bundle takes only its extracted size on disk.",
   "datasets": {
     "xenium-lung-2fov": {
       "title": "Xenium V1 human Lung, 2 FOVs (XOA 2.0, nucleus expansion 5 µm)",
@@ -269,6 +269,22 @@
           "path": "transcripts.zarr.zip",
           "size": 24811019,
           "sha256": "595697ccd55d9a0e45ec6cc9badd6fd32f70a680ec85e0c837bf124739e08b3c"
+        }
+      ]
+    }
+  },
+  "tools": {
+    "axe-core": {
+      "title": "axe-core 4.13.0 (Deque Systems)",
+      "description": "The accessibility rule engine: every documentation scene audited with the WCAG 2.1 A and AA rules by node docs/capture/capture.mjs --audit.",
+      "source": "https://github.com/dequelabs/axe-core (npm package axe-core, served by jsDelivr)",
+      "license": "MPL-2.0. SituCraft downloads it for testing and does not ship or redistribute it.",
+      "base": "https://cdn.jsdelivr.net/npm/axe-core@4.13.0/",
+      "files": [
+        {
+          "path": "axe.min.js",
+          "size": 580491,
+          "sha256": "c24f097bd2f451d4f933e8bc7d8d539f8672a2ebcb5cc9f9f3eec8ca9470a0c1"
         }
       ]
     }

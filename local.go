@@ -237,6 +237,34 @@ func walkFolder(dir string) ([]localFile, string) {
 	return files, problem
 }
 
+// within answers the known items the paths name: each path's own item (a bundle by its folder or
+// its experiment.xenium), or the items found inside a folder it names.
+func (l *localFiles) within(paths []string) []localFile {
+	var roots []string
+	for _, raw := range paths {
+		path, err := absPath(raw)
+		if err != nil {
+			continue
+		}
+		if strings.EqualFold(filepath.Base(path), bundleManifest) {
+			path = filepath.Dir(path)
+		}
+		roots = append(roots, filepath.Clean(path))
+	}
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	var out []localFile
+	for _, file := range l.files {
+		for _, root := range roots {
+			if file.path == root || strings.HasPrefix(file.path, root+string(filepath.Separator)) {
+				out = append(out, file)
+				break
+			}
+		}
+	}
+	return out
+}
+
 func (l *localFiles) list() []localFile {
 	l.mu.RLock()
 	defer l.mu.RUnlock()

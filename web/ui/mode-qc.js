@@ -558,6 +558,15 @@ export function mountQC(app, container) {
     // For the validation harness (validation/viewer.mjs) and the console.
     window.situcraftQC = {
       renderer, desc, cells, report,
+      dataset: t.dataset.id,
+      map: () => session.map,
+      maps: () => qcMaps(desc).map((m) => ({ id: m.id, label: m.label })),
+      // The filter in use (an artifact's id), or null for none.
+      filter: () => session.active,
+      setFilter: (id) => {
+        session.active = id;
+        refreshKeep();
+      },
       metricRows: () => metricRows(report.summary.runMetrics, report.summary.metrics),
       setMap: (id) => {
         session.map = id;

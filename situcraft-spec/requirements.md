@@ -170,7 +170,7 @@ Status: **planned (wave N)** until built. Then **done**, **partial** (the gap no
 
 | # | Requirement | Status |
 | --- | --- | --- |
-| A1 | Remote control from local programs (the hub the documentation's screenshots and later agents use) | planned (wave 2) |
+| A1 | Remote control from local programs (the hub the documentation's screenshots and later agents use) | done (wave 2, slice 1: `--remote-control`, 20 actions performed in the window, `remote.json`, a token for paths and files; the screenshots and the viewer suite drive the window through it) |
 | A2 | An MCP server: read-only tools by default; compute tools only when enabled | planned (wave 9) |
 | A3 | Cell and transcript queries compiled from a typed filter tree, never arbitrary SQL or shell | planned (wave 9) |
 | A4 | Every agent call logged with parameters, affected artifacts and returned result IDs | planned (wave 9) |

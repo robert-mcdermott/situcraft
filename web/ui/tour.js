@@ -48,7 +48,7 @@ export function startTour(app, { tour, dataset }) {
     if (active === controller) active = null;
   }
 
-  const controller = { close, go, step: () => index, card };
+  const controller = { close, go, step: () => index, card, tour, dataset, open: () => card.isConnected };
   active = controller;
   app.tour = controller;
   go(0);

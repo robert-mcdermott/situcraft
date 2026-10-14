@@ -32,7 +32,8 @@ see `conventions.md`. For the methods, formats and datasets behind these choices
 │   security.go    loopback only, Host-header check, same-origin API, CSP                               │
 │   window.go      desktop window (Chrome/Edge/Brave --app with its own profile) or default browser     │
 │   store.go       library: projects/*.json, content-addressed files, trash                             │
-│   remote.go, actions.go, connection.go, mcp.go, run.go, verify.go   automation (later waves)          │
+│   remote.go, actions.go, connection.go, output.go   remote control (wave 2)                           │
+│   mcp.go, run.go, verify.go                         agents and headless runs (wave 9)                 │
 │ data plane (new)                                                                                      │
 │   internal/codec     zstd (RFC 8878), LZ4 block, Blosc, Snappy; deflate/gzip from the standard library │
 │   internal/parquet   Parquet reader (flat schemas) and writer                                         │
@@ -207,6 +208,31 @@ Long computations (indexing, segmentation, comparison, registration, permutation
   checked often.
 - The first version (wave 1, slice 4) runs jobs in memory, one at a time and one per key (a
   dataset's build); persisting them, orphaned jobs and the warning on closing come in wave 2.
+
+### Remote control
+
+With `--remote-control`, programs on this computer drive the open window (`remote.go`, adapted from
+MaveScape 0.8). An action POSTed to `/api/remote/action` goes to the page over server-sent events;
+the page performs it (`web/ui/remote.js`) and posts its answer back, which the program returns to
+the caller. The window is where the work happens, as when the user does it: an action shows what
+it does, its changes go into the project's history and can be undone, and the page's own code
+(saved views' path, the QC view's filters, the methods) is what runs, so a script and a person get
+the same result.
+
+- **One at a time,** to the window opened last from this run of the program; a window of an
+  earlier run is refused and asked to reload.
+- **The actions** are listed once in `actions.go` with JSON schemas for their arguments (served at
+  `/api/remote/tools`, under an API version), and performed by the page's table of the same names;
+  a test keeps the two, and `docs/REMOTE-CONTROL.md`, in step. Wave 9's MCP server offers the same
+  list to agents.
+- **Paths and files:** `open_paths` and `export` need the token in `remote.json` (mode 0600, in
+  the data folder, removed on stop). The program checks a file's path before asking the page, and
+  the page uploads the bytes to a one-use slot that writes them through a temporary file.
+- **Tissue views** are applied as saved views are (a view made from the arguments, not kept), so
+  `show_tissue` and `open_view` share the Viewer's one path; the answer is the view as the page
+  then captures it.
+- **The documentation's screenshots** (`docs/capture/capture.mjs`) are scenes of actions on the
+  development bundles, captured in headless Chrome in both themes and audited by axe-core.
 
 ### The host, from the siblings
 

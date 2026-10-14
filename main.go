@@ -59,6 +59,7 @@ type config struct {
 	cacheDir    string
 	cacheLimit  int64
 	examplesDir string
+	remote      bool
 	dev         bool
 	showVersion bool
 	files       []string
@@ -81,6 +82,8 @@ type app struct {
 	views *views
 	// examples are the example datasets, downloaded on request.
 	examples *examples.Library
+	// control is the remote-control hub (remote.go), with --remote-control.
+	control *remoteHub
 }
 
 func init() {
@@ -107,8 +110,9 @@ func main() {
 		return
 	}
 	// A SituCraft already running on the preferred port gets the paths and a new window, so that
-	// one program owns the library, the cache and any running jobs.
-	if existing := findRunning(cfg.host, cfg.port); existing != "" {
+	// one program owns the library, the cache and any running jobs. One started for remote control
+	// starts on its own port, so that scripts reach a page they can drive.
+	if existing := findRunning(cfg.host, cfg.port); existing != "" && !cfg.remote {
 		handed := false
 		if len(cfg.files) > 0 {
 			if err := forwardFiles(existing, cfg.files); err != nil {
@@ -187,9 +191,14 @@ type runningServer struct {
 	url          string
 	cancel       context.CancelFunc
 	windowClosed <-chan struct{}
+	// connection: the remote.json scripts read (connection.go), removed on stop.
+	connection string
 }
 
 func (s *runningServer) stop(timeout time.Duration) {
+	if s.connection != "" {
+		removeConnectionFile(s.connection, s.app.control.token)
+	}
 	// A running job stops where it is (what it finished is kept and resumed next time); a job
 	// slow to notice is not waited for beyond the timeout.
 	closed := make(chan struct{})
@@ -230,14 +239,21 @@ func start(cfg config, out io.Writer) (*runningServer, error) {
 		return nil, fmt.Errorf("failed to listen: %w", err)
 	}
 	url := "http://" + net.JoinHostPort(cfg.host, strconv.Itoa(actualPort))
-	a.printBanner(out, url)
+	connection := ""
+	if a.control != nil {
+		if connection, err = writeConnectionFile(a.store.dir, url, a.control.token); err != nil {
+			log.Printf("could not write the connection file for scripts: %v", err)
+			connection = ""
+		}
+	}
+	a.printBanner(out, url, connection)
 	base, cancel := context.WithCancel(context.Background())
 	server := &http.Server{
 		Handler:           protect(handler, cfg.host, actualPort),
 		ReadHeaderTimeout: 10 * time.Second,
 		BaseContext:       func(net.Listener) context.Context { return base },
 	}
-	running := &runningServer{app: a, server: server, listener: listener, url: url, cancel: cancel}
+	running := &runningServer{app: a, server: server, listener: listener, url: url, cancel: cancel, connection: connection}
 	if cfg.window != "none" {
 		closed := make(chan struct{})
 		running.windowClosed = closed
@@ -279,6 +295,7 @@ func parseConfig(args []string) (config, error) {
 	flags.BoolVar(&cfg.keepRunning, "keep-running", false, "keep serving after the app window is closed")
 	flags.StringVar(&cfg.dataDir, "data-dir", "", "folder for the project library (default: <user config dir>/SituCraft)")
 	flags.StringVar(&cfg.cacheDir, "cache-dir", "", "folder for derived data, which can be deleted and made again (default: <user cache dir>/situcraft)")
+	flags.BoolVar(&cfg.remote, "remote-control", false, "accept actions from programs on this computer at /api/remote/action (scripts, the documentation's screenshots)")
 	flags.StringVar(&cfg.examplesDir, "examples-dir", "", "folder the example datasets are downloaded into, when asked (default: <data dir>/examples)")
 	cacheLimit := flags.String("cache-limit", "10GB", "size the cache is kept within, removing what was used least recently (for example 500MB or 20GB; 0 for no limit)")
 	flags.BoolVar(&cfg.dev, "dev", false, "serve web/ from the working directory instead of the embedded copy")
@@ -352,6 +369,14 @@ func newApp(cfg config) (*app, error) {
 		examplesDir = abs
 	}
 	a.examples = newExamples(examplesDir)
+	if cfg.remote {
+		a.control = newRemoteHub()
+		a.control.session = a.session
+		a.control.open = func(paths []string) ([]localFile, []string) {
+			problems := a.files.add(paths)
+			return a.files.within(paths), problems
+		}
+	}
 	if a.cacheDir != "" {
 		c, err := cache.Open(a.cacheDir, cfg.cacheLimit)
 		if err != nil {
@@ -397,7 +422,7 @@ func newApp(cfg config) (*app, error) {
 	return a, nil
 }
 
-func (a *app) printBanner(out io.Writer, url string) {
+func (a *app) printBanner(out io.Writer, url, connection string) {
 	fmt.Fprintf(out, "SituCraft %s is running at %s\n", version, url)
 	if a.dev {
 		fmt.Fprintf(out, "Dev mode: serving web/ from disk in %s (no-store)\n", a.assetDir)
@@ -413,6 +438,13 @@ func (a *app) printBanner(out io.Writer, url string) {
 	}
 	if n := len(a.files.list()); n > 0 {
 		fmt.Fprintf(out, "Opening %d item(s) named on the command line\n", n)
+	}
+	if a.control != nil {
+		fmt.Fprintf(out, "Remote control: POST {\"action\": ..., \"args\": {...}} to %s/api/remote/action (the actions: %s/api/remote/tools)\n", url, url)
+		fmt.Fprintf(out, "Opening paths and writing files (open_paths, export) need the header %s: %s\n", remoteTokenHeader, a.control.token)
+		if connection != "" {
+			fmt.Fprintln(out, connectionNotice(connection))
+		}
 	}
 	fmt.Fprintln(out, "Press Ctrl+C to stop.")
 }
@@ -444,6 +476,10 @@ type info struct {
 	CacheLimit int64       `json:"cacheLimit"`
 	Files      []localFile `json:"files"`
 	Platform   string      `json:"platform"`
+	// API is the version of the remote-control actions (actions.go); RemoteControl: the page
+	// connects to the hub (web/ui/remote.js).
+	API           int  `json:"api"`
+	RemoteControl bool `json:"remoteControl"`
 }
 
 func (a *app) registerAPI(mux *http.ServeMux) {
@@ -452,7 +488,7 @@ func (a *app) registerAPI(mux *http.ServeMux) {
 		if a.cache != nil {
 			limit = a.cache.Limit()
 		}
-		writeJSON(w, info{Name: "SituCraft", Session: a.session, Version: version, Commit: buildCommit(), Mode: "desktop", DataDir: a.store.dir, CacheDir: a.cacheDir, CacheLimit: limit, Files: a.files.list(), Platform: platformName()})
+		writeJSON(w, info{Name: "SituCraft", Session: a.session, Version: version, Commit: buildCommit(), Mode: "desktop", DataDir: a.store.dir, CacheDir: a.cacheDir, CacheLimit: limit, Files: a.files.list(), Platform: platformName(), API: apiVersion, RemoteControl: a.control != nil})
 	})
 	mux.HandleFunc("GET /api/local/{index}", a.files.serve)
 	mux.HandleFunc("POST /api/open", a.openPaths)
@@ -463,6 +499,9 @@ func (a *app) registerAPI(mux *http.ServeMux) {
 	a.registerView(mux)
 	a.registerProject(mux)
 	a.registerExamples(mux)
+	if a.control != nil {
+		a.control.register(mux)
+	}
 	mux.HandleFunc("POST /api/library/local/{index}", func(w http.ResponseWriter, r *http.Request) {
 		file, ok := a.files.get(r.PathValue("index"))
 		if !ok {

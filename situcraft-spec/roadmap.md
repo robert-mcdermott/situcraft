@@ -613,9 +613,77 @@ other tools can be imported.
 
 ### Wave 2
 
-1. **Remote control and screenshots (A1).** The remote-control hub, actions and `remote.json`
-   from MaveScape. The documentation's capture scenes drive the page through it in headless
-   Chrome, as in the siblings.
+1. **Remote control and screenshots (A1): done.** Programs on this computer drive the open
+   window, which performs each action where the user sees it.
+   - **The hub** (`remote.go`, `connection.go`, `output.go`, adapted from MaveScape 0.8), with
+     `--remote-control`:
+     - actions POSTed to `/api/remote/action` reach the page over server-sent events, one at a
+       time, and the page's answer returns;
+     - only this computer, no other site's page, and only the window opened from this run;
+     - opening paths and writing files need the token printed at startup and kept in
+       `remote.json` (mode 0600, removed on stop); a file is written through a one-use upload
+       slot, never over an existing one unless asked;
+     - `GET /api/remote/tools` lists the actions with their arguments' JSON schemas, under an
+       API version (also in `/api/info`).
+   - **20 actions** (`actions.go`; performed by `ui/remote.js`, whose table a test keeps equal to
+     the program's list and to `docs/REMOTE-CONTROL.md`):
+     - **state:** `get_state`;
+     - **projects and data:** `new_project`, `open_project`, `open_paths`, `add_dataset`,
+       `open_example`, `tour`;
+     - **seeing:** `set_mode`, `focus`, `show_tissue`, `select_cell`;
+     - **saved views:** `save_view`, `open_view`, `remove_view`;
+     - **QC:** `qc_metrics`, `set_qc_map`, `select_cells`, `save_filter`;
+     - **the record:** `methods`, `export` (the project document, an archive, the methods).
+   - **How the actions run:**
+     - `show_tissue` builds a view from its arguments and applies it as a saved view is applied;
+       its answer is the view as the page then captures it.
+     - An action closes a dialog left open, as Escape does.
+     - A cell is found by its ID (the host's cell endpoint now takes `id:<cell_id>`).
+     - The methods dialog moved to `ui/methods.js`, shared by the Data view and the `methods`
+       action.
+   - **Screenshots** (`docs/capture/capture.mjs`): 11 scenes (start, data, viewer, viewer-genes,
+     viewer-methods, qc, qc-outside, qc-filter, saved-views, methods, tour) on the development
+     bundles, in both themes. They are driven through remote control in headless Chrome, as
+     `docs/images/*.webp` (5.3 MB), and shown in the README and the getting-started guide.
+     - With `--audit`, axe-core 4.13.0 (`node validation/fetch.mjs axe-core`, a new `tools` entry
+       of `validation/sources.json`) checks each scene against WCAG 2.1 A and AA.
+     - The places shown are the default ones, not the run's temporary folders.
+   - **Documentation:** `docs/REMOTE-CONTROL.md` (starting, sending actions in curl and Python,
+     status codes, security, every action).
+   - Validation:
+     - **Go tests** (16 of the hub, most adapted from MaveScape's):
+       - an action reaches the page and its answer returns;
+       - one action runs at a time;
+       - no page, a silent page, a page that leaves and a page of another run are refused
+         plainly;
+       - only this computer may send actions, and no other site's page;
+       - opening paths and writing files need the token;
+       - exports never replace a file unasked, and an upload slot takes one upload;
+       - the connection file is private and removed on stop, and another server's is kept;
+       - without the flag there is no hub;
+       - the tools list is complete;
+       - the page's action table, the program's list and the documentation name the same actions;
+       - a cell is found by its ID.
+     - **In headless Chrome** (`node validation/run.mjs viewer`, 52 checks; the program now runs
+       with `--remote-control`):
+       - `get_state` describes the open project;
+       - `show_tissue` shows exactly the genes, place, zoom, cell and fill asked for;
+       - a view saved by a program reopens exactly;
+       - a program's filter keeps the cells, under the same SHA-256, that the 0.1.0 project's
+         identical filter recorded;
+       - the methods cite the data and SituCraft;
+       - `export` writes the project only with the token.
+     - **axe-core:** all 22 captures (11 scenes, 2 themes) have no violation.
+     - **By hand:** every action run from a script against the window, with its errors (unknown
+       names listing the choices, bad colors, unknown stains, a missing cell, a file that exists,
+       a missing token, another site's page).
+   - Found by slice 1:
+     - **The audit found three accessibility faults in 0.1.0,** now fixed:
+       - the view rail's separators inside its tab list;
+       - the project tree's empty sections marked as lists, and its rows (buttons) as list items;
+       - a hidden stain's name dimmed below WCAG contrast.
+     - **A dialog left open** (the methods, say) covered what later actions showed: actions now
+       close it first.
 2. **Segmentations as artifacts (D8, S6, S9).**
    - The artifact store: states, lineage, temporary outputs promoted after validation.
    - The instrument's segmentation registered as an artifact.

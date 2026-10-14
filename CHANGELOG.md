@@ -1,5 +1,62 @@
 # Changelog
 
+## 0.2.0 (unreleased)
+
+Wave 2 of the [roadmap](situcraft-spec/roadmap.md): segmentations become artifacts to compare,
+review and choose between. Built slice by slice; this section grows with each.
+
+### Added
+
+- **Remote control (wave 2, slice 1).** `situcraft --remote-control` lets programs on this
+  computer (scripts, notebooks, the documentation's screenshots) drive the open window, which
+  performs each action where you see it; what an action changes is in the history and can be
+  undone ([docs/REMOTE-CONTROL.md](docs/REMOTE-CONTROL.md)).
+  - **20 actions:**
+    - **the project:** describe it; start or open a project; open bundles and archives by path;
+      add a dataset; open an example; take a tour;
+    - **the tissue:** show a view; focus an item; show the tissue (place, zoom, stains, genes,
+      layers, a cell); select a cell;
+    - **saved views:** save, open and remove them;
+    - **QC:** read the metrics; show a QC map; choose cells; save a filter;
+    - **the record:** the methods paragraph; write the project, an archive or the methods to a
+      file.
+  - **Finding SituCraft:** scripts find it in `remote.json` (its address and a token), and
+    `/api/remote/tools` lists the actions with their arguments' schemas.
+  - **Safety:** it answers this computer only, and only the window opened from this run.
+    Opening paths and writing files also need the token, and a file is never written over an
+    existing one unless asked.
+- **Screenshots** of the documentation: 11 scenes in both themes, captured through remote control
+  from the development bundles (`node docs/capture/capture.mjs`), in the README and the
+  getting-started guide.
+- **A cell by its ID:** the program finds a cell by its `cell_id` as well as by its row.
+
+### Fixed
+
+- **Accessibility, found by the audit of the screenshots** (axe-core, WCAG 2.1 A and AA):
+  - the view rail's separators sat inside its tab list;
+  - the project tree's sections were marked as lists with no items in them (and its rows,
+    buttons, as list items);
+  - a hidden stain's name and ranges were dimmed below the contrast text needs.
+
+### Validation
+
+- **Go tests of the remote-control hub:** actions reach the window and its answer returns, one at
+  a time; no window, a silent one, one that leaves and one of another run are each refused
+  plainly; only this computer, and no other site's page, may send actions; opening paths and
+  writing files need the token; exports never replace a file unasked; the connection file is
+  private and removed on stop; the window's action table, the program's list and
+  `docs/REMOTE-CONTROL.md` name the same actions.
+- **In headless Chrome** (`node validation/run.mjs viewer`, 52 checks):
+  - a program drives the window: `get_state` describes the open project;
+  - `show_tissue` shows exactly the genes, place, zoom, cell and fill asked for;
+  - a view it saves reopens exactly;
+  - a filter it saves keeps the cells, under the same SHA-256, that the 0.1.0 project's identical
+    filter recorded;
+  - the methods cite the data and SituCraft;
+  - `export` writes the project only with the token.
+- **Every screenshot scene in both themes** passes axe-core's WCAG 2.1 A and AA rules
+  (`docs/capture/audit.json`, 22 captures, no violation).
+
 ## 0.1.0 (2026-10-14)
 
 SituCraft's first release, wave 1 of the [roadmap](situcraft-spec/roadmap.md): open a Xenium

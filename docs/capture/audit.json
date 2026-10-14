@@ -1,0 +1,112 @@
+[
+ {
+  "scene": "start",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "start",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "data",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "data",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "viewer",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "viewer",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "viewer-genes",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "viewer-genes",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "viewer-methods",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "viewer-methods",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "qc",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "qc",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "qc-outside",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "qc-outside",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "qc-filter",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "qc-filter",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "saved-views",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "saved-views",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "methods",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "methods",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "tour",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "tour",
+  "theme": "light",
+  "violations": []
+ }
+]

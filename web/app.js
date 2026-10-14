@@ -161,6 +161,8 @@ async function start() {
   app.jobs = createJobs(app);
   app.bundles = createBundles(app);
   app.examples = createExamples(app);
+  // Remote control (situcraft --remote-control): programs on this computer drive this window.
+  if (info.remoteControl) import('./ui/remote.js').then((m) => { app.remote = m.installRemote(app); });
   app.sidebar = mountSidebar(app);
   app.inspector = mountInspector(app);
   app.drawer = mountDrawer(app);
@@ -178,7 +180,8 @@ async function start() {
     clear(rail);
     for (const mode of MODES) {
       if (mode === 'sep') {
-        rail.append(h('span.rail-sep', { role: 'separator' }));
+        // Drawn only: a tab list holds tabs alone.
+        rail.append(h('span.rail-sep', { 'aria-hidden': 'true' }));
         continue;
       }
       if (mode.hidden) continue;
