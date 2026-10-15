@@ -306,6 +306,41 @@ func (s *State) Attribute(m *Model) {
 	s.count(m)
 }
 
+// AttributionsFor draws each transcript's attribution (to its voxel's cell, or the background)
+// from its conditional given the state and the model's rates, into out, without changing the
+// state or the model: what a summarized sweep counts each transcript as. It draws from a stream of
+// its own (stepSummary), so the chain is the same with it or without.
+func (s *State) AttributionsFor(m *Model, out []bool) {
+	g := m.Genes
+	n := len(s.gene)
+	chunks := (n + attributeChunk - 1) / attributeChunk
+	var wg sync.WaitGroup
+	next := make(chan int)
+	for w := 0; w < max(1, m.Workers); w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for chunk := range next {
+				r := m.stream(stepSummary, chunk)
+				for i := chunk * attributeChunk; i < min(n, (chunk+1)*attributeChunk); i++ {
+					c := s.Labels[s.voxel[i]]
+					if c == 0 {
+						out[i] = false
+						continue
+					}
+					l := m.Rate[int(c-1)*g+int(s.gene[i])]
+					out[i] = mul(r.Float64(), m.Bg[s.gene[i]]+l) < l
+				}
+			}
+		}()
+	}
+	for chunk := 0; chunk < chunks; chunk++ {
+		next <- chunk
+	}
+	close(next)
+	wg.Wait()
+}
+
 // AttributeByPlace attributes every transcript in a cell to it and the rest to the background,
 // and sets the model's statistics: the start, before there are rates to draw attributions from.
 func (s *State) AttributeByPlace(m *Model) {

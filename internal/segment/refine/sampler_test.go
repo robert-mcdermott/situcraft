@@ -154,7 +154,7 @@ func TestRunsAreTheSameOnAnyThreadsAndProcessor(t *testing.T) {
 			t.Errorf("%d threads: digest %s, 1 thread %s", workers, got, want)
 		}
 	}
-	const pinned = "5511d4da8868b0a0"
+	const pinned = "4413ca0b5511531f"
 	if want != pinned {
 		t.Errorf("the run's digest is %s, not %s (on %s)", want, pinned, runtime.GOARCH)
 	}

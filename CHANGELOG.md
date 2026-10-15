@@ -93,8 +93,28 @@ segmentation, validated against simulated truth and independent reference output
   same recipe gives the same files, byte for byte, as the app. The folder imports into the app
   (**Import a segmentation**, SituCraft segmentation).
 
+- **Validation against an independent reference (wave 3, slice 6).** SituCraft's refinement is
+  compared with Proseg 3.2.0 (the publication's software) on both 2-FOV bundles and a simulated
+  tissue, with the comparison workspace's measures; the numbers are kept in
+  `validation/reference/segmentation/` and checked weekly.
+  - On the simulated tissue SituCraft puts 85.0% of transcripts in their true cell, against
+    Proseg's 75.6% and the instrument's 82.2%, with outlines as close to the true ones (median IoU
+    0.714 against 0.725).
+  - Every tolerance is met on the Breast bundle and the simulated tissue. Three differences on the
+    Lung bundle are explained in research.md.
+  - The Breast bundle refines in 108 s and 282 MB on a laptop.
+
 ### Changed
 
+- **A transcript counts in a cell only when the model attributes it to the cell,** not merely when
+  it lies in the cell's voxels: the refinement's assignments and counts leave out what the model
+  takes for background. On the Breast example the assigned fraction fell from 98.8% to 97.0% and
+  spurious co-expression from 1.94 to 1.83.
+- **Simulated tissues have every transcript column of Xenium's,** with its types:
+  `nucleus_distance` and `codeword_index` are new, and `overlaps_nucleus` is 8 bits. Tools that
+  need them now read simulated bundles.
+- `comparison.json` counts, of the transcripts A assigns, those B puts elsewhere
+  (`changesQ20OfAssignedA`): against the truth, the share in their true cell.
 - **The default perimeter bound is 1.6** (it was 2), the tightest that still admits a cell four
   times as long as wide at any angle. On the standard simulated tissue the median IoU with the
   true cells rose from 0.678 to 0.712 and the transcripts in their true cells from 85.9% to
@@ -113,6 +133,9 @@ segmentation, validated against simulated truth and independent reference output
 
 ### Fixed
 
+- **A SpatialData import matched only some transcripts** when its points kept both where a tool
+  moved each transcript and where it was observed: transcripts are matched at their observed
+  places.
 - **Discarding or resuming a job could read its state while it was changing** (a data race the
   race detector found now and then). The state is read before the lock is let go.
 - **`refine_segmentation` could time out** under remote control on a long run: it is now a long

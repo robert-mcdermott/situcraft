@@ -232,6 +232,10 @@ Segmentation is SituCraft's own code (`internal/segment`), not an external progr
   (it never changes the result). A run's spec is kept as a **recipe** (`recipe.go`) that either
   runs again, byte for byte. Failures carry a class and a remedy (`jobs.Classified`), which the
   Jobs view and the studio show.
+- **Validated against an independent reference:** on the 2-FOV bundles and a simulated tissue,
+  SituCraft's refinement is compared with Proseg 3.2.0's by the comparison workspace's own measures.
+  The maintainer reduces Proseg's outputs to committed numbers (`validation/reference/segmentation/`),
+  and a weekly check requires SituCraft's segmentation to be, byte for byte, the one compared.
 - **Imported segmentations** (`internal/segment/imports`) come from SpatialData Zarr,
   Baysor-style CSV plus GeoJSON, Xenium Ranger outputs, or GeoJSON polygons plus an assignment
   table; SituCraft's own files (`situcraft refine`'s) are checked against the dataset and copied. This is how results from external tools are compared, without SituCraft running those

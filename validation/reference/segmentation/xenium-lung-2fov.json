@@ -1,0 +1,492 @@
+{
+ "dataSet": "xenium-lung-2fov",
+ "situcraft": {
+  "version": "0.2.0",
+  "command": "situcraft refine --seed <seed> <bundle> <folder> (Balanced)",
+  "cores": 10
+ },
+ "proseg": {
+  "defaults": {
+   "version": "3.2.0",
+   "command": "proseg --xenium transcripts.parquet --output-spatialdata proseg-output.zarr",
+   "machine": "Darwin arm64"
+  },
+  "one-layer": {
+   "version": "3.2.0",
+   "command": "proseg --xenium transcripts.parquet --voxel-layers 1 --output-spatialdata proseg-output.zarr",
+   "machine": "Darwin arm64"
+  }
+ },
+ "segmentations": {
+  "instrument": {
+   "cells": 11898,
+   "cellsWithNucleus": 11898,
+   "assignedFraction": 0.979724,
+   "medianTranscriptsPerCell": 56,
+   "medianAreaUm2": 48.520391,
+   "spuriousCoexpression": 1.870334,
+   "mecr": 0.009058
+  },
+  "proseg-1": {
+   "cells": 11871,
+   "cellsWithNucleus": 11424,
+   "assignedFraction": 0.956767,
+   "medianTranscriptsPerCell": 51,
+   "medianAreaUm2": 38.563438,
+   "spuriousCoexpression": 1.369196,
+   "mecr": 0.007069,
+   "seconds": 156.02,
+   "peakResidentBytes": 640057344
+  },
+  "proseg-2": {
+   "cells": 11871,
+   "cellsWithNucleus": 11369,
+   "assignedFraction": 0.958911,
+   "medianTranscriptsPerCell": 52,
+   "medianAreaUm2": 38.563438,
+   "spuriousCoexpression": 1.426892,
+   "mecr": 0.007271,
+   "seconds": 169.3,
+   "peakResidentBytes": 646430720
+  },
+  "proseg-defaults-1": {
+   "cells": 11872,
+   "cellsWithNucleus": 11128,
+   "assignedFraction": 0.394094,
+   "medianTranscriptsPerCell": 9,
+   "medianAreaUm2": 44.885311,
+   "spuriousCoexpression": 1.093051,
+   "mecr": 0.006544,
+   "seconds": 152.64,
+   "peakResidentBytes": 853819392
+  },
+  "proseg-defaults-2": {
+   "cells": 11872,
+   "cellsWithNucleus": 11271,
+   "assignedFraction": 0.354841,
+   "medianTranscriptsPerCell": 5,
+   "medianAreaUm2": 44.027344,
+   "spuriousCoexpression": 1.094118,
+   "mecr": 0.007064,
+   "seconds": 165.18,
+   "peakResidentBytes": 850067456
+  },
+  "situcraft-1": {
+   "cells": 11898,
+   "cellsWithNucleus": 11824,
+   "assignedFraction": 0.996269,
+   "medianTranscriptsPerCell": 56,
+   "medianAreaUm2": 37.163593,
+   "spuriousCoexpression": 1.678571,
+   "mecr": 0.008817,
+   "seconds": 98.8,
+   "peakResidentBytes": 279232512,
+   "digest": "751ae5a3757d7dad8b2f094b5544b07e8bac6d6338bb0be0c3b3d840b700c9f1"
+  },
+  "situcraft-2": {
+   "cells": 11898,
+   "cellsWithNucleus": 11818,
+   "assignedFraction": 0.996281,
+   "medianTranscriptsPerCell": 56,
+   "medianAreaUm2": 36.937813,
+   "spuriousCoexpression": 1.686775,
+   "mecr": 0.008756,
+   "seconds": 124,
+   "peakResidentBytes": 277954560,
+   "digest": "8e0cbae28abd30933db0630dcb0e99f47e86e57992092259e73d10205b56950e"
+  }
+ },
+ "pairs": {
+  "instrument / proseg-1": {
+   "classes": {
+    "contracted": 5520,
+    "expanded": 966,
+    "merged": 99,
+    "one-to-one": 4651,
+    "only in A": 78,
+    "only in B": 91,
+    "rearranged": 207,
+    "split": 63
+   },
+   "matchedCells": 11137,
+   "iou": {
+    "p10": 0.3788,
+    "p25": 0.4831,
+    "p50": 0.5833,
+    "p75": 0.668,
+    "p90": 0.7274
+   },
+   "countCorrelation": {
+    "pearsonLog": 0.8422,
+    "spearman": 0.8381
+   },
+   "changedQ20": 0.416522,
+   "changedQ20OfAssignedA": 0.413065,
+   "pixelAgreement": 0.602131
+  },
+  "instrument / proseg-2": {
+   "classes": {
+    "contracted": 5473,
+    "expanded": 983,
+    "merged": 107,
+    "one-to-one": 4613,
+    "only in A": 77,
+    "only in B": 98,
+    "rearranged": 230,
+    "split": 66
+   },
+   "matchedCells": 11069,
+   "iou": {
+    "p10": 0.3768,
+    "p25": 0.4784,
+    "p50": 0.581,
+    "p75": 0.6679,
+    "p90": 0.7278
+   },
+   "countCorrelation": {
+    "pearsonLog": 0.8313,
+    "spearman": 0.8319
+   },
+   "changedQ20": 0.418347,
+   "changedQ20OfAssignedA": 0.41483,
+   "pixelAgreement": 0.596653
+  },
+  "instrument / proseg-defaults-1": {
+   "classes": {
+    "contracted": 3697,
+    "expanded": 1401,
+    "merged": 283,
+    "one-to-one": 5224,
+    "only in A": 13,
+    "only in B": 258,
+    "rearranged": 447,
+    "split": 46
+   },
+   "matchedCells": 10322,
+   "iou": {
+    "p10": 0.3874,
+    "p25": 0.4727,
+    "p50": 0.5614,
+    "p75": 0.6365,
+    "p90": 0.695
+   },
+   "countCorrelation": {
+    "pearsonLog": 0.412,
+    "spearman": 0.4631
+   },
+   "changedQ20": 0.766548,
+   "changedQ20OfAssignedA": 0.779688,
+   "pixelAgreement": 0.59251
+  },
+  "instrument / proseg-defaults-2": {
+   "classes": {
+    "contracted": 3869,
+    "expanded": 1247,
+    "merged": 223,
+    "one-to-one": 5496,
+    "only in A": 19,
+    "only in B": 197,
+    "rearranged": 370,
+    "split": 41
+   },
+   "matchedCells": 10612,
+   "iou": {
+    "p10": 0.3977,
+    "p25": 0.4795,
+    "p50": 0.5707,
+    "p75": 0.6456,
+    "p90": 0.7036
+   },
+   "countCorrelation": {
+    "pearsonLog": 0.4922,
+    "spearman": 0.5085
+   },
+   "changedQ20": 0.782393,
+   "changedQ20OfAssignedA": 0.795986,
+   "pixelAgreement": 0.611184
+  },
+  "instrument / situcraft-1": {
+   "classes": {
+    "contracted": 5621,
+    "expanded": 523,
+    "merged": 14,
+    "one-to-one": 5668,
+    "only in A": 16,
+    "only in B": 29,
+    "rearranged": 20,
+    "split": 1
+   },
+   "matchedCells": 11812,
+   "iou": {
+    "p10": 0.4725,
+    "p25": 0.549,
+    "p50": 0.6234,
+    "p75": 0.6851,
+    "p90": 0.733
+   },
+   "countCorrelation": {
+    "pearsonLog": 0.9246,
+    "spearman": 0.9289
+   },
+   "changedQ20": 0.155163,
+   "changedQ20OfAssignedA": 0.1413,
+   "pixelAgreement": 0.657589
+  },
+  "instrument / situcraft-2": {
+   "classes": {
+    "contracted": 5701,
+    "expanded": 477,
+    "merged": 8,
+    "one-to-one": 5658,
+    "only in A": 18,
+    "only in B": 22,
+    "rearranged": 12,
+    "split": 4
+   },
+   "matchedCells": 11836,
+   "iou": {
+    "p10": 0.4719,
+    "p25": 0.5489,
+    "p50": 0.623,
+    "p75": 0.6861,
+    "p90": 0.7326
+   },
+   "countCorrelation": {
+    "pearsonLog": 0.9272,
+    "spearman": 0.9279
+   },
+   "changedQ20": 0.153522,
+   "changedQ20OfAssignedA": 0.139616,
+   "pixelAgreement": 0.659713
+  },
+  "proseg-1 / proseg-2": {
+   "classes": {
+    "contracted": 2153,
+    "expanded": 2125,
+    "merged": 153,
+    "one-to-one": 6198,
+    "only in A": 134,
+    "only in B": 160,
+    "rearranged": 383,
+    "split": 135
+   },
+   "matchedCells": 10476,
+   "iou": {
+    "p10": 0.4529,
+    "p25": 0.5808,
+    "p50": 0.7012,
+    "p75": 0.7903,
+    "p90": 0.8513
+   },
+   "countCorrelation": {
+    "pearsonLog": 0.845,
+    "spearman": 0.8477
+   },
+   "changedQ20": 0.506034,
+   "changedQ20OfAssignedA": 0.497258,
+   "pixelAgreement": 0.659832
+  },
+  "proseg-1 / proseg-defaults-1": {
+   "classes": {
+    "contracted": 1664,
+    "expanded": 3649,
+    "merged": 341,
+    "one-to-one": 4460,
+    "only in A": 124,
+    "only in B": 406,
+    "rearranged": 534,
+    "split": 108
+   },
+   "matchedCells": 9773,
+   "iou": {
+    "p10": 0.337,
+    "p25": 0.4457,
+    "p50": 0.5629,
+    "p75": 0.6644,
+    "p90": 0.7387
+   },
+   "countCorrelation": {
+    "pearsonLog": 0.405,
+    "spearman": 0.4593
+   },
+   "changedQ20": 0.777889,
+   "changedQ20OfAssignedA": 0.804431,
+   "pixelAgreement": 0.539571
+  },
+  "proseg-defaults-1 / proseg-defaults-2": {
+   "classes": {
+    "contracted": 2362,
+    "expanded": 2147,
+    "merged": 182,
+    "one-to-one": 5044,
+    "only in A": 336,
+    "only in B": 256,
+    "rearranged": 640,
+    "split": 231
+   },
+   "matchedCells": 9553,
+   "iou": {
+    "p10": 0.3434,
+    "p25": 0.4413,
+    "p50": 0.5512,
+    "p75": 0.6451,
+    "p90": 0.7163
+   },
+   "countCorrelation": {
+    "pearsonLog": 0.5783,
+    "spearman": 0.5913
+   },
+   "changedQ20": 0.401187,
+   "changedQ20OfAssignedA": 0.690905,
+   "pixelAgreement": 0.549494
+  },
+  "situcraft-1 / proseg-1": {
+   "classes": {
+    "contracted": 2946,
+    "expanded": 2813,
+    "merged": 102,
+    "one-to-one": 5222,
+    "only in A": 114,
+    "only in B": 132,
+    "rearranged": 258,
+    "split": 61
+   },
+   "matchedCells": 10981,
+   "iou": {
+    "p10": 0.3698,
+    "p25": 0.4695,
+    "p50": 0.5574,
+    "p75": 0.6295,
+    "p90": 0.6834
+   },
+   "countCorrelation": {
+    "pearsonLog": 0.8403,
+    "spearman": 0.8412
+   },
+   "changedQ20": 0.418181,
+   "changedQ20OfAssignedA": 0.419615,
+   "pixelAgreement": 0.566482
+  },
+  "situcraft-1 / proseg-defaults-1": {
+   "classes": {
+    "contracted": 1773,
+    "expanded": 3833,
+    "merged": 365,
+    "one-to-one": 4639,
+    "only in A": 46,
+    "only in B": 416,
+    "rearranged": 389,
+    "split": 24
+   },
+   "matchedCells": 10245,
+   "iou": {
+    "p10": 0.3342,
+    "p25": 0.418,
+    "p50": 0.5031,
+    "p75": 0.5811,
+    "p90": 0.6388
+   },
+   "countCorrelation": {
+    "pearsonLog": 0.4184,
+    "spearman": 0.4748
+   },
+   "changedQ20": 0.776336,
+   "changedQ20OfAssignedA": 0.779204,
+   "pixelAgreement": 0.510725
+  },
+  "situcraft-1 / situcraft-2": {
+   "classes": {
+    "contracted": 1857,
+    "expanded": 1789,
+    "merged": 8,
+    "one-to-one": 8129,
+    "only in A": 29,
+    "only in B": 20,
+    "rearranged": 29,
+    "split": 18
+   },
+   "matchedCells": 11775,
+   "iou": {
+    "p10": 0.5071,
+    "p25": 0.6018,
+    "p50": 0.6882,
+    "p75": 0.7612,
+    "p90": 0.8172
+   },
+   "countCorrelation": {
+    "pearsonLog": 0.9375,
+    "spearman": 0.9344
+   },
+   "changedQ20": 0.139893,
+   "changedQ20OfAssignedA": 0.139798,
+   "pixelAgreement": 0.713681
+  },
+  "situcraft-2 / proseg-2": {
+   "classes": {
+    "contracted": 2915,
+    "expanded": 2862,
+    "merged": 111,
+    "one-to-one": 5146,
+    "only in A": 105,
+    "only in B": 135,
+    "rearranged": 279,
+    "split": 64
+   },
+   "matchedCells": 10923,
+   "iou": {
+    "p10": 0.3667,
+    "p25": 0.467,
+    "p50": 0.5603,
+    "p75": 0.6305,
+    "p90": 0.683
+   },
+   "countCorrelation": {
+    "pearsonLog": 0.8343,
+    "spearman": 0.8341
+   },
+   "changedQ20": 0.420409,
+   "changedQ20OfAssignedA": 0.421836,
+   "pixelAgreement": 0.566927
+  }
+ },
+ "checks": [
+  {
+   "name": "cells",
+   "tolerance": "SituCraft's within 5% of Proseg's",
+   "value": 0.0023,
+   "limit": 0.05,
+   "pass": true
+  },
+  {
+   "name": "assigned fraction",
+   "tolerance": "within 3 points of Proseg's",
+   "value": 0.0395,
+   "limit": 0.03,
+   "pass": false,
+   "explained": "SituCraft assigns to cells transcripts the background would explain. On the simulated tissue it assigns 99.95% where the truth assigns 97.54% (Proseg 98.47%): its background rate is a quarter of the truth's (0.68% of the transcripts against 2.46%), the same from any start, a property of one background rate per gene when cells cover nearly every transcript. Lung shows it most (SituCraft 99.63%, Proseg 95.68%, the instrument 97.97%)."
+  },
+  {
+   "name": "spurious co-expression",
+   "tolerance": "SituCraft's at most 10% above Proseg's",
+   "value": 1.6786,
+   "limit": 1.5061,
+   "pass": false,
+   "explained": "Spurious co-expression does not rank methods by accuracy: on the simulated tissue Proseg's (1.99) is below the truth's own (2.01) while it puts 75.6% of transcripts in their true cell, against SituCraft's 85.0% (2.14). On Lung SituCraft's is 10% below the instrument's; part of the rest is the background it assigns."
+  },
+  {
+   "name": "matched cells' counts",
+   "tolerance": "SituCraft and Proseg correlated within 0.05 of the lower of their own runs' correlations",
+   "value": 0.8403,
+   "limit": 0.795,
+   "pass": true
+  },
+  {
+   "name": "median IoU",
+   "tolerance": "SituCraft and Proseg within 0.10 of the lower of their own runs' median IoUs",
+   "value": 0.5574,
+   "limit": 0.5882,
+   "pass": false,
+   "explained": "Lung's cells are the smallest (median 37 µm²), and Proseg's outlines are more compact there (1.16 times the least perimeter, SituCraft's 1.32): with Conservative's bound (1.3) SituCraft's agreement with Proseg rises from 0.557 to 0.576. Starting SituCraft from the nuclei, as Proseg starts, leaves it at 0.557."
+  }
+ ]
+}

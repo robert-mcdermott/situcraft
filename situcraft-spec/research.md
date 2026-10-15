@@ -646,7 +646,7 @@ The refined segmentation assigns more transcripts to their true cells than the t
 themselves do by place. Repositioning estimates where each molecule came from, which no
 segmentation by place can. Its cells cover 175,252 µm² against the true 185,852 µm² (the
 expansion's 245,477): the sparse edges of cells are left to the background. On the small tissue
-(the unit test: 300 sweeps, 250 summarized), 86.8% of transcripts are in their true cell (the
+(the unit test: 300 sweeps, 250 summarized), 86.4% of transcripts are in their true cell (the
 expansion 83.4%), with a median IoU of 0.712 (0.634).
 
 **Found by slice 3:**
@@ -723,21 +723,22 @@ regions (rectangles, µm).
   wide enough gap.
 
 **Presets** (`refine.Presets`, version 1), each measured on the standard simulated tissue
-(`TestPresetsOnSimulatedTissue`, REFINE_PRESETS=standard). The scores are as above; "outlines" is
-the median ratio of each cell's outline (pixel edges) to the least its area can have.
+(`TestPresetsOnSimulatedTissue`, REFINE_PRESETS=standard; measured again after slice 6's change to
+the summary). The scores are as above; "outlines" is the median ratio of each cell's outline (pixel
+edges) to the least its area can have.
 
 | Preset | What it changes from Balanced | In their true cell | Median IoU | Outlines | Memory (estimated) |
 | --- | --- | --- | --- | --- | --- |
 | The instrument's expansion | | 82.5% | 0.622 | 1.22 | |
 | Balanced (the defaults) | | 86.3% | 0.712 | 1.32 | 89 MB |
 | Conservative boundary | perimeters within 1.3 times the least; gaps proposed at 0.1; nuclear prior 0.9 | 86.2% | 0.727 | 1.21 | 89 MB |
-| Flexible morphology | perimeters within 2.5 times the least; nuclear prior 0.7 | 85.0% | 0.638 | 1.63 | 89 MB |
+| Flexible morphology | perimeters within 2.5 times the least; nuclear prior 0.7 | 84.9% | 0.638 | 1.63 | 89 MB |
 | Low memory | 2 µm voxels; the collector's target 20% | 84.9% | 0.650 | 1.34 | 73 MB |
-| ROI pilot (a 200 µm square in the middle) | a region, run with two seeds | 86.9% in the region (Balanced on the whole tissue: 87.1%) | 0.719 (0.716) | | |
+| ROI pilot (a 200 µm square in the middle) | a region, run with two seeds | 86.6% in the region (Balanced on the whole tissue: 87.1%) | 0.719 (0.716) | | |
 
 - **Every preset puts more transcripts in their true cells than the instrument's segmentation.**
-- **The pilot reproduces the whole run in its region:** 86.9% and 0.719 against the whole run's
-  87.1% and 0.716 there. Its two seeds put 93.4% of the transcripts in refined cells in the same
+- **The pilot reproduces the whole run in its region:** 86.6% and 0.719 against the whole run's
+  87.1% and 0.716 there. Its two seeds put 92.6% of the transcripts in refined cells in the same
   cell; the split-half agreement is about 95%, both bounded by the posterior's own uncertainty.
 - **What did not work:**
   - *Low memory without repositioning:* keeping transcripts where they were observed put only
@@ -834,6 +835,109 @@ run by the app's job or by `situcraft refine`, through one function (`refine.Ref
 - The terminal's folder imports back into the app as a refinement of the same dataset, with the
   same files' SHA-256.
 - A folder of another image's size is refused.
+
+#### Against an independent reference (verified, wave 3, slice 6)
+
+SituCraft's refinement was compared with Proseg 3.2.0 (Jones et al. 2025;
+https://github.com/dcjones/proseg), the publication's own software, on both 2-FOV bundles and the
+standard simulated tissue (`validation/reference/segmentation/`).
+- **SituCraft:** Balanced, as `situcraft refine` runs it, with two seeds.
+- **Proseg:** its Xenium preset, as a user runs it, in two configurations, each run twice (it has
+  no seed):
+  - one voxel layer (`--voxel-layers 1`), as SituCraft's default: the like-for-like reference;
+  - its own defaults (four layers).
+- **Read and measured as any segmentation:** each is imported (Proseg's SpatialData store) and
+  compared with every other by the comparison workspace's measures, against the instrument's
+  segmentation and, on the simulated tissue, the truth:
+  - each segmentation's cells, assigned fraction (gene transcripts of quality 20 or more), spurious
+    co-expression (relative to the nuclei) and mutually exclusive co-expression;
+  - between two, the cells matched (one to one, expanded or contracted), the quantiles of their
+    IoU, the correlation of their counts (Pearson's on log(1 + n)), and the transcripts whose cell
+    changed;
+  - against the truth, the share of the transcripts in a true cell that are in it
+    (`changesQ20OfAssignedA`). It pairs cells by the comparison's matching, so it differs a little
+    from the nucleus-based scoring of the tests above (85.0% against 86.3% for the same run).
+
+**Tolerances,** set before the comparison was made (`validation/segmentation_test.go`), each with
+its reason. Differences beyond one are explained below or fixed.
+
+| Measure | Tolerance |
+| --- | --- |
+| Cells | SituCraft's within 5% of Proseg's (SituCraft keeps every cell of the instrument's; Proseg makes one per nucleus) |
+| Assigned fraction | within 3 points (both assign by the same model) |
+| Spurious co-expression | SituCraft's at most 10% above Proseg's |
+| Matched cells' counts | correlated within 0.05 of the lower of each method's own two runs |
+| Median IoU | within 0.10 of the lower of each method's own two runs |
+| On the truth | in their true cell no more than 1 point below Proseg; median IoU no more than 0.02 below |
+| Budget (Breast) | under 2 minutes and 4 GB on a laptop |
+
+**Results** (one run of each; ten cores of an Apple M4 laptop):
+
+| | Lung: SituCraft | Lung: Proseg | Breast: SituCraft | Breast: Proseg | Simulated: SituCraft | Simulated: Proseg |
+| --- | --- | --- | --- | --- | --- | --- |
+| Cells | 11,898 | 11,871 | 7,275 | 7,008 | 2,925 | 2,925 |
+| Assigned | 99.63% | 95.68% | 97.03% | 94.39% | 99.95% | 98.47% |
+| Spurious co-expression (instrument) | 1.68 (1.87) | 1.37 | 1.83 (1.77) | 1.69 | 2.14 (2.74; truth 2.01) | 1.99 |
+| Median IoU, SituCraft with Proseg (each's own runs) | 0.557 (0.688) | (0.701) | 0.676 (0.775) | (0.815) | 0.710 (0.764) | (0.788) |
+| Counts correlated with the other | 0.840 | | 0.916 | | 0.963 | |
+| Transcripts changing cell between own runs | 14.0% | 50.6% | 11.3% | 37.3% | 6.9% | 23.6% |
+| In their true cell (instrument 82.2%) | | | | | **85.0%** | 75.6% |
+| Median IoU with the truth (instrument 0.622) | | | | | 0.714 | 0.725 |
+| Time, peak memory | 99 s, 266 MB | 156 s, 610 MB | 108 s, 282 MB | 122 s, 664 MB | 25 s, 107 MB | 28 s, 298 MB |
+
+- **Met everywhere** on Breast and the simulated tissue, the budget included: Breast in 108 s and
+  282 MB.
+- **On the truth** SituCraft puts 9.4 points more transcripts in their true cells than Proseg, with
+  outlines as close to the true ones (median IoU 0.714 against 0.725).
+- **Stability:** Proseg's per-transcript assignments differ between two of its runs three to four
+  times as much as SituCraft's between two seeds, while their outlines differ about as much.
+- **On Lung, three are explained:**
+  - *Assigned fraction (99.63% against 95.68%):* SituCraft assigns to cells transcripts the
+    background would explain (below).
+  - *Spurious co-expression (1.68 against 1.37):* the measure does not rank methods by accuracy.
+    On the simulated tissue Proseg's is below the truth's own (1.99 against 2.01), while it puts
+    9.4 points fewer transcripts in their true cells than SituCraft (2.14). On Lung SituCraft's is
+    10% below the instrument's; part of the rest is the background it assigns.
+  - *Median IoU (0.557, the tolerance 0.588):* Lung's cells are the smallest (median 37 µm²), and
+    Proseg's outlines are more compact there (1.16 times the least perimeter against SituCraft's
+    1.32). With Conservative's bound (1.3) SituCraft's agreement rises to 0.576; started from the
+    nuclei, as Proseg starts, it stays at 0.557.
+- **The background, an open question (§9).** On the simulated tissue 2.46% of the modelled
+  transcripts are background. SituCraft's background rate accounts for 0.68% and Proseg's
+  assignments for 1.53%.
+  - SituCraft's comes to the same 0.7% whether the chain starts with 2.5% or 10% of the
+    transcripts in cells given to the background: the posterior prefers it, not the start.
+  - SituCraft follows the publication's model here: one background rate per gene over the whole
+    region, a gamma prior, no term that keeps cells from the background's transcripts (its
+    Methods, 8.7 and 8.9). When cells cover nearly every transcript, the background's own voxels
+    hold few, and its rate is estimated low.
+
+**Found by slice 6:**
+- **The summary counted the background in cells.** A transcript in a cell's voxel was reported in
+  the cell even in the sweeps where the sampler attributed it to the background. Each summarized
+  sweep now draws every transcript's attribution, from a random stream of its own, so the chain is
+  unchanged; the reported cell is where it most often lay and was attributed. Breast's assigned
+  fraction fell from 98.80% to 97.03% and its co-expression from 1.94 to 1.83. Elsewhere the
+  posterior's mode moved little: a background probability of a few percent rarely wins the mode.
+  One posterior sample assigns about 1% fewer (Lung: 98.96% against 99.63%).
+- **Proseg's four-layer default lost Lung's transcripts:** 61% of them went to the background, and
+  5,035 of its 11,872 cells were left empty. With one layer, 4% went to the background. Lung's
+  transcripts span more depth than Breast's (§1.3b). The like-for-like reference is therefore one
+  layer, as SituCraft's default; SituCraft's default stays one layer.
+- **The simulated bundles lacked two of Xenium's transcript columns,** `nucleus_distance` and
+  `codeword_index`, and stored `overlaps_nucleus` as 32 bits rather than 8. Proseg could not read
+  them. The simulator now writes Xenium's columns and types (§3.4).
+- **A tool may keep where it moved each transcript beside where it was observed.** Proseg's points
+  hold both; the SpatialData import matches transcripts at their observed places
+  (`observed_x`, `observed_y`).
+- **The perimeter bound, revisited:** tighter bounds agree a little more with Proseg on Lung (0.557
+  at 1.6, 0.576 at 1.3, 0.499 at 2.5), as with the simulated truth (slice 5). The default stays at
+  1.6, the tightest that still lets a round start grow into a cell four times as long as wide.
+
+The maintainer makes Proseg's segmentations (`validation/reference/segmentation/run_proseg.sh`) and
+reduces them to the committed numbers. The weekly real-data workflow refines each data set again
+and checks that SituCraft's segmentation is still, byte for byte, the one the numbers were made
+from.
 
 SituCraft's other choices where the publication leaves them open:
 - **Polygons** come from the summarized voxel labels by boundary tracing per z layer, and from
@@ -985,7 +1089,10 @@ own model is flattered (the "inverse crime": Wirgin A. The inverse crime. arXiv:
   `analysis_sw_version` names the layout first (`xenium-2.0.0 layout, situcraft-simulate …`),
   because readers choose how to read a bundle by it. spatialdata-io reads a bundle whose version it
   cannot parse as XOA 1: it looks for the image elsewhere and reads cell ids another way.
-- `transcripts.parquet` with ids, instrument cells, nucleus overlap, fields of view and quality.
+- `transcripts.parquet` in Xenium's columns and types (§1.2): ids, instrument cells, nucleus
+  overlap (`uint8`), fields of view, quality, each molecule's distance to the nearest nucleus (µm,
+  from its pixel; 0 over one) and its codeword (the panel's). The last two came in slice 6, when
+  Proseg would not read a bundle without them.
 - `cells.parquet` and both boundary tables.
 - The counts in both forms:
   - `cell_feature_matrix.h5`: the 10x Genomics feature-barcode matrix in HDF5, which
@@ -1325,6 +1432,12 @@ Notes:
   Stat Soc B* 1970;32:115–122 (the goodness-of-fit tests of `internal/stats`).
 
 ## 9. To verify before relying on it
+
+- **The transcript-informed segmentation's background** (§3.2, against an independent reference):
+  on the simulated tissue it accounts for a quarter of the true background. The posterior, not the
+  start, decides it, so it is the model's. A background held to the regions no cell can reach, or
+  informed by the negative controls, are the candidates; each is to be judged on simulated truth
+  and on the reference comparison.
 
 - The metrics left empty in the bundles in hand (polygon counts, nuclei without cells), when a
   bundle fills them: whether "non-simple polygon" means what SituCraft's check (and GEOS) means.

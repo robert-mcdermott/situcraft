@@ -137,6 +137,7 @@ const (
 	stepProportions
 	stepVolumes
 	stepInit
+	stepSummary
 )
 
 // stream is the random stream of an item's draws in a step of a sweep.

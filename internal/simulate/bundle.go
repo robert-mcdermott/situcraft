@@ -34,6 +34,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -42,6 +43,7 @@ import (
 	"situcraft/internal/hdf5"
 	"situcraft/internal/parquet"
 	"situcraft/internal/segment"
+	"situcraft/internal/segment/expand"
 	"situcraft/internal/xenium"
 	"situcraft/internal/zarr"
 )
@@ -214,6 +216,10 @@ func i64(s string) parquet.Field { return parquet.Field{Name: s, Type: parquet.I
 func u32(s string) parquet.Field {
 	return parquet.Field{Name: s, Type: parquet.Int32, Annotation: "uint"}
 }
+func u8(s string) parquet.Field {
+	return parquet.Field{Name: s, Type: parquet.Int32, Annotation: "uint8"}
+}
+func i32(s string) parquet.Field { return parquet.Field{Name: s, Type: parquet.Int32} }
 func u64id(s string) parquet.Field {
 	return parquet.Field{Name: s, Type: parquet.Int64, Annotation: "uint"}
 }
@@ -295,19 +301,35 @@ func (wr *writer) writeTranscripts() error {
 	for i, id := range wr.trueID {
 		tru[i] = []byte(id)
 	}
+	// Each molecule's distance to the nearest nucleus in the section (µm, from its pixel's centre
+	// to the nearest nuclear pixel's; 0 over a nucleus), as Xenium records it.
+	near := expand.SquaredDistances(wr.in.nuclei, wr.t.w, wr.t.h, runtime.NumCPU())
+	// The columns of Xenium Onboard Analysis 2, in its order; cell_id is each file's own.
 	common := func(c []*parquet.Values, from, to int) {
 		for i := from; i < to; i++ {
 			m := wr.mols[i]
 			c[0].Int64 = append(c[0].Int64, int64(ids[i]))
-			c[2].Bytes = append(c[2].Bytes, names[m.feature])
-			c[3].Float32 = append(c[3].Float32, m.x)
-			c[4].Float32 = append(c[4].Float32, m.y)
-			c[5].Float32 = append(c[5].Float32, m.z)
-			c[6].Float32 = append(c[6].Float32, m.qv)
-			c[7].Bytes = append(c[7].Bytes, fovs[i])
+			n := int32(0)
+			if nuclear[i] {
+				n = 1
+			}
+			c[2].Int32 = append(c[2].Int32, n)
+			c[3].Bytes = append(c[3].Bytes, names[m.feature])
+			c[4].Float32 = append(c[4].Float32, m.x)
+			c[5].Float32 = append(c[5].Float32, m.y)
+			c[6].Float32 = append(c[6].Float32, m.z)
+			c[7].Float32 = append(c[7].Float32, m.qv)
+			c[8].Bytes = append(c[8].Bytes, fovs[i])
+			d := float32(math.NaN())
+			if d2 := near[wr.pixelOf(m.x, m.y)]; d2 != math.MaxInt64 {
+				d = float32(math.Sqrt(float64(d2)) * wr.t.p.PixelUm)
+			}
+			c[9].Float32 = append(c[9].Float32, d)
+			c[10].Int32 = append(c[10].Int32, int32(m.feature)+1) // gene_panel.json's codeword
 		}
 	}
-	fields := []parquet.Field{u64id("transcript_id"), text("cell_id"), text("feature_name"), f32("x_location"), f32("y_location"), f32("z_location"), f32("qv"), text("fov_name"), u32("overlaps_nucleus")}
+	fields := []parquet.Field{u64id("transcript_id"), text("cell_id"), u8("overlaps_nucleus"), text("feature_name"), f32("x_location"), f32("y_location"), f32("z_location"), f32("qv"), text("fov_name"),
+		f32("nucleus_distance"), i32("codeword_index")}
 	err := parquetFile(filepath.Join(wr.dir, "transcripts.parquet"), fields, wr.software, len(wr.mols), func(from, to int) []*parquet.Values {
 		c := make([]*parquet.Values, len(fields))
 		for i := range c {
@@ -320,11 +342,6 @@ func (wr *writer) writeTranscripts() error {
 			} else {
 				c[1].Bytes = append(c[1].Bytes, unassigned)
 			}
-			n := int32(0)
-			if nuclear[i] {
-				n = 1
-			}
-			c[8].Int32 = append(c[8].Int32, n)
 		}
 		return c
 	})
@@ -336,7 +353,7 @@ func (wr *writer) writeTranscripts() error {
 		return err
 	}
 	origins := [][]byte{[]byte("cell"), []byte("background"), []byte("control probe"), []byte("control codeword")}
-	truthFields := append(fields[:8:8], f32("true_x_location"), f32("true_y_location"), f32("true_z_location"), text("origin"), u32("wide_displacement"))
+	truthFields := append(fields[:len(fields):len(fields)], f32("true_x_location"), f32("true_y_location"), f32("true_z_location"), text("origin"), u32("wide_displacement"))
 	return parquetFile(filepath.Join(wr.dir, "truth", "transcripts.parquet"), truthFields, wr.software, len(wr.mols), func(from, to int) []*parquet.Values {
 		c := make([]*parquet.Values, len(truthFields))
 		for i := range c {
@@ -350,15 +367,15 @@ func (wr *writer) writeTranscripts() error {
 			} else {
 				c[1].Bytes = append(c[1].Bytes, unassigned)
 			}
-			c[8].Float32 = append(c[8].Float32, m.tx)
-			c[9].Float32 = append(c[9].Float32, m.ty)
-			c[10].Float32 = append(c[10].Float32, m.tz)
-			c[11].Bytes = append(c[11].Bytes, origins[m.origin])
+			c[11].Float32 = append(c[11].Float32, m.tx)
+			c[12].Float32 = append(c[12].Float32, m.ty)
+			c[13].Float32 = append(c[13].Float32, m.tz)
+			c[14].Bytes = append(c[14].Bytes, origins[m.origin])
 			wide := int32(0)
 			if m.wide {
 				wide = 1
 			}
-			c[12].Int32 = append(c[12].Int32, wide)
+			c[15].Int32 = append(c[15].Int32, wide)
 		}
 		return c
 	})

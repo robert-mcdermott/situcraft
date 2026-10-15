@@ -410,6 +410,7 @@ func Run(ctx context.Context, in *Inputs, region Region, opt Options, progress f
 	}
 	done := 0
 	var voxels, transcripts *tally
+	var fromCell []bool
 	var halves [2]*tally
 	for si := start; si < len(opt.Stages); si++ {
 		st := opt.Stages[si]
@@ -445,10 +446,20 @@ func Run(ctx context.Context, in *Inputs, region Region, opt Options, progress f
 				for v, c := range s.Labels {
 					voxels.add(v, c)
 				}
+				// Each transcript counts as in its voxel's cell when it is attributed to the cell, as
+				// in the background otherwise (its own attribution's draw, given this sweep's state).
+				if fromCell == nil {
+					fromCell = make([]bool, len(s.voxel))
+				}
+				s.AttributionsFor(m, fromCell)
 				for i, v := range s.voxel {
-					transcripts.add(i, s.Labels[v])
+					l := s.Labels[v]
+					if !fromCell[i] {
+						l = 0
+					}
+					transcripts.add(i, l)
 					if i%splitEvery == 0 {
-						half.add(i/splitEvery, s.Labels[v])
+						half.add(i/splitEvery, l)
 					}
 				}
 				voxels.samples++
