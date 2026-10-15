@@ -74,6 +74,64 @@ func TestDistributions(t *testing.T) {
 	})
 }
 
+// The Chinese restaurant table distribution: P(l tables | n, r) = |s(n, l)| r^l / (r(r+1)⋯(r+n−1)),
+// |s(n, l)| the unsigned Stirling numbers of the first kind, by their recurrence.
+func TestCRT(t *testing.T) {
+	s := New(20261015, 2)
+	for _, c := range []struct {
+		n int
+		r float64
+	}{{1, 0.5}, {5, 0.7}, {20, 3.2}, {30, 12}} {
+		stirling := []float64{1} // |s(0, 0)|
+		for m := 0; m < c.n; m++ {
+			next := make([]float64, len(stirling)+1)
+			for l, v := range stirling {
+				next[l] += float64(m) * v
+				next[l+1] += v
+			}
+			stirling = next
+		}
+		rising := 1.0
+		for j := 0; j < c.n; j++ {
+			rising *= c.r + float64(j)
+		}
+		discrete(t, fmt.Sprintf("CRT(%d, %g)", c.n, c.r), func() int { return s.CRT(c.n, c.r) }, func(l int) float64 {
+			if l >= len(stirling) {
+				return 0
+			}
+			return stirling[l] * math.Pow(c.r, float64(l)) / rising
+		})
+	}
+	if New(1, 1).CRT(0, 3) != 0 {
+		t.Error("no customers, no tables")
+	}
+}
+
+// A Dirichlet draw's components are beta: component k of Dirichlet(α) is Beta(α_k, Σα − α_k).
+func TestDirichlet(t *testing.T) {
+	s := New(20261015, 3)
+	shapes := []float64{0.6, 2, 7.5}
+	components := make([][]float64, len(shapes))
+	out := make([]float64, len(shapes))
+	for i := 0; i < draws; i++ {
+		s.Dirichlet(shapes, out)
+		var sum float64
+		for k, v := range out {
+			components[k] = append(components[k], v)
+			sum += v
+		}
+		if math.Abs(sum-1) > 1e-12 {
+			t.Fatalf("a draw sums to %g", sum)
+		}
+	}
+	for k, a := range shapes {
+		b := 0.6 + 2 + 7.5 - a
+		if d, p := stats.KS(components[k], func(x float64) float64 { return stats.BetaCDF(x, a, b) }); p < alpha {
+			t.Errorf("Dirichlet component %d: D %.4f, p %.2g", k, d, p)
+		}
+	}
+}
+
 // The same seed and stream give the same draws, other streams others; and the draws are the same
 // bits on every processor (this checksum is the same on amd64, where CI runs, and arm64).
 func TestReproducible(t *testing.T) {

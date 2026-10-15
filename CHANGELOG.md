@@ -31,6 +31,14 @@ segmentation, validated against simulated truth and independent reference output
   - **Validated:** goodness-of-fit tests show that the counts, places, displacements, quality
     scores, background and cells follow the distributions they are drawn from.
 
+- **The model of SituCraft's transcript-informed segmentation (wave 3, slice 2),** not yet in
+  the app: a voxel lattice; a Poisson likelihood with per-gene background; a mixture of
+  expression states with negative-binomial counts; log-normal cell volumes; and a prior from the
+  nuclei. Its parameters are drawn by exact conditional updates. Each update is checked against
+  its analytic posterior, and the whole sweep by Geweke's joint distribution test, with the same
+  result on any number of threads and any processor. The equations are in
+  [research.md §3.2](situcraft-spec/research.md).
+
 ### Fixed
 
 - **Nucleus expansion stopped with an internal error** when a bundle's cell mask

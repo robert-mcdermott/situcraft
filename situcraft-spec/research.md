@@ -350,25 +350,172 @@ is another segmentation, not a reproduction.
 Jones DC, Elz AE, Hadadianpour A, Ryu H, Glass DR, Newell EW. Cell simulation as cell
 segmentation. *Nat Methods* 2025;22(6):1331–1342. doi:10.1038/s41592-025-02697-0.
 
-The model, as SituCraft implements it (notation is SituCraft's; equations are written out in full
-when wave 3 is planned):
+A cell is a region of space whose molecules are a Poisson process with its own rate for each
+gene, over a background with a rate for each gene everywhere; a segmentation is the labelling of
+space that makes the observed molecules most probable, given what cells' expression and sizes are
+like. SituCraft samples labellings from their posterior, as the publication does. The model and
+its updates are written out below (notation is SituCraft's), then the sampler.
 
-- **Space.** A 3D lattice of voxels. Each voxel is either unassigned (background) or assigned to
-  exactly one cell. Sampling starts coarse (4 µm in x/y, one z layer) and doubles resolution twice
-  (to 1 µm, 4 z layers). Doubling splits voxels without changing which cell owns each region.
-- **Transcripts.** Observed molecules are a Poisson point process. Each gene has a constant
-  background rate over the region. Each cell has a constant per-gene rate over its volume.
-- **Expression.** Cell rates follow a hierarchical gamma mixture with *k* components (broad
-  expression states). With per-gene, per-component gamma parameters, counts are marginally
-  negative binomial. Conditional updates use conjugacy and data augmentation:
-  - Chinese-restaurant-table augmentation for the dispersion (Zhou & Carin 2015, *IEEE TPAMI*
-    37:307–320, doi:10.1109/TPAMI.2013.211);
-  - Pólya–Gamma augmentation for the logistic parameters (Polson, Scott & Windle 2013, *JASA*
-    108:1339–1349, doi:10.1080/01621459.2013.829001).
-- **Volume.** Log-normal cell volume per component.
-- **Prior segmentation.** Sampling is initialized from nuclei. A nuclear prior penalizes moving a
-  transcript away from its initial nucleus (probability 0.8 that the initial assignment is
-  correct, in the publication).
+#### The model (verified, wave 3, slice 2)
+
+**Space.** The region $R$ (a patch of the section, of volume $|R|$ µm³) is a lattice of voxels,
+each of volume $\nu$ (its side in x and y times the section's depth divided by the number of z
+layers). A labelling $\sigma$ gives each voxel $v$ a cell $\sigma(v) \in \{1, \dots, C\}$ or the
+background, $\sigma(v) = 0$. Cell $c$'s volume is $V_c = \nu \, |\{v : \sigma(v) = c\}|$. Sampling
+starts coarse (4 µm in x and y, one z layer) and doubles the resolution twice, to 1 µm and four
+layers; doubling splits voxels without changing which cell owns a region (slice 3).
+
+**Molecules.** Transcript $i$ ($i = 1, \dots, N$; gene transcripts of quality 20 or more) has
+gene $g_i$ and lies in voxel $v(i)$; write $\sigma(i) = \sigma(v(i))$. The molecules of gene $g$
+are a Poisson process of intensity $\lambda_{0g} + \lambda_{\sigma(x) g}$ at $x$ (per µm³; the
+second term is absent over the background): the background's rate $\lambda_{0g}$ everywhere and
+cell $c$'s rate $\lambda_{cg}$ within it. The log-likelihood of the labelling and the rates is
+
+$$\log p(\text{molecules} \mid \sigma, \lambda) = \sum_i \log\bigl(\lambda_{0 g_i} + \lambda_{\sigma(i) g_i}\bigr) - |R| \sum_g \lambda_{0g} - \sum_c V_c \Lambda_c, \qquad \Lambda_c = \sum_g \lambda_{cg},$$
+
+with $\lambda_{0\cdot}$ for $\sigma(i) = 0$ read as zero. Each molecule in a cell came from the cell
+or from the background: the attribution $a_i$, with
+$P(a_i = \text{cell}) = \lambda_{\sigma(i) g_i} / (\lambda_{0 g_i} + \lambda_{\sigma(i) g_i})$
+(the superposition of two Poisson processes). Given the attributions, cell $c$'s count of gene
+$g$, $n_{cg}$, is Poisson with mean $V_c \lambda_{cg}$, and the background's, $n_{0g}$ (its
+molecules in cells and outside them), Poisson with mean $|R| \lambda_{0g}$.
+
+**Expression.** Each cell belongs to one of $K$ components (broad expression states),
+$z_c \in \{1, \dots, K\}$, with probabilities $\pi \sim \mathrm{Dirichlet}(\alpha, \dots, \alpha)$.
+Given its component, a cell's rates are gamma (shape $r$, rate $\beta$):
+
+$$\lambda_{cg} \mid z_c = k \sim \mathrm{Gamma}(r_{kg}, \beta_{kg}), \quad r_{kg} \sim \mathrm{Gamma}(a_r, b_r), \quad \beta_{kg} \sim \mathrm{Gamma}(a_\beta, \phi_g), \quad \phi_g \sim \mathrm{Gamma}(e_\phi, f_\phi), \quad \lambda_{0g} \sim \mathrm{Gamma}(a_0, b_0).$$
+
+A cell's count, its rate integrated out, is negative binomial:
+$n_{cg} \sim \mathrm{NB}(r_{kg}, p_{ckg})$, $p_{ckg} = V_c / (V_c + \beta_{kg})$, of mean
+$V_c r_{kg} / \beta_{kg}$. The gene-level $\phi_g$ shares each gene's scale across components, so a
+component with few cells is drawn toward the gene's typical rate.
+
+*SituCraft's choice:* the publication parameterizes the negative binomial's probability
+logistically and samples it with Pólya–Gamma variables (Polson, Scott & Windle 2013, *JASA*
+108:1339–1349, doi:10.1080/01621459.2013.829001; as in Zhou M, Li L, Dunson D, Carin L.
+Lognormal and gamma mixed negative binomial regression. *ICML* 2012). SituCraft places a gamma
+prior on the rate $\beta_{kg}$ instead, conjugate given the cells' rates. Every expression update
+is then an exact draw, with no Pólya–Gamma variates, whose exact sampling for the large,
+non-integer shapes that arise here ($n_{cg} + r_{kg}$) is costly and whose fast samplers
+approximate. The sampler's target is then exactly the model's posterior, which slice 3 tests by
+enumeration.
+
+**Volume.** A cell's volume is log-normal by component,
+$\log V_c \mid z_c = k \sim \mathcal{N}(m_k, s_k^2)$, with the conjugate normal–inverse-gamma
+prior $s_k^2 \sim \mathrm{InvGamma}(a_s, b_s)$, $m_k \mid s_k^2 \sim \mathcal{N}(m_0, s_k^2/\kappa_0)$.
+
+**The nuclear prior.** A transcript over a nucleus in the section has that nucleus's cell as its
+prior cell $q_i$ (otherwise $q_i = 0$). The labelling's prior weighs each such transcript by
+$\rho$ if it lies in $q_i$ and $1 - \rho$ if it does not ($\rho = 0.8$, the publication's).
+
+**The labelling's prior** is
+$p(\sigma \mid z, m, s) \propto I(\sigma) \prod_c \mathrm{LogNormal}(V_c; m_{z_c}, s^2_{z_c}) \prod_{i : q_i \ne 0} \rho^{[\sigma(i) = q_i]} (1 - \rho)^{[\sigma(i) \ne q_i]}$,
+where $I(\sigma)$ is 1 when every cell is connected, within its perimeter bound and non-empty, and
+0 otherwise (slice 3). *The one approximation.* This prior's normalizing constant, a sum over
+every labelling, depends on the volume parameters and the components, and cannot be computed
+(the "doubly intractable" problem: Murray I, Ghahramani Z, MacKay DJC. MCMC for
+doubly-intractable distributions. *UAI* 2006). SituCraft updates the components and the volume
+parameters as though the cells' volumes were independent log-normal draws, which treats that
+constant as fixed. With one volume prior for every component, held fixed (`exact` mode), the
+constant is a constant and the sampler is exact; the tests that check exactness use that mode.
+
+**The updates.** One sweep of the parameters, given the labelling, draws in this order:
+
+1. **Attributions:** each molecule in a cell from the cell with probability
+   $\lambda_{\sigma(i) g_i} / (\lambda_{0 g_i} + \lambda_{\sigma(i) g_i})$; the counts $n_{cg}$
+   and $n_{0g}$ follow.
+2. **Background:** $\lambda_{0g} \sim \mathrm{Gamma}(a_0 + n_{0g},\; b_0 + |R|)$.
+3. **Components**, each cell's rates integrated out:
+   $P(z_c = k) \propto \pi_k \, \mathrm{LogNormal}(V_c; m_k, s_k^2) \prod_g \mathrm{NB}(n_{cg}; r_{kg}, p_{ckg})$,
+   where $\log \mathrm{NB}(n; r, p) = \sum_{j=0}^{n-1} \log(r + j) + r \log(1 - p) + n \log p - \log n!$
+   (the last term is the same for every $k$ and is dropped).
+4. **Shapes**, the rates integrated out, by Chinese-restaurant-table augmentation (Zhou M, Carin
+   L. Negative binomial process count and mixture modeling. *IEEE TPAMI* 2015;37:307–320.
+   doi:10.1109/TPAMI.2013.211): for each cell of component $k$,
+   $\ell_{cg} \sim \mathrm{CRT}(n_{cg}, r_{kg})$, the sum of $n_{cg}$ Bernoulli draws of
+   probabilities $r/(r + j - 1)$, $j = 1, \dots, n_{cg}$; then
+   $r_{kg} \sim \mathrm{Gamma}\bigl(a_r + \sum_c \ell_{cg},\; b_r + \sum_{c : z_c = k} \log(1 + V_c/\beta_{kg})\bigr)$.
+5. **Rates:** $\lambda_{cg} \sim \mathrm{Gamma}(r_{z_c g} + n_{cg},\; \beta_{z_c g} + V_c)$.
+6. **Rate parameters:** $\beta_{kg} \sim \mathrm{Gamma}\bigl(a_\beta + N_k r_{kg},\; \phi_g + \sum_{c : z_c = k} \lambda_{cg}\bigr)$, $N_k$ the component's cells.
+7. **Gene scales:** $\phi_g \sim \mathrm{Gamma}(e_\phi + K a_\beta,\; f_\phi + \sum_k \beta_{kg})$.
+8. **Proportions:** $\pi \sim \mathrm{Dirichlet}(\alpha + N_1, \dots, \alpha + N_K)$.
+9. **Volumes:** for each component, with $y_c = \log V_c$ over its cells, mean $\bar y$:
+   $\kappa_n = \kappa_0 + N_k$, $m_n = (\kappa_0 m_0 + N_k \bar y)/\kappa_n$, $a_n = a_s + N_k/2$,
+   $b_n = b_s + \tfrac12 \sum_c (y_c - \bar y)^2 + \kappa_0 N_k (\bar y - m_0)^2 / (2\kappa_n)$;
+   $s_k^2 \sim \mathrm{InvGamma}(a_n, b_n)$, $m_k \sim \mathcal{N}(m_n, s_k^2/\kappa_n)$
+   (skipped in `exact` mode).
+
+Steps 3 and 4 integrate the cells' rates out, and step 5 draws them anew before anything
+conditions on them (step 6, and step 1 of the next sweep): a partially collapsed Gibbs sampler,
+valid in this order (van Dyk DA, Park T. Partially collapsed Gibbs samplers: theory and methods.
+*JASA* 2008;103:790–796. doi:10.1198/016214508000000409). Collapsing the rates lets a cell change
+component without its rates holding it in place. Every cell's draws in steps 1, 3, 4 and 5 come
+from its own random stream, named by the sweep, the step and the cell, so the cells are updated in
+parallel with the same result on any number of threads.
+
+**A voxel's move** from cell $a$ to cell $b$ (either may be the background, $0$; slice 3 proposes
+them) changes the log-posterior, the attributions integrated out, by
+
+$$\Delta = \sum_{i \in v} \log\frac{\lambda_{0 g_i} + \lambda_{b g_i}}{\lambda_{0 g_i} + \lambda_{a g_i}} - \nu(\Lambda_b - \Lambda_a) + \Delta_{\text{volume}} + \sum_{i \in v,\, q_i \ne 0} \Delta_{\text{nuclear}}(i),$$
+
+with the background's $\lambda_{0\cdot}$ and $\Lambda_0$ read as zero in the cell terms;
+$\Delta_{\text{volume}}$ the change in $\log \mathrm{LogNormal}$ of the cells' volumes ($V_a - \nu$,
+$V_b + \nu$); and $\Delta_{\text{nuclear}}(i)$ $\log\rho - \log(1-\rho)$ when the molecule moves
+into its prior cell, the opposite when it moves out of it, and 0 otherwise. A move that empties a
+cell is refused.
+
+**Defaults** (SituCraft's choices; every one recorded with a segmentation):
+
+| Parameter | Default | Why |
+| --- | --- | --- |
+| Components $K$ | 10 | Enough for a panel's broad cell types; empty components fall back to the prior |
+| $\alpha$ | 1 | A uniform prior over the proportions |
+| $a_r, b_r$ | 2, 0.5 | Shapes of mean 4 (sd 2.8): overdispersed, as single-cell counts are, without ruling out near-Poisson genes |
+| $a_\beta$ | 1 | An exponential prior on each component's rate parameter about the gene's scale |
+| $e_\phi, f_\phi$ | 1, 1 µm³ | Weak: rate parameters are hundreds to thousands of µm³ |
+| $a_0, b_0$ | 1, 1 µm³ | Weak: the region is of the order of $10^5$–$10^7$ µm³ |
+| $m_0$ | $\log$ of the median initial cell volume | Centres the volume prior on the cells the sampler starts from |
+| $\kappa_0, a_s, b_s$ | 1, 2, 0.25 | A prior mean of 0.25 for $s_k^2$: volumes within a factor of about 1.6 |
+| $\rho$ | 0.8 | The publication's |
+
+**Validation** (`internal/segment/refine`; fixed seeds, each test at the 0.001 level):
+- **Each conjugate update against its analytic posterior** (Kolmogorov–Smirnov, 6,000 draws):
+  the background's, the cells' and the components' rates, the gene scales, the proportions (each
+  marginally beta), and the volume prior (its variance inverse gamma, its mean normal given it).
+- **The components** against probabilities computed independently from the negative binomial
+  and log-normal densities (χ²).
+- **The shapes:** 3,000 independent chains of the augmented update, started from the prior, end
+  distributed as the posterior computed by numerical integration.
+- **The whole sweep** by Geweke's joint distribution test (Geweke J. Getting it right: joint
+  distribution tests of posterior simulators. *J Am Stat Assoc* 2004;99:799–804.
+  doi:10.1198/016214504000001132). 4,000 chains start from the prior and data drawn from the
+  model, then alternate 40 sweeps with fresh data. Eleven quantities (shapes, rate parameters,
+  scales, rates, background, proportions, volume parameters, component sizes) stay distributed as
+  the prior (two-sample Kolmogorov–Smirnov).
+- **Moves:** in a random walk of 2,000 voxel moves, each move's computed change equals the target
+  recomputed afresh (to $10^{-9}$ relative); a move that would empty a cell is refused.
+- **Attributions:** each in proportion to the rates (z test); the counts follow them.
+- **Behaviour:** on counts of 300 cells of three types, the components separate the types
+  (purity 0.95 or more).
+- **Determinism:** the same parameters on 1 and 8 workers. A pinned checksum of twenty sweeps is
+  the same on arm64 and amd64.
+- **Power.** Each test was shown to fail on a deliberate error. Nine errors were tried:
+  - a conjugate posterior's parameter wrong (background, shapes, rates, rate parameters, gene
+    scales, volumes);
+  - the volume prior dropped from the components;
+  - the CRT off by one;
+  - the rates drawn before the shapes, which breaks the partially collapsed order (caught only by
+    the joint test, once its chains were long enough for the error to accumulate).
+
+  Four more were tried on the moves and attributions (a sign, the nuclear prior reversed, a
+  volume off by one, the attribution's share). Every one was caught.
+
+A sweep of the parameters at the standard simulation's size (3,000 cells, 120 genes, 10
+components) takes about 9 ms on ten cores; its cost grows with cells × genes × components.
+
+#### The sampler (wave 3, slice 3; as planned)
+
 - **Morphology.** A hard constraint, not an energy: each cell's perimeter in each z layer is
   bounded relative to the perimeter of a circle of the same area (factor 1.3 by default).
   Proposals that violate it are rejected.
@@ -836,6 +983,13 @@ Notes:
 - Deutsch P, Gailly J-L. ZLIB compressed data format specification version 3.3. RFC 1950, 1996;
   Deutsch P. DEFLATE compressed data format specification version 1.3. RFC 1951, 1996 (the
   cache's blocks, through Go's standard library; the simulated morphology images).
+- Zhou M, Carin L. Negative binomial process count and mixture modeling. *IEEE TPAMI*
+  2015;37:307–320. doi:10.1109/TPAMI.2013.211. van Dyk DA, Park T. Partially collapsed Gibbs
+  samplers: theory and methods. *JASA* 2008;103:790–796. doi:10.1198/016214508000000409. Geweke J.
+  Getting it right: joint distribution tests of posterior simulators. *JASA* 2004;99:799–804.
+  doi:10.1198/016214504000001132. Murray I, Ghahramani Z, MacKay DJC. MCMC for
+  doubly-intractable distributions. *UAI* 2006 (the transcript-informed segmentation's model,
+  §3.2).
 - Feder J. Random sequential adsorption. *J Theor Biol* 1980;87:237–254.
   doi:10.1016/0022-5193(80)90358-6 (placing simulated cells).
 - Borgefors G. Distance transformations in digital images. *Comput Vis Graph Image Process*
@@ -856,7 +1010,7 @@ Notes:
 - Sun Microsystems. fdlibm 5.3, 1993: the logarithm and exponential `internal/dmath` and
   `web/lib/dmath.js` compute, the same in Go and JavaScript on every processor.
 - Abramowitz M, Stegun IA. *Handbook of Mathematical Functions*. National Bureau of Standards,
-  1964, 6.5.29 and 6.5.31 (the incomplete gamma function). Stephens MA. Use of the
+  1964, 6.5.29 and 6.5.31 (the incomplete gamma function), 26.5.8 (the incomplete beta function). Stephens MA. Use of the
   Kolmogorov–Smirnov, Cramér–von Mises and related statistics without extensive tables. *J R
   Stat Soc B* 1970;32:115–122 (the goodness-of-fit tests of `internal/stats`).
 

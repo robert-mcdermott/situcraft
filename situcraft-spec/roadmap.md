@@ -1132,16 +1132,44 @@ independent reference outputs.
      - **spatialdata-io needs more than SituCraft:** the HDF5 matrix, `cells.zarr.zip`'s
        polygon sets and cell summary, and a version it can parse. Without them it read the
        bundle as XOA 1. All three are written.
-2. **The model (S2).**
-   - Voxel lattice and cell state.
-   - Poisson likelihood with per-gene background.
-   - The gamma–negative-binomial expression mixture with its conjugate and augmented updates
-     (Chinese-restaurant-table and Pólya–Gamma), the log-normal volume prior, and the nuclear
-     prior.
+2. **The model (S2): done.**
+   - **The equations** are written out in research.md §3.2 (notation, likelihood, priors, every
+     conditional, their order, defaults).
+   - **The model** (`internal/segment/refine`):
+     - a voxel lattice and the labelling's state: cells, transcripts by voxel, prior cells,
+       attributions;
+     - the Poisson likelihood with per-gene background, the attributions integrated out or drawn;
+     - the gamma–negative-binomial mixture of expression states;
+     - the log-normal volume prior and the nuclear prior;
+     - the change one voxel's move makes to the target, for slice 3's proposals.
+   - **The updates:** a partially collapsed Gibbs sweep, with the components and shapes drawn
+     with the cells' rates integrated out; the shapes by Chinese-restaurant-table augmentation;
+     everything else conjugate. Every cell, gene and component draws from its own stream, in
+     parallel, with the same result on any number of threads and on any processor.
+   - **SituCraft's choices,** recorded in research.md:
+     - a gamma prior on each component's rate parameter, with a gene-level scale, instead of the
+       publication's Pólya–Gamma-sampled probability, so that every update is an exact draw;
+     - the volume prior's normalizing constant (intractable) treated as fixed when its
+       parameters and the components are updated, stated as the sampler's one approximation,
+       with an `exact` mode (one fixed volume prior) for the exactness tests.
+   - **New draws and tests:** the Chinese-restaurant-table and Dirichlet draws (`internal/random`,
+     tested against the exact distributions); the beta distribution function and the two-sample
+     Kolmogorov–Smirnov test (`internal/stats`).
+   - Validation (research.md §3.2):
+     - each conjugate update against its analytic posterior;
+     - the components against independently computed probabilities;
+     - the shapes' augmented chain against the numerically integrated posterior;
+     - Geweke's joint distribution test of the whole sweep;
+     - every voxel move's change against the recomputed target;
+     - the attributions' shares;
+     - type recovery from counts;
+     - the same bits on any number of workers and on arm64 and amd64.
 
-   The equations are written out in `research.md` §3 before the code.
-   - Validation: each conditional update agrees with its analytic posterior on small cases, or
-     with a brute-force numerical posterior.
+     Thirteen deliberate errors were each caught, among them the partially collapsed steps in
+     the wrong order.
+   - Found by slice 2:
+     - **Geweke's test needs long chains for ordering errors:** with 8 sweeps per chain it missed
+       the rates drawn before the shapes; with 40 the error accumulates and is caught.
 3. **The sampler (S2, S8).**
    - Proposals: voxel-label copy, Metropolis–Hastings with proposal correction, bubble proposals.
    - Constraints: connectivity (articulation check) and the perimeter bound.

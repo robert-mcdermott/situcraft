@@ -63,3 +63,66 @@ func TestKSAndChiSquare(t *testing.T) {
 		t.Fatalf("merged df %d", df)
 	}
 }
+
+// The beta distribution function against the binomial identity I_x(a, b) = P(Binomial(a+b−1, x) ≥ a)
+// for whole shapes, and known closed forms.
+func TestBetaCDF(t *testing.T) {
+	binom := func(n, k int) float64 {
+		v := 1.0
+		for i := 1; i <= k; i++ {
+			v = v * float64(n-k+i) / float64(i)
+		}
+		return v
+	}
+	for a := 1; a <= 9; a += 2 {
+		for b := 1; b <= 12; b += 3 {
+			for _, x := range []float64{0.01, 0.2, 0.5, 0.77, 0.99} {
+				n := a + b - 1
+				want := 0.0
+				for j := a; j <= n; j++ {
+					want += binom(n, j) * math.Pow(x, float64(j)) * math.Pow(1-x, float64(n-j))
+				}
+				if got := BetaCDF(x, float64(a), float64(b)); math.Abs(got-want) > 1e-12 {
+					t.Errorf("I_%g(%d, %d) = %.15g, want %.15g", x, a, b, got, want)
+				}
+			}
+		}
+	}
+	for _, c := range []struct{ x, a, b, want float64 }{
+		{0.5, 3.3, 3.3, 0.5},
+		{0.3, 0.5, 1, math.Sqrt(0.3)},
+		{0.3, 1, 2.5, 1 - math.Pow(0.7, 2.5)},
+		{0, 2, 2, 0}, {1, 2, 2, 1},
+	} {
+		if got := BetaCDF(c.x, c.a, c.b); math.Abs(got-c.want) > 1e-12 {
+			t.Errorf("I_%g(%g, %g) = %.15g, want %.15g", c.x, c.a, c.b, got, c.want)
+		}
+	}
+}
+
+// Two samples of one distribution pass; of two that differ, fail.
+func TestKS2(t *testing.T) {
+	r := func(seed uint64, shift float64) []float64 {
+		x := make([]float64, 3000)
+		state := seed
+		for i := range x {
+			// A sum of twelve uniforms (Irwin–Hall), from a linear congruential generator.
+			var u float64
+			for k := 0; k < 12; k++ {
+				state = state*6364136223846793005 + 1442695040888963407
+				u += float64(state>>11) * 0x1p-53
+			}
+			x[i] = u - 6 + shift
+		}
+		return x
+	}
+	if _, p := KS2(r(1, 0), r(2, 0)); p < 1e-3 {
+		t.Errorf("one distribution: p %.2g", p)
+	}
+	if _, p := KS2(r(1, 0), r(2, 0.2)); p > 1e-3 {
+		t.Errorf("shifted by 0.2 σ: p %.2g", p)
+	}
+	if d, _ := KS2([]float64{1, 2, 3}, []float64{4, 5}); d != 1 {
+		t.Errorf("disjoint samples: D %g", d)
+	}
+}

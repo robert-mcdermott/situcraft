@@ -10,7 +10,11 @@
 //     Cramér–von Mises and related statistics without extensive tables. J R Stat Soc B
 //     1970;32:115–122);
 //   - Pearson's chi-square test of counts against expected ones, neighbouring bins merged in
-//     order until each expects at least five (what is left at the end joins the last).
+//     order until each expects at least five (what is left at the end joins the last);
+//   - the regularized incomplete beta function, by its continued fraction (Abramowitz and Stegun
+//     26.5.8, evaluated by Lentz's method), for the beta distribution function;
+//   - the two-sample Kolmogorov–Smirnov test, its p-value from the limiting distribution at the
+//     samples' effective size n₁n₂/(n₁ + n₂), with Stephens' correction.
 package stats
 
 import (
@@ -186,4 +190,81 @@ func ChiSquare(observed, expected []float64, fitted int) (stat float64, df int, 
 	}
 	df = len(bins) - 1 - fitted
 	return stat, df, ChiSquareP(stat, df)
+}
+
+// BetaCDF is the beta distribution function of shapes a and b at x: the regularized incomplete
+// beta function I_x(a, b).
+func BetaCDF(x, a, b float64) float64 {
+	switch {
+	case x <= 0:
+		return 0
+	case x >= 1:
+		return 1
+	}
+	la, _ := math.Lgamma(a)
+	lb, _ := math.Lgamma(b)
+	lab, _ := math.Lgamma(a + b)
+	front := math.Exp(a*math.Log(x) + b*math.Log1p(-x) - (la + lb - lab))
+	// The fraction converges fast below the mean; above it, by symmetry.
+	if x < (a+1)/(a+b+2) {
+		return front * betaFraction(x, a, b) / a
+	}
+	return 1 - front*betaFraction(1-x, b, a)/b
+}
+
+// betaFraction is A&S 26.5.8's continued fraction, by Lentz's method.
+func betaFraction(x, a, b float64) float64 {
+	const tiny = 1e-300
+	c, d := 1.0, 1-(a+b)*x/(a+1)
+	if math.Abs(d) < tiny {
+		d = tiny
+	}
+	d = 1 / d
+	h := d
+	for m := 1; m <= 10000; m++ {
+		fm := float64(m)
+		// The even step, then the odd.
+		for _, num := range []float64{
+			fm * (b - fm) * x / ((a + 2*fm - 1) * (a + 2*fm)),
+			-(a + fm) * (a + b + fm) * x / ((a + 2*fm) * (a + 2*fm + 1)),
+		} {
+			d = 1 + num*d
+			if math.Abs(d) < tiny {
+				d = tiny
+			}
+			c = 1 + num/c
+			if math.Abs(c) < tiny {
+				c = tiny
+			}
+			d = 1 / d
+			h *= d * c
+		}
+		if math.Abs(d*c-1) < 1e-15 {
+			break
+		}
+	}
+	return h
+}
+
+// KS2 is the two-sample Kolmogorov–Smirnov test: the largest difference between the samples'
+// distribution functions, and its p-value.
+func KS2(a, b []float64) (d, p float64) {
+	x := append([]float64(nil), a...)
+	y := append([]float64(nil), b...)
+	sort.Float64s(x)
+	sort.Float64s(y)
+	i, j := 0, 0
+	for i < len(x) && j < len(y) {
+		v := math.Min(x[i], y[j])
+		for i < len(x) && x[i] == v {
+			i++
+		}
+		for j < len(y) && y[j] == v {
+			j++
+		}
+		d = math.Max(d, math.Abs(float64(i)/float64(len(x))-float64(j)/float64(len(y))))
+	}
+	n := float64(len(x)) * float64(len(y)) / float64(len(x)+len(y))
+	en := math.Sqrt(n)
+	return d, KolmogorovQ((en + 0.12 + 0.11/en) * d)
 }

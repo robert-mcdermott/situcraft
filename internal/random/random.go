@@ -13,7 +13,11 @@
 //     gamma variables. ACM Trans Math Softw 2000;26:363–372), with U^(1/a) for shapes below 1;
 //   - Poisson: the product of uniforms (Knuth, The Art of Computer Programming, vol. 2, §3.4.1),
 //     for means of 30 or less, sums of such draws above (a sum of Poisson variables is Poisson);
-//   - negative binomial: a Poisson draw whose mean is gamma (the gamma–Poisson mixture).
+//   - negative binomial: a Poisson draw whose mean is gamma (the gamma–Poisson mixture);
+//   - Chinese restaurant table: the tables n customers occupy in a Chinese restaurant process of
+//     concentration r, a sum of Bernoulli draws (Zhou M, Carin L. Negative binomial process count
+//     and mixture modeling. IEEE TPAMI 2015;37:307–320);
+//   - Dirichlet: independent gamma draws, normalized.
 package random
 
 import (
@@ -168,4 +172,46 @@ func (s *Stream) NegativeBinomial(m, r float64) int {
 		return s.Poisson(m)
 	}
 	return s.Poisson(s.Gamma(r, m/r))
+}
+
+// CRT is a draw of the Chinese restaurant table distribution: the number of tables n customers
+// occupy when customer j sits at a new table with probability r/(r + j − 1).
+func (s *Stream) CRT(n int, r float64) int {
+	tables := 0
+	for j := 1; j <= n; j++ {
+		if s.Float64() < r/(r+float64(j-1)) {
+			tables++
+		}
+	}
+	return tables
+}
+
+// Dirichlet fills out (as long as alpha) with a draw of the Dirichlet distribution of parameters
+// alpha, each above 0.
+func (s *Stream) Dirichlet(alpha, out []float64) {
+	var sum float64
+	for k, a := range alpha {
+		out[k] = s.Gamma(a, 1)
+		sum += out[k]
+	}
+	if sum == 0 {
+		// Every draw underflowed (parameters far below 1): the mass goes to one component, chosen
+		// in proportion to the parameters, which is the distribution's limit.
+		var total float64
+		for _, a := range alpha {
+			total += a
+		}
+		u := mul(s.Float64(), total)
+		for k, a := range alpha {
+			out[k] = 0
+			if u >= 0 && u < a {
+				out[k] = 1
+			}
+			u -= a
+		}
+		return
+	}
+	for k := range out[:len(alpha)] {
+		out[k] /= sum
+	}
 }
