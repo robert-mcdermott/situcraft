@@ -84,14 +84,16 @@ export function mountWelcome(app, container) {
       const card = h('div.card.example', { 'data-example': example.name },
         h('h4', icon('bundle'), example.title.replace(/\s*\(.*\)$/, '')),
         h('p', example.summary),
-        h('p.muted.example-source', 'Data: ', example.page ? h('a', { href: example.page, target: '_blank', rel: 'noopener noreferrer' }, example.publisher) : example.publisher, ', ',
-          example.licenseUrl ? h('a', { href: example.licenseUrl, target: '_blank', rel: 'noopener noreferrer' }, example.license.replace(/\s*\(.*\)$/, '')) : example.license,
-          ` · ${formatBytes(example.download)} to download, ${formatBytes(example.size)} on disk`),
+        example.generated
+          ? h('p.muted.example-source', `Data: simulated by SituCraft on this computer, nothing downloaded · about ${formatBytes(example.size)} on disk`)
+          : h('p.muted.example-source', 'Data: ', example.page ? h('a', { href: example.page, target: '_blank', rel: 'noopener noreferrer' }, example.publisher) : example.publisher, ', ',
+            example.licenseUrl ? h('a', { href: example.licenseUrl, target: '_blank', rel: 'noopener noreferrer' }, example.license.replace(/\s*\(.*\)$/, '')) : example.license,
+            ` · ${formatBytes(example.download)} to download, ${formatBytes(example.size)} on disk`),
         actions);
       const worked = workedExamples(example.name);
       if (worked.length) {
         card.insertBefore(h('div.example-worked', h('div.example-worked-title', 'Worked example'), ...worked.map((w) => h('div.example-worked-item',
-          h('div', h('b', w.title), w.simulated ? h('span.badge.warn', { style: { marginLeft: '6px' } }, 'simulated errors') : null),
+          h('div', h('b', w.title), w.simulated ? h('span.badge.warn', { style: { marginLeft: '6px' } }, example.generated ? 'simulated tissue' : 'simulated errors') : null),
           h('p.muted', w.question),
           example.state === 'ready' && !job ? h('button.btn.small', { type: 'button', 'data-worked': w.id, onclick: () => app.examples.tour(example.name, w.id) }, icon('flask'), 'Start') : null))), actions);
       }
@@ -106,6 +108,8 @@ export function mountWelcome(app, container) {
         actions.append(
           h('button.btn.small', { type: 'button', onclick: () => app.examples.open(example.name) }, icon('bundle'), 'Open'),
           h('button.btn.small', { type: 'button', title: `Delete it from ${example.path}`, onclick: () => app.examples.remove(example.name) }, icon('trash'), 'Remove'));
+      } else if (example.generated) {
+        actions.append(h('button.btn.small.primary', { type: 'button', title: `Simulate it into ${app.examples.dir()}`, onclick: () => app.examples.download(example.name) }, icon('sparkles'), 'Make it'));
       } else {
         actions.append(h('button.btn.small.primary', { type: 'button', title: `Download into ${app.examples.dir()}, checking every file`, onclick: () => app.examples.download(example.name) }, icon('download'), example.state === 'incomplete' ? 'Download again' : 'Download'));
       }

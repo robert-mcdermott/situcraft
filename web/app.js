@@ -18,7 +18,7 @@ import { colorVisionFriendly, setColorVisionFriendly } from './lib/colormaps.js'
 import { createProject, isEmptyProject, parseProject, rename, serializeProject } from './lib/project.js';
 import { parseViewLink } from './lib/views.js';
 
-const VERSION = '0.2.0';
+const VERSION = '0.3.0';
 
 const toOpen = { label: 'Open a bundle', icon: 'bundle', run: (app) => app.openPathDialog() };
 
@@ -386,6 +386,17 @@ async function start() {
     app.focusItem(kept ? { kind: 'view', id: view.id } : { kind: 'dataset', id: view.dataset });
     if (store.ui.mode === view.mode) store.notify(['view-pending']);
     else app.setMode(view.mode);
+  };
+
+  // Shows a segmentation on its dataset's tissue: the Viewer draws it (wave 3, slice 8), keeping
+  // where it was and what else it showed.
+  app.showOnTissue = (datasetId, segmentationId) => {
+    if (!store.project.datasets.some((d) => d.id === datasetId)) return;
+    const record = store.project.artifacts.find((a) => a.kind === 'segmentation' && a.id === segmentationId && a.dataset === datasetId);
+    app.pendingSegmentation = { dataset: datasetId, segmentation: !record || record.source === 'instrument' ? null : record.id };
+    app.focusItem({ kind: 'dataset', id: datasetId });
+    if (store.ui.mode === 'viewer') store.notify(['view-pending']);
+    else app.setMode('viewer');
   };
 
   // A deep link (#project=…&view=…) opens its project from the library and shows the view.

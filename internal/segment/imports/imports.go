@@ -2,7 +2,8 @@
 // (internal/segment), checked against the dataset they segment: SpatialData Zarr (shapes or
 // labels, points with assignments, AnnData tables), Baysor-style transcript assignments with cell
 // polygons, GeoJSON polygons with an optional transcript-to-cell table, and Xenium Ranger (or
-// Xenium Onboard Analysis) output bundles of the same run.
+// Xenium Onboard Analysis) output bundles of the same run. SituCraft's own files (`situcraft
+// refine`'s) are checked against the dataset and copied (situcraft.go).
 //
 // Every import becomes the same files as a segmentation SituCraft makes:
 //   - the cells, by the tool's own ids;
@@ -202,6 +203,9 @@ func Run(ctx context.Context, ds Dataset, opt Options, dir string, workers int, 
 	if len(opt.Paths) == 0 {
 		return nil, nil, nil, errors.New("name the files to import")
 	}
+	if opt.Format == SituCraft {
+		return copyOwn(ctx, ds, opt, dir, progress)
+	}
 	_, _, pixelSize := ds.Grid()
 	scale := 1.0
 	if opt.Units == "pixels" {
@@ -218,7 +222,7 @@ func Run(ctx context.Context, ds Dataset, opt Options, dir string, workers int, 
 	case Xenium:
 		src, err = readXenium(ctx, ds, opt)
 	default:
-		return nil, nil, nil, fmt.Errorf("the format %q is not imported (%s, %s, %s or %s)", opt.Format, SpatialData, Baysor, GeoJSON, Xenium)
+		return nil, nil, nil, fmt.Errorf("the format %q is not imported (%s, %s, %s, %s or %s)", opt.Format, SpatialData, Baysor, GeoJSON, Xenium, SituCraft)
 	}
 	if err != nil {
 		return nil, nil, nil, err

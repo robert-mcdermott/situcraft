@@ -171,6 +171,29 @@ func (a *app) handleJobs() {
 			b.Close()
 		}
 	})
+	a.jobs.Handle("refinement", func(spec json.RawMessage) (jobs.Func, error) {
+		if a.cache == nil {
+			return nil, errors.New("SituCraft has no cache folder")
+		}
+		p, err := refineOf(spec)
+		if err != nil {
+			return nil, err
+		}
+		// A refinement starts again from its seed: the same seed gives the same segmentation.
+		return a.refineJob(p), nil
+	}, func(id string, spec json.RawMessage) {
+		// Its staged files go with it.
+		p, err := refineOf(spec)
+		if err != nil {
+			return
+		}
+		if b, err := xenium.Open(p.Bundle, xenium.Options{CacheDir: a.cacheDir}); err == nil {
+			if instrument := a.knownSegmentation(b); instrument != nil {
+				a.artifacts.Discard(refineID(instrument.ID, p.Spec))
+			}
+			b.Close()
+		}
+	})
 	a.jobs.Handle("import", func(spec json.RawMessage) (jobs.Func, error) {
 		if a.cache == nil {
 			return nil, errors.New("SituCraft has no cache folder")

@@ -22,7 +22,8 @@ type Field struct {
 	Name string
 	Type Type
 	// Annotation says what the physical type holds: "string" (UTF-8 text in a BYTE_ARRAY),
-	// "uint" (an unsigned INT32 or INT64), or "" (the type itself).
+	// "uint" (an unsigned INT32 or INT64), "uint8" (an unsigned byte in an INT32), or "" (the type
+	// itself).
 	Annotation string
 }
 
@@ -54,6 +55,7 @@ type writtenGroup struct {
 // Converted and logical annotations (parquet.thrift).
 const (
 	convertedUTF8   = 0
+	convertedUint8  = 11
 	convertedUint32 = 13
 	convertedUint64 = 14
 	logicalString   = 1
@@ -76,7 +78,7 @@ func NewWriter(w io.Writer, fields []Field, createdBy string) (*Writer, error) {
 		default:
 			return nil, fmt.Errorf("parquet: column %s: %s is not written", f.Name, f.Type)
 		}
-		if f.Annotation == "string" && f.Type != ByteArray || f.Annotation == "uint" && f.Type != Int32 && f.Type != Int64 {
+		if f.Annotation == "string" && f.Type != ByteArray || f.Annotation == "uint" && f.Type != Int32 && f.Type != Int64 || f.Annotation == "uint8" && f.Type != Int32 {
 			return nil, fmt.Errorf("parquet: column %s: %s cannot hold a %s", f.Name, f.Type, f.Annotation)
 		}
 	}
@@ -285,12 +287,15 @@ func (w *Writer) Close() error {
 			t.fieldStruct(logicalString)
 			t.end()
 			t.end()
-		case "uint":
+		case "uint", "uint8":
 			bits := 32
 			if f.Type == Int64 {
 				bits = 64
 			}
-			t.i32(6, map[int]int32{32: convertedUint32, 64: convertedUint64}[bits])
+			if f.Annotation == "uint8" {
+				bits = 8
+			}
+			t.i32(6, map[int]int32{8: convertedUint8, 32: convertedUint32, 64: convertedUint64}[bits])
 			t.fieldStruct(10)
 			t.fieldStruct(logicalInteger)
 			t.byteField(1, int8(bits))

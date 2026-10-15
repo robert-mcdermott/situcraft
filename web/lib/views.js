@@ -1,6 +1,6 @@
 // Saved views: what the Viewer or the QC view shows of a dataset (where, at what zoom, which
-// channels in which colors and windows, which genes, which layers, which cell, which QC map and
-// filter), kept in the project and reopened exactly. Channels and genes are named, not numbered,
+// channels in which colors and windows, which genes, which layers, which segmentation, which cell,
+// which QC map and filter), kept in the project and reopened exactly. Channels and genes are named, not numbered,
 // so a view survives its derived data being rebuilt. The zoom is in µm per CSS pixel, so a view
 // shows the same tissue on any screen. A deep link names the project and the view.
 
@@ -21,8 +21,9 @@ export function captureView({ name, dataset, mode = 'viewer', state, desc, id = 
     dataset,
     mode,
     created: now,
-    // The segmentation the view draws: the instrument's (the Compare view draws any two).
-    segmentation: 'instrument',
+    // The segmentation the view draws: 'instrument' (the dataset's own), or an artifact's id (the
+    // Compare view draws any two).
+    segmentation: layers.cells.segmentation ?? 'instrument',
     // To 12 significant digits: converting back through another pixel ratio (viewCamera) and
     // capturing again would otherwise differ in the last bit.
     camera: { cx: camera.cx, cy: camera.cy, umPerCss: Number((ratio / camera.scale).toPrecision(12)) },
@@ -34,6 +35,9 @@ export function captureView({ name, dataset, mode = 'viewer', state, desc, id = 
       minQ: layers.transcripts.minQ,
       pointSize: layers.transcripts.pointSize,
       gain: layers.transcripts.gain,
+      // Recorded only when transcripts are colored by their probability, so that views saved
+      // before it reopen exactly.
+      ...(layers.transcripts.colorBy === 'probability' ? { colorBy: 'probability' } : {}),
     },
     cells: { outlines: layers.cells.outlines, nuclei: layers.cells.nuclei, fill: layers.cells.fill ?? null, opacity: layers.cells.opacity },
     cell: state.cell ?? null,
@@ -67,8 +71,9 @@ export function viewLayers(view, desc, defaults) {
   return {
     layers: {
       channels,
-      transcripts: { ...defaults.transcripts, visible: t.visible ?? defaults.transcripts.visible, all: t.all ?? false, genes, colors: [], minQ: t.minQ ?? defaults.transcripts.minQ, pointSize: t.pointSize ?? defaults.transcripts.pointSize, gain: t.gain ?? defaults.transcripts.gain },
-      cells: { ...defaults.cells, ...(view.cells ?? {}) },
+      transcripts: { ...defaults.transcripts, visible: t.visible ?? defaults.transcripts.visible, all: t.all ?? false, genes, colors: [], minQ: t.minQ ?? defaults.transcripts.minQ, pointSize: t.pointSize ?? defaults.transcripts.pointSize, gain: t.gain ?? defaults.transcripts.gain, colorBy: t.colorBy ?? 'gene' },
+      // A view that names no segmentation (a tour's step) draws the dataset's default.
+      cells: { ...defaults.cells, ...(view.cells ?? {}), segmentation: view.segmentation === undefined ? undefined : view.segmentation === 'instrument' ? null : view.segmentation },
     },
     missing,
   };

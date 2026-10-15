@@ -227,7 +227,10 @@ type Result struct {
 	// All transcripts, and gene transcripts of quality 20 or more.
 	Changes    Changes `json:"changes"`
 	ChangesQ20 Changes `json:"changesQ20"`
-	IoU        struct {
+	// ChangesQ20OfA counts, of the gene transcripts of quality 20 or more that A assigns to a cell,
+	// those B puts elsewhere: with the truth as A, 1 − Fraction is the share in their true cell.
+	ChangesQ20OfA Changes `json:"changesQ20OfAssignedA"`
+	IoU           struct {
 		Median Float `json:"median"`
 		Mean   Float `json:"mean"`
 		Pairs  int   `json:"pairs"`
@@ -479,6 +482,9 @@ func Compare(ctx context.Context, in Inputs) (*Result, error) {
 			continue
 		}
 		count(&r.ChangesQ20)
+		if la != 0 {
+			count(&r.ChangesQ20OfA)
+		}
 		k := regions.at(float64(t.X[i]), float64(t.Y[i]))
 		if k >= 0 {
 			regions.Transcripts[k]++
@@ -501,7 +507,7 @@ func Compare(ctx context.Context, in Inputs) (*Result, error) {
 			}
 		}
 	}
-	for _, c := range []*Changes{&r.Changes, &r.ChangesQ20} {
+	for _, c := range []*Changes{&r.Changes, &r.ChangesQ20, &r.ChangesQ20OfA} {
 		if c.Transcripts > 0 {
 			c.Fraction = round6(float64(c.Changed) / float64(c.Transcripts))
 		}

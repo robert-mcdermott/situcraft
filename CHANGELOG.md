@@ -1,5 +1,218 @@
 # Changelog
 
+## 0.3.0 (2026-10-15)
+
+Wave 3 of the [roadmap](situcraft-spec/roadmap.md): SituCraft's own transcript-informed
+segmentation, validated against simulated truth and independent reference outputs.
+
+### Added
+
+- **Simulated tissues (wave 3, slice 1).** `situcraft simulate` makes a tissue whose every cell,
+  nucleus and molecule is known, and writes it as a Xenium output bundle labelled simulated, with
+  the truth beside it ([docs/FORMATS.md](docs/FORMATS.md)).
+  - **The tissue:**
+    - cell types with their own sizes, shapes, densities and expression, in domains of different
+      composition;
+    - nuclei, some outside the section;
+    - negative-binomial expression; molecules diffused (a few far), background and negative
+      controls, quality scores and depth.
+  - **The simulated instrument** segments it by nucleus expansion. Its DAPI image is a tiled
+    OME-TIFF.
+  - **The truth** (`truth/`) imports into the simulated dataset as a Xenium Ranger bundle of the
+    same run, so any segmentation is scored against it with the comparison workspace.
+  - **Labelled simulated:** SituCraft marks the bundle simulated in the Data view, the inspector
+    and the dataset list. Its methods paragraph says that the data were simulated and implies no
+    instrument.
+  - **Read by other tools as Xenium data:** the counts are also written as the 10x Genomics
+    HDF5 matrix (`cell_feature_matrix.h5`, by SituCraft's own HDF5 writer). `cells.zarr.zip`
+    follows XOA 2's layout. spatialdata-io reads a simulated bundle with no warning.
+  - **Reproducible:** the same parameters and seed give the same bundle, byte for byte, on any
+    computer.
+  - **Validated:** goodness-of-fit tests show that the counts, places, displacements, quality
+    scores, background and cells follow the distributions they are drawn from.
+
+- **The model of SituCraft's transcript-informed segmentation (wave 3, slice 2),** not yet in
+  the app: a voxel lattice; a Poisson likelihood with per-gene background; a mixture of
+  expression states with negative-binomial counts; log-normal cell volumes; and a prior from the
+  nuclei. Its parameters are drawn by exact conditional updates. Each update is checked against
+  its analytic posterior, and the whole sweep by Geweke's joint distribution test, with the same
+  result on any number of threads and any processor. The equations are in
+  [research.md §3.2](situcraft-spec/research.md).
+
+- **The sampler of SituCraft's transcript-informed segmentation (wave 3, slice 3),** not yet in
+  the app. It moves cells' boundaries voxel by voxel, keeping each cell whole and within a
+  perimeter bound, and repositions each transcript within its likely displacement. It runs in
+  parallel with the same result on any number of threads and any processor. It reports each
+  transcript's most probable cell with its probability. On a simulated tissue it puts 85.9% of
+  transcripts in their true cells, against 82.5% for the instrument's nucleus expansion, and its
+  cells overlap the true ones more (median IoU 0.663 against 0.622). Its moves are checked to keep
+  the posterior exactly (detailed balance on every state of small lattices).
+
+- **Transcript-informed segmentation in the app (wave 3, slice 4).** **Refine from the
+  transcripts** in the Segmentation view redraws the cells from the transcripts as a job and
+  records the segmentation as an artifact. That artifact keeps each transcript's probability of
+  its cell, the run's diagnostics, and each layer's outlines when there are several. It is
+  compared with the instrument's segmentation at once, ready for review in the comparison
+  workspace.
+  - **The view shows** whether the run settled (Geweke's diagnostic), how stable its assignments
+    are, and which cells it is least sure of: few transcripts, uncertain boundaries, no nucleus.
+  - **The workspace** lists a chosen difference's flagged cells.
+  - **The methods paragraph** describes a refined segmentation.
+  - **Remote control** adds `refine_segmentation`.
+  - On a simulated tissue it puts 85.9% of transcripts in their true cells (the instrument's
+    expansion: 82.5%), with a median IoU of 0.678 (0.622).
+
+- **The segmentation studio (wave 3, slice 5).** The Segmentation view sets up and runs a
+  refinement in six steps: Input, Compute, Model, Review, Run, Compare. Each step shows what the
+  run would do on this bundle and this computer.
+  - **What it covers:** the whole tissue, its separate sections apart (each with a model of its
+    own), or chosen regions, typed in µm or the region last framed in the Viewer. Cells about a
+    region are held as the instrument drew them, so no cell is cut; the rest of the tissue keeps
+    the instrument's segmentation. The transcripts' quality is a setting (Q20 to start).
+  - **Presets:** Balanced, Conservative boundary, Flexible morphology, Low memory, ROI pilot and
+    Expert. Each says what it is for, what it changes and what it risks, with its measured
+    accuracy on a simulated tissue; every setting says what it does and what it costs. Changing
+    one but the seed makes the settings Expert.
+  - **The ROI pilot** refines a region twice with different seeds and reports how often the two
+    put transcripts in the same cell. On a simulated tissue it matched the whole tissue's run in
+    its region.
+  - **A preflight** counts the transcripts modelled and those left out, the cells it starts from,
+    and what it covers. It estimates memory, disk and time against what the computer has, and
+    refuses a run that would not fit. On the Lung example its estimates were within 5% of the
+    memory a whole run took, 10% of the disk and 10% of the time.
+  - **Progress, a log and Stop** while it runs. A failure (missing cells to start from, a
+    malformed bundle, memory, disk space, a region without cells) says what went wrong and what
+    to do, in the studio, the Jobs view and remote control.
+  - **Recipes:** **Save the recipe** keeps a refinement's settings as readable JSON. **Load a
+    recipe** applies one.
+  - **Remote control** adds `refinement_preflight`; `refine_segmentation` takes a preset, regions
+    or sections, the quality, a second seed and the threads.
+
+- **`situcraft refine`** runs a refinement in the terminal from a preset or a recipe, writing the
+  segmentation's files and its recipe to a new folder; `--preflight` says what it would need. The
+  same recipe gives the same files, byte for byte, as the app. The folder imports into the app
+  (**Import a segmentation**, SituCraft segmentation).
+
+- **Validation against an independent reference (wave 3, slice 6).** SituCraft's refinement is
+  compared with Proseg 3.2.0 (the publication's software) on both 2-FOV bundles and a simulated
+  tissue, with the comparison workspace's measures; the numbers are kept in
+  `validation/reference/segmentation/` and checked weekly.
+  - On the simulated tissue SituCraft puts 84.7% of transcripts in their true cell, against
+    Proseg's 75.2% and the instrument's 82.2%, with outlines as close to the true ones (median IoU
+    0.719 against 0.727), and leaves a tenth as many of the cells' transcripts in no cell (0.13%
+    against 1.42%).
+  - Every tolerance is met on the Breast bundle and the simulated tissue. Three differences on the
+    Lung bundle are explained in research.md.
+  - The Breast bundle refines in 83 s and 279 MB on a laptop.
+
+- **The background's calibration (wave 3, slice 7).** The refinement's background has two parts:
+  false decodes, which fall on every codeword alike and which the panel's negative controls
+  measure, and each gene's ambient RNA. The false decodes are now measured, not guessed.
+  - **A benchmark on simulated truth** at three background levels and each kind alone: the false
+    decodes are measured within a sixth of the truth; on the standard tissue twice as much of the
+    background is found as before, with the same accuracy. Of what SituCraft leaves in no cell,
+    55–72% truly is background (Proseg: 18%).
+  - **The diagnostics report the background:** the shares the model's rates account for, false
+    decodes and ambient RNA, the negative controls that measured them, and the share left in no
+    cell (`diagnostics.json`; the studio's Background).
+  - **The limit, documented:** inside cells, ambient RNA cannot be told from the cells' own
+    expression, so most of it stays counted in cells (research.md §3.2 and §9). On the real
+    bundles false decodes are under 0.1% of the transcripts, and results there hardly change.
+
+- **Segmentations on the tissue (wave 3, slice 8).** The Viewer draws any of a dataset's
+  segmentations over its stains, chosen in its Cells layer: the instrument's, nucleus expansions,
+  refinements, imports. A Viewer opened afresh draws the dataset's default. The legend names the
+  segmentation drawn and says how it was made.
+  - **A refinement's uncertainty, shown:** cells filled by their flagged limitations (few
+    transcripts, uncertain boundary, no nucleus), by their boundary certainty or by their
+    transcripts' mean probability; transcripts colored by their assignment's probability, close
+    up. Doubtful cells and transcripts are drawn bright, certain ones dark.
+  - **The inspector** describes the segmentation's cell: the instrument's cell it came from, its
+    counts and top genes, and what its method flags.
+  - **Show on the tissue** on each segmentation in the Segmentation view and the inspector, and on
+    an expansion's and a refinement's result.
+  - **Saved views and links** keep the segmentation drawn, its cell and how transcripts are
+    colored. Remote control: `show_tissue` takes `segmentation`, the new fills and `color_by`;
+    `select_cell` selects a cell of the segmentation drawn.
+  - **A refinement records each cell's boundary certainty** (`certainty.bin`,
+    [docs/FORMATS.md](docs/FORMATS.md)).
+
+- **Larger tissues (wave 3, slice 9).** A region of more than about 4 million modelled transcripts
+  is refined in patches of about 2 million, one after another, each also refining the cells within
+  40 µm of its square, and stitched into one segmentation: each pixel and transcript from the
+  patch whose square holds it, each cell counted once. The result is still the same for the same
+  seed on any computer. The preflight, the studio and `situcraft refine` say how many patches, and
+  the diagnostics keep each patch's summary.
+  - **As accurate as one run:** on the standard simulated tissue in four patches, 86.1% of
+    transcripts in their true cell (86.3% in one run), 87.4% within 20 µm of a seam.
+  - **Measured at scale:** a simulated tissue of 6.1 × 5.2 mm and 55 million transcripts was
+    refined in 25 patches in 5 to 6 GB of memory (an estimated 10.8 GB in one run). What still
+    grows with the tissue is about 100 bytes a transcript: a computer with 16 GB refines about 120
+    million.
+  - **The Viewer streams a segmentation's transcripts:** their cells and probabilities are written
+    once into the cache by tile and read by tile, never held whole. The dataset's own cells table
+    counts each cell's genes a row of tiles at a time, no longer holding a pair for every
+    transcript. At 55 million transcripts the
+    Viewer drawing a refinement peaked at 0.9 GB (1.8 GB before), and with the dataset alone at 0.2 GB (1.7 GB before).
+  - **`situcraft simulate --preset large`** makes that tissue: a mosaic of 7 × 6 standard fields,
+    made a field at a time and joined into one bundle (`tiles_across`, `tiles_down`;
+    [docs/FORMATS.md](docs/FORMATS.md)), in about 10 minutes and 3 GB of memory.
+  - **A weekly scale test** makes it, refines it, opens and draws it, each step's time and memory
+    within its budget, then deletes it (`validation/scale_test.go`).
+
+- **A third example: a simulated tissue with known truth,** made on this computer in seconds
+  (**Make it** on the start page; `open_example` with `simulated`). Its worked example scores the
+  instrument's nucleus expansion and SituCraft's refinement against the truth.
+- **A worked example on the Breast data refines the instrument's cells** from their transcripts,
+  compares the two, and shows where the refinement is unsure of itself.
+
+### Changed
+
+- **Simulated tissues' background is of two kinds:** ambient RNA on the genes in proportion to
+  their expression, and false decodes on every codeword, genes and negative controls alike
+  (`ambient_per_100um2` and `false_decodes_per_100um2`; a parameters file giving the old
+  `background_per_100um2` or `control_per_100um2` is refused). The standard tissue's background is still 2.46% of its transcripts; the same seed
+  now makes a different tissue.
+- **A transcript counts in a cell only when the model attributes it to the cell,** not merely when
+  it lies in the cell's voxels: the refinement's assignments and counts leave out what the model
+  takes for background. On the Breast example the assigned fraction fell from 98.8% to 97.0% and
+  spurious co-expression from 1.94 to 1.83.
+- **Simulated tissues have every transcript column of Xenium's,** with its types:
+  `nucleus_distance` and `codeword_index` are new, and `overlaps_nucleus` is 8 bits. Tools that
+  need them now read simulated bundles.
+- `comparison.json` counts, of the transcripts A assigns, those B puts elsewhere
+  (`changesQ20OfAssignedA`): against the truth, the share in their true cell.
+- **The default perimeter bound is 1.6** (it was 2), the tightest that still admits a cell four
+  times as long as wide at any angle. On the standard simulated tissue the median IoU with the
+  true cells rose from 0.678 to 0.712 and the transcripts in their true cells from 85.9% to
+  86.3%, every cell type gaining. Refinements made with 0.3.0's earlier builds keep their own
+  settings.
+- **A refinement takes about half the memory:** the posterior's tallies are smaller (the
+  split-half agreement is estimated on every eighth transcript), only the columns it needs are
+  read, and the garbage collector keeps the heap closer to what it holds. On the standard
+  simulated tissue its peak fell from 172 to 89 MB; its result is unchanged.
+- **Convergence is said to be judged only when it can be:** with fewer than 100 sweeps
+  summarized, Geweke's diagnostic cannot judge it, and the page now says so instead of
+  "settled".
+- `diagnostics.json` holds each region's summary and trace (`regions`; a patch's with its square,
+  `patch`, and the summary's `patches`); the recorded parameters hold the area, the regions
+  refined, the patches, the quality, the preset and a second seed
+  ([docs/FORMATS.md](docs/FORMATS.md)).
+- `situcraft refine`'s summary says what it refined in: "in one region", "in 3 regions" or "in 25
+  patches of one region".
+
+### Fixed
+
+- **A SpatialData import matched only some transcripts** when its points kept both where a tool
+  moved each transcript and where it was observed: transcripts are matched at their observed
+  places.
+- **Discarding or resuming a job could read its state while it was changing** (a data race the
+  race detector found now and then). The state is read before the lock is let go.
+- **`refine_segmentation` could time out** under remote control on a long run: it is now a long
+  action.
+- **Nucleus expansion stopped with an internal error** when a bundle's cell mask
+  (`cells.zarr.zip`) had more cells than its `cells.parquet`. It now refuses with the reason.
+
 ## 0.2.0 (2026-10-14)
 
 Wave 2 of the [roadmap](situcraft-spec/roadmap.md): segmentations become artifacts to compare,

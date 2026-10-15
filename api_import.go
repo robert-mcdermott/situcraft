@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -23,6 +24,7 @@ import (
 	"situcraft/internal/jobs"
 	"situcraft/internal/segment"
 	"situcraft/internal/segment/imports"
+	"situcraft/internal/segment/refine"
 	"situcraft/internal/xenium"
 )
 
@@ -79,9 +81,9 @@ func (a *app) startImport(w http.ResponseWriter, r *http.Request) {
 // checkImport checks an import's options and makes its paths absolute.
 func checkImport(opt *imports.Options) error {
 	switch opt.Format {
-	case imports.SpatialData, imports.Baysor, imports.GeoJSON, imports.Xenium:
+	case imports.SpatialData, imports.Baysor, imports.GeoJSON, imports.Xenium, imports.SituCraft:
 	default:
-		return fmt.Errorf("the format is %s, %s, %s or %s", imports.SpatialData, imports.Baysor, imports.GeoJSON, imports.Xenium)
+		return fmt.Errorf("the format is %s, %s, %s, %s or %s", imports.SpatialData, imports.Baysor, imports.GeoJSON, imports.Xenium, imports.SituCraft)
 	}
 	if len(opt.Paths) == 0 || len(opt.Paths) > 2 {
 		return errors.New("name one or two files to import")
@@ -107,7 +109,8 @@ func importTitle(opt imports.Options) string {
 	if opt.Tool != "" {
 		return opt.Tool
 	}
-	return map[string]string{imports.SpatialData: "a SpatialData store", imports.Baysor: "a Baysor segmentation", imports.GeoJSON: "GeoJSON polygons", imports.Xenium: "an output bundle"}[opt.Format]
+	return map[string]string{imports.SpatialData: "a SpatialData store", imports.Baysor: "a Baysor segmentation", imports.GeoJSON: "GeoJSON polygons", imports.Xenium: "an output bundle",
+		imports.SituCraft: "a SituCraft segmentation"}[opt.Format]
 }
 
 // importJob imports a segmentation into the bundle's dataset and records it.
@@ -205,9 +208,14 @@ func (a *app) importJob(path string, opt imports.Options) jobs.Func {
 		detail, _ := json.Marshal(map[string]any{"format": opt.Format, "sources": sources, "files": files})
 		name := rec.Tool
 		if name == "" {
-			name = map[string]string{imports.SpatialData: "SpatialData", imports.Baysor: "Baysor", imports.GeoJSON: "GeoJSON", imports.Xenium: "Xenium output"}[opt.Format]
+			name = map[string]string{imports.SpatialData: "SpatialData", imports.Baysor: "Baysor", imports.GeoJSON: "GeoJSON", imports.Xenium: "Xenium output", imports.SituCraft: "SituCraft"}[opt.Format]
 		}
 		method := artifacts.Method{Name: name, Version: rec.Version, Citation: rec.Citation, Detail: detail}
+		if opt.Format == imports.SituCraft && d.Method == refine.Method+" "+refine.MethodVersion {
+			// SituCraft's own refinement, made headless: recorded as its method, as the app's are.
+			name = refineName(refineSpecOfRecorded(d.Parameters))
+			method = artifacts.Method{Name: refine.Method, Version: refine.MethodVersion, Citation: refine.Citation, Detail: detail}
+		}
 		software := []artifacts.Software{}
 		if rec.Tool != "" {
 			software = append(software, artifacts.Software{Name: rec.Tool, Version: rec.Version})
@@ -215,8 +223,11 @@ func (a *app) importJob(path string, opt imports.Options) jobs.Func {
 		software = append(software, artifacts.Software{Name: "situcraft", Version: version, Commit: buildCommit()})
 		spec, _ := json.Marshal(importSpec{path, opt})
 		var own []artifacts.File
-		for _, f := range []string{segment.FileDescription, segment.FileCells, segment.FileMask, segment.FileAssignments, segment.FileCounts, segment.FileOutlines} {
-			own = append(own, artifacts.File{Path: f, Role: segment.Roles[f]})
+		for _, f := range []string{segment.FileDescription, segment.FileCells, segment.FileMask, segment.FileAssignments, segment.FileCounts, segment.FileOutlines,
+			segment.FileProbabilities, segment.FileCertainty, segment.FileDiagnostics, segment.FileLayers} {
+			if _, err := os.Stat(filepath.Join(a.artifacts.Dir(), "staging", id, f)); err == nil || f == segment.FileDescription {
+				own = append(own, artifacts.File{Path: f, Role: segment.Roles[f]})
+			}
 		}
 		m := artifacts.Manifest{
 			ID:   id,

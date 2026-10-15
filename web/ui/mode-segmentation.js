@@ -10,6 +10,7 @@
 import { h, icon, clear, formatBytes, formatCount, relativeTime } from './dom.js';
 import { toast } from './overlays.js';
 import { EXPORT_FORMATS, comparisonsOf, exportsOf, promotedSegmentation, segmentationsOf } from '../lib/segmentations.js';
+import { createStudio } from './refine-studio.js';
 
 const DEFAULT_DISTANCE = 5;
 const MAX_DISTANCE = 100;
@@ -48,6 +49,12 @@ export const IMPORT_FORMATS = {
     label: 'Xenium Ranger output',
     paths: [{ label: 'Output bundle', placeholder: '/data/ranger/outs', hint: 'its folder, zip or experiment.xenium' }],
     about: 'A bundle of the same run segmented anew (Xenium Ranger import-segmentation or resegment): its cell mask, cells, boundaries and each transcript\'s cell.',
+    options: [],
+  },
+  situcraft: {
+    label: 'SituCraft segmentation',
+    paths: [{ label: 'Folder', placeholder: '/data/refined', hint: 'the folder situcraft refine wrote' }],
+    about: 'SituCraft\'s own segmentation files, as the terminal\'s situcraft refine writes them: checked against this dataset\'s image and transcripts and recorded as they are, with the method that made them.',
     options: [],
   },
 };
@@ -98,7 +105,7 @@ export function mountSegmentation(app, container) {
   function sessionOf(dataset) {
     if (!sessions.has(dataset.id)) {
       sessions.set(dataset.id, {
-        shown: null, distance: DEFAULT_DISTANCE, compare: { a: '', b: '', shown: null },
+        shown: null, distance: DEFAULT_DISTANCE, refined: null, compare: { a: '', b: '', shown: null },
         import: { format: 'spatialdata', paths: ['', ''], units: 'um', fields: {}, tool: '', tool_version: '', citation: '' },
         export: { segmentation: '', formats: new Set(DEFAULT_EXPORTS), folder: '', overwrite: false, shown: null },
         answers: false,
@@ -112,7 +119,7 @@ export function mountSegmentation(app, container) {
     const spec = IMPORT_FORMATS[state.format];
     const options = { format: state.format, paths: spec.paths.map((_, i) => (state.paths[i] ?? '').trim()).filter(Boolean), units: state.units };
     for (const key of spec.options) if ((state.fields[key] ?? '').trim()) options[key] = state.fields[key].trim();
-    if (state.format !== 'xenium') {
+    if (state.format !== 'xenium' && state.format !== 'situcraft') {
       for (const key of ['tool', 'tool_version', 'citation']) if (state[key].trim()) options[key] = state[key].trim();
     }
     return options;
@@ -182,13 +189,17 @@ export function mountSegmentation(app, container) {
       h('td.r', exact(s.cells)),
       h('td.r', percent(s.assignedFraction)),
       h('td.r', Number.isFinite(s.medianTranscriptsPerCell) ? String(s.medianTranscriptsPerCell) : '—'),
-      h('td.r', Number.isFinite(s.medianAreaUm2) ? s.medianAreaUm2.toFixed(1) : '—'));
+      h('td.r', Number.isFinite(s.medianAreaUm2) ? s.medianAreaUm2.toFixed(1) : '—'),
+      h('td', a.state === 'complete' ? h('button.icon-button', { type: 'button', title: `Show ${a.name} on the tissue`, 'aria-label': `Show ${a.name} on the tissue`, 'data-show-tissue': a.id, onclick: (event) => {
+        event.stopPropagation();
+        app.showOnTissue(a.dataset, a.id);
+      } }, icon('tissue')) : null));
     });
     return h('section.seg-section',
       h('div.section-title', `Segmentations of ${t.dataset.name}`),
       list.length
         ? h('div', { style: { overflowX: 'auto' } }, h('table.data.seg-table',
-          h('thead', h('tr', h('th', 'Segmentation'), h('th', 'Made by'), h('th.r', 'Cells'), h('th.r', { title: 'Gene transcripts of quality 20 or more assigned to a cell' }, 'Assigned'), h('th.r', { title: 'Gene transcripts of quality 20 or more per cell, median' }, 'Transcripts per cell'), h('th.r', { title: 'Median cell area, µm²' }, 'Area (µm²)'))),
+          h('thead', h('tr', h('th', 'Segmentation'), h('th', 'Made by'), h('th.r', 'Cells'), h('th.r', { title: 'Gene transcripts of quality 20 or more assigned to a cell' }, 'Assigned'), h('th.r', { title: 'Gene transcripts of quality 20 or more per cell, median' }, 'Transcripts per cell'), h('th.r', { title: 'Median cell area, µm²' }, 'Area (µm²)'), h('th', { title: 'Show it on the tissue, in the Viewer' }, h('span.sr-only', 'On the tissue')))),
           h('tbody', ...rows)))
         : h('p.muted.seg-note', app.bundles.registeringSegmentation(t.dataset.id) ? 'The instrument\'s segmentation is being registered…' : 'None yet: the instrument\'s segmentation is registered when the dataset\'s bundle is found.'),
       h('p.muted.seg-note', 'The numbers are each segmentation\'s own: gene transcripts of quality 20 or more, as the QC view counts them. The default segmentation is the one later analyses use; another is chosen in the Compare view\'s Decide panel, with a reason, after comparing them.'));
@@ -244,6 +255,22 @@ export function mountSegmentation(app, container) {
         ...running,
         h('p.muted.seg-cite', 'Methods: a Voronoi partition of the tissue by the nuclei, clipped at the distance (Okabe et al. 2000), with exact Euclidean distances (Felzenszwalb & Huttenlocher 2012).')));
   }
+
+  // --- Transcript-informed segmentation: the studio (refine-studio.js) ---
+  async function refineRun(t, request = {}) {
+    const answer = await app.bundles.refineSegmentation(t.item, t.dataset.id, request);
+    adopt(t, answer.manifest, answer.comparison);
+    render(true);
+    return answer;
+  }
+
+  function adopt(t, manifest, comparison = null) {
+    const session = sessionOf(t.dataset);
+    session.refined = manifest.id;
+    if (comparison) session.compare.shown = comparison.id;
+  }
+
+  const studio = createStudio(app, { render, live, refineRun, adopt, showInWorkspace: (id) => showInWorkspace(id) });
 
   // --- Comparing two segmentations ---
   async function runComparison(t, a, b) {
@@ -398,7 +425,7 @@ export function mountSegmentation(app, container) {
     const advanced = spec.options.map((key) => field(`seg-import-${key}`, OPTION_LABELS[key][0], text(`seg-import-${key}`, state.fields[key] ?? '', OPTION_LABELS[key][1], (v) => {
       state.fields[key] = v;
     })));
-    const tool = state.format === 'xenium' ? [] : [
+    const tool = state.format === 'xenium' || state.format === 'situcraft' ? [] : [
       field('seg-import-tool', 'Made by', text('seg-import-tool', state.tool, state.format === 'baysor' ? 'Baysor' : 'the tool\'s name', (v) => {
         state.tool = v;
       })),
@@ -672,7 +699,8 @@ export function mountSegmentation(app, container) {
     return h('section.seg-section',
       head,
       h('div.seg-card',
-        h('h3.seg-card-title', a.name, h('span.muted', ` · compared with ${g.reference.replace(/^the instrument's segmentation: /, '')}`)),
+        h('h3.seg-card-title', a.name, h('span.muted', ` · compared with ${g.reference.replace(/^the instrument's segmentation: /, '')}`),
+          h('button.btn.small', { type: 'button', style: { marginLeft: '10px' }, onclick: () => app.showOnTissue(a.dataset, a.id) }, icon('tissue'), 'Show on the tissue')),
         h('dl.kv.seg-kv',
           ...kv('Cells', `SituCraft ${exact(c.situcraft)}, one for each nucleus; the instrument ${exact(c.instrument)}`, `(${pairing})`),
           ...kv('Pixels', percent(p.agreement, 2), 'in the same cell, of those either gives a cell'),
@@ -709,7 +737,7 @@ export function mountSegmentation(app, container) {
     const session = sessionOf(t.dataset);
     if (t.focused && segmentationsOf(app.store.project, t.dataset.id).some((a) => a.id === t.focused && a.source === 'situcraft')) session.shown = t.focused;
     const list = segmentationsOf(app.store.project, t.dataset.id);
-    const next = JSON.stringify([t.dataset.id, Boolean(t.item), list.map((a) => [a.id, a.state]), session.shown, comparisonsOf(app.store.project, t.dataset.id).map((c) => c.id), session.compare, app.bundles.comparisons(t.dataset.id), app.bundles.expansions(t.dataset.id), app.bundles.imports(t.dataset.id), app.bundles.plantings(t.dataset.id), app.practice?.(), Boolean(app.examples?.forDataset(t.dataset)), app.bundles.exports(t.dataset.id), exportsOf(app.store.project, t.dataset.id).length, app.bundles.registeringSegmentation(t.dataset.id), promotedSegmentation(app.store.project, t.dataset.id)?.record.id]);
+    const next = JSON.stringify([t.dataset.id, Boolean(t.item), list.map((a) => [a.id, a.state]), session.shown, comparisonsOf(app.store.project, t.dataset.id).map((c) => c.id), session.compare, app.bundles.comparisons(t.dataset.id), app.bundles.expansions(t.dataset.id), app.bundles.refinements(t.dataset.id), session.refined, app.bundles.imports(t.dataset.id), app.bundles.plantings(t.dataset.id), app.practice?.(), Boolean(app.examples?.forDataset(t.dataset)), app.bundles.exports(t.dataset.id), exportsOf(app.store.project, t.dataset.id).length, app.bundles.registeringSegmentation(t.dataset.id), promotedSegmentation(app.store.project, t.dataset.id)?.record.id]);
     if (!force && next === shape) {
       updateLive();
       return;
@@ -720,7 +748,7 @@ export function mountSegmentation(app, container) {
     // Keep what is being typed when the view redraws (the import's fields keep their values in the
     // session; the distance its own).
     const focused = document.activeElement && body.contains(document.activeElement) ? document.activeElement.id : '';
-    const typing = focused === 'seg-distance' || focused === 'seg-export-folder' ? document.activeElement.value : null;
+    const typing = focused === 'seg-distance' || focused === 'seg-export-folder' || focused.startsWith('studio-') ? document.activeElement.value : null;
     const advancedOpen = body.querySelector('details.seg-advanced')?.open;
     if (advancedOpen !== undefined) session.import.open = advancedOpen;
     clear(body).append(
@@ -728,11 +756,12 @@ export function mountSegmentation(app, container) {
       table(t, list, session),
       expansionCard(t, list, session),
       agreementCard(t, list, session),
+      studio.card(t, list, session),
       comparisonCard(t, list, session),
       importCard(t, list, session),
       ...[practiceCard(t, list, session)].filter(Boolean),
       exportCard(t, list, session));
-    if (typing !== null) body.querySelector(`#${focused}`).value = typing;
+    if (typing !== null && body.querySelector(`#${focused}`)) body.querySelector(`#${focused}`).value = typing;
     if (focused) body.querySelector(`#${CSS.escape(focused)}`)?.focus();
     updateLive();
   }
@@ -797,6 +826,22 @@ export function mountSegmentation(app, container) {
       sessionOf(dataset).answers = true;
       render(true);
       document.querySelector('.seg-answers')?.closest('details')?.scrollIntoView({ block: 'start' });
+    },
+    refine: async (dataset, request) => {
+      const t = target();
+      if (!t || t.dataset.id !== dataset.id) app.focusItem({ kind: 'dataset', id: dataset.id });
+      const now = target();
+      if (!now.item) throw new Error(`${dataset.name}'s bundle was not found where the project records it.`);
+      const answer = await studio.run(now, sessionOf(dataset), request);
+      document.querySelector('.seg-refined')?.scrollIntoView({ block: 'center' });
+      return answer;
+    },
+    refinementPreflight: async (dataset, request) => {
+      const t = target();
+      if (!t || t.dataset.id !== dataset.id) app.focusItem({ kind: 'dataset', id: dataset.id });
+      const now = target();
+      if (!now.item) throw new Error(`${dataset.name}'s bundle was not found where the project records it.`);
+      return studio.preflight(now, sessionOf(dataset), request);
     },
     expand: async (dataset, distance) => {
       const t = target();

@@ -6,6 +6,8 @@
 // its genes are found together (the 300 µm square where their shares of the section's transcripts
 // are highest together).
 
+import { REFINE_METHOD } from './refine.js';
+
 // Behind colored transcripts, nuclei in gray (the first gene's color is close to the nuclear
 // stain's blue).
 const GRAY_NUCLEI = [{ name: 'DAPI', visible: true, color: '#8c8c8c' }];
@@ -121,10 +123,12 @@ export const TOURS = { 'xenium-lung-2fov': LUNG, 'xenium-breast-2fov': BREAST };
 //
 // A question answered on an example dataset, step by step, saying what to expect. Besides opening
 // views, a step may do something before the example goes on (do: expand the nuclei, plant errors,
-// compare two segmentations), or show a comparison in the Compare view (compare: its two
-// segmentations, the view, the reviewer's rules, the difference shown, the side panel's tab).
-// Segmentations are named by what they are: 'instrument', 'expansion-5' (SituCraft's nucleus
-// expansion by 5 µm), 'planted' (errors planted for practice).
+// compare two segmentations, refine the cells, import the truth), or show a comparison in the
+// Compare view (compare: its two segmentations, the view, the reviewer's rules, the difference
+// shown, the side panel's tab). A Viewer step may draw a segmentation other than the instrument's
+// (segmentation). Segmentations are named by what they are: 'instrument', 'expansion-5' (SituCraft's
+// nucleus expansion by 5 µm), 'planted' (errors planted for practice), 'refined' (SituCraft's
+// transcript-informed segmentation), 'truth' (a simulated tissue's true cells, imported).
 
 const BREAST_COMPARE = {
   id: 'compare-expansion',
@@ -232,8 +236,114 @@ const LUNG_PLANTED = {
   ],
 };
 
+const BREAST_REFINE = {
+  id: 'refine-compare',
+  title: 'Redraw the cells from their transcripts',
+  question: 'How does SituCraft\'s transcript-informed segmentation redraw the instrument\'s cells, and where is it unsure of itself?',
+  expect: 'It keeps all 7,275 of the instrument\'s cells and redraws their outlines from where their transcripts lie, in about two minutes on a laptop. It assigns about 97% of gene transcripts to cells (the instrument 87%) and moves about 23% of them to another cell: about 4,700 cells stay as they were, 1,700 grow and 760 shrink. Its spurious co-expression is a little higher (1.83 against 1.77): there is no truth here to say which is right, only evidence to weigh.',
+  steps: [
+    {
+      mode: 'segmentation',
+      title: 'The question',
+      text: 'The instrument drew these cells from its stains. SituCraft\'s transcript-informed segmentation (after Jones et al. 2025) redraws each one from where its transcripts lie, starting from the instrument\'s, and says how sure it is of each boundary and each transcript.',
+    },
+    {
+      mode: 'segmentation',
+      title: 'Refine the cells',
+      text: 'With the Balanced settings: the model samples the cells\' boundaries, their expression and the background many times over, and keeps where each cell and transcript most often was. It takes about two minutes, and is compared with the instrument\'s at once.',
+      do: { action: 'refine', preset: 'balanced' },
+      label: 'Refine the cells',
+    },
+    {
+      mode: 'viewer',
+      title: 'How sure each boundary is',
+      text: 'The refined cells over the stains, filled by how sure their boundaries are: bright where the samples disagreed, dark where every one agreed. Click a cell for where it came from, its transcripts and what the model flags about it.',
+      segmentation: 'refined',
+      cells: { fill: 'certainty', opacity: 0.6 },
+      camera: { cx: 300, cy: 300, umPerCss: 0.4 },
+    },
+    {
+      mode: 'viewer',
+      title: 'Doubtful transcripts',
+      text: 'Close up, each transcript is drawn by its probability of being in the cell it is in: the bright ones are those the model is least sure of, most of them where neighbouring cells express the same genes.',
+      segmentation: 'refined',
+      transcripts: { all: true, colorBy: 'probability' },
+      camera: { cx: 300, cy: 300, umPerCss: 0.15 },
+    },
+    {
+      mode: 'compare',
+      title: 'What moved',
+      text: 'The instrument\'s cells (A) and the refined ones (B) with one camera, ranked by the transcripts that changed cell. Step through with Next (or ]): each difference shows which cells gained and lost transcripts, and the model\'s flags for them.',
+      compare: { a: 'instrument', b: 'refined', view: 'side', rank: 'reassigned', difference: 1, tab: 'queue' },
+    },
+    {
+      mode: 'compare',
+      title: 'Decide, with your reason',
+      text: 'Promote the refinement as the dataset\'s default, keep it for exploration, or reject it, with your reason and this comparison recorded. Nothing is deleted.',
+      compare: { a: 'instrument', b: 'refined', tab: 'decide' },
+    },
+  ],
+};
+
+const SIMULATED_TRUTH = {
+  id: 'score-against-truth',
+  title: 'Score segmentations against the truth',
+  simulated: true,
+  question: 'When every cell is known, how close do the instrument\'s nucleus expansion and SituCraft\'s transcript-informed segmentation come to the true cells?',
+  expect: 'Against the true cells, the instrument\'s expansion has a median IoU of 0.62 and puts about 82% of the true cells\' transcripts in them; SituCraft\'s refinement, made in about half a minute, a median IoU of 0.72 and about 85%. In the workspace, about 20% of the transcripts change cell from the truth to the instrument\'s, 17% to the refinement\'s.',
+  steps: [
+    {
+      mode: 'data',
+      title: 'A tissue whose cells are known',
+      text: 'SituCraft simulated this tissue on this computer: cells of four types in domains, their nuclei, their transcripts drifted a little, a background, and an instrument that grows each nucleus by 5 µm. Every file is laid out as a Xenium bundle\'s, labelled simulated; its truth is in its truth folder.',
+    },
+    {
+      mode: 'segmentation',
+      title: 'Import the truth',
+      text: 'The truth is shaped as a Xenium Ranger output of the same run: imported, it is a segmentation like any other, and any other can be compared with it.',
+      do: { action: 'import-truth' },
+      label: 'Import the truth',
+    },
+    {
+      mode: 'segmentation',
+      title: 'Refine the cells',
+      text: 'SituCraft\'s transcript-informed segmentation of the instrument\'s cells, with the Balanced settings: about half a minute.',
+      do: { action: 'refine', preset: 'balanced' },
+      label: 'Refine the cells',
+    },
+    {
+      mode: 'segmentation',
+      title: 'Score the instrument\'s',
+      text: 'The truth (A) compared with the instrument\'s expansion (B): how much of each true cell its cells cover, and which transcripts they put elsewhere.',
+      do: { action: 'compare', a: 'truth', b: 'instrument' },
+      label: 'Compare with the truth',
+    },
+    {
+      mode: 'segmentation',
+      title: 'Score the refinement',
+      text: 'The truth (A) compared with the refinement (B), measured the same way.',
+      do: { action: 'compare', a: 'truth', b: 'refined' },
+      label: 'Compare with the truth',
+    },
+    {
+      mode: 'compare',
+      title: 'The refinement against the truth',
+      text: 'The true cells and the refined ones overlaid. The median IoU above (each true cell\'s overlap with its refined one) and the transcripts that changed cell say how close it came; open the other comparison (the selector at the top) to see the instrument\'s.',
+      compare: { a: 'truth', b: 'refined', view: 'overlay', rank: 'disagreement', difference: 1, tab: 'queue' },
+    },
+    {
+      mode: 'viewer',
+      title: 'Where it is unsure',
+      text: 'The refined cells filled by how sure their boundaries are, bright where the samples disagreed. Compare with the truth: the doubtful cells are where it is most often wrong.',
+      segmentation: 'refined',
+      cells: { fill: 'certainty', opacity: 0.6 },
+      camera: { cx: 250, cy: 250, umPerCss: 0.3 },
+    },
+  ],
+};
+
 // The worked examples, by example dataset.
-export const WORKED = { 'xenium-breast-2fov': [BREAST_COMPARE], 'xenium-lung-2fov': [LUNG_PLANTED] };
+export const WORKED = { 'xenium-breast-2fov': [BREAST_COMPARE, BREAST_REFINE], 'xenium-lung-2fov': [LUNG_PLANTED], 'simulated-standard': [SIMULATED_TRUTH] };
 
 export function workedExamples(example) {
   return WORKED[example] ?? [];
@@ -245,11 +355,15 @@ export function guideFor(example, name = 'tour') {
   return workedExamples(example).find((w) => w.id === name) ?? null;
 }
 
-// A segmentation of a dataset's records by what it is: 'instrument', 'expansion-<µm>', 'planted'.
+// A segmentation of a dataset's records by what it is: 'instrument', 'expansion-<µm>', 'planted',
+// 'refined' (the latest transcript-informed segmentation), 'truth' (a simulated tissue's truth,
+// imported from its truth folder).
 export function segmentationByRole(segmentations, role) {
   const complete = segmentations.filter((s) => s.state === 'complete');
   if (role === 'instrument') return complete.find((s) => s.source === 'instrument') ?? null;
   if (role === 'planted') return complete.find((s) => s.source === 'planted') ?? null;
+  if (role === 'refined') return [...complete].reverse().find((s) => s.method?.name === REFINE_METHOD) ?? null;
+  if (role === 'truth') return complete.find((s) => s.source === 'imported' && (s.sources ?? []).some((src) => /[\\/]truth[\\/]?$/.test(src.path))) ?? null;
   const m = /^expansion-(\d+(?:\.\d+)?)$/.exec(role);
   if (m) return complete.find((s) => s.source === 'situcraft' && s.parameters?.distance_um === Number(m[1])) ?? null;
   return null;
@@ -271,7 +385,7 @@ export function stepView(step, dataset, index) {
     segmentation: 'instrument',
     camera: step.camera ? { ...step.camera } : null,
     channels: (step.channels ?? []).map((c) => ({ ...c })),
-    transcripts: { visible: true, all: false, genes: [...(step.transcripts?.genes ?? [])] },
+    transcripts: { visible: true, all: step.transcripts?.all ?? false, genes: [...(step.transcripts?.genes ?? [])], ...(step.transcripts?.colorBy ? { colorBy: step.transcripts.colorBy } : {}) },
     cells: { outlines: true, nuclei: false, fill: null, opacity: 0.55, ...(step.cells ?? {}) },
     cell: null,
   };

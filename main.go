@@ -36,7 +36,7 @@ import (
 //go:embed web/index.html web/styles.css web/app.js web/favicon.svg web/lib/*.js web/ui/*.js web/render/*.js
 var content embed.FS
 
-var version = "0.2.0"
+var version = "0.3.0"
 
 // commit is the source revision the program was built from. Release builds set it with
 // -ldflags "-X main.commit=..."; otherwise it comes from the version-control stamp Go records
@@ -84,12 +84,16 @@ type app struct {
 	artifacts *artifacts.Store
 	// views are the datasets open in the tissue viewer.
 	views *views
-	// outlines are segmentations' outline tiles opened for the comparison workspace.
+	// outlines are segmentations' outline tiles opened for the comparison workspace and the
+	// Viewer; segViews what the Viewer draws of the segmentations it shows (api_segview.go).
 	outlines outlineEntries
+	segViews segViews
 	// examples are the example datasets, downloaded on request.
 	examples *examples.Library
 	// control is the remote-control hub (remote.go), with --remote-control.
 	control *remoteHub
+	// refineInputs are the last bundle's inputs read for a refinement's preflight.
+	refineInputs refineInputs
 }
 
 func init() {
@@ -102,6 +106,13 @@ func init() {
 }
 
 func main() {
+	// Commands that run in the terminal and exit (a path of the same name is given as ./simulate).
+	if len(os.Args) > 1 && os.Args[1] == "simulate" {
+		os.Exit(runSimulate(os.Args[2:], os.Stdout, os.Stderr))
+	}
+	if len(os.Args) > 1 && os.Args[1] == "refine" {
+		os.Exit(runRefine(os.Args[2:], os.Stdout, os.Stderr))
+	}
 	cfg, err := parseConfig(os.Args[1:])
 	if errors.Is(err, flag.ErrHelp) {
 		return
@@ -324,6 +335,7 @@ func parseConfig(args []string) (config, error) {
 	noOpen := flags.Bool("no-open", false, "same as --window none")
 	flags.Usage = func() {
 		fmt.Fprintln(flags.Output(), "Usage: situcraft [flags] [Xenium output bundles (folders or .zip), images (.ome.tif), tables (.parquet, .csv), polygons (.geojson), Zarr stores, projects (.scz) or folders of them...]")
+		fmt.Fprintln(flags.Output(), "       situcraft simulate [flags] <new output folder>   (a simulated tissue with its truth; situcraft simulate -h)")
 		flags.PrintDefaults()
 	}
 	files, err := parseArgs(flags, args)
@@ -529,9 +541,11 @@ func (a *app) registerAPI(mux *http.ServeMux) {
 	a.registerExamples(mux)
 	a.registerSegmentations(mux)
 	a.registerExpansion(mux)
+	a.registerRefine(mux)
 	a.registerImports(mux)
 	a.registerComparisons(mux)
 	a.registerWorkspace(mux)
+	a.registerSegView(mux)
 	a.registerPlant(mux)
 	a.registerExports(mux)
 	if a.control != nil {

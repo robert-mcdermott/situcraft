@@ -931,8 +931,11 @@ func TestExamplesDownloadOnlyWhenAsked(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil || rec.Code != http.StatusOK {
 		t.Fatalf("listing: %d %s", rec.Code, rec.Body)
 	}
-	if len(listed.Examples) != 2 || listed.Examples[0].State != "absent" || listed.Examples[0].License == "" || !strings.HasPrefix(listed.Dir, a.examples.Dir) {
+	if len(listed.Examples) != 3 || listed.Examples[0].State != "absent" || listed.Examples[0].License == "" || !strings.HasPrefix(listed.Dir, a.examples.Dir) {
 		t.Errorf("listed %+v", listed)
+	}
+	if g := listed.Examples[2]; g.Name != simulatedExample || !g.Generated || g.State != "absent" || g.Download != 0 {
+		t.Errorf("the simulated example listed as %+v", g)
 	}
 	// Downloading and removing write on this computer: only it may ask.
 	local := func(method, target string) *httptest.ResponseRecorder {
@@ -998,6 +1001,43 @@ func TestExamplesDownloadOnlyWhenAsked(t *testing.T) {
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Errorf("the example is still there: %v", err)
+	}
+
+	// A generated example is made here, as a job, then opened and listed as ready; and removed.
+	a.examples.Generated = append(a.examples.Generated, examples.Generated{Name: "made", Title: "A made example", Size: 1 << 10,
+		Make: func(_ context.Context, dir string, progress examples.Progress) error {
+			progress(0.5, "Making it")
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				return err
+			}
+			return os.WriteFile(filepath.Join(dir, "experiment.xenium"), manifest, 0o644)
+		}})
+	rec = local(http.MethodPost, "/api/examples/made")
+	if err := json.Unmarshal(rec.Body.Bytes(), &job); err != nil || rec.Code != http.StatusOK || job.Kind != "example" || !strings.HasPrefix(job.Title, "Make ") {
+		t.Fatalf("making: %d %s", rec.Code, rec.Body)
+	}
+	if j, _ := a.jobs.Wait(context.Background(), job.ID); j.State != jobs.Complete {
+		t.Fatalf("the making ended %s: %s", j.State, j.Error)
+	}
+	made := filepath.Join(a.examples.Dir, "made")
+	var state examples.State
+	for _, e := range a.examples.List() {
+		if e.Name == "made" {
+			state = e
+		}
+	}
+	opened := false
+	for _, f := range a.files.list() {
+		opened = opened || (f.path == made && f.Kind == "bundle")
+	}
+	if state.State != "ready" || state.ManifestSHA256 != sum(manifest) || state.Path != made || !opened {
+		t.Errorf("made: %+v, opened %v", state, opened)
+	}
+	if rec := local(http.MethodDelete, "/api/examples/made"); rec.Code != http.StatusOK {
+		t.Errorf("removing the made one: %d %s", rec.Code, rec.Body)
+	}
+	if _, err := os.Stat(made); !os.IsNotExist(err) {
+		t.Errorf("the made example is still there: %v", err)
 	}
 }
 

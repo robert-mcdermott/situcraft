@@ -177,6 +177,12 @@ test('points, density and cells answers are read in place', () => {
   assert.equal(nearestCell(cells, 1.2, 3.1, 1), 0);
   assert.equal(nearestCell(cells, 10, 10, 1), -1);
   assert.throws(() => readPoints(encode('SCVD', [0, 0, 0], [new Uint32Array([0])])));
+  assert.equal(points.probability, null);
+  // A segmentation's points carry each one's probability after the genes.
+  const withP = readPoints(encode('SCVP', [3, 2, 1], [new Uint32Array([0, 1, 3]), new Float32Array([1, 2, 3]), new Float32Array([4, 5, 6]), new Uint32Array([7, 8, 9]), genes, new Float32Array([0.5, NaN, 1])]));
+  assert.equal(withP.probability[0], 0.5);
+  assert.ok(Number.isNaN(withP.probability[1]));
+  assert.deepEqual([...withP.cell], [7, 8, 9]);
 });
 
 test('16-bit samples are joined from their byte planes', () => {

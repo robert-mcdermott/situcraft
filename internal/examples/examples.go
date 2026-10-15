@@ -4,6 +4,9 @@
 // SHA-256; only the bundle's files are extracted, each checked against its recorded size and
 // SHA-256 (a member claiming more is refused, as is a name leaving the folder); then the archive
 // is deleted, so an example costs only its bundle's size. Nothing is downloaded unless asked.
+//
+// An example may instead be made on this computer (Generated): SituCraft's simulated tissue, with
+// its truth, nothing downloaded.
 package examples
 
 import (
@@ -75,11 +78,21 @@ func Parse(raw []byte) ([]Source, error) {
 	return out, nil
 }
 
+// Generated is an example made on this computer rather than downloaded.
+type Generated struct {
+	Name, Title, Summary string
+	// Size is about the bytes it takes on disk.
+	Size int64
+	// Make writes it into dir, which must not exist yet (written beside it, then moved).
+	Make func(ctx context.Context, dir string, progress Progress) error
+}
+
 // Library is the examples folder.
 type Library struct {
-	Dir     string
-	Sources []Source
-	Client  *http.Client
+	Dir       string
+	Sources   []Source
+	Generated []Generated
+	Client    *http.Client
 	// UserAgent names SituCraft to the publisher's server.
 	UserAgent string
 	// Free reports the free space in a folder (the cache's helper); nil skips the check.
@@ -105,6 +118,8 @@ type State struct {
 	// downloaded) or "incomplete".
 	State string `json:"state"`
 	Path  string `json:"path,omitempty"`
+	// Generated: made on this computer, nothing downloaded.
+	Generated bool `json:"generated,omitempty"`
 }
 
 func (s Source) diskSize() int64 {
@@ -113,6 +128,15 @@ func (s Source) diskSize() int64 {
 		n += f.Size
 	}
 	return n
+}
+
+func (l *Library) generated(name string) (Generated, bool) {
+	for _, g := range l.Generated {
+		if g.Name == name {
+			return g, true
+		}
+	}
+	return Generated{}, false
 }
 
 func (l *Library) source(name string) (Source, bool) {
@@ -151,6 +175,16 @@ func (l *Library) List() []State {
 		}
 		out = append(out, st)
 	}
+	// A generated example is ready once made; its experiment.xenium names it.
+	for _, g := range l.Generated {
+		st := State{Name: g.Name, Title: g.Title, Summary: g.Summary, Size: g.Size, State: "absent", Generated: true}
+		dir := filepath.Join(l.Dir, g.Name)
+		if raw, err := os.ReadFile(filepath.Join(dir, "experiment.xenium")); err == nil {
+			sum := sha256.Sum256(raw)
+			st.ManifestSHA256, st.State, st.Path = hex.EncodeToString(sum[:]), "ready", dir
+		}
+		out = append(out, st)
+	}
 	return out
 }
 
@@ -160,12 +194,26 @@ type Progress func(fraction float64, message string)
 // Download fetches an example, checks it and extracts its bundle, answering the bundle's folder.
 // A cancelled or failed download leaves nothing behind.
 func (l *Library) Download(ctx context.Context, name string, progress Progress) (string, error) {
+	if progress == nil {
+		progress = func(float64, string) {}
+	}
+	if g, ok := l.generated(name); ok {
+		if err := os.MkdirAll(l.Dir, 0o755); err != nil {
+			return "", err
+		}
+		target := filepath.Join(l.Dir, name)
+		if err := os.RemoveAll(target); err != nil {
+			return "", err
+		}
+		if err := g.Make(ctx, target, progress); err != nil {
+			return "", err
+		}
+		progress(1, "Ready")
+		return target, nil
+	}
 	s, ok := l.source(name)
 	if !ok {
 		return "", fmt.Errorf("no example %q", name)
-	}
-	if progress == nil {
-		progress = func(float64, string) {}
 	}
 	if err := os.MkdirAll(l.Dir, 0o755); err != nil {
 		return "", err
@@ -355,7 +403,8 @@ func (l *Library) Clean(name string) {
 
 // Remove deletes a downloaded example.
 func (l *Library) Remove(name string) error {
-	if _, ok := l.source(name); !ok {
+	_, generated := l.generated(name)
+	if _, ok := l.source(name); !ok && !generated {
 		return fmt.Errorf("no example %q", name)
 	}
 	return os.RemoveAll(filepath.Join(l.Dir, name))

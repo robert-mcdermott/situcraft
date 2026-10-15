@@ -265,7 +265,19 @@ type Transcripts struct {
 	File *parquet.File
 	f    ReaderAt
 	idx  map[string]int
+	only map[string]bool // the columns Each decodes (nil: all)
 }
+
+// Only has Each decode just the named columns, leaving the batch's others nil: a row group's
+// decoded columns are what reading it costs in memory, the text columns most.
+func (t *Transcripts) Only(columns ...string) {
+	t.only = map[string]bool{}
+	for _, c := range columns {
+		t.only[c] = true
+	}
+}
+
+func (t *Transcripts) wants(column string) bool { return t.only == nil || t.only[column] }
 
 // OpenTranscripts opens transcripts.parquet, checking it has the columns SituCraft reads.
 func (b *Bundle) OpenTranscripts() (*Transcripts, error) {
@@ -307,48 +319,55 @@ func (t *Transcripts) Each(fn func(*TranscriptBatch) error) error {
 			return t.File.ReadColumn(g, t.idx[name])
 		}
 		batch := &TranscriptBatch{Rows: int(t.File.RowGroups[g].NumRows)}
-		cell, err := read("cell_id")
-		if err != nil {
-			return err
-		}
-		if cell.Bytes == nil {
-			// Older bundles numbered cells; a number is still an identity.
-			batch.CellID = make([][]byte, cell.Len)
-			for i, n := range ints(cell) {
-				batch.CellID[i] = []byte(strconv.FormatInt(n, 10))
-				if n < 0 {
-					batch.CellID[i] = []byte(unassignedCellMarker)
-				}
+		if t.wants("cell_id") {
+			cell, err := read("cell_id")
+			if err != nil {
+				return err
 			}
-		} else {
-			batch.CellID = cell.Bytes
+			if cell.Bytes == nil {
+				// Older bundles numbered cells; a number is still an identity.
+				batch.CellID = make([][]byte, cell.Len)
+				for i, n := range ints(cell) {
+					batch.CellID[i] = []byte(strconv.FormatInt(n, 10))
+					if n < 0 {
+						batch.CellID[i] = []byte(unassignedCellMarker)
+					}
+				}
+			} else {
+				batch.CellID = cell.Bytes
+			}
 		}
-		feature, err := read("feature_name")
-		if err != nil {
-			return err
+		if t.wants("feature_name") {
+			feature, err := read("feature_name")
+			if err != nil {
+				return err
+			}
+			if feature.Bytes == nil {
+				return errors.New("transcripts.parquet: feature_name is not text")
+			}
+			batch.Feature = feature.Bytes
 		}
-		if feature.Bytes == nil {
-			return errors.New("transcripts.parquet: feature_name is not text")
-		}
-		batch.Feature = feature.Bytes
 		for _, xyz := range []struct {
 			name string
 			dst  *[]float32
 		}{{"x_location", &batch.X}, {"y_location", &batch.Y}, {"z_location", &batch.Z}, {"qv", &batch.QV}} {
+			if !t.wants(xyz.name) {
+				continue
+			}
 			v, err := read(xyz.name)
 			if err != nil {
 				return err
 			}
 			*xyz.dst = toFloat32(v)
 		}
-		if t.idx["overlaps_nucleus"] >= 0 {
+		if t.idx["overlaps_nucleus"] >= 0 && t.wants("overlaps_nucleus") {
 			v, err := read("overlaps_nucleus")
 			if err != nil {
 				return err
 			}
 			batch.OverlapsNucleus = v.Int32
 		}
-		if t.idx["transcript_id"] >= 0 {
+		if t.idx["transcript_id"] >= 0 && t.wants("transcript_id") {
 			v, err := read("transcript_id")
 			if err != nil {
 				return err

@@ -3,6 +3,7 @@ package segment
 import (
 	"encoding/binary"
 	"encoding/json"
+	"math"
 	"math/rand/v2"
 	"os"
 	"path/filepath"
@@ -93,6 +94,16 @@ func TestFilesReadBackAsWritten(t *testing.T) {
 	if err != nil || len(o) != 2 || len(o[0].X) < 3 || o[1].Pixels != 6 {
 		t.Errorf("outlines %+v, %v", o, err)
 	}
+	// The boundary certainty, optional: one per cell, NaN for a cell not drawn by the method.
+	if err := WriteCertainty(dir, []float32{0.875, float32(math.NaN())}); err != nil {
+		t.Fatal(err)
+	}
+	if f := Check(dir, &m); len(fatalCodes(f)) > 0 {
+		t.Fatalf("a valid boundary certainty fails the check: %+v", f)
+	}
+	if b, err := ReadCertainty(dir); err != nil || len(b) != 2 || b[0] != 0.875 || !math.IsNaN(float64(b[1])) {
+		t.Errorf("certainty %v, %v", b, err)
+	}
 }
 
 // Each kind of damage is found, and named.
@@ -146,6 +157,12 @@ func TestTheCheckFindsDamage(t *testing.T) {
 			d.Q20GeneAssigned = 4
 			WriteDescription(dir, *d)
 		}, "counts.total"},
+		{"a boundary certainty for each cell", func(t *testing.T, dir string) {
+			WriteCertainty(dir, []float32{0.9})
+		}, "certainty.count"},
+		{"a boundary certainty above 1", func(t *testing.T, dir string) {
+			WriteCertainty(dir, []float32{0.9, 1.5})
+		}, "certainty.range"},
 		{"an outline outside the raster", func(t *testing.T, dir string) {
 			o, _ := ReadOutlines(dir)
 			o[0].X[0] = 100
@@ -189,6 +206,83 @@ func TestRowRangeIsRowsSlice(t *testing.T) {
 			if !reflect.DeepEqual(got, full[x0:x1]) {
 				t.Fatalf("row %v, range %d..%d: %v", full, x0, x1, got)
 			}
+		}
+	}
+}
+
+// A column streamed a block at a time reads what was written, and a damaged one fails.
+func TestColumnsStreamAsWritten(t *testing.T) {
+	dir := t.TempDir()
+	labels := make([]uint32, 100_003)
+	prob := make([]float32, len(labels))
+	for i := range labels {
+		labels[i] = uint32(i*7919) % 1000
+		prob[i] = float32(i%97) / 97
+	}
+	prob[5] = float32(math.NaN())
+	if err := WriteAssignments(dir, labels); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteProbabilities(dir, prob); err != nil {
+		t.Fatal(err)
+	}
+	for _, block := range []int{1, 4096, 1 << 20} {
+		a, err := OpenColumn(dir, FileAssignments)
+		if err != nil {
+			t.Fatal(err)
+		}
+		p, err := OpenColumn(dir, FileProbabilities)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if a.Len() != len(labels) || p.Len() != len(prob) {
+			t.Fatalf("lengths %d, %d", a.Len(), p.Len())
+		}
+		bufA, bufP := make([]uint32, block), make([]uint32, block)
+		at := 0
+		for {
+			k, err := a.Next(bufA)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if j, err := p.Next(bufP); err != nil || j != k {
+				t.Fatalf("probabilities: %d values, %v", j, err)
+			}
+			if k == 0 {
+				break
+			}
+			for i := range k {
+				if bufA[i] != labels[at+i] || bufP[i] != math.Float32bits(prob[at+i]) {
+					t.Fatalf("block %d: value %d differs", block, at+i)
+				}
+			}
+			at += k
+		}
+		if at != len(labels) {
+			t.Errorf("block %d: %d values read", block, at)
+		}
+		a.Close()
+		p.Close()
+	}
+	if _, err := OpenColumn(dir, FileCells); err == nil {
+		t.Error("cells.bin opened as a column")
+	}
+	// Cut short, the stream fails before its end.
+	raw, _ := os.ReadFile(filepath.Join(dir, FileAssignments))
+	os.WriteFile(filepath.Join(dir, FileAssignments), raw[:len(raw)/2], 0o644)
+	c, err := OpenColumn(dir, FileAssignments)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	buf := make([]uint32, 1<<16)
+	for {
+		k, err := c.Next(buf)
+		if err != nil {
+			break
+		}
+		if k == 0 {
+			t.Fatal("a file cut short read to its end")
 		}
 	}
 }

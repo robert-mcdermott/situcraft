@@ -350,49 +350,781 @@ is another segmentation, not a reproduction.
 Jones DC, Elz AE, Hadadianpour A, Ryu H, Glass DR, Newell EW. Cell simulation as cell
 segmentation. *Nat Methods* 2025;22(6):1331–1342. doi:10.1038/s41592-025-02697-0.
 
-The model, as SituCraft implements it (notation is SituCraft's; equations are written out in full
-when wave 3 is planned):
+A cell is a region of space whose molecules are a Poisson process with its own rate for each
+gene, over a background with a rate for each gene everywhere; a segmentation is the labelling of
+space that makes the observed molecules most probable, given what cells' expression and sizes are
+like. SituCraft samples labellings from their posterior, as the publication does. The model and
+its updates are written out below (notation is SituCraft's), then the sampler.
 
-- **Space.** A 3D lattice of voxels. Each voxel is either unassigned (background) or assigned to
-  exactly one cell. Sampling starts coarse (4 µm in x/y, one z layer) and doubles resolution twice
-  (to 1 µm, 4 z layers). Doubling splits voxels without changing which cell owns each region.
-- **Transcripts.** Observed molecules are a Poisson point process. Each gene has a constant
-  background rate over the region. Each cell has a constant per-gene rate over its volume.
-- **Expression.** Cell rates follow a hierarchical gamma mixture with *k* components (broad
-  expression states). With per-gene, per-component gamma parameters, counts are marginally
-  negative binomial. Conditional updates use conjugacy and data augmentation:
-  - Chinese-restaurant-table augmentation for the dispersion (Zhou & Carin 2015, *IEEE TPAMI*
-    37:307–320, doi:10.1109/TPAMI.2013.211);
-  - Pólya–Gamma augmentation for the logistic parameters (Polson, Scott & Windle 2013, *JASA*
-    108:1339–1349, doi:10.1080/01621459.2013.829001).
-- **Volume.** Log-normal cell volume per component.
-- **Prior segmentation.** Sampling is initialized from nuclei. A nuclear prior penalizes moving a
-  transcript away from its initial nucleus (probability 0.8 that the initial assignment is
-  correct, in the publication).
-- **Morphology.** A hard constraint, not an energy: each cell's perimeter in each z layer is
-  bounded relative to the perimeter of a circle of the same area (factor 1.3 by default).
-  Proposals that violate it are rejected.
-- **Connectivity.** Proposals that would change local connected components are rejected (an
-  articulation check in the Moore neighborhood). Cells are never annihilated. Background
-  "bubble" proposals (probability 0.05) let gaps form and close between cells.
-- **Sampler.** Metropolis–Hastings. A proposal copies a voxel's label to a neighbor with a
-  different label (von Neumann neighborhood), with the proposal-ratio correction. Parallel
-  updates use a checkerboard of blocks updated in four phases.
-- **Repositioning.** Each transcript's true position has a two-component normal mixture prior
-  around its observed position: a wide component (σ = 4 µm, weight 0.2) for leaked or diffused
-  molecules and a narrow one (σ = 0.5 µm). It is sampled jointly with the boundaries. A setting
-  disables diffusion, lowering memory use.
+#### The model (verified, wave 3, slice 2)
 
-SituCraft's choices where the publication leaves them open:
-- **Determinism.** Each block has its own seeded random stream and blocks are updated in a fixed
-  order, so a seed gives the same result on any number of threads.
-- **Polygons** come from voxel labels by boundary tracing per z layer. A consensus 2D polygon
-  assigns each x/y position to its dominant cell.
-- **Convergence.** Diagnostics are reported: assignment changes per sweep, log-likelihood trace,
-  and agreement between two seeds on a pilot region.
-- **Large tissues** run as overlapping patches that are stitched. Patch-based processing of large
-  sections follows the approach of Blampey et al. (2024), *Nat Commun* 15:4981,
-  doi:10.1038/s41467-024-48981-z.
+**Space.** The region $R$ (a patch of the section, of volume $|R|$ µm³) is a lattice of voxels,
+each of volume $\nu$ (its side in x and y times the section's depth divided by the number of z
+layers). A labelling $\sigma$ gives each voxel $v$ a cell $\sigma(v) \in \{1, \dots, C\}$ or the
+background, $\sigma(v) = 0$. Cell $c$'s volume is $V_c = \nu \, |\{v : \sigma(v) = c\}|$. A run
+can sample in stages of finer voxels, each splitting the last's without changing which cell owns
+a region (the sampler, below).
+
+**Molecules.** Transcript $i$ ($i = 1, \dots, N$; gene transcripts of quality 20 or more) has
+gene $g_i$ and lies in voxel $v(i)$; write $\sigma(i) = \sigma(v(i))$. The molecules of gene $g$
+are a Poisson process of intensity $\lambda_{0g} + \lambda_{\sigma(x) g}$ at $x$ (per µm³; the
+second term is absent over the background): the background's rate $\lambda_{0g}$ everywhere and
+cell $c$'s rate $\lambda_{cg}$ within it. The log-likelihood of the labelling and the rates is
+
+$$\log p(\text{molecules} \mid \sigma, \lambda) = \sum_i \log\bigl(\lambda_{0 g_i} + \lambda_{\sigma(i) g_i}\bigr) - |R| \sum_g \lambda_{0g} - \sum_c V_c \Lambda_c, \qquad \Lambda_c = \sum_g \lambda_{cg},$$
+
+with $\lambda_{0\cdot}$ for $\sigma(i) = 0$ read as zero. Each molecule in a cell came from the cell
+or from the background: the attribution $a_i$, with
+$P(a_i = \text{cell}) = \lambda_{\sigma(i) g_i} / (\lambda_{0 g_i} + \lambda_{\sigma(i) g_i})$
+(the superposition of two Poisson processes). Given the attributions, cell $c$'s count of gene
+$g$, $n_{cg}$, is Poisson with mean $V_c \lambda_{cg}$, and the background's, $n_{0g}$ (its
+molecules in cells and outside them), Poisson with mean $|R| \lambda_{0g}$.
+
+**The background, of two kinds (wave 3, slice 7).** Molecules from no cell arise two ways: decoding
+errors and probes bound off target, which fall on every codeword alike (false decodes), and RNA
+loose in the tissue, which falls on each gene by its own rate (ambient RNA). So
+$\lambda_{0g} = f + a_g$: a false-decode rate $f$ shared by every codeword and an ambient rate
+$a_g$ for each gene. The panel's negative-control codewords (probes and codewords that match no
+gene, $C$ of them, seen at any quality) are false decodes only: their $n_c$ transcripts of quality
+20 or more in the region are Poisson with mean $|R|\,C f$, evidence of the background that no cell
+can take. *SituCraft's extension:* the publication has one background rate per gene and does not
+model the negative controls.
+
+**Expression.** Each cell belongs to one of $K$ components (broad expression states),
+$z_c \in \{1, \dots, K\}$, with probabilities $\pi \sim \mathrm{Dirichlet}(\alpha, \dots, \alpha)$.
+Given its component, a cell's rates are gamma (shape $r$, rate $\beta$):
+
+$$\lambda_{cg} \mid z_c = k \sim \mathrm{Gamma}(r_{kg}, \beta_{kg}), \quad r_{kg} \sim \mathrm{Gamma}(a_r, b_r), \quad \beta_{kg} \sim \mathrm{Gamma}(a_\beta, \phi_g), \quad \phi_g \sim \mathrm{Gamma}(e_\phi, f_\phi), \quad f, a_g \sim \mathrm{Gamma}(a_0, b_0).$$
+
+A cell's count, its rate integrated out, is negative binomial:
+$n_{cg} \sim \mathrm{NB}(r_{kg}, p_{ckg})$, $p_{ckg} = V_c / (V_c + \beta_{kg})$, of mean
+$V_c r_{kg} / \beta_{kg}$. The gene-level $\phi_g$ shares each gene's scale across components, so a
+component with few cells is drawn toward the gene's typical rate.
+
+*SituCraft's choice:* the publication parameterizes the negative binomial's probability
+logistically and samples it with Pólya–Gamma variables (Polson, Scott & Windle 2013, *JASA*
+108:1339–1349, doi:10.1080/01621459.2013.829001; as in Zhou M, Li L, Dunson D, Carin L.
+Lognormal and gamma mixed negative binomial regression. *ICML* 2012). SituCraft places a gamma
+prior on the rate $\beta_{kg}$ instead, conjugate given the cells' rates. Every expression update
+is then an exact draw, with no Pólya–Gamma variates, whose exact sampling for the large,
+non-integer shapes that arise here ($n_{cg} + r_{kg}$) is costly and whose fast samplers
+approximate. The sampler's target is then exactly the model's posterior, which slice 3 tests by
+enumeration.
+
+**Volume.** A cell's volume is log-normal by component,
+$\log V_c \mid z_c = k \sim \mathcal{N}(m_k, s_k^2)$, with the conjugate normal–inverse-gamma
+prior $s_k^2 \sim \mathrm{InvGamma}(a_s, b_s)$, $m_k \mid s_k^2 \sim \mathcal{N}(m_0, s_k^2/\kappa_0)$.
+
+**The nuclear prior.** A transcript over a nucleus in the section has that nucleus's cell as its
+prior cell $q_i$ (otherwise $q_i = 0$). The labelling's prior weighs each such transcript by
+$\rho$ if it lies in $q_i$ and $1 - \rho$ if it does not ($\rho = 0.8$, the publication's).
+
+**The labelling's prior** is
+$p(\sigma \mid z, m, s) \propto I(\sigma) \prod_c \mathrm{LogNormal}(V_c; m_{z_c}, s^2_{z_c}) \prod_{i : q_i \ne 0} \rho^{[\sigma(i) = q_i]} (1 - \rho)^{[\sigma(i) \ne q_i]}$,
+where $I(\sigma)$ is 1 when every cell is connected, within its perimeter bound and non-empty, and
+0 otherwise (slice 3). *The one approximation.* This prior's normalizing constant, a sum over
+every labelling, depends on the volume parameters and the components, and cannot be computed
+(the "doubly intractable" problem: Murray I, Ghahramani Z, MacKay DJC. MCMC for
+doubly-intractable distributions. *UAI* 2006). SituCraft updates the components and the volume
+parameters as though the cells' volumes were independent log-normal draws, which treats that
+constant as fixed. With one volume prior for every component, held fixed (`exact` mode), the
+constant is a constant and the sampler is exact; the tests that check exactness use that mode.
+
+**The updates.** One sweep of the parameters, given the labelling, draws in this order:
+
+1. **Attributions:** each molecule in a cell from the cell with probability
+   $\lambda_{\sigma(i) g_i} / (\lambda_{0 g_i} + \lambda_{\sigma(i) g_i})$; the counts $n_{cg}$
+   and $n_{0g}$ follow.
+2. **Background:** each gene's $n_{0g}$ splits into false decodes and ambient RNA,
+   $k_g \sim \mathrm{Binomial}(n_{0g}, f / (f + a_g))$ (each a false decode with that
+   probability); then $a_g \sim \mathrm{Gamma}(a_0 + n_{0g} - k_g,\; b_0 + |R|)$ and
+   $f \sim \mathrm{Gamma}(a_0 + n_c + \sum_g k_g,\; b_0 + |R|(C + G))$, every codeword exposed
+   to false decodes over the region; $\lambda_{0g} = f + a_g$. The binomial is drawn exactly, by
+   splitting large counts with beta order statistics (Devroye L. *Non-Uniform Random Variate
+   Generation.* Springer, 1986, ch. X.4).
+3. **Components**, each cell's rates integrated out:
+   $P(z_c = k) \propto \pi_k \, \mathrm{LogNormal}(V_c; m_k, s_k^2) \prod_g \mathrm{NB}(n_{cg}; r_{kg}, p_{ckg})$,
+   where $\log \mathrm{NB}(n; r, p) = \sum_{j=0}^{n-1} \log(r + j) + r \log(1 - p) + n \log p - \log n!$
+   (the last term is the same for every $k$ and is dropped).
+4. **Shapes**, the rates integrated out, by Chinese-restaurant-table augmentation (Zhou M, Carin
+   L. Negative binomial process count and mixture modeling. *IEEE TPAMI* 2015;37:307–320.
+   doi:10.1109/TPAMI.2013.211): for each cell of component $k$,
+   $\ell_{cg} \sim \mathrm{CRT}(n_{cg}, r_{kg})$, the sum of $n_{cg}$ Bernoulli draws of
+   probabilities $r/(r + j - 1)$, $j = 1, \dots, n_{cg}$; then
+   $r_{kg} \sim \mathrm{Gamma}\bigl(a_r + \sum_c \ell_{cg},\; b_r + \sum_{c : z_c = k} \log(1 + V_c/\beta_{kg})\bigr)$.
+5. **Rates:** $\lambda_{cg} \sim \mathrm{Gamma}(r_{z_c g} + n_{cg},\; \beta_{z_c g} + V_c)$.
+6. **Rate parameters:** $\beta_{kg} \sim \mathrm{Gamma}\bigl(a_\beta + N_k r_{kg},\; \phi_g + \sum_{c : z_c = k} \lambda_{cg}\bigr)$, $N_k$ the component's cells.
+7. **Gene scales:** $\phi_g \sim \mathrm{Gamma}(e_\phi + K a_\beta,\; f_\phi + \sum_k \beta_{kg})$.
+8. **Proportions:** $\pi \sim \mathrm{Dirichlet}(\alpha + N_1, \dots, \alpha + N_K)$.
+9. **Volumes:** for each component, with $y_c = \log V_c$ over its cells, mean $\bar y$:
+   $\kappa_n = \kappa_0 + N_k$, $m_n = (\kappa_0 m_0 + N_k \bar y)/\kappa_n$, $a_n = a_s + N_k/2$,
+   $b_n = b_s + \tfrac12 \sum_c (y_c - \bar y)^2 + \kappa_0 N_k (\bar y - m_0)^2 / (2\kappa_n)$;
+   $s_k^2 \sim \mathrm{InvGamma}(a_n, b_n)$, $m_k \sim \mathcal{N}(m_n, s_k^2/\kappa_n)$
+   (skipped in `exact` mode).
+
+Steps 3 and 4 integrate the cells' rates out, and step 5 draws them anew before anything
+conditions on them (step 6, and step 1 of the next sweep): a partially collapsed Gibbs sampler,
+valid in this order (van Dyk DA, Park T. Partially collapsed Gibbs samplers: theory and methods.
+*JASA* 2008;103:790–796. doi:10.1198/016214508000000409). Collapsing the rates lets a cell change
+component without its rates holding it in place. Every cell's draws in steps 1, 3, 4 and 5 come
+from its own random stream, named by the sweep, the step and the cell, so the cells are updated in
+parallel with the same result on any number of threads.
+
+**A voxel's move** from cell $a$ to cell $b$ (either may be the background, $0$; slice 3 proposes
+them) changes the log-posterior, the attributions integrated out, by
+
+$$\Delta = \sum_{i \in v} \log\frac{\lambda_{0 g_i} + \lambda_{b g_i}}{\lambda_{0 g_i} + \lambda_{a g_i}} - \nu(\Lambda_b - \Lambda_a) + \Delta_{\text{volume}} + \sum_{i \in v,\, q_i \ne 0} \Delta_{\text{nuclear}}(i),$$
+
+with the background's $\lambda_{0\cdot}$ and $\Lambda_0$ read as zero in the cell terms;
+$\Delta_{\text{volume}}$ the change in $\log \mathrm{LogNormal}$ of the cells' volumes ($V_a - \nu$,
+$V_b + \nu$); and $\Delta_{\text{nuclear}}(i)$ $\log\rho - \log(1-\rho)$ when the molecule moves
+into its prior cell, the opposite when it moves out of it, and 0 otherwise. A move that empties a
+cell is refused.
+
+**Defaults** (SituCraft's choices; every one recorded with a segmentation):
+
+| Parameter | Default | Why |
+| --- | --- | --- |
+| Components $K$ | 10 | Enough for a panel's broad cell types; empty components fall back to the prior |
+| $\alpha$ | 1 | A uniform prior over the proportions |
+| $a_r, b_r$ | 2, 0.5 | Shapes of mean 4 (sd 2.8): overdispersed, as single-cell counts are, without ruling out near-Poisson genes |
+| $a_\beta$ | 1 | An exponential prior on each component's rate parameter about the gene's scale |
+| $e_\phi, f_\phi$ | 1, 1 µm³ | Weak: rate parameters are hundreds to thousands of µm³ |
+| $a_0, b_0$ | 1, 1 µm³ | Weak (on $f$ and each $a_g$): the region is of the order of $10^5$–$10^7$ µm³ |
+| $m_0$ | $\log$ of the median initial cell volume | Centres the volume prior on the cells the sampler starts from |
+| $\kappa_0, a_s, b_s$ | 1, 2, 0.25 | A prior mean of 0.25 for $s_k^2$: volumes within a factor of about 1.6 |
+| $\rho$ | 0.8 | The publication's |
+
+**Validation** (`internal/segment/refine`; fixed seeds, each test at the 0.001 level):
+- **Each conjugate update against its analytic posterior** (Kolmogorov–Smirnov, 6,000 draws):
+  the cells' and the components' rates, the gene scales, the proportions (each marginally beta),
+  and the volume prior (its variance inverse gamma, its mean normal given it). The background's
+  update is a data augmentation (the split), so its chain, thinned to every tenth draw, is tested
+  against the exact posterior of $f$ and each $a_g$: a mixture of gammas over the splits, each
+  weighted by its marginal likelihood, enumerated.
+- **The components** against probabilities computed independently from the negative binomial
+  and log-normal densities (χ²).
+- **The shapes:** 3,000 independent chains of the augmented update, started from the prior, end
+  distributed as the posterior computed by numerical integration.
+- **The whole sweep** by Geweke's joint distribution test (Geweke J. Getting it right: joint
+  distribution tests of posterior simulators. *J Am Stat Assoc* 2004;99:799–804.
+  doi:10.1198/016214504000001132). 4,000 chains start from the prior and data drawn from the
+  model (the negative controls among the data), then alternate 40 sweeps with fresh data. Thirteen
+  quantities (shapes, rate parameters, scales, rates, the background's rate and its two parts,
+  proportions, volume parameters, component sizes) stay distributed as the prior (two-sample
+  Kolmogorov–Smirnov).
+- **Moves:** in a random walk of 2,000 voxel moves, each move's computed change equals the target
+  recomputed afresh (to $10^{-9}$ relative); a move that would empty a cell is refused.
+- **Attributions:** each in proportion to the rates (z test); the counts follow them.
+- **Behaviour:** on counts of 300 cells of three types, the components separate the types
+  (purity 0.95 or more).
+- **Determinism:** the same parameters on 1 and 8 workers. A pinned checksum of twenty sweeps is
+  the same on arm64 and amd64.
+- **Power.** Each test was shown to fail on a deliberate error. Nine errors were tried:
+  - a conjugate posterior's parameter wrong (background, shapes, rates, rate parameters, gene
+    scales, volumes); for the two-part background, the controls' exposure without the genes, the
+    split inverted, the controls left out of $f$ (each caught by its posterior test), and the
+    exposure one codeword short (caught by the joint test);
+  - the volume prior dropped from the components;
+  - the CRT off by one;
+  - the rates drawn before the shapes, which breaks the partially collapsed order (caught only by
+    the joint test, once its chains were long enough for the error to accumulate).
+
+  Four more were tried on the moves and attributions (a sign, the nuclear prior reversed, a
+  volume off by one, the attribution's share). Every one was caught.
+
+A sweep of the parameters at the standard simulation's size (3,000 cells, 120 genes, 10
+components) takes about 9 ms on ten cores; its cost grows with cells × genes × components.
+
+#### The sampler (verified, wave 3, slice 3)
+
+Each sweep draws the attributions and the parameters (above), then the labelling, then the
+transcripts' places.
+
+**The labelling's moves** (Metropolis–Hastings). A voxel $v$ is chosen. With probability
+$p_b = 0.05$ the background is proposed for it (a "bubble", which lets gaps open between cells);
+otherwise the label of one of its face neighbours, chosen uniformly. A voxel's neighbours do not
+change when it moves, so the proposal's probability both ways is local,
+$q(a \to b) \propto p_b [b = 0] + (1 - p_b)\, n_b(v)/n(v)$ ($n_b(v)$ of its $n(v)$ face
+neighbours labelled $b$). The move is accepted with probability
+$\min\{1, e^{\Delta}\, q(b \to a)/q(a \to b)\}$.
+
+**The constraints,** each holding in both directions, so that a move is allowed exactly when its
+reverse is (which detailed balance needs):
+- **No cell is emptied.**
+- **Connectivity.** Among the 26 voxels about $v$, those of the cell losing $v$ and those of the
+  cell gaining it must each form exactly one face-connected piece touching $v$'s faces. Removing
+  $v$ then cannot disconnect the first, and adding it cannot join pieces of the second into a
+  loop. This is a local test of simple points (Kong TY, Rosenfeld A. Digital topology:
+  introduction and survey. *Comput Vis Graph Image Process* 1989;48:357–393).
+  - *SituCraft's choice:* the test applies to both cells. A test of the losing cell alone allows
+    moves whose reverse it forbids. The tests below catch that error.
+- **Perimeter.** In each layer a cell's perimeter, counted in voxel edges, is at most $f$ times the
+  least any shape of its area can have: $2\lceil 2\sqrt{n}\rceil$ for $n$ voxels (Harary F,
+  Harborth H. Extremal animals. *J Combin Inform System Sci* 1976;1:1–8), $f = 1.6$ (2 until
+  slice 5).
+  - *SituCraft's choice:* the publication bounds the perimeter against a circle's (a factor of
+    1.3). In voxel edges, a digital disc's perimeter already exceeds the circle's by about 4/π.
+    SituCraft bounds against the least digital perimeter instead. An elongated cell (an ellipse of
+    aspect 4 at 45°) reaches about 1.6 times it, a thin tendril far more. $f = 1.6$ is the tightest
+    bound that still admits that ellipse at any angle; it was chosen by measurement (the
+    segmentation studio, below).
+  - A cell that starts beyond the bound keeps its own starting ratio as its bound.
+
+**Parallel and deterministic.** The region is cut into square blocks (40 µm, all layers), coloured
+in a 2 × 2 checkerboard and shifted each sweep by an offset drawn from the sweep's stream. In each
+of four phases the blocks of one colour are updated in parallel. Each block proposes as many moves
+as it has voxels, at voxels chosen uniformly within it, from its own random stream.
+
+Blocks of one colour are a block apart, so a move in one never reads a voxel another changes. A
+cell may move in a phase only if its bounding box, grown by one voxel, meets exactly one of the
+phase's blocks. Blocks therefore change disjoint cells, and a phase is the same as its blocks
+updated one after another. A block's moves never change which cells it may move, so each phase
+keeps the target. A seed gives the same result, byte for byte, on any number of threads and on
+any processor.
+
+**Repositioning.** Each transcript's true place in x and y is its observed place displaced by a
+normal of σ 4 µm with probability 0.2, else of σ 0.5 µm (the publication's mixture). Its depth is
+kept: a section's layer is thicker than the displacement. Each sweep proposes a place for every
+transcript from that prior, about where it was observed, and accepts it with probability
+$\min\{1, \Lambda(\text{new})/\Lambda(\text{old})\}$: an independence sampler, whose proposal is the
+prior. $\Lambda$ is the gene's intensity at the place's voxel times the transcript's nuclear prior
+there. A place outside the region is refused.
+
+**The start.** The run starts from the instrument's cells (`cells.zarr.zip` masks/1):
+- **On the first lattice:** each column takes the label most of its pixels have, and each cell
+  keeps its piece holding its seed, the centre of its largest nucleus (masks/0).
+- **Prior cells:** each nucleus belongs to the cell holding most of its pixels, and each
+  transcript over a nucleus has that cell as its prior.
+- **Small cells:** a cell left without a column takes its seed's column. If a cell still has none
+  (two seeds in one voxel), the run starts at the next finer stage, and cells lost even at the
+  finest are left out and counted.
+- **Each finer stage** splits every voxel by whole factors, so no region changes owner.
+
+**What is reported** is the posterior's summary over the last sweeps, not one sample: each voxel's
+most frequent label, and each transcript's most frequent cell with its posterior probability (the
+share of samples). A cell's 2D footprint takes, in each column, the label holding most of its
+layers (the background counted like a cell; a tie between a cell and the background goes to the
+cell).
+
+At 1 µm a voxel at a cell's edge holds a transcript or two at most (in four layers, about 0.4),
+so whether it belongs to the cell is decided by a few nats at most. Any one sample's boundary is
+therefore as rough as the posterior is broad, and the summary is what estimates it.
+
+**Defaults** (SituCraft's choices, from the validation below): one stage of 1 µm voxels in one
+layer, 600 sweeps, the last 500 summarized; perimeters within 1.6 times the least (slice 5).
+- **The schedule** was the best of those tried on simulated truth. The publication's schedule (4 µm
+  and one layer, then 2 µm and two, then 1 µm and four) is available. Coarse starts reach a higher
+  likelihood on the simulations, but land further from the truth there. These simulated cells do
+  not overlap in depth, which real tissue can.
+- **The samples:** summarizing more of them helped steadily. On the standard tissue, a summary of
+  100, 300 and 500 sweeps gave median IoUs of 0.610, 0.640 and 0.663.
+- Slice 6's comparison on real data revisits both.
+
+**Validation** (`internal/segment/refine`; fixed seeds):
+- **Detailed balance, exactly.** On lattices small enough to list every labelling (3 × 3 in one
+  layer, 2,136 states reachable; 2 × 2 × 2, 2,314), with the parameters held fixed:
+  - every move from every reachable state satisfies $\pi(\sigma)K(\sigma\to\sigma') = \pi(\sigma')K(\sigma'\to\sigma)$
+    to $10^{-9}$ (13,712 and 22,592 moves);
+  - no move is allowed one way only;
+  - every reachable state keeps the constraints, checked independently.
+- **The random steps sample it.** 20,000 chains started from exact draws of π, each run 200 steps,
+  end distributed as π (χ²). The same holds for the parallel sweep on a 4 × 2 lattice in blocks of
+  two voxels.
+- **Along a random walk** on a 9 × 8 × 2 lattice with six cells, where a voxel can sit between two
+  pieces of a cell, every proposed move balances against the target computed afresh.
+- **Repositioning:** 20,000 transcripts observed at one place, near cells of different rates and a
+  nuclear prior, end in each voxel as often as the displacement prior's mass, the intensity and
+  the prior say (χ²).
+- **Determinism:** a run gives the same digest on 1, 4 and 16 threads, on arm64 and amd64
+  (pinned).
+- **Power.** Each test was shown to fail on a deliberate error. Eight errors were tried:
+  - connectivity tested for the losing cell only;
+  - the proposal ratio left out, or the bubble left out of it;
+  - a step that always copies the first neighbour;
+  - the perimeter's change computed wrongly;
+  - repositioning without the nuclear prior, with one width for both components, or about the
+    current place instead of the observed one.
+
+  Every one was caught; the one-sided connectivity test only by the walk on the larger lattice.
+
+**Reference numbers.** On the standard simulated tissue (500 × 500 µm, seed 20261014: 2,925
+cells started from the instrument's, 394,490 gene transcripts of quality 20 or more; ten cores),
+scored on gene transcripts of quality 20 or more and on the true cells with a nucleus in the
+section:
+
+| Segmentation | Transcripts in their true cell | Median IoU | Time |
+| --- | --- | --- | --- |
+| The true cells, each transcript by where it was observed | 85.0% (the small tissue) | 1 | |
+| The instrument's 5 µm expansion (the start) | 82.5% | 0.622 | |
+| Default: 1 µm, one layer, 600 sweeps (500 summarized), perimeters within 1.6 times the least (slice 5) | **86.3%** | **0.712** | 22 s |
+| The same with perimeters within twice the least, holes filled (slice 4; the rows below too) | 85.9% | 0.678 | 20 s |
+| The same, holes left (slice 3) | 85.9% | 0.663 | 24 s |
+| 1 µm, one layer, 1,500 sweeps (the last 1,000 summarized) | 85.9% | 0.677 | 56 s |
+| 1 µm, four layers, 600 sweeps (500 summarized) | 85.1% | 0.630 | 51 s |
+| The publication's schedule, 4 → 2 → 1 µm (250 summarized) | 83.0% | 0.591 | 39 s |
+
+The refined segmentation assigns more transcripts to their true cells than the true cells
+themselves do by place. Repositioning estimates where each molecule came from, which no
+segmentation by place can. Its cells cover 175,252 µm² against the true 185,852 µm² (the
+expansion's 245,477): the sparse edges of cells are left to the background. On the small tissue
+(the unit test: 300 sweeps, 250 summarized), 86.4% of transcripts are in their true cell (the
+expansion 83.4%), with a median IoU of 0.712 (0.634).
+
+**Found by slice 3:**
+- **Attributions before rates.** The first attribution, drawn before any cell had rates, gave every
+  transcript to the background, and the chain never recovered. The start now attributes by place.
+- **One sample is not the segmentation.** On the small tissue at 1 µm in four layers, the last of
+  80 sweeps put 80.8% of transcripts in their true cells (median IoU 0.571), below the expansion.
+  The posterior summary is above it.
+- **Projecting 3D cells:** taking any layer's cell for a column spread cells over the gaps; the
+  column's dominant label does not.
+
+#### The outputs (verified, wave 3, slice 4)
+
+A run is written as SituCraft's segmentation files (docs/FORMATS.md), checked, and compared with
+the instrument's segmentation as soon as it is made.
+
+- **The 2D footprint.** Each column's dominant label. *SituCraft's choice:* with every hole
+  filled, so that a region of the background enclosed by one cell (not reaching the region's
+  edge) is the cell's. In one layer an empty voxel inside a cell gains about 2.5 nats by going to
+  the background, so about 8% of a cell's voxels are holes in the summary where no transcript
+  happened to lie; cells have none. Filling them raised the standard tissue's median IoU from
+  0.663 to 0.678, and the small tissue's from 0.668 to 0.678.
+- **The raster and outlines.** The footprint at the image's resolution; outlines traced from it
+  and simplified to half a voxel, so that the voxels' steps are not drawn. With several layers,
+  each layer's outlines too (`layers.bin`).
+- **Assignments and probabilities.** Each modelled transcript's most frequent cell and its share
+  of the summarized sweeps; the others by the pixel they were observed in.
+- **Counts:** the gene transcripts of quality 20 or more, by assigned cell.
+- **Limitations, per cell** (shown in the Segmentation view and with a difference's cells in the
+  comparison workspace). *SituCraft's thresholds:*
+  - fewer than 10 gene transcripts: the boundary comes more from the prior than from the
+    transcripts;
+  - uncertain boundaries: the cell's voxels are its own in fewer than 75% of the summarized
+    sweeps, on average (that average, each cell's boundary certainty, is recorded since slice 8,
+    `certainty.bin`, and fills the cells in the Viewer);
+  - no nucleus: the cell started without one, so no nuclear prior holds it;
+  - left out at the start;
+  - for every cell: no cell absent from the start can be created, and boundaries between cells
+    of like expression are uncertain.
+- **Convergence.** The verdict is Geweke's diagnostic of the log-likelihood over the summarized
+  sweeps: the means of their first tenth and last half compared, the standard errors from batch
+  means (Geweke J. Evaluating the accuracy of sampling-based approaches to the calculation of
+  posterior moments. In: *Bayesian Statistics 4*, Oxford University Press 1992:169–193). Within
+  ±2 the run has settled. The split-half agreement (each transcript's most frequent cell over
+  each half) describes stability. It is bounded below 1 by the posterior's own uncertainty: on
+  the small tissue it was 94.3% after 300 and 600 sweeps, 95.4% after 1,200 and 95.8% after 3,000,
+  about a third of transcripts having probabilities below 0.9.
+  - *What the diagnostic found:* the log-likelihood climbs for about a thousand sweeps on the
+    small tissue, while cells leave the gaps (their volume falling from 128,000 to 124,000 µm³)
+    and the expression states consolidate (10 to 7 used). It then drifts slowly. With the
+    defaults, Geweke's z is about 9.5 on the small tissue and 15 on the standard one, and still
+    4.6 after 1,500 sweeps on the standard tissue.
+  - Against the truth the result barely changes with longer runs (the table above). So the
+    defaults stand, and the page says plainly that the run is still drifting and that more
+    sweeps would make sure.
+  - Agreement between two seeds on a pilot region came with the segmentation studio (below).
+
+#### The segmentation studio (verified, wave 3, slice 5)
+
+**Regions and sections.** A refinement covers the whole tissue, its sections apart, or chosen
+regions (rectangles, µm).
+- **A region's cells** are those whose seed (their nucleus's centre) lies in it. They are refined
+  on a lattice covering the region and a margin of 20 µm about it. The cells about it are held
+  where the instrument drew them: no move takes a voxel from a held cell or gives it one. So the
+  region's edge never cuts a cell, and a refined cell near it keeps its whole extent. The rest of
+  the tissue keeps the instrument's segmentation, and its transcripts their pixel's cell.
+- **Regions** are clipped to the tissue. Regions whose margins would overlap are merged, so that no
+  cell is both refined and held.
+- **Sections** are the tissue's separate pieces: cells grouped where their boxes come within a gap
+  (100 µm unless set; single linkage, through a grid of the gap's size), each group's box grown by
+  the margin. Each is refined apart, with a model of its own: unrelated tissues on one slide do not
+  share expression states. Only one region's run is held in memory at a time.
+- *Validation:* a region's run changes no pixel outside its lattice and none of a held cell; its
+  outputs pass the segmentation check. Sections are found as the tissue's pieces and joined by a
+  wide enough gap.
+
+**Presets** (`refine.Presets`, version 1), each measured on the standard simulated tissue
+(`TestPresetsOnSimulatedTissue`, REFINE_PRESETS=standard; measured again after slice 6's change to
+the summary, and on slice 7's tissue, whose background is of two kinds). The scores are as above; "outlines" is the median ratio of each cell's outline (pixel
+edges) to the least its area can have.
+
+| Preset | What it changes from Balanced | In their true cell | Median IoU | Outlines | Memory (estimated) |
+| --- | --- | --- | --- | --- | --- |
+| The instrument's expansion | | 82.5% | 0.622 | 1.22 | |
+| Balanced (the defaults) | | 86.3% | 0.716 | 1.32 | 89 MB |
+| Conservative boundary | perimeters within 1.3 times the least; gaps proposed at 0.1; nuclear prior 0.9 | 86.2% | 0.731 | 1.21 | 89 MB |
+| Flexible morphology | perimeters within 2.5 times the least; nuclear prior 0.7 | 84.7% | 0.638 | 1.62 | 89 MB |
+| Low memory | 2 µm voxels; the collector's target 20% | 84.8% | 0.648 | 1.33 | 72 MB |
+| ROI pilot (a 200 µm square in the middle) | a region, run with two seeds | 86.5% in the region (Balanced on the whole tissue: 87.1%) | 0.724 (0.718) | | |
+
+- **Every preset puts more transcripts in their true cells than the instrument's segmentation.**
+- **The pilot reproduces the whole run in its region:** 86.5% and 0.724 against the whole run's
+  87.1% and 0.718 there. Its two seeds put 93.2% of the transcripts in refined cells in the same
+  cell; the split-half agreement is about 95%, both bounded by the posterior's own uncertainty.
+- **What did not work:**
+  - *Low memory without repositioning:* keeping transcripts where they were observed put only
+    83.0% of them in their true cells on the small tissue, below the instrument's 83.4%; with 2 µm
+    voxels as well, 78.2%. Low memory keeps repositioning.
+  - *Coarser voxels alone* hardly lowered the peak, since most memory goes with the transcripts.
+    The collector's target does lower it (below).
+- **The perimeter bound decides the shapes.** Conservative's three changes were tried apart on the
+  standard tissue. The bubble (0.1: IoU 0.688) and the nuclear prior (0.9: 0.681) moved little.
+  The perimeter bound moved most, and every simulated cell type gained from a tighter bound,
+  including the elongated ones:
+
+  | Perimeter bound | Median IoU | Endothelial-like (aspect up to 4) | Fibroblast-like (up to 3.2) | Epithelial-like | Immune-like |
+  | --- | --- | --- | --- | --- | --- |
+  | 2.5 | 0.642 | | | | |
+  | 2 (slice 4) | 0.678 | 0.641 | 0.694 | 0.738 | 0.663 |
+  | 1.8 | 0.697 | | | | |
+  | 1.6 (the default) | 0.712 | 0.665 | 0.716 | 0.775 | 0.701 |
+  | 1.4 | 0.724 | 0.673 | 0.718 | 0.780 | 0.720 |
+  | 1.3 | 0.724 | | | | |
+  | 1.2 | 0.716 | | | | |
+
+  - The bound acts mostly against ragged outlines rather than long ones: cells start from the
+    instrument's expansion, and a cell starting beyond the bound keeps its own ratio.
+  - *SituCraft's choice:* the default is 1.6, the tightest bound that still admits an ellipse
+    four times as long as wide at any angle, rather than the simulation's best (1.3–1.4).
+    Simulated outlines are smoother than many real cells', and a bound below 1.6 would hold real
+    elongated cells to shorter shapes than they have.
+  - Conservative takes the simulation's best, 1.3, for tissues of rounded cells. Its cells cover a
+    little more area than Balanced's, not less: a tight bound stops the background carving ragged
+    gaps as much as it stops cells growing tendrils. So its warning is about elongated cells, not
+    unassigned transcripts (0.02% unassigned, against Balanced's 0.01%).
+  - Slice 6's comparison on real data revisits the default.
+
+**Memory.** Measured with the heap in use sampled every 10 ms. The run now holds less:
+- **Tallies:** each transcript's tally keeps up to four labels with their counts (24 bytes; a slot
+  is free while its count is 0). The split-half agreement is estimated on every eighth transcript.
+  It is a share, and on 50,000 transcripts its standard error is about 0.1%. Before, two more
+  full tallies were kept for it. The live heap on the standard tissue fell from 75 to 53 MB; the
+  assignments are unchanged (the pinned digest held).
+- **Reading:** only the columns used are decoded from `transcripts.parquet` (gene, quality and
+  place). A row group then costs about 70 bytes a row instead of 135.
+- **Between phases** (after reading, after sampling) the collector runs, and the sampler's state is
+  let go before the segmentation is written (`Result.Release`).
+- **The collector's target:** refinements run with Go's collector keeping the heap within 50% of
+  its live size (Go's default is 100%). On the standard tissue the peak fell from 190 to 141 MB,
+  in 7.1 s against 7.0. Low memory sets 20%. The target never changes the result; a lower setting
+  of the user's own (GOGC) is kept.
+- With all of these, the standard tissue's peak fell from 172 MB (slice 4) to 89 MB.
+
+**Preflight estimates** (`refine.EstimateCost`). The peak memory is the largest of three phases:
+- reading: a block of each mask (its chunks' rows across), else a row group of the transcripts,
+  with the inputs;
+- sampling: the inputs, and the largest region's run (per modelled transcript, voxel, and cell ×
+  gene);
+- writing: a row group again, every row's assignment, and the regions' results.
+
+The phases' terms are scaled by the collector's target. Disk is counted per row (assignment), per
+modelled transcript (probability), per non-zero count, per cell (record, outline, label runs) and
+per sweep (the trace). Time is counted per modelled transcript and per cell × gene × component in
+each sweep.
+
+| Run (100 sweeps; ten cores) | Memory measured (estimated) | Disk | Time |
+| --- | --- | --- | --- |
+| Small simulated tissue, 120 genes | 8 MB (8) | 115 kB (140) | 0.4 s (0.3) |
+| 300 µm, 1,000 genes | 48 MB (47) | 648 kB (602) | 3.8 s (4.0) |
+| 300 µm, a region | 28 MB (28) | 401 kB (464) | 0.7 s (0.7) |
+| 500 µm, a small region | 75 MB (71) | 1,001 kB (1,051) | 0.7 s (0.9) |
+| 500 µm, 120 genes | 89 MB (89) | 1,352 kB (1,631) | 4.0 s (4.1) |
+| 500 µm, 1,000 genes, Low memory | 97 MB (97) | 1,713 kB (1,658) | 10.5 s (11.4) |
+| The Lung 2-FOV bundle, Balanced (600 sweeps), whole | 264 MB resident (251) | 4.45 MB (4.0) | 97 s (88) |
+| The large simulated tissue (§3.4), 25 patches | 5.1 GB resident (6.6) | 166 MB (224) | 626 s (about 600) |
+
+- A region's run is dominated by reading the bundle; a small panel's by the transcripts modelled; a
+  large panel's by the cells × genes. In patches, the memory is the largest patch's run with
+  what is held throughout (large tissues, below); the large tissue's estimate is a fifth over
+  what it took, on the safe side.
+- The preflight refuses a run whose estimate passes 85% of the computer's memory (unless forced)
+  or the free space where it is written, and warns past half of either.
+- *Found by measuring:* the first, linear model under-predicted small regions by a factor of four.
+  Reading and writing the bundle cost more than sampling a small region.
+
+**Failures, classified** (requirements S7): the cells to start from missing (`cells.zarr.zip`), a
+malformed bundle, memory, storage (also a full disk met while writing), a region holding no cell's
+nucleus or no transcript, and settings a run cannot use. Each failure carries what to do, shown in
+the studio, the Jobs view and the remote action's answer.
+
+**Convergence judged only when it can be.** Geweke's diagnostic needs a first tenth of five
+batches of two: 100 summarized sweeps. Below that the diagnostics say it was not judged
+(`gewekeJudged`), the page says so, and the preflight warns. *Found by slice 5:* a short run's z
+of 0, which means too short to judge, was shown as settled.
+
+**Recipes and the terminal** (requirements E5). A spec is kept as a recipe (docs/FORMATS.md) and
+run by the app's job or by `situcraft refine`, through one function (`refine.Refine`).
+- On a simulated bundle, a recipe from the app's preflight, run in the terminal on three threads,
+  gave every file the app's job made, byte for byte.
+- The terminal's folder imports back into the app as a refinement of the same dataset, with the
+  same files' SHA-256.
+- A folder of another image's size is refused.
+
+#### Against an independent reference (verified, wave 3, slice 6)
+
+SituCraft's refinement was compared with Proseg 3.2.0 (Jones et al. 2025;
+https://github.com/dcjones/proseg), the publication's own software, on both 2-FOV bundles and the
+standard simulated tissue (`validation/reference/segmentation/`).
+- **SituCraft:** Balanced, as `situcraft refine` runs it, with two seeds.
+- **Proseg:** its Xenium preset, as a user runs it, in two configurations, each run twice (it has
+  no seed):
+  - one voxel layer (`--voxel-layers 1`), as SituCraft's default: the like-for-like reference;
+  - its own defaults (four layers).
+- **Read and measured as any segmentation:** each is imported (Proseg's SpatialData store) and
+  compared with every other by the comparison workspace's measures, against the instrument's
+  segmentation and, on the simulated tissue, the truth:
+  - each segmentation's cells, assigned fraction (gene transcripts of quality 20 or more), spurious
+    co-expression (relative to the nuclei) and mutually exclusive co-expression;
+  - between two, the cells matched (one to one, expanded or contracted), the quantiles of their
+    IoU, the correlation of their counts (Pearson's on log(1 + n)), and the transcripts whose cell
+    changed;
+  - against the truth, the share of the transcripts in a true cell that are in it
+    (`changesQ20OfAssignedA`). It pairs cells by the comparison's matching, so it differs a little
+    from the nucleus-based scoring of the tests above (85.0% against 86.3% for the same run).
+
+**Tolerances,** set before the comparison was made (`validation/segmentation_test.go`), each with
+its reason. Differences beyond one are explained below or fixed.
+
+| Measure | Tolerance |
+| --- | --- |
+| Cells | SituCraft's within 5% of Proseg's (SituCraft keeps every cell of the instrument's; Proseg makes one per nucleus) |
+| Assigned fraction | within 3 points (both assign by the same model) |
+| Spurious co-expression | SituCraft's at most 10% above Proseg's |
+| Matched cells' counts | correlated within 0.05 of the lower of each method's own two runs |
+| Median IoU | within 0.10 of the lower of each method's own two runs |
+| On the truth | in their true cell no more than 1 point below Proseg; median IoU no more than 0.02 below; cells' transcripts left in no cell no more than Proseg's (slice 7) |
+| Budget (Breast) | under 2 minutes and 4 GB on a laptop |
+
+**Results** (one run of each; ten cores of an Apple M4 laptop; made again in slice 7, when the
+simulated tissue's background became two kinds and SituCraft's model began measuring the false
+decodes):
+
+| | Lung: SituCraft | Lung: Proseg | Breast: SituCraft | Breast: Proseg | Simulated: SituCraft | Simulated: Proseg |
+| --- | --- | --- | --- | --- | --- | --- |
+| Cells | 11,898 | 11,871 | 7,275 | 7,008 | 2,925 | 2,925 |
+| Assigned | 99.63% | 95.68% | 97.04% | 94.39% | 99.66% (truth 97.54%) | 98.27% |
+| Spurious co-expression (instrument) | 1.68 (1.87) | 1.37 | 1.83 (1.77) | 1.69 | 2.02 (2.53; truth 1.89) | 1.87 |
+| Median IoU, SituCraft with Proseg (each's own runs) | 0.558 (0.688) | (0.701) | 0.676 (0.775) | (0.815) | 0.713 (0.771) | (0.784) |
+| Counts correlated with the other | 0.839 | | 0.919 | | 0.961 | |
+| Transcripts changing cell between own runs | 14.0% | 50.6% | 11.1% | 37.3% | 6.8% | 23.6% |
+| In their true cell (instrument 82.2%) | | | | | **84.7%** | 75.2% |
+| Median IoU with the truth (instrument 0.622) | | | | | 0.719 | 0.727 |
+| Cells' transcripts left in no cell (instrument 1.17%) | | | | | **0.13%** | 1.42% |
+| Time, peak memory | 93 s, 263 MB | 156 s, 610 MB | 83 s, 279 MB | 122 s, 663 MB | 23 s, 106 MB | 22 s, 305 MB |
+
+- **Met everywhere** on Breast and the simulated tissue, the budget included: Breast in 83 s and
+  279 MB.
+- **On the truth** SituCraft puts 9.5 points more transcripts in their true cells than Proseg, with
+  outlines as close to the true ones (median IoU 0.719 against 0.727), and leaves a tenth as many
+  of the cells' transcripts in no cell. On slice 6's tissue it put 85.0% in their true cell and
+  Proseg 75.6%: slice 7's tissue differs, and on it slice 6's model scores as slice 7's.
+- **Stability:** Proseg's per-transcript assignments differ between two of its runs three to four
+  times as much as SituCraft's between two seeds, while their outlines differ about as much.
+- **On Lung, three are explained:**
+  - *Assigned fraction (99.63% against 95.68%):* a larger background share is not a more accurate
+    one. On the simulated tissue only 18% of what Proseg leaves in no cell is background, and the
+    cells' transcripts it leaves out are ten times SituCraft's (the background, below).
+  - *Spurious co-expression (1.68 against 1.37):* the measure does not rank methods by accuracy.
+    On the simulated tissue Proseg's is below the truth's own (1.87 against 1.89), while it puts
+    9.5 points fewer transcripts in their true cells than SituCraft (2.02). On Lung SituCraft's is
+    10% below the instrument's; part of the rest is ambient RNA counted in cells.
+  - *Median IoU (0.558, the tolerance 0.588):* Lung's cells are the smallest (median 37 µm²), and
+    Proseg's outlines are more compact there (1.16 times the least perimeter against SituCraft's
+    1.32). With Conservative's bound (1.3) SituCraft's agreement rises to 0.576; started from the
+    nuclei, as Proseg starts, it stays at 0.557.
+- **The background** was found under-estimated here (a quarter of the simulated tissue's) and
+  taken up by slice 7 (the background, below).
+
+**Found by slice 6:**
+- **The summary counted the background in cells.** A transcript in a cell's voxel was reported in
+  the cell even in the sweeps where the sampler attributed it to the background. Each summarized
+  sweep now draws every transcript's attribution, from a random stream of its own, so the chain is
+  unchanged; the reported cell is where it most often lay and was attributed. Breast's assigned
+  fraction fell from 98.80% to 97.03% and its co-expression from 1.94 to 1.83. Elsewhere the
+  posterior's mode moved little: a background probability of a few percent rarely wins the mode.
+  One posterior sample assigns about 1% fewer (Lung: 98.96% against 99.63%).
+- **Proseg's four-layer default lost Lung's transcripts:** 61% of them went to the background, and
+  5,035 of its 11,872 cells were left empty. With one layer, 4% went to the background. Lung's
+  transcripts span more depth than Breast's (§1.3b). The like-for-like reference is therefore one
+  layer, as SituCraft's default; SituCraft's default stays one layer.
+- **The simulated bundles lacked two of Xenium's transcript columns,** `nucleus_distance` and
+  `codeword_index`, and stored `overlaps_nucleus` as 32 bits rather than 8. Proseg could not read
+  them. The simulator now writes Xenium's columns and types (§3.4).
+- **A tool may keep where it moved each transcript beside where it was observed.** Proseg's points
+  hold both; the SpatialData import matches transcripts at their observed places
+  (`observed_x`, `observed_y`).
+- **The perimeter bound, revisited:** tighter bounds agree a little more with Proseg on Lung (0.557
+  at 1.6, 0.576 at 1.3, 0.499 at 2.5), as with the simulated truth (slice 5). The default stays at
+  1.6, the tightest that still lets a round start grow into a cell four times as long as wide.
+
+The maintainer makes Proseg's segmentations (`validation/reference/segmentation/run_proseg.sh`) and
+reduces them to the committed numbers. The weekly real-data workflow refines each data set again
+and checks that SituCraft's segmentation is still, byte for byte, the one the numbers were made
+from.
+
+#### The background (verified, wave 3, slice 7)
+
+Slice 6 found SituCraft's background rate accounting for a quarter of the simulated tissue's
+background, whatever the chain's start. Slice 7 diagnosed it on simulated truth, made the
+background two-part (the model, above), and measured what any per-transcript call can find.
+
+**The diagnosis** (the standard tissue; temporary test hooks, not kept):
+- **Cells take the background's molecules where they lie.** The refined cells cover as much of the
+  field as the true ones (73% and 74%), but their gaps fall where no transcripts lie. With every
+  gene's background rate held at the truth, cells still took 85% of the background molecules in
+  the true gaps, and the summary left 0.65% of the transcripts in no cell (the truth: 2.46%).
+  Rates alone cannot recover the background transcript by transcript.
+- **Inside cells, ambient RNA looks like expression.** On a tissue of ambient RNA alone, one rate
+  per gene gave the rarest fifth of the genes three times their background and the commonest fifth
+  a seventh of theirs. A cell's rates absorb the ambient RNA of the genes it expresses; only the
+  rare transcripts of genes a cell barely expresses stand out. Tying the ambient RNA to the
+  tissue's mean expression, one level for every gene, let the level collapse to almost nothing
+  (0.01% of the transcripts): the posterior prefers cells explaining a floor of every gene.
+- **The outlines' settings change little:** a perimeter bound of 1.3 or 1.2, or gap proposals
+  four times as often (0.2), left 0.35–0.37% of the transcripts in no cell, against 0.34%.
+
+**The change:** the negative controls measure the false decodes, which no cell can take (the
+model, above). The ambient RNA keeps one rate per gene.
+
+**The benchmark** (`TestBackgroundOnSimulatedTruth`, run by hand: `REFINE_BACKGROUND=all`): the
+standard tissue at three levels of both kinds, and each kind alone, refined with Balanced.
+Precision is the share of the transcripts left in no cell that truly are background, recall the
+share of the background left in no cell.
+
+| Tissue: ambient RNA, false decodes (per 100 µm²) | Background (truth) | Rates: false decodes (expected) | Rates: ambient RNA (expected) | In no cell | Precision | Cells' transcripts in no cell | Recall | In their true cell | Median IoU |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Low: 0.6, 0.005 | 0.51% | 0.21% (0.25%) | 0.47% (0.25%) | 0.06% | 35.9% | 0.04% | 4.3% | 86.4% | 0.717 |
+| Standard: 3, 0.025 | 2.46% | 1.10% (1.24%) | 0.61% (1.24%) | 0.34% | 60.2% | 0.13% | 8.2% | 86.3% | 0.716 |
+| High: 12, 0.1 | 9.13% | 4.32% (4.61%) | 1.21% (4.61%) | 2.10% | 71.5% | 0.60% | 16.4% | 85.8% | 0.715 |
+| Ambient RNA only: 6, 0 | 2.46% | 0.01% (0) | 0.71% (2.47%) | 0.06% | 55.5% | 0.02% | 1.2% | 86.3% | 0.713 |
+| False decodes only: 0, 0.05 | 2.44% | 2.21% (2.47%) | 0.55% (0) | 0.74% | 62.1% | 0.28% | 18.9% | 86.2% | 0.719 |
+| Standard, slice 6's background (one rate per gene, no controls) | 2.46% | | 0.78% in all | 0.14% | 70.5% | 0.04% | 4.1% | 86.3% | 0.716 |
+| Standard, every gene's rate held at the truth | 2.46% | | | 0.65% | 56.1% | 0.29% | 14.8% | 86.2% | 0.718 |
+| Ambient RNA only, the rates held at the truth | 2.46% | | | 0.79% | 54.1% | 0.36% | 17.4% | 86.1% | 0.715 |
+
+(The rates are their mean over the summarized sweeps times the region's volume, as shares of the
+modelled transcripts; the expected shares are the simulator's, of quality 20 or more. The last
+three rows are diagnostics, not settings.)
+
+- **The false decodes are measured** within a sixth of the truth at every level, a little low: the
+  controls are unbiased, but the genes' false decodes that cells take pull the estimate down.
+- **The background found doubles** on the standard tissue against slice 6's model (8.2% of it
+  against 4.1%, its rates 1.71% of the transcripts against 0.78%), with the same accuracy.
+- **The ambient RNA is estimated less surely:** from a quarter of the truth (high, ambient only)
+  to about twice it (low, where the rare transcripts of genes a cell barely expresses are taken
+  for background).
+- **What is left in no cell is mostly background** (55–72% from the standard level up), and the
+  cells' transcripts left there are a small share of all (0.03–0.6%). The rest of the background
+  is counted in cells, as every per-transcript call must count most of it.
+- **Accuracy is unchanged:** 85.8–86.4% of transcripts in their true cell, median IoU
+  0.713–0.719.
+- **Where the limit lies:** even with the rates at the truth, about a sixth of the background
+  could be told from the cells' transcripts (recall 15–17%). The rest lies in or beside cells that
+  express the same genes, and only a better prior on cells' shapes could leave more of it out.
+
+**Against Proseg** (§3.2, against an independent reference; `lostQ20` in the comparison's numbers):
+on the simulated tissue Proseg leaves more in no cell (1.59–1.73% of the transcripts in its two
+runs), but only 18–19% of it is background, so 1.29–1.42% of all transcripts are cells' it leaves
+out: ten times SituCraft's 0.12–0.13% (0.32–0.34% in no cell, 61–63% of it background). Proseg
+recovers more of the background (12% against 8%; 21% with its four-layer defaults, which leave out
+2.0% of the transcripts wrongly). A background share alone does not rank methods: what is left out
+wrongly matters as much as what is left in. The slice's first aim, a share at least Proseg's 1.53%,
+would therefore have been the wrong goal, and is not taken; the reference comparison checks instead
+that SituCraft leaves out no more of the cells' transcripts than Proseg.
+
+On the real bundles the controls put false decodes at 0.04% (Lung) and 0.06% (Breast) of the
+transcripts, so SituCraft's results there hardly changed (Lung's assigned fraction 99.63%, as in
+slice 6; Breast's 97.04%). Their background beyond that is ambient RNA, the part no method here
+can tell from the cells' own expression transcript by transcript.
+
+The refinement's diagnostics report the background (`diagnostics.json`; the studio's Background):
+the shares its rates account for, by kind, the negative controls that measured the false decodes,
+and the share left in no cell.
+
+#### Large tissues (verified, wave 3, slice 9)
+
+A run's memory grows with what it holds of its region: about 130 bytes a modelled transcript, 50
+a voxel and 17 a cell × gene (the cost model above). A tissue of tens of millions of transcripts
+cannot be held as one run on a laptop, so a large region is refined in patches, an approach
+after Blampey et al. (2024), *Nat Commun* 15:4981, doi:10.1038/s41467-024-48981-z.
+
+**Patches.**
+- **When:** a region of more than twice `patch_transcripts` modelled transcripts (2 million by
+  default, so above 4 million) is cut into equal rectangles: $k = \lceil n / \text{target} \rceil$
+  of them, $n_x = \operatorname{round}(\sqrt{k\,w/h})$ across and $\lceil k / n_x \rceil$ down, the
+  last ending exactly at the region's edges. They depend on the data and the settings only, never
+  on the threads or the memory, so a refinement is still the same bytes for the same seed.
+- **Each patch is a run** of the region's kind: it refines the cells whose seeds lie within 40 µm
+  of its rectangle (clipped to the region) and holds the cells about them as the instrument drew
+  them. A cell near a seam is refined with its neighbours on both sides, in every patch whose
+  margin reaches it.
+- **One at a time:** each patch's sampler is released when its run ends, so the sampling holds
+  one patch's state.
+- **Stitching:** each pixel and transcript is taken from the patch whose rectangle holds it, each
+  cell's boundary certainty and flags from the patch whose rectangle holds its seed, and each cell
+  is counted once. The diagnostics keep each patch's summary and trace, with its rectangle.
+
+**Validation.**
+- **Stitched as specified** (`TestPatchesAreStitched`, a 200 × 160 µm tissue in four patches):
+  the segmentation passes the check; every pixel is a cell its rectangle's patch refines where
+  its footprint has one; every cell is decided once and none is held. The patches and a run of
+  the whole agree on 89.7% of transcripts, two seeds of the whole on 90.7%: the patches differ
+  from the whole as chance does.
+- **As accurate as the whole** (`REFINE_PATCHES=standard`, the standard tissue in four patches,
+  Balanced): 86.1% of transcripts in their true cell and a median IoU of 0.719, against the
+  whole's 86.3% and 0.716; within 20 µm of a seam, 87.4%. The seams lose nothing.
+
+**At scale** (`validation/scale_test.go`, weekly; measured here on a 10-core laptop with 32 GB):
+the `large` simulated tissue (§3.4), 6.1 × 5.2 mm, 399,084 cells and 54,782,352
+transcripts, made, refined, opened and drawn, each step in a process of its own, then deleted.
+
+| Step | Time | Peak memory |
+|---|---|---|
+| Making the tissue, a field at a time | 621 s | 3.1 GB |
+| Refining it in 25 patches (40 sweeps) | 338 s | 6.2 GB |
+| Its derived data, the instrument's segmentation registered, the refinement imported | 128 s | 1.8 GB |
+| The Viewer with the dataset alone: its descriptor, cells and a region's transcripts | 20 s | 0.19 GB |
+| The Viewer drawing the refinement: its cells and all 2,688 transcript tiles | 38 s | 0.93 GB |
+
+- **The preflight** foresaw 25 patches of 1,219 µm, 49.4 million transcripts modelled (58.3
+  million with those the patches share) and 6.6 GB; without patches the run would need 10.8 GB.
+- **The refinement** (40 sweeps, the last 20 summarized: the test checks the scale, not the
+  chain) refined all 383,159 of the instrument's cells in 25 patches. With 100 sweeps, 50 summarized, it took
+  626 s at 5.1 GB, Geweke's z 0.0, and 93.5% of transcripts were in the same cell over both
+  halves of the summarized sweeps; Balanced's 600 sweeps are estimated at 53 minutes. Its peak
+  moves by a sixth from run to run with the collector's timing (5.1 to 6.2 GB over three runs),
+  always under the estimate.
+- **The Viewer** answers each transcript tile of the refinement, with every transcript's cell
+  and probability, in 12 ms at worst (2,688 tiles).
+
+**What still grows with the tissue.** Patches bound the sampling; the run still holds every
+modelled transcript's place and prior, each patch's results until the segmentation is written,
+and every row's assignment and probability as they are written: about 100 bytes a transcript and
+2 a pixel of the image. A computer with 16 GB thus refines about 120 million transcripts at this
+density, and the preflight says so before a run starts. Whole slides beyond that need the inputs
+and results streamed by patch (wave 10).
+
+**The Viewer's memory.** The dataset's cells table counts each cell's genes detected a row of
+tiles at a time: a first pass finds the last row each cell has a transcript in, and the second
+makes each row's (cell, gene) pairs unique with those carried from earlier rows, counting a cell
+at its last row (checked cell by cell against transcripts.parquet on both bundles). It held a pair
+for every transcript in a cell before: with the dataset alone at 55 million transcripts, the
+Viewer now peaks at 0.19 GB, against 1.65 GB. A segmentation's per-transcript files (its assignments and
+probabilities, 8 bytes a transcript) are never read whole: they are streamed once, to give each
+cell its transcripts' mean probability and to write the transcripts' cells and probabilities by
+the dataset's tiles into the cache, in batches of about 4 million transcripts, each batch sorted by
+row and picked out in one pass over the files. Each tile's are then read when it is drawn. At 55
+million transcripts the Viewer drawing a refinement peaked at 0.93 GB, against 1.8 GB reading
+the files whole.
+
+SituCraft's other choices where the publication leaves them open:
+- **Polygons** come from the summarized voxel labels by boundary tracing per z layer, and from
+  the 2D footprint.
+- **Convergence.** Each sweep records the voxels moved, the transcripts repositioned and the
+  log-likelihood (`diagnostics.json`).
+- **Large tissues** run as overlapping patches that are stitched (above).
 
 Limitations to show in the interface: refinement cannot create cells absent from the prior
 segmentation; boundaries of cells with few transcripts, or in regions of homogeneous expression,
@@ -457,6 +1189,197 @@ and CSV tables), pandas (Baysor's tables), pyarrow and zarr-python (a Xenium Ran
 bundle). The scene has a cell with a hole, one of two polygons, one reaching beyond the image, one
 without a polygon, transcripts the tool assigns outside every polygon, noise, and a transcript the
 dataset does not have.
+
+### 3.4 Simulated tissues (verified, wave 3, slice 1)
+
+A segmentation can be scored only against a truth, and no measured tissue has one. `situcraft
+simulate` (`internal/simulate`) makes tissues whose every cell, nucleus and molecule is known and
+writes each as a Xenium output bundle with its truth. The simulator shares no code with
+SituCraft's segmentation; only the file writers and the outline tracer are common. Its generative
+model differs from the one the transcript-informed segmentation fits (§3.2): fixed expression
+profiles by cell type rather than a gamma mixture, a different wide displacement (3 µm, not 4), and
+cell shapes that are not grown by the sampler's moves. A method scored only on data drawn from its
+own model is flattered (the "inverse crime": Wirgin A. The inverse crime. arXiv:math-ph/0401050,
+2004).
+
+**The tissue.**
+- **Domains.** The Voronoi regions of seeded centres. Each has a mix of the cell types, one
+  dominating it (a share of 0.6, the rest by gamma weights), and a direction its elongated cells
+  tend to follow.
+- **Cells** are placed by random sequential adsorption (Feder J. Random sequential adsorption.
+  *J Theor Biol* 1980;87:237–254. doi:10.1016/0022-5193(80)90358-6):
+  - a candidate's domain chooses its type, and the type its area (log-normal about the type's
+    median), elongation (uniform from 1 to the type's) and outline;
+  - a candidate closer to a placed cell than three quarters of their summed radii is refused;
+  - placement stops when the cells' nominal areas cover the fill asked for, or after 2,000
+    refusals in a row.
+- **Shapes.** A cell is an ellipse of its area and elongation. Its radius varies with direction
+  by second and third harmonics (σ 0.06 and 0.05). A pixel belongs to the cell whose scaled
+  distance to it is least, below 1. Neighbours meet where their outlines compete, and gaps remain
+  where none reaches. Each cell keeps its largest 4-connected piece; one under 8 µm² is dropped.
+- **Nuclei.** A smaller, rounder ellipse (the square root of the cell's elongation) near the
+  cell's centre, of the type's share of its radius. A share of cells (4%) have their nucleus
+  outside the section; so do nuclei of under 4 µm² within the cell.
+- **Depth.** Each cell spans its type's height, centred anywhere in the section and cut by its
+  faces; its nucleus spans the middle 60%.
+
+**The molecules.**
+- **Expression.** Each gene has a base level (gamma, shape 0.6). A type's profile is:
+  - the base levels;
+  - its markers' (base + 0.5) times its fold;
+  - the other types' markers at a fifth;
+  - all normalized to sum to one.
+
+  A cell's expected total is its type's density × its area × a size factor (log-normal, σ 0.25).
+  Each gene's count is negative binomial: mean = that total × the gene's share of the profile,
+  dispersion = the type's.
+- **Places.** A molecule lies at a uniform point of a pixel of its cell. A nucleus pixel weighs
+  the nuclear enrichment (1.5); any other pixel weighs one. It lies at a uniform depth of the cell
+  (of the nucleus, for a nuclear molecule).
+- **Displacement.** A molecule is observed displaced by a normal in x and y: σ 3 µm for a fifth
+  of molecules, 0.5 µm for the rest. In z it is displaced with σ 0.5 µm and held within the
+  section. One displaced out of the field is lost.
+- **Background,** of two kinds (wave 3, slice 7), in 50 µm tiles:
+  - ambient RNA on the genes: Poisson, 3 per 100 µm² in all, spread over the genes in proportion
+    to the tissue's mean expression;
+  - false decodes on every codeword alike, genes and negative controls: Poisson, 0.025 per
+    100 µm² each (3 per 100 µm² over the 120 genes);
+  - background molecules lie uniformly in the tile and the section's depth.
+
+  Before slice 7 the controls' molecules had no counterpart on the genes, and the genes'
+  background was all in proportion to expression (6 per 100 µm²).
+
+  *Against the real bundles:* the negative-control codewords' rate is 0.04% of a gene's mean on
+  Lung and 0.06% on Breast (262 and 540 controls of quality 20 or more on 248 and 249 codewords),
+  so false decodes are under 0.1% of their gene transcripts. On the standard tissue they are
+  1.2%, twenty to thirty times as many, so that both kinds of background are exercised; its
+  benchmark (§3.2, the background) also has tissues of ambient RNA alone.
+- **Quality.** A cell's molecule is below 20 with probability 0.08 (uniform in 4–20); otherwise
+  its quality is 40 less an exponential of mean 3, no lower than 20.1. Background and control
+  molecules are below 20 with probability 0.35.
+
+**The instrument and the image.**
+- **The simulated instrument** sees the nuclei in the section and grows each by 5 µm, every pixel
+  going to the nearest nucleus. Its distances are the 5-7-11 chamfer transform (Borgefors G.
+  Distance transformations in digital images. *Comput Vis Graph Image Process* 1986;34:344–371),
+  within 2% of Euclidean. This is an instrument's own approximation, deliberately not SituCraft's
+  exact expansion (§3.1). A transcript belongs to the cell holding the pixel it is observed in.
+- **The DAPI image:**
+  - each visible nucleus has a brightness (log-normal about 1,800, σ 0.25), falling to about two
+    thirds at its edge, with grain (each pixel times 1 + a normal of σ 0.15);
+  - the stain is blurred by two passes of a 3 × 3 mean, laid on a background of 80, and given
+    camera noise (a normal of σ 6);
+  - it is written as a tiled, deflate-compressed OME-TIFF with its reduced levels (lossless,
+    readable by every TIFF reader; Xenium's own images are JPEG 2000).
+
+**The bundle.** It holds every file the Xenium Onboard Analysis 2 layout requires (§1.1):
+- `experiment.xenium`: one experiment UUID for the run, derived from the parameters.
+  `analysis_sw_version` names the layout first (`xenium-2.0.0 layout, situcraft-simulate …`),
+  because readers choose how to read a bundle by it. spatialdata-io reads a bundle whose version it
+  cannot parse as XOA 1: it looks for the image elsewhere and reads cell ids another way.
+- `transcripts.parquet` in Xenium's columns and types (§1.2): ids, instrument cells, nucleus
+  overlap (`uint8`), fields of view, quality, each molecule's distance to the nearest nucleus (µm,
+  from its pixel; 0 over one) and its codeword (the panel's). The last two came in slice 6, when
+  Proseg would not read a bundle without them.
+- `cells.parquet` and both boundary tables.
+- The counts in both forms:
+  - `cell_feature_matrix.h5`: the 10x Genomics feature-barcode matrix in HDF5, which
+    spatialdata-io and scanpy read. It is written by SituCraft's own HDF5 writer
+    (`internal/hdf5`, from the HDF5 File Format Specification 3.0: superblock version 2, compact
+    groups, contiguous datasets, Jenkins' lookup3 checksums; h5py reads it).
+  - `cell_feature_matrix/`: Matrix Market.
+- `cells.zarr.zip` as XOA 2 lays it out: both masks, the 4 × 4 transform, the cell ids,
+  `cell_summary`, and both polygon sets with each polygon's cell (`cell_index`) and method.
+- The morphology image.
+- `metrics_summary.csv`, computed as SituCraft's validation recomputes it.
+- `gene_panel.json`.
+
+`situcraft-simulation.json` at the root says that the bundle is simulated and gives every
+parameter. SituCraft labels such a bundle simulated wherever it is shown, and its methods
+paragraph says that the data were simulated. `truth/` is a Xenium Ranger-shaped bundle of the same
+run, which SituCraft's Xenium import reads as a segmentation:
+- every true cell, with its type and whether its nucleus is in the section;
+- the true outlines, nuclei and masks;
+- every molecule's true cell, true place, origin (cell, background, control probe or codeword)
+  and kind of displacement.
+
+**Random numbers.** Each part has its own stream:
+- the layout and the panel each have one;
+- each cell has one, as does each background tile and each image row.
+
+So molecules are drawn in parallel and merged in order. Every product is rounded on its own, and
+logarithms and exponentials come from `internal/dmath`. The same parameters give the same bundle
+byte for byte on any number of threads, on arm64 and amd64 alike (the small preset's digest is
+pinned in the tests).
+
+**Mosaics** (wave 3, slice 9). A field holds its image whole, about 75 bytes a pixel, so one
+field stops at 50 million pixels (about 1.5 mm a side). A larger tissue is a mosaic of fields
+(`tiles_across` × `tiles_down`), each a whole number of the stain's 512-pixel tiles each way:
+- **each tile is a tissue of its own:** its layout, cells, molecules and stain come from streams
+  of its own, the seed mixed with SplitMix64's finalizer of the tile's number (Steele GL, Lea D,
+  Flood CH. Fast splittable pseudorandom number generators. *OOPSLA* 2014:453–472.
+  doi:10.1145/2660193.2660195); the panel is shared, and the first tile is the single field the
+  same parameters make, byte for byte;
+- **made one at a time and joined by streaming** into one bundle: the tables by row groups, the
+  masks a chunk per tile, the stain tile by tile at every level whose tiles hold whole tiles of
+  the field (the coarser levels assembled whole, being small), ids, fields of view and places
+  numbered across the mosaic. Memory is a tile's whatever the mosaic's size;
+- **its seams show:** no cell crosses one, a molecule displaced across one is lost as at the
+  field's edge, and each tile has its own domains. A mosaic is for measuring SituCraft at scale,
+  not a model of a larger tissue.
+
+The `large` preset is 7 × 6 standard fields of 4,096 pixels (870.4 µm), 12 domains each: 6.1 ×
+5.2 mm, 399,084 cells and 54,782,352 transcripts, made here in about 620 s with a peak of 3.1 GB and 4.0
+GB of disk. A mosaic of 2 × 2 small tiles validates as one bundle, with every metric the validator
+recomputes agreeing; its first tile is the single field, its transcript ids unique, its truth
+matching it row for row, and its masks whole (`TestAMosaicIsOneBundle`).
+
+**Validation** (`internal/simulate/gof_test.go`; fixed seeds, each test at the 0.001 level):
+- **Counts.** The randomized probability integral transform of every interior cell's count of
+  every gene (87,480 counts) is uniform (Kolmogorov–Smirnov). A studentized test of the
+  variance against the negative binomial's catches a dispersion 30% off.
+- **Places.** Every molecule's true place is in its cell, at a depth within its cell's (or
+  nucleus's). The share in nuclei matches the enrichment (z test).
+- **Displacements.** The wide and narrow displacements, divided by their σ, are standard normal
+  (Kolmogorov–Smirnov; catches a σ 5% off), as are the displacements in depth. The wide share is
+  binomial.
+- **Quality.** Both quality distributions and both low-quality shares (one catches an exponential
+  mean 3% off).
+- **Background.** Per-tile totals are Poisson (χ²; catches a density 3% off); the genes' shares are
+  their ambient RNA's (in proportion to the tissue's mean expression) plus the false decodes', the
+  controls' total is Poisson at the false-decode rate, and places are uniform.
+- **Cells.** On a sparse tissue (1,012 cells), the standardized log areas are normal (catches a
+  median 5% off); the types are in their domains' proportions (χ²); and isolated cells' pixels
+  cover their nominal areas (median ratio within 0.97–1.04).
+- **End to end.** The small preset's bundle:
+  - passes SituCraft's validation with no warning;
+  - has every recomputed metric (16 of 16) agreeing with what it records;
+  - imports its truth through the Xenium import with no finding;
+  - is segmented and compared like a measured bundle.
+- **Other readers** (`validation/reference/read_simulation.py`; spatialdata-io 0.7.1, spatialdata
+  0.8.0, tifffile 2026.9.20, pyarrow 26.0.0). Both presets are read with no warning about the
+  bundle:
+  - spatialdata-io's Xenium reader gives the instrument's cells in `cells.parquet`'s order, each
+    labelled as its row + 1, and their gene counts;
+  - it also gives every transcript, both boundary sets, the labels and the image, each of the
+    simulation's size;
+  - tifffile reads the OME-TIFF's pixel size, channel and levels;
+  - pyarrow reads the truth's molecules by origin and its cells by type.
+
+**Reference numbers** (the standard preset, 500 × 500 µm, seed 20261014; 3.3 s and 29 MB):
+- **The tissue:** 3,030 cells (611 epithelial-like, 660 fibroblast-like, 1,113 immune-like, 646
+  endothelial-like), 2,925 nuclei in the section, 440,796 transcripts.
+- **Against the truth,** for gene transcripts of quality 20 or more:
+
+  | Segmentation | Median IoU | Assigned to a cell | Assigned to another cell than the true one |
+  |---|---|---|---|
+  | The nuclei alone | 0.27 | 32% | 68% |
+  | Nuclei grown 2 µm | 0.71 | 78% | 31% |
+  | The instrument's 5 µm expansion | 0.62 | 98.8% | 20% |
+
+  Most of the instrument's cells are larger than the true cells (1,915 of 2,925), as nucleus
+  expansion's are where it fills the gaps between cells. These are the baselines the
+  transcript-informed segmentation must beat (wave 3, slice 3).
 
 ## 4. Comparing segmentations (verified, wave 2, slice 5)
 
@@ -680,9 +1603,57 @@ Notes:
   interquartile ranges).
 - Deutsch P, Gailly J-L. ZLIB compressed data format specification version 3.3. RFC 1950, 1996;
   Deutsch P. DEFLATE compressed data format specification version 1.3. RFC 1951, 1996 (the
-  cache's blocks, through Go's standard library).
+  cache's blocks, through Go's standard library; the simulated morphology images).
+- Zhou M, Carin L. Negative binomial process count and mixture modeling. *IEEE TPAMI*
+  2015;37:307–320. doi:10.1109/TPAMI.2013.211. van Dyk DA, Park T. Partially collapsed Gibbs
+  samplers: theory and methods. *JASA* 2008;103:790–796. doi:10.1198/016214508000000409. Geweke J.
+  Getting it right: joint distribution tests of posterior simulators. *JASA* 2004;99:799–804.
+  doi:10.1198/016214504000001132. Murray I, Ghahramani Z, MacKay DJC. MCMC for
+  doubly-intractable distributions. *UAI* 2006 (the transcript-informed segmentation's model,
+  §3.2).
+- Geweke J. Evaluating the accuracy of sampling-based approaches to the calculation of posterior
+  moments. In: Bernardo JM, Berger JO, Dawid AP, Smith AFM, eds. *Bayesian Statistics 4*. Oxford
+  University Press, 1992:169–193 (the transcript-informed segmentation's convergence diagnostic).
+- Kong TY, Rosenfeld A. Digital topology: introduction and survey. *Comput Vis Graph Image
+  Process* 1989;48:357–393 (the sampler's connectivity test). Harary F, Harborth H. Extremal
+  animals. *J Combin Inform System Sci* 1976;1:1–8 (the least perimeter of n voxels, the
+  sampler's perimeter bound).
+- Feder J. Random sequential adsorption. *J Theor Biol* 1980;87:237–254.
+  doi:10.1016/0022-5193(80)90358-6 (placing simulated cells).
+- Borgefors G. Distance transformations in digital images. *Comput Vis Graph Image Process*
+  1986;34:344–371. doi:10.1016/S0734-189X(86)80047-0 (the simulated instrument's expansion).
+- Wirgin A. The inverse crime. arXiv:math-ph/0401050, 2004 (why the simulator's model differs
+  from the segmentation's).
+- O'Neill ME. PCG: a family of simple fast space-efficient statistically good algorithms for
+  random number generation. Harvey Mudd College technical report HMC-CS-2014-0905, 2014 (the
+  generator under `internal/random`, through Go's math/rand/v2).
+- Marsaglia G, Bray TA. A convenient method for generating normal variables. *SIAM Rev*
+  1964;6:260–264. Marsaglia G, Tsang WW. A simple method for generating gamma variables.
+  *ACM Trans Math Softw* 2000;26:363–372. Knuth DE. *The Art of Computer Programming*, vol. 2,
+  3rd ed., §3.4.1. Addison-Wesley, 1997 (normal, gamma and Poisson draws). Devroye L.
+  *Non-Uniform Random Variate Generation*. Springer, 1986, ch. X.4 (binomial draws, by splitting
+  a large count at a beta-distributed order statistic).
+- The HDF Group. HDF5 File Format Specification, version 3.0. 10x Genomics. Feature-barcode
+  matrices (HDF5 format), Cell Ranger and Xenium documentation (the simulated bundles'
+  `cell_feature_matrix.h5`). Jenkins B. lookup3.c, 2006, public domain (HDF5's metadata
+  checksums).
+- Sun Microsystems. fdlibm 5.3, 1993: the logarithm and exponential `internal/dmath` and
+  `web/lib/dmath.js` compute, the same in Go and JavaScript on every processor.
+- Abramowitz M, Stegun IA. *Handbook of Mathematical Functions*. National Bureau of Standards,
+  1964, 6.5.29 and 6.5.31 (the incomplete gamma function), 26.5.8 (the incomplete beta function). Stephens MA. Use of the
+  Kolmogorov–Smirnov, Cramér–von Mises and related statistics without extensive tables. *J R
+  Stat Soc B* 1970;32:115–122 (the goodness-of-fit tests of `internal/stats`).
 
 ## 9. To verify before relying on it
+
+- **The transcript-informed segmentation's ambient RNA** (§3.2, the background): inside cells it
+  cannot be told from the cells' own expression, so the model estimates it at a quarter to twice
+  the truth on simulated tissues and leaves most of it counted in cells; even exact rates would
+  tell about a sixth of the background apart. What might tell more: a prior on cells' shapes that
+  leaves the gaps between cells to the background, or expression states in which a gene can be
+  absent altogether (the simulator's cell types express every gene, so it would need tissues that
+  do not). Each would be judged on the background benchmark, and the real bundles' background
+  measured where cells are far apart.
 
 - The metrics left empty in the bundles in hand (polygon counts, nuclei without cells), when a
   bundle fills them: whether "non-simple polygon" means what SituCraft's check (and GEOS) means.

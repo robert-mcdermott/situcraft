@@ -34,6 +34,10 @@ Coordinates are in microns throughout; images are related to them by the manifes
 (0.2125 µm at full resolution). Transcripts of quality 20 or more (Q20) are the ones counted, as
 by XOA.
 
+A bundle with `situcraft-simulation.json` at its root was made by `situcraft simulate` (below),
+not by an instrument. SituCraft reads it as any other bundle, labels it simulated wherever it is
+shown, and lists its truth (`truth/`) among its files.
+
 ### The underlying formats
 
 | Format | Specification | What SituCraft supports |
@@ -55,10 +59,11 @@ reads a segmentation made by another tool into a dataset:
 
 | Format | Files | What is read |
 | --- | --- | --- |
-| SpatialData Zarr | the store (`.zarr` folder or its zip), format 2 or 3 | the cells from a shapes element (polygons) or a labels element (a label image); each transcript's cell from a points element (a `cell_id`, `cell` or `assignment` column, or one named); the counts from a table annotating the cells; each element's coordinate transformation to a coordinate system (`global` unless named) |
+| SpatialData Zarr | the store (`.zarr` folder or its zip), format 2 or 3 | the cells from a shapes element (polygons) or a labels element (a label image); each transcript's cell from a points element (a `cell_id`, `cell` or `assignment` column, or one named; matched by `transcript_id` at its observed place, `observed_x` and `observed_y` when a tool kept them beside where it moved the transcript); the counts from a table annotating the cells; each element's coordinate transformation to a coordinate system (`global` unless named) |
 | Baysor | `segmentation.csv`, and `segmentation_polygons.json` | each transcript's cell (`cell`; `0` and `is_noise` are none), by `transcript_id` when the table has it, else by `x`, `y` and `gene`; the cells' polygons |
 | GeoJSON | polygons (`.geojson`, `.json`), and optionally a table (`.csv`, `.csv.gz`, `.tsv`, `.parquet`) | the polygons, each feature naming its cell (`cell_id`, `cell`, `id`…, or the feature's id); each transcript's cell from the table (`transcript_id` and the cell), else from the polygon it lies in |
 | Xenium Ranger output | the bundle (folder, zip or `experiment.xenium`) of the same run | its cell mask, cells, boundaries, and each transcript's `cell_id` |
+| SituCraft segmentation | the folder `situcraft refine` wrote (below) | its files as they are, once their image's grid and their transcripts' count match the dataset's; a refinement is recorded as its method, with its parameters |
 
 Coordinates are read in µm unless the import says they are pixels of the morphology image: they
 are never guessed. A cell of `""`, `UNASSIGNED`, `NA`, `nan`, `None` or `-1` is none. The import is
@@ -94,10 +99,12 @@ A filter's checksum is the SHA-256 of the cell count (32-bit unsigned, little-en
 one bit per cell, in the order of `cells.parquet`, the first cell in the lowest bit of the first
 byte, set when the cell is kept. Anyone can recompute it from the bundle and the conditions.
 
-A saved view records its dataset, its mode (Viewer or QC), the segmentation shown, the place and
-zoom (`camera`: the center in µm and the µm per CSS pixel), each stain by name with its visibility,
-color, window and gamma, the genes by name with the transcript settings, the cell layers, the
-selected cell (row and ID), and in the QC view the map and filter. Names rather than numbers keep a
+A saved view records its dataset, its mode (Viewer or QC), the segmentation shown (`segmentation`:
+`instrument` for the dataset's own, else the segmentation artifact's id), the place and zoom
+(`camera`: the center in µm and the µm per CSS pixel), each stain by name with its visibility,
+color, window and gamma, the genes by name with the transcript settings (`colorBy: "probability"`
+when transcripts are colored by their assignment's probability), the cell layers, the selected
+cell (its row and ID in the segmentation shown), and in the QC view the map and filter. Names rather than numbers keep a
 view valid when the derived data are rebuilt. A link to a view is the page's address with
 `#project=<project id>&view=<view id>`; it opens in SituCraft on the computer whose library holds
 the project.
@@ -158,6 +165,40 @@ Readers check every size before reading, and the zlib checksum.
 
 These files are SituCraft's own; for other tools, export a segmentation (below).
 
+SituCraft's transcript-informed segmentation (`SituCraft transcript-informed segmentation`, from
+0.3.0) writes the six with what its model adds:
+- **Its cells** are named `c1`, `c2`, …: cell *k* is the instrument's cell *k* (`cells.parquet`'s
+  row *k*), whose id it records, whether it was refined or not.
+- **Its raster** is the instrument's, with each refined region's lattice drawn again: there, each
+  refined cell's 2D footprint (its voxels' most frequent labels, at the image's resolution), and
+  the cells held about the region as the instrument drew them. Its outlines are simplified to half
+  a voxel.
+- **A region of more than 4 million modelled transcripts** (twice `area.patch_transcripts`, 2
+  million by default) is refined in patches, one after another: equal rectangles of about 2
+  million transcripts each, each run refining the cells within 40 µm of its rectangle and holding
+  the rest. The patches are stitched: each pixel and transcript is taken from the patch whose
+  rectangle holds it, each cell's certainty and flags from the patch holding its nucleus's seed.
+- **Its assignments** are, for the gene transcripts it models (of the quality it was given, in a
+  region's lattice), each one's most frequent place over the summarized sweeps: a cell when the
+  transcript lay in its voxels and the model attributed it to the cell, else the background. Every other
+  transcript (controls, those below the quality or outside the regions) goes to the cell holding
+  the pixel it was observed in.
+- **Its parameters** (`segmentation.json`) are every setting after defaults: `model`, `sampler`,
+  `stages`, `block_um`, `seed`, `samples`; `area` as asked (`mode`: `whole`, `sections` or
+  `regions`, with `regions` and `section_gap_um`; `patch_transcripts`, when set, the transcripts a
+  patch aims at) and `regions`, the rectangles refined (µm: `x0_um`, `y0_um`, `x1_um`, `y1_um`;
+  for a region refined in patches, each patch's rectangle of refined cells); `patches`, each
+  patch's own rectangle, when there are patches; `min_qv`, the quality modelled, and `counts_min_quality`
+  (20); `start` and `start_stages`, each region's first stage; `preset` and `presets_version`; and
+  `second_seed`, when a second run checked the first.
+
+| File | Magic | Holds |
+| --- | --- | --- |
+| `probabilities.bin` | `SCPR` | Each transcript's posterior probability of its cell (`float32`, in the row order of `transcripts.parquet`): the share of the summarized sweeps it lay in that cell; NaN for a transcript assigned by place |
+| `certainty.bin` | `SCBC` | Each cell's boundary certainty (`float32`, in `cells.bin`'s order): the mean, over its pixels, of the share of the summarized sweeps each was its; NaN for a cell held or outside the regions refined. A cell is flagged uncertain below 0.75 |
+| `diagnostics.json` | | `summary` (the sweeps and samples; the split-half agreement, on every eighth transcript; the mean assignment probability and the share below 0.5; the log-likelihood's drift, Geweke's z and `gewekeJudged`, false when fewer than 100 sweeps were summarized; the voxels moved per sweep at the end; the cells refined, held and flagged; the regions, and `patches`, the patches they were refined in; the transcripts modelled; the background: `falseDecodeShare` and `ambientShare`, the shares of the modelled transcripts its rates account for (their mean over the summarized sweeps), `negativeControls`, the negative controls' transcripts in the regions that measure the false decodes, and `inBackgroundShare`, the share the summary leaves in no cell; `seedAgreement`, with a second seed: the share of transcripts either run put in a refined cell that both put in the same cell), `limitations` (the cells, by id, with fewer than 10 gene transcripts, uncertain boundaries, or no nucleus, and the instrument's cells left out; the thresholds) and `regions` (each region or patch refined: its rectangle, a patch's own rectangle as `patch`, its own `summary`, and its `trace`, each sweep's stage, voxels moved, transcripts repositioned and log-likelihood). Over several regions, the summary's Geweke's z is the one farthest from 0 |
+| `layers.bin` | `SCLY` | With more than one layer: each layer's depths (µm) and each cell's outline in it, as `outlines.bin` holds them |
+
 A segmentation with errors planted for practice (`SituCraft planted errors`, simulated) is the
 instrument's segmentation with known errors in it, and keeps its answer key in `planted.json`:
 `format` (`"situcraft-planted-errors"`), `source` (the segmentation planted in), `params` (how many
@@ -172,7 +213,7 @@ A comparison of two segmentations is an artifact of two files:
 
 | File | Magic | Holds |
 | --- | --- | --- |
-| `comparison.json` | | `format` (`"situcraft-comparison"`), `version`, `method`; the two segmentations (`a`, `b`: artifact id and name); `params` (the correspondence's and co-expression's thresholds, the regions' size, the seed); each segmentation's measures (`metricsA`, `metricsB`); the differences by class (`classes`, and each side's cells in each: `cellsA`, `cellsB`); the transcripts that changed cell (`changes`, `changesQ20`: gained, lost, moved); `iou` and `displacement` of the cells the same in both; `pixelAgreement`; the co-expression reference (`coexpression`) and the MECR's gene pairs (`mecrPairs`); and the same counts by region (`regions`: squares of `sizeUm`, row-major). A measure not taken is `null` |
+| `comparison.json` | | `format` (`"situcraft-comparison"`), `version`, `method`; the two segmentations (`a`, `b`: artifact id and name); `params` (the correspondence's and co-expression's thresholds, the regions' size, the seed); each segmentation's measures (`metricsA`, `metricsB`); the differences by class (`classes`, and each side's cells in each: `cellsA`, `cellsB`); the transcripts that changed cell (`changes`, `changesQ20`: gained, lost, moved; `changesQ20OfAssignedA`, of those A assigns to a cell: with the truth as A, the rest are in their true cell); `iou` and `displacement` of the cells the same in both; `pixelAgreement`; the co-expression reference (`coexpression`) and the MECR's gene pairs (`mecrPairs`); and the same counts by region (`regions`: squares of `sizeUm`, row-major). A measure not taken is `null` |
 | `groups.bin` | `SCCG` | Each difference: its class (by its index in one-to-one, expanded, contracted, split, merged, rearranged, only in A, only in B, assignment-only), its cells in A and in B (indices into each segmentation's cells), the IoU, the transcripts' Jaccard and the boundary displacement (µm) of one cell in each, the gene transcripts whose cell changed, where it lies (µm), its cells' gene transcripts in A and in B, and the most pairs of mutually exclusive lineage markers one of its cells expresses together in A and in B (method version 2) |
 
 ### Jobs
@@ -190,7 +231,8 @@ beside it first, from its recorded place otherwise. The bundles themselves are n
 ### Derived data
 
 The cache (`--cache-dir`) holds what SituCraft builds from each bundle: image tiles at every zoom,
-a spatial index of the transcripts with density grids, and tiled cell outlines. These are internal
+a spatial index of the transcripts with density grids, tiled cell outlines, and, for each
+segmentation drawn in the Viewer, its transcripts' cells and probabilities by the index's tiles. These are internal
 files, versioned with SituCraft and rebuilt when their format changes; they can be deleted at any
 time. They are not for exchange: export a segmentation instead (below).
 
@@ -243,3 +285,88 @@ morphology image's (a fatal finding when they differ), cells without a pixel (Xe
 cannot keep them), transcripts the segmentation assigns otherwise than its mask holds at their
 pixel (Xenium Ranger assigns by the mask), a dataset without a nucleus mask, and a zipped bundle
 (Xenium Ranger reads a folder).
+
+### Refinement recipes
+
+A recipe is a refinement's spec as readable JSON, to keep with its result, share, and run again
+(the Segmentation view's **Save the recipe**, `refinement_preflight`, and `situcraft refine`
+beside its output):
+
+| Field | Holds |
+| --- | --- |
+| `format`, `version`, `kind` | `"situcraft-recipe"`, 1, `"refinement"`. A newer version, another kind or a field this SituCraft does not know is refused |
+| `dataset` | The bundle it was made for: `name`, `path`, `run_name` and `region_name` from `experiment.xenium`, and `simulated` |
+| `refinement` | `preset`; `options` (`model`, `sampler`, `stages`, `block_um`, `samples`, `seed`, as `segmentation.json` records them); `area`; `min_qv`; `seed_check`; `gc_percent`, the memory target (it never changes the result) |
+| `presets_version`, `method`, `citation`, `software` | What made it |
+| `run` | How to run it again |
+
+The same recipe on the same bundle gives the same segmentation, byte for byte, in the app or the
+terminal, on any computer and any number of threads.
+
+### Refinements in the terminal (`situcraft refine`)
+
+`situcraft refine [flags] <bundle> <new folder>` refines a bundle's segmentation as the app does,
+without the app, and writes the segmentation's files (above) to the new folder with its
+`recipe.json`. The folder imports into the app as a SituCraft segmentation of the same dataset.
+
+| Flag | Sets |
+| --- | --- |
+| `--recipe` | A recipe to run (the bundle defaults to its `dataset.path`); the flags below change it |
+| `--preset` | `balanced` (the default), `conservative`, `flexible`, `low-memory`, `roi-pilot` or `expert` |
+| `--seed`, `--sweeps`, `--samples` | The seed, the last stage's sweeps and the sweeps summarized |
+| `--min-qv` | The quality the modelled transcripts reach (20) |
+| `--region x0,y0,x1,y1` | A region to refine, in µm (repeatable); `--sections` refines the tissue's separate sections apart |
+| `--seed-check` | Run again with the next seed and report the two runs' agreement |
+| `--threads` | Threads to run on (every core); the result does not depend on them |
+| `--force` | Run even when the estimate exceeds the computer's memory |
+| `--preflight`, `--print-recipe` | Print what it would model, cover and cost, or its recipe, and exit |
+
+The folder must not exist: it is written under a hidden name beside it and renamed into place when
+the segmentation check passes. A failure is printed with what to do; the exit code is 2 for a
+mistaken command, 1 for a failed run.
+
+### Simulated tissues (`situcraft simulate`)
+
+`situcraft simulate [flags] <new folder>` writes a simulated tissue as a Xenium output bundle, in
+the layout of Xenium Onboard Analysis 2, so that any tool reading Xenium data reads it. Every cell,
+nucleus and molecule is known, and the truth is written beside it. The method and its validation
+are in [research.md](../situcraft-spec/research.md) §3.4.
+
+| Flag | Default | Sets |
+| --- | --- | --- |
+| `--preset` | `standard` | The starting parameters: `standard` (500 × 500 µm, about 3,000 cells and 440,000 transcripts, in a few seconds), `small` (160 × 120 µm) or `large` (a mosaic of 7 × 6 fields of 870.4 µm, about 6.1 × 5.2 mm, 400,000 cells and 55 million transcripts: about 10 minutes, 3.2 GB of memory and 4 GB of disk) |
+| `--seed` | the preset's | The random seed. The same parameters and seed give the same bundle, byte for byte, on any computer |
+| `--width`, `--height` | the preset's | The field's size in µm: at least 20, and at most 50 million pixels in all (about 1.5 × 1.5 mm at 0.2125 µm, which needs about 4 GB of memory; 1 × 1 mm takes about 13 s and 1.7 GB). A larger tissue is a mosaic of fields (below) |
+| `--params` | | A JSON file of parameters, each overriding the preset's; `--print-params` prints them all, with their names |
+| `--quiet` | | Print only the summary |
+
+The folder must not exist: it is written under a temporary name beside it and renamed into place
+when complete, so an interrupted run (Ctrl+C) leaves nothing behind.
+
+**A mosaic** (`tiles_across` and `tiles_down` in the parameters, 0 or 1 for one field) is a tissue
+too large to make whole: tiles of the field's size, each a whole number of 512-pixel blocks each
+way, side by side. Each tile is a tissue of its own (its layout, cells, molecules and stain, from
+streams of its own), sharing the panel and every other parameter; the first is the single field
+the same parameters make. The tiles are made one at a time and joined into one bundle, so memory
+is a tile's whatever the mosaic's size: cell and nucleus ids, transcript ids and fields of view
+are numbered across the mosaic, and coordinates placed in it.
+
+| File | Holds |
+| --- | --- |
+| `situcraft-simulation.json` | `format` (`"situcraft-simulation"`), `version` (1), `simulated` (`true`), `software`, `about`, `truth` (the truth's folder), `parameters` (every parameter, with the seed) and `made` (the cells by type, nuclei in the section, the instrument's cells, the transcripts by origin) |
+| `experiment.xenium` | The run: one `experiment_uuid` derived from the parameters, the pixel size, the cell count and median transcripts per cell, the image's path. `analysis_sw_version` names the layout the files follow, then what wrote them (`xenium-2.0.0 layout, situcraft-simulate 0.3.0`): readers choose how to read a bundle by its version |
+| `transcripts.parquet` | Every observed molecule, in Xenium's columns and types: `transcript_id` (its field of view of 250 µm in the top 16 bits), `cell_id` (the simulated instrument's cell, or `UNASSIGNED`), `overlaps_nucleus` (`uint8`), `feature_name`, `x_location`, `y_location`, `z_location` (µm), `qv`, `fov_name`, `nucleus_distance` (µm to the nearest nucleus in the section, from the molecule's pixel; 0 over one), `codeword_index` (its feature's codeword in `gene_panel.json`) |
+| `cells.parquet`, `cell_boundaries.parquet`, `nucleus_boundaries.parquet` | The simulated instrument's cells (Xenium's columns; `segmentation_method` "Segmented by nucleus expansion of 5.0µm") and their outlines along pixel edges |
+| `cell_feature_matrix.h5`, `cell_feature_matrix/` | Their counts of Q20 molecules of every feature: as a 10x Genomics feature-barcode matrix in HDF5 (`/matrix`: `barcodes`, `data`, `indices`, `indptr`, `shape`, and `features/` with `id`, `name`, `feature_type`, `genome`), and as Matrix Market |
+| `cells.zarr.zip` | Zarr format 2, zipped, as XOA 2 lays it out: `masks/0` (nuclei: label *p* + 1 is nucleus *p*) and `masks/1` (cells: label *k* + 1 is `cells.parquet`'s row *k*) as `uint32` labels on the image's pixels; `masks/homogeneous_transform` (4 × 4, µm to pixels); `cell_id`; `cell_summary`; and `polygon_sets/0` (nuclei) and `polygon_sets/1` (cells), each with its outlines' `vertices` and `num_vertices`, each polygon's `cell_index` and `method`; the root's attributes name the sets and the segmentation methods |
+| `morphology_focus/morphology_focus_0000.ome.tif` | The DAPI stain of the nuclei in the section: a tiled, deflate-compressed OME-TIFF with its reduced levels as SubIFDs (Xenium's own are JPEG 2000) |
+| `metrics_summary.csv`, `gene_panel.json` | The run's metrics, computed as SituCraft's validation recomputes them, and the panel: genes `SIM001`…, negative control probes `NegControlProbe_SIM01`… and codewords `NegControlCodeword_0500`… |
+| `truth/` | A Xenium Ranger-shaped bundle of the same run: `experiment.xenium`; `cells.parquet` (every true cell: `cell_type`, `nucleus_in_section`, areas, centroid, Q20 gene transcripts), both boundary tables and `cells.zarr.zip` of the true cells (the nuclei in the section numbered in their cells' order, `cell_index` naming each one's cell); `transcripts.parquet`, the observed molecules row for row in the bundle's columns, with their true `cell_id`, and `true_x_location`, `true_y_location`, `true_z_location`, `origin` (`cell`, `background`, `control probe`, `control codeword`) and `wide_displacement` |
+
+To score a segmentation against the truth, import `truth/` into the simulated dataset as a
+Xenium Ranger bundle (Segmentation view, **Import a segmentation**) and compare the two.
+
+Other tools read a simulated bundle as they read Xenium's: spatialdata-io's Xenium reader reads
+its table, transcripts, labels, boundaries and image with no warning, and tifffile and pyarrow
+its image and tables (`validation/reference/read_simulation.py` checks each against what the
+simulation made).

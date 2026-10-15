@@ -64,13 +64,13 @@ var remoteActions = []remoteAction{
 		"bundle": textArg("The bundle by its name or path."),
 		"wait":   flagArg("Wait for its derived data to be built (true if not given)."),
 	}, "bundle"), long: true},
-	{Name: "open_example", Title: "Open an example dataset", Description: "Opens an example dataset (xenium-lung-2fov, xenium-breast-2fov: 10x Genomics' Xenium 2-FOV bundles, CC BY 4.0) in the project, or in a new project when this one has other datasets, and builds its derived data. One not on this computer is downloaded from 10x Genomics only with download: true (280 to 380 MB, checked by checksums).", InputSchema: schema(map[string]any{
-		"example":  textArg("xenium-lung-2fov or xenium-breast-2fov (or lung, breast)."),
+	{Name: "open_example", Title: "Open an example dataset", Description: "Opens an example dataset (xenium-lung-2fov, xenium-breast-2fov: 10x Genomics' Xenium 2-FOV bundles, CC BY 4.0; simulated-standard: a tissue SituCraft simulates on this computer, its truth beside it) in the project, or in a new project when this one has other datasets, and builds its derived data. A 10x Genomics example not on this computer is downloaded only with download: true (280 to 380 MB, checked by checksums); the simulated one is made in seconds.", InputSchema: schema(map[string]any{
+		"example":  textArg("xenium-lung-2fov, xenium-breast-2fov or simulated-standard (or lung, breast, simulated)."),
 		"download": flagArg("Download it first if it is not on this computer."),
 	}, "example"), long: true},
-	{Name: "tour", Title: "Take an example's tour", Description: "Starts the guided tour of an example (opening it as open_example does), or one of its worked examples (name: compare-expansion on the Breast example, planted-errors on the Lung example: a question answered step by step, some steps running a job first), or goes to one of its steps; run: true does the step's job (expanding, planting, comparing) and goes on to the next; end: true closes it. Returns the step's title and text, and the comparison a step shows.", InputSchema: schema(map[string]any{
-		"example": textArg("xenium-lung-2fov or xenium-breast-2fov; the tour running if not given."),
-		"name":    textArg("tour (the default), or a worked example: compare-expansion, planted-errors."),
+	{Name: "tour", Title: "Take an example's tour", Description: "Starts the guided tour of an example (opening it as open_example does), or one of its worked examples (name: compare-expansion or refine-compare on the Breast example, planted-errors on the Lung example, score-against-truth on the simulated one: a question answered step by step, some steps running a job first), or goes to one of its steps; run: true does the step's job (expanding, planting, refining, importing the truth, comparing) and goes on to the next; end: true closes it. Returns the step's title and text, and the comparison a step shows.", InputSchema: schema(map[string]any{
+		"example": textArg("xenium-lung-2fov, xenium-breast-2fov or simulated-standard; the tour running if not given."),
+		"name":    textArg("tour (the default; the 10x Genomics examples), or a worked example: compare-expansion, refine-compare, planted-errors, score-against-truth."),
 		"step":    map[string]any{"type": "integer", "minimum": 1, "description": "The step to show, from 1 (1 if not given)."},
 		"run":     flagArg("Do the step's job, then go on to the next step."),
 		"end":     flagArg("Close the tour."),
@@ -82,7 +82,7 @@ var remoteActions = []remoteAction{
 		"kind": textArg("dataset, filter, view or local; found by name among all of them if not given."),
 		"name": textArg("Its name."),
 	})},
-	{Name: "show_tissue", Title: "Show the tissue", Description: "Shows a dataset in the Viewer as asked, everything else as the Viewer shows it now: where (a center in µm and µm per screen pixel, or a width in µm; the whole section with whole: true), the stains (by name: visible, color, brightness window, gamma), the transcripts of genes by name (up to 16) or all of them, their minimum quality and point size, the cell and nucleus outlines, a cell fill and its opacity, and a cell to select. Returns what it shows, as a saved view records it, and what the dataset lacks.", InputSchema: schema(map[string]any{
+	{Name: "show_tissue", Title: "Show the tissue", Description: "Shows a dataset in the Viewer as asked, everything else as the Viewer shows it now: where (a center in µm and µm per screen pixel, or a width in µm; the whole section with whole: true), the stains (by name: visible, color, brightness window, gamma), the transcripts of genes by name (up to 16) or all of them, their minimum quality and point size, which of the dataset's segmentations is drawn, the cell and nucleus outlines, a cell fill and its opacity, the transcripts colored by gene or by their assignment's probability, and a cell to select. Returns what it shows, as a saved view records it, and what the dataset lacks.", InputSchema: schema(map[string]any{
 		"dataset":         datasetArg,
 		"center":          map[string]any{"type": "array", "items": map[string]any{"type": "number"}, "minItems": 2, "maxItems": 2, "description": "The center, [x, y] in µm."},
 		"um_per_pixel":    numberArg("The zoom: µm per screen (CSS) pixel."),
@@ -96,12 +96,14 @@ var remoteActions = []remoteAction{
 		"channels":        map[string]any{"type": "object", "description": "By stain name (DAPI, ATP1A1/CD45/E-Cadherin, 18S, alphaSMA/Vimentin…): {visible, color (#rrggbb), window: [low, high], gamma}, each optional."},
 		"outlines":        flagArg("Draw the cell outlines."),
 		"nuclei":          flagArg("Draw the nucleus outlines."),
-		"fill":            textArg("Fill the cells by transcripts, total, area, nucleusArea or method; none for no fill."),
+		"segmentation":    textArg("The segmentation drawn: by its name or artifact ID, instrument for the instrument's, default for the dataset's default."),
+		"fill":            textArg("Fill the cells by transcripts, total, area, nucleusArea or method (the instrument's); limitations, certainty or probability (a refinement's); none for no fill."),
 		"opacity":         numberArg("The fill's opacity, 0 to 1."),
-		"cell":            textArg("A cell to select, by its ID (as cells.parquet names it)."),
+		"color_by":        textArg("Color the transcripts by gene (as listed) or probability (their assignment's, a refinement's; seen close up)."),
+		"cell":            textArg("A cell to select, by its ID in the segmentation drawn (as cells.parquet names the instrument's)."),
 	}), long: true},
-	{Name: "select_cell", Title: "Select a cell", Description: "Selects a cell in the Viewer and shows it in the inspector: its ID, position, areas, segmentation method, and its transcripts by gene. With no cell, clears the selection.", InputSchema: schema(map[string]any{
-		"cell":    textArg("The cell's ID (as cells.parquet names it), or its row from 0 as \"#123\"."),
+	{Name: "select_cell", Title: "Select a cell", Description: "Selects a cell of the segmentation the Viewer draws and shows it in the inspector: its ID, position, areas, segmentation method (or, for another segmentation, the instrument's cell it came from and what its method flags), and its transcripts by gene. With no cell, clears the selection.", InputSchema: schema(map[string]any{
+		"cell":    textArg("The cell's ID in the segmentation drawn (as cells.parquet names the instrument's), or its row from 0 as \"#123\"."),
 		"dataset": datasetArg,
 		"center":  flagArg("Center the view on it (true if not given)."),
 	}), long: true},
@@ -144,10 +146,12 @@ var remoteActions = []remoteAction{
 		"dataset":     datasetArg,
 		"distance_um": map[string]any{"type": "number", "minimum": 0, "maximum": 100, "description": "How far each nucleus grows, in µm (5 if not given)."},
 	}), long: true},
-	{Name: "import_segmentation", Title: "Import a segmentation", Description: "Imports another tool's segmentation into a dataset, in the Segmentation view, which shows it: a SpatialData Zarr store (spatialdata), Baysor's segmentation.csv with its polygons (baysor), GeoJSON polygons with an optional transcript table (geojson), or a Xenium Ranger output bundle of the same run (xenium). A job reads it, checks it against the dataset (the transcripts it names, where its cells lie, its ids) and records it as a segmentation artifact with the files' SHA-256; an import whose check finds a fatal problem is recorded as invalid. Coordinates are read in units (um, else pixels of the morphology image), never guessed. Needs the token (it reads files).", InputSchema: schema(map[string]any{
+	{Name: "refine_segmentation", Title: "Refine the segmentation from the transcripts", Description: "SituCraft's transcript-informed segmentation of a dataset (after Jones et al. 2025), in the Segmentation view's studio: starting from the instrument's cells and their nuclei, each cell's boundary moves to where its own transcripts are, sampled from the posterior; the result is its summary over the last sweeps, with each transcript's probability of its cell. A preset sets the model (balanced if not given); regions or sections limit what it covers, the rest keeping the instrument's cells. Runs as a job (minutes per square millimetre); its failures are classified with what to do. The segmentation artifact is recorded in the project and compared with the instrument's segmentation. Answers its summary, diagnostics and that comparison.", InputSchema: schema(refineArgs()), long: true},
+	{Name: "refinement_preflight", Title: "Check a refinement before it runs", Description: "What a transcript-informed segmentation of a dataset would model, cover and cost, without running it: the transcripts at the quality, the cells it starts from, the regions or sections, its memory, disk and time against what the computer has, its problems (which stop it) and risks, and its recipe (JSON, to keep or run with `situcraft refine --recipe`). Takes the same arguments as refine_segmentation.", InputSchema: schema(refineArgs()), long: true},
+	{Name: "import_segmentation", Title: "Import a segmentation", Description: "Imports another tool's segmentation into a dataset, in the Segmentation view, which shows it: a SpatialData Zarr store (spatialdata), Baysor's segmentation.csv with its polygons (baysor), GeoJSON polygons with an optional transcript table (geojson), a Xenium Ranger output bundle of the same run (xenium), or a folder of SituCraft's own segmentation files, as `situcraft refine` writes them (situcraft). A job reads it, checks it against the dataset (the transcripts it names, where its cells lie, its ids) and records it as a segmentation artifact with the files' SHA-256; an import whose check finds a fatal problem is recorded as invalid. Coordinates are read in units (um, else pixels of the morphology image), never guessed. Needs the token (it reads files).", InputSchema: schema(map[string]any{
 		"dataset":           datasetArg,
-		"format":            textArg("spatialdata, baysor, geojson or xenium."),
-		"paths":             map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "The files: a store or bundle; or Baysor's segmentation.csv and its polygons; or GeoJSON polygons and a transcript table (CSV or Parquet)."},
+		"format":            textArg("spatialdata, baysor, geojson, xenium or situcraft."),
+		"paths":             map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "The files: a store or bundle; or Baysor's segmentation.csv and its polygons; or GeoJSON polygons and a transcript table (CSV or Parquet); or the folder situcraft refine wrote."},
 		"units":             textArg("um (the default) or pixels (of the morphology image)."),
 		"coordinate_system": textArg("SpatialData: the coordinate system (global)."),
 		"cells":             textArg("SpatialData: the shapes or labels element holding the cells."),
@@ -233,4 +237,21 @@ func actionNames() []string {
 		names[i] = action.Name
 	}
 	return names
+}
+
+// refineArgs are refine_segmentation's and refinement_preflight's arguments.
+func refineArgs() map[string]any {
+	return map[string]any{
+		"dataset":    datasetArg,
+		"preset":     textArg("The settings' preset: balanced (the default), conservative, flexible, low-memory, roi-pilot (a region, run with two seeds) or expert."),
+		"sweeps":     map[string]any{"type": "integer", "minimum": 10, "maximum": 100000, "description": "Sweeps of the sampler (the preset's if not given; changing it makes the settings expert)."},
+		"samples":    map[string]any{"type": "integer", "minimum": 1, "description": "The last sweeps summarized (the preset's if not given, at most the sweeps)."},
+		"seed":       map[string]any{"type": "integer", "minimum": 0, "description": "The random seed (20250 if not given); a seed gives the same segmentation on any computer."},
+		"layers":     map[string]any{"type": "integer", "minimum": 1, "maximum": 16, "description": "Voxel layers in depth (1 if not given)."},
+		"regions":    map[string]any{"type": "array", "items": map[string]any{"type": "array", "items": map[string]any{"type": "number"}, "minItems": 4, "maxItems": 4}, "description": "Regions to refine, each [x0, y0, x1, y1] in µm; the rest of the tissue keeps the instrument's cells."},
+		"sections":   flagArg("Refine the tissue's separate sections apart, each with a model of its own."),
+		"min_qv":     map[string]any{"type": "number", "minimum": 0, "maximum": 40, "description": "The quality the modelled transcripts reach (20 if not given)."},
+		"seed_check": flagArg("Run again with the next seed and report how many transcripts both runs put in the same cell."),
+		"threads":    map[string]any{"type": "integer", "minimum": 1, "description": "Threads to run on (every core if not given); the result does not depend on them."},
+	}
 }

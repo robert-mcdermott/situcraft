@@ -665,6 +665,12 @@ func readPoints(ctx context.Context, s *spatialStore, src *source, name, system 
 		}
 		at := func(n string) int { return p.Index(n) }
 		cols := tableColumns{id: at("transcript_id"), x: at("x"), y: at("y"), gene: at(feature), noise: -1}
+		// A tool that moves transcripts (repositioning them toward the cell they came from) may keep
+		// where each was observed beside where it put it: the observed place is the dataset's.
+		if ox, oy := at("observed_x"), at("observed_y"); ox >= 0 && oy >= 0 {
+			cols.x, cols.y = ox, oy
+			src.read["points_position"] = "observed_x, observed_y (where each transcript was observed; x, y are where the tool placed it)"
+		}
 		names := cellColumns
 		if opt.CellColumn != "" {
 			names = []string{opt.CellColumn}

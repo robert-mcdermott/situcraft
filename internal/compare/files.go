@@ -240,7 +240,7 @@ func Check(dir string, m *artifacts.Manifest) []artifacts.Finding {
 			fatal("groups.counts", "The description counts %d differences %s; the file holds %d.", d.Classes[c], c, classes[c])
 		}
 	}
-	for _, c := range []Changes{d.Changes, d.ChangesQ20} {
+	for _, c := range []Changes{d.Changes, d.ChangesQ20, d.ChangesQ20OfA} {
 		if c.Changed != c.Gained+c.Lost+c.Moved || c.Changed > c.Transcripts {
 			fatal("changes.counts", "The changed transcripts (%d) are not those gained, lost and moved.", c.Changed)
 		}

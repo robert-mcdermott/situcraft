@@ -14,6 +14,7 @@ import { CLASS_INFO, RANKS, cellNames, warnings } from '../lib/review.js';
 import { workedExamples } from '../lib/tours.js';
 import { parseProject, rename, serializeProject } from '../lib/project.js';
 import { removeView, sameView, viewLink } from '../lib/views.js';
+import { SEG_FILLS, defaultChoice, segmentationChoices } from '../lib/segview.js';
 
 export class ActionError extends Error {}
 
@@ -26,6 +27,8 @@ const frames = () => Promise.race([new Promise((resolve) => requestAnimationFram
 // The views by the names scripts use.
 const MODES = { start: 'welcome', welcome: 'welcome', data: 'data', viewer: 'viewer', tissue: 'viewer', qc: 'qc', segmentation: 'segmentation', compare: 'compare', comparison: 'compare', celltypes: 'celltypes', 'cell types': 'celltypes', spatial: 'spatial', cohort: 'cohort', reports: 'reports', jobs: 'jobs' };
 const FILLS = ['transcripts', 'total', 'area', 'nucleusArea', 'method'];
+// A segmentation's fills besides those (lib/segview.js).
+const SEGMENTATION_FILLS = SEG_FILLS.map((f) => f.id).filter((id) => !FILLS.includes(id));
 
 // One of `options` (strings) by a forgiving name: exact, then ignoring case, then the one that
 // starts with or contains it. Errors list the choices.
@@ -57,6 +60,34 @@ const finite = (v, what) => {
   if (!Number.isFinite(n)) throw new ActionError(`${what} is a number.`);
   return n;
 };
+
+// A refinement's request (api_refine.go) from refine_segmentation's or refinement_preflight's
+// arguments.
+const PRESETS = ['balanced', 'conservative', 'flexible', 'low-memory', 'roi-pilot', 'expert'];
+function refineRequest(args) {
+  const request = {};
+  if (args.preset !== undefined) request.preset = choose(args.preset, PRESETS, 'preset');
+  for (const key of ['sweeps', 'samples', 'seed', 'layers', 'threads']) {
+    if (args[key] === undefined) continue;
+    const v = finite(args[key], key);
+    if (!Number.isInteger(v) || v < 0) throw new ActionError(`${key} is a whole number.`);
+    request[key] = v;
+  }
+  if (args.min_qv !== undefined) request.min_qv = finite(args.min_qv, 'min_qv');
+  if (args.seed_check !== undefined) request.seed_check = Boolean(args.seed_check);
+  if (args.regions !== undefined) {
+    if (!Array.isArray(args.regions) || !args.regions.length || args.regions.some((r) => !Array.isArray(r) || r.length !== 4)) throw new ActionError('regions is a list of [x0, y0, x1, y1] in µm.');
+    if (args.sections) throw new ActionError('Refine regions or sections, not both.');
+    request.area = { mode: 'regions', regions: args.regions.map((r) => {
+      const [x0, y0, x1, y1] = r.map((v) => finite(v, 'a region\'s corner'));
+      if (!(x1 > x0 && y1 > y0)) throw new ActionError('A region\'s second corner is right of and below its first.');
+      return { x0_um: x0, y0_um: y0, x1_um: x1, y1_um: y1 };
+    }) };
+  } else if (args.sections) {
+    request.area = { mode: 'sections' };
+  }
+  return request;
+}
 
 export function installRemote(app) {
   const { store } = app;
@@ -114,7 +145,7 @@ export function installRemote(app) {
     const list = app.examples.list() ?? [];
     const names = list.map((e) => e.name);
     const text = String(ref ?? '').trim().toLowerCase();
-    const short = { lung: 'xenium-lung-2fov', breast: 'xenium-breast-2fov' }[text];
+    const short = { lung: 'xenium-lung-2fov', breast: 'xenium-breast-2fov', simulated: 'simulated-standard' }[text];
     return list.find((e) => e.name === choose(short ?? ref, names, 'example'));
   }
 
@@ -153,7 +184,10 @@ export function installRemote(app) {
   // Applies a view (saved, or made here) and waits for it to be shown.
   async function apply(view, dataset) {
     app.applyView(view);
-    return shown(view.mode, dataset);
+    const hook = await shown(view.mode, dataset);
+    // The segmentation it draws, read.
+    await hook.segmentationReady?.();
+    return hook;
   }
 
   async function settleMode(mode) {
@@ -204,7 +238,8 @@ export function installRemote(app) {
   const link = (view) => viewLink(location.href, project().id, view.id);
 
   function viewData(v) {
-    return { id: v.id, name: v.name, dataset: datasetName(v.dataset), mode: v.mode, camera: v.camera, genes: v.transcripts?.genes ?? [], cell: v.cell?.id ?? null, ...(v.qc ? { qc: v.qc } : {}), link: link(v) };
+    const seg = v.segmentation && v.segmentation !== 'instrument' ? project().artifacts.find((a) => a.kind === 'segmentation' && a.id === v.segmentation) : null;
+    return { id: v.id, name: v.name, dataset: datasetName(v.dataset), mode: v.mode, segmentation: v.segmentation === 'instrument' || !v.segmentation ? 'instrument' : seg?.name ?? v.segmentation, camera: v.camera, genes: v.transcripts?.genes ?? [], cell: v.cell?.id ?? null, ...(v.qc ? { qc: v.qc } : {}), link: link(v) };
   }
 
   // What the Viewer or the QC view shows now, as a saved view records it.
@@ -322,9 +357,10 @@ export function installRemote(app) {
       if (!app.examples.list()) await app.examples.refresh();
       let example = resolveExample(args.example);
       if (example.state !== 'ready') {
-        if (!args.download) throw new ActionError(`${example.title} is not on this computer: pass download: true to download it from 10x Genomics (${(example.download / 1e6).toFixed(0)} MB).`);
+        // A generated example is made here, nothing downloaded.
+        if (!args.download && !example.generated) throw new ActionError(`${example.title} is not on this computer: pass download: true to download it from 10x Genomics (${(example.download / 1e6).toFixed(0)} MB).`);
         await app.examples.download(example.name);
-        await waitFor(() => !app.examples.job(example.name) && app.examples.list().find((e) => e.name === example.name)?.state === 'ready', 60 * 60000, `${example.title} to download`).catch(async (error) => {
+        await waitFor(() => !app.examples.job(example.name) && app.examples.list().find((e) => e.name === example.name)?.state === 'ready', 60 * 60000, `${example.title} to ${example.generated ? 'be made' : 'download'}`).catch(async (error) => {
           await app.examples.refresh();
           throw error;
         });
@@ -346,9 +382,9 @@ export function installRemote(app) {
       if (!app.examples.list()) await app.examples.refresh();
       let card = app.tour?.open?.() ? app.tour : null;
       if (args.example !== undefined || !card) {
-        if (args.example === undefined) throw new ActionError('Name the example whose tour to take (xenium-lung-2fov or xenium-breast-2fov).');
+        if (args.example === undefined) throw new ActionError('Name the example whose tour to take (xenium-lung-2fov, xenium-breast-2fov or simulated-standard).');
         const example = resolveExample(args.example);
-        if (example.state !== 'ready') throw new ActionError(`${example.title} is not on this computer: open_example with download: true downloads it.`);
+        if (example.state !== 'ready') throw new ActionError(`${example.title} is not on this computer: ${example.generated ? 'open_example makes it' : 'open_example with download: true downloads it'}.`);
         const names = ['tour', ...workedExamples(example.name).map((w) => w.id)];
         const name = args.name === undefined ? 'tour' : choose(args.name, names, 'tour or worked example');
         card = await app.examples.tour(example.name, name);
@@ -477,12 +513,17 @@ export function installRemote(app) {
           if (patch.gamma !== undefined) c.gamma = Math.min(4, Math.max(0.2, finite(patch.gamma, 'gamma')));
         }
       }
-      // Cells.
+      // Cells: which segmentation, how drawn, which cell.
+      if (args.segmentation !== undefined) view.segmentation = segmentationRef(dataset, args.segmentation);
       if (args.outlines !== undefined) view.cells.outlines = Boolean(args.outlines);
       if (args.nuclei !== undefined) view.cells.nuclei = Boolean(args.nuclei);
-      if (args.fill !== undefined) view.cells.fill = args.fill === null || /^none$/i.test(String(args.fill)) ? null : choose(args.fill, FILLS, 'fill');
+      if (args.fill !== undefined) view.cells.fill = args.fill === null || /^none$/i.test(String(args.fill)) ? null : choose(args.fill, view.segmentation === 'instrument' ? FILLS : [...FILLS.filter((f) => f !== 'method'), ...SEGMENTATION_FILLS], 'fill');
       if (args.opacity !== undefined) view.cells.opacity = Math.min(1, Math.max(0, finite(args.opacity, 'opacity')));
-      if (args.cell !== undefined) view.cell = args.cell ? await cellRef(dataset, args.cell) : null;
+      if (args.color_by !== undefined) {
+        if (choose(args.color_by, ['gene', 'probability'], 'coloring') === 'probability') view.transcripts.colorBy = 'probability';
+        else delete view.transcripts.colorBy;
+      }
+      if (args.cell !== undefined) view.cell = args.cell ? await cellRef(dataset, args.cell, view.segmentation) : null;
       const shownNow = await apply(view, dataset);
       if (view.cell) await waitFor(() => shownNow.detail()?.row === view.cell.row, 30000, 'the cell to be read');
       const now = showing();
@@ -496,15 +537,24 @@ export function installRemote(app) {
         await v.select(-1);
         return { message: 'No cell selected.' };
       }
-      const ref = await cellRef(dataset, args.cell);
+      await v.segmentationReady?.();
+      const drawn = v.segmentation?.() ?? null;
+      const ref = await cellRef(dataset, args.cell, drawn ?? 'instrument');
       await v.select(ref.row);
-      const d = await waitFor(() => (v.detail()?.row === ref.row ? v.detail() : null), 30000, 'the cell to be read');
+      const d = await waitFor(() => (v.detail()?.row === ref.row && v.detail()?.id === ref.id ? v.detail() : null), 30000, 'the cell to be read');
       if (args.center !== false) {
         const cam = v.renderer.camera;
         v.setCamera({ ...cam, cx: d.x, cy: d.y });
         await v.settled();
       }
       await frames();
+      // A cell of a segmentation other than the instrument's.
+      if (d.segmentation) {
+        return {
+          message: `Cell ${d.id} of ${d.segmentation.name}: ${d.transcripts} gene transcripts (quality 20 or more) of ${d.genesDetected} genes${d.instrument ? `, from the instrument's cell ${d.instrument.id}` : ''}${d.limitations.length ? `; flagged: ${d.limitations.join(', ')}` : ''}.`,
+          data: { id: d.id, row: d.row, segmentation: d.segmentation, x: d.x, y: d.y, area: d.area, nucleusArea: d.nucleusArea, instrument: d.instrument, transcripts: d.transcripts, assigned: d.assigned, genesDetected: d.genesDetected, genes: d.genes.map((g) => ({ gene: g.name, count: g.count })), limitations: d.limitations, boundaryCertainty: d.boundaryCertainty, meanProbability: d.meanProbability },
+        };
+      }
       return {
         message: `Cell ${d.id}: ${d.counted.q20Genes} gene transcripts (quality 20 or more) of ${d.genesDetected} genes${d.method ? `, ${d.method.replace(/^Segmented /, 'segmented ')}` : ''}.`,
         data: { id: d.id, row: d.row, x: d.x, y: d.y, area: d.area ?? null, nucleusArea: d.nucleusArea ?? null, method: d.method ?? null, transcripts: d.counted, genesDetected: d.genesDetected, genes: d.genes.map((g) => ({ gene: g.name, count: g.count })), recorded: d.recorded },
@@ -651,9 +701,53 @@ export function installRemote(app) {
       };
     },
 
+    async refine_segmentation(args) {
+      const dataset = resolveDataset(args.dataset);
+      const request = refineRequest(args);
+      await settleMode('segmentation');
+      let answer;
+      try {
+        answer = await app.segmentationView.refine(dataset, request);
+      } catch (error) {
+        const remedy = error.job?.failure?.remedy;
+        throw new ActionError(`${error.message}${remedy ? ` What to do: ${remedy}` : ''}`);
+      }
+      await frames();
+      const m = answer.manifest;
+      const s = m.summary ?? {};
+      const d = s.diagnostics ?? {};
+      const c = answer.comparison;
+      const pc = (v) => `${(100 * v).toFixed(2)}%`;
+      return {
+        message: `${m.name} of ${dataset.name} (${m.state}): ${plural(s.cells ?? 0, 'cell')}${d.patches ? ` (refined in ${d.patches.toLocaleString('en-US')} patches)` : ''}${d.cellsHeld ? ` (${plural(d.cellsRefined ?? 0, 'cell')} refined, ${d.cellsHeld} held about ${plural(d.regions ?? 1, 'region')})` : ''}, ${pc(s.assignedFraction ?? 0)} of gene transcripts assigned; Geweke's z ${(d.gewekeZ ?? 0).toFixed(1)}${d.gewekeJudged === false ? ' (too few sweeps summarized to judge)' : ''}; ${pc(d.splitHalfAgreement ?? 0)} of transcripts in the same cell over both halves of the last ${d.samples ?? 0} sweeps${Number.isFinite(d.seedAgreement) ? `; a second seed agreed on ${pc(d.seedAgreement)}` : ''}${c ? `; compared with the instrument's segmentation, ${pc(c.summary?.changedFraction ?? 0)} of gene transcripts changed cell` : ''}.`,
+        data: { id: m.id, name: m.name, dataset: dataset.name, state: m.state, parameters: m.lineage?.parameters ?? null, summary: s, findings: m.findings ?? [], comparison: c ? { id: c.id, summary: c.summary ?? null } : null },
+      };
+    },
+
+    async refinement_preflight(args) {
+      const dataset = resolveDataset(args.dataset);
+      const request = refineRequest(args);
+      await settleMode('segmentation');
+      let answer;
+      try {
+        answer = await app.segmentationView.refinementPreflight(dataset, request);
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      const p = answer.preflight;
+      const e = p.estimate ?? {};
+      const size = (n) => (n >= 1e9 ? `${(n / 1e9).toFixed(1)} GB` : `${Math.round(n / 1e6)} MB`);
+      const covers = e.regions ? `refines ${plural(e.cells, 'cell')}${e.cellsHeld ? ` (${e.cellsHeld} held about them)` : ''} in ${p.patches?.length ? `${e.regions.toLocaleString('en-US')} patches` : plural(e.regions, 'region')}, ${plural(e.transcripts, 'transcript')} modelled; needs about ${size(e.peakMemoryBytes)} of memory${p.memoryBytes ? ` (the computer has ${size(p.memoryBytes)})` : ''}, ${size(e.diskBytes)} of disk${p.freeDiskBytes >= 0 ? ` (${size(p.freeDiskBytes)} free)` : ''} and about ${Math.max(1, Math.round(e.seconds))} s on ${e.cores} threads` : 'covers nothing yet';
+      const problems = p.problems.map((f) => `${f.message}${f.remedy ? ` ${f.remedy}` : ''}`);
+      return {
+        message: `${answer.name ?? 'The refinement'} of ${dataset.name} (${p.spec.preset}) ${covers}.${problems.length ? ` Problems: ${problems.join(' ')}` : ' No problems.'}${p.risks.length ? ` Risks: ${p.risks.map((f) => f.message).join(' ')}` : ''}${answer.artifact ? ' It was made already.' : ''}`,
+        data: { id: answer.id ?? null, name: answer.name, dataset: dataset.name, made: Boolean(answer.artifact), preflight: p, recipe: answer.recipe },
+      };
+    },
+
     async import_segmentation(args) {
       const dataset = resolveDataset(args.dataset);
-      const format = choose(args.format, ['spatialdata', 'baysor', 'geojson', 'xenium'], 'format');
+      const format = choose(args.format, ['spatialdata', 'baysor', 'geojson', 'xenium', 'situcraft'], 'format');
       if (!Array.isArray(args.paths) || !args.paths.length || args.paths.some((p) => typeof p !== 'string' || !p.trim())) throw new ActionError('paths is a list of one or two files.');
       const options = { format, paths: args.paths.map((p) => p.trim()) };
       if (args.units !== undefined) options.units = choose(args.units, ['um', 'pixels'], 'units');
@@ -890,14 +984,29 @@ export function installRemote(app) {
   };
 
   // A cell of a dataset by its ID, or by its row as "#123": { row, id }.
-  async function cellRef(dataset, ref) {
+  // A cell by its ID (or "#row") in a segmentation of a dataset ('instrument' for the dataset's
+  // own): { row, id }.
+  async function cellRef(dataset, ref, segmentation = 'instrument') {
     const item = bundleOf(dataset);
     const text = String(ref).trim();
     const name = /^#\d+$/.test(text) ? text.slice(1) : `id:${encodeURIComponent(text)}`;
-    const response = await fetch(`${item.url}/cells/${name}?top=0`, { cache: 'no-store' });
+    const base = segmentation && segmentation !== 'instrument' ? `${item.url}/segmentations/${encodeURIComponent(segmentation)}` : item.url;
+    const response = await fetch(`${base}/cells/${name}?top=0`, { cache: 'no-store' });
     const body = await response.json().catch(() => ({}));
     if (!response.ok) throw new ActionError(body.error ?? `No cell ${text} in ${dataset.name}.`);
     return { row: body.row, id: body.id };
+  }
+
+  // A segmentation of a dataset by its name or artifact ID ('instrument', 'default' too), as a view
+  // records it: 'instrument' or the artifact's ID.
+  function segmentationRef(dataset, ref) {
+    const list = segmentationChoices(project(), dataset.id);
+    const text = String(ref ?? '').trim();
+    let c;
+    if (/^default$/i.test(text)) c = defaultChoice(project(), dataset.id);
+    else if (/^(the )?instrument('s)?$/i.test(text)) c = list.find((x) => x.instrument) ?? { instrument: true };
+    else c = list.find((x) => x.id === text) ?? list.find((x) => x.name === choose(text, list.map((y) => y.name), 'segmentation'));
+    return !c || c.instrument ? 'instrument' : c.id;
   }
 
   // --- Connection -----------------------------------------------------------------------------

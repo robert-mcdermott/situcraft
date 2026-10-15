@@ -10,12 +10,16 @@ package segment
 //   - assignments: one per transcript, each to a cell or none, and each cell's count of them is the
 //     one it records;
 //   - counts: the matrix's rows sum to each cell's gene transcripts, its gene indices are genes, and
-//     each row's genes are the cell's genes detected.
+//     each row's genes are the cell's genes detected;
+//   - the optional files, when written: a probability per transcript, in [0, 1]; an outline for
+//     every cell in every layer; diagnostics with a summary.
 
 import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"os"
+	"path/filepath"
 
 	"situcraft/internal/artifacts"
 )
@@ -32,6 +36,8 @@ type Summary struct {
 	Method             string          `json:"method"`
 	Parameters         json.RawMessage `json:"parameters"`
 	Agreement          json.RawMessage `json:"agreement,omitempty"`
+	// Diagnostics is diagnostics.json's summary, for methods that write it.
+	Diagnostics json.RawMessage `json:"diagnostics,omitempty"`
 }
 
 // Check examines a staged segmentation in dir; it fills the manifest's summary.
@@ -223,13 +229,79 @@ func Check(dir string, m *artifacts.Manifest) []artifacts.Finding {
 	if q20Assigned != desc.Q20GeneAssigned {
 		fatal("counts.total", "The counts hold %d gene transcripts; the description says %d are assigned.", q20Assigned, desc.Q20GeneAssigned)
 	}
+	// The optional files, when written: one probability per transcript, in [0, 1] (NaN for one
+	// assigned by place); one boundary certainty per cell, in [0, 1] (NaN for one not drawn); an
+	// outline for every cell in every layer; diagnostics with a summary.
+	var diagnostics json.RawMessage
+	if exists(dir, FileProbabilities) {
+		p, err := ReadProbabilities(dir)
+		switch {
+		case err != nil:
+			fatal("segmentation.unreadable", "%v", err)
+		case len(p) != len(assignments):
+			fatal("probabilities.count", "%d assignment probabilities for %d transcripts.", len(p), len(assignments))
+		default:
+			bad := 0
+			for i, v := range p {
+				if !math.IsNaN(float64(v)) && (v < 0 || v > 1 || assignments[i] != 0 && v == 0) {
+					bad++
+				}
+			}
+			if bad > 0 {
+				fatal("probabilities.range", "%d assignment probabilities are outside [0, 1], or zero for an assigned transcript.", bad)
+			}
+		}
+	}
+	if exists(dir, FileCertainty) {
+		c, err := ReadCertainty(dir)
+		switch {
+		case err != nil:
+			fatal("segmentation.unreadable", "%v", err)
+		case len(c) != n:
+			fatal("certainty.count", "%d boundary certainties for %d cells.", len(c), n)
+		default:
+			bad := 0
+			for _, v := range c {
+				if !math.IsNaN(float64(v)) && (v < 0 || v > 1) {
+					bad++
+				}
+			}
+			if bad > 0 {
+				fatal("certainty.range", "%d boundary certainties are outside [0, 1].", bad)
+			}
+		}
+	}
+	if exists(dir, FileLayers) {
+		layers, err := ReadLayers(dir)
+		switch {
+		case err != nil:
+			fatal("segmentation.unreadable", "%v", err)
+		default:
+			for i, l := range layers {
+				if len(l.Outlines) != n || !(l.Z1 > l.Z0) {
+					fatal("layers.shape", "Layer %d has %d outlines for %d cells, or no depth.", i+1, len(l.Outlines), n)
+				}
+			}
+		}
+	}
+	if exists(dir, FileDiagnostics) {
+		raw, err := os.ReadFile(filepath.Join(dir, FileDiagnostics))
+		var d struct {
+			Summary json.RawMessage `json:"summary"`
+		}
+		if err != nil || json.Unmarshal(raw, &d) != nil || len(d.Summary) == 0 {
+			fatal("diagnostics.unreadable", "%s is not diagnostics with a summary.", FileDiagnostics)
+		} else {
+			diagnostics = d.Summary
+		}
+	}
 	areas := make([]float64, 0, n)
 	for i := range cells {
 		if stats[i].Pixels > 0 {
 			areas = append(areas, float64(cells[i].Area))
 		}
 	}
-	s := Summary{Cells: n, EmptyCells: empty, Q20GeneTranscripts: desc.Q20GeneTranscripts, MedianTranscripts: median(totals), MedianArea: median(areas), Method: desc.Method, Parameters: desc.Parameters, Agreement: desc.Agreement}
+	s := Summary{Cells: n, EmptyCells: empty, Q20GeneTranscripts: desc.Q20GeneTranscripts, MedianTranscripts: median(totals), MedianArea: median(areas), Method: desc.Method, Parameters: desc.Parameters, Agreement: desc.Agreement, Diagnostics: diagnostics}
 	if desc.Q20GeneTranscripts > 0 {
 		s.AssignedFraction = math.Round(float64(q20Assigned)/float64(desc.Q20GeneTranscripts)*1e6) / 1e6
 	}
@@ -252,4 +324,9 @@ func median(v []float64) float64 {
 		return v[len(v)/2]
 	}
 	return (v[len(v)/2-1] + v[len(v)/2]) / 2
+}
+
+func exists(dir, name string) bool {
+	_, err := os.Stat(filepath.Join(dir, name))
+	return err == nil
 }

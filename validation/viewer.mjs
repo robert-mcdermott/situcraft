@@ -30,7 +30,16 @@
 // - comparisons (wave 2, slice 5): the instrument's segmentation and the expansion compared by a
 //   program, as the expansion's own comparison counted, recorded and shown;
 // - the comparison workspace (wave 2, slice 6): its review queue ranked as asked, both
-//   segmentations drawn with one camera in each mode, decisions recorded as the rules allow.
+//   segmentations drawn with one camera in each mode, decisions recorded as the rules allow;
+// - segmentations on the tissue (wave 3, slice 8): each kind (an expansion, an import, a
+//   refinement, errors planted for practice) drawn as its files hold it: the cell found at points
+//   of each the one its label raster holds there, and the fill drawn there the color of that
+//   cell's value; the list, its default first; a saved view reopening with its segmentation and
+//   cell; show_tissue and select_cell in a segmentation; transcripts with their probabilities;
+// - the examples and the release (wave 3, slice 9): the simulated example made here; the worked
+//   examples refining the Breast data and scoring segmentations against the simulated truth, as
+//   their cards expect; the projects saved by 0.2.0 and 0.3.0 reopened, every artifact they record
+//   made again with the same checksums.
 //
 // It builds the program, starts it on the bundles with an empty cache and library, builds their
 // derived data, and drives the page through window.situcraft (the app, app.js) and window.situcraftViewer
@@ -43,7 +52,10 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { findChrome, launch, sleep } from './cdp.mjs';
-import { readCells } from '../web/lib/viewer-data.js';
+import { inflateSync } from 'node:zlib';
+import { attributeRange, readCells } from '../web/lib/viewer-data.js';
+import { certaintyColor, readSegCells } from '../web/lib/segview.js';
+import { colormapLUT, hexToRgb } from '../web/lib/colormaps.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const BUNDLES = ['xenium-lung-2fov', 'xenium-breast-2fov'];
@@ -71,6 +83,44 @@ async function json(url, options) {
   const response = await fetch(url, options);
   if (!response.ok) throw new Error(`${url}: HTTP ${response.status} ${await response.text()}`);
   return response.json();
+}
+
+// A segmentation's label raster (internal/segment mask.bin: a header, then zlib: width, height,
+// pixel size, each row's (label, length) runs as unsigned varints): { pixel, label(x, y) }.
+function readMask(buffer) {
+  if (buffer.subarray(0, 4).toString() !== 'SCMK') throw new Error('not a label raster');
+  const body = inflateSync(buffer.subarray(16));
+  let at = 0;
+  const width = body.readUInt32LE(0);
+  const height = body.readUInt32LE(4);
+  const pixel = body.readDoubleLE(8);
+  at = 16;
+  const uvarint = () => {
+    let x = 0;
+    for (let shift = 0; ; shift += 7) {
+      const b = body[at];
+      at += 1;
+      x += (b & 0x7f) * 2 ** shift;
+      if (b < 0x80) return x;
+    }
+  };
+  const rows = [];
+  for (let y = 0; y < height; y += 1) {
+    const runs = [];
+    for (let n = uvarint(); n > 0; n -= 1) runs.push([uvarint(), uvarint()]);
+    rows.push(runs);
+  }
+  return {
+    width, height, pixel,
+    label(x, y) {
+      let px = 0;
+      for (const [label, length] of rows[y] ?? []) {
+        if (x < px + length) return label;
+        px += length;
+      }
+      return 0;
+    },
+  };
 }
 
 // The points answer (internal/view): [{ gene, x, y }].
@@ -314,7 +364,11 @@ export async function viewerSuite({ check, MissingData, verbose }) {
 
     // --- The examples and their tours (wave 1, slice 7) ---
     const examples = await json(`${url}/api/examples`);
-    check('viewer', 'the example datasets are listed, and none is downloaded unasked', examples.examples.map((e) => `${e.name}: ${e.state}`).join(', '), examples.examples.length === 2 && examples.examples.every((e) => e.state === 'absent' && e.download > 0 && e.license), 'two, absent');
+    const downloads = examples.examples.filter((e) => !e.generated);
+    const generated = examples.examples.filter((e) => e.generated);
+    check('viewer', 'the example datasets are listed, and none is downloaded or made unasked', examples.examples.map((e) => `${e.name}: ${e.state}`).join(', '),
+      downloads.length === 2 && downloads.every((e) => e.state === 'absent' && e.download > 0 && e.license) && generated.length === 1 && generated[0].name === 'simulated-standard' && generated[0].state === 'absent' && !generated[0].download,
+      'two to download and one to make, all absent');
     for (const name of info.files.map((f) => f.name)) {
       const toured = await chrome.eval(`(async () => {
         const app = window.situcraft;
@@ -565,31 +619,170 @@ export async function viewerSuite({ check, MissingData, verbose }) {
         const back = await act('import_segmentation', { dataset: 'xenium-lung-2fov', format: 'spatialdata', paths: [join(folder, 'spatialdata.zarr')], tool: 'SituCraft export' });
         const bs = back.data?.summary ?? {};
         check('viewer', 'the exported SpatialData store imports back as the instrument\'s segmentation', back.message ?? back.error, back.ok && back.data.state === 'complete' && bs.cells === 11898 && Math.abs(bs.assignedFraction - segmentations.data.segmentations[0].summary.assignedFraction) < 1e-9, '11,898 cells, the same assigned fraction');
+        // The transcript-informed segmentation (wave 3, slice 4), a short run: recorded with its
+        // probabilities and diagnostics, compared with the instrument's segmentation at once, and
+        // shown with its convergence, its background (slice 7: the false decodes measured by the
+        // negative controls) and its limitations.
+        const comparisonsBefore = await chrome.eval(`window.situcraft.store.project.artifacts.filter((a) => a.kind === 'comparison').length`);
+        const refined = await act('refine_segmentation', { dataset: 'xenium-lung-2fov', sweeps: 40, samples: 20 });
+        const rs = refined.ok ? refined.data.summary : {};
+        check('viewer', 'remote control: refine_segmentation refines the Lung bundle\'s cells from its transcripts and compares them with the instrument\'s', refined.message ?? refined.error,
+          refined.ok && refined.data.state === 'complete' && rs.cells >= 11800 && rs.assignedFraction > 0.5 && rs.diagnostics?.samples === 20 && refined.data.comparison?.summary?.classes?.['one-to-one'] > 0, 'about 11,898 cells, their diagnostics, and a comparison with the instrument\'s');
+        const shownRefined = await chrome.eval(`(() => {
+          const app = window.situcraft;
+          const r = app.store.project.artifacts.find((a) => a.kind === 'segmentation' && a.method?.name === 'SituCraft transcript-informed segmentation');
+          return { files: r ? r.files.map((f) => f.path).sort().join() : '', comparisons: app.store.project.artifacts.filter((a) => a.kind === 'comparison').length, card: Boolean(document.querySelector('.seg-refined')), lines: document.querySelectorAll('.seg-refined .seg-differs li').length,
+            background: (document.querySelector('.seg-refined')?.textContent ?? '').match(/The model's background accounts for [\\d.]+% of the modelled transcripts: false decodes [\\d.]+%, measured by [\\d,]+ negative-control transcripts/)?.[0] ?? '' };
+        })()`);
+        check('viewer', 'the refinement is recorded with its probabilities and diagnostics, its comparison too, and shown with its convergence, background and limitations', JSON.stringify(shownRefined),
+          /diagnostics\.json/.test(shownRefined.files) && /probabilities\.bin/.test(shownRefined.files) && shownRefined.comparisons === comparisonsBefore + 1 && shownRefined.card && shownRefined.lines >= 5 && shownRefined.background !== '', 'its 9 files; one more comparison; the card with its convergence, background (the controls measuring the false decodes) and limitations');
 
-        // The project as 0.2.0 saved it (validation/projects/0.2.0-lung.situcraft.json): written
-        // when asked (SITUCRAFT_WRITE_FIXTURE=1), the places of this run's folders made neutral and
-        // given its own id; then
-        // reopened, and every artifact SituCraft made that it records is made again by this build
-        // with the same files' checksums (a comparison by its differences: its comparison.json
-        // records the jobs' times).
-        const fixture2Path = join(root, 'validation', 'projects', '0.2.0-lung.situcraft.json');
+        // Segmentations on the tissue (wave 3, slice 8). The list: every complete segmentation,
+        // the default first.
+        const lungItem = `${url}/api/local/${info.files.findIndex((f) => f.name === 'xenium-lung-2fov')}`;
+        await act('show_tissue', { dataset: 'xenium-lung-2fov', segmentation: 'default' });
+        const listed = await chrome.eval(`(async () => {
+          const app = window.situcraft;
+          const { promotedSegmentation } = await import('/lib/segmentations.js');
+          const dataset = app.store.project.datasets.find((d) => d.name === 'xenium-lung-2fov');
+          const complete = app.store.project.artifacts.filter((a) => a.kind === 'segmentation' && a.dataset === dataset.id && a.state === 'complete').map((a) => a.id);
+          const choices = window.situcraftViewer.choices();
+          return { complete, listed: choices.map((c) => c.id), first: choices[0]?.id, isDefault: choices[0]?.isDefault, promoted: promotedSegmentation(app.store.project, dataset.id)?.record.id, picker: [...document.querySelectorAll('.viewer-panel select[aria-label="Segmentation drawn"] option')].map((o) => o.value) };
+        })()`);
+        check('viewer', 'the Viewer lists every complete segmentation of the dataset, its default first', JSON.stringify({ listed: listed.listed.length, complete: listed.complete.length, first: listed.first === listed.promoted }),
+          listed.listed.length === listed.complete.length && listed.complete.every((id) => listed.listed.includes(id)) && listed.first === listed.promoted && listed.isDefault && listed.picker.join() === listed.listed.join(), 'all of them, in the picker; the default first');
+        // Each kind drawn as its files hold it: at cells' centroids (where its raster holds the
+        // cell itself), the cell found is that one, and the fill drawn is the color of its value.
+        const planted = await chrome.eval(`window.situcraft.store.project.artifacts.find((a) => a.kind === 'segmentation' && a.source === 'planted')?.id ?? null`);
+        const kinds = [['an expansion', expanded.data?.id, 'transcripts'], ['an import', selfImport.data?.id, 'transcripts'], ['a refinement', refined.data?.id, 'certainty'], ['errors planted for practice', planted, 'area']];
+        const viridis = colormapLUT('viridis');
+        for (const [kind, id, fill] of kinds) {
+          if (!id) {
+            check('viewer', `${kind} is drawn as its files hold it`, 'not made', false, 'made earlier in this suite');
+            continue;
+          }
+          const mask = readMask(Buffer.from(await (await fetch(`${url}/api/artifacts/${id}/files/mask.bin`)).arrayBuffer()));
+          const table = readSegCells(await (await fetch(`${lungItem}/segmentations/${id}/cells`)).arrayBuffer());
+          const [lo, hi] = attributeRange(table[fill === 'transcripts' ? 'transcripts' : fill === 'area' ? 'area' : 'certainty']);
+          const expected = (k) => {
+            if (fill === 'certainty') return Number.isFinite(table.certainty[k]) ? hexToRgb(certaintyColor(table.certainty[k])) : null;
+            const v = table[fill][k];
+            const i = Math.max(0, Math.min(255, Math.round((255 * (v - lo)) / (hi - lo))));
+            return [viridis[3 * i], viridis[3 * i + 1], viridis[3 * i + 2]];
+          };
+          // Pixels anywhere in its cells, each well inside its cell (its 7 × 7 pixels the same
+          // cell, clear of the outline's simplification), from a fixed sequence.
+          const samples = [];
+          let seed = 12345;
+          const next = () => {
+            seed = (seed * 1103515245 + 12345) % 2147483648;
+            return seed / 2147483648;
+          };
+          for (let tries = 0; samples.length < 24 && tries < 200000; tries += 1) {
+            const px = 3 + Math.floor(next() * (mask.width - 6));
+            const py = 3 + Math.floor(next() * (mask.height - 6));
+            const label = mask.label(px, py);
+            if (!label || !expected(label - 1)) continue;
+            let inside = true;
+            for (let dy = -3; dy <= 3 && inside; dy += 1) for (let dx = -3; dx <= 3 && inside; dx += 1) inside = mask.label(px + dx, py + dy) === label;
+            if (inside) samples.push({ cell: label - 1, x: (px + 0.5) * mask.pixel, y: (py + 0.5) * mask.pixel, color: expected(label - 1) });
+          }
+          const got = await chrome.eval(`(async () => {
+            const v = window.situcraftViewer;
+            await v.setSegmentation(${JSON.stringify(id)});
+            v.setChannelsVisible(false);
+            v.setTranscripts({ visible: false });
+            v.setCells({ outlines: true, nuclei: false, fill: ${JSON.stringify(fill)}, opacity: 1 });
+            const out = [];
+            for (const s of ${JSON.stringify(samples)}) {
+              v.setCamera({ cx: s.x, cy: s.y, scale: (window.devicePixelRatio || 1) / 0.25 });
+              await v.settled();
+              const [sx, sy] = v.worldToScreen(s.x, s.y);
+              out.push({ cell: s.cell, picked: v.pick(sx, sy), color: v.readColor(sx, sy).slice(0, 3) });
+            }
+            return { drawn: v.segmentation(), out };
+          })()`);
+          const wrongCell = got.out.filter((o) => o.picked !== o.cell);
+          const wrongColor = got.out.filter((o, i) => o.color.some((c, j) => Math.abs(c - samples[i].color[j]) > 1));
+          check('viewer', `${kind} is drawn as its files hold it`, `${got.out.length} cells; ${wrongCell.length} found as another (${wrongCell.slice(0, 2).map((o) => `${o.cell}→${o.picked}`).join(', ')}); ${wrongColor.length} filled otherwise`,
+            got.drawn === id && samples.length >= 20 && wrongCell.length === 0 && wrongColor.length === 0, `its cells where its raster has them, filled by ${fill}`);
+        }
+        // A view of the refinement, its fill, its transcripts by probability and a cell, saved,
+        // reopens with all of them; select_cell answers its cell.
+        const refinedShown = await act('show_tissue', { dataset: 'xenium-lung-2fov', segmentation: refined.data?.id, fill: 'certainty', opacity: 0.6, all_transcripts: true, color_by: 'probability', center: [750, 300], um_per_pixel: 0.25, cell: 'c100' });
+        const segPage = await chrome.eval(`(() => { const v = window.situcraftViewer; v.setChannelsVisible(true); return { seg: v.segmentation(), cell: v.detail()?.id, of: v.detail()?.segmentation?.id, colorBy: v.layers().transcripts.colorBy }; })()`);
+        check('viewer', 'remote control: show_tissue draws the segmentation asked, with its cell', refinedShown.ok ? JSON.stringify(segPage) : refinedShown.message,
+          refinedShown.ok && refinedShown.data.showing.segmentation === refined.data?.id && segPage.seg === refined.data?.id && segPage.cell === 'c100' && segPage.of === refined.data?.id && segPage.colorBy === 'probability', 'the refinement, its cell c100, transcripts by probability');
+        const points = await chrome.eval(`(async () => {
+          const v = window.situcraftViewer;
+          await v.settled();
+          const rect = { x0: 740, y0: 290, x1: 760, y1: 310 };
+          const loaded = v.loadedPoints(rect);
+          const n = v.cellsDrawn().n;
+          return { loaded: loaded.length, withP: loaded.filter((p) => p.probability !== null && (Number.isNaN(p.probability) || p.probability >= 0 && p.probability <= 1)).length, cells: loaded.filter((p) => p.cell === 0xffffffff || p.cell < n).length };
+        })()`);
+        const own = readPoints(await (await fetch(`${lungItem}/points?x0=740&y0=290&x1=760&y1=310&minq=20`)).arrayBuffer());
+        check('viewer', 'its transcripts carry their probability and their cell in it, the same transcripts as the dataset\'s', JSON.stringify({ ...points, dataset: own.length }),
+          points.loaded > 0 && points.loaded === own.length && points.withP === points.loaded && points.cells === points.loaded, 'every one, with a probability and a cell of the refinement');
+        const segView = await act('save_view', { name: 'The refinement on the tissue' });
+        await act('show_tissue', { dataset: 'xenium-lung-2fov', segmentation: 'instrument', fill: 'none', color_by: 'gene', all_transcripts: false, cell: null });
+        const segReopened = await act('open_view', { view: 'The refinement on the tissue' });
+        const reopenedPage = await chrome.eval(`(() => { const v = window.situcraftViewer; return { seg: v.segmentation(), cell: v.detail()?.id, fill: v.layers().cells.fill }; })()`);
+        check('viewer', 'a saved view reopens with its segmentation, its fill and its cell', `${segReopened.message ?? segReopened.error}; ${JSON.stringify(reopenedPage)}`,
+          segView.ok && segReopened.ok && segReopened.data.exact === true && reopenedPage.seg === refined.data?.id && reopenedPage.cell === 'c100' && reopenedPage.fill === 'certainty', 'exactly as saved: the refinement, certainty, c100');
+        const selectedSeg = await act('select_cell', { dataset: 'xenium-lung-2fov', cell: 'c200' });
+        check('viewer', 'remote control: select_cell selects a cell of the segmentation drawn, with the instrument\'s it came from', selectedSeg.message ?? selectedSeg.error,
+          selectedSeg.ok && selectedSeg.data.id === 'c200' && selectedSeg.data.segmentation?.id === refined.data?.id && selectedSeg.data.instrument?.id && Array.isArray(selectedSeg.data.limitations), 'c200 of the refinement, from an instrument\'s cell');
+        // The Viewer as the rest of the suite expects it: the instrument's cells, every stain.
+        await act('show_tissue', { dataset: 'xenium-lung-2fov', segmentation: 'instrument', fill: 'none', color_by: 'gene', all_transcripts: false, transcripts: true, cell: null });
+        await chrome.eval('window.situcraftViewer.setChannelsVisible(true)');
+        await act('set_mode', { mode: 'segmentation' });
+        // The segmentation studio (wave 3, slice 5): its six steps; a pilot's preflight on a region
+        // (refused without one); the pilot run twice, its seeds' agreement recorded and the rest of
+        // the tissue kept; a region holding no nucleus failing, classified, with what to do.
+        const steps = await chrome.eval(`[...document.querySelectorAll('.studio .studio-step')].map((b) => b.textContent).join(' ')`);
+        const pilotArgs = { dataset: 'xenium-lung-2fov', preset: 'roi-pilot', regions: [[500, 300, 700, 450]], sweeps: 40, samples: 20 };
+        const preflight = await act('refinement_preflight', pilotArgs);
+        const pp = preflight.ok ? preflight.data.preflight : { problems: [], regions: [], estimate: {} };
+        check('viewer', 'the studio\'s six steps; refinement_preflight says what a pilot on a region models, covers and costs, with its recipe', `${steps}; ${preflight.message ?? preflight.error}`,
+          /Input.*Compute.*Model.*Review.*Run.*Compare/.test(steps) && preflight.ok && pp.problems.length === 0 && pp.regions.length === 1 && pp.estimate.cells > 0 && pp.estimate.cellsHeld > 0 && pp.estimate.peakMemoryBytes > 0 && preflight.data.recipe?.format === 'situcraft-recipe',
+          'no problems; one region, its cells refined and held; an estimate; a recipe');
+        const noRegion = await act('refinement_preflight', { dataset: 'xenium-lung-2fov', preset: 'roi-pilot' });
+        check('viewer', 'a pilot without a region is refused, saying why', noRegion.message ?? noRegion.error, !noRegion.ok && /no region was chosen/.test(noRegion.message ?? noRegion.error ?? ''), 'refused: no region was chosen');
+        const pilot = await act('refine_segmentation', pilotArgs);
+        const pd = pilot.ok ? pilot.data.summary.diagnostics ?? {} : {};
+        check('viewer', 'remote control: the pilot refines its region twice, records the seeds\' agreement, and keeps the instrument\'s cells elsewhere', pilot.message ?? pilot.error,
+          pilot.ok && pilot.data.state === 'complete' && pilot.data.summary.cells === 11898 && pd.regions === 1 && pd.cellsRefined > 0 && pd.cellsHeld > 0 && pd.seedAgreement > 0.5 && pilot.data.parameters?.second_seed === 20251,
+          'the region\'s cells refined, those about it held, a second seed\'s agreement');
+        const failed = await act('refine_segmentation', { dataset: 'xenium-lung-2fov', regions: [[600.11, 400.11, 600.13, 400.13]], sweeps: 20, samples: 10 });
+        const failure = await chrome.eval(`document.querySelector('.studio-failure')?.innerText ?? ''`);
+        check('viewer', 'a region holding no nucleus fails, classified, with what to do, in the answer and the studio', `${failed.message ?? failed.error}; the studio: ${failure.replace(/\s+/g, ' ')}`,
+          !failed.ok && /holds no cell's nucleus/.test(failed.message ?? failed.error ?? '') && /What to do/.test(failed.message ?? failed.error ?? '') && /What to do/.test(failure), 'refused by the job, with the region\'s remedy');
+
+        // The projects as 0.2.0 and 0.3.0 saved them (validation/projects/<version>-lung.situcraft.json):
+        // this release's written when asked (SITUCRAFT_WRITE_FIXTURE=1), the places of this run's
+        // folders made neutral and given its own id; then each reopened, and every artifact
+        // SituCraft made that it records made again by this build with the same files' checksums
+        // (a comparison by its differences: its comparison.json records the jobs' times).
+        const fixtureOf = (v) => join(root, 'validation', 'projects', `${v}-lung.situcraft.json`);
         if (process.env.SITUCRAFT_WRITE_FIXTURE) {
           const doc = await chrome.eval(`(async () => {
             const app = window.situcraft;
             const { rename, serializeProject } = await import('/lib/project.js');
-            app.store.commit(rename(app.store.project, 'Lung example, as SituCraft 0.2.0 saved it'), 'Rename');
+            app.store.commit(rename(app.store.project, 'Lung example, as SituCraft 0.3.0 saved it'), 'Rename');
             return serializeProject(app.store.project);
           })()`);
           // Its own id: it grew from the 0.1.0 project in this run.
           const neutral = JSON.parse(doc.split(join(dataRoot, 'xenium-lung-2fov')).join('/data/examples/xenium-lung-2fov').split(work).join('/data/work'));
-          writeFileSync(fixture2Path, `${JSON.stringify({ ...neutral, id: 'p-situcraft-0-2-0-lung' }, null, 1)}\n`);
+          writeFileSync(fixtureOf('0.3.0'), `${JSON.stringify({ ...neutral, id: 'p-situcraft-0-3-0-lung' }, null, 1)}\n`);
         }
-        if (existsSync(fixture2Path)) {
-          const text2 = readFileSync(fixture2Path, 'utf8');
-          const fixture2 = JSON.parse(text2);
+        for (const v of ['0.2.0', '0.3.0']) {
+          if (!existsSync(fixtureOf(v))) continue;
+          const text = readFileSync(fixtureOf(v), 'utf8');
+          const fixture = JSON.parse(text);
           // An import of SituCraft's own export is not made again by another version: the export's
           // files name the SituCraft that wrote them, so their checksums, and the import's id, differ.
-          const made = fixture2.artifacts.filter((a) => (a.kind === 'segmentation' && a.source !== 'instrument' && a.method?.name !== 'SituCraft export') || a.kind === 'comparison');
+          const made = fixture.artifacts.filter((a) => (a.kind === 'segmentation' && a.source !== 'instrument' && a.method?.name !== 'SituCraft export') || a.kind === 'comparison');
           const differing = [];
           for (const a of made) {
             const m = await fetch(`${url}/api/artifacts/${encodeURIComponent(a.id)}`).then((r) => (r.ok ? r.json() : null));
@@ -604,22 +797,22 @@ export async function viewerSuite({ check, MissingData, verbose }) {
             const sums = new Map((m.files ?? []).map((f) => [f.path, f.sha256]));
             for (const f of a.files) if (sums.get(f.path) !== f.sha256) differing.push(`${a.name}: ${f.path}`);
           }
-          check('viewer', '0.2.0 Lung project: every artifact SituCraft made is made again with the same checksums', `${made.length} artifacts${differing.length ? `; ${differing.slice(0, 4).join('; ')}` : ', all the same'}`, made.length >= 5 && differing.length === 0, 'all the same');
-          const reopened2 = await chrome.eval(`(async () => {
+          check('viewer', `${v} Lung project: every artifact SituCraft made is made again with the same checksums`, `${made.length} artifacts${differing.length ? `; ${differing.slice(0, 4).join('; ')}` : ', all the same'}`, made.length >= 5 && differing.length === 0, 'all the same');
+          const reopened = await chrome.eval(`(async () => {
             const app = window.situcraft;
             const { promotedSegmentation, exportsOf } = await import('/lib/segmentations.js');
             const wait = async (f) => { for (let k = 0; k < 300; k += 1) { const v = f(); if (v) return v; await new Promise((r) => setTimeout(r, 100)); } return null; };
-            const doc = ${JSON.stringify(text2)};
-            const id = JSON.parse(doc).id;
-            await app.library.saveProject(id, doc);
-            await app.openProject(id);
+            const doc = ${JSON.stringify(text)};
+            const saved = JSON.parse(doc);
+            await app.library.saveProject(saved.id, doc);
+            await app.openProject(saved.id);
             const dataset = app.store.project.datasets[0];
             const before = (await wait(() => { const l = app.bundles.link(dataset.id); return l && l.state !== 'checking' ? l : null; }))?.state;
             const link = await app.bundles.locate(dataset.id, ${JSON.stringify(join(dataRoot, 'xenium-lung-2fov'))});
             const p = app.store.project;
-            return { before, after: link?.state, segmentations: p.artifacts.filter((a) => a.kind === 'segmentation').length, comparisons: p.artifacts.filter((a) => a.kind === 'comparison').length, decisions: p.decisions.length, exports: exportsOf(p, dataset.id).length, default: promotedSegmentation(p, dataset.id)?.record.source };
+            return { before, after: link?.state, segmentations: p.artifacts.filter((a) => a.kind === 'segmentation').length, comparisons: p.artifacts.filter((a) => a.kind === 'comparison').length, decisions: p.decisions.length, exports: exportsOf(p, dataset.id).length, default: promotedSegmentation(p, dataset.id)?.record.id, saved: promotedSegmentation(saved, saved.datasets[0].id)?.record.id };
           })()`);
-          check('viewer', '0.2.0 Lung project: it opens and finds its moved bundle; its segmentations, comparisons, decisions and exports are there, the instrument\'s the default', JSON.stringify(reopened2), reopened2.before === 'missing' && reopened2.after === 'ok' && reopened2.segmentations === fixture2.artifacts.filter((a) => a.kind === 'segmentation').length && reopened2.comparisons >= 2 && reopened2.decisions === fixture2.decisions.length && reopened2.exports >= 1 && reopened2.default === 'instrument', 'missing, then ok; all there');
+          check('viewer', `${v} Lung project: it opens and finds its moved bundle; its segmentations, comparisons, decisions and exports are there, and its default`, JSON.stringify(reopened), reopened.before === 'missing' && reopened.after === 'ok' && reopened.segmentations === fixture.artifacts.filter((a) => a.kind === 'segmentation').length && reopened.comparisons >= 2 && reopened.decisions === fixture.decisions.length && reopened.exports >= 1 && reopened.default && reopened.default === reopened.saved, 'missing, then ok; all there');
         }
 
         // The worked example on the Breast data: the instrument's cells, drawn from stains, against
@@ -642,7 +835,62 @@ export async function viewerSuite({ check, MissingData, verbose }) {
           check('viewer', 'the Breast worked example expands the nuclei, compares, and shows splits and merges first', steps.map((x) => x.ok ? `step ${x.data.step}` : x.message).join('; ') + (bc ? `; ${JSON.stringify(bc.classes)}; the first ${bc.selected?.class}` : ''),
             steps.every((x) => x.ok) && steps.at(-1).data.step === 4 && bc?.classes?.split === 263 && bc.classes.merged === 128 && bc.classes['only in A'] === 119 && ['split', 'merged', 'only in A'].includes(bc.selected?.class), 'step 4: 263 splits, 128 merges, 119 only in A; one of them first');
           await act('tour', { end: true });
+
+          // The worked example refining the Breast data (wave 3, slice 9): what its card says to
+          // expect, as it happens.
+          await chrome.eval(`(async () => {
+            const app = window.situcraft;
+            const { guideFor } = await import('/lib/tours.js');
+            const { startTour } = await import('/ui/tour.js');
+            const dataset = app.store.project.datasets.find((d) => d.name === 'xenium-breast-2fov');
+            startTour(app, { tour: guideFor('xenium-breast-2fov', 'refine-compare'), dataset: dataset.id });
+            return true;
+          })()`);
+          const rsteps = [];
+          for (let k = 0; k < 4; k += 1) rsteps.push(await act('tour', { run: true }));
+          const rc = rsteps.at(-1).data?.comparison;
+          const rn = await chrome.eval(`(async () => {
+            const app = window.situcraft;
+            const { segmentationsOf } = await import('/lib/segmentations.js');
+            const { segmentationByRole } = await import('/lib/tours.js');
+            const p = app.store.project;
+            const d = p.datasets.find((x) => x.name === 'xenium-breast-2fov');
+            const segs = segmentationsOf(p, d.id);
+            const inst = segmentationByRole(segs, 'instrument'), refined = segmentationByRole(segs, 'refined');
+            const c = p.artifacts.find((x) => x.kind === 'comparison' && x.a === inst?.id && x.b === refined?.id);
+            return { cells: refined?.summary?.cells, changed: c?.summary?.changedFraction, coA: c?.summary?.spuriousCoexpressionA, coB: c?.summary?.spuriousCoexpressionB };
+          })()`);
+          const near = (v, want, tol) => Number.isFinite(v) && Math.abs(v - want) <= tol;
+          check('viewer', 'the Breast refinement worked example refines, shows its certainty and what moved, as its card expects', `${rsteps.map((x) => x.ok ? `step ${x.data.step}` : x.message).join('; ')}; ${JSON.stringify(rc?.classes ?? {})}; ${JSON.stringify(rn)}`,
+            rsteps.every((x) => x.ok) && rsteps.at(-1).data.step === 5 && rn.cells === 7275 && near(rc?.classes?.['one-to-one'], 4700, 250) && near(rc?.classes?.expanded, 1700, 150) && near(rc?.classes?.contracted, 760, 80) && near(rn.changed, 0.23, 0.02) && near(rn.coA, 1.77, 0.03) && near(rn.coB, 1.83, 0.03),
+            '7,275 cells; about 4,700 the same, 1,700 grown, 760 shrunk; 23% of transcripts moved; co-expression 1.77 and 1.83');
+          await act('tour', { end: true });
         }
+
+        // The simulated example, made on this computer, and its worked example scoring the
+        // instrument's segmentation and a refinement against the truth (wave 3, slice 9).
+        const simulatedMade = await act('open_example', { example: 'simulated' });
+        await act('tour', { example: 'simulated-standard', name: 'score-against-truth' });
+        const tsteps = [];
+        for (let k = 0; k < 5; k += 1) tsteps.push(await act('tour', { run: true }));
+        const scores = await chrome.eval(`(async () => {
+          const app = window.situcraft;
+          const { segmentationsOf } = await import('/lib/segmentations.js');
+          const { segmentationByRole } = await import('/lib/tours.js');
+          const p = app.store.project;
+          const d = p.datasets.find((x) => x.name === 'simulated-standard');
+          const segs = segmentationsOf(p, d.id);
+          const truth = segmentationByRole(segs, 'truth');
+          const score = (role) => p.artifacts.find((x) => x.kind === 'comparison' && x.a === truth?.id && x.b === segmentationByRole(segs, role)?.id)?.summary;
+          const s = (role) => { const c = score(role); return c ? { iou: c.medianIoU, changed: c.changedFraction } : null; };
+          return { truth: Boolean(truth), instrument: s('instrument'), refined: s('refined') };
+        })()`);
+        const tc = tsteps.at(-1).data?.comparison;
+        const near = (v, want, tol) => Number.isFinite(v) && Math.abs(v - want) <= tol;
+        check('viewer', 'the simulated example is made here; its worked example imports the truth, refines, and scores both against it as its card expects', `${simulatedMade.message ?? simulatedMade.error}; ${tsteps.map((x) => x.ok ? `step ${x.data.step}` : x.message).join('; ')}; ${JSON.stringify(scores)}`,
+          simulatedMade.ok && tsteps.every((x) => x.ok) && tsteps.at(-1).data.step === 6 && tc?.mode === 'overlay' && scores.truth && near(scores.instrument?.iou, 0.62, 0.02) && near(scores.instrument?.changed, 0.20, 0.02) && near(scores.refined?.iou, 0.72, 0.02) && near(scores.refined?.changed, 0.17, 0.02),
+          'the instrument\'s: median IoU 0.62, 20% changed; the refinement\'s: 0.72, 17%');
+        await act('tour', { end: true });
       }
     }
     check('viewer', 'no uncaught errors in the page', errors.length ? errors.slice(0, 3).join(' | ') : 'none', errors.length === 0, 'none');

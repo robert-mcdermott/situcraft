@@ -120,3 +120,11 @@ func parallel(n, workers int, do func(a, b int)) {
 	}
 	wg.Wait()
 }
+
+// SquaredDistances are, for each pixel of a w×h label image (row-major), the squared distance in
+// pixels from its centre to the nearest labelled pixel's (0 on one; MaxInt64 where there is
+// none): exact, and the same for any number of workers.
+func SquaredDistances(labels []uint32, w, h, workers int) []int64 {
+	_, d := nearest(labels, w, h, workers)
+	return d
+}

@@ -125,6 +125,15 @@ The viewer draws with WebGL2 (`web/render/`), from the derived data's tiles:
 - **Transcripts** are points while few tiles are in view, and density grids farther out.
   **Cells** are outlines from the matching geometry level, fills colored through a per-cell color
   texture, and the selected cell drawn from its full-resolution polygon.
+- **Any segmentation** of the dataset can be drawn (wave 3, slice 8). The instrument's comes from
+  the dataset's own entries. Any other's outlines are tiled into an entry of their own, as the
+  comparison workspace's are. Its cells table, a cell's detail and its transcript tiles come from
+  its artifact's files (`api_segview.go`, kept read for the last few drawn): each transcript
+  carries its cell in that segmentation and, for a refinement, its probability. What is per
+  transcript is never held: the files are streamed once (`segment.Column`) into a cache entry by
+  the dataset's transcript tiles, and each tile's are read when it is drawn. Tile keys name the
+  segmentation, so a tile of one is never drawn as another's; while one is read, the cells drawn
+  before are hidden rather than shown under its name. The nuclei stay the dataset's.
 - **Tiles** are addressed by cache entry, whose name hashes its sources. They never change, so
   the browser caches them for good, and the renderer keeps the GPU's copies within a budget.
 
@@ -159,7 +168,9 @@ cells they keep (a SHA-256), so their reproduction can be checked whenever the p
 ### Example datasets and tours
 
 The examples are the development bundles, listed in `validation/sources.json` (embedded in the
-program: the list, not the data). `internal/examples` downloads one when asked, as a job: it checks
+program: the list, not the data), and the standard simulated tissue, made on this computer when
+asked (`examples.Generated`, by `internal/simulate`; byte for byte what `situcraft simulate`
+makes). `internal/examples` downloads one when asked, as a job: it checks
 free space first; the archive by its size, the publisher's MD5 and its SHA-256; each extracted file
 by its size and SHA-256 (a member claiming more is refused, as is a name leaving the folder); then
 deletes the archive and moves the checked folder into place, so a failed or stopped download
@@ -173,9 +184,9 @@ each zoomed step looks where its genes meet (the 300 µm square where their shar
 transcripts are highest together).
 
 A worked example is a tour that answers a question, saying first what to expect: its steps may run
-a job before going on (expanding the nuclei, planting errors, comparing), each named by the
-segmentations it needs ('instrument', 'expansion-5', 'planted') so that a step already done is
-not done again, and may show a comparison in the workspace as the step describes it (the view, the
+a job before going on (expanding the nuclei, planting errors, refining, importing the simulated
+tissue's truth, comparing), each named by the segmentations it needs ('instrument',
+'expansion-5', 'planted', 'refined', 'truth') so that a step already done is not done again, and may show a comparison in the workspace as the step describes it (the view, the
 ranking, the classes kept, the difference shown, the side panel). The Lung example's practises on
 errors planted in its instrument segmentation (`internal/segment/plant`): neighbouring cells whose
 merged cell would mix markers of two lineages, large cells split across their long axis, cells
@@ -200,18 +211,50 @@ Segmentation is SituCraft's own code (`internal/segment`), not an external progr
   pixel or µm, per-label statistics, outlines traced and simplified), each transcript's cell, the
   counts in sparse rows, and the cells, written zlib-compressed with checked sizes and checked
   together (geometry, assignments, counts, metadata) before they become an artifact.
-- **Transcript-informed segmentation** follows the generative model and sampler of Jones et al.
-  (2025): a voxel lattice, Poisson transcript likelihoods with per-gene background, a
-  gamma–negative-binomial mixture of expression states, hard morphology and connectivity
-  constraints, transcript repositioning, multi-resolution sampling, and initialization from
-  nuclei (`research.md` §3). Unlike the published implementation, it is **deterministic for a
+- **Transcript-informed segmentation** (`internal/segment/refine`) follows the generative model
+  and sampler of Jones et al. (2025): a voxel lattice, Poisson transcript likelihoods over a
+  background of false decodes (measured by the negative controls) and each gene's ambient RNA, a
+  gamma–negative-binomial mixture of expression states, hard morphology
+  and connectivity constraints, transcript repositioning, multi-resolution sampling, and
+  initialization from nuclei (`research.md` §3). Its parameters are drawn by a partially
+  collapsed Gibbs sweep in which every update is an exact draw (a gamma prior on the components'
+  rate parameters, where the publication uses Pólya–Gamma variables). The labelling's moves keep
+  detailed balance exactly (constraints that hold both ways); the reported segmentation is the
+  posterior's summary over the last sweeps; the default schedule is the one that recovers
+  simulated cells best (research.md §3.2). Unlike the published implementation, it is **deterministic for a
   seed regardless of thread count**: each parallel block draws from its own seeded random stream,
   in a fixed update order.
 - **Outputs** are converted to polygons (per z layer and consensus), transcript assignments with
-  probabilities, and counts. They enter the artifact system like any other segmentation.
+  probabilities, and counts. They enter the artifact system like any other segmentation, with
+  diagnostics: convergence (Geweke's diagnostic of the log-likelihood) and each cell's flagged
+  limitations, shown in the Segmentation view and the comparison workspace. Each refinement is
+  compared with the instrument's segmentation as soon as it is made.
+- **The studio** (`web/ui/refine-studio.js`, `api_refine.go`) sets a refinement up in six steps
+  (Input, Compute, Model, Review, Run, Compare). Every change asks the program for the spec's
+  **preflight** (`refine.Check`): what it models and covers, its problems and risks, and its cost
+  against the computer's memory (`internal/sysinfo`) and the free disk. The cost model is fitted
+  to measured runs by phase: reading, sampling one region at a time, writing. The bundle's inputs
+  are kept between preflights.
+  - **Presets** (`refine.Presets`, versioned) and every setting's help come from the program, so
+    the page, the terminal and remote control say the same.
+  - **Regions** hold the cells about them, so a region never cuts a cell. **Sections** are found
+    by single linkage, and each gets a model of its own.
+  - **Patches** (`refine.Units`): a region of more than about 4 million modelled transcripts is
+    cut into rectangles of about 2 million, run one at a time as regions are (each also refining
+    the cells within 40 µm of its rectangle), and stitched by rectangle and by seed, so the
+    sampling holds one patch. They depend on the data and settings alone.
+- **One way to run** (`refine.Refine`): the app's job and `situcraft refine` read, check, sample,
+  release the sampler's state and write the same way, under a tighter target for Go's collector
+  (it never changes the result). A run's spec is kept as a **recipe** (`recipe.go`) that either
+  runs again, byte for byte. Failures carry a class and a remedy (`jobs.Classified`), which the
+  Jobs view and the studio show.
+- **Validated against an independent reference:** on the 2-FOV bundles and a simulated tissue,
+  SituCraft's refinement is compared with Proseg 3.2.0's by the comparison workspace's own measures.
+  The maintainer reduces Proseg's outputs to committed numbers (`validation/reference/segmentation/`),
+  and a weekly check requires SituCraft's segmentation to be, byte for byte, the one compared.
 - **Imported segmentations** (`internal/segment/imports`) come from SpatialData Zarr,
   Baysor-style CSV plus GeoJSON, Xenium Ranger outputs, or GeoJSON polygons plus an assignment
-  table. This is how results from external tools are compared, without SituCraft running those
+  table; SituCraft's own files (`situcraft refine`'s) are checked against the dataset and copied. This is how results from external tools are compared, without SituCraft running those
   tools. Each becomes SituCraft's own segmentation files: a label image resampled or polygons
   drawn at the morphology image's resolution, the tool's assignment matched to the dataset's
   transcripts (by id and position, or by position and gene), counts made as for every
@@ -396,7 +439,8 @@ CI jobs (all on fixed data):
 - **Installers:** syntax checks.
 
 Anything slow, large or external is not in per-commit CI. That covers the Breast bundle's full
-validation, scale tests, and regenerating reference numbers from external tools. These run in a
+validation, scale tests, the refinement's memory estimates against measured runs (which the race
+detector would distort), and regenerating reference numbers from external tools. These run in a
 weekly and on-demand workflow, or on the maintainer's machine, and their outputs are committed as
 reference JSON.
 

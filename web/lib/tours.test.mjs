@@ -75,8 +75,9 @@ test('a dataset is known as its example by its manifest, wherever it is', () => 
 });
 
 test('every worked example asks its question, says what to expect, and its steps can be done', () => {
-  assert.deepEqual(Object.keys(WORKED).sort(), Object.keys(sources).sort());
-  const roles = new Set(['instrument', 'expansion-5', 'planted']);
+  // The downloaded examples', and the simulated one made on this computer (api_examples.go).
+  assert.deepEqual(Object.keys(WORKED).sort(), [...Object.keys(sources), 'simulated-standard'].sort());
+  const roles = new Set(['instrument', 'expansion-5', 'planted', 'refined', 'truth']);
   for (const [name, list] of Object.entries(WORKED)) {
     for (const w of list) {
       assert.equal(guideFor(name, w.id), w);
@@ -89,11 +90,15 @@ test('every worked example asks its question, says what to expect, and its steps
           assert.ok(step.label, `${step.title} says what it does`);
           if (step.do.action === 'expand') made.add(`expansion-${step.do.distance}`);
           if (step.do.action === 'plant') made.add('planted');
+          // A refinement is compared with the instrument's at once (api_refine.go).
+          if (step.do.action === 'refine') made.add('refined').add('instrument|refined');
+          if (step.do.action === 'import-truth') made.add('truth');
           if (step.do.action === 'compare') {
             assert.ok(made.has(step.do.a) && made.has(step.do.b), `${step.title}: its segmentations are made before`);
             made.add(`${step.do.a}|${step.do.b}`);
           }
         }
+        if (step.segmentation) assert.ok(step.mode === 'viewer' && roles.has(step.segmentation) && made.has(step.segmentation), `${step.title}: its segmentation is made before`);
         if (step.compare) {
           assert.ok(roles.has(step.compare.a) && roles.has(step.compare.b), step.title);
           assert.ok(made.has(`${step.compare.a}|${step.compare.b}`), `${step.title}: its comparison is made before`);
@@ -119,4 +124,23 @@ test('segmentations are found by what they are', () => {
   assert.equal(segmentationByRole(segs, 'expansion-10').id, 'c');
   assert.equal(segmentationByRole(segs, 'planted').id, 'e', 'a complete one');
   assert.equal(segmentationByRole(segs, 'expansion-2'), null);
+});
+
+test('segmentations by role: the latest refinement, and the truth imported from its folder', () => {
+  const seg = (id, extra) => ({ id, state: 'complete', source: 'situcraft', method: { name: '' }, ...extra });
+  const list = [
+    seg('inst', { source: 'instrument' }),
+    seg('r1', { method: { name: 'SituCraft transcript-informed segmentation' } }),
+    seg('r2', { method: { name: 'SituCraft transcript-informed segmentation' } }),
+    seg('other', { source: 'imported', sources: [{ path: '/data/other' }] }),
+    seg('truth', { source: 'imported', sources: [{ path: '/data/simulated-standard/truth' }] }),
+  ];
+  assert.equal(segmentationByRole(list, 'refined').id, 'r2');
+  assert.equal(segmentationByRole(list, 'truth').id, 'truth');
+  assert.equal(segmentationByRole(list.slice(0, 1), 'refined'), null);
+  // A Viewer step draws its segmentation and colors its transcripts as it says.
+  const view = stepView({ mode: 'viewer', title: 't', transcripts: { all: true, colorBy: 'probability' }, cells: { fill: 'certainty' } }, 'd1', 0);
+  assert.equal(view.transcripts.all, true);
+  assert.equal(view.transcripts.colorBy, 'probability');
+  assert.equal(view.cells.fill, 'certainty');
 });

@@ -140,10 +140,10 @@ async function showPlaces() {
 // --- Scenes ---------------------------------------------------------------------------------------
 
 const scenes = {
-  // The start page: the examples to download, what to bring.
+  // The start page: the examples to download or make, what to bring.
   async start() {
     await act('set_mode', { mode: 'start' });
-    await waitFor(`document.querySelectorAll('.card.example').length === 2`);
+    await waitFor(`document.querySelectorAll('.card.example').length === 3`);
   },
   // The Lung example checked: what the run was, its findings, its derived data.
   async data() {
@@ -274,6 +274,24 @@ const scenes = {
     if (note) throw new Error(`step ${step.data?.step}: ${note}`);
     await js(`(async () => { const w = window.situcraft.compareView.current(); for (const r of w.state.renderers) await r.renderer.settled(); return true; })()`);
     await sleep(500);
+  },
+  // The segmentation studio on the Breast example (wave 3, slice 5): the Balanced preset's
+  // preflight, at the Compute step, what the run needs against what the computer has.
+  async studio() {
+    await act('open_example', { example: 'breast' });
+    await act('refinement_preflight', { preset: 'balanced' });
+    await js(`[...document.querySelectorAll('.studio-step')].find((b) => b.textContent.includes('Compute'))?.click()`);
+    await sleep(400);
+    await scrollTo('.studio-steps', 'start');
+  },
+  // The Lung example refined from its transcripts (Balanced) and drawn on the tissue (wave 3,
+  // slice 8): cells filled by their boundary certainty, transcripts by their probability of their
+  // cell, a cell in the inspector.
+  async refined() {
+    await act('open_example', { example: 'lung' });
+    const refined = await act('refine_segmentation', { preset: 'balanced' });
+    await act('show_tissue', { segmentation: refined.data.id, fill: 'certainty', opacity: 0.6, all_transcripts: true, color_by: 'probability', channels: { DAPI: { color: '#8c8c8c' } }, center: [750, 300], um_per_pixel: 0.25, cell: 'c100' });
+    await js(`window.situcraftViewer.settled()`);
   },
   // The Lung example's instrument segmentation exported as SpatialData, AnnData and Xenium
   // Ranger's inputs: the formats, the folder, the export listed with the prepared command

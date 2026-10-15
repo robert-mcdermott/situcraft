@@ -58,7 +58,7 @@ export function mountInspector(app) {
     return h('section.inspector-section',
       h('h3', icon('bundle'), d.name),
       h('dl.kv',
-        h('dt', 'Platform'), h('dd', `${d.platform} (XOA ${d.version})`),
+        h('dt', 'Platform'), h('dd', v.support === 'simulated' ? `Simulated, in ${d.platform}'s format` : `${d.platform} (XOA ${d.version})`),
         h('dt', 'Panel'), h('dd', d.panel || '—'),
         h('dt', 'Tissue'), h('dd', [d.organism, d.tissue].filter(Boolean).join(' ') || '—'),
         h('dt', 'Cells'), h('dd', Number(d.cells).toLocaleString('en-US')),
@@ -146,7 +146,8 @@ export function mountInspector(app) {
         ...a.files.map((f) => h('div.seg-file', { title: `${f.path}: SHA-256 ${f.sha256}` }, h('div', f.path), h('div.muted', f.role, ' · ', h('span.mono', short(f.sha256)))))),
       a.findings.length ? h('div.seg-findings', h('div.muted', 'Its check found'),
         ...a.findings.map((f) => h('div.seg-finding', h(`span.badge.${severity[f.severity] ?? ''}`, f.severity), h('span', `${f.message}${f.count ? ` (${f.count.toLocaleString('en-US')})` : ''}`)))) : h('p.muted', { style: { fontSize: '12px' } }, 'Its check found nothing to report.'),
-      a.method.citation ? h('p.muted', { style: { margin: '8px 0 0', fontSize: '11.5px' } }, a.method.citation) : null);
+      a.method.citation ? h('p.muted', { style: { margin: '8px 0 0', fontSize: '11.5px' } }, a.method.citation) : null,
+      a.state === 'complete' ? h('div.btn-row', { style: { marginTop: '10px' } }, h('button.btn.small', { type: 'button', onclick: () => app.showOnTissue(a.dataset, a.id) }, icon('tissue'), 'Show on the tissue')) : null);
   }
 
   // A comparison: its two segmentations, its headline numbers, and the workspace.

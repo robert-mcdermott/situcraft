@@ -24,19 +24,23 @@ The start page offers your recent projects, the example datasets and **Open a bu
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/start-dark.webp">
-  <img alt="SituCraft's start page: recent projects, and the two example datasets with their size, source and license, each with a Download button" src="images/start-light.webp">
+  <img alt="SituCraft's start page: recent projects, and the example datasets with their size, source and license and their worked examples, each with a Download or Make it button" src="images/start-light.webp">
 </picture>
 
-Under **Examples**, two public Xenium bundles from 10x Genomics (CC BY 4.0) are ready to download:
+Under **Examples**, two public Xenium bundles from 10x Genomics (CC BY 4.0) are ready to download,
+and a simulated tissue is ready to make:
 
 | Example | Download | On disk | What it shows |
 | --- | --- | --- | --- |
 | Xenium V1 human Lung, 2 FOVs | 278 MB | 284 MB | 11,898 cells, 825,885 transcripts, 289 genes, a DAPI image, nucleus-expansion segmentation |
 | Xenium V1 human Breast, 2 FOVs | 379 MB | 385 MB | 7,275 cells, 1,113,950 transcripts, 280 genes, four stains, multimodal cell segmentation |
+| A simulated tissue with known truth | none: made here in seconds | 34 MB | 3,030 cells of four types, 436,996 transcripts, 120 genes, a DAPI image, nucleus-expansion segmentation, and the truth: every cell's and transcript's |
 
 **Download** fetches one from 10x Genomics, checks the archive and every file against recorded
 checksums, keeps only the bundle and deletes the archive. Nothing is downloaded until you ask.
-When it is ready, **Take the tour**: seven steps through the Data view, the Viewer and QC. Use
+**Make it** simulates the third with SituCraft's standard settings (`situcraft simulate` makes
+the same tissue, byte for byte); it is labelled simulated wherever it is shown.
+When a 10x Genomics example is ready, **Take the tour**: seven steps through the Data view, the Viewer and QC. Use
 **Next** and **Back** on the card at the foot of the window; you can explore at any step, and the
 tour continues from there.
 
@@ -50,13 +54,16 @@ methods paragraph (section 7) cites it.
 
 Each example also has a **worked example**: a question answered step by step, saying first what to
 expect. Some steps run a job before going on (the card's button says what it does: expand the
-nuclei, plant errors, compare), and others open the comparison in the Compare workspace with the
-view, the ranking and the difference the step talks about.
+nuclei, plant errors, refine, import the truth, compare), and others open the comparison in the
+Compare workspace or the Viewer with the view, the ranking and the difference the step talks
+about.
 
 | Example | Worked example | The question |
 | --- | --- | --- |
 | Breast | The instrument's cells against a nucleus expansion | Where does growing each nucleus by 5 µm disagree with the cells the instrument drew from its stains, and which does the evidence favour there? |
+| Breast | Redraw the cells from their transcripts | How does SituCraft's transcript-informed segmentation redraw the instrument's cells, and where is it unsure of itself? |
 | Lung | Find the planted errors (simulated) | Can you find a segmentation's errors with the comparison workspace, and which ranking finds which kind? |
+| Simulated | Score segmentations against the truth | When every cell is known, how close do the instrument's nucleus expansion and SituCraft's transcript-informed segmentation come to the true cells? |
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/worked-dark.webp">
@@ -120,11 +127,24 @@ needed. **View the tissue** opens the Viewer.
   **Quality 20 or more only** keeps the transcripts Xenium counts.
 - **Cells:** cell and nucleus outlines (drawn once cells are large enough to see), and cells filled
   by their transcripts, area or segmentation method, with a legend.
+- **Segmentation:** any of the dataset's segmentations, chosen in the Cells layer (its default
+  first); the legend says how it was made. A transcript-informed one also fills its cells by the
+  limitations it flagged, its boundary certainty or its assignment certainty, and colors its
+  transcripts, close up, by their probability of their cell: doubtful ones bright, certain ones
+  dark. **Show on the tissue**, beside a segmentation in the Segmentation view or the inspector,
+  opens it here.
 - **A cell:** click it to see its ID, position, areas, segmentation method and genes in the
-  inspector (right); **Esc** clears it.
+  inspector (right); **Esc** clears it. In another segmentation than the instrument's, the
+  inspector also says which instrument's cell it came from and how sure the segmentation is of
+  it.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/refined-dark.webp">
+  <img alt="The Viewer drawing the Lung example's transcript-informed segmentation: cells filled by their boundary certainty, transcripts colored by their probability of their cell, a refined cell described in the inspector" src="images/refined-light.webp">
+</picture>
 
 **Save view** keeps exactly what the Viewer shows: the place and zoom, the stains and their
-settings, the genes, the layers and the selected cell. Saved views are listed in the project tree
+settings, the genes, the layers, the segmentation and the selected cell. Saved views are listed in the project tree
 (left) and the command palette (⌘K or Ctrl+K). Select one to reopen it; in the inspector, **Copy
 link** gives a link that reopens it, **Rename** and **Remove** change it.
 
@@ -200,6 +220,43 @@ segmentation of its own, kept with its parameters. Below, it is compared with th
 segmentation pixel by pixel and transcript by transcript, and what differs is described: on the
 Lung example, segmented by the instrument the same way, 98.06% of pixels and 98.94% of transcripts
 are in the same cells.
+
+**Transcript-informed segmentation** redraws each cell from the transcripts (SituCraft's
+implementation, after Jones et al. 2025). It starts from the instrument's cells and their nuclei.
+Each boundary moves to where the cell's own transcripts are, and each transcript may have drifted
+from the cell it came from. Its studio takes you through six steps, each showing what the run
+would do on this bundle and this computer:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/studio-dark.webp">
+  <img alt="The segmentation studio on the Breast example at its Compute step: the threads, and the memory, disk and time the Balanced refinement needs against what the computer has" src="images/studio-light.webp">
+</picture>
+
+1. **Input:** the transcripts' quality (Q20 to start), the cells it starts from, and what it
+   covers: the whole tissue, its separate sections apart, or chosen regions (typed in µm, or the
+   region last framed in the Viewer). Outside a region the instrument's cells stay as they are.
+2. **Compute:** the threads, and the memory, disk and time it needs against what the computer
+   has.
+3. **Model:** a preset (Balanced, Conservative boundary, Flexible morphology, Low memory, ROI pilot,
+   Expert), what it changes and what it risks, and every setting with what it does and costs.
+4. **Review:** what will run, anything that stops it (with what to do) and its risks; **Refine**
+   starts it, and **Save the recipe** keeps its settings as a file, to run again here or with
+   `situcraft refine` in a terminal.
+5. **Run:** its progress and log, and **Stop**. A failure says what went wrong and what to do.
+6. **Compare:** whether it settled, which cells its result is least sure of (few transcripts,
+   uncertain boundaries, no nucleus), and, for an ROI pilot, how often a second seed put the
+   transcripts in the same cells. **Review the differences** opens the comparison workspace on it
+   against the instrument's segmentation, made as soon as the refinement is.
+
+The ROI pilot is the place to start on a new tissue: a region of a few hundred µm takes seconds,
+and its two seeds show how much of the result is chance. The result itself is the summary of many
+samples from the model: each transcript in its most probable cell, with that probability kept.
+
+A large tissue (more than about 4 million transcripts modelled) is refined in patches of about 2
+million transcripts each, one after another, each also refining the cells within 40 µm of its
+square, and stitched into one segmentation; the Compute step says how many. The result is the same
+for the same seed whatever the computer. The memory still grows with the tissue, by about 100
+bytes a transcript: a tissue of 55 million transcripts needed 5 to 6 GB.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/import-dark.webp">

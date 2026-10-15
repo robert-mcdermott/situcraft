@@ -21,6 +21,7 @@ import { defaultLayers } from './viewer-panel.js';
 import { categoricalColor, hexToRgb } from '../lib/colormaps.js';
 import { comparisonsOf, decideSegmentation, DECISIONS, promotedSegmentation, segmentationDecision, segmentationsOf } from '../lib/segmentations.js';
 import { CLASS_INFO, DIFFERING, RANKS, cellNames, prepare, rank, warnings } from '../lib/review.js';
+import { cellFlags, flagsOf } from '../lib/refine.js';
 
 const CLASSES = Object.keys(CLASS_INFO);
 // A's and B's colours in the overlay (Okabe and Ito's palette, told apart with any colour vision).
@@ -135,6 +136,16 @@ export function mountCompare(app, container) {
     const nameB = segs.find((s) => s.id === cmp.b)?.name ?? d.b?.name ?? 'B';
     const session = sessions.get(cmp.id) ?? { mode: 'side', map: false, classes: new Set(DIFFERING), by: 'reassigned', minChanged: 0, tab: 'queue', selected: null, page: 0, sort: { key: 'changed', dir: -1 }, camera: null, decision: 'promote', side: 'b' };
     sessions.set(cmp.id, session);
+    // The limitations each side's method flags per cell (a transcript-informed segmentation's
+    // diagnostics.json), shown with a chosen difference's cells.
+    const flags = { a: new Map(), b: new Map() };
+    for (const [side, id] of [['a', cmp.a], ['b', cmp.b]]) {
+      if (!segs.find((x) => x.id === id)?.files?.some((f) => f.path === 'diagnostics.json')) continue;
+      getJSON(`/api/artifacts/${encodeURIComponent(id)}/files/diagnostics.json`).then((diag) => {
+        flags[side] = cellFlags(diag);
+        if (session.selected !== null && groups[session.selected]) app.inspector.setSection('compare-selection', () => selectionSection(groups[session.selected]));
+      }).catch(() => {});
+    }
     const { groups, ofA, ofB } = prepared;
     const state = { renderers: [], flicker: null, navs: [], observer: null, queue: [] };
 
@@ -378,7 +389,9 @@ export function mountCompare(app, container) {
           h('dt', 'Reassigned'), h('dd', `${exact(g.changed)} gene transcripts`),
           h('dt', 'Gene transcripts'), h('dd', `A ${exact(g.transcriptsA)}, B ${exact(g.transcriptsB)}`),
           h('dt', 'Mixed markers'), h('dd', `A ${exact(g.mixedA)}, B ${exact(g.mixedB)}`, h('span.muted', ' pairs of exclusive markers in one cell')),
-          h('dt', 'Where'), h('dd', `${num(g.x, 1)}, ${num(g.y, 1)} µm`)));
+          h('dt', 'Where'), h('dd', `${num(g.x, 1)}, ${num(g.y, 1)} µm`),
+          ...[['A', flagsOf(flags.a, g.a.map((i) => prepared.idsA[i]))], ['B', flagsOf(flags.b, g.b.map((i) => prepared.idsB[i]))]]
+            .filter(([, text]) => text).flatMap(([side, text]) => [h('dt', `Limitations of ${side}`), h('dd', text)])));
     }
 
     // --- The side panel ---

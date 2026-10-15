@@ -1,11 +1,13 @@
 // The tissue viewer's layers panel: the morphology channels (shown or not, color, contrast window,
-// gamma), transcripts (genes found by name, each in its own color, or all transcripts in one;
-// quality floor, point size, density gain) and cells (outlines, nuclei, fill by an attribute).
+// gamma), transcripts (genes found by name, each in its own color, or all transcripts in one, or
+// colored by their assignment's probability; quality floor, point size, density gain) and cells
+// (which segmentation, outlines, nuclei, fill by an attribute).
 
 import { h, icon, clear, formatCount } from './dom.js';
 import { showMenu } from './overlays.js';
 import { categoricalColor, colormapLUT, colormapCSS } from '../lib/colormaps.js';
 import { attributeRange } from '../lib/viewer-data.js';
+import { CERTAINTY_RANGE, LIMITATIONS, NO_PROBABILITY_COLOR, SEVERAL, certaintyCSS, segFillColors, segFills } from '../lib/segview.js';
 
 // Channel colors by Xenium's channel purpose, then in order.
 const PURPOSE_COLORS = [
@@ -46,15 +48,39 @@ export function defaultLayers(desc) {
   }
   return {
     channels,
-    transcripts: { visible: true, all: false, genes: [], colors: [], minQ: 20, pointSize: 3, gain: 1, allColor: '#ffd84d' },
-    cells: { outlines: true, nuclei: false, fill: null, opacity: 0.55 },
+    transcripts: { visible: true, all: false, genes: [], colors: [], minQ: 20, pointSize: 3, gain: 1, allColor: '#ffd84d', colorBy: 'gene' },
+    // segmentation: null for the dataset's own (the instrument's), an artifact's id, or undefined
+    // for the dataset's default (the Viewer resolves it).
+    cells: { outlines: true, nuclei: false, fill: null, opacity: 0.55, segmentation: undefined },
   };
 }
 
+// Numbers on viridis over their 1st–99th percentiles, unknown values transparent: RGBA per cell.
+function numericColors(values) {
+  const out = new Uint8Array(4 * values.length);
+  const [lo, hi] = attributeRange(values);
+  const lut = colormapLUT('viridis');
+  for (let i = 0; i < values.length; i += 1) {
+    const v = values[i];
+    if (!Number.isFinite(v)) continue;
+    const k = Math.max(0, Math.min(255, Math.round((255 * (v - lo)) / (hi - lo))));
+    out.set([lut[3 * k], lut[3 * k + 1], lut[3 * k + 2], 255], 4 * i);
+  }
+  return out;
+}
+
+// The fills a cells table offers: the dataset's own, or a segmentation's (lib/segview.js).
+export function fillsOf(cells, desc) {
+  if (cells?.kind === 'segmentation') return segFills(cells);
+  return FILLS.filter((f) => !f.categorical || desc.cells.methods?.length);
+}
+
 // RGBA bytes per cell for a fill (null for none): numbers on viridis over their 1st–99th
-// percentiles, methods in categorical colors; unknown values transparent.
+// percentiles, methods in categorical colors; unknown values transparent. A segmentation's own
+// fills are colored as lib/segview.js says.
 export function cellFillColors(fill, cells, desc) {
   if (!fill || !cells) return null;
+  if (cells.kind === 'segmentation') return segFillColors(fill, cells, numericColors);
   const spec = FILLS.find((f) => f.id === fill);
   if (!spec) return null;
   const out = new Uint8Array(4 * cells.n);
@@ -68,19 +94,19 @@ export function cellFillColors(fill, cells, desc) {
     }
     return out;
   }
-  const values = cells[spec.column];
-  const [lo, hi] = attributeRange(values);
-  const lut = colormapLUT('viridis');
-  for (let i = 0; i < cells.n; i += 1) {
-    const v = values[i];
-    if (!Number.isFinite(v)) continue;
-    const k = Math.max(0, Math.min(255, Math.round((255 * (v - lo)) / (hi - lo))));
-    out.set([lut[3 * k], lut[3 * k + 1], lut[3 * k + 2], 255], 4 * i);
-  }
-  return out;
+  return numericColors(cells[spec.column]);
 }
 
-export function mountViewerPanel(host, { desc, layers, cells, onChange }) {
+// segmentations: the dataset's, to choose which is drawn ({ id, name, isDefault, instrument,
+// about }; lib/segview.js segmentationChoices); drawn: the one drawn (its choice, or null for the
+// dataset's own before any is registered).
+// The certainty scale's legend: doubtful (bright) to certain (dark).
+function certaintyLegend(label, help) {
+  return h('div', h('b', label), h('div.viewer-legend-bar', { style: { background: certaintyCSS() } }),
+    h('div.viewer-legend-range', h('span', `${CERTAINTY_RANGE[0]} or less`), h('span', String(CERTAINTY_RANGE[1]))), help ? h('div.muted', help) : null);
+}
+
+export function mountViewerPanel(host, { desc, layers, cells, onChange, segmentations = [], drawn = null }) {
   let state = structuredClone(layers);
   const emit = (what) => onChange(structuredClone(state), what);
   const genes = desc.transcripts?.genes ?? [];
@@ -144,6 +170,12 @@ export function mountViewerPanel(host, { desc, layers, cells, onChange }) {
   const visibleBox = h('input', { type: 'checkbox', checked: state.transcripts.visible });
   const size = h('input', { type: 'range', min: 1, max: 8, step: 0.5, value: state.transcripts.pointSize, 'aria-label': 'Point size' });
   const gain = h('input', { type: 'range', min: -2, max: 3, step: 0.1, value: Math.log2(state.transcripts.gain), 'aria-label': 'Density brightness' });
+  // Coloring by the assignment's probability needs a segmentation that gives one.
+  const probable = Boolean(cells?.holds?.probability);
+  const colorBy = h('select', { 'aria-label': 'Color transcripts by' },
+    h('option', { value: 'gene' }, 'Gene'),
+    h('option', { value: 'probability', disabled: !probable }, probable ? 'Assignment probability' : 'Assignment probability (a refinement\'s)'));
+  colorBy.value = probable && state.transcripts.colorBy === 'probability' ? 'probability' : 'gene';
   let active = -1;
 
   function recolor() {
@@ -261,12 +293,26 @@ export function mountViewerPanel(host, { desc, layers, cells, onChange }) {
     state.transcripts.gain = 2 ** Number(gain.value);
     emit('transcripts');
   });
+  colorBy.addEventListener('change', () => {
+    state.transcripts.colorBy = colorBy.value;
+    emit('transcripts');
+  });
 
   // --- Cells ---
   const outlines = h('input', { type: 'checkbox', checked: state.cells.outlines });
   const nuclei = h('input', { type: 'checkbox', checked: state.cells.nuclei });
-  const fill = h('select', { 'aria-label': 'Fill cells by' }, h('option', { value: '' }, 'No fill'), ...FILLS.filter((f) => !f.categorical || desc.cells.methods?.length).map((f) => h('option', { value: f.id }, f.label)));
-  fill.value = state.cells.fill ?? '';
+  const fills = fillsOf(cells, desc);
+  const fill = h('select', { 'aria-label': 'Fill cells by' }, h('option', { value: '' }, 'No fill'), ...fills.map((f) => h('option', { value: f.id, title: f.help ?? '' }, f.label)));
+  fill.value = fills.some((f) => f.id === state.cells.fill) ? state.cells.fill : '';
+  // Which segmentation is drawn: the dataset's, its default first.
+  const segPicker = h('select', { 'aria-label': 'Segmentation drawn' }, ...segmentations.map((c) => h('option', { value: c.id }, `${c.name}${c.isDefault ? ' (default)' : ''}`)));
+  if (drawn) segPicker.value = drawn.id;
+  segPicker.disabled = segmentations.length < 2;
+  segPicker.addEventListener('change', () => {
+    const c = segmentations.find((x) => x.id === segPicker.value);
+    state.cells.segmentation = !c || c.instrument ? null : c.id;
+    emit('segmentation');
+  });
   const opacity = h('input', { type: 'range', min: 0.1, max: 1, step: 0.05, value: state.cells.opacity, 'aria-label': 'Fill opacity' });
   const sets = new Set((desc.geometry ?? []).map((s) => s.name));
   outlines.disabled = !sets.has('cells');
@@ -298,18 +344,29 @@ export function mountViewerPanel(host, { desc, layers, cells, onChange }) {
       chips,
       toggle(allBox, `All transcripts (${formatCount(desc.transcripts.count)})`),
       toggle(q20Box, 'Quality 20 or more only'),
+      h('label.viewer-slider', 'Color by', colorBy),
       h('label.viewer-slider', 'Point size', size),
       h('label.viewer-slider', 'Density brightness', gain),
-      h('p.muted.viewer-hint', 'Close up, each transcript is a point; farther out, each gene\'s density, counted in bins a few pixels wide.')) : null,
+      h('p.muted.viewer-hint', 'Close up, each transcript is a point; farther out, each gene\'s density, counted in bins a few pixels wide. A transcript\'s probability shows on its point, close up.')) : null,
     desc.geometry?.length ? section('Cells', 'cell',
-      toggle(outlines, `Cell outlines (${formatCount(desc.cells.count)})`),
+      segmentations.length ? h('label.viewer-slider', 'Segmentation', segPicker) : null,
+      drawn ? h('p.muted.viewer-hint.viewer-seg-about', `${drawn.about[0].toUpperCase()}${drawn.about.slice(1)}.`) : null,
+      toggle(outlines, `Cell outlines (${formatCount(cells?.n ?? desc.cells.count)})`),
       toggle(nuclei, 'Nucleus outlines'),
       h('label.viewer-slider', 'Fill by', fill),
       h('label.viewer-slider', 'Fill opacity', opacity)) : null);
   renderChannels();
   renderChips();
 
+  // The transcripts' probability legend, when they are colored by it.
+  function probabilityLegend() {
+    if (!(probable && state.transcripts.colorBy === 'probability' && state.transcripts.visible)) return null;
+    return h('div', certaintyLegend('Transcripts by their assignment\'s probability', 'Close up, each transcript is drawn by its probability of the cell (or the background) it is in.'),
+      h('div.viewer-legend-item', h('span.dot', { style: { background: NO_PROBABILITY_COLOR } }), 'Assigned by place (not modelled)'));
+  }
+
   return {
+    probabilityLegend,
     addGene,
     setGenes(list) {
       state.transcripts.genes = list.filter((g) => g >= 0 && g < genes.length).slice(0, MAX_GENES);
@@ -330,9 +387,30 @@ export function mountViewerPanel(host, { desc, layers, cells, onChange }) {
       renderChips();
       emit('genes');
     },
-    // The fill's legend: a color bar with its range, or the methods' colors.
+    // The fill's legend: a color bar with its range, or the methods' colors; a segmentation's
+    // limitations' colors, or the certainty scale.
     legend() {
       const id = state.cells.fill;
+      if (cells?.kind === 'segmentation') {
+        const spec = fills.find((f) => f.id === id);
+        if (!spec) return null;
+        if (spec.id === 'limitations') {
+          const count = (test) => {
+            let n = 0;
+            for (let i = 0; i < cells.n; i += 1) if (test(cells.limitations[i])) n += 1;
+            return n;
+          };
+          const single = (bit) => (f) => f === bit;
+          return h('div', h('b', spec.label),
+            ...LIMITATIONS.map((l) => h('div.viewer-legend-item', h('span.dot', { style: { background: l.color } }), l.label, h('span.muted', formatCount(count(single(l.bit)))))),
+            h('div.viewer-legend-item', h('span.dot', { style: { background: SEVERAL.color } }), SEVERAL.label, h('span.muted', formatCount(count((f) => f && (f & (f - 1)) !== 0)))),
+            h('div.muted', 'Cells without one are not filled.'));
+        }
+        if (spec.scale === 'certainty') return certaintyLegend(spec.label, spec.help);
+        const [lo, hi] = attributeRange(cells[spec.column]);
+        const fmt = (v) => (Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(1));
+        return h('div', h('b', spec.label), h('div.viewer-legend-bar', { style: { background: colormapCSS('viridis') } }), h('div.viewer-legend-range', h('span', fmt(lo)), h('span', fmt(hi))), h('div.muted', '1st to 99th percentile'));
+      }
       const spec = FILLS.find((f) => f.id === id);
       if (!spec) return null;
       if (spec.categorical) {

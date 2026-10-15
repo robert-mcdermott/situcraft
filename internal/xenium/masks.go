@@ -79,6 +79,9 @@ func openMask(f ReaderAt, index int, pixelSize float64) (*Mask, error) {
 // Size is the mask's width and height in pixels.
 func (m *Mask) Size() (int, int) { return m.width, m.height }
 
+// ChunkRows is how many rows the mask's chunks hold: a reader decodes that many rows at a time.
+func (m *Mask) ChunkRows() int { return m.a.Chunks[0] }
+
 // Close releases the file.
 func (m *Mask) Close() error { return m.f.Close() }
 

@@ -85,6 +85,7 @@ export function mountJobs(app, container) {
       isFinished(job.state) ? null : h('div.progress', bar),
       h('div.job-meta', message, times),
       job.error ? h('p.job-error', job.error) : null,
+      job.failure?.remedy ? h('p.job-remedy', h('b', 'What to do: '), job.failure.remedy) : null,
       job.state === 'orphaned' ? h('p.muted.job-note', job.resumable ? 'SituCraft stopped before it finished. Resuming continues it (what was finished is kept).' : 'This SituCraft cannot resume it; discard it, and start the work again.') : null,
       h('div.job-foot', toggle),
       more);
