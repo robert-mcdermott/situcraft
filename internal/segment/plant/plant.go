@@ -447,21 +447,47 @@ func (pl *planter) take(labels ...uint32) {
 	}
 }
 
-// profile is a cell's counts as a unit vector, by gene.
-func (pl *planter) profile(l uint32) map[uint32]float64 {
+// entry is one gene's share of a cell's unit-length counts.
+type entry struct {
+	gene uint32
+	v    float64
+}
+
+// profile is a cell's counts as a unit vector, by gene in ascending order. Its sums, like every
+// floating-point sum here, add products each rounded on its own (never fused) in a fixed order,
+// so the same cells are chosen on every processor.
+func (pl *planter) profile(l uint32) []entry {
 	c := pl.counts
-	out := map[uint32]float64{}
+	var out []entry
 	var norm float64
 	for k := c.Offsets[l-1]; k < c.Offsets[l]; k++ {
 		v := float64(c.Count[k])
-		out[c.Gene[k]] = v
-		norm += v * v
+		out = append(out, entry{c.Gene[k], v})
+		norm += float64(v * v)
 	}
+	sort.Slice(out, func(i, j int) bool { return out[i].gene < out[j].gene })
 	norm = math.Sqrt(norm)
-	for g := range out {
-		out[g] /= norm
+	for i := range out {
+		out[i].v /= norm
 	}
 	return out
+}
+
+// dot is two profiles' inner product.
+func dot(a, b []entry) float64 {
+	var sum float64
+	for i, j := 0, 0; i < len(a) && j < len(b); {
+		switch {
+		case a[i].gene < b[j].gene:
+			i++
+		case a[i].gene > b[j].gene:
+			j++
+		default:
+			sum += float64(a[i].v * b[j].v)
+			i, j = i+1, j+1
+		}
+	}
+	return sum
 }
 
 func (pl *planter) q20(l uint32) uint32 { return pl.cells[l-1].Transcripts }
@@ -514,12 +540,7 @@ func (pl *planter) merges(k int) []Error {
 	}
 	var pairs []pair
 	for _, key := range keys {
-		pa, pb := pl.profile(key[0]), pl.profile(key[1])
-		var dot float64
-		for g, v := range pa {
-			dot += v * pb[g]
-		}
-		p := pair{a: key[0], b: key[1], unlike: 1 - dot}
+		p := pair{a: key[0], b: key[1], unlike: 1 - dot(pl.profile(key[0]), pl.profile(key[1]))}
 		ea, eb := expresses(key[0]), expresses(key[1])
 		for _, m := range markers {
 			alone := ea[m[0]] && ea[m[1]] || eb[m[0]] && eb[m[1]]
@@ -606,18 +627,18 @@ func (pl *planter) splits(k int) []Error {
 		}
 		s := pl.stats[l-1]
 		cx, cy := s.SumX/float64(s.Pixels)-0.5, s.SumY/float64(s.Pixels)-0.5
-		// The long axis, from the pixels' second moments.
+		// The long axis: the second moments' leading eigenvector, from products, sums, a
+		// quotient and a square root alone (each rounded the same on every processor).
 		var sxx, syy, sxy float64
 		pixels := pl.pixels(l)
 		for _, p := range pixels {
 			dx, dy := float64(p[0])-cx, float64(p[1])-cy
-			sxx, syy, sxy = sxx+dx*dx, syy+dy*dy, sxy+dx*dy
+			sxx, syy, sxy = sxx+float64(dx*dx), syy+float64(dy*dy), sxy+float64(dx*dy)
 		}
-		angle := 0.5 * math.Atan2(2*sxy, sxx-syy)
-		ux, uy := math.Cos(angle), math.Sin(angle)
+		ux, uy := longAxis(sxx, syy, sxy)
 		var half [][2]int
 		for _, p := range pixels {
-			if (float64(p[0])-cx)*ux+(float64(p[1])-cy)*uy > 0 {
+			if float64((float64(p[0])-cx)*ux)+float64((float64(p[1])-cy)*uy) > 0 {
 				half = append(half, p)
 			}
 		}
@@ -719,6 +740,19 @@ func (pl *planter) grow(k int, reach float64) []Error {
 	return out
 }
 
+// longAxis is the leading eigenvector (not normalized) of the symmetric matrix [[a, b], [b, c]].
+func longAxis(a, c, b float64) (float64, float64) {
+	if b == 0 {
+		if a >= c {
+			return 1, 0
+		}
+		return 0, 1
+	}
+	h := (a - c) / 2
+	lambda := (a+c)/2 + math.Sqrt(float64(h*h)+float64(b*b))
+	return b, lambda - a
+}
+
 func (pl *planter) isAround(l, o uint32) bool {
 	for _, v := range pl.around[l] {
 		if v == o {
@@ -775,7 +809,7 @@ func near(edge [][2]int, x, y int, reach float64) bool {
 	r2 := reach * reach
 	for _, p := range edge {
 		dx, dy := float64(p[0]-x), float64(p[1]-y)
-		if dx*dx+dy*dy <= r2 {
+		if float64(dx*dx)+float64(dy*dy) <= r2 {
 			return true
 		}
 	}

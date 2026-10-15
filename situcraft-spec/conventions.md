@@ -66,6 +66,13 @@ situcraft-spec/      requirements, design, roadmap, research, these conventions
   callback. Errors a user can fix name the file, member, row, column, tile or cell.
 - Parallel code is deterministic: work is split into fixed blocks, each with its own seeded
   random stream (`internal/random`), and results are combined in a fixed order.
+- What an artifact holds is the same on every processor. Go may fuse `a*b + c` into one
+  multiply-add on some processors (arm64) and not others (amd64), which rounds differently: a
+  floating-point product summed into a value an artifact keeps or decides on is rounded on its own
+  (`float64(a*b)`), and geometry on integer pixel corners is computed exactly (squared distances,
+  cross products) rather than through `math.Hypot` or trigonometry. Sums over a map are taken in
+  sorted order. CI (amd64) reopens the release's project, written on another processor, and
+  checks its artifacts' checksums.
 - Processes are started only with argument arrays (`exec.Command(name, args...)`), never via a
   shell.
 

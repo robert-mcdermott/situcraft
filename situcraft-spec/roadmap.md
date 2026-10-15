@@ -1040,6 +1040,14 @@ other tools can be imported.
      - **Zarr format 3's text scalars** (a SpatialData table's region) were not read.
      - **anndata 0.13 writes Zarr format 3 by default;** the AnnData export keeps format 2, which
        every version reads.
+     - **Artifacts differed between processors:** CI (Linux, amd64) reopened the 0.2.0 project
+       written on a Mac (arm64), and the expansion's and planted errors' outlines had other
+       checksums. The compiler fuses multiply-adds on arm64 and not on amd64; the outline
+       simplification now uses exact arithmetic, and products reaching an artifact are rounded on
+       their own (conventions.md). The planted errors' sums over a map, whose order Go randomizes,
+       are taken in order. Both builds now give the same files.
+     - **Job ids repeated** when the program started again within the same millisecond (a test
+       restarting the job manager found it): an id in use is skipped.
      - **Practice belongs with the tutorials:** offered on every dataset, planting errors put
        simulated cells one click from a real project, and from an export. It is offered on the
        example datasets only, unless the user turns practice tools on, and planted segmentations

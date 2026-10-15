@@ -12,31 +12,36 @@ import (
 	"math"
 )
 
-// affine maps (x, y) to (a·x + b·y + c, d·x + e·y + f).
+// affine maps (x, y) to (a·x + b·y + c, d·x + e·y + f). Each product is rounded on its own
+// (mul), never fused with the sum, so a map gives the same coordinates on every processor.
 type affine struct{ a, b, c, d, e, f float64 }
+
+// mul is a product rounded on its own: an explicit conversion keeps the compiler from fusing it
+// into a multiply-add, which some processors' would round once instead of twice.
+func mul(a, b float64) float64 { return float64(a * b) }
 
 func identity() affine { return affine{a: 1, e: 1} }
 
 func (t affine) apply(x, y float64) (float64, float64) {
-	return t.a*x + t.b*y + t.c, t.d*x + t.e*y + t.f
+	return mul(t.a, x) + mul(t.b, y) + t.c, mul(t.d, x) + mul(t.e, y) + t.f
 }
 
 // then is t followed by u.
 func (t affine) then(u affine) affine {
 	return affine{
-		a: u.a*t.a + u.b*t.d, b: u.a*t.b + u.b*t.e, c: u.a*t.c + u.b*t.f + u.c,
-		d: u.d*t.a + u.e*t.d, e: u.d*t.b + u.e*t.e, f: u.d*t.c + u.e*t.f + u.f,
+		a: mul(u.a, t.a) + mul(u.b, t.d), b: mul(u.a, t.b) + mul(u.b, t.e), c: mul(u.a, t.c) + mul(u.b, t.f) + u.c,
+		d: mul(u.d, t.a) + mul(u.e, t.d), e: mul(u.d, t.b) + mul(u.e, t.e), f: mul(u.d, t.c) + mul(u.e, t.f) + u.f,
 	}
 }
 
 func (t affine) invert() (affine, bool) {
-	det := t.a*t.e - t.b*t.d
+	det := mul(t.a, t.e) - mul(t.b, t.d)
 	if det == 0 || math.IsNaN(det) || math.IsInf(det, 0) {
 		return affine{}, false
 	}
 	return affine{
-		a: t.e / det, b: -t.b / det, c: (t.b*t.f - t.e*t.c) / det,
-		d: -t.d / det, e: t.a / det, f: (t.d*t.c - t.a*t.f) / det,
+		a: t.e / det, b: -t.b / det, c: (mul(t.b, t.f) - mul(t.e, t.c)) / det,
+		d: -t.d / det, e: t.a / det, f: (mul(t.d, t.c) - mul(t.a, t.f)) / det,
 	}, true
 }
 

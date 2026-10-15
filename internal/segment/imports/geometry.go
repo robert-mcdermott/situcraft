@@ -26,7 +26,7 @@ type polygon [][]point
 func ringArea(r []point) float64 {
 	var s float64
 	for i, j := 0, len(r)-1; i < len(r); j, i = i, i+1 {
-		s += r[j].X*r[i].Y - r[i].X*r[j].Y
+		s += mul(r[j].X, r[i].Y) - mul(r[i].X, r[j].Y)
 	}
 	return math.Abs(s) / 2
 }

@@ -128,8 +128,8 @@ func (r *Raster) Stats(n int) []LabelStats {
 				l := int(run.Length)
 				s.Pixels += int64(l)
 				// The sum of the pixel centers' x over the run: l·x + l(l−1)/2 + l/2.
-				s.SumX += float64(l)*float64(x) + float64(l)*float64(l)/2
-				s.SumY += float64(l) * (float64(y) + 0.5)
+				s.SumX += float64(float64(l)*float64(x)) + float64(float64(l)*float64(l))/2
+				s.SumY += float64(float64(l) * (float64(y) + 0.5))
 				s.MinX, s.MaxX = min(s.MinX, x), max(s.MaxX, x+l-1)
 				s.MinY, s.MaxY = min(s.MinY, y), max(s.MaxY, y)
 			}

@@ -162,6 +162,13 @@ by its SHA-256.
 
 ### Fixed
 
+- **The same segmentation on every processor:** the outlines of an expansion (and of planted
+  errors) could differ in their last bits between Apple silicon and Intel or AMD processors, where
+  the compiler may fuse a multiply and an add; the outlines are now simplified with exact
+  arithmetic, and every product that reaches an artifact is rounded on its own. Found by the
+  continuous integration (Linux, amd64) reopening the 0.2.0 project made on a Mac (arm64).
+- **Job ids** could repeat when SituCraft was started again within the same millisecond, and a
+  new job then took an earlier one's record: an id already used is skipped.
 - **A dataset opened by several requests at once** (the Compare view's, when no other view had
   opened the dataset first) could be closed by one while another read it, and answered "damaged
   cache file": one request now opens it while the others wait for it.
@@ -198,6 +205,9 @@ by its SHA-256.
     same seed plants the same errors.
   - **Node tests:** planted segmentations recorded as such and never promoted; exports recorded;
     every worked example's steps doable in order; the methods' sentence for a default segmentation.
+  - **The same artifacts on every processor:** the Lung expansion's and planted errors' files have
+    the same SHA-256 built for arm64 and for amd64, and the browser suite passes with an amd64
+    build against the project saved on arm64.
   - **In headless Chrome** (80 checks): the Lung worked example plants, compares and opens the
     queue on a planted error, and by contamination a merge comes first; every planted error is
     the difference it should be, and a planted segmentation is never exported;

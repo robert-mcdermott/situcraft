@@ -236,10 +236,23 @@ func (m *Manager) Handle(kindName string, resume Handler, discard func(id string
 	m.kinds[kindName] = kind{resume: resume, discard: discard}
 }
 
-// newID names a job uniquely across runs of the program: its time and a count. m.mu is held.
+// newID names a job uniquely across runs of the program: its time and a count, never an id a
+// job already has (one kept from a run started within the same millisecond, whose count also
+// began at 1), nor one whose file is in the folder. m.mu is held.
 func (m *Manager) newID() string {
-	m.next++
-	return "j" + strconv.FormatInt(time.Now().UnixMilli(), 36) + "-" + strconv.Itoa(m.next)
+	for {
+		m.next++
+		id := "j" + strconv.FormatInt(time.Now().UnixMilli(), 36) + "-" + strconv.Itoa(m.next)
+		if _, taken := m.jobs[id]; taken {
+			continue
+		}
+		if m.dir != "" {
+			if _, err := os.Stat(filepath.Join(m.dir, id+".json")); err == nil {
+				continue
+			}
+		}
+		return id
+	}
 }
 
 // Submit queues a job. A job with the same non-empty key that has not finished is returned

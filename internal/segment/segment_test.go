@@ -147,7 +147,7 @@ func pointIn(px, py float64, xs, ys []float32) bool {
 func ringDistance(px, py float64, xs, ys []float32) float64 {
 	best := math.Inf(1)
 	for i, j := 0, len(xs)-1; i < len(xs); j, i = i, i+1 {
-		best = math.Min(best, segmentDistance(px, py, float64(xs[j]), float64(ys[j]), float64(xs[i]), float64(ys[i])))
+		best = math.Min(best, math.Sqrt(segmentDistance2(px, py, float64(xs[j]), float64(ys[j]), float64(xs[i]), float64(ys[i]))))
 	}
 	return best
 }

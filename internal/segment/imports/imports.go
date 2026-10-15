@@ -700,7 +700,7 @@ func (m *matcher) byPosition(x, y float64, gene string) int32 {
 				if m.used[k] || m.recs.gene[k] != gene {
 					continue
 				}
-				d := (m.recs.x[k]-x)*(m.recs.x[k]-x) + (m.recs.y[k]-y)*(m.recs.y[k]-y)
+				d := mul(m.recs.x[k]-x, m.recs.x[k]-x) + mul(m.recs.y[k]-y, m.recs.y[k]-y)
 				if d <= bestD {
 					best, bestD = k, d
 				}

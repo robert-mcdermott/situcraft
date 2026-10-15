@@ -161,13 +161,16 @@ func countHoles(piece []int32, id int32, w, h int) int {
 func RingArea(xs, ys []float32) float64 {
 	var a float64
 	for i, j := 0, len(xs)-1; i < len(xs); j, i = i, i+1 {
-		a += float64(xs[j])*float64(ys[i]) - float64(xs[i])*float64(ys[j])
+		a += float64(float64(xs[j])*float64(ys[i])) - float64(float64(xs[i])*float64(ys[j]))
 	}
 	return math.Abs(a) / 2
 }
 
 // simplifyRing simplifies a closed ring by Douglas–Peucker, keeping its first vertex and the one
-// farthest from it as anchors; it keeps at least three vertices.
+// farthest from it as anchors; it keeps at least three vertices. Distances are compared squared,
+// from products and quotients alone: on the traced rings' integer corners every one is exact, so
+// the same vertices are kept on every processor (a fused multiply-add, which compilers may use on
+// some, would otherwise move a distance at the tolerance to either side of it).
 func simplifyRing(xs, ys []float64, eps float64) ([]float64, []float64) {
 	n := len(xs)
 	if n <= 3 || eps <= 0 {
@@ -175,23 +178,24 @@ func simplifyRing(xs, ys []float64, eps float64) ([]float64, []float64) {
 	}
 	far, best := 0, -1.0
 	for i := 1; i < n; i++ {
-		if d := math.Hypot(xs[i]-xs[0], ys[i]-ys[0]); d > best {
+		if d := squared(xs[i]-xs[0], ys[i]-ys[0]); d > best {
 			far, best = i, d
 		}
 	}
 	keep := make([]bool, n)
 	keep[0], keep[far] = true, true
+	eps2 := float64(eps * eps)
 	var span func(a, b int)
 	span = func(a, b int) {
 		// The open chain a..b (b may wrap to n, meaning vertex 0).
 		maxD, at := -1.0, -1
 		bx, by := xs[b%n], ys[b%n]
 		for i := a + 1; i < b; i++ {
-			if d := segmentDistance(xs[i], ys[i], xs[a], ys[a], bx, by); d > maxD {
+			if d := segmentDistance2(xs[i], ys[i], xs[a], ys[a], bx, by); d > maxD {
 				maxD, at = d, i
 			}
 		}
-		if at >= 0 && maxD > eps {
+		if at >= 0 && maxD > eps2 {
 			keep[at] = true
 			span(a, at)
 			span(at, b)
@@ -211,11 +215,24 @@ func simplifyRing(xs, ys []float64, eps float64) ([]float64, []float64) {
 	return ox, oy
 }
 
-func segmentDistance(px, py, ax, ay, bx, by float64) float64 {
+// squared is x² + y², each product rounded on its own (never fused).
+func squared(x, y float64) float64 { return float64(x*x) + float64(y*y) }
+
+// segmentDistance2 is the squared distance from p to the segment ab: to the nearer end beyond the
+// segment's ends, else the cross product squared over the segment's length squared.
+func segmentDistance2(px, py, ax, ay, bx, by float64) float64 {
 	dx, dy := bx-ax, by-ay
-	t := 0.0
-	if l := dx*dx + dy*dy; l > 0 {
-		t = math.Max(0, math.Min(1, ((px-ax)*dx+(py-ay)*dy)/l))
+	l := squared(dx, dy)
+	if l == 0 {
+		return squared(px-ax, py-ay)
 	}
-	return math.Hypot(ax+t*dx-px, ay+t*dy-py)
+	dot := float64((px-ax)*dx) + float64((py-ay)*dy)
+	switch {
+	case dot <= 0:
+		return squared(px-ax, py-ay)
+	case dot >= l:
+		return squared(px-bx, py-by)
+	}
+	cross := float64((px-ax)*dy) - float64((py-ay)*dx)
+	return float64(cross*cross) / l
 }
