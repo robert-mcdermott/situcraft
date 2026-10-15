@@ -1417,7 +1417,27 @@ independent reference outputs.
 
      If the background of commonly expressed genes cannot be told from their cells' own, the
      limit reached is documented.
-8. **Larger tissues and release (S12, P6).**
+8. **Segmentations on the tissue (V2, V5, V8).** Any segmentation can be looked at where it lies,
+   as scientists check one: its outlines over the stains. Today the Viewer draws only the
+   instrument's outlines, and SituCraft's own expansions and refinements appear on the tissue only
+   through a comparison.
+   - **The Viewer's cell layer draws any segmentation of the dataset,** chosen from a list (the
+     instrument's, nucleus expansions, refinements, imports), the project's default first. Its
+     outlines, nuclei and fills by its cells' attributes; a legend says which segmentation is drawn
+     and how it was made.
+   - **"Show on the tissue"** on every segmentation in the Segmentation view and on each result
+     (an expansion's, a refinement's, an import's), opening the Viewer with it drawn.
+   - **A refinement's uncertainty, shown:** cells filled by their flagged limitations (few
+     transcripts, uncertain boundary, no nucleus) or by how certain their boundaries are, and
+     transcripts by their assignment's probability, so the doubtful ones stand out.
+   - **The inspector** describes the chosen segmentation's cell: its id, the instrument's cell it
+     came from, its counts, and its limitations.
+   - **Saved views and links** record the segmentation drawn (V8), and the remote action
+     `show_tissue` takes one.
+   - Validation: in headless Chrome, each kind of segmentation drawn as its files hold it (outlines
+     and fills against the artifact's raster and cells), the list and the default, a saved view
+     reopening with its segmentation, and the remote action.
+9. **Larger tissues and release (S12, P6).**
    - Overlapping patches with stitching, so that memory is bounded for any tissue size.
    - Memory guards.
    - A scale test on a generated tissue of ~50 million transcripts, created, measured and deleted
