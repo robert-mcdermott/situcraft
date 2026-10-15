@@ -10,7 +10,7 @@ import { h, icon, formatCount } from './dom.js';
 import { toast } from './overlays.js';
 import { comparisonsOf } from '../lib/segmentations.js';
 import {
-  GENERAL_LIMITATION, STUDIO_STEPS, areaText, bytes, convergence, duration, failureOf, isRefinement, limitations, load, memory, parseRegion,
+  GENERAL_LIMITATION, STUDIO_STEPS, areaText, background, bytes, convergence, duration, failureOf, isRefinement, limitations, load, memory, parseRegion,
   presetSpec, readRecipe, regionText, settingProblem, settingValue, withSetting,
 } from '../lib/refine.js';
 
@@ -437,6 +437,7 @@ export function createStudio(app, hooks) {
         h('dt', 'Assigned'), h('dd', percent(s.assignedFraction, 2), h('span.muted', ' of gene transcripts of quality 20 or more')),
         h('dt', 'Median cell'), h('dd', `${count(s.medianTranscriptsPerCell)} transcripts, ${count(s.medianAreaUm2)} µm²`)),
       d ? h('div.seg-differs', h('div.muted', 'Convergence'), h('ul', ...convergence(d).map((c) => h(`li${c.ok ? '' : '.warn'}`, c.text)))) : null,
+      background(d) ? h('div.seg-differs', h('div.muted', 'Background'), h('p', background(d))) : null,
       h('div.seg-differs', h('div.muted', 'Limitations'), h('ul', ...limitations(d).map((l) => h('li', l.text)), h('li', GENERAL_LIMITATION))),
       cmp
         ? h('p.seg-note', `Compared with the instrument's segmentation: ${exact(cmp.summary?.classes?.['one-to-one'] ?? 0)} cells one to one, ${percent(cmp.summary?.changedFraction, 2)} of gene transcripts in another cell. `,

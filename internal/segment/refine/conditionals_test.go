@@ -55,7 +55,12 @@ func fixture(t *testing.T) *Model {
 		}
 		m.RateSum[c] = sum
 	}
-	copy(m.Bg, []float64{0.002, 0.004, 0.001})
+	m.Controls, m.ControlKinds = 3, 4
+	m.False = 0.0002
+	copy(m.Ambient, []float64{0.0018, 0.0036, 0.0008})
+	for j := range m.Bg {
+		m.Bg[j] = m.False + m.Ambient[j]
+	}
 	return m
 }
 
@@ -70,11 +75,103 @@ func repeat(m *Model, update func(), value func() float64) []float64 {
 	return out
 }
 
-func TestBackgroundIsItsGammaPosterior(t *testing.T) {
+// The background's update is a data augmentation (each background transcript split between the
+// false decodes and its gene's ambient RNA), so successive draws are correlated: thinned, they are
+// tested against the exact posterior, a mixture over the splits. Given the false decodes k_g of
+// each gene's n_g, and K their sum,
+//
+//	f ~ Gamma(a₀ + n_c + K, b₀ + |R| (C + G)),   a_g ~ Gamma(a₀ + n_g − k_g, b₀ + |R|),
+//
+// each split weighted by ∏ C(n_g, k_g) Γ(a₀ + n_g − k_g) / (b₀ + |R|)^(a₀ + n_g − k_g) ×
+// Γ(a₀ + n_c + K) / (b₀ + |R| (C + G))^(a₀ + n_c + K), the rates integrated out.
+func TestBackgroundIsItsPosterior(t *testing.T) {
+	const thin = 10
 	m := fixture(t)
-	for g := 0; g < m.Genes; g++ {
-		x := repeat(m, m.UpdateBackground, func() float64 { return m.Bg[g] })
-		ksGamma(t, fmt.Sprintf("background rate of gene %d", g), x, m.H.BackgroundA+float64(m.BgCounts[g]), m.H.BackgroundBUm+m.Region)
+	h, g := m.H, m.Genes
+	a0, b0, v := h.BackgroundA, h.BackgroundBUm, m.Region
+	exposure := b0 + v*float64(m.ControlKinds+g)
+	type split struct {
+		k []int
+		w float64
+	}
+	var splits []split
+	var enumerate func(k []int)
+	enumerate = func(k []int) {
+		if len(k) == g {
+			lw, total := 0.0, 0
+			for j, kj := range k {
+				n := int(m.BgCounts[j])
+				lc, _ := math.Lgamma(float64(n + 1))
+				lk, _ := math.Lgamma(float64(kj + 1))
+				lnk, _ := math.Lgamma(float64(n - kj + 1))
+				la, _ := math.Lgamma(a0 + float64(n-kj))
+				lw += lc - lk - lnk + la - (a0+float64(n-kj))*math.Log(b0+v)
+				total += kj
+			}
+			lf, _ := math.Lgamma(a0 + float64(m.Controls) + float64(total))
+			lw += lf - (a0+float64(m.Controls)+float64(total))*math.Log(exposure)
+			splits = append(splits, split{append([]int(nil), k...), lw})
+			return
+		}
+		for kj := 0; kj <= int(m.BgCounts[len(k)]); kj++ {
+			enumerate(append(k, kj))
+		}
+	}
+	enumerate(nil)
+	top := math.Inf(-1)
+	for _, s := range splits {
+		top = math.Max(top, s.w)
+	}
+	var sum float64
+	for i := range splits {
+		splits[i].w = math.Exp(splits[i].w - top)
+		sum += splits[i].w
+	}
+	falseCDF := func(x float64) float64 {
+		var p float64
+		for _, s := range splits {
+			total := 0
+			for _, kj := range s.k {
+				total += kj
+			}
+			p += s.w / sum * stats.GammaP(a0+float64(m.Controls)+float64(total), x*exposure)
+		}
+		return p
+	}
+	ambientCDF := func(j int) func(float64) float64 {
+		return func(x float64) float64 {
+			var p float64
+			for _, s := range splits {
+				p += s.w / sum * stats.GammaP(a0+float64(int(m.BgCounts[j])-s.k[j]), x*(b0+v))
+			}
+			return p
+		}
+	}
+	f := make([]float64, draws)
+	a := make([][]float64, g)
+	for j := range a {
+		a[j] = make([]float64, draws)
+	}
+	for i := 0; i < draws; i++ {
+		for r := 0; r < thin; r++ {
+			m.Sweep = i*thin + r
+			m.UpdateBackground()
+		}
+		f[i] = m.False
+		for j := range a {
+			a[j][i] = m.Ambient[j]
+			if m.Bg[j] != m.False+m.Ambient[j] {
+				t.Fatalf("gene %d's background rate %g is not its parts' sum", j, m.Bg[j])
+			}
+		}
+	}
+	if d, p := stats.KS(f, falseCDF); p < alpha {
+		t.Errorf("false-decode rate: Kolmogorov–Smirnov D %.4f, p %.2g", d, p)
+	}
+	for j := range a {
+		if d, p := stats.KS(a[j], ambientCDF(j)); p < alpha {
+			t.Errorf("gene %d's ambient rate: Kolmogorov–Smirnov D %.4f, p %.2g", j, d, p)
+		}
 	}
 }
 
@@ -297,7 +394,7 @@ func TestSweepsAreTheSameOnAnyWorkers(t *testing.T) {
 	a, b := run(1), run(8)
 	for name, pair := range map[string][2][]float64{
 		"rates": {a.Rate, b.Rate}, "shapes": {a.Shape, b.Shape}, "rate parameters": {a.RateParam, b.RateParam},
-		"scales": {a.Scale, b.Scale}, "proportions": {a.Pi, b.Pi}, "volume means": {a.VolMean, b.VolMean}, "background": {a.Bg, b.Bg},
+		"scales": {a.Scale, b.Scale}, "proportions": {a.Pi, b.Pi}, "volume means": {a.VolMean, b.VolMean}, "background": {a.Bg, b.Bg}, "ambient": {a.Ambient, b.Ambient}, "false decodes": {{a.False}, {b.False}},
 	} {
 		for i := range pair[0] {
 			if pair[0][i] != pair[1][i] {

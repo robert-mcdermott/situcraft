@@ -1,6 +1,7 @@
 package refine
 
-// A run's inputs from a Xenium output bundle: its gene transcripts of a quality or more; the
+// A run's inputs from a Xenium output bundle: its gene transcripts of a quality or more, and its
+// negative controls (what they say of false decodes, research.md §3.2, the background); the
 // instrument's cells (cells.zarr.zip masks/1, label k cells.parquet's row k−1) to start from, each
 // seeded at its nucleus's centre; and each transcript over a nucleus (masks/0) given that
 // nucleus's cell, the instrument's cell holding most of its pixels, as its prior.
@@ -181,6 +182,7 @@ func BundleInputs(b *xenium.Bundle, minQV float64) (*Inputs, *BundleIndex, error
 		idx.RowGroup = max(idx.RowGroup, int(g.NumRows))
 	}
 	genes := map[string]uint32{}
+	controlKinds := map[string]bool{}
 	zMin, zMax := math.Inf(1), math.Inf(-1)
 	row := 0
 	err = tr.Each(func(batch *xenium.TranscriptBatch) error {
@@ -189,7 +191,13 @@ func BundleInputs(b *xenium.Bundle, minQV float64) (*Inputs, *BundleIndex, error
 			row++
 			name := string(batch.Feature[i])
 			if xenium.FeatureKind(name) != xenium.KindGene {
+				// A negative control (probe or codeword): a false decode, whatever its quality.
 				idx.Controls++
+				controlKinds[name] = true
+				x, y := float64(batch.X[i]), float64(batch.Y[i])
+				if float64(batch.QV[i]) >= minQV && x >= 0 && y >= 0 && x <= in.WidthUm && y <= in.HeightUm {
+					in.ControlX, in.ControlY = append(in.ControlX, batch.X[i]), append(in.ControlY, batch.Y[i])
+				}
 				continue
 			}
 			if float64(batch.QV[i]) < minQV {
@@ -231,6 +239,7 @@ func BundleInputs(b *xenium.Bundle, minQV float64) (*Inputs, *BundleIndex, error
 		return nil, nil, fail(ClassInput, "Lower the quality threshold, or check the bundle's transcripts in the Data view.", "the bundle has no gene transcripts of quality %g or more", minQV)
 	}
 	in.Genes = len(idx.Genes)
+	in.ControlKinds = len(controlKinds)
 	in.Z0, in.DepthUm = zMin, zMax-zMin
 	return in, idx, nil
 }

@@ -380,11 +380,21 @@ $P(a_i = \text{cell}) = \lambda_{\sigma(i) g_i} / (\lambda_{0 g_i} + \lambda_{\s
 $g$, $n_{cg}$, is Poisson with mean $V_c \lambda_{cg}$, and the background's, $n_{0g}$ (its
 molecules in cells and outside them), Poisson with mean $|R| \lambda_{0g}$.
 
+**The background, of two kinds (wave 3, slice 7).** Molecules from no cell arise two ways: decoding
+errors and probes bound off target, which fall on every codeword alike (false decodes), and RNA
+loose in the tissue, which falls on each gene by its own rate (ambient RNA). So
+$\lambda_{0g} = f + a_g$: a false-decode rate $f$ shared by every codeword and an ambient rate
+$a_g$ for each gene. The panel's negative-control codewords (probes and codewords that match no
+gene, $C$ of them, seen at any quality) are false decodes only: their $n_c$ transcripts of quality
+20 or more in the region are Poisson with mean $|R|\,C f$, evidence of the background that no cell
+can take. *SituCraft's extension:* the publication has one background rate per gene and does not
+model the negative controls.
+
 **Expression.** Each cell belongs to one of $K$ components (broad expression states),
 $z_c \in \{1, \dots, K\}$, with probabilities $\pi \sim \mathrm{Dirichlet}(\alpha, \dots, \alpha)$.
 Given its component, a cell's rates are gamma (shape $r$, rate $\beta$):
 
-$$\lambda_{cg} \mid z_c = k \sim \mathrm{Gamma}(r_{kg}, \beta_{kg}), \quad r_{kg} \sim \mathrm{Gamma}(a_r, b_r), \quad \beta_{kg} \sim \mathrm{Gamma}(a_\beta, \phi_g), \quad \phi_g \sim \mathrm{Gamma}(e_\phi, f_\phi), \quad \lambda_{0g} \sim \mathrm{Gamma}(a_0, b_0).$$
+$$\lambda_{cg} \mid z_c = k \sim \mathrm{Gamma}(r_{kg}, \beta_{kg}), \quad r_{kg} \sim \mathrm{Gamma}(a_r, b_r), \quad \beta_{kg} \sim \mathrm{Gamma}(a_\beta, \phi_g), \quad \phi_g \sim \mathrm{Gamma}(e_\phi, f_\phi), \quad f, a_g \sim \mathrm{Gamma}(a_0, b_0).$$
 
 A cell's count, its rate integrated out, is negative binomial:
 $n_{cg} \sim \mathrm{NB}(r_{kg}, p_{ckg})$, $p_{ckg} = V_c / (V_c + \beta_{kg})$, of mean
@@ -425,7 +435,13 @@ constant is a constant and the sampler is exact; the tests that check exactness 
 1. **Attributions:** each molecule in a cell from the cell with probability
    $\lambda_{\sigma(i) g_i} / (\lambda_{0 g_i} + \lambda_{\sigma(i) g_i})$; the counts $n_{cg}$
    and $n_{0g}$ follow.
-2. **Background:** $\lambda_{0g} \sim \mathrm{Gamma}(a_0 + n_{0g},\; b_0 + |R|)$.
+2. **Background:** each gene's $n_{0g}$ splits into false decodes and ambient RNA,
+   $k_g \sim \mathrm{Binomial}(n_{0g}, f / (f + a_g))$ (each a false decode with that
+   probability); then $a_g \sim \mathrm{Gamma}(a_0 + n_{0g} - k_g,\; b_0 + |R|)$ and
+   $f \sim \mathrm{Gamma}(a_0 + n_c + \sum_g k_g,\; b_0 + |R|(C + G))$, every codeword exposed
+   to false decodes over the region; $\lambda_{0g} = f + a_g$. The binomial is drawn exactly, by
+   splitting large counts with beta order statistics (Devroye L. *Non-Uniform Random Variate
+   Generation.* Springer, 1986, ch. X.4).
 3. **Components**, each cell's rates integrated out:
    $P(z_c = k) \propto \pi_k \, \mathrm{LogNormal}(V_c; m_k, s_k^2) \prod_g \mathrm{NB}(n_{cg}; r_{kg}, p_{ckg})$,
    where $\log \mathrm{NB}(n; r, p) = \sum_{j=0}^{n-1} \log(r + j) + r \log(1 - p) + n \log p - \log n!$
@@ -474,15 +490,18 @@ cell is refused.
 | $a_r, b_r$ | 2, 0.5 | Shapes of mean 4 (sd 2.8): overdispersed, as single-cell counts are, without ruling out near-Poisson genes |
 | $a_\beta$ | 1 | An exponential prior on each component's rate parameter about the gene's scale |
 | $e_\phi, f_\phi$ | 1, 1 µm³ | Weak: rate parameters are hundreds to thousands of µm³ |
-| $a_0, b_0$ | 1, 1 µm³ | Weak: the region is of the order of $10^5$–$10^7$ µm³ |
+| $a_0, b_0$ | 1, 1 µm³ | Weak (on $f$ and each $a_g$): the region is of the order of $10^5$–$10^7$ µm³ |
 | $m_0$ | $\log$ of the median initial cell volume | Centres the volume prior on the cells the sampler starts from |
 | $\kappa_0, a_s, b_s$ | 1, 2, 0.25 | A prior mean of 0.25 for $s_k^2$: volumes within a factor of about 1.6 |
 | $\rho$ | 0.8 | The publication's |
 
 **Validation** (`internal/segment/refine`; fixed seeds, each test at the 0.001 level):
 - **Each conjugate update against its analytic posterior** (Kolmogorov–Smirnov, 6,000 draws):
-  the background's, the cells' and the components' rates, the gene scales, the proportions (each
-  marginally beta), and the volume prior (its variance inverse gamma, its mean normal given it).
+  the cells' and the components' rates, the gene scales, the proportions (each marginally beta),
+  and the volume prior (its variance inverse gamma, its mean normal given it). The background's
+  update is a data augmentation (the split), so its chain, thinned to every tenth draw, is tested
+  against the exact posterior of $f$ and each $a_g$: a mixture of gammas over the splits, each
+  weighted by its marginal likelihood, enumerated.
 - **The components** against probabilities computed independently from the negative binomial
   and log-normal densities (χ²).
 - **The shapes:** 3,000 independent chains of the augmented update, started from the prior, end
@@ -490,9 +509,10 @@ cell is refused.
 - **The whole sweep** by Geweke's joint distribution test (Geweke J. Getting it right: joint
   distribution tests of posterior simulators. *J Am Stat Assoc* 2004;99:799–804.
   doi:10.1198/016214504000001132). 4,000 chains start from the prior and data drawn from the
-  model, then alternate 40 sweeps with fresh data. Eleven quantities (shapes, rate parameters,
-  scales, rates, background, proportions, volume parameters, component sizes) stay distributed as
-  the prior (two-sample Kolmogorov–Smirnov).
+  model (the negative controls among the data), then alternate 40 sweeps with fresh data. Thirteen
+  quantities (shapes, rate parameters, scales, rates, the background's rate and its two parts,
+  proportions, volume parameters, component sizes) stay distributed as the prior (two-sample
+  Kolmogorov–Smirnov).
 - **Moves:** in a random walk of 2,000 voxel moves, each move's computed change equals the target
   recomputed afresh (to $10^{-9}$ relative); a move that would empty a cell is refused.
 - **Attributions:** each in proportion to the rates (z test); the counts follow them.
@@ -502,7 +522,9 @@ cell is refused.
   the same on arm64 and amd64.
 - **Power.** Each test was shown to fail on a deliberate error. Nine errors were tried:
   - a conjugate posterior's parameter wrong (background, shapes, rates, rate parameters, gene
-    scales, volumes);
+    scales, volumes); for the two-part background, the controls' exposure without the genes, the
+    split inverted, the controls left out of $f$ (each caught by its posterior test), and the
+    exposure one codeword short (caught by the joint test);
   - the volume prior dropped from the components;
   - the CRT off by one;
   - the rates drawn before the shapes, which breaks the partially collapsed order (caught only by
@@ -724,21 +746,21 @@ regions (rectangles, µm).
 
 **Presets** (`refine.Presets`, version 1), each measured on the standard simulated tissue
 (`TestPresetsOnSimulatedTissue`, REFINE_PRESETS=standard; measured again after slice 6's change to
-the summary). The scores are as above; "outlines" is the median ratio of each cell's outline (pixel
+the summary, and on slice 7's tissue, whose background is of two kinds). The scores are as above; "outlines" is the median ratio of each cell's outline (pixel
 edges) to the least its area can have.
 
 | Preset | What it changes from Balanced | In their true cell | Median IoU | Outlines | Memory (estimated) |
 | --- | --- | --- | --- | --- | --- |
 | The instrument's expansion | | 82.5% | 0.622 | 1.22 | |
-| Balanced (the defaults) | | 86.3% | 0.712 | 1.32 | 89 MB |
-| Conservative boundary | perimeters within 1.3 times the least; gaps proposed at 0.1; nuclear prior 0.9 | 86.2% | 0.727 | 1.21 | 89 MB |
-| Flexible morphology | perimeters within 2.5 times the least; nuclear prior 0.7 | 84.9% | 0.638 | 1.63 | 89 MB |
-| Low memory | 2 µm voxels; the collector's target 20% | 84.9% | 0.650 | 1.34 | 73 MB |
-| ROI pilot (a 200 µm square in the middle) | a region, run with two seeds | 86.6% in the region (Balanced on the whole tissue: 87.1%) | 0.719 (0.716) | | |
+| Balanced (the defaults) | | 86.3% | 0.716 | 1.32 | 89 MB |
+| Conservative boundary | perimeters within 1.3 times the least; gaps proposed at 0.1; nuclear prior 0.9 | 86.2% | 0.731 | 1.21 | 89 MB |
+| Flexible morphology | perimeters within 2.5 times the least; nuclear prior 0.7 | 84.7% | 0.638 | 1.62 | 89 MB |
+| Low memory | 2 µm voxels; the collector's target 20% | 84.8% | 0.648 | 1.33 | 72 MB |
+| ROI pilot (a 200 µm square in the middle) | a region, run with two seeds | 86.5% in the region (Balanced on the whole tissue: 87.1%) | 0.724 (0.718) | | |
 
 - **Every preset puts more transcripts in their true cells than the instrument's segmentation.**
-- **The pilot reproduces the whole run in its region:** 86.6% and 0.719 against the whole run's
-  87.1% and 0.716 there. Its two seeds put 92.6% of the transcripts in refined cells in the same
+- **The pilot reproduces the whole run in its region:** 86.5% and 0.724 against the whole run's
+  87.1% and 0.718 there. Its two seeds put 93.2% of the transcripts in refined cells in the same
   cell; the split-half agreement is about 95%, both bounded by the posterior's own uncertainty.
 - **What did not work:**
   - *Low memory without repositioning:* keeping transcripts where they were observed put only
@@ -868,49 +890,48 @@ its reason. Differences beyond one are explained below or fixed.
 | Spurious co-expression | SituCraft's at most 10% above Proseg's |
 | Matched cells' counts | correlated within 0.05 of the lower of each method's own two runs |
 | Median IoU | within 0.10 of the lower of each method's own two runs |
-| On the truth | in their true cell no more than 1 point below Proseg; median IoU no more than 0.02 below |
+| On the truth | in their true cell no more than 1 point below Proseg; median IoU no more than 0.02 below; cells' transcripts left in no cell no more than Proseg's (slice 7) |
 | Budget (Breast) | under 2 minutes and 4 GB on a laptop |
 
-**Results** (one run of each; ten cores of an Apple M4 laptop):
+**Results** (one run of each; ten cores of an Apple M4 laptop; made again in slice 7, when the
+simulated tissue's background became two kinds and SituCraft's model began measuring the false
+decodes):
 
 | | Lung: SituCraft | Lung: Proseg | Breast: SituCraft | Breast: Proseg | Simulated: SituCraft | Simulated: Proseg |
 | --- | --- | --- | --- | --- | --- | --- |
 | Cells | 11,898 | 11,871 | 7,275 | 7,008 | 2,925 | 2,925 |
-| Assigned | 99.63% | 95.68% | 97.03% | 94.39% | 99.95% | 98.47% |
-| Spurious co-expression (instrument) | 1.68 (1.87) | 1.37 | 1.83 (1.77) | 1.69 | 2.14 (2.74; truth 2.01) | 1.99 |
-| Median IoU, SituCraft with Proseg (each's own runs) | 0.557 (0.688) | (0.701) | 0.676 (0.775) | (0.815) | 0.710 (0.764) | (0.788) |
-| Counts correlated with the other | 0.840 | | 0.916 | | 0.963 | |
-| Transcripts changing cell between own runs | 14.0% | 50.6% | 11.3% | 37.3% | 6.9% | 23.6% |
-| In their true cell (instrument 82.2%) | | | | | **85.0%** | 75.6% |
-| Median IoU with the truth (instrument 0.622) | | | | | 0.714 | 0.725 |
-| Time, peak memory | 99 s, 266 MB | 156 s, 610 MB | 108 s, 282 MB | 122 s, 664 MB | 25 s, 107 MB | 28 s, 298 MB |
+| Assigned | 99.63% | 95.68% | 97.04% | 94.39% | 99.66% (truth 97.54%) | 98.27% |
+| Spurious co-expression (instrument) | 1.68 (1.87) | 1.37 | 1.83 (1.77) | 1.69 | 2.02 (2.53; truth 1.89) | 1.87 |
+| Median IoU, SituCraft with Proseg (each's own runs) | 0.558 (0.688) | (0.701) | 0.676 (0.775) | (0.815) | 0.713 (0.771) | (0.784) |
+| Counts correlated with the other | 0.839 | | 0.919 | | 0.961 | |
+| Transcripts changing cell between own runs | 14.0% | 50.6% | 11.1% | 37.3% | 6.8% | 23.6% |
+| In their true cell (instrument 82.2%) | | | | | **84.7%** | 75.2% |
+| Median IoU with the truth (instrument 0.622) | | | | | 0.719 | 0.727 |
+| Cells' transcripts left in no cell (instrument 1.17%) | | | | | **0.13%** | 1.42% |
+| Time, peak memory | 93 s, 264 MB | 156 s, 610 MB | 99 s, 282 MB | 122 s, 663 MB | 27 s, 106 MB | 22 s, 305 MB |
 
-- **Met everywhere** on Breast and the simulated tissue, the budget included: Breast in 108 s and
+- **Met everywhere** on Breast and the simulated tissue, the budget included: Breast in 99 s and
   282 MB.
-- **On the truth** SituCraft puts 9.4 points more transcripts in their true cells than Proseg, with
-  outlines as close to the true ones (median IoU 0.714 against 0.725).
+- **On the truth** SituCraft puts 9.5 points more transcripts in their true cells than Proseg, with
+  outlines as close to the true ones (median IoU 0.719 against 0.727), and leaves a tenth as many
+  of the cells' transcripts in no cell. On slice 6's tissue it put 85.0% in their true cell and
+  Proseg 75.6%: slice 7's tissue differs, and on it slice 6's model scores as slice 7's.
 - **Stability:** Proseg's per-transcript assignments differ between two of its runs three to four
   times as much as SituCraft's between two seeds, while their outlines differ about as much.
 - **On Lung, three are explained:**
-  - *Assigned fraction (99.63% against 95.68%):* SituCraft assigns to cells transcripts the
-    background would explain (below).
+  - *Assigned fraction (99.63% against 95.68%):* a larger background share is not a more accurate
+    one. On the simulated tissue only 18% of what Proseg leaves in no cell is background, and the
+    cells' transcripts it leaves out are ten times SituCraft's (the background, below).
   - *Spurious co-expression (1.68 against 1.37):* the measure does not rank methods by accuracy.
-    On the simulated tissue Proseg's is below the truth's own (1.99 against 2.01), while it puts
-    9.4 points fewer transcripts in their true cells than SituCraft (2.14). On Lung SituCraft's is
-    10% below the instrument's; part of the rest is the background it assigns.
-  - *Median IoU (0.557, the tolerance 0.588):* Lung's cells are the smallest (median 37 µm²), and
+    On the simulated tissue Proseg's is below the truth's own (1.87 against 1.89), while it puts
+    9.5 points fewer transcripts in their true cells than SituCraft (2.02). On Lung SituCraft's is
+    10% below the instrument's; part of the rest is ambient RNA counted in cells.
+  - *Median IoU (0.558, the tolerance 0.588):* Lung's cells are the smallest (median 37 µm²), and
     Proseg's outlines are more compact there (1.16 times the least perimeter against SituCraft's
     1.32). With Conservative's bound (1.3) SituCraft's agreement rises to 0.576; started from the
     nuclei, as Proseg starts, it stays at 0.557.
-- **The background, an open question (§9; wave 3, slice 7).** On the simulated tissue 2.46% of the
-  modelled transcripts are background. SituCraft's background rate accounts for 0.68% and Proseg's
-  assignments for 1.53%.
-  - SituCraft's comes to the same 0.7% whether the chain starts with 2.5% or 10% of the
-    transcripts in cells given to the background: the posterior prefers it, not the start.
-  - SituCraft follows the publication's model here: one background rate per gene over the whole
-    region, a gamma prior, no term that keeps cells from the background's transcripts (its
-    Methods, 8.7 and 8.9). When cells cover nearly every transcript, the background's own voxels
-    hold few, and its rate is estimated low.
+- **The background** was found under-estimated here (a quarter of the simulated tissue's) and
+  taken up by slice 7 (the background, below).
 
 **Found by slice 6:**
 - **The summary counted the background in cells.** A transcript in a cell's voxel was reported in
@@ -938,6 +959,85 @@ The maintainer makes Proseg's segmentations (`validation/reference/segmentation/
 reduces them to the committed numbers. The weekly real-data workflow refines each data set again
 and checks that SituCraft's segmentation is still, byte for byte, the one the numbers were made
 from.
+
+#### The background (verified, wave 3, slice 7)
+
+Slice 6 found SituCraft's background rate accounting for a quarter of the simulated tissue's
+background, whatever the chain's start. Slice 7 diagnosed it on simulated truth, made the
+background two-part (the model, above), and measured what any per-transcript call can find.
+
+**The diagnosis** (the standard tissue; temporary test hooks, not kept):
+- **Cells take the background's molecules where they lie.** The refined cells cover as much of the
+  field as the true ones (73% and 74%), but their gaps fall where no transcripts lie. With every
+  gene's background rate held at the truth, cells still took 85% of the background molecules in
+  the true gaps, and the summary left 0.65% of the transcripts in no cell (the truth: 2.46%).
+  Rates alone cannot recover the background transcript by transcript.
+- **Inside cells, ambient RNA looks like expression.** On a tissue of ambient RNA alone, one rate
+  per gene gave the rarest fifth of the genes three times their background and the commonest fifth
+  a seventh of theirs. A cell's rates absorb the ambient RNA of the genes it expresses; only the
+  rare transcripts of genes a cell barely expresses stand out. Tying the ambient RNA to the
+  tissue's mean expression, one level for every gene, let the level collapse to almost nothing
+  (0.01% of the transcripts): the posterior prefers cells explaining a floor of every gene.
+- **The outlines' settings change little:** a perimeter bound of 1.3 or 1.2, or gap proposals
+  four times as often (0.2), left 0.35–0.37% of the transcripts in no cell, against 0.34%.
+
+**The change:** the negative controls measure the false decodes, which no cell can take (the
+model, above). The ambient RNA keeps one rate per gene.
+
+**The benchmark** (`TestBackgroundOnSimulatedTruth`, run by hand: `REFINE_BACKGROUND=all`): the
+standard tissue at three levels of both kinds, and each kind alone, refined with Balanced.
+Precision is the share of the transcripts left in no cell that truly are background, recall the
+share of the background left in no cell.
+
+| Tissue: ambient RNA, false decodes (per 100 µm²) | Background (truth) | Rates: false decodes (expected) | Rates: ambient RNA (expected) | In no cell | Precision | Cells' transcripts in no cell | Recall | In their true cell | Median IoU |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Low: 0.6, 0.005 | 0.51% | 0.21% (0.25%) | 0.47% (0.25%) | 0.06% | 35.9% | 0.04% | 4.3% | 86.4% | 0.717 |
+| Standard: 3, 0.025 | 2.46% | 1.10% (1.24%) | 0.61% (1.24%) | 0.34% | 60.2% | 0.13% | 8.2% | 86.3% | 0.716 |
+| High: 12, 0.1 | 9.13% | 4.32% (4.61%) | 1.21% (4.61%) | 2.10% | 71.5% | 0.60% | 16.4% | 85.8% | 0.715 |
+| Ambient RNA only: 6, 0 | 2.46% | 0.01% (0) | 0.71% (2.47%) | 0.06% | 55.5% | 0.02% | 1.2% | 86.3% | 0.713 |
+| False decodes only: 0, 0.05 | 2.44% | 2.21% (2.47%) | 0.55% (0) | 0.74% | 62.1% | 0.28% | 18.9% | 86.2% | 0.719 |
+| Standard, slice 6's background (one rate per gene, no controls) | 2.46% | | 0.78% in all | 0.14% | 70.5% | 0.04% | 4.1% | 86.3% | 0.716 |
+| Standard, every gene's rate held at the truth | 2.46% | | | 0.65% | 56.1% | 0.29% | 14.8% | 86.2% | 0.718 |
+| Ambient RNA only, the rates held at the truth | 2.46% | | | 0.79% | 54.1% | 0.36% | 17.4% | 86.1% | 0.715 |
+
+(The rates are their mean over the summarized sweeps times the region's volume, as shares of the
+modelled transcripts; the expected shares are the simulator's, of quality 20 or more. The last
+three rows are diagnostics, not settings.)
+
+- **The false decodes are measured** within a sixth of the truth at every level, a little low: the
+  controls are unbiased, but the genes' false decodes that cells take pull the estimate down.
+- **The background found doubles** on the standard tissue against slice 6's model (8.2% of it
+  against 4.1%, its rates 1.71% of the transcripts against 0.78%), with the same accuracy.
+- **The ambient RNA is estimated less surely:** from a quarter of the truth (high, ambient only)
+  to about twice it (low, where the rare transcripts of genes a cell barely expresses are taken
+  for background).
+- **What is left in no cell is mostly background** (55–72% from the standard level up), and the
+  cells' transcripts left there are a small share of all (0.03–0.6%). The rest of the background
+  is counted in cells, as every per-transcript call must count most of it.
+- **Accuracy is unchanged:** 85.8–86.4% of transcripts in their true cell, median IoU
+  0.713–0.719.
+- **Where the limit lies:** even with the rates at the truth, about a sixth of the background
+  could be told from the cells' transcripts (recall 15–17%). The rest lies in or beside cells that
+  express the same genes, and only a better prior on cells' shapes could leave more of it out.
+
+**Against Proseg** (§3.2, against an independent reference; `lostQ20` in the comparison's numbers):
+on the simulated tissue Proseg leaves more in no cell (1.59–1.73% of the transcripts in its two
+runs), but only 18–19% of it is background, so 1.29–1.42% of all transcripts are cells' it leaves
+out: ten times SituCraft's 0.12–0.13% (0.32–0.34% in no cell, 61–63% of it background). Proseg
+recovers more of the background (12% against 8%; 21% with its four-layer defaults, which leave out
+2.0% of the transcripts wrongly). A background share alone does not rank methods: what is left out
+wrongly matters as much as what is left in. The slice's first aim, a share at least Proseg's 1.53%,
+would therefore have been the wrong goal, and is not taken; the reference comparison checks instead
+that SituCraft leaves out no more of the cells' transcripts than Proseg.
+
+On the real bundles the controls put false decodes at 0.04% (Lung) and 0.06% (Breast) of the
+transcripts, so SituCraft's results there hardly changed (Lung's assigned fraction 99.63%, as in
+slice 6; Breast's 97.04%). Their background beyond that is ambient RNA, the part no method here
+can tell from the cells' own expression transcript by transcript.
+
+The refinement's diagnostics report the background (`diagnostics.json`; the studio's Background):
+the shares its rates account for, by kind, the negative controls that measured the false decodes,
+and the share left in no cell.
 
 SituCraft's other choices where the publication leaves them open:
 - **Polygons** come from the summarized voxel labels by boundary tracing per z layer, and from
@@ -1061,11 +1161,21 @@ own model is flattered (the "inverse crime": Wirgin A. The inverse crime. arXiv:
 - **Displacement.** A molecule is observed displaced by a normal in x and y: σ 3 µm for a fifth
   of molecules, 0.5 µm for the rest. In z it is displaced with σ 0.5 µm and held within the
   section. One displaced out of the field is lost.
-- **Background.** In 50 µm tiles:
-  - each gene's count is Poisson (6 per 100 µm², spread over the genes in proportion to the
-    tissue's mean expression);
-  - each negative control probe's and codeword's is Poisson (0.05 per 100 µm²);
+- **Background,** of two kinds (wave 3, slice 7), in 50 µm tiles:
+  - ambient RNA on the genes: Poisson, 3 per 100 µm² in all, spread over the genes in proportion
+    to the tissue's mean expression;
+  - false decodes on every codeword alike, genes and negative controls: Poisson, 0.025 per
+    100 µm² each (3 per 100 µm² over the 120 genes);
   - background molecules lie uniformly in the tile and the section's depth.
+
+  Before slice 7 the controls' molecules had no counterpart on the genes, and the genes'
+  background was all in proportion to expression (6 per 100 µm²).
+
+  *Against the real bundles:* the negative-control codewords' rate is 0.04% of a gene's mean on
+  Lung and 0.06% on Breast (262 and 540 controls of quality 20 or more on 248 and 249 codewords),
+  so false decodes are under 0.1% of their gene transcripts. On the standard tissue they are
+  1.2%, twenty to thirty times as many, so that both kinds of background are exercised; its
+  benchmark (§3.2, the background) also has tissues of ambient RNA alone.
 - **Quality.** A cell's molecule is below 20 with probability 0.08 (uniform in 4–20); otherwise
   its quality is 40 less an exponential of mean 3, no lower than 20.1. Background and control
   molecules are below 20 with probability 0.35.
@@ -1135,8 +1245,9 @@ pinned in the tests).
   binomial.
 - **Quality.** Both quality distributions and both low-quality shares (one catches an exponential
   mean 3% off).
-- **Background.** Per-tile totals are Poisson (χ²; catches a density 3% off), genes are in
-  proportion to the tissue's mean expression, and places are uniform.
+- **Background.** Per-tile totals are Poisson (χ²; catches a density 3% off); the genes' shares are
+  their ambient RNA's (in proportion to the tissue's mean expression) plus the false decodes', the
+  controls' total is Poisson at the false-decode rate, and places are uniform.
 - **Cells.** On a sparse tissue (1,012 cells), the standardized log areas are normal (catches a
   median 5% off); the types are in their domains' proportions (χ²); and isolated cells' pixels
   cover their nominal areas (median ratio within 0.97–1.04).
@@ -1419,7 +1530,9 @@ Notes:
 - Marsaglia G, Bray TA. A convenient method for generating normal variables. *SIAM Rev*
   1964;6:260–264. Marsaglia G, Tsang WW. A simple method for generating gamma variables.
   *ACM Trans Math Softw* 2000;26:363–372. Knuth DE. *The Art of Computer Programming*, vol. 2,
-  3rd ed., §3.4.1. Addison-Wesley, 1997 (normal, gamma and Poisson draws).
+  3rd ed., §3.4.1. Addison-Wesley, 1997 (normal, gamma and Poisson draws). Devroye L.
+  *Non-Uniform Random Variate Generation*. Springer, 1986, ch. X.4 (binomial draws, by splitting
+  a large count at a beta-distributed order statistic).
 - The HDF Group. HDF5 File Format Specification, version 3.0. 10x Genomics. Feature-barcode
   matrices (HDF5 format), Cell Ranger and Xenium documentation (the simulated bundles'
   `cell_feature_matrix.h5`). Jenkins B. lookup3.c, 2006, public domain (HDF5's metadata
@@ -1433,12 +1546,14 @@ Notes:
 
 ## 9. To verify before relying on it
 
-- **The transcript-informed segmentation's background** (§3.2, against an independent reference):
-  on the simulated tissue it accounts for a quarter of the true background. The posterior, not the
-  start, decides it, so it is the model's. Wave 3, slice 7 takes it up (roadmap): a diagnosis on
-  simulated truth first; then evidence cells cannot take (the negative controls, the quality
-  scores, the density far from any nucleus), each judged on simulated truth and the reference
-  comparison.
+- **The transcript-informed segmentation's ambient RNA** (§3.2, the background): inside cells it
+  cannot be told from the cells' own expression, so the model estimates it at a quarter to twice
+  the truth on simulated tissues and leaves most of it counted in cells; even exact rates would
+  tell about a sixth of the background apart. What might tell more: a prior on cells' shapes that
+  leaves the gaps between cells to the background, or expression states in which a gene can be
+  absent altogether (the simulator's cell types express every gene, so it would need tissues that
+  do not). Each would be judged on the background benchmark, and the real bundles' background
+  measured where cells are far apart.
 
 - The metrics left empty in the bundles in hand (polygon counts, nuclei without cells), when a
   bundle fills them: whether "non-simple polygon" means what SituCraft's check (and GEOS) means.

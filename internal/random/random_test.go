@@ -66,6 +66,16 @@ func TestDistributions(t *testing.T) {
 	for _, c := range [][2]float64{{10, 2}, {3, 0.4}, {60, 8}} {
 		discrete(t, fmt.Sprintf("negative binomial(%g, %g)", c[0], c[1]), func() int { return s.NegativeBinomial(c[0], c[1]) }, func(k int) float64 { return stats.NegativeBinomialPMF(k, c[0], c[1]) })
 	}
+	// The binomial both ways: trial by trial (up to 64 trials) and by order statistics.
+	for _, c := range []struct {
+		n int
+		p float64
+	}{{10, 0.3}, {64, 0.9}, {65, 0.5}, {200, 0.02}, {1000, 0.4}, {5000, 0.001}, {100000, 0.6}} {
+		discrete(t, fmt.Sprintf("binomial(%d, %g)", c.n, c.p), func() int { return s.Binomial(c.n, c.p) }, func(k int) float64 { return stats.BinomialPMF(k, c.n, c.p) })
+	}
+	if s.Binomial(0, 0.5) != 0 || s.Binomial(7, 0) != 0 || s.Binomial(7, 1) != 7 {
+		t.Error("binomial's edges")
+	}
 	discrete(t, "IntN(7)", func() int { return s.IntN(7) }, func(k int) float64 {
 		if k < 7 {
 			return 1.0 / 7

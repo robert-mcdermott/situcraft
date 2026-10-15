@@ -136,6 +136,8 @@ func digestOf(res *Result) string {
 	put(h, m.Shape...)
 	put(h, m.RateParam...)
 	put(h, m.Bg...)
+	put(h, m.Ambient...)
+	put(h, m.False)
 	put(h, m.Pi...)
 	put(h, m.VolMean...)
 	for _, tr := range res.Trace {
@@ -154,7 +156,7 @@ func TestRunsAreTheSameOnAnyThreadsAndProcessor(t *testing.T) {
 			t.Errorf("%d threads: digest %s, 1 thread %s", workers, got, want)
 		}
 	}
-	const pinned = "4413ca0b5511531f"
+	const pinned = "8b1e710d21645cb0"
 	if want != pinned {
 		t.Errorf("the run's digest is %s, not %s (on %s)", want, pinned, runtime.GOARCH)
 	}

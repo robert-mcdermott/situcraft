@@ -174,6 +174,42 @@ func (s *Stream) NegativeBinomial(m, r float64) int {
 	return s.Poisson(s.Gamma(r, m/r))
 }
 
+// binomialDirect is the most trials a binomial draw counts one by one.
+const binomialDirect = 64
+
+// Binomial is the number of successes in n trials of probability p, exactly: counted trial by
+// trial for few trials, else by recursion on order statistics. The a-th smallest of n uniforms is
+// Beta(a, n − a + 1); the trials below it are uniform under it and those above it uniform above
+// it, so one beta draw halves the trials left (Devroye L. Non-Uniform Random Variate Generation.
+// Springer, 1986, ch. X.4).
+func (s *Stream) Binomial(n int, p float64) int {
+	if n <= 0 || !(p > 0) {
+		return 0
+	}
+	if p >= 1 {
+		return n
+	}
+	k := 0
+	for n > binomialDirect {
+		a := 1 + n/2
+		b := n + 1 - a
+		g1, g2 := s.Gamma(float64(a), 1), s.Gamma(float64(b), 1)
+		x := g1 / (g1 + g2)
+		if x >= p {
+			n, p = a-1, p/x
+		} else {
+			k += a
+			n, p = b-1, (p-x)/(1-x)
+		}
+	}
+	for i := 0; i < n; i++ {
+		if s.Float64() < p {
+			k++
+		}
+	}
+	return k
+}
+
 // CRT is a draw of the Chinese restaurant table distribution: the number of tables n customers
 // occupy when customer j sits at a new table with probability r/(r + j − 1).
 func (s *Stream) CRT(n int, r float64) int {

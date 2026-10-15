@@ -40,7 +40,11 @@ func drawPrior(m *Model, s *random.Stream) {
 	h, g := m.H, m.Genes
 	for j := 0; j < g; j++ {
 		m.Scale[j] = s.Gamma(h.ScaleE, 1/h.ScaleFUm)
-		m.Bg[j] = s.Gamma(h.BackgroundA, 1/h.BackgroundBUm)
+		m.Ambient[j] = s.Gamma(h.BackgroundA, 1/h.BackgroundBUm)
+	}
+	m.False = s.Gamma(h.BackgroundA, 1/h.BackgroundBUm)
+	for j := 0; j < g; j++ {
+		m.Bg[j] = m.False + m.Ambient[j]
 	}
 	for k := 0; k < h.Components; k++ {
 		for j := 0; j < g; j++ {
@@ -71,7 +75,7 @@ func drawPrior(m *Model, s *random.Stream) {
 	}
 }
 
-// drawData sets the volumes and counts from the parameters.
+// drawData sets the volumes and counts, the negative controls' among them, from the parameters.
 func drawData(m *Model, s *random.Stream) {
 	g := m.Genes
 	for c, k := range m.Comp {
@@ -83,6 +87,7 @@ func drawData(m *Model, s *random.Stream) {
 	for j := 0; j < g; j++ {
 		m.BgCounts[j] = uint32(s.Poisson(m.Region * m.Bg[j]))
 	}
+	m.Controls = uint32(s.Poisson(m.Region * float64(m.ControlKinds) * m.False))
 }
 
 // watched are the quantities compared.
@@ -97,6 +102,8 @@ var watched = []struct {
 	{"cell 0's rate λ₀₀", func(m *Model) float64 { return m.Rate[0] }},
 	{"cell 3's rate sum", func(m *Model) float64 { return m.RateSum[3] }},
 	{"background λ₀", func(m *Model) float64 { return m.Bg[0] }},
+	{"false-decode rate f", func(m *Model) float64 { return m.False }},
+	{"ambient rate a₂", func(m *Model) float64 { return m.Ambient[2] }},
 	{"proportion π₀", func(m *Model) float64 { return m.Pi[0] }},
 	{"volume mean m₁", func(m *Model) float64 { return m.VolMean[1] }},
 	{"volume variance s₀²", func(m *Model) float64 { return m.VolVar[0] }},
@@ -122,7 +129,7 @@ func TestTheSweepKeepsTheJointDistribution(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m.Workers = 1
+	m.Workers, m.ControlKinds = 1, 2
 	prior := make([][]float64, len(watched))
 	sampled := make([][]float64, len(watched))
 	for j := 0; j < chains; j++ {

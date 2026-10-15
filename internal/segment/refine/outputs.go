@@ -122,6 +122,14 @@ type DiagnosticsSummary struct {
 	Regions int `json:"regions"`
 	// Transcripts are the modelled transcripts (in the regions' lattices).
 	Transcripts int `json:"transcripts"`
+	// The background (research.md §3.2): the shares of the modelled transcripts its rates account
+	// for, false decodes (measured by the NegativeControls in the regions) and ambient RNA (less
+	// surely: where cells cover the tissue, the ambient RNA of genes they express cannot be told
+	// from their own); InBackground the share the summary leaves in no cell.
+	FalseDecodeShare float64 `json:"falseDecodeShare"`
+	AmbientShare     float64 `json:"ambientShare"`
+	NegativeControls int     `json:"negativeControls"`
+	InBackground     float64 `json:"inBackgroundShare"`
 	// SeedAgreement is the share of the transcripts a run with a second seed puts in the same cell,
 	// of those either run puts in a refined cell (absent without a second run).
 	SeedAgreement *float64 `json:"seedAgreement,omitempty"`
@@ -445,6 +453,13 @@ func regionSummary(res *Result, cells []segment.Cell, in *Inputs, lim *Limitatio
 	}
 	n := float64(max(1, len(res.Probability)))
 	s.MeanProbability, s.LowProbability = sum/n, float64(low)/n
+	s.FalseDecodeShare, s.AmbientShare, s.NegativeControls = res.FalseDecodes/n, res.Ambient/n, res.Controls
+	for _, c := range res.Assigned {
+		if c == 0 {
+			s.InBackground++
+		}
+	}
+	s.InBackground /= n
 	if samples >= 2 {
 		window := res.Trace[len(res.Trace)-samples:]
 		var first, second float64
@@ -521,6 +536,10 @@ func diagnostics(results []*Result, cells []segment.Cell, in *Inputs, idx *Bundl
 		all.MeanProbability += w * s.MeanProbability
 		all.LowProbability += w * s.LowProbability
 		all.LogLikelihoodDrift += w * s.LogLikelihoodDrift
+		all.FalseDecodeShare += w * s.FalseDecodeShare
+		all.AmbientShare += w * s.AmbientShare
+		all.InBackground += w * s.InBackground
+		all.NegativeControls += s.NegativeControls
 		if math.Abs(s.GewekeZ) > math.Abs(all.GewekeZ) {
 			all.GewekeZ = s.GewekeZ
 		}
@@ -540,6 +559,9 @@ func diagnostics(results []*Result, cells []segment.Cell, in *Inputs, idx *Bundl
 		all.MeanProbability /= weight
 		all.LowProbability /= weight
 		all.LogLikelihoodDrift /= weight
+		all.FalseDecodeShare /= weight
+		all.AmbientShare /= weight
+		all.InBackground /= weight
 	}
 	return d
 }

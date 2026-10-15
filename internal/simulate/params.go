@@ -7,8 +7,8 @@
 // space with its neighbours; some cells' nuclei lie outside the section and are not seen. Each
 // cell expresses the panel's genes with negative-binomial counts around its type's profile, in
 // proportion to its area; its molecules lie within it, in the section's depth, and some are
-// observed displaced (diffused), a few far. Background molecules of every gene, and negative
-// control probes and codewords, fall anywhere. Every molecule has a quality score, lower for
+// observed displaced (diffused), a few far. Background molecules, ambient ones of every gene and
+// false decodes of every codeword (genes and negative controls alike), fall anywhere. Every molecule has a quality score, lower for
 // background. The instrument the bundle comes from segments by expanding the nuclei it sees.
 //
 // The simulator shares no code with SituCraft's segmentation: only the file writers and a
@@ -71,10 +71,13 @@ type Params struct {
 	WideUm    float64 `json:"diffusion_wide_um"`
 	NarrowUm  float64 `json:"diffusion_narrow_um"`
 	ZUm       float64 `json:"diffusion_z_um"`
-	// Background gene transcripts per 100 µm², spread over the genes in proportion to their
-	// mean expression; control probes and codewords per 100 µm² each.
-	Background float64 `json:"background_per_100um2"`
-	ControlBg  float64 `json:"control_per_100um2"`
+	// The background, molecules from no cell, of two kinds:
+	//   - Ambient: gene molecules per 100 µm², shared among the genes in proportion to their mean
+	//     expression (RNA loose in the tissue);
+	//   - FalseDecodes: molecules per 100 µm² on every codeword alike, genes and controls (decoding
+	//     errors and probes bound off target), which is what the negative controls measure.
+	Ambient      float64 `json:"ambient_per_100um2"`
+	FalseDecodes float64 `json:"false_decodes_per_100um2"`
 	// LowQuality is the share of cells' molecules with a quality below 20; background's is
 	// BackgroundLowQuality.
 	LowQuality           float64 `json:"low_quality"`
@@ -104,7 +107,7 @@ func standard() Params {
 		Domains: 6, Types: standardTypes(), Genes: 120, Controls: 20, Codewords: 41,
 		HiddenNuclei: 0.04, NuclearEnrichment: 1.5,
 		WideShare: 0.2, WideUm: 3, NarrowUm: 0.5, ZUm: 0.5,
-		Background: 6, ControlBg: 0.05, LowQuality: 0.08, BackgroundLowQuality: 0.35,
+		Ambient: 3, FalseDecodes: 0.025, LowQuality: 0.08, BackgroundLowQuality: 0.35,
 		ExpansionUm: 5,
 	}
 }
@@ -147,7 +150,7 @@ func (p *Params) Check() error {
 	need(p.HiddenNuclei >= 0 && p.HiddenNuclei < 1, "a hidden-nucleus share below 1")
 	need(p.NuclearEnrichment >= 0.1 && p.NuclearEnrichment <= 20, "a nuclear enrichment of 0.1 to 20")
 	need(p.WideShare >= 0 && p.WideShare <= 1 && p.WideUm >= 0 && p.NarrowUm >= 0 && p.ZUm >= 0, "diffusion shares and widths of 0 or more")
-	need(p.Background >= 0 && p.ControlBg >= 0, "background densities of 0 or more")
+	need(p.Ambient >= 0 && p.FalseDecodes >= 0, "background densities of 0 or more")
 	need(p.LowQuality >= 0 && p.LowQuality <= 1 && p.BackgroundLowQuality >= 0 && p.BackgroundLowQuality <= 1, "quality shares of 0 to 1")
 	need(p.ExpansionUm >= 0 && p.ExpansionUm <= 50, "an instrument expansion of 0 to 50 µm")
 	// About 75 bytes of memory a pixel at the peak (measured): 50 million pixels, about 1.5 mm a

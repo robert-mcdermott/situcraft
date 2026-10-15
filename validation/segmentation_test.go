@@ -80,6 +80,11 @@ type pairNumbers struct {
 	ChangedQ20     float64 `json:"changedQ20"`
 	ChangedQ20OfA  float64 `json:"changedQ20OfAssignedA"`
 	PixelAgreement float64 `json:"pixelAgreement"`
+	// LostQ20 is the share of gene transcripts (quality 20 or more) A puts in a cell and B in none;
+	// GainedQ20 the share A puts in none and B in a cell. With the truth as A, LostQ20 is B's
+	// background that is cells' transcripts.
+	LostQ20   float64 `json:"lostQ20"`
+	GainedQ20 float64 `json:"gainedQ20"`
 }
 
 // prosegRun is how a configuration of Proseg was run.
@@ -143,8 +148,8 @@ const (
 // explained are differences beyond a tolerance, explained (research.md §3.2, against an
 // independent reference), by data set and check.
 var explained = map[string]string{
-	"xenium-lung-2fov: assigned fraction":      "SituCraft assigns to cells transcripts the background would explain. On the simulated tissue it assigns 99.95% where the truth assigns 97.54% (Proseg 98.47%): its background rate is a quarter of the truth's (0.68% of the transcripts against 2.46%), the same from any start, a property of one background rate per gene when cells cover nearly every transcript. Lung shows it most (SituCraft 99.63%, Proseg 95.68%, the instrument 97.97%).",
-	"xenium-lung-2fov: spurious co-expression": "Spurious co-expression does not rank methods by accuracy: on the simulated tissue Proseg's (1.99) is below the truth's own (2.01) while it puts 75.6% of transcripts in their true cell, against SituCraft's 85.0% (2.14). On Lung SituCraft's is 10% below the instrument's; part of the rest is the background it assigns.",
+	"xenium-lung-2fov: assigned fraction":      "Proseg leaves more transcripts in no cell, but on the simulated tissue only 18% of those it leaves there are background: 1.42% of all transcripts are cells' it leaves out, against SituCraft's 0.13% (61% of the 0.34% it leaves out are background). A larger background share is not a more accurate one. On Lung (SituCraft 99.63%, Proseg 95.68%, the instrument 97.97%) the negative controls put the false decodes at 0.04% of the transcripts; the rest of any background is ambient RNA, which inside cells cannot be told from their own (research.md §3.2, the background).",
+	"xenium-lung-2fov: spurious co-expression": "Spurious co-expression does not rank methods by accuracy: on the simulated tissue Proseg's (1.87) is below the truth's own (1.89) while it puts 75.2% of transcripts in their true cell, against SituCraft's 84.7% (2.02). On Lung SituCraft's is 10% below the instrument's; part of the rest is ambient RNA counted in cells (research.md §3.2, the background).",
 	"xenium-lung-2fov: median IoU":             "Lung's cells are the smallest (median 37 µm²), and Proseg's outlines are more compact there (1.16 times the least perimeter, SituCraft's 1.32): with Conservative's bound (1.3) SituCraft's agreement with Proseg rises from 0.557 to 0.576. Starting SituCraft from the nuclei, as Proseg starts, leaves it at 0.557.",
 }
 
@@ -224,6 +229,21 @@ func report(t *testing.T, ref *referenceNumbers) {
 		p := ref.Pairs[name]
 		t.Logf("%s: %d matched; IoU median %.3f (10%% %.3f, 90%% %.3f); counts r %.3f (Spearman %.3f); %.2f%% changed (%.2f%% of A's); pixels %.2f%%",
 			name, p.Matched, p.IoU["p50"], p.IoU["p10"], p.IoU["p90"], p.Counts.PearsonLog, p.Counts.Spearman, 100*p.ChangedQ20, 100*p.ChangedQ20OfA, 100*p.PixelAgreement)
+	}
+	// On the truth, each one's background: how much of what it leaves in no cell truly is
+	// background (precision), and how much of the background it leaves there (recall).
+	if truth, ok := ref.Segmentations["truth"]; ok {
+		background := 1 - truth.AssignedFraction
+		for _, name := range names {
+			p, ok := ref.Pairs["truth / "+name]
+			if !ok {
+				continue
+			}
+			none := 1 - ref.Segmentations[name].AssignedFraction
+			right := none - p.LostQ20
+			t.Logf("%s's background: %.2f%% of transcripts in no cell (the truth's %.2f%%), %.2f%% of them cells'; precision %.1f%%, recall %.1f%%",
+				name, 100*none, 100*background, 100*p.LostQ20, 100*right/math.Max(none, 1e-12), 100*right/math.Max(background, 1e-12))
+		}
 	}
 	for _, c := range ref.Checks {
 		switch {
@@ -478,6 +498,9 @@ func importProseg(ctx context.Context, t *testing.T, ds imports.Dataset, run, ve
 // pairOf reduces a comparison.
 func pairOf(r *compare.Result) pairNumbers {
 	p := pairNumbers{Classes: r.Classes, IoU: map[string]float64{}, ChangedQ20: r.ChangesQ20.Fraction, ChangedQ20OfA: r.ChangesQ20OfA.Fraction, PixelAgreement: r.PixelAgreement}
+	if n := float64(r.ChangesQ20.Transcripts); n > 0 {
+		p.LostQ20, p.GainedQ20 = round4(float64(r.ChangesQ20.Lost)/n), round4(float64(r.ChangesQ20.Gained)/n)
+	}
 	var ious, a, b []float64
 	for _, g := range r.Groups {
 		if g.Class != compare.OneToOne && g.Class != compare.Expanded && g.Class != compare.Contracted {
@@ -528,6 +551,7 @@ func checks(set string, ref *referenceNumbers) []check {
 		tp := ref.Pairs["truth / proseg-1"]
 		add("transcripts in their true cell", "SituCraft's no more than 1 point below Proseg's", 1-t1.ChangedQ20OfA, 1-tp.ChangedQ20OfA-tolTrueCell, 1-t1.ChangedQ20OfA >= 1-tp.ChangedQ20OfA-tolTrueCell)
 		add("median IoU with the truth", "SituCraft's no more than 0.02 below Proseg's", t1.IoU["p50"], tp.IoU["p50"]-tolTrueIoU, t1.IoU["p50"] >= tp.IoU["p50"]-tolTrueIoU)
+		add("cells' transcripts in the background", "SituCraft's no more than Proseg's", t1.LostQ20, tp.LostQ20, t1.LostQ20 <= tp.LostQ20)
 	}
 	if set == "xenium-breast-2fov" {
 		add("time (Breast)", "under 2 minutes on a laptop", s1.Seconds, budgetSeconds, s1.Seconds <= budgetSeconds)

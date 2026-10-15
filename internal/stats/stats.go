@@ -117,6 +117,17 @@ func PoissonPMF(k int, m float64) float64 {
 	return math.Exp(float64(k)*math.Log(m) - m - lg)
 }
 
+// BinomialPMF is P(N = k) for n trials of probability p.
+func BinomialPMF(k, n int, p float64) float64 {
+	if k < 0 || k > n {
+		return 0
+	}
+	lc, _ := math.Lgamma(float64(n + 1))
+	lk, _ := math.Lgamma(float64(k + 1))
+	lnk, _ := math.Lgamma(float64(n - k + 1))
+	return math.Exp(lc - lk - lnk + float64(k)*math.Log(p) + float64(n-k)*math.Log1p(-p))
+}
+
 // NegativeBinomialPMF is P(N = k) for mean m and dispersion r (variance m + m²/r).
 func NegativeBinomialPMF(k int, m, r float64) float64 {
 	if k < 0 {

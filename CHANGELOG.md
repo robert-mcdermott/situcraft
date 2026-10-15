@@ -97,15 +97,35 @@ segmentation, validated against simulated truth and independent reference output
   compared with Proseg 3.2.0 (the publication's software) on both 2-FOV bundles and a simulated
   tissue, with the comparison workspace's measures; the numbers are kept in
   `validation/reference/segmentation/` and checked weekly.
-  - On the simulated tissue SituCraft puts 85.0% of transcripts in their true cell, against
-    Proseg's 75.6% and the instrument's 82.2%, with outlines as close to the true ones (median IoU
-    0.714 against 0.725).
+  - On the simulated tissue SituCraft puts 84.7% of transcripts in their true cell, against
+    Proseg's 75.2% and the instrument's 82.2%, with outlines as close to the true ones (median IoU
+    0.719 against 0.727), and leaves a tenth as many of the cells' transcripts in no cell (0.13%
+    against 1.42%).
   - Every tolerance is met on the Breast bundle and the simulated tissue. Three differences on the
     Lung bundle are explained in research.md.
-  - The Breast bundle refines in 108 s and 282 MB on a laptop.
+  - The Breast bundle refines in 99 s and 282 MB on a laptop.
+
+- **The background's calibration (wave 3, slice 7).** The refinement's background has two parts:
+  false decodes, which fall on every codeword alike and which the panel's negative controls
+  measure, and each gene's ambient RNA. The false decodes are now measured, not guessed.
+  - **A benchmark on simulated truth** at three background levels and each kind alone: the false
+    decodes are measured within a sixth of the truth; on the standard tissue twice as much of the
+    background is found as before, with the same accuracy. Of what SituCraft leaves in no cell,
+    55–72% truly is background (Proseg: 18%).
+  - **The diagnostics report the background:** the shares the model's rates account for, false
+    decodes and ambient RNA, the negative controls that measured them, and the share left in no
+    cell (`diagnostics.json`; the studio's Background).
+  - **The limit, documented:** inside cells, ambient RNA cannot be told from the cells' own
+    expression, so most of it stays counted in cells (research.md §3.2 and §9). On the real
+    bundles false decodes are under 0.1% of the transcripts, and results there hardly change.
 
 ### Changed
 
+- **Simulated tissues' background is of two kinds:** ambient RNA on the genes in proportion to
+  their expression, and false decodes on every codeword, genes and negative controls alike
+  (`ambient_per_100um2` and `false_decodes_per_100um2`; a parameters file giving the old
+  `background_per_100um2` or `control_per_100um2` is refused). The standard tissue's background is still 2.46% of its transcripts; the same seed
+  now makes a different tissue.
 - **A transcript counts in a cell only when the model attributes it to the cell,** not merely when
   it lies in the cell's voxels: the refinement's assignments and counts leave out what the model
   takes for background. On the Breast example the assigned fraction fell from 98.8% to 97.0% and

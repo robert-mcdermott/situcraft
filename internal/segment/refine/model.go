@@ -50,7 +50,8 @@ type Hyper struct {
 	// ScaleE, ScaleF: the gamma prior (shape, rate in µm³) on each gene's scale φ.
 	ScaleE   float64 `json:"scale_e"`
 	ScaleFUm float64 `json:"scale_f_um3"`
-	// BackgroundA, BackgroundB: the gamma prior (shape, rate in µm³) on the background's rates.
+	// BackgroundA, BackgroundB: the gamma prior (shape, rate in µm³) on the background's rates (the
+	// false-decode rate, and each gene's ambient rate).
 	BackgroundA   float64 `json:"background_a"`
 	BackgroundBUm float64 `json:"background_b_um3"`
 	// The volume prior: log volume normal of mean m (prior mean VolumeMean, in log µm³; 0 for the
@@ -105,11 +106,17 @@ type Model struct {
 	Rate    []float64
 	RateSum []float64
 
-	// BgCounts are the transcripts attributed to the background, by gene; Bg its rates (per µm³);
-	// Region the region's volume (µm³).
-	BgCounts []uint32
-	Bg       []float64
-	Region   float64
+	// BgCounts are the transcripts attributed to the background, by gene; Bg its rates (per µm³),
+	// each the false-decode rate False and the gene's Ambient rate; Region the region's volume
+	// (µm³). Controls are the negative controls' transcripts in the region, ControlKinds their
+	// codewords: false decodes only, they measure False.
+	BgCounts     []uint32
+	Bg           []float64
+	Ambient      []float64
+	False        float64
+	Controls     uint32
+	ControlKinds int
+	Region       float64
 
 	// The components: shapes r and rate parameters β (component-major, k*Genes+g), each gene's
 	// scale φ, the proportions π, and each component's volume prior (mean and variance of the log
@@ -168,7 +175,7 @@ func NewModel(h Hyper, volumes []float64, genes int, region float64, seed uint64
 	m := &Model{H: h, Genes: genes, Cells: n, Seed: seed, Workers: runtime.GOMAXPROCS(0),
 		Volume: append([]float64(nil), volumes...), Counts: make([]uint32, n*genes), Comp: make([]int, n),
 		Rate: make([]float64, n*genes), RateSum: make([]float64, n),
-		BgCounts: make([]uint32, genes), Bg: make([]float64, genes), Region: region,
+		BgCounts: make([]uint32, genes), Bg: make([]float64, genes), Ambient: make([]float64, genes), Region: region,
 		Shape: make([]float64, k*genes), RateParam: make([]float64, k*genes), Scale: make([]float64, genes),
 		Pi: make([]float64, k), VolMean: make([]float64, k), VolVar: make([]float64, k)}
 	return m, nil
@@ -196,7 +203,11 @@ func (m *Model) Init() {
 			m.Shape[k*g+j] = r0
 			m.RateParam[k*g+j] = r0 / mean
 		}
-		m.Bg[j] = (h.BackgroundA + float64(m.BgCounts[j])) / (h.BackgroundBUm + m.Region)
+		m.Ambient[j] = (h.BackgroundA + float64(m.BgCounts[j])) / (h.BackgroundBUm + m.Region)
+	}
+	m.False = (h.BackgroundA + float64(m.Controls)) / (h.BackgroundBUm + mul(m.Region, float64(m.ControlKinds+g)))
+	for j := range m.Bg {
+		m.Bg[j] = m.False + m.Ambient[j]
 	}
 	s := random.New(m.Seed, uint64(stepInit)<<58)
 	for c := range m.Comp {
@@ -260,11 +271,29 @@ func (m *Model) SweepParameters() {
 	m.Sweep++
 }
 
-// UpdateBackground draws the background's rates: Gamma(a₀ + n₀g, b₀ + |R|).
+// UpdateBackground draws the background's rates. Each gene's is a false-decode rate f, the same
+// for every codeword (genes and negative controls alike), and an ambient rate a_g of its own:
+// λ₀g = f + a_g (research.md §3.2, the background). The transcripts attributed to the background
+// split between the two, each a false decode with probability f / λ₀g (a binomial draw); then
+//
+//	a_g ~ Gamma(a₀ + its ambient transcripts, b₀ + |R|),
+//	f ~ Gamma(a₀ + the controls in the region + the false decodes, b₀ + |R| (C + G)),
+//
+// C the control codewords and G the genes, each exposed to false decodes over the region.
 func (m *Model) UpdateBackground() {
-	rate := m.H.BackgroundBUm + m.Region
-	for g := range m.Bg {
-		m.Bg[g] = m.stream(stepBackground, g).Gamma(m.H.BackgroundA+float64(m.BgCounts[g]), 1/rate)
+	h, g := m.H, m.Genes
+	var falseDecodes float64
+	for j := 0; j < g; j++ {
+		s := m.stream(stepBackground, j)
+		n := int(m.BgCounts[j])
+		k := s.Binomial(n, m.False/(m.False+m.Ambient[j]))
+		falseDecodes += float64(k)
+		m.Ambient[j] = s.Gamma(h.BackgroundA+float64(n-k), 1/(h.BackgroundBUm+m.Region))
+	}
+	exposure := mul(m.Region, float64(m.ControlKinds+g))
+	m.False = m.stream(stepBackground, g).Gamma(h.BackgroundA+float64(m.Controls)+falseDecodes, 1/(h.BackgroundBUm+exposure))
+	for j := range m.Bg {
+		m.Bg[j] = m.False + m.Ambient[j]
 	}
 }
 

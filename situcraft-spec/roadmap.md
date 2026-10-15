@@ -1380,43 +1380,56 @@ independent reference outputs.
      - **Proseg's four-layer default lost 61% of Lung's transcripts to the background** (4% with one
        layer). SituCraft's one-layer default stands.
      - **The simulated bundles lacked two of Xenium's columns,** so Proseg could not read them.
-7. **The background's calibration (S2).** On the simulated tissue SituCraft's background accounts
-   for 0.68% of the modelled transcripts against the truth's 2.46% (Proseg 1.53%), whatever the
-   chain's start (research.md §3.2 and §9). The goal: at least Proseg's level, ideally the truth's,
-   without losing accuracy elsewhere.
-   - **Diagnose first,** on the simulated truth:
-     - the transcript density in SituCraft's background voxels against the true background's;
-     - the background molecules cells take in the gaps between them, against those inside cells
-       attributed to the cell;
-     - whether the shortfall grows with the background's level.
-
-     The leading suspicion is a selection effect: at 1 µm a voxel holds about 0.4 transcripts, so
-     cells gain by claiming the boundary voxels that hold one. The background's voxels are left
-     emptier than its density, and its rate is estimated low.
-   - **A benchmark harder to fool:**
-     - simulated tissues with several background levels (about 0.5%, 2.5% and 10%), and both
-       kinds: in proportion to expression (ambient) and uniform (decoding noise);
-     - the simulator's background checked against the 2-FOV bundles (the transcripts' density far
-       from any nucleus, the negative controls' rates).
-   - **Candidate fixes,** each judged on the simulated truth and the reference comparison, from the
-     publication's model and SituCraft's own design:
-     - evidence cells cannot take: the negative controls (never from a cell), the transcripts'
-       quality scores (the background is low-quality more often, as the controls show), and the
-       density far from any nucleus;
-     - the selection effect corrected directly, if the diagnosis confirms it (for example, a
-       smoothness cost on outlines beside the perimeter bound);
-     - a background varying with depth, which the publication names as an extension.
-
-     A change to the model extends its exactness tests (detailed balance, Geweke's joint test) and
-     keeps the same result on any number of threads and any processor.
-   - **Done when,** at every simulated background level:
-     - the background found is at least Proseg's 1.53%, ideally near the truth's;
-     - the transcripts in their true cell stay at least 85.0% and the median IoU at least 0.714;
-     - on Lung, the differences from Proseg in assigned fraction and co-expression shrink;
-     - the reference numbers are made again, and the explanations revised.
-
-     If the background of commonly expressed genes cannot be told from their cells' own, the
-     limit reached is documented.
+7. **The background's calibration (S2): done, to the limit found.**
+   - **The diagnosis,** on simulated truth (research.md §3.2, the background):
+     - cells take the background's molecules where they lie: with every gene's rate held at the
+       truth, cells still took 85% of those in the true gaps, and the summary left only 0.65% of
+       the transcripts in no cell (the truth: 2.46%);
+     - inside cells, ambient RNA looks like expression: one rate per gene gave the rarest genes
+       three times their background and the commonest a seventh of theirs; tied to the tissue's
+       mean expression, the ambient level collapsed to almost nothing;
+     - tighter outlines and more gap proposals changed little.
+   - **The background in two parts:** false decodes, shared by every codeword and measured by the
+     negative controls, which no cell can take; and each gene's ambient RNA. The updates are
+     exact (a binomial split, then conjugate gammas). They are tested against the exact posterior
+     (a mixture of gammas over the splits) and by Geweke's joint test, each shown to catch
+     deliberate errors, and give the same result on any number of threads and either processor.
+   - **The simulator's background is of two kinds:** ambient RNA on the genes in proportion to
+     their expression, and false decodes on every codeword. Checked against the real bundles'
+     negative controls: false decodes are 0.04% of Lung's transcripts and 0.06% of Breast's. The
+     standard tissue has 1.2%, so that both kinds are exercised.
+   - **A benchmark** (`TestBackgroundOnSimulatedTruth`): five tissues, backgrounds of 0.5%, 2.5%
+     and 9% and each kind alone. The false decodes are measured within a sixth of the truth. On
+     the standard tissue the background found doubled (8.2% of it, against slice 6's 4.1%) with
+     the same accuracy (86.3% in their true cell, median IoU 0.716).
+   - **The diagnostics report the background** (`diagnostics.json`; the studio's Background): the
+     shares its rates account for, by kind, the negative controls that measured the false decodes,
+     and the share left in no cell.
+   - **Reference numbers made again** on the new simulated tissue: SituCraft puts 84.7% of
+     transcripts in their true cell (Proseg 75.2%, the instrument 82.2%), median IoU 0.719
+     (0.727), and leaves 0.13% of the cells' transcripts in no cell (Proseg 1.42%), a new check.
+     The presets were measured again.
+   - **"Done when," as measured:**
+     - *The background found at least Proseg's 1.53%:* not taken as a goal. On the truth only 18%
+       of what Proseg leaves in no cell is background; matching its share would leave out about
+       ten times as many of the cells' transcripts. SituCraft leaves 0.34%, 61% of it background.
+     - *At least 85.0% in their true cell and a median IoU of 0.714:* the IoU holds (0.719). The
+       new tissue puts 84.7% in their true cell, as slice 6's model does on it (85.0% on the old).
+     - *Lung's differences from Proseg shrink:* they do not. Its controls put false decodes at
+       0.04%, so Lung hardly changed; its two explanations were revised with what the truth shows.
+     - *The limit reached is documented* (research.md §9): ambient RNA inside cells cannot be told
+       from their expression, and even exact rates find about a sixth of the background.
+   - Found by slice 7:
+     - **A background share does not rank methods** (above): what is left out wrongly matters as
+       much as what is left in.
+     - **The old simulator's controls matched its genes' background by chance** (0.05 per
+       codeword over 120 genes, against 6 per 100 µm² of ambient RNA), so calibrating by the
+       controls alone looked right there. The physically consistent simulator showed otherwise.
+     - **A low background is called less surely:** at 0.5%, 36% of what is left in no cell is
+       background, 0.04% of all transcripts.
+     - **The diagnostics lost the controls' count:** a refinement releases its model before
+       writing, so the count read from it was 0. The browser suite caught it on Lung; the count
+       now travels with the result, and the summary's test releases its results first.
 8. **Segmentations on the tissue (V2, V5, V8).** Any segmentation can be looked at where it lies,
    as scientists check one: its outlines over the stains. Today the Viewer draws only the
    instrument's outlines, and SituCraft's own expansions and refinements appear on the tissue only

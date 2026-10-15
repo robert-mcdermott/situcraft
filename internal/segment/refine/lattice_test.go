@@ -118,6 +118,7 @@ func randomState(t *testing.T, seed uint64) (*State, *Model) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	m.Controls, m.ControlKinds = uint32(s.IntN(4)), 3
 	st.AttributeByPlace(m)
 	m.Init()
 	for i := 0; i < 5; i++ {
@@ -240,11 +241,13 @@ func TestSweepsAreTheSameOnEveryProcessor(t *testing.T) {
 	put(m.VolMean...)
 	put(m.VolVar...)
 	put(m.Bg...)
+	put(m.Ambient...)
+	put(m.False)
 	for _, k := range m.Comp {
 		put(float64(k))
 	}
 	put(st.LogTarget(m), st.MoveDelta(m, 17, 2))
-	const pinned = "92aff03a9506b9c9"
+	const pinned = "fd508ea77c9de6f0"
 	if got := hex.EncodeToString(h.Sum(nil))[:16]; got != pinned {
 		t.Errorf("the sweeps' checksum is %s, not %s (on %s)", got, pinned, runtime.GOARCH)
 	}

@@ -201,8 +201,9 @@ Segmentation is SituCraft's own code (`internal/segment`), not an external progr
   counts in sparse rows, and the cells, written zlib-compressed with checked sizes and checked
   together (geometry, assignments, counts, metadata) before they become an artifact.
 - **Transcript-informed segmentation** (`internal/segment/refine`) follows the generative model
-  and sampler of Jones et al. (2025): a voxel lattice, Poisson transcript likelihoods with
-  per-gene background, a gamma–negative-binomial mixture of expression states, hard morphology
+  and sampler of Jones et al. (2025): a voxel lattice, Poisson transcript likelihoods over a
+  background of false decodes (measured by the negative controls) and each gene's ambient RNA, a
+  gamma–negative-binomial mixture of expression states, hard morphology
   and connectivity constraints, transcript repositioning, multi-resolution sampling, and
   initialization from nuclei (`research.md` §3). Its parameters are drawn by a partially
   collapsed Gibbs sweep in which every update is an exact draw (a gamma prior on the components'

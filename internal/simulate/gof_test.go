@@ -299,15 +299,18 @@ func TestBackgroundIsPoissonAndUniform(t *testing.T) {
 			t.Errorf("%s per tile: χ² %.1f on %d degrees of freedom, p %.2g", name, stat, df, pv)
 		}
 	}
-	poisson("background gene molecules", geneTotals, p.Background*area)
-	poisson("control molecules", controlTotals, p.ControlBg*area*float64(p.Controls+p.Codewords))
+	poisson("background gene molecules", geneTotals, (p.Ambient+p.FalseDecodes*float64(pn.genes))*area)
+	poisson("control molecules", controlTotals, p.FalseDecodes*area*float64(p.Controls+p.Codewords))
+	// Each gene's share: its ambient share (by its mean expression) and an equal share of the false
+	// decodes.
 	var all float64
 	for _, n := range byGene {
 		all += n
 	}
 	expected := make([]float64, pn.genes)
+	perGene := p.Ambient + p.FalseDecodes*float64(pn.genes)
 	for g := range expected {
-		expected[g] = pn.tissueMean[g] * all
+		expected[g] = (p.Ambient*pn.tissueMean[g] + p.FalseDecodes) / perGene * all
 	}
 	if stat, df, pv := stats.ChiSquare(byGene, expected, 0); pv < alpha {
 		t.Errorf("background genes: χ² %.1f on %d degrees of freedom, p %.2g", stat, df, pv)

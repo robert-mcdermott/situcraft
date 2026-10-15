@@ -85,6 +85,11 @@ func TestOutputsAreASegmentation(t *testing.T) {
 		if diag.Summary.Samples != 40 || diag.Summary.Sweeps != 60 || diag.Summary.SplitHalf < 0.8 || diag.Summary.MeanProbability < 0.5 {
 			t.Errorf("%d layers: diagnostics %+v", layers, diag.Summary)
 		}
+		// The simulated tissue's background is about 2.5% of its transcripts, half of it false
+		// decodes, which its negative controls measure.
+		if s := diag.Summary; s.NegativeControls == 0 || !(s.FalseDecodeShare > 0.005 && s.FalseDecodeShare < 0.02) || !(s.AmbientShare > 0) || !(s.InBackground > 0) {
+			t.Errorf("%d layers: background %+v", layers, s)
+		}
 		// It loads and compares with the instrument's segmentation.
 		seg, err := compare.Load(dir)
 		if err != nil {
@@ -130,6 +135,29 @@ func TestLimitationsAreFlagged(t *testing.T) {
 	}
 	if s := d.Summary; s.Refined != 2 || s.Held != 1 || s.Regions != 1 || s.LeftOut != 1 {
 		t.Errorf("summary %+v", s)
+	}
+}
+
+// The background's shares are each region's, weighted by its transcripts over several, and the
+// negative controls are summed, from results released as a refinement releases them before
+// writing.
+func TestBackgroundIsSummarized(t *testing.T) {
+	region := func(transcripts, inBackground, controls int, falseDecodes, ambient float64) *Result {
+		res := &Result{Probability: make([]float32, transcripts), Assigned: make([]uint32, transcripts), Trace: []SweepTrace{{}},
+			FalseDecodes: falseDecodes, Ambient: ambient, Controls: controls, Model: &Model{Controls: uint32(controls)}}
+		for i := inBackground; i < transcripts; i++ {
+			res.Assigned[i] = 1
+		}
+		res.Release()
+		return res
+	}
+	d := diagnostics([]*Result{region(100, 2, 7, 3, 1), region(300, 0, 5, 3, 9)}, nil, &Inputs{}, &BundleIndex{})
+	s := d.Summary
+	if s.FalseDecodeShare != 6.0/400 || s.AmbientShare != 10.0/400 || s.InBackground != 2.0/400 || s.NegativeControls != 12 {
+		t.Errorf("background %g, %g; in no cell %g; controls %d", s.FalseDecodeShare, s.AmbientShare, s.InBackground, s.NegativeControls)
+	}
+	if r := d.Regions[0].Summary; r.FalseDecodeShare != 0.03 || r.AmbientShare != 0.01 || r.InBackground != 0.02 || r.NegativeControls != 7 {
+		t.Errorf("the first region's background %+v", r)
 	}
 }
 

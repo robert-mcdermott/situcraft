@@ -97,6 +97,11 @@ type Inputs struct {
 	Box        []Region
 	// MinQV is the quality the transcripts reach.
 	MinQV float64
+	// ControlX, ControlY are the negative controls' places (µm; of the quality or more), and
+	// ControlKinds their codewords (those seen at any quality): false decodes only, they measure
+	// the false-decode rate every codeword shares (Model.False).
+	ControlX, ControlY []float32
+	ControlKinds       int
 }
 
 // SweepTrace is what a sweep did.
@@ -132,6 +137,11 @@ type Result struct {
 	// splitEvery-th transcript; Samples the sweeps summarized.
 	SplitHalf float64
 	Samples   int
+	// FalseDecodes and Ambient are the region's gene transcripts the background's rates account
+	// for (the rates times the region's volume), each kind's mean over the samples; Controls the
+	// negative controls' transcripts in its lattice, which measured the false decodes.
+	FalseDecodes, Ambient float64
+	Controls              int
 	// Overflow counts the tallies' labels beyond their slots (left uncounted).
 	Overflow int
 }
@@ -398,12 +408,20 @@ func Run(ctx context.Context, in *Inputs, region Region, opt Options, progress f
 	if err != nil {
 		return nil, err
 	}
+	// The negative controls in the lattice: observations of the false-decode rate.
+	ctrl := lat.extent()
+	for i := range in.ControlX {
+		if ctrl.Contains(float64(in.ControlX[i]), float64(in.ControlY[i])) {
+			m.Controls++
+		}
+	}
+	m.ControlKinds = in.ControlKinds
 	if opt.Workers > 0 {
 		m.Workers = opt.Workers
 	}
 	s.AttributeByPlace(m)
 	m.Init()
-	res := &Result{Model: m, Kept: kept, Frozen: frozen, Index: index, Region: region, LeftOut: lost, StartStage: start}
+	res := &Result{Model: m, Kept: kept, Frozen: frozen, Index: index, Region: region, LeftOut: lost, StartStage: start, Controls: int(m.Controls)}
 	total := 0
 	for _, st := range opt.Stages[start:] {
 		total += st.Sweeps
@@ -465,6 +483,10 @@ func Run(ctx context.Context, in *Inputs, region Region, opt Options, progress f
 				voxels.samples++
 				transcripts.samples++
 				half.samples++
+				res.FalseDecodes += mul(m.False, m.Region) * float64(m.Genes)
+				for _, a := range m.Ambient {
+					res.Ambient += mul(a, m.Region)
+				}
 			}
 			done++
 			progress(float64(done)/float64(max(1, total)), fmt.Sprintf("Sampling at %g µm (sweep %d of %d)", st.VoxelUm, k+1, st.Sweeps))
@@ -496,6 +518,8 @@ func Run(ctx context.Context, in *Inputs, region Region, opt Options, progress f
 	}
 	res.Overflow = voxels.overflow + transcripts.overflow
 	res.Samples = voxels.samples
+	res.FalseDecodes /= float64(res.Samples)
+	res.Ambient /= float64(res.Samples)
 	return res, nil
 }
 

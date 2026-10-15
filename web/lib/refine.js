@@ -50,6 +50,19 @@ export function convergence(s) {
   return out;
 }
 
+// What a diagnostics summary says of the background: a plain statement, or '' for a run recorded
+// before it was measured. The false decodes are measured by the negative controls; the ambient RNA
+// less surely, since where cells cover the tissue the ambient RNA of genes they express cannot be
+// told from their own (research.md §3.2, the background: on simulated tissues, from a quarter of
+// the truth to twice it).
+export function background(s) {
+  if (!Number.isFinite(s?.falseDecodeShare) || !Number.isFinite(s?.ambientShare)) return '';
+  const controls = s.negativeControls
+    ? `measured by ${count(s.negativeControls)} negative-control transcripts`
+    : 'with no negative controls in the region to measure them';
+  return `The model's background accounts for ${pct(s.falseDecodeShare + s.ambientShare)} of the modelled transcripts: false decodes ${pct(s.falseDecodeShare)}, ${controls}, and ambient RNA ${pct(s.ambientShare)}, estimated less surely (where cells cover the tissue, ambient RNA of genes they express cannot be told from their own: on simulated tissues this part was found at a quarter to twice the truth). ${pct(s.inBackgroundShare ?? 0, 2)} of transcripts are left in no cell, where the background explains them better than any cell; the rest of the background is counted in the cells.`;
+}
+
 // The limitations a run flags, as plain statements: [{ key, n, text }] with n cells each.
 export function limitations(s, thresholds = { lowTranscripts: 10, uncertainShare: 0.75 }) {
   if (!s) return [];

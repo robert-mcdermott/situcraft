@@ -223,14 +223,17 @@ func (t *tissue) background(tile int, pn *panel, out []molecule) []molecule {
 				feature: int32(feature), origin: origin, qv: quality(s, p.BackgroundLowQuality)})
 		}
 	}
+	// Each gene's ambient molecules, in proportion to its mean expression, with its false decodes;
+	// each control's false decodes, at the same rate as a gene's.
+	decodes := mul(p.FalseDecodes, area/100)
 	for g := 0; g < pn.genes; g++ {
-		draw(g, mul(mul(p.Background, area/100), pn.tissueMean[g]), FromBackground)
+		draw(g, mul(mul(p.Ambient, area/100), pn.tissueMean[g])+decodes, FromBackground)
 	}
 	for c := 0; c < p.Controls; c++ {
-		draw(pn.genes+c, mul(p.ControlBg, area/100), FromControlProbe)
+		draw(pn.genes+c, decodes, FromControlProbe)
 	}
 	for c := 0; c < p.Codewords; c++ {
-		draw(pn.genes+p.Controls+c, mul(p.ControlBg, area/100), FromControlCodeword)
+		draw(pn.genes+p.Controls+c, decodes, FromControlCodeword)
 	}
 	return out
 }

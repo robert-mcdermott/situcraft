@@ -73,27 +73,27 @@
   },
   "situcraft-1": {
    "cells": 7275,
-   "cellsWithNucleus": 6938,
-   "assignedFraction": 0.970253,
+   "cellsWithNucleus": 6944,
+   "assignedFraction": 0.970371,
    "medianTranscriptsPerCell": 126,
-   "medianAreaUm2": 89.996407,
-   "spuriousCoexpression": 1.825532,
-   "mecr": 0.050384,
-   "seconds": 107.8,
-   "peakResidentBytes": 295796736,
-   "digest": "e194bf79054dc411c072eaee48bc418e3dbe40a71d36f0e401c8bac6a4fc9142"
+   "medianAreaUm2": 89.770622,
+   "spuriousCoexpression": 1.831728,
+   "mecr": 0.049992,
+   "seconds": 98.7,
+   "peakResidentBytes": 296075264,
+   "digest": "bd3902fd27d6a58d2e45dedf188cda345e3d13fe3c5c67522cad0df01dd93936"
   },
   "situcraft-2": {
    "cells": 7275,
-   "cellsWithNucleus": 6944,
-   "assignedFraction": 0.970634,
-   "medianTranscriptsPerCell": 127,
-   "medianAreaUm2": 90.447968,
-   "spuriousCoexpression": 1.821429,
-   "mecr": 0.050304,
-   "seconds": 107.5,
-   "peakResidentBytes": 300302336,
-   "digest": "9613f360de16515359e58d40999fd24847239f22c26cf0ccbf6e1bca9e6f5e5d"
+   "cellsWithNucleus": 6943,
+   "assignedFraction": 0.969721,
+   "medianTranscriptsPerCell": 126,
+   "medianAreaUm2": 89.996407,
+   "spuriousCoexpression": 1.838433,
+   "mecr": 0.05054,
+   "seconds": 100.4,
+   "peakResidentBytes": 296402944,
+   "digest": "8a4ec33237f86ecc214645108b0195e638068eeff5898f12999d3a68713d6563"
   }
  },
  "pairs": {
@@ -122,7 +122,9 @@
    },
    "changedQ20": 0.412499,
    "changedQ20OfAssignedA": 0.343204,
-   "pixelAgreement": 0.638972
+   "pixelAgreement": 0.638972,
+   "lostQ20": 0.0371,
+   "gainedQ20": 0.1154
   },
   "instrument / proseg-2": {
    "classes": {
@@ -149,7 +151,9 @@
    },
    "changedQ20": 0.40966,
    "changedQ20OfAssignedA": 0.339731,
-   "pixelAgreement": 0.642501
+   "pixelAgreement": 0.642501,
+   "lostQ20": 0.0361,
+   "gainedQ20": 0.1156
   },
   "instrument / proseg-defaults-1": {
    "classes": {
@@ -176,7 +180,9 @@
    },
    "changedQ20": 0.419732,
    "changedQ20OfAssignedA": 0.379767,
-   "pixelAgreement": 0.645416
+   "pixelAgreement": 0.645416,
+   "lostQ20": 0.0849,
+   "gainedQ20": 0.091
   },
   "instrument / proseg-defaults-2": {
    "classes": {
@@ -203,61 +209,67 @@
    },
    "changedQ20": 0.4194,
    "changedQ20OfAssignedA": 0.378897,
-   "pixelAgreement": 0.646287
+   "pixelAgreement": 0.646287,
+   "lostQ20": 0.0828,
+   "gainedQ20": 0.0914
   },
   "instrument / situcraft-1": {
    "classes": {
-    "contracted": 784,
-    "expanded": 1671,
-    "merged": 12,
-    "one-to-one": 4695,
-    "only in A": 70,
-    "only in B": 75,
-    "rearranged": 12,
-    "split": 7
+    "contracted": 764,
+    "expanded": 1664,
+    "merged": 17,
+    "one-to-one": 4725,
+    "only in A": 64,
+    "only in B": 77,
+    "rearranged": 10,
+    "split": 4
    },
-   "matchedCells": 7150,
+   "matchedCells": 7153,
    "iou": {
-    "p10": 0.4213,
-    "p25": 0.5598,
-    "p50": 0.6818,
-    "p75": 0.7608,
-    "p90": 0.8087
+    "p10": 0.4234,
+    "p25": 0.5648,
+    "p50": 0.6809,
+    "p75": 0.7628,
+    "p90": 0.8085
    },
    "countCorrelation": {
-    "pearsonLog": 0.9063,
-    "spearman": 0.9287
+    "pearsonLog": 0.9058,
+    "spearman": 0.9282
    },
-   "changedQ20": 0.228938,
-   "changedQ20OfAssignedA": 0.127271,
-   "pixelAgreement": 0.70203
+   "changedQ20": 0.228048,
+   "changedQ20OfAssignedA": 0.126136,
+   "pixelAgreement": 0.702878,
+   "lostQ20": 0.0141,
+   "gainedQ20": 0.1189
   },
   "instrument / situcraft-2": {
    "classes": {
-    "contracted": 753,
-    "expanded": 1700,
-    "merged": 12,
-    "one-to-one": 4702,
-    "only in A": 67,
-    "only in B": 78,
-    "rearranged": 14,
-    "split": 1
+    "contracted": 718,
+    "expanded": 1635,
+    "merged": 21,
+    "one-to-one": 4783,
+    "only in A": 65,
+    "only in B": 80,
+    "rearranged": 13,
+    "split": 6
    },
-   "matchedCells": 7155,
+   "matchedCells": 7136,
    "iou": {
-    "p10": 0.4187,
-    "p25": 0.5616,
-    "p50": 0.6804,
-    "p75": 0.7603,
-    "p90": 0.8077
+    "p10": 0.424,
+    "p25": 0.5636,
+    "p50": 0.6819,
+    "p75": 0.7609,
+    "p90": 0.8071
    },
    "countCorrelation": {
-    "pearsonLog": 0.9062,
-    "spearman": 0.9284
+    "pearsonLog": 0.9078,
+    "spearman": 0.9278
    },
-   "changedQ20": 0.228689,
-   "changedQ20OfAssignedA": 0.126516,
-   "pixelAgreement": 0.699592
+   "changedQ20": 0.229687,
+   "changedQ20OfAssignedA": 0.128266,
+   "pixelAgreement": 0.700398,
+   "lostQ20": 0.0146,
+   "gainedQ20": 0.1187
   },
   "proseg-1 / proseg-2": {
    "classes": {
@@ -284,7 +296,9 @@
    },
    "changedQ20": 0.373426,
    "changedQ20OfAssignedA": 0.357849,
-   "pixelAgreement": 0.788137
+   "pixelAgreement": 0.788137,
+   "lostQ20": 0.0344,
+   "gainedQ20": 0.0356
   },
   "proseg-1 / proseg-defaults-1": {
    "classes": {
@@ -311,7 +325,9 @@
    },
    "changedQ20": 0.414535,
    "changedQ20OfAssignedA": 0.410798,
-   "pixelAgreement": 0.720701
+   "pixelAgreement": 0.720701,
+   "lostQ20": 0.0989,
+   "gainedQ20": 0.0268
   },
   "proseg-defaults-1 / proseg-defaults-2": {
    "classes": {
@@ -338,115 +354,125 @@
    },
    "changedQ20": 0.396021,
    "changedQ20OfAssignedA": 0.374735,
-   "pixelAgreement": 0.767693
+   "pixelAgreement": 0.767693,
+   "lostQ20": 0.0668,
+   "gainedQ20": 0.0693
   },
   "situcraft-1 / proseg-1": {
    "classes": {
-    "contracted": 1115,
-    "expanded": 1240,
-    "merged": 176,
-    "one-to-one": 4207,
-    "only in A": 149,
-    "only in B": 54,
-    "rearranged": 90,
-    "split": 16
+    "contracted": 1078,
+    "expanded": 1193,
+    "merged": 158,
+    "one-to-one": 4290,
+    "only in A": 165,
+    "only in B": 48,
+    "rearranged": 99,
+    "split": 18
    },
-   "matchedCells": 6562,
+   "matchedCells": 6561,
    "iou": {
-    "p10": 0.4419,
-    "p25": 0.5663,
-    "p50": 0.6762,
-    "p75": 0.7489,
-    "p90": 0.7931
+    "p10": 0.439,
+    "p25": 0.5666,
+    "p50": 0.6763,
+    "p75": 0.7485,
+    "p90": 0.7911
    },
    "countCorrelation": {
-    "pearsonLog": 0.9162,
-    "spearman": 0.9308
+    "pearsonLog": 0.9187,
+    "spearman": 0.9313
    },
-   "changedQ20": 0.341994,
-   "changedQ20OfAssignedA": 0.340358,
-   "pixelAgreement": 0.667351
+   "changedQ20": 0.342663,
+   "changedQ20OfAssignedA": 0.340974,
+   "pixelAgreement": 0.665475,
+   "lostQ20": 0.0382,
+   "gainedQ20": 0.0118
   },
   "situcraft-1 / proseg-defaults-1": {
    "classes": {
-    "contracted": 766,
-    "expanded": 1760,
-    "merged": 188,
-    "one-to-one": 4001,
-    "only in A": 138,
-    "only in B": 62,
-    "rearranged": 109,
-    "split": 5
+    "contracted": 780,
+    "expanded": 1774,
+    "merged": 172,
+    "one-to-one": 3981,
+    "only in A": 150,
+    "only in B": 53,
+    "rearranged": 112,
+    "split": 11
    },
-   "matchedCells": 6527,
+   "matchedCells": 6535,
    "iou": {
-    "p10": 0.4239,
-    "p25": 0.5318,
-    "p50": 0.6331,
-    "p75": 0.7089,
-    "p90": 0.7585
+    "p10": 0.417,
+    "p25": 0.5279,
+    "p50": 0.6324,
+    "p75": 0.708,
+    "p90": 0.7573
    },
    "countCorrelation": {
-    "pearsonLog": 0.926,
-    "spearman": 0.9329
+    "pearsonLog": 0.9251,
+    "spearman": 0.9328
    },
-   "changedQ20": 0.378322,
-   "changedQ20OfAssignedA": 0.384254,
-   "pixelAgreement": 0.647871
+   "changedQ20": 0.377648,
+   "changedQ20OfAssignedA": 0.38362,
+   "pixelAgreement": 0.647646,
+   "lostQ20": 0.104,
+   "gainedQ20": 0.0054
   },
   "situcraft-1 / situcraft-2": {
    "classes": {
-    "contracted": 594,
-    "expanded": 655,
-    "merged": 14,
-    "one-to-one": 5913,
-    "only in A": 43,
-    "only in B": 49,
-    "rearranged": 17,
-    "split": 8
+    "contracted": 558,
+    "expanded": 618,
+    "merged": 10,
+    "one-to-one": 5992,
+    "only in A": 38,
+    "only in B": 39,
+    "rearranged": 19,
+    "split": 10
    },
-   "matchedCells": 7162,
+   "matchedCells": 7168,
    "iou": {
-    "p10": 0.562,
-    "p25": 0.6785,
-    "p50": 0.7754,
-    "p75": 0.838,
-    "p90": 0.8763
+    "p10": 0.5673,
+    "p25": 0.6826,
+    "p50": 0.7745,
+    "p75": 0.8386,
+    "p90": 0.8785
    },
    "countCorrelation": {
-    "pearsonLog": 0.9686,
-    "spearman": 0.9765
+    "pearsonLog": 0.9716,
+    "spearman": 0.9774
    },
-   "changedQ20": 0.112704,
-   "changedQ20OfAssignedA": 0.109767,
-   "pixelAgreement": 0.800896
+   "changedQ20": 0.110575,
+   "changedQ20OfAssignedA": 0.108553,
+   "pixelAgreement": 0.803796,
+   "lostQ20": 0.0059,
+   "gainedQ20": 0.0052
   },
   "situcraft-2 / proseg-2": {
    "classes": {
-    "contracted": 1056,
-    "expanded": 1251,
-    "merged": 157,
-    "one-to-one": 4250,
-    "only in A": 160,
-    "only in B": 46,
-    "rearranged": 102,
-    "split": 15
+    "contracted": 1079,
+    "expanded": 1268,
+    "merged": 167,
+    "one-to-one": 4190,
+    "only in A": 167,
+    "only in B": 58,
+    "rearranged": 99,
+    "split": 17
    },
-   "matchedCells": 6557,
+   "matchedCells": 6537,
    "iou": {
-    "p10": 0.4416,
-    "p25": 0.5709,
-    "p50": 0.6751,
-    "p75": 0.7485,
-    "p90": 0.7924
+    "p10": 0.4493,
+    "p25": 0.5704,
+    "p50": 0.6756,
+    "p75": 0.7454,
+    "p90": 0.7916
    },
    "countCorrelation": {
-    "pearsonLog": 0.9225,
-    "spearman": 0.9336
+    "pearsonLog": 0.9224,
+    "spearman": 0.9334
    },
-   "changedQ20": 0.341919,
-   "changedQ20OfAssignedA": 0.339731,
-   "pixelAgreement": 0.664301
+   "changedQ20": 0.343699,
+   "changedQ20OfAssignedA": 0.341503,
+   "pixelAgreement": 0.662628,
+   "lostQ20": 0.0371,
+   "gainedQ20": 0.0125
   }
  },
  "checks": [
@@ -460,42 +486,42 @@
   {
    "name": "assigned fraction",
    "tolerance": "within 3 points of Proseg's",
-   "value": 0.0263,
+   "value": 0.0265,
    "limit": 0.03,
    "pass": true
   },
   {
    "name": "spurious co-expression",
    "tolerance": "SituCraft's at most 10% above Proseg's",
-   "value": 1.8255,
+   "value": 1.8317,
    "limit": 1.8607,
    "pass": true
   },
   {
    "name": "matched cells' counts",
    "tolerance": "SituCraft and Proseg correlated within 0.05 of the lower of their own runs' correlations",
-   "value": 0.9162,
+   "value": 0.9187,
    "limit": 0.8849,
    "pass": true
   },
   {
    "name": "median IoU",
    "tolerance": "SituCraft and Proseg within 0.10 of the lower of their own runs' median IoUs",
-   "value": 0.6762,
-   "limit": 0.6754,
+   "value": 0.6763,
+   "limit": 0.6745,
    "pass": true
   },
   {
    "name": "time (Breast)",
    "tolerance": "under 2 minutes on a laptop",
-   "value": 107.8,
+   "value": 98.7,
    "limit": 120,
    "pass": true
   },
   {
    "name": "memory (Breast)",
    "tolerance": "under 4 GB on a laptop",
-   "value": 295796736,
+   "value": 296075264,
    "limit": 4294967296,
    "pass": true
   }
