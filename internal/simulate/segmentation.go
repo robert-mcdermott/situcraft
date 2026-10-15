@@ -136,6 +136,19 @@ func (wr *writer) zLevel(k int) float64 {
 // zStepUm is the run's z step (experiment.xenium's z_step_size).
 const zStepUm = 0.75
 
+// cellsZarrAttrs are cells.zarr.zip's root attributes, for n cells segmented by methods (cells,
+// then nuclei).
+func cellsZarrAttrs(n int, methods []string) map[string]any {
+	return map[string]any{
+		"major_version": 6, "minor_version": 2, "name": "CellSegmentationDataset", "number_cells": n,
+		"polygon_set_names":         []string{"nucleus", "cell"},
+		"polygon_set_display_names": []string{"Nucleus boundaries", "Cell boundaries"},
+		"polygon_set_descriptions":  []string{methods[1], methods[0]},
+		"segmentation_methods":      methods,
+		"spatial_units":             "microns",
+	}
+}
+
 // writeCellsZarr writes cells.zarr.zip as Xenium Onboard Analysis 2 lays it out (Zarr format 2,
 // zipped): masks/0 (nuclei) and masks/1 (cells), the µm-to-pixel transform, the cells' ids,
 // cell_summary, and for each polygon set (0 nuclei, 1 cells) its outlines' vertices, each
@@ -147,14 +160,7 @@ func (wr *writer) writeCellsZarr(path string, s *segmentation) error {
 	}
 	defer os.RemoveAll(tmp)
 	n := len(s.ids)
-	z, err := zarr.NewWriter(tmp, 2, map[string]any{
-		"major_version": 6, "minor_version": 2, "name": "CellSegmentationDataset", "number_cells": n,
-		"polygon_set_names":         []string{"nucleus", "cell"},
-		"polygon_set_display_names": []string{"Nucleus boundaries", "Cell boundaries"},
-		"polygon_set_descriptions":  []string{s.methods[1], s.methods[0]},
-		"segmentation_methods":      s.methods,
-		"spatial_units":             "microns",
-	})
+	z, err := zarr.NewWriter(tmp, 2, cellsZarrAttrs(n, s.methods))
 	if err != nil {
 		return err
 	}

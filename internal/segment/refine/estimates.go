@@ -53,13 +53,15 @@ type Estimate struct {
 	Cores       int     `json:"cores"`
 }
 
-// EstimateCost predicts what refining the regions of a bundle's inputs with the options takes on
-// a number of cores, with the collector's target. Its peak memory is the largest of three phases', the collector run between
-// them (Refine): reading the bundle (a block of each mask, then a row group of its transcripts,
-// decoded at once), sampling each region in turn (only one region's run held at a time), and
-// writing the segmentation (a row group again, every row's assignment, the regions' results).
-func EstimateCost(in *Inputs, idx *BundleIndex, regions []Region, opt Options, cores, gcPercent int) Estimate {
-	e := Estimate{Regions: len(regions), Cores: max(1, cores)}
+// EstimateCost predicts what refining the units (regions, or patches) of a bundle's inputs with the
+// options takes on a number of cores, with the collector's target. Its peak memory is the largest
+// of three phases', the collector run between them (Refine): reading the bundle (a block of each
+// mask, then a row group of its transcripts, decoded at once), sampling each unit in turn (only one
+// unit's run held at a time), and writing the segmentation (a row group again, every row's
+// assignment, the units' results, the transcripts patches share counted in each). Cells are
+// counted once, by the unit deciding them; those held, by none.
+func EstimateCost(in *Inputs, idx *BundleIndex, units []Unit, opt Options, cores, gcPercent int) Estimate {
+	e := Estimate{Regions: len(units), Cores: max(1, cores)}
 	finest := opt.Stages[len(opt.Stages)-1]
 	sweeps := 0
 	for _, st := range opt.Stages {
@@ -68,7 +70,17 @@ func EstimateCost(in *Inputs, idx *BundleIndex, regions []Region, opt Options, c
 	k := float64(opt.Model.Components)
 	g := float64(in.Genes)
 	var worstRegion, results, seconds, refinedGenes, modelled float64
-	for _, r := range regions {
+	decided := make([]bool, in.Cells)
+	for _, u := range units {
+		for c := 0; c < in.Cells; c++ {
+			if u.Own.Contains(in.SeedX[c], in.SeedY[c]) && u.Free.Contains(in.SeedX[c], in.SeedY[c]) {
+				decided[c] = true
+			}
+		}
+	}
+	heldBy := make([]bool, in.Cells)
+	for _, u := range units {
+		r := u.Free
 		ext := r.grown(marginUm).clipped(in.whole())
 		l := in.latticeOf(ext, finest, finest)
 		voxels := int64(l.Voxels())
@@ -79,25 +91,32 @@ func EstimateCost(in *Inputs, idx *BundleIndex, regions []Region, opt Options, c
 				transcripts++
 			}
 		}
-		cells, held := 0, 0
+		cells, inRun := 0, 0
 		for c := 0; c < in.Cells; c++ {
 			switch {
 			case r.Contains(in.SeedX[c], in.SeedY[c]):
 				cells++
+				inRun++
 			case !in.Box[c].Empty() && in.Box[c].overlaps(ext):
-				held++
+				inRun++
+				heldBy[c] = !decided[c]
 			}
 		}
 		e.Voxels += voxels
 		e.Transcripts += transcripts
-		e.Cells += cells
-		e.Held += held
-		cg := float64(cells+held) * g
+		cg := float64(inRun) * g
 		refinedGenes += float64(cells) * g
 		worstRegion = math.Max(worstRegion, memPerModelled*float64(transcripts)+memPerVoxel*float64(voxels)+memPerCellGene*cg)
 		results += memPerResult*float64(transcripts) + memPerResultVox*float64(voxels)
 		modelled += float64(transcripts)
 		seconds += float64(sweeps) * (secPerModelled*float64(transcripts) + secPerCellGeneK*cg*k)
+	}
+	for c := range decided {
+		if decided[c] {
+			e.Cells++
+		} else if heldBy[c] {
+			e.Held++
+		}
 	}
 	rows := float64(idx.Total)
 	batch := memPerBatchRow * math.Min(rows, float64(max(idx.RowGroup, 1)))
@@ -116,7 +135,7 @@ func EstimateCost(in *Inputs, idx *BundleIndex, regions []Region, opt Options, c
 	e.PeakBytes = int64(memBase + math.Max(reading, math.Max(sampling, writing)))
 	counts := math.Min(float64(in.Cells)*g, float64(len(in.Transcripts.Gene)))
 	e.DiskBytes = int64(diskBase + diskPerRow*rows + diskPerModelled*modelled + diskPerCount*counts + diskPerCell*float64(in.Cells) +
-		diskPerSweep*float64(sweeps*len(regions)))
+		diskPerSweep*float64(sweeps*len(units)))
 	e.Seconds = seconds/(parallelism*float64(e.Cores)) + secPerRow*rows
 	return e
 }

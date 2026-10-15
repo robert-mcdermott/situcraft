@@ -46,7 +46,10 @@ export function convergence(s) {
       text: `A second seed put ${pct(s.seedAgreement)} of the transcripts in refined cells in the same cell${s.seedAgreement >= 0.9 ? '' : ': much of the result is chance here, so read its boundaries with care'}.`,
     });
   }
-  if (s.regions > 1 || s.cellsHeld) out.push({ ok: true, text: `${count(s.cellsRefined)} cell${s.cellsRefined === 1 ? '' : 's'} refined in ${s.regions === 1 ? 'one region' : `${count(s.regions)} regions`}${s.cellsHeld ? `, ${count(s.cellsHeld)} about ${s.cellsRefined === 1 ? 'it' : 'them'} held as the instrument drew them` : ''}.` });
+  if (s.regions > 1 || s.patches || s.cellsHeld) {
+    const regions = s.regions === 1 ? 'one region' : `${count(s.regions)} regions`;
+    out.push({ ok: true, text: `${count(s.cellsRefined)} cell${s.cellsRefined === 1 ? '' : 's'} refined in ${s.patches ? `${count(s.patches)} patches of ${regions}, stitched into one segmentation` : regions}${s.cellsHeld ? `, ${count(s.cellsHeld)} about ${s.cellsRefined === 1 ? 'it' : 'them'} held as the instrument drew them` : ''}.` });
+  }
   return out;
 }
 
@@ -203,6 +206,18 @@ export function areaText(area) {
   if (area.mode === 'sections') return `the tissue's separate sections, each refined apart (cells more than ${area.section_gap_um || 100} µm apart are separate)`;
   if (area.mode === 'regions') return area.regions?.length ? `${area.regions.length === 1 ? 'the region' : `${area.regions.length} regions:`} ${area.regions.map(regionText).join('; ')}` : 'a region, not chosen yet';
   return 'the whole tissue';
+}
+
+// What a preflight says of patches (internal/segment/refine Units): a region too large for one run
+// is refined in overlapping patches, stitched; '' when it is not.
+export function patchesText(pre) {
+  const patches = pre?.patches ?? [];
+  if (!patches.length) return '';
+  const side = (u) => Math.round(Math.max(u.own.x1_um - u.own.x0_um, u.own.y1_um - u.own.y0_um));
+  const sides = patches.map(side);
+  const lo = Math.min(...sides);
+  const hi = Math.max(...sides);
+  return `Too large for one run: refined in ${patches.length} patches of ${lo === hi ? `${lo} µm` : `${lo} to ${hi} µm`}, one after another, each also refining the cells within 40 µm of its square; the segmentation takes each place from the patch it lies most inside of. A patch's memory is what the run needs, whatever the tissue's size.`;
 }
 
 // A recipe (recipe.go) read: its spec and the dataset it was made for. Throws why it is not one

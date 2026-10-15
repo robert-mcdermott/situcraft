@@ -64,13 +64,13 @@ var remoteActions = []remoteAction{
 		"bundle": textArg("The bundle by its name or path."),
 		"wait":   flagArg("Wait for its derived data to be built (true if not given)."),
 	}, "bundle"), long: true},
-	{Name: "open_example", Title: "Open an example dataset", Description: "Opens an example dataset (xenium-lung-2fov, xenium-breast-2fov: 10x Genomics' Xenium 2-FOV bundles, CC BY 4.0) in the project, or in a new project when this one has other datasets, and builds its derived data. One not on this computer is downloaded from 10x Genomics only with download: true (280 to 380 MB, checked by checksums).", InputSchema: schema(map[string]any{
-		"example":  textArg("xenium-lung-2fov or xenium-breast-2fov (or lung, breast)."),
+	{Name: "open_example", Title: "Open an example dataset", Description: "Opens an example dataset (xenium-lung-2fov, xenium-breast-2fov: 10x Genomics' Xenium 2-FOV bundles, CC BY 4.0; simulated-standard: a tissue SituCraft simulates on this computer, its truth beside it) in the project, or in a new project when this one has other datasets, and builds its derived data. A 10x Genomics example not on this computer is downloaded only with download: true (280 to 380 MB, checked by checksums); the simulated one is made in seconds.", InputSchema: schema(map[string]any{
+		"example":  textArg("xenium-lung-2fov, xenium-breast-2fov or simulated-standard (or lung, breast, simulated)."),
 		"download": flagArg("Download it first if it is not on this computer."),
 	}, "example"), long: true},
-	{Name: "tour", Title: "Take an example's tour", Description: "Starts the guided tour of an example (opening it as open_example does), or one of its worked examples (name: compare-expansion on the Breast example, planted-errors on the Lung example: a question answered step by step, some steps running a job first), or goes to one of its steps; run: true does the step's job (expanding, planting, comparing) and goes on to the next; end: true closes it. Returns the step's title and text, and the comparison a step shows.", InputSchema: schema(map[string]any{
-		"example": textArg("xenium-lung-2fov or xenium-breast-2fov; the tour running if not given."),
-		"name":    textArg("tour (the default), or a worked example: compare-expansion, planted-errors."),
+	{Name: "tour", Title: "Take an example's tour", Description: "Starts the guided tour of an example (opening it as open_example does), or one of its worked examples (name: compare-expansion or refine-compare on the Breast example, planted-errors on the Lung example, score-against-truth on the simulated one: a question answered step by step, some steps running a job first), or goes to one of its steps; run: true does the step's job (expanding, planting, refining, importing the truth, comparing) and goes on to the next; end: true closes it. Returns the step's title and text, and the comparison a step shows.", InputSchema: schema(map[string]any{
+		"example": textArg("xenium-lung-2fov, xenium-breast-2fov or simulated-standard; the tour running if not given."),
+		"name":    textArg("tour (the default; the 10x Genomics examples), or a worked example: compare-expansion, refine-compare, planted-errors, score-against-truth."),
 		"step":    map[string]any{"type": "integer", "minimum": 1, "description": "The step to show, from 1 (1 if not given)."},
 		"run":     flagArg("Do the step's job, then go on to the next step."),
 		"end":     flagArg("Close the tour."),

@@ -1473,16 +1473,70 @@ independent reference outputs.
        numbers its cells as the instrument does. The suite now samples points well inside cells.
        An expansion's and an import's still agree with the instrument's almost everywhere, by
        design, so the refinement and the planted errors are the ones that tell.
-9. **Larger tissues and release (S12, P6).**
-   - Overlapping patches with stitching, so that memory is bounded for any tissue size.
-   - Memory guards. The Viewer reads a drawn segmentation's assignments and probabilities whole
-     (8 bytes a transcript; 400 MB at 50 million): read them by tile instead.
-   - A scale test on a generated tissue of ~50 million transcripts, created, measured and deleted
-     (weekly workflow). The simulator makes tissues that large in patches too: slice 1's holds
-     the whole image in memory, about 75 bytes a pixel, and stops at 50 million pixels (about
-     1.5 × 1.5 mm).
-   - Examples (refine the Breast bundle's segmentation and compare; a simulation with known
-     truth), documentation, release 0.3.0.
+9. **Larger tissues and release (S12, P6): done.**
+   - **Patches** (research.md §3.2, large tissues): a region of more than twice
+     `patch_transcripts` (2 million by default) modelled transcripts is cut into equal rectangles
+     of about that many, refined one after another, each refining the cells within 40 µm of its
+     rectangle and holding the rest, each sampler released when its run ends. They are stitched:
+     each pixel and transcript from the patch whose rectangle holds it, each cell's certainty and
+     flags from the patch holding its seed, every cell counted once. The patches depend on the
+     data and settings alone, so a seed still gives the same bytes. The preflight (app, studio,
+     `situcraft refine`, `refinement_preflight`) says how many; the progress names each patch;
+     the diagnostics and the recorded parameters keep each patch.
+   - **Memory guards in the Viewer:** the dataset's cells table counts each cell's genes a row of
+     tiles at a time. A segmentation's assignments and probabilities are never read whole. They are streamed (`segment.Column`) to give each cell its mean probability and
+     to write the transcripts' cells and probabilities by tile into the cache, in batches of about
+     4 million, each sorted by row and picked out in one pass; each tile's are then read when
+     drawn.
+   - **Mosaics in the simulator** (research.md §3.4): `tiles_across` × `tiles_down` fields, each a
+     tissue of its own from streams of its own, made one at a time and joined by streaming into
+     one bundle (row groups, a mask chunk per tile, the stain by its tiles through a tiled TIFF
+     writer). The first tile is the single field, byte for byte. The `large` preset: 7 × 6
+     standard fields, 6.1 × 5.2 mm, 54.8 million transcripts.
+   - **The scale test** (`validation/scale_test.go`, weekly in `data.yml`): the large tissue made,
+     preflighted, refined (40 sweeps), its derived data built, the instrument's segmentation
+     registered and the refinement imported, the Viewer opened on the dataset alone and then
+     drawing the refinement's cells and every transcript tile; each step a process of its own,
+     its time and peak memory against its budget; then all deleted. Measured on a 10-core laptop:
+     - made in 621 s, at a peak of 3.1 GB, on 4.0 GB of disk;
+     - refined in 25 patches in 338 s at 6.2 GB (5.1 to 6.2 GB over three runs; estimated 6.6
+       GB, and 10.8 GB in one run);
+     - its derived data built, the instrument's segmentation registered and the refinement
+       imported in 128 s at 1.8 GB;
+     - the Viewer with the dataset alone at 0.19 GB; drawing the refinement at 0.93 GB, each
+       transcript tile in 12 ms at most.
+   - **Examples:**
+     - a third example, generated: the standard simulated tissue, made on this computer
+       (**Make it**; `open_example` with `simulated`);
+     - worked examples: refine the Breast example's segmentation and compare it with the
+       instrument's (`refine-compare`); score the instrument's and SituCraft's segmentations of
+       the simulated tissue against its truth (`score-against-truth`).
+   - **Documentation:** research.md (large tissues, mosaics), FORMATS, Getting started, remote
+     control, the README; screenshots of the studio and of a refinement on the tissue.
+   - **Release 0.3.0:** a project saved by 0.3.0 kept in `validation/projects/` and reopened by
+     every later release.
+   - **"Done when," as measured:**
+     - *Memory bounded for any tissue size:* the sampling's is, at one patch; the rest is not, and
+       is measured instead: about 100 bytes a transcript and 2 a pixel, 5.1 to 6.2 GB at 55
+       million transcripts against an estimated 10.8 GB in one run. A computer with 16 GB refines about
+       120 million transcripts; streaming the rest is wave 10's.
+     - *The Viewer reads by tile:* its peak drawing the large refinement fell from 1.8 GB to
+       0.93 GB, and with the dataset alone from 1.65 GB to 0.19 GB.
+     - *A scale test of ~50 million transcripts, created, measured and deleted weekly:* 54.8
+       million.
+   - Found by slice 9:
+     - **The refinement's peak at scale is not the sampler's:** in patches, holding every
+       transcript's inputs and every row's result for writing dominates (the preflight's writing
+       phase).
+     - **Reading a refinement's files whole held them two or three times over:** each column was
+       decompressed into one buffer and converted into another, and the probabilities copied
+       again as floats. Streaming holds none of them.
+     - **The dataset's own cells table held a pair for every transcript in a cell** while it
+       counted each cell's genes: the scale test found the Viewer with the dataset alone at 1.65
+       GB, more than drawing the refinement. It now counts a row of tiles at a time, carrying the
+       cells that span rows, and is checked cell by cell against transcripts.parquet.
+     - **The summary counted patches as regions** ("held about 25 regions"): it now counts the
+       regions and the patches apart.
 
 ## 0.4.0: cell identities (wave 4)
 
@@ -1552,6 +1606,9 @@ Outline.
 Outline.
 - Whole-slide performance on a large public bundle (on a machine with room) and on generated
   tissues of billions of transcripts.
+- The refinement's inputs and results streamed by patch, so that its memory no longer grows with
+  the tissue: in 0.3.0 the sampling holds one patch, but the run still holds about 100 bytes a
+  transcript (wave 3, slice 9).
 - CosMx and MERSCOPE readers (D11).
 - XOA 3.x/4.x and Xenium Prime 5K coverage completed.
 

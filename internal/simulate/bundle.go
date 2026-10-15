@@ -82,6 +82,7 @@ func uuidOf(text string) string {
 
 // written is what the bundle holds, for the summary and the metrics.
 type written struct {
+	trueCells         int
 	instrumentCells   int
 	transcripts       int
 	q20Genes          int64
@@ -130,8 +131,8 @@ func (wr *writer) pixelOf(x, y float32) int {
 	return py*wr.t.w + px
 }
 
-func (wr *writer) writeAll(progress func(float64, string)) error {
-	p := wr.t.p
+// prepare names the cells and describes the run, for every file.
+func (wr *writer) prepare() {
 	for i := range wr.in.cells {
 		_, id := cellID(i, 0)
 		wr.instID = append(wr.instID, id)
@@ -140,17 +141,26 @@ func (wr *writer) writeAll(progress func(float64, string)) error {
 		_, id := cellID(i, trueSalt)
 		wr.trueID = append(wr.trueID, id)
 	}
+	wr.run = runOf(wr.t.p, wr.software)
+}
+
+// runOf is experiment.xenium's description of the run, but its cells.
+func runOf(p Params, software string) map[string]any {
 	params, _ := json.Marshal(p)
 	experiment := uuidOf("situcraft simulation experiment\n" + string(params))
-	wr.run = map[string]any{
+	return map[string]any{
 		"major_version": 5, "minor_version": 0, "patch_version": 0,
 		"run_name": "SituCraft simulation", "region_name": fmt.Sprintf("simulated tissue, seed %d", p.Seed),
 		"preservation_method": "", "panel_name": "SituCraft simulated panel", "panel_design_id": "situcraft-simulated",
 		"panel_organism": "Simulated", "panel_tissue_type": "", "pixel_size": p.PixelUm,
-		"instrument_sn": "simulated", "instrument_sw_version": "simulated", "analysis_sw_version": analysisSoftware(wr.software),
+		"instrument_sn": "simulated", "instrument_sw_version": "simulated", "analysis_sw_version": analysisSoftware(software),
 		"experiment_uuid": experiment, "z_step_size": zStepUm, "segmentation_stain": "DAPI",
 		"images": map[string]any{"morphology_focus_filepath": "morphology_focus/morphology_focus_0000.ome.tif"},
 	}
+}
+
+func (wr *writer) writeAll(progress func(float64, string)) error {
+	wr.prepare()
 	steps := []struct {
 		what string
 		do   func() error
@@ -485,10 +495,13 @@ func (wr *writer) writeInstrument() error {
 // writeMatrix writes the instrument cells' counts of molecules of quality 20 or more, every
 // feature, as Matrix Market.
 func (wr *writer) writeMatrix() error {
-	dir := filepath.Join(wr.dir, "cell_feature_matrix")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
-	}
+	indptr, indices, data := wr.cellCounts()
+	return wr.writeMatrixFiles(indptr, indices, data)
+}
+
+// cellCounts are the instrument cells' counts of molecules of quality 20 or more, by feature, as
+// compressed sparse columns (a column per cell, its features in order).
+func (wr *writer) cellCounts() (indptr, indices []int64, data []int32) {
 	n := len(wr.in.cells)
 	counts := make([]map[int32]int64, n)
 	for _, m := range wr.mols {
@@ -501,6 +514,30 @@ func (wr *writer) writeMatrix() error {
 		}
 		counts[l-1][m.feature]++
 	}
+	indptr = []int64{0}
+	for _, c := range counts {
+		features := make([]int, 0, len(c))
+		for f := range c {
+			features = append(features, int(f))
+		}
+		sort.Ints(features)
+		for _, f := range features {
+			indices = append(indices, int64(f))
+			data = append(data, int32(c[int32(f)]))
+		}
+		indptr = append(indptr, int64(len(indices)))
+	}
+	return indptr, indices, data
+}
+
+// writeMatrixFiles writes the counts (and the panel's features, the cells' ids) as Matrix Market
+// and as the 10x Genomics HDF5 matrix.
+func (wr *writer) writeMatrixFiles(indptr, indices []int64, data []int32) error {
+	dir := filepath.Join(wr.dir, "cell_feature_matrix")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	n := len(indptr) - 1
 	gz := func(name string, fn func(w *bufio.Writer)) error {
 		f, err := os.Create(filepath.Join(dir, name))
 		if err != nil {
@@ -531,22 +568,6 @@ func (wr *writer) writeMatrix() error {
 		}
 	}); err != nil {
 		return err
-	}
-	// The counts by cell (compressed sparse columns: a column per cell, its features in order).
-	indptr := []int64{0}
-	var indices []int64
-	var data []int32
-	for _, c := range counts {
-		features := make([]int, 0, len(c))
-		for f := range c {
-			features = append(features, int(f))
-		}
-		sort.Ints(features)
-		for _, f := range features {
-			indices = append(indices, int64(f))
-			data = append(data, int32(c[int32(f)]))
-		}
-		indptr = append(indptr, int64(len(indices)))
 	}
 	err := gz("matrix.mtx.gz", func(w *bufio.Writer) {
 		fmt.Fprintf(w, "%%%%MatrixMarket matrix coordinate integer general\n%%metadata_json: {\"software_version\": %q}\n%d %d %d\n", "situcraft-simulate "+wr.software, len(wr.pn.names), n, len(data))
@@ -679,20 +700,30 @@ func (wr *writer) writeImage() error {
 		return err
 	}
 	plane := wr.t.stain()
+	return tiffWrite(filepath.Join(wr.dir, "morphology_focus", "morphology_focus_0000.ome.tif"), plane, stainXML(plane.Width, plane.Height, p.PixelUm, wr.software),
+		"SituCraft simulate "+wr.software, stainLevels(plane.Width, plane.Height))
+}
+
+// stainLevels is how many halvings bring the stain within 1,024 pixels.
+func stainLevels(w, h int) int {
 	levels := 0
-	for s := max(plane.Width, plane.Height); s > 1024; s = (s + 1) / 2 {
+	for s := max(w, h); s > 1024; s = (s + 1) / 2 {
 		levels++
 	}
-	ps := strconv.FormatFloat(p.PixelUm, 'f', -1, 64)
-	xml := `<?xml version="1.0" encoding="UTF-8"?>` +
-		`<OME xmlns="http://www.openmicroscopy.org/Schemas/OME/2016-06" Creator="SituCraft simulate ` + wr.software + `">` +
+	return levels
+}
+
+// stainXML is the stain's OME-XML.
+func stainXML(w, h int, pixelUm float64, software string) string {
+	ps := strconv.FormatFloat(pixelUm, 'f', -1, 64)
+	return `<?xml version="1.0" encoding="UTF-8"?>` +
+		`<OME xmlns="http://www.openmicroscopy.org/Schemas/OME/2016-06" Creator="SituCraft simulate ` + software + `">` +
 		`<Image ID="Image:0" Name="morphology_focus"><Pixels ID="Pixels:0" DimensionOrder="XYZCT" Type="uint16" BigEndian="false"` +
-		fmt.Sprintf(` SizeX="%d" SizeY="%d" SizeZ="1" SizeC="1" SizeT="1"`, plane.Width, plane.Height) +
+		fmt.Sprintf(` SizeX="%d" SizeY="%d" SizeZ="1" SizeC="1" SizeT="1"`, w, h) +
 		` PhysicalSizeX="` + ps + `" PhysicalSizeXUnit="µm" PhysicalSizeY="` + ps + `" PhysicalSizeYUnit="µm">` +
 		`<Channel ID="Channel:0" Name="DAPI" SamplesPerPixel="1"><AnnotationRef ID="Annotation:0"/></Channel>` +
 		`<TiffData IFD="0" PlaneCount="1" FirstZ="0" FirstC="0" FirstT="0"/></Pixels></Image>` +
 		`<StructuredAnnotations><MapAnnotation ID="Annotation:0"><Value><M K="Purpose">Nuclear</M><M K="Simulated">true</M></Value></MapAnnotation></StructuredAnnotations></OME>`
-	return tiffWrite(filepath.Join(wr.dir, "morphology_focus", "morphology_focus_0000.ome.tif"), plane, xml, "SituCraft simulate "+wr.software, levels)
 }
 
 func (wr *writer) writeTruth() error {
@@ -703,11 +734,7 @@ func (wr *writer) writeTruth() error {
 	for k, v := range wr.run {
 		run[k] = v
 	}
-	run["analysis_sw_version"] = analysisSoftware(wr.software) + " truth"
-	params, _ := json.Marshal(p)
-	run["analysis_uuid"] = uuidOf("situcraft simulation truth\n" + string(params))
-	delete(run, "images")
-	if err := writeJSON(filepath.Join(dir, "experiment.xenium"), run); err != nil {
+	if err := writeTruthRun(dir, run, p, wr.software); err != nil {
 		return err
 	}
 	ps := p.PixelUm
@@ -758,6 +785,15 @@ func (wr *writer) writeTruth() error {
 	return wr.writeCellsZarr(filepath.Join(dir, "cells.zarr.zip"), seg)
 }
 
+// writeTruthRun writes the truth's experiment.xenium: the run's, as Xenium Ranger's output of it.
+func writeTruthRun(dir string, run map[string]any, p Params, software string) error {
+	run["analysis_sw_version"] = analysisSoftware(software) + " truth"
+	params, _ := json.Marshal(p)
+	run["analysis_uuid"] = uuidOf("situcraft simulation truth\n" + string(params))
+	delete(run, "images")
+	return writeJSON(filepath.Join(dir, "experiment.xenium"), run)
+}
+
 func median(v []int64) float64 {
 	s := append([]int64(nil), v...)
 	sort.Slice(s, func(i, j int) bool { return s[i] < s[j] })
@@ -775,7 +811,8 @@ func (wr *writer) writeDescription() error {
 	p := wr.t.p
 	w := &wr.w
 	cells := float64(w.instrumentCells)
-	region := p.WidthUm * p.HeightUm
+	across, down := p.tiles()
+	region := p.WidthUm * p.HeightUm * float64(across*down)
 	empty := 0
 	var probes int64
 	for k, c := range w.transcriptCounts {

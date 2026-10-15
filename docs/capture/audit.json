@@ -180,6 +180,26 @@
   "violations": []
  },
  {
+  "scene": "studio",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "studio",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "refined",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "refined",
+  "theme": "light",
+  "violations": []
+ },
+ {
   "scene": "export",
   "theme": "dark",
   "violations": []

@@ -84,13 +84,42 @@ type Params struct {
 	BackgroundLowQuality float64 `json:"background_low_quality"`
 	// ExpansionUm is how far the simulated instrument grows the nuclei it sees into cells.
 	ExpansionUm float64 `json:"instrument_expansion_um"`
+	// A mosaic, for a tissue too large to hold whole (mosaic.go): TilesAcross × TilesDown tiles,
+	// each the field above (WidthUm × HeightUm, whole 512-pixel blocks each way), a tissue of its
+	// own (its own layout, cells, molecules and stain; the panel and every other parameter
+	// shared), written into one bundle a tile at a time. 0 or 1: one field.
+	TilesAcross int `json:"tiles_across,omitempty"`
+	TilesDown   int `json:"tiles_down,omitempty"`
+
+	// part is a mosaic's tile, from 0: its streams' own (the first tile's, a single field's, are
+	// the seed's).
+	part uint64
 }
 
-// MaxPixels is the largest image a simulation makes (its memory grows with it).
+// tiles are the mosaic's tiles across and down (1 and 1 for one field).
+func (p Params) tiles() (int, int) { return max(1, p.TilesAcross), max(1, p.TilesDown) }
+
+// seed is a stream's seed: the panel's is the seed itself, every other stream's the tile's.
+func (p Params) seed(stream uint64) uint64 {
+	if stream == streamPanel || p.part == 0 {
+		return p.Seed
+	}
+	// SplitMix64's finalizer of the tile's number (Steele, Lea and Flood 2014), mixed in.
+	z := p.part * 0x9e3779b97f4a7c15
+	z = (z ^ z>>30) * 0xbf58476d1ce4e5b9
+	z = (z ^ z>>27) * 0x94d049bb133111eb
+	return p.Seed ^ (z ^ z>>31)
+}
+
+// MaxPixels is the largest image a simulation makes (its memory grows with it): a field's, or a
+// mosaic tile's.
 const MaxPixels = 50e6
 
+// mosaicBlock is the side (pixels) a mosaic's tiles are whole multiples of: the stain's tiles'.
+const mosaicBlock = 512
+
 // Presets are named starting points: small (fast, for tests and trials) and standard.
-var Presets = map[string]Params{"small": small(), "standard": standard()}
+var Presets = map[string]Params{"small": small(), "standard": standard(), "large": large()}
 
 func standardTypes() []CellType {
 	return []CellType{
@@ -110,6 +139,16 @@ func standard() Params {
 		Ambient: 3, FalseDecodes: 0.025, LowQuality: 0.08, BackgroundLowQuality: 0.35,
 		ExpansionUm: 5,
 	}
+}
+
+// large is a mosaic of 7 × 6 tiles, each the standard tissue on 4,096 pixels a side (870.4 µm):
+// about 6.1 × 5.2 mm and 50 million transcripts, for measuring SituCraft at scale.
+func large() Params {
+	p := standard()
+	p.WidthUm, p.HeightUm = 4096*p.PixelUm, 4096*p.PixelUm
+	p.Domains = 12
+	p.TilesAcross, p.TilesDown = 7, 6
+	return p
 }
 
 func small() Params {
@@ -156,7 +195,12 @@ func (p *Params) Check() error {
 	// About 75 bytes of memory a pixel at the peak (measured): 50 million pixels, about 1.5 mm a
 	// side at Xenium's 0.2125 µm, need about 4 GB.
 	if pixels := math.Ceil(p.WidthUm/p.PixelUm) * math.Ceil(p.HeightUm/p.PixelUm); pixels > MaxPixels {
-		bad = append(bad, fmt.Sprintf("at most %d million pixels (%.0f million asked; about 1.5 mm a side at 0.2125 µm, which needs about 4 GB of memory): larger tissues are not simulated yet", int(MaxPixels/1e6), pixels/1e6))
+		bad = append(bad, fmt.Sprintf("at most %d million pixels a field (%.0f million asked; about 1.5 mm a side at 0.2125 µm, which needs about 4 GB of memory): a larger tissue is a mosaic of fields (tiles_across, tiles_down)", int(MaxPixels/1e6), pixels/1e6))
+	}
+	need(p.TilesAcross >= 0 && p.TilesDown >= 0 && p.TilesAcross <= 100 && p.TilesDown <= 100, "0 to 100 tiles each way")
+	if across, down := p.tiles(); across*down > 1 {
+		w, h := int(math.Ceil(p.WidthUm/p.PixelUm)), int(math.Ceil(p.HeightUm/p.PixelUm))
+		need(w%mosaicBlock == 0 && h%mosaicBlock == 0, fmt.Sprintf("a mosaic's tiles whole %d-pixel blocks each way (%d × %d pixels asked; %.1f µm is %d at %g µm)", mosaicBlock, w, h, float64(mosaicBlock)*8*p.PixelUm, 8*mosaicBlock, p.PixelUm))
 	}
 	if len(bad) > 0 {
 		return fmt.Errorf("the simulation's parameters: %s", joinAnd(bad))

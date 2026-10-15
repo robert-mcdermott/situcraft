@@ -19,7 +19,7 @@
     irm https://raw.githubusercontent.com/robert-mcdermott/situcraft/main/install.ps1 | iex
 
 .EXAMPLE
-    & ([scriptblock]::Create((irm https://raw.githubusercontent.com/robert-mcdermott/situcraft/main/install.ps1))) -Version v0.2.0
+    & ([scriptblock]::Create((irm https://raw.githubusercontent.com/robert-mcdermott/situcraft/main/install.ps1))) -Version v0.3.0
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File .\install.ps1 -InstallDir "$HOME\bin"

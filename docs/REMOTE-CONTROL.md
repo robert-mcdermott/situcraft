@@ -108,8 +108,8 @@ case, then the one name that starts with or contains what was given. An error li
 | `open_project` | `project` (name or id) | Opens a project from the library, finding its bundles |
 | `open_paths` | `paths` (absolute), `add` | Opens bundles (folder, `.zip`, `experiment.xenium`), project archives (`.scz`) or folders of them; with `add`, adds each bundle with no fatal problem to the project and waits for its derived data. Needs the token |
 | `add_dataset` | `bundle` (name or path), `wait` | Adds a bundle already opened to the project, checking it and building its derived data |
-| `open_example` | `example` (`lung`, `breast`, or their names), `download` | Opens an example dataset (in a new project when this one has other datasets); with `download`, downloads it first if needed |
-| `tour` | `example`, `name` (`tour`, or a worked example: `compare-expansion`, `planted-errors`), `step`, `run`, `end` | Starts an example's guided tour or worked example (opening the example), or goes to a step; `run` does the step's job (expanding, planting, comparing) and goes on; answers the step and the comparison it shows |
+| `open_example` | `example` (`lung`, `breast`, `simulated`, or their names), `download` | Opens an example dataset (in a new project when this one has other datasets); with `download`, downloads a 10x Genomics one first if needed. The simulated one is made on this computer, in seconds, with its truth |
+| `tour` | `example`, `name` (`tour`, or a worked example: `compare-expansion` and `refine-compare` on Breast, `planted-errors` on Lung, `score-against-truth` on the simulated example), `step`, `run`, `end` | Starts an example's guided tour or worked example (opening the example), or goes to a step; `run` does the step's job (expanding, planting, refining, importing the truth, comparing) and goes on; answers the step and the comparison it shows |
 
 ### Seeing the tissue
 

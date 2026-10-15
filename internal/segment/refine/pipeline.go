@@ -111,6 +111,9 @@ func (s Spec) Check() error {
 	if s.Area.GapUm < 0 {
 		return errors.New("refine: the gap between sections is positive")
 	}
+	if s.Area.PatchTranscripts != 0 && (s.Area.PatchTranscripts < 10_000 || s.Area.PatchTranscripts > 100_000_000) {
+		return errors.New("refine: a patch holds 10,000 to 100,000,000 transcripts")
+	}
 	if s.Preset != "" {
 		p, ok := PresetByID(s.Preset)
 		if !ok {
@@ -146,6 +149,9 @@ type Preflight struct {
 	Cells   int      `json:"cells"`
 	Nuclei  int      `json:"cellsWithNucleus"`
 	Regions []Region `json:"regions"`
+	// Patches are the runs, when a region holds too many transcripts for one (Units): each patch's
+	// square and the region whose cells it refines.
+	Patches []Unit `json:"patches,omitempty"`
 	// Estimate is its cost; with a second seed, Seconds doubles.
 	Estimate Estimate `json:"estimate"`
 	// MemoryBytes is the computer's memory (0: unknown); FreeBytes the space free where it is
@@ -197,7 +203,14 @@ func Check(in *Inputs, idx *BundleIndex, spec Spec, cores int, memory, free int6
 		return p
 	}
 	p.Regions = regions
-	p.Estimate = EstimateCost(in, idx, regions, spec.Options, cores, spec.GCPercent)
+	units, _ := in.Units(spec.Area)
+	for _, u := range units {
+		if u.Own != u.Free {
+			p.Patches = units
+			break
+		}
+	}
+	p.Estimate = EstimateCost(in, idx, units, spec.Options, cores, spec.GCPercent)
 	if spec.SeedCheck {
 		p.Estimate.Seconds *= 2
 	}
@@ -354,8 +367,12 @@ func Refine(ctx context.Context, b *xenium.Bundle, spec Spec, dir string, job Jo
 		log("warning", "%s", f.Message)
 	}
 	e := pre.Estimate
-	log("info", "%d region(s): %d cells refined, %d held about them, %d transcripts modelled; about %s of memory, %s of disk and %s on %d threads.",
-		e.Regions, e.Cells, e.Held, e.Transcripts, Memory(e.PeakBytes), Bytes(e.DiskBytes), Duration(e.Seconds), cores)
+	runsOf := "region(s)"
+	if len(pre.Patches) > 0 {
+		runsOf = "patches"
+	}
+	log("info", "%d %s: %d cells refined, %d held about them, %d transcripts modelled; about %s of memory, %s of disk and %s on %d threads.",
+		e.Regions, runsOf, e.Cells, e.Held, e.Transcripts, Memory(e.PeakBytes), Bytes(e.DiskBytes), Duration(e.Seconds), cores)
 	opt := spec.Options
 	opt.Workers = cores
 	runs := 1

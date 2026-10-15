@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"math"
 	"net/http"
 	"os"
@@ -21,8 +22,13 @@ func TestASegmentationOnTheTissue(t *testing.T) {
 	if testing.Short() {
 		t.Skip("short mode")
 	}
-	f := newRefineFixture(t, true)
+	// Two by two tiles of transcripts, written by tile in batches of a few hundred, from the
+	// columns streamed a hundred values at a time.
+	f := newRefineFixtureOf(t, true, 150, 130)
 	t.Cleanup(f.a.views.closeAll)
+	batch, block := segPointsBatch, columnBlock
+	segPointsBatch, columnBlock = 300, 100
+	t.Cleanup(func() { segPointsBatch, columnBlock = batch, block })
 	var building struct{ Job *jobs.Job }
 	json.NewDecoder(f.post("/api/local/0/cache", "").Body).Decode(&building)
 	if building.Job != nil {
@@ -127,29 +133,41 @@ func TestASegmentationOnTheTissue(t *testing.T) {
 		t.Errorf("a flagged cell: limitations %v, certainty %v, mean probability %v", detail.Limitations, detail.BoundaryCertainty, detail.MeanProbability)
 	}
 
-	// A transcript tile: each transcript's cell and probability in the segmentation, in the
+	// Every transcript tile: each transcript's cell and probability in the segmentation, in the
 	// dataset's tile's order.
-	tile := get("/api/local/0/segmentations/" + m.ID + "/points/0/0?minq=0")
-	pts, err := d.TilePoints(0, 0, nil, 0)
-	if err != nil {
-		t.Fatal(err)
+	if d.Grid.Across(0) < 2 || d.Grid.Down(0) < 2 {
+		t.Fatalf("a grid of %d by %d tiles", d.Grid.Across(0), d.Grid.Down(0))
 	}
-	np := int(le.Uint32(tile[4:]))
-	genes := int(le.Uint32(tile[8:]))
-	if string(tile[:4]) != "SCVP" || np != len(pts.Row) || le.Uint32(tile[12:]) != 1 || np == 0 {
-		t.Fatalf("tile header %q %d %d", tile[:4], np, le.Uint32(tile[12:]))
+	seen := 0
+	for ty := range d.Grid.Down(0) {
+		for tx := range d.Grid.Across(0) {
+			tile := get(fmt.Sprintf("/api/local/0/segmentations/%s/points/%d/%d?minq=0", m.ID, tx, ty))
+			pts, err := d.TilePoints(tx, ty, nil, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			np := int(le.Uint32(tile[4:]))
+			genes := int(le.Uint32(tile[8:]))
+			if string(tile[:4]) != "SCVP" || np != len(pts.Row) || le.Uint32(tile[12:]) != 1 {
+				t.Fatalf("tile header %q %d %d", tile[:4], np, le.Uint32(tile[12:]))
+			}
+			at := 16 + 4*(genes+1) + 8*np
+			end := at + 4*np + 2*genes
+			end = (end + 3) &^ 3
+			for i, row := range pts.Row {
+				want := uint32(cache.NoCell)
+				if assign[row] > 0 {
+					want = assign[row] - 1
+				}
+				if le.Uint32(tile[at+4*i:]) != want || !same(math.Float32frombits(le.Uint32(tile[end+4*i:])), prob[row]) {
+					t.Fatalf("tile %d, %d, point %d (row %d): cell %d, probability %g", tx, ty, i, row, le.Uint32(tile[at+4*i:]), math.Float32frombits(le.Uint32(tile[end+4*i:])))
+				}
+			}
+			seen += np
+		}
 	}
-	at := 16 + 4*(genes+1) + 8*np
-	end := at + 4*np + 2*genes
-	end = (end + 3) &^ 3
-	for i, row := range pts.Row {
-		want := uint32(cache.NoCell)
-		if assign[row] > 0 {
-			want = assign[row] - 1
-		}
-		if le.Uint32(tile[at+4*i:]) != want || !same(math.Float32frombits(le.Uint32(tile[end+4*i:])), prob[row]) {
-			t.Fatalf("point %d (row %d): cell %d, probability %g", i, row, le.Uint32(tile[at+4*i:]), math.Float32frombits(le.Uint32(tile[end+4*i:])))
-		}
+	if seen != len(assign) {
+		t.Errorf("%d transcripts in the tiles of %d", seen, len(assign))
 	}
 
 	// The instrument's segmentation is the dataset's own; an unknown one is not found.

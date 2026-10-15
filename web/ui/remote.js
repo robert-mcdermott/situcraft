@@ -145,7 +145,7 @@ export function installRemote(app) {
     const list = app.examples.list() ?? [];
     const names = list.map((e) => e.name);
     const text = String(ref ?? '').trim().toLowerCase();
-    const short = { lung: 'xenium-lung-2fov', breast: 'xenium-breast-2fov' }[text];
+    const short = { lung: 'xenium-lung-2fov', breast: 'xenium-breast-2fov', simulated: 'simulated-standard' }[text];
     return list.find((e) => e.name === choose(short ?? ref, names, 'example'));
   }
 
@@ -357,9 +357,10 @@ export function installRemote(app) {
       if (!app.examples.list()) await app.examples.refresh();
       let example = resolveExample(args.example);
       if (example.state !== 'ready') {
-        if (!args.download) throw new ActionError(`${example.title} is not on this computer: pass download: true to download it from 10x Genomics (${(example.download / 1e6).toFixed(0)} MB).`);
+        // A generated example is made here, nothing downloaded.
+        if (!args.download && !example.generated) throw new ActionError(`${example.title} is not on this computer: pass download: true to download it from 10x Genomics (${(example.download / 1e6).toFixed(0)} MB).`);
         await app.examples.download(example.name);
-        await waitFor(() => !app.examples.job(example.name) && app.examples.list().find((e) => e.name === example.name)?.state === 'ready', 60 * 60000, `${example.title} to download`).catch(async (error) => {
+        await waitFor(() => !app.examples.job(example.name) && app.examples.list().find((e) => e.name === example.name)?.state === 'ready', 60 * 60000, `${example.title} to ${example.generated ? 'be made' : 'download'}`).catch(async (error) => {
           await app.examples.refresh();
           throw error;
         });
@@ -381,9 +382,9 @@ export function installRemote(app) {
       if (!app.examples.list()) await app.examples.refresh();
       let card = app.tour?.open?.() ? app.tour : null;
       if (args.example !== undefined || !card) {
-        if (args.example === undefined) throw new ActionError('Name the example whose tour to take (xenium-lung-2fov or xenium-breast-2fov).');
+        if (args.example === undefined) throw new ActionError('Name the example whose tour to take (xenium-lung-2fov, xenium-breast-2fov or simulated-standard).');
         const example = resolveExample(args.example);
-        if (example.state !== 'ready') throw new ActionError(`${example.title} is not on this computer: open_example with download: true downloads it.`);
+        if (example.state !== 'ready') throw new ActionError(`${example.title} is not on this computer: ${example.generated ? 'open_example makes it' : 'open_example with download: true downloads it'}.`);
         const names = ['tour', ...workedExamples(example.name).map((w) => w.id)];
         const name = args.name === undefined ? 'tour' : choose(args.name, names, 'tour or worked example');
         card = await app.examples.tour(example.name, name);
@@ -718,7 +719,7 @@ export function installRemote(app) {
       const c = answer.comparison;
       const pc = (v) => `${(100 * v).toFixed(2)}%`;
       return {
-        message: `${m.name} of ${dataset.name} (${m.state}): ${plural(s.cells ?? 0, 'cell')}${d.cellsHeld ? ` (${plural(d.cellsRefined ?? 0, 'cell')} refined, ${d.cellsHeld} held about ${plural(d.regions ?? 1, 'region')})` : ''}, ${pc(s.assignedFraction ?? 0)} of gene transcripts assigned; Geweke's z ${(d.gewekeZ ?? 0).toFixed(1)}${d.gewekeJudged === false ? ' (too few sweeps summarized to judge)' : ''}; ${pc(d.splitHalfAgreement ?? 0)} of transcripts in the same cell over both halves of the last ${d.samples ?? 0} sweeps${Number.isFinite(d.seedAgreement) ? `; a second seed agreed on ${pc(d.seedAgreement)}` : ''}${c ? `; compared with the instrument's segmentation, ${pc(c.summary?.changedFraction ?? 0)} of gene transcripts changed cell` : ''}.`,
+        message: `${m.name} of ${dataset.name} (${m.state}): ${plural(s.cells ?? 0, 'cell')}${d.patches ? ` (refined in ${d.patches.toLocaleString('en-US')} patches)` : ''}${d.cellsHeld ? ` (${plural(d.cellsRefined ?? 0, 'cell')} refined, ${d.cellsHeld} held about ${plural(d.regions ?? 1, 'region')})` : ''}, ${pc(s.assignedFraction ?? 0)} of gene transcripts assigned; Geweke's z ${(d.gewekeZ ?? 0).toFixed(1)}${d.gewekeJudged === false ? ' (too few sweeps summarized to judge)' : ''}; ${pc(d.splitHalfAgreement ?? 0)} of transcripts in the same cell over both halves of the last ${d.samples ?? 0} sweeps${Number.isFinite(d.seedAgreement) ? `; a second seed agreed on ${pc(d.seedAgreement)}` : ''}${c ? `; compared with the instrument's segmentation, ${pc(c.summary?.changedFraction ?? 0)} of gene transcripts changed cell` : ''}.`,
         data: { id: m.id, name: m.name, dataset: dataset.name, state: m.state, parameters: m.lineage?.parameters ?? null, summary: s, findings: m.findings ?? [], comparison: c ? { id: c.id, summary: c.summary ?? null } : null },
       };
     },
@@ -736,7 +737,7 @@ export function installRemote(app) {
       const p = answer.preflight;
       const e = p.estimate ?? {};
       const size = (n) => (n >= 1e9 ? `${(n / 1e9).toFixed(1)} GB` : `${Math.round(n / 1e6)} MB`);
-      const covers = e.regions ? `refines ${plural(e.cells, 'cell')}${e.cellsHeld ? ` (${e.cellsHeld} held about them)` : ''} in ${plural(e.regions, 'region')}, ${plural(e.transcripts, 'transcript')} modelled; needs about ${size(e.peakMemoryBytes)} of memory${p.memoryBytes ? ` (the computer has ${size(p.memoryBytes)})` : ''}, ${size(e.diskBytes)} of disk${p.freeDiskBytes >= 0 ? ` (${size(p.freeDiskBytes)} free)` : ''} and about ${Math.max(1, Math.round(e.seconds))} s on ${e.cores} threads` : 'covers nothing yet';
+      const covers = e.regions ? `refines ${plural(e.cells, 'cell')}${e.cellsHeld ? ` (${e.cellsHeld} held about them)` : ''} in ${p.patches?.length ? `${e.regions.toLocaleString('en-US')} patches` : plural(e.regions, 'region')}, ${plural(e.transcripts, 'transcript')} modelled; needs about ${size(e.peakMemoryBytes)} of memory${p.memoryBytes ? ` (the computer has ${size(p.memoryBytes)})` : ''}, ${size(e.diskBytes)} of disk${p.freeDiskBytes >= 0 ? ` (${size(p.freeDiskBytes)} free)` : ''} and about ${Math.max(1, Math.round(e.seconds))} s on ${e.cores} threads` : 'covers nothing yet';
       const problems = p.problems.map((f) => `${f.message}${f.remedy ? ` ${f.remedy}` : ''}`);
       return {
         message: `${answer.name ?? 'The refinement'} of ${dataset.name} (${p.spec.preset}) ${covers}.${problems.length ? ` Problems: ${problems.join(' ')}` : ' No problems.'}${p.risks.length ? ` Risks: ${p.risks.map((f) => f.message).join(' ')}` : ''}${answer.artifact ? ' It was made already.' : ''}`,

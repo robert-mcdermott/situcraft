@@ -129,7 +129,9 @@ The viewer draws with WebGL2 (`web/render/`), from the derived data's tiles:
   the dataset's own entries. Any other's outlines are tiled into an entry of their own, as the
   comparison workspace's are. Its cells table, a cell's detail and its transcript tiles come from
   its artifact's files (`api_segview.go`, kept read for the last few drawn): each transcript
-  carries its cell in that segmentation and, for a refinement, its probability. Tile keys name the
+  carries its cell in that segmentation and, for a refinement, its probability. What is per
+  transcript is never held: the files are streamed once (`segment.Column`) into a cache entry by
+  the dataset's transcript tiles, and each tile's are read when it is drawn. Tile keys name the
   segmentation, so a tile of one is never drawn as another's; while one is read, the cells drawn
   before are hidden rather than shown under its name. The nuclei stay the dataset's.
 - **Tiles** are addressed by cache entry, whose name hashes its sources. They never change, so
@@ -166,7 +168,9 @@ cells they keep (a SHA-256), so their reproduction can be checked whenever the p
 ### Example datasets and tours
 
 The examples are the development bundles, listed in `validation/sources.json` (embedded in the
-program: the list, not the data). `internal/examples` downloads one when asked, as a job: it checks
+program: the list, not the data), and the standard simulated tissue, made on this computer when
+asked (`examples.Generated`, by `internal/simulate`; byte for byte what `situcraft simulate`
+makes). `internal/examples` downloads one when asked, as a job: it checks
 free space first; the archive by its size, the publisher's MD5 and its SHA-256; each extracted file
 by its size and SHA-256 (a member claiming more is refused, as is a name leaving the folder); then
 deletes the archive and moves the checked folder into place, so a failed or stopped download
@@ -180,9 +184,9 @@ each zoomed step looks where its genes meet (the 300 µm square where their shar
 transcripts are highest together).
 
 A worked example is a tour that answers a question, saying first what to expect: its steps may run
-a job before going on (expanding the nuclei, planting errors, comparing), each named by the
-segmentations it needs ('instrument', 'expansion-5', 'planted') so that a step already done is
-not done again, and may show a comparison in the workspace as the step describes it (the view, the
+a job before going on (expanding the nuclei, planting errors, refining, importing the simulated
+tissue's truth, comparing), each named by the segmentations it needs ('instrument',
+'expansion-5', 'planted', 'refined', 'truth') so that a step already done is not done again, and may show a comparison in the workspace as the step describes it (the view, the
 ranking, the classes kept, the difference shown, the side panel). The Lung example's practises on
 errors planted in its instrument segmentation (`internal/segment/plant`): neighbouring cells whose
 merged cell would mix markers of two lineages, large cells split across their long axis, cells
@@ -235,6 +239,10 @@ Segmentation is SituCraft's own code (`internal/segment`), not an external progr
     the page, the terminal and remote control say the same.
   - **Regions** hold the cells about them, so a region never cuts a cell. **Sections** are found
     by single linkage, and each gets a model of its own.
+  - **Patches** (`refine.Units`): a region of more than about 4 million modelled transcripts is
+    cut into rectangles of about 2 million, run one at a time as regions are (each also refining
+    the cells within 40 µm of its rectangle), and stitched by rectangle and by seed, so the
+    sampling holds one patch. They depend on the data and settings alone.
 - **One way to run** (`refine.Refine`): the app's job and `situcraft refine` read, check, sample,
   release the sampler's state and write the same way, under a tighter target for Go's collector
   (it never changes the result). A run's spec is kept as a **recipe** (`recipe.go`) that either

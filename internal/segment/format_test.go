@@ -209,3 +209,80 @@ func TestRowRangeIsRowsSlice(t *testing.T) {
 		}
 	}
 }
+
+// A column streamed a block at a time reads what was written, and a damaged one fails.
+func TestColumnsStreamAsWritten(t *testing.T) {
+	dir := t.TempDir()
+	labels := make([]uint32, 100_003)
+	prob := make([]float32, len(labels))
+	for i := range labels {
+		labels[i] = uint32(i*7919) % 1000
+		prob[i] = float32(i%97) / 97
+	}
+	prob[5] = float32(math.NaN())
+	if err := WriteAssignments(dir, labels); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteProbabilities(dir, prob); err != nil {
+		t.Fatal(err)
+	}
+	for _, block := range []int{1, 4096, 1 << 20} {
+		a, err := OpenColumn(dir, FileAssignments)
+		if err != nil {
+			t.Fatal(err)
+		}
+		p, err := OpenColumn(dir, FileProbabilities)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if a.Len() != len(labels) || p.Len() != len(prob) {
+			t.Fatalf("lengths %d, %d", a.Len(), p.Len())
+		}
+		bufA, bufP := make([]uint32, block), make([]uint32, block)
+		at := 0
+		for {
+			k, err := a.Next(bufA)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if j, err := p.Next(bufP); err != nil || j != k {
+				t.Fatalf("probabilities: %d values, %v", j, err)
+			}
+			if k == 0 {
+				break
+			}
+			for i := range k {
+				if bufA[i] != labels[at+i] || bufP[i] != math.Float32bits(prob[at+i]) {
+					t.Fatalf("block %d: value %d differs", block, at+i)
+				}
+			}
+			at += k
+		}
+		if at != len(labels) {
+			t.Errorf("block %d: %d values read", block, at)
+		}
+		a.Close()
+		p.Close()
+	}
+	if _, err := OpenColumn(dir, FileCells); err == nil {
+		t.Error("cells.bin opened as a column")
+	}
+	// Cut short, the stream fails before its end.
+	raw, _ := os.ReadFile(filepath.Join(dir, FileAssignments))
+	os.WriteFile(filepath.Join(dir, FileAssignments), raw[:len(raw)/2], 0o644)
+	c, err := OpenColumn(dir, FileAssignments)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	buf := make([]uint32, 1<<16)
+	for {
+		k, err := c.Next(buf)
+		if err != nil {
+			break
+		}
+		if k == 0 {
+			t.Fatal("a file cut short read to its end")
+		}
+	}
+}

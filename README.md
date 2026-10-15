@@ -20,21 +20,30 @@ tissue-level spatial analysis one reproducible workflow:
 SituCraft runs as one self-contained program on macOS, Linux and Windows. It opens as a desktop
 window, needs no other software, and keeps your data on your computer.
 
-**Status:** 0.2.0. SituCraft opens a Xenium output bundle (folder or zip), reads every byte of it
+**Status:** 0.3.0. SituCraft opens a Xenium output bundle (folder or zip), reads every byte of it
 with its own readers, validates it (fatal problems, warnings and notes, and 22 of the run's
 recorded values recomputed from its data) and records it in a project. Its tissue viewer shows the
 morphology stains, the transcripts of chosen genes and the cells at any zoom, every image sample
 exactly as recorded; its QC view explains the run's metrics, maps quality over the tissue and keeps
-cell filters as reproducible versions. Since 0.2.0, segmentations are artifacts with their lineage:
-the instrument's, SituCraft's own nucleus expansion, and other tools' imported from SpatialData,
-Baysor, GeoJSON or Xenium Ranger. Any two are compared cell by cell, with measures of transcripts
-given to the wrong cell; a workspace shows both on the tissue, ranks their differences for review,
-and records the decision that promotes one, with its reason. Any segmentation exports to
-SpatialData, AnnData, Parquet, CSV, Matrix Market and GeoJSON, or is prepared for Xenium Ranger,
-every file listed by its SHA-256. Programs drive the window by remote control. Two public example
-datasets download in a click, each with a guided tour and a worked example. Transcript-informed
-segmentation built in comes next (0.3.0): see the [roadmap](situcraft-spec/roadmap.md) and the
-[changelog](CHANGELOG.md).
+cell filters as reproducible versions. Segmentations are artifacts with their lineage: the
+instrument's, SituCraft's own, and other tools' imported from SpatialData, Baysor, GeoJSON or
+Xenium Ranger. Any two are compared cell by cell, with measures of transcripts given to the wrong
+cell; a workspace shows both on the tissue, ranks their differences for review, and records the
+decision that promotes one, with its reason. Any segmentation exports to SpatialData, AnnData,
+Parquet, CSV, Matrix Market and GeoJSON, or is prepared for Xenium Ranger, every file listed by its
+SHA-256. Programs drive the window by remote control.
+
+Since 0.3.0, SituCraft segments cells from their transcripts itself (after Jones et al. 2025),
+redrawing the instrument's cells where their transcripts lie, in the app's segmentation studio or
+with `situcraft refine`. The same settings and seed give the same segmentation, byte for byte, on
+any computer. Each transcript's probability of its cell, each cell's boundary certainty and the
+cells it is least sure of are kept, and drawn on the tissue. Large tissues are refined in patches.
+It is validated against simulated tissues whose every cell is known, which `situcraft simulate`
+makes, and against an independent reference: on the standard simulated tissue it puts 84.7% of
+transcripts in their true cell, against 82.2% for the instrument's nucleus expansion and 75.2% for
+the reference. Three example datasets (two public Xenium bundles, downloaded in a click, and a
+simulated tissue with its truth) come with guided tours and worked examples. See the
+[roadmap](situcraft-spec/roadmap.md) and the [changelog](CHANGELOG.md).
 
 ## A look around
 
@@ -70,6 +79,8 @@ More: [checking a bundle](docs/images/data-light.webp), [the tissue's stains](do
 [two segmentations compared](docs/images/comparison-light.webp),
 [the comparison workspace's disagreement map](docs/images/workspace-map-light.webp),
 [a worked example finding planted errors](docs/images/worked-light.webp),
+[the segmentation studio](docs/images/studio-light.webp),
+[a refinement on the tissue, by its certainty](docs/images/refined-light.webp),
 [exporting a segmentation](docs/images/export-light.webp),
 [the Jobs view](docs/images/jobs-light.webp).
 
@@ -128,7 +139,8 @@ QC, saved views and the methods paragraph.
 known. It writes the tissue as a Xenium output bundle labelled simulated, with the truth in its
 `truth/` folder, so that any segmentation can be scored against it. SituCraft and other tools
 (spatialdata-io among them) read the bundle as they read Xenium's. The same seed gives the same
-bundle on any computer. `situcraft simulate -h` lists the settings, and
+bundle on any computer. `--preset large` makes a tissue of 6 × 5 mm and 55 million transcripts,
+a field at a time, for measuring at scale. `situcraft simulate -h` lists the settings, and
 [Formats](docs/FORMATS.md#simulated-tissues-situcraft-simulate) describes the files.
 
 ## Refinements in the terminal
@@ -175,7 +187,8 @@ The example datasets are 10x Genomics' Xenium human Lung and Breast 2-FOV output
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) from
 [10x Genomics' example data](https://www.10xgenomics.com/support/software/xenium-onboard-analysis/latest/resources/xenium-example-data).
 SituCraft downloads them from 10x Genomics only when asked; they are not part of SituCraft or this
-repository. The screenshots in this documentation show these data.
+repository. The screenshots in this documentation show these data. The third example, a simulated
+tissue, is made by SituCraft on your computer when asked.
 
 ## Research use
 

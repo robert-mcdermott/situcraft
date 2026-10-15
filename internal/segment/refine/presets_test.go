@@ -252,7 +252,7 @@ func TestPresetsOnSimulatedTissue(t *testing.T) {
 	}
 	run := func(p Preset, area Area) outcome {
 		spec := Spec{Preset: p.ID, Options: p.Options, Area: area, MinQV: 20, SeedCheck: p.SeedCheck, GCPercent: p.GCPercent}
-		regions, err := in.Regions(area)
+		regions, err := in.Units(area)
 		if err != nil {
 			t.Fatal(err)
 		}

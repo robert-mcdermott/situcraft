@@ -401,6 +401,22 @@ func TestRealQCMapsAndColumns(t *testing.T) {
 			if median != metric("median_genes_per_cell") {
 				t.Errorf("median genes per cell %v, recorded %v", median, metric("median_genes_per_cell"))
 			}
+			// Every cell's genes, against transcripts.parquet read directly: the table counts a row of
+			// tiles at a time, carrying the cells that span rows.
+			detected := make([]map[uint16]bool, cells)
+			for _, x := range readAll(t, d, b) {
+				if x.cell != cache.NoCell && x.qv >= 20 && tr.Summary.Genes[x.gene].Kind == xenium.KindGene {
+					if detected[x.cell] == nil {
+						detected[x.cell] = map[uint16]bool{}
+					}
+					detected[x.cell][x.gene] = true
+				}
+			}
+			for i := range detected {
+				if int(genes[i]) != len(detected[i]) {
+					t.Fatalf("cell %d: %d genes in the table, %d in transcripts.parquet", i, genes[i], len(detected[i]))
+				}
+			}
 			if nuclearSum == 0 || nuclearSum >= transcriptSum {
 				t.Errorf("%d nuclear of %d transcripts", nuclearSum, transcriptSum)
 			}

@@ -251,7 +251,18 @@ func runRefine(args []string, stdout, stderr io.Writer) int {
 		return fail(1, "%v", err)
 	}
 	s := diag.Summary
-	fmt.Fprintf(stdout, "Refined %d of %d cells (%d held about %d region(s)) of %s with the %s preset, seed %d.\n", s.Refined, d.Cells, s.Held, s.Regions, b.Name, presetName(spec.Preset), spec.Options.Seed)
+	in := "one region"
+	if s.Regions > 1 {
+		in = fmt.Sprintf("%d regions", s.Regions)
+	}
+	if s.Patches > 0 {
+		in = fmt.Sprintf("%d patches of %s", s.Patches, in)
+	}
+	held := ""
+	if s.Held > 0 {
+		held = fmt.Sprintf(", %d held about them", s.Held)
+	}
+	fmt.Fprintf(stdout, "Refined %d of %d cells of %s in %s%s, with the %s preset, seed %d.\n", s.Refined, d.Cells, b.Name, in, held, presetName(spec.Preset), spec.Options.Seed)
 	verdict := "settled"
 	if math.Abs(s.GewekeZ) > 2 {
 		verdict = "still drifting: more sweeps would make sure"
@@ -280,9 +291,25 @@ func printPreflight(w io.Writer, p refine.Preflight) {
 	for i, r := range p.Regions {
 		fmt.Fprintf(w, "Region %d: (%.0f, %.0f)–(%.0f, %.0f) µm.\n", i+1, r.X0, r.Y0, r.X1, r.Y1)
 	}
+	if len(p.Patches) > 0 {
+		lo, hi := math.Inf(1), 0.0
+		for _, u := range p.Patches {
+			side := math.Max(u.Own.X1-u.Own.X0, u.Own.Y1-u.Own.Y0)
+			lo, hi = math.Min(lo, side), math.Max(hi, side)
+		}
+		sides := fmt.Sprintf("%.0f to %.0f µm", lo, hi)
+		if math.Round(lo) == math.Round(hi) {
+			sides = fmt.Sprintf("%.0f µm", hi)
+		}
+		fmt.Fprintf(w, "Too large for one run: refined in %d patches of %s, one after another, each also refining the cells within 40 µm of its square.\n", len(p.Patches), sides)
+	}
 	e := p.Estimate
 	if e.Regions > 0 {
-		fmt.Fprintf(w, "Refines %d cells (%d held about them), %d transcripts in %d voxels.\n", e.Cells, e.Held, e.Transcripts, e.Voxels)
+		runs := ""
+		if len(p.Patches) > 0 {
+			runs = fmt.Sprintf(" (patches share %d of them)", e.Transcripts-p.Transcripts)
+		}
+		fmt.Fprintf(w, "Refines %d cells (%d held about them), %d transcripts%s in %d voxels.\n", e.Cells, e.Held, e.Transcripts, runs, e.Voxels)
 		mem := "unknown"
 		if p.MemoryBytes > 0 {
 			mem = refine.Memory(p.MemoryBytes)

@@ -141,7 +141,7 @@ func TestLimitationsAreFlagged(t *testing.T) {
 	cells := []segment.Cell{{ID: "c1", Transcripts: 25}, {ID: "c2", Transcripts: 1}, {ID: "c3", Transcripts: 3}, {ID: "c4"}}
 	in := &Inputs{NucleusUm2: []float64{30, 0, 0, 10}}
 	idx := &BundleIndex{CellIDs: []string{"a-1", "b-1", "c-1", "d-1"}}
-	d := diagnostics([]*Result{res}, cells, in, idx)
+	d := diagnostics([]*Result{res}, cells, in, idx, nil)
 	l := d.Limitations
 	// c2 (input cell 1) is held: never flagged; c3 is refined with 3 transcripts, no nucleus and
 	// an uncertain boundary; d-1 was left out.
@@ -167,7 +167,7 @@ func TestBackgroundIsSummarized(t *testing.T) {
 		res.Release()
 		return res
 	}
-	d := diagnostics([]*Result{region(100, 2, 7, 3, 1), region(300, 0, 5, 3, 9)}, nil, &Inputs{}, &BundleIndex{})
+	d := diagnostics([]*Result{region(100, 2, 7, 3, 1), region(300, 0, 5, 3, 9)}, nil, &Inputs{}, &BundleIndex{}, nil)
 	s := d.Summary
 	if s.FalseDecodeShare != 6.0/400 || s.AmbientShare != 10.0/400 || s.InBackground != 2.0/400 || s.NegativeControls != 12 {
 		t.Errorf("background %g, %g; in no cell %g; controls %d", s.FalseDecodeShare, s.AmbientShare, s.InBackground, s.NegativeControls)

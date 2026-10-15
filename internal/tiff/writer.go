@@ -94,91 +94,164 @@ func (c *countingWriter) Write(b []byte) (int, error) {
 
 // WriteOMETIFF writes the plane, and its reduced levels, to path.
 func WriteOMETIFF(path string, p *Plane16, opt WriteOptions) error {
-	if opt.Tile == 0 {
-		opt.Tile = 512
+	if p.Width <= 0 || p.Height <= 0 || len(p.Pix) != p.Width*p.Height {
+		return errors.New("tiff: a plane of its size")
 	}
-	if opt.Tile%16 != 0 || p.Width <= 0 || p.Height <= 0 || len(p.Pix) != p.Width*p.Height {
-		return errors.New("tiff: a plane of its size, and tiles a multiple of 16")
-	}
-	f, err := os.Create(path)
+	w, err := NewTiledWriter(path, p.Width, p.Height, opt)
 	if err != nil {
-		return err
-	}
-	cw := &countingWriter{w: f}
-	ok := false
-	defer func() {
-		f.Close()
-		if !ok {
-			os.Remove(path)
-		}
-	}()
-	// The header; the first directory's offset is patched at the end.
-	if _, err := cw.Write([]byte{'I', 'I', 42, 0, 0, 0, 0, 0}); err != nil {
 		return err
 	}
 	planes := []*Plane16{p}
 	for i := 0; i < opt.Levels; i++ {
 		planes = append(planes, planes[len(planes)-1].Halve())
 	}
-	type written struct {
-		offsets, counts []uint32
-	}
-	var tiles []written
-	for _, pl := range planes {
-		var t written
-		for ty := 0; ty < (pl.Height+opt.Tile-1)/opt.Tile; ty++ {
-			for tx := 0; tx < (pl.Width+opt.Tile-1)/opt.Tile; tx++ {
-				block, err := tileBlock(pl, tx, ty, opt.Tile)
-				if err != nil {
-					return err
-				}
-				if cw.pos > 1<<32-int64(len(block))-1 {
-					return errors.New("tiff: the image is too large for a classic TIFF")
-				}
-				t.offsets = append(t.offsets, uint32(cw.pos))
-				t.counts = append(t.counts, uint32(len(block)))
-				if _, err := cw.Write(block); err != nil {
+	for level, pl := range planes {
+		tile := w.opt.Tile
+		for ty := 0; ty < (pl.Height+tile-1)/tile; ty++ {
+			for tx := 0; tx < (pl.Width+tile-1)/tile; tx++ {
+				if err := w.WriteTile(level, tx, ty, pl); err != nil {
+					w.Abort()
 					return err
 				}
 			}
 		}
-		tiles = append(tiles, t)
 	}
-	// The directories: the reduced levels first (their offsets go in the first's SubIFDs).
+	return w.Close()
+}
+
+// TiledWriter writes an OME-TIFF a tile at a time, in any order: an image too large to hold whole
+// (a large simulated tissue) is written as its parts are made. Each level is half the last's size
+// (rounded up), as Halve makes it; every tile of every level must be written before Close.
+type TiledWriter struct {
+	f      *os.File
+	cw     *countingWriter
+	opt    WriteOptions
+	sizes  [][2]int
+	tiles  [][]tileAt
+	closed bool
+}
+
+type tileAt struct{ offset, count uint32 }
+
+// NewTiledWriter starts an OME-TIFF of a width × height plane, with opt.Levels reduced levels.
+func NewTiledWriter(path string, width, height int, opt WriteOptions) (*TiledWriter, error) {
+	if opt.Tile == 0 {
+		opt.Tile = 512
+	}
+	if opt.Tile%16 != 0 || width <= 0 || height <= 0 {
+		return nil, errors.New("tiff: a plane of its size, and tiles a multiple of 16")
+	}
+	f, err := os.Create(path)
+	if err != nil {
+		return nil, err
+	}
+	w := &TiledWriter{f: f, cw: &countingWriter{w: f}, opt: opt}
+	// The header; the first directory's offset is patched at the end.
+	if _, err := w.cw.Write([]byte{'I', 'I', 42, 0, 0, 0, 0, 0}); err != nil {
+		w.Abort()
+		return nil, err
+	}
+	for level := 0; level <= opt.Levels; level++ {
+		w.sizes = append(w.sizes, [2]int{width, height})
+		n := ((width + opt.Tile - 1) / opt.Tile) * ((height + opt.Tile - 1) / opt.Tile)
+		w.tiles = append(w.tiles, make([]tileAt, n))
+		width, height = (width+1)/2, (height+1)/2
+	}
+	return w, nil
+}
+
+// Size is a level's width and height.
+func (w *TiledWriter) Size(level int) (int, int) { return w.sizes[level][0], w.sizes[level][1] }
+
+// WriteTile writes tile (tx, ty) of a level, its pixels read from the level's whole plane.
+func (w *TiledWriter) WriteTile(level, tx, ty int, pl *Plane16) error {
+	return w.WriteTileAt(level, tx, ty, pl, 0, 0)
+}
+
+// WriteTileAt writes tile (tx, ty) of a level, its pixels read from pl, whose pixel (0, 0) is the
+// level's (ox, oy); pixels beyond the level are zero.
+func (w *TiledWriter) WriteTileAt(level, tx, ty int, pl *Plane16, ox, oy int) error {
+	tile := w.opt.Tile
+	lw, lh := w.Size(level)
+	across := (lw + tile - 1) / tile
+	if tx < 0 || ty < 0 || tx >= across || ty*tile >= lh {
+		return fmt.Errorf("tiff: no tile (%d, %d) at level %d", tx, ty, level)
+	}
+	block, err := tileBlockAt(pl, tx*tile-ox, ty*tile-oy, tile, lw-ox, lh-oy)
+	if err != nil {
+		return err
+	}
+	if w.cw.pos > 1<<32-int64(len(block))-1 {
+		return errors.New("tiff: the image is too large for a classic TIFF")
+	}
+	w.tiles[level][ty*across+tx] = tileAt{uint32(w.cw.pos), uint32(len(block))}
+	_, err = w.cw.Write(block)
+	return err
+}
+
+// Abort removes the file.
+func (w *TiledWriter) Abort() {
+	if w.closed {
+		return
+	}
+	w.closed = true
+	w.f.Close()
+	os.Remove(w.f.Name())
+}
+
+// Close writes the directories, the reduced levels' first (their offsets go in the first's
+// SubIFDs).
+func (w *TiledWriter) Close() error {
+	if w.closed {
+		return errors.New("tiff: closed")
+	}
+	for level, ts := range w.tiles {
+		for i, t := range ts {
+			if t.count == 0 {
+				w.Abort()
+				return fmt.Errorf("tiff: tile %d of level %d not written", i, level)
+			}
+		}
+	}
 	entries := func(i int) []ifdEntry {
-		pl := planes[i]
+		width, height := w.Size(i)
 		subfile := uint32(0)
 		if i > 0 {
 			subfile = 1
 		}
+		offsets, counts := make([]uint32, len(w.tiles[i])), make([]uint32, len(w.tiles[i]))
+		for k, t := range w.tiles[i] {
+			offsets[k], counts[k] = t.offset, t.count
+		}
 		e := []ifdEntry{
 			longEntry(254, subfile),
-			longEntry(256, uint32(pl.Width)),
-			longEntry(257, uint32(pl.Height)),
+			longEntry(256, uint32(width)),
+			longEntry(257, uint32(height)),
 			shortEntry(258, 16),
 			shortEntry(259, CompressionDeflate),
 			shortEntry(262, 1),
 			shortEntry(277, 1),
 			shortEntry(284, 1),
 			shortEntry(317, 2),
-			longEntry(322, uint32(opt.Tile)),
-			longEntry(323, uint32(opt.Tile)),
-			longEntry(324, tiles[i].offsets...),
-			longEntry(325, tiles[i].counts...),
+			longEntry(322, uint32(w.opt.Tile)),
+			longEntry(323, uint32(w.opt.Tile)),
+			longEntry(324, offsets...),
+			longEntry(325, counts...),
 			shortEntry(339, 1),
 		}
-		if opt.Software != "" {
-			e = append(e, asciiEntry(305, opt.Software))
+		if w.opt.Software != "" {
+			e = append(e, asciiEntry(305, w.opt.Software))
 		}
-		if i == 0 && opt.Description != "" {
-			e = append(e, asciiEntry(270, opt.Description))
+		if i == 0 && w.opt.Description != "" {
+			e = append(e, asciiEntry(270, w.opt.Description))
 		}
 		return e
 	}
-	subOffsets := make([]uint32, 0, len(planes)-1)
-	for i := 1; i < len(planes); i++ {
-		off, err := writeIFD(cw, entries(i))
+	subOffsets := make([]uint32, 0, len(w.tiles)-1)
+	for i := 1; i < len(w.tiles); i++ {
+		off, err := writeIFD(w.cw, entries(i))
 		if err != nil {
+			w.Abort()
 			return err
 		}
 		subOffsets = append(subOffsets, off)
@@ -187,30 +260,32 @@ func WriteOMETIFF(path string, p *Plane16, opt WriteOptions) error {
 	if len(subOffsets) > 0 {
 		first = append(first, longEntry(330, subOffsets...))
 	}
-	off, err := writeIFD(cw, first)
+	off, err := writeIFD(w.cw, first)
 	if err != nil {
+		w.Abort()
 		return err
 	}
 	var head [4]byte
 	binary.LittleEndian.PutUint32(head[:], off)
-	if _, err := f.WriteAt(head[:], 4); err != nil {
+	if _, err := w.f.WriteAt(head[:], 4); err != nil {
+		w.Abort()
 		return err
 	}
-	ok = true
-	return f.Close()
+	w.closed = true
+	return w.f.Close()
 }
 
-// tileBlock is tile (tx, ty) of a plane, padded with zeros, after the differencing predictor,
-// deflated.
-func tileBlock(p *Plane16, tx, ty, tile int) ([]byte, error) {
+// tileBlockAt is the tile whose top-left pixel is pl's (x0, y0), padded with zeros beyond pl and
+// beyond (w, h) in pl's pixels (the level's edge), after the differencing predictor, deflated.
+func tileBlockAt(p *Plane16, x0, y0, tile, w, h int) ([]byte, error) {
 	raw := make([]byte, 2*tile*tile)
 	for y := 0; y < tile; y++ {
-		sy := ty*tile + y
+		sy := y0 + y
 		var prev uint16
 		for x := 0; x < tile; x++ {
-			sx := tx*tile + x
+			sx := x0 + x
 			var v uint16
-			if sx < p.Width && sy < p.Height {
+			if sx >= 0 && sy >= 0 && sx < p.Width && sy < p.Height && sx < w && sy < h {
 				v = p.Pix[sy*p.Width+sx]
 			}
 			binary.LittleEndian.PutUint16(raw[2*(y*tile+x):], v-prev)

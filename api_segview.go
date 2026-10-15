@@ -11,15 +11,24 @@ package main
 //	                                           it when the segmentation gives one
 //
 // The instrument's segmentation is the dataset's own (api_view.go). A segmentation's files are
-// read once and kept while it is drawn (the last few).
+// read once and what is per cell kept while it is drawn (the last few). What is per transcript is
+// streamed, never held whole: it is written once into the cache by the dataset's point tiles
+// (segpoints), each tile's read when it is asked for. A drawn segmentation holds a few dozen
+// bytes a cell, none a transcript.
 
 import (
+	"bufio"
+	"cmp"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"math"
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -44,8 +53,8 @@ type segView struct {
 	id, name, method string
 	cells            []segment.Cell
 	outlines         []segment.Outline
-	assign           []uint32  // each transcript's cell (k: cells[k−1]; 0 none)
-	prob             []float32 // each transcript's probability of its cell; nil when not given
+	points           *segPoints // its transcripts by tile
+	hasProb          bool       // its transcripts have probabilities
 	counts           *segment.Counts
 	certainty        []float32 // each cell's boundary certainty; nil when not given
 	flags            []uint8   // each cell's limitations; nil without diagnostics
@@ -77,14 +86,217 @@ func (s *segViews) put(v *segView) {
 	if s.byID == nil {
 		s.byID = map[string]*segView{}
 	}
-	if _, ok := s.byID[v.id]; !ok {
+	if old, ok := s.byID[v.id]; ok {
+		old.points.close()
+	} else {
 		s.order = append(s.order, v.id)
 	}
 	s.byID[v.id] = v
 	for len(s.order) > maxSegViews {
+		s.byID[s.order[0]].points.close()
 		delete(s.byID, s.order[0])
 		s.order = s.order[1:]
 	}
+}
+
+// segPoints is a segmentation's transcripts by the dataset's point tiles (a file in the cache,
+// "SCSP"): a header (magic, version, tiles), each tile's offset (u64, tiles + 1), then each tile's
+// points in its order, every one's cell (u32: its index in the cells table, NoCell for none) and
+// probability of it (f32, NaN when none).
+type segPoints struct {
+	f       *os.File
+	offsets []uint64
+	across  int
+}
+
+func (p *segPoints) close() {
+	if p != nil {
+		p.f.Close()
+	}
+}
+
+// tile reads a tile's points' cells and probabilities.
+func (p *segPoints) tile(tx, ty int) ([]byte, error) {
+	k := ty*p.across + tx
+	if tx < 0 || tx >= p.across || k+1 >= len(p.offsets) {
+		return nil, errors.New("no such tile")
+	}
+	buf := make([]byte, p.offsets[k+1]-p.offsets[k])
+	_, err := p.f.ReadAt(buf, int64(p.offsets[k]))
+	return buf, err
+}
+
+// segPointsBatch is the most transcripts writeSegPoints places in one pass over a
+// segmentation's columns (16 bytes each while it does), so that memory is bounded whatever the
+// tissue's size.
+var segPointsBatch = 1 << 22
+
+// writeSegPoints writes the points file of the segmentation in dir (its assignments and, when it
+// has them, probabilities) by the dataset's point tiles. The tiles are taken in batches: a batch's
+// transcripts are sorted by row and picked out of the columns streamed from the start.
+func writeSegPoints(path string, d *view.Dataset, dir string, hasProb bool) error {
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	across, down := d.Grid.Across(0), d.Grid.Down(0)
+	tiles := across * down
+	offsets := make([]uint64, tiles+1)
+	header := 16 + 8*(tiles+1)
+	w := bufio.NewWriterSize(f, 1<<20)
+	if _, err := w.Write(make([]byte, header)); err != nil {
+		return err
+	}
+	at := uint64(header)
+	var keys []uint64 // each transcript's row << 32 | its place in the batch
+	var picked []byte
+	for k0 := 0; k0 < tiles; {
+		keys = keys[:0]
+		k := k0
+		for ; k < tiles && (k == k0 || len(keys) < segPointsBatch); k++ {
+			offsets[k] = at + 8*uint64(len(keys))
+			pts, err := d.TilePoints(k%across, k/across, nil, 0)
+			if err != nil {
+				return err
+			}
+			for _, row := range pts.Row {
+				keys = append(keys, uint64(row)<<32|uint64(len(keys)))
+			}
+		}
+		slices.Sort(keys)
+		if cap(picked) < 8*len(keys) {
+			picked = make([]byte, 8*len(keys))
+		}
+		picked = picked[:8*len(keys)]
+		if err := pickSegPoints(dir, hasProb, keys, picked); err != nil {
+			return err
+		}
+		if _, err := w.Write(picked); err != nil {
+			return err
+		}
+		at += uint64(len(picked))
+		k0 = k
+	}
+	offsets[tiles] = at
+	if err := w.Flush(); err != nil {
+		return err
+	}
+	head := []byte("SCSP")
+	head = binary.LittleEndian.AppendUint32(head, 1)
+	head = binary.LittleEndian.AppendUint32(head, uint32(tiles))
+	head = binary.LittleEndian.AppendUint32(head, 0)
+	for _, o := range offsets {
+		head = binary.LittleEndian.AppendUint64(head, o)
+	}
+	if _, err := f.WriteAt(head, 0); err != nil {
+		return err
+	}
+	return f.Close()
+}
+
+// pickSegPoints puts each of a batch's transcripts (keys sorted by row) in its place in out: its
+// cell (NoCell for none) and its probability (NaN for none), read from the columns streamed up to
+// the batch's last row.
+func pickSegPoints(dir string, hasProb bool, keys []uint64, out []byte) error {
+	le := binary.LittleEndian
+	nan := math.Float32bits(float32(math.NaN()))
+	for i := range len(keys) {
+		le.PutUint32(out[8*i:], cache.NoCell)
+		le.PutUint32(out[8*i+4:], nan)
+	}
+	j := 0
+	return streamColumns(dir, hasProb, func(start int, assign, prob []uint32) bool {
+		end := uint64(start + len(assign))
+		for ; j < len(keys) && keys[j]>>32 < end; j++ {
+			i, slot := int(keys[j]>>32)-start, keys[j]&0xffffffff
+			if a := assign[i]; a > 0 {
+				le.PutUint32(out[8*slot:], a-1)
+			}
+			if prob != nil {
+				le.PutUint32(out[8*slot+4:], prob[i])
+			}
+		}
+		return j < len(keys)
+	})
+}
+
+// columnBlock is the values streamColumns reads at a time.
+var columnBlock = 1 << 20
+
+// streamColumns streams a segmentation's assignments and, when asked, probabilities together, a
+// block at a time, while each returns true.
+func streamColumns(dir string, withProb bool, each func(start int, assign, prob []uint32) bool) error {
+	a, err := segment.OpenColumn(dir, segment.FileAssignments)
+	if err != nil {
+		return err
+	}
+	defer a.Close()
+	var p *segment.Column
+	if withProb {
+		if p, err = segment.OpenColumn(dir, segment.FileProbabilities); err != nil {
+			return err
+		}
+		defer p.Close()
+		if p.Len() != a.Len() {
+			return errors.New("its probabilities do not match its assignments")
+		}
+	}
+	assign := make([]uint32, columnBlock)
+	var prob []uint32
+	if p != nil {
+		prob = make([]uint32, columnBlock)
+	}
+	for start := 0; ; {
+		k, err := a.Next(assign)
+		if err != nil {
+			return err
+		}
+		if p != nil {
+			if j, err := p.Next(prob); err != nil || j != k {
+				return cmp.Or(err, errors.New("its probabilities do not match its assignments"))
+			}
+		}
+		if k == 0 {
+			return nil
+		}
+		var pk []uint32
+		if p != nil {
+			pk = prob[:k]
+		}
+		if !each(start, assign[:k], pk) {
+			return nil
+		}
+		start += k
+	}
+}
+
+// openSegPoints opens a points file for a dataset's tiles.
+func openSegPoints(path string, d *view.Dataset) (*segPoints, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	head := make([]byte, 16)
+	if _, err := io.ReadFull(f, head); err != nil || string(head[:4]) != "SCSP" || binary.LittleEndian.Uint32(head[4:]) != 1 {
+		f.Close()
+		return nil, errors.New("not a segmentation's points file")
+	}
+	tiles := int(binary.LittleEndian.Uint32(head[8:]))
+	if tiles != d.Grid.Across(0)*d.Grid.Down(0) {
+		f.Close()
+		return nil, fmt.Errorf("a points file of %d tiles for %d", tiles, d.Grid.Across(0)*d.Grid.Down(0))
+	}
+	raw := make([]byte, 8*(tiles+1))
+	if _, err := io.ReadFull(f, raw); err != nil {
+		f.Close()
+		return nil, err
+	}
+	p := &segPoints{f: f, across: d.Grid.Across(0), offsets: make([]uint64, tiles+1)}
+	for k := range p.offsets {
+		p.offsets[k] = binary.LittleEndian.Uint64(raw[8*k:])
+	}
+	return p, nil
 }
 
 func (a *app) registerSegView(mux *http.ServeMux) {
@@ -146,9 +358,6 @@ func (a *app) readSegView(d *view.Dataset, m artifacts.Manifest) (*segView, erro
 	if v.outlines, err = segment.ReadOutlines(dir); err != nil {
 		return nil, err
 	}
-	if v.assign, err = segment.ReadAssignments(dir); err != nil {
-		return nil, err
-	}
 	if v.counts, err = segment.ReadCounts(dir); err != nil {
 		return nil, err
 	}
@@ -156,14 +365,7 @@ func (a *app) readSegView(d *view.Dataset, m artifacts.Manifest) (*segView, erro
 		_, err := os.Stat(filepath.Join(dir, name))
 		return err == nil
 	}
-	if optional(segment.FileProbabilities) {
-		if v.prob, err = segment.ReadProbabilities(dir); err != nil {
-			return nil, err
-		}
-		if len(v.prob) != len(v.assign) {
-			return nil, errors.New("its probabilities do not match its assignments")
-		}
-	}
+	v.hasProb = optional(segment.FileProbabilities)
 	if optional(segment.FileCertainty) {
 		if v.certainty, err = segment.ReadCertainty(dir); err != nil {
 			return nil, err
@@ -195,13 +397,20 @@ func (a *app) readSegView(d *view.Dataset, m artifacts.Manifest) (*segView, erro
 		}
 	}
 	n := len(v.cells)
-	if v.prob != nil {
+	if v.hasProb {
+		// Streamed, as the points file is written: a drawn segmentation holds nothing a transcript.
 		sum, count := make([]float64, n), make([]int, n)
-		for row, c := range v.assign {
-			if c > 0 && int(c) <= n && !math.IsNaN(float64(v.prob[row])) {
-				sum[c-1] += float64(v.prob[row])
-				count[c-1]++
+		err := streamColumns(dir, true, func(_ int, assign, prob []uint32) bool {
+			for i, c := range assign {
+				if p := math.Float32frombits(prob[i]); c > 0 && int(c) <= n && !math.IsNaN(float64(p)) {
+					sum[c-1] += float64(p)
+					count[c-1]++
+				}
 			}
+			return true
+		})
+		if err != nil {
+			return nil, err
 		}
 		v.meanProb = make([]float32, n)
 		for i := range v.meanProb {
@@ -229,6 +438,16 @@ func (a *app) readSegView(d *view.Dataset, m artifacts.Manifest) (*segView, erro
 		}
 	}
 	v.table = v.encodeTable()
+	// Its transcripts by tile, written once (the dataset's transcript index decides the tiles).
+	pdir, err := a.cache.Derived("segpoints", m.ID+"\n"+d.Entries[cache.KindTranscripts], func(into string) error {
+		return writeSegPoints(filepath.Join(into, "points.bin"), d, dir, v.hasProb)
+	})
+	if err != nil {
+		return nil, err
+	}
+	if v.points, err = openSegPoints(filepath.Join(pdir, "points.bin"), d); err != nil {
+		return nil, err
+	}
 	return v, nil
 }
 
@@ -236,7 +455,7 @@ func (a *app) readSegView(d *view.Dataset, m artifacts.Manifest) (*segView, erro
 func (v *segView) encodeTable() []byte {
 	n := len(v.cells)
 	nan := float32(math.NaN())
-	t := view.SegmentationTable{HasLimitations: v.flags != nil, HasCertainty: v.certainty != nil, HasProbability: v.prob != nil,
+	t := view.SegmentationTable{HasLimitations: v.flags != nil, HasCertainty: v.certainty != nil, HasProbability: v.hasProb,
 		X: make([]float32, n), Y: make([]float32, n), Area: make([]float32, n), NucleusArea: make([]float32, n),
 		Transcripts: make([]uint32, n), Assigned: make([]uint32, n), Genes: make([]uint32, n), Instrument: make([]uint32, n),
 		Certainty: make([]float32, n), Probability: make([]float32, n), Limitations: make([]uint8, n)}
@@ -409,18 +628,22 @@ func (a *app) segViewPoints(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if v.prob != nil {
-		pts.Probability = make([]float32, len(pts.Row))
+	block, err := v.points.tile(t[0], t[1])
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
 	}
-	for i, row := range pts.Row {
-		pts.Cell[i] = cache.NoCell
-		if int(row) < len(v.assign) {
-			if c := v.assign[row]; c > 0 {
-				pts.Cell[i] = c - 1
-			}
-			if v.prob != nil {
-				pts.Probability[i] = v.prob[row]
-			}
+	if v.hasProb {
+		pts.Probability = make([]float32, len(pts.Raw))
+	}
+	for i, raw := range pts.Raw {
+		if int(raw)*8+8 > len(block) {
+			writeError(w, http.StatusInternalServerError, "the segmentation's points file does not match the dataset's tiles")
+			return
+		}
+		pts.Cell[i] = binary.LittleEndian.Uint32(block[8*raw:])
+		if v.hasProb {
+			pts.Probability[i] = math.Float32frombits(binary.LittleEndian.Uint32(block[8*raw+4:]))
 		}
 	}
 	writeBinary(w, pts.Encode(), false)

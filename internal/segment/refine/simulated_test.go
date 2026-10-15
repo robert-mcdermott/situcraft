@@ -332,7 +332,7 @@ func TestRecoversSimulatedCells(t *testing.T) {
 		}())
 	}
 	if os.Getenv("REFINE_DIAG") != "" {
-		d := diagnostics([]*Result{res}, make([]segment.Cell, in.Cells), in, idx)
+		d := diagnostics([]*Result{res}, make([]segment.Cell, in.Cells), in, idx, nil)
 		t.Logf("convergence: Geweke z %.2f, split-half %.4f, mean probability %.4f", d.Summary.GewekeZ, d.Summary.SplitHalf, d.Summary.MeanProbability)
 	}
 	t.Logf("instrument: %.1f%% of transcripts in their true cell, median IoU %.3f", 100*instrument.accuracy, instrument.medianIoU)

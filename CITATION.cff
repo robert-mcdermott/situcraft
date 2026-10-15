@@ -8,8 +8,8 @@ authors:
     given-names: Robert
 repository-code: "https://github.com/robert-mcdermott/situcraft"
 license: Apache-2.0
-version: 0.2.0
-date-released: "2026-10-14"
+version: 0.3.0
+date-released: "2026-10-15"
 keywords:
   - spatial transcriptomics
   - imaging-based spatial transcriptomics

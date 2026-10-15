@@ -10,6 +10,7 @@ export function exampleFor(dataset, examples) {
 
 // The source of an example's data, as methodsParagraph (lib/methods.js) cites it.
 export function exampleSource(example) {
-  if (!example) return null;
+  // A generated example is SituCraft's own simulation, which the methods paragraph says it is.
+  if (!example || example.generated) return null;
   return { title: example.title, attribution: example.publisher, license: example.license.replace(/\s*\(.*\)$/, ''), url: example.page };
 }

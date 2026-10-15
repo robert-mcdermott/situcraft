@@ -2,6 +2,7 @@ package refine
 
 import (
 	"context"
+	"math"
 	"path/filepath"
 	"testing"
 
@@ -128,5 +129,141 @@ func TestARegionKeepsTheRest(t *testing.T) {
 	}
 	if changedOutside != 0 || changedInside == 0 || heldChanged != 0 {
 		t.Errorf("pixels changed: %d inside the region's lattice, %d outside it, %d of held cells to another", changedInside, changedOutside, heldChanged)
+	}
+}
+
+// Patches: a region of more than twice a patch's transcripts is cut into equal squares that tile
+// it, each refining the cells within the overlap of its square; one at or under that is itself.
+func TestPatchesTileTheRegion(t *testing.T) {
+	r := Region{0, 0, 1000, 600}
+	if u := patches(r, 4_000_000, patchTarget); len(u) != 1 || u[0].Own != r || u[0].Free != r {
+		t.Errorf("at twice a patch: %+v", u)
+	}
+	u := patches(r, 6_000_000, 1_000_000)
+	var area float64
+	for _, p := range u {
+		area += p.Own.Area()
+		if want := p.Own.grown(patchOverlapUm).clipped(r); p.Free != want {
+			t.Errorf("patch %+v: refines %+v", p.Own, p.Free)
+		}
+		for _, q := range u {
+			if p != q && p.Own.overlaps(q.Own) {
+				t.Errorf("squares %+v and %+v overlap", p.Own, q.Own)
+			}
+		}
+	}
+	if len(u) != 6 || math.Abs(area-r.Area()) > 1e-6 || u[len(u)-1].Own.X1 != r.X1 || u[len(u)-1].Own.Y1 != r.Y1 {
+		t.Errorf("%d patches covering %g µm² of %g", len(u), area, r.Area())
+	}
+}
+
+// A tissue refined in patches is stitched into one segmentation: each pixel and transcript from
+// the patch whose square holds it, each cell counted once; it agrees with a run of the whole
+// about as two seeds do.
+func TestPatchesAreStitched(t *testing.T) {
+	if testing.Short() {
+		t.Skip("short mode")
+	}
+	folder := filepath.Join(t.TempDir(), "small")
+	p := simulate.Presets["small"]
+	p.WidthUm, p.HeightUm = 200, 160
+	if _, err := simulate.Run(context.Background(), p, folder, "test", nil); err != nil {
+		t.Fatal(err)
+	}
+	b := openBundle(t, folder)
+	in, idx, err := BundleInputs(b, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	opt := DefaultOptions()
+	opt.Stages, opt.Samples = []Stage{{1, 1, 100}}, 60
+	area := Area{Mode: AreaWhole, PatchTranscripts: len(in.Transcripts.Gene)/4 + 1}
+	results, err := RunArea(context.Background(), in, area, opt, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 4 {
+		t.Fatalf("%d patches", len(results))
+	}
+	footprints := make([][]uint32, len(results))
+	for r, res := range results {
+		if !res.patched() || res.Model.Rate != nil || res.State.voxel != nil {
+			t.Fatalf("patch %+v: patched %v, its sampler kept", res.Own, res.patched())
+		}
+		footprints[r] = Footprint(res)
+	}
+	dir := t.TempDir()
+	_, diag, err := WriteBundleOutputs(b, in, idx, results, opt, Recorded{Area: area}, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := artifacts.Manifest{}
+	for _, f := range segment.Check(dir, &m) {
+		if f.Severity == "fatal" {
+			t.Errorf("%s: %s", f.Code, f.Message)
+		}
+	}
+	// Every cell decided once: the whole tissue refined, none held.
+	if s := diag.Summary; s.Refined+s.LeftOut != in.Cells || s.Held != 0 || s.Transcripts != len(in.Transcripts.Gene) || s.Regions != 1 || s.Patches != 4 {
+		t.Errorf("refined %d, left out %d, held %d of %d cells; %d of %d transcripts; %d regions, %d patches", s.Refined, s.LeftOut, s.Held, in.Cells, s.Transcripts, len(in.Transcripts.Gene), s.Regions, s.Patches)
+	}
+	// Each pixel is its square's patch's: a cell that patch refines where its footprint has one.
+	mask, _ := segment.ReadMask(dir)
+	row := make([]uint32, mask.Width)
+	wrong, checked := 0, 0
+	for y := 0; y < mask.Height; y++ {
+		mask.Row(y, row)
+		yUm := in.Y0 + (float64(y)+0.5)*mask.PixelSize
+		for x := range row {
+			xUm := in.X0 + (float64(x)+0.5)*mask.PixelSize
+			for r, res := range results {
+				if !res.Own.Contains(xUm, yUm) {
+					continue
+				}
+				l := res.State.Lat
+				f := footprints[r][l.Voxel(xUm, yUm, l.Z0+l.LayerUm/2)%(l.W*l.H)]
+				if f > 0 && !res.Frozen[f-1] {
+					checked++
+					if row[x] != uint32(res.Kept[f-1]+1) {
+						wrong++
+					}
+				}
+			}
+		}
+	}
+	if checked == 0 || wrong != 0 {
+		t.Errorf("%d of %d pixels not their patch's", wrong, checked)
+	}
+	// Against runs of the whole tissue: the patches agree with one about as well as two seeds do.
+	whole, err := Run(context.Background(), in, Region{}, opt, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	opt2 := opt
+	opt2.Seed++
+	other, err := Run(context.Background(), in, Region{}, opt2, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cellOf := func(res *Result, i int) uint32 {
+		if k := res.Assigned[i]; k > 0 {
+			return uint32(res.Kept[k-1] + 1)
+		}
+		return 0
+	}
+	assignments, _ := segment.ReadAssignments(dir)
+	patched, seeds := 0, 0
+	for i, r := range idx.Rows {
+		if assignments[r] == cellOf(whole, i) {
+			patched++
+		}
+		if cellOf(other, i) == cellOf(whole, i) {
+			seeds++
+		}
+	}
+	n := float64(len(idx.Rows))
+	t.Logf("the patches and the whole agree on %.3f of transcripts, two seeds of the whole on %.3f", float64(patched)/n, float64(seeds)/n)
+	if float64(patched)/n < float64(seeds)/n-0.03 {
+		t.Errorf("the patches agree with the whole on %.3f of transcripts, two seeds on %.3f", float64(patched)/n, float64(seeds)/n)
 	}
 }

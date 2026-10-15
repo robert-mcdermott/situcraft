@@ -12,6 +12,7 @@ import (
 
 	"situcraft/internal/examples"
 	"situcraft/internal/jobs"
+	"situcraft/internal/simulate"
 	"situcraft/internal/xenium"
 )
 
@@ -23,8 +24,21 @@ func newExamples(dir string) *examples.Library {
 	if err != nil {
 		log.Printf("the example list cannot be read: %v", err)
 	}
-	return &examples.Library{Dir: dir, Sources: sources, UserAgent: "SituCraft/" + version + " (+https://github.com/robert-mcdermott/situcraft)", Free: xenium.FreeBytes}
+	return &examples.Library{Dir: dir, Sources: sources, UserAgent: "SituCraft/" + version + " (+https://github.com/robert-mcdermott/situcraft)", Free: xenium.FreeBytes,
+		Generated: []examples.Generated{{
+			Name:    simulatedExample,
+			Title:   "A simulated tissue with known truth",
+			Summary: "SituCraft's standard simulated tissue: 500 × 500 µm, about 3,000 cells of four types and 440,000 transcripts, every cell, nucleus and molecule known. Made on this computer in seconds; its truth is beside it, so any segmentation can be scored.",
+			Size:    35 << 20,
+			Make: func(ctx context.Context, dir string, progress examples.Progress) error {
+				_, err := simulate.Run(ctx, simulate.Presets["standard"], dir, version, func(f float64, message string) { progress(f, message) })
+				return err
+			},
+		}}}
 }
+
+// simulatedExample is the generated example's name.
+const simulatedExample = "simulated-standard"
 
 func (a *app) registerExamples(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/examples", func(w http.ResponseWriter, r *http.Request) {
@@ -57,6 +71,22 @@ func (a *app) registerExamples(mux *http.ServeMux) {
 
 func exampleJobKey(name string) string { return "example\x00" + name }
 
+// exampleTitle is an example's title ("" for none), and whether it is made here rather than
+// downloaded.
+func (a *app) exampleTitle(name string) (title string, generated bool) {
+	for _, s := range a.examples.Sources {
+		if s.Name == name {
+			return s.Title, false
+		}
+	}
+	for _, g := range a.examples.Generated {
+		if g.Name == name {
+			return g.Title, true
+		}
+	}
+	return "", false
+}
+
 // downloadExample starts a job downloading an example (or answers the one running).
 func (a *app) downloadExample(w http.ResponseWriter, r *http.Request) {
 	if !isLoopbackRequest(r) {
@@ -64,12 +94,7 @@ func (a *app) downloadExample(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name := r.PathValue("name")
-	var title string
-	for _, s := range a.examples.Sources {
-		if s.Name == name {
-			title = s.Title
-		}
-	}
+	title, generated := a.exampleTitle(name)
 	if title == "" {
 		writeError(w, http.StatusNotFound, "No such example.")
 		return
@@ -79,7 +104,11 @@ func (a *app) downloadExample(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, err.Error())
 		return
 	}
-	job, _, err := a.jobs.Submit("example", "Download "+title, exampleJobKey(name), map[string]string{"example": name}, fn)
+	verb := "Download "
+	if generated {
+		verb = "Make "
+	}
+	job, _, err := a.jobs.Submit("example", verb+title, exampleJobKey(name), map[string]string{"example": name}, fn)
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, err.Error())
 		return
@@ -89,22 +118,25 @@ func (a *app) downloadExample(w http.ResponseWriter, r *http.Request) {
 
 // exampleJob downloads an example, then opens its bundle.
 func (a *app) exampleJob(name string) (jobs.Func, error) {
-	var title string
-	for _, s := range a.examples.Sources {
-		if s.Name == name {
-			title = s.Title
-		}
-	}
+	title, made := a.exampleTitle(name)
 	if title == "" {
 		return nil, fmt.Errorf("no example %q", name)
 	}
 	return func(ctx context.Context, run *jobs.Run) error {
-		run.Log("info", "Downloading %s into %s.", title, a.examples.Dir)
+		if made {
+			run.Log("info", "Making %s in %s.", title, a.examples.Dir)
+		} else {
+			run.Log("info", "Downloading %s into %s.", title, a.examples.Dir)
+		}
 		path, err := a.examples.Download(ctx, name, func(f float64, message string) { run.Progress(f, message) })
 		if err != nil {
 			return err
 		}
-		run.Log("info", "%s is ready at %s; every file checked against its recorded SHA-256.", title, path)
+		if made {
+			run.Log("info", "%s is ready at %s.", title, path)
+		} else {
+			run.Log("info", "%s is ready at %s; every file checked against its recorded SHA-256.", title, path)
+		}
 		// The bundle is now on this computer, ready to open.
 		a.files.add([]string{path})
 		return nil

@@ -129,9 +129,12 @@ type Result struct {
 	Frozen      []bool
 	Index       []int32
 	Region      Region
-	LeftOut     []int
-	StartStage  int
-	Trace       []SweepTrace
+	// Own is what the stitched segmentation takes from this run: its region, or its patch's square
+	// (Unit); Whole the region it is of (its own region, or the region it is a patch of).
+	Own, Whole Region
+	LeftOut    []int
+	StartStage int
+	Trace      []SweepTrace
 	// SplitHalf is the share of transcripts whose most frequent cell is the same over the first
 	// and the second half of the samples (a check that the summary has settled), estimated on every
 	// splitEvery-th transcript; Samples the sweeps summarized.
@@ -307,20 +310,32 @@ func RunArea(ctx context.Context, in *Inputs, a Area, opt Options, progress func
 	if progress == nil {
 		progress = func(float64, string) {}
 	}
-	regions, err := in.Regions(a)
+	units, err := in.Units(a)
 	if err != nil {
 		return nil, err
 	}
+	patched := false
+	for _, u := range units {
+		patched = patched || u.Own != u.Free
+	}
 	var out []*Result
-	for i, r := range regions {
-		res, err := Run(ctx, in, r, opt, func(f float64, message string) {
-			if len(regions) > 1 {
-				message = fmt.Sprintf("Region %d of %d: %s", i+1, len(regions), message)
+	for i, u := range units {
+		res, err := Run(ctx, in, u.Free, opt, func(f float64, message string) {
+			switch {
+			case patched:
+				message = fmt.Sprintf("Patch %d of %d: %s", i+1, len(units), message)
+			case len(units) > 1:
+				message = fmt.Sprintf("Region %d of %d: %s", i+1, len(units), message)
 			}
-			progress((float64(i)+f)/float64(len(regions)), message)
+			progress((float64(i)+f)/float64(len(units)), message)
 		})
 		if err != nil {
 			return nil, err
+		}
+		res.Own, res.Whole = u.Own, u.Region
+		// A patch's sampler goes as soon as it is done: only one is held at a time.
+		if patched {
+			res.Release()
 		}
 		out = append(out, res)
 	}
@@ -421,7 +436,7 @@ func Run(ctx context.Context, in *Inputs, region Region, opt Options, progress f
 	}
 	s.AttributeByPlace(m)
 	m.Init()
-	res := &Result{Model: m, Kept: kept, Frozen: frozen, Index: index, Region: region, LeftOut: lost, StartStage: start, Controls: int(m.Controls)}
+	res := &Result{Model: m, Kept: kept, Frozen: frozen, Index: index, Region: region, Own: region, Whole: region, LeftOut: lost, StartStage: start, Controls: int(m.Controls)}
 	total := 0
 	for _, st := range opt.Stages[start:] {
 		total += st.Sweeps

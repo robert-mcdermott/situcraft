@@ -58,6 +58,9 @@ func Run(ctx context.Context, p Params, folder, software string, progress func(f
 		progress(at, what)
 		return nil
 	}
+	if across, down := p.tiles(); across*down > 1 {
+		return runMosaic(p, folder, software, stop, progress)
+	}
 
 	t, pn, mols, in, err := simulateTissue(p, stop, report)
 	if err != nil {
@@ -102,7 +105,7 @@ func simulateTissue(p Params, stop func() bool, report func(float64, string) err
 		return nil, nil, nil, nil, err
 	}
 	t := newTissue(p)
-	layout := random.New(p.Seed, streamLayout)
+	layout := random.New(p.seed(streamLayout), streamLayout)
 	t.makeDomains(layout)
 	t.placeCells(layout)
 	if err := t.rasterize(stop); err != nil {
@@ -115,7 +118,7 @@ func simulateTissue(p Params, stop func() bool, report func(float64, string) err
 	if err := report(0.15, "Drawing the molecules"); err != nil {
 		return nil, nil, nil, nil, err
 	}
-	pn := makePanel(p, random.New(p.Seed, streamPanel), t.typeShares())
+	pn := makePanel(p, random.New(p.seed(streamPanel), streamPanel), t.typeShares())
 	mols, err := t.molecules(pn, stop)
 	if err != nil {
 		return nil, nil, nil, nil, err
@@ -199,6 +202,7 @@ func (t *tissue) molecules(pn *panel, stop func() bool) ([]molecule, error) {
 // count records what the molecules are, for the summary.
 func (wr *writer) count() {
 	wr.w.moleculesByOrigin = map[string]int{}
+	wr.w.trueCells = len(wr.t.cells)
 	names := []string{"cell", "background", "control probe", "control codeword"}
 	for _, m := range wr.mols {
 		wr.w.moleculesByOrigin[names[m.origin]]++
@@ -210,7 +214,7 @@ func (wr *writer) count() {
 
 func (wr *writer) summary(folder string) *Summary {
 	return &Summary{
-		Folder: folder, Cells: len(wr.t.cells), CellsByType: wr.w.trueCellsByType, VisibleNuclei: wr.w.visibleNuclei,
+		Folder: folder, Cells: wr.w.trueCells, CellsByType: wr.w.trueCellsByType, VisibleNuclei: wr.w.visibleNuclei,
 		InstrumentCells: wr.w.instrumentCells, Transcripts: wr.w.transcripts, MoleculesByOrigin: wr.w.moleculesByOrigin,
 		WideDisplacements: wr.w.wide, ImageWidth: wr.t.w, ImageHeight: wr.t.h,
 	}

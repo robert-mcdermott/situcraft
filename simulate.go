@@ -30,7 +30,7 @@ func runSimulate(args []string, stdout, stderr io.Writer) int {
 		names = append(names, name)
 	}
 	sort.Strings(names)
-	preset := flags.String("preset", "standard", "the starting parameters: "+strings.Join(names, " or "))
+	preset := flags.String("preset", "standard", "the starting parameters: "+strings.Join(names[:len(names)-1], ", ")+" or "+names[len(names)-1]+" (large: a mosaic of 55 million transcripts, for measuring at scale)")
 	seed := flags.Uint64("seed", 0, "the random seed (default: the preset's); the same parameters and seed give the same bundle, byte for byte")
 	width := flags.Float64("width", 0, "the field's width in µm (default: the preset's)")
 	height := flags.Float64("height", 0, "the field's height in µm (default: the preset's)")
@@ -109,7 +109,12 @@ func runSimulate(args []string, stdout, stderr io.Writer) int {
 			types = append(types, fmt.Sprintf("%d %s", n, ty.Name))
 		}
 	}
-	fmt.Fprintf(stdout, "Simulated %d cells (%s) in %g × %g µm, seed %d.\n", sum.Cells, strings.Join(types, ", "), p.WidthUm, p.HeightUm, p.Seed)
+	area := fmt.Sprintf("%g × %g µm", p.WidthUm, p.HeightUm)
+	if p.TilesAcross > 1 || p.TilesDown > 1 {
+		area = fmt.Sprintf("%g × %g µm (a mosaic of %d × %d tiles of %g × %g µm)", float64(sum.ImageWidth)*p.PixelUm, float64(sum.ImageHeight)*p.PixelUm,
+			max(1, p.TilesAcross), max(1, p.TilesDown), p.WidthUm, p.HeightUm)
+	}
+	fmt.Fprintf(stdout, "Simulated %d cells (%s) in %s, seed %d.\n", sum.Cells, strings.Join(types, ", "), area, p.Seed)
 	fmt.Fprintf(stdout, "%d nuclei are in the section; the simulated instrument segmented %d cells by nucleus expansion.\n", sum.VisibleNuclei, sum.InstrumentCells)
 	fmt.Fprintf(stdout, "%d transcripts: %d from cells, %d background, %d negative controls.\n", sum.Transcripts, sum.MoleculesByOrigin["cell"], sum.MoleculesByOrigin["background"],
 		sum.MoleculesByOrigin["control probe"]+sum.MoleculesByOrigin["control codeword"])

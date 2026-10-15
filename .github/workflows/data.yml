@@ -3,7 +3,8 @@ name: Real data
 # Weekly and by hand: SituCraft's readers on both development bundles (the Breast bundle's
 # 368 MB too, which each commit's CI leaves out), against independent readers. Each commit is
 # checked on the smaller Lung bundle by ci.yml; this run catches what only the larger bundle has
-# (four channels, multimodal segmentation) without making every commit download it.
+# (four channels, multimodal segmentation) without making every commit download it. And the scale
+# test: a simulated tissue of 55 million transcripts made, refined and drawn, then deleted.
 on:
   schedule:
     - cron: '17 6 * * 1'
@@ -61,3 +62,21 @@ jobs:
           # A runner has no GPU: Chrome's software WebGL, and no sandbox on the throwaway machine.
           SITUCRAFT_CHROME_ARGS: --use-angle=swiftshader --enable-unsafe-swiftshader --no-sandbox
         run: node validation/run.mjs viewer --require-data
+
+  scale:
+    name: A tissue of 55 million transcripts
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Room for it (about 8 GB), on the runner's second disk when it has one
+        run: |
+          dir=/mnt/situcraft-scale
+          if ! { sudo mkdir -p "$dir" && sudo chown "$USER" "$dir"; }; then dir="$RUNNER_TEMP/situcraft-scale"; mkdir -p "$dir"; fi
+          df -h "$dir"
+          echo "SITUCRAFT_SCALE=$dir" >> "$GITHUB_ENV"
+      - name: Made, refined in patches, opened and drawn, each step's time and peak memory within its budget, then deleted (validation/scale_test.go)
+        run: go test -v -timeout 4h -run Scale ./validation/

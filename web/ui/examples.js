@@ -43,7 +43,7 @@ export function createExamples(app) {
     const example = byName(name);
     try {
       await getJSON(`/api/examples/${encodeURIComponent(name)}`, { method: 'POST' });
-      app.log(`Downloading ${example?.title ?? name} into ${dir}.`);
+      app.log(`${example?.generated ? 'Making' : 'Downloading'} ${example?.title ?? name} into ${dir}.`);
     } catch (e) {
       toast(e.message, { kind: 'error' });
     }
@@ -53,7 +53,7 @@ export function createExamples(app) {
   async function remove(name) {
     const example = byName(name);
     if (!example) return;
-    if (!(await confirmDialog({ title: 'Remove the example?', message: `Delete ${example.title} from ${example.path}? It can be downloaded again. Projects using it will find it missing.`, confirm: 'Remove', danger: true }))) return;
+    if (!(await confirmDialog({ title: 'Remove the example?', message: `Delete ${example.title} from ${example.path}? It can be ${example.generated ? 'made' : 'downloaded'} again. Projects using it will find it missing.`, confirm: 'Remove', danger: true }))) return;
     try {
       await getJSON(`/api/examples/${encodeURIComponent(name)}`, { method: 'DELETE' });
       app.log(`Removed ${example.title}.`);
@@ -66,7 +66,7 @@ export function createExamples(app) {
   // The example's bundle as a local item (local.go), registered if it is not yet.
   async function item(name) {
     const example = byName(name);
-    if (example?.state !== 'ready') throw new Error('It is not downloaded.');
+    if (example?.state !== 'ready') throw new Error(example?.generated ? 'It is not made yet.' : 'It is not downloaded.');
     const known = app.localItems.find((i) => i.path === example.path);
     if (known) return known;
     const answer = await openPaths([example.path]);
@@ -124,7 +124,7 @@ export function createExamples(app) {
       if (job.state === 'complete' && example) {
         toast(`${example.title} is ready.`, { kind: 'ok', action: tourFor(example.name) ? { label: 'Take the tour', onClick: () => tour(example.name) } : { label: 'Open', onClick: () => open(example.name) } });
       } else if (job.state === 'failed') {
-        toast(`${example?.title ?? 'The example'} was not downloaded: ${job.error}`, { kind: 'error' });
+        toast(`${example?.title ?? 'The example'} was not ${example?.generated ? 'made' : 'downloaded'}: ${job.error}`, { kind: 'error' });
       }
     });
   });

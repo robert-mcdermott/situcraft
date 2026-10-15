@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { REFINE_METHOD, STUDIO_STEPS, areaText, background, bytes, memory, cellFlags, convergence, duration, failureOf, flagsOf, isRefinement, limitations, load, parseRegion, presetSpec, readRecipe, regionText, resolvePreset, settingProblem, settingValue, withSetting } from './refine.js';
+import { REFINE_METHOD, STUDIO_STEPS, areaText, background, bytes, patchesText, memory, cellFlags, convergence, duration, failureOf, flagsOf, isRefinement, limitations, load, parseRegion, presetSpec, readRecipe, regionText, resolvePreset, settingProblem, settingValue, withSetting } from './refine.js';
 
 const summary = { sweeps: 600, samples: 500, splitHalfAgreement: 0.982, meanProbability: 0.913, lowProbabilityShare: 0.041, logLikelihoodDriftPerTranscript: 0.0001, voxelsMovedPerSweep: 6627.4, cellsLowTranscripts: 12, cellsNoNucleus: 0, cellsUncertainBoundaries: 31, cellsLeftOut: 2 };
 
@@ -60,6 +60,7 @@ test('convergence adds a second seed\'s agreement, and what was refined and held
   assert.equal(pilot.at(-2).ok, true);
   assert.match(pilot.at(-1).text, /^57 cells refined in one region, 112 about them held as the instrument drew them\.$/);
   assert.match(convergence({ ...summary, gewekeZ: 1, regions: 1, cellsRefined: 1, cellsHeld: 7 }).at(-1).text, /^1 cell refined in one region, 7 about it held/);
+  assert.equal(convergence({ ...summary, gewekeZ: 1, regions: 1, patches: 25, cellsRefined: 383159, cellsHeld: 0 }).at(-1).text, '383,159 cells refined in 25 patches of one region, stitched into one segmentation.');
   const chance = convergence({ ...summary, gewekeZ: 1, seedAgreement: 0.7 });
   assert.equal(chance.at(-1).ok, false);
   assert.match(chance.at(-1).text, /much of the result is chance here/);
@@ -156,4 +157,12 @@ test('sizes, times, loads and failures as the program words them', () => {
   assert.deepEqual(failureOf({ error: 'The refinement needs about 20 GB of memory; the computer has 16 GB.', failure: { class: 'memory', remedy: 'Refine a region first.' } }),
     { title: 'Memory', message: 'The refinement needs about 20 GB of memory; the computer has 16 GB.', remedy: 'Refine a region first.' });
   assert.equal(failureOf({ error: 'x' }), null);
+});
+
+test('patches: how many, their sides, and none for a run in one piece', () => {
+  const unit = (x0, x1) => ({ own: { x0_um: x0, y0_um: 0, x1_um: x1, y1_um: 870 }, free: {} });
+  assert.match(patchesText({ patches: [unit(0, 870), unit(870, 1740)] }), /^Too large for one run: refined in 2 patches of 870 µm, one after another/);
+  assert.match(patchesText({ patches: [unit(0, 900), unit(900, 1700)] }), /2 patches of 870 to 900 µm/);
+  assert.equal(patchesText({ regions: [{}] }), '');
+  assert.equal(patchesText(null), '');
 });

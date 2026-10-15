@@ -173,6 +173,11 @@ SituCraft's transcript-informed segmentation (`SituCraft transcript-informed seg
   refined cell's 2D footprint (its voxels' most frequent labels, at the image's resolution), and
   the cells held about the region as the instrument drew them. Its outlines are simplified to half
   a voxel.
+- **A region of more than 4 million modelled transcripts** (twice `area.patch_transcripts`, 2
+  million by default) is refined in patches, one after another: equal rectangles of about 2
+  million transcripts each, each run refining the cells within 40 µm of its rectangle and holding
+  the rest. The patches are stitched: each pixel and transcript is taken from the patch whose
+  rectangle holds it, each cell's certainty and flags from the patch holding its nucleus's seed.
 - **Its assignments** are, for the gene transcripts it models (of the quality it was given, in a
   region's lattice), each one's most frequent place over the summarized sweeps: a cell when the
   transcript lay in its voxels and the model attributed it to the cell, else the background. Every other
@@ -180,8 +185,10 @@ SituCraft's transcript-informed segmentation (`SituCraft transcript-informed seg
   the pixel it was observed in.
 - **Its parameters** (`segmentation.json`) are every setting after defaults: `model`, `sampler`,
   `stages`, `block_um`, `seed`, `samples`; `area` as asked (`mode`: `whole`, `sections` or
-  `regions`, with `regions` and `section_gap_um`) and `regions`, the rectangles refined (µm:
-  `x0_um`, `y0_um`, `x1_um`, `y1_um`); `min_qv`, the quality modelled, and `counts_min_quality`
+  `regions`, with `regions` and `section_gap_um`; `patch_transcripts`, when set, the transcripts a
+  patch aims at) and `regions`, the rectangles refined (µm: `x0_um`, `y0_um`, `x1_um`, `y1_um`;
+  for a region refined in patches, each patch's rectangle of refined cells); `patches`, each
+  patch's own rectangle, when there are patches; `min_qv`, the quality modelled, and `counts_min_quality`
   (20); `start` and `start_stages`, each region's first stage; `preset` and `presets_version`; and
   `second_seed`, when a second run checked the first.
 
@@ -189,7 +196,7 @@ SituCraft's transcript-informed segmentation (`SituCraft transcript-informed seg
 | --- | --- | --- |
 | `probabilities.bin` | `SCPR` | Each transcript's posterior probability of its cell (`float32`, in the row order of `transcripts.parquet`): the share of the summarized sweeps it lay in that cell; NaN for a transcript assigned by place |
 | `certainty.bin` | `SCBC` | Each cell's boundary certainty (`float32`, in `cells.bin`'s order): the mean, over its pixels, of the share of the summarized sweeps each was its; NaN for a cell held or outside the regions refined. A cell is flagged uncertain below 0.75 |
-| `diagnostics.json` | | `summary` (the sweeps and samples; the split-half agreement, on every eighth transcript; the mean assignment probability and the share below 0.5; the log-likelihood's drift, Geweke's z and `gewekeJudged`, false when fewer than 100 sweeps were summarized; the voxels moved per sweep at the end; the cells refined, held and flagged; the regions; the transcripts modelled; the background: `falseDecodeShare` and `ambientShare`, the shares of the modelled transcripts its rates account for (their mean over the summarized sweeps), `negativeControls`, the negative controls' transcripts in the regions that measure the false decodes, and `inBackgroundShare`, the share the summary leaves in no cell; `seedAgreement`, with a second seed: the share of transcripts either run put in a refined cell that both put in the same cell), `limitations` (the cells, by id, with fewer than 10 gene transcripts, uncertain boundaries, or no nucleus, and the instrument's cells left out; the thresholds) and `regions` (each region refined: its rectangle, its own `summary`, and its `trace`, each sweep's stage, voxels moved, transcripts repositioned and log-likelihood). Over several regions, the summary's Geweke's z is the one farthest from 0 |
+| `diagnostics.json` | | `summary` (the sweeps and samples; the split-half agreement, on every eighth transcript; the mean assignment probability and the share below 0.5; the log-likelihood's drift, Geweke's z and `gewekeJudged`, false when fewer than 100 sweeps were summarized; the voxels moved per sweep at the end; the cells refined, held and flagged; the regions, and `patches`, the patches they were refined in; the transcripts modelled; the background: `falseDecodeShare` and `ambientShare`, the shares of the modelled transcripts its rates account for (their mean over the summarized sweeps), `negativeControls`, the negative controls' transcripts in the regions that measure the false decodes, and `inBackgroundShare`, the share the summary leaves in no cell; `seedAgreement`, with a second seed: the share of transcripts either run put in a refined cell that both put in the same cell), `limitations` (the cells, by id, with fewer than 10 gene transcripts, uncertain boundaries, or no nucleus, and the instrument's cells left out; the thresholds) and `regions` (each region or patch refined: its rectangle, a patch's own rectangle as `patch`, its own `summary`, and its `trace`, each sweep's stage, voxels moved, transcripts repositioned and log-likelihood). Over several regions, the summary's Geweke's z is the one farthest from 0 |
 | `layers.bin` | `SCLY` | With more than one layer: each layer's depths (µm) and each cell's outline in it, as `outlines.bin` holds them |
 
 A segmentation with errors planted for practice (`SituCraft planted errors`, simulated) is the
@@ -224,7 +231,8 @@ beside it first, from its recorded place otherwise. The bundles themselves are n
 ### Derived data
 
 The cache (`--cache-dir`) holds what SituCraft builds from each bundle: image tiles at every zoom,
-a spatial index of the transcripts with density grids, and tiled cell outlines. These are internal
+a spatial index of the transcripts with density grids, tiled cell outlines, and, for each
+segmentation drawn in the Viewer, its transcripts' cells and probabilities by the index's tiles. These are internal
 files, versioned with SituCraft and rebuilt when their format changes; they can be deleted at any
 time. They are not for exchange: export a segmentation instead (below).
 
@@ -326,14 +334,22 @@ are in [research.md](../situcraft-spec/research.md) §3.4.
 
 | Flag | Default | Sets |
 | --- | --- | --- |
-| `--preset` | `standard` | The starting parameters: `standard` (500 × 500 µm, about 3,000 cells and 440,000 transcripts, in a few seconds) or `small` (160 × 120 µm) |
+| `--preset` | `standard` | The starting parameters: `standard` (500 × 500 µm, about 3,000 cells and 440,000 transcripts, in a few seconds), `small` (160 × 120 µm) or `large` (a mosaic of 7 × 6 fields of 870.4 µm, about 6.1 × 5.2 mm, 400,000 cells and 55 million transcripts: about 10 minutes, 3.2 GB of memory and 4 GB of disk) |
 | `--seed` | the preset's | The random seed. The same parameters and seed give the same bundle, byte for byte, on any computer |
-| `--width`, `--height` | the preset's | The field's size in µm: at least 20, and at most 50 million pixels in all (about 1.5 × 1.5 mm at 0.2125 µm, which needs about 4 GB of memory; 1 × 1 mm takes about 13 s and 1.7 GB) |
+| `--width`, `--height` | the preset's | The field's size in µm: at least 20, and at most 50 million pixels in all (about 1.5 × 1.5 mm at 0.2125 µm, which needs about 4 GB of memory; 1 × 1 mm takes about 13 s and 1.7 GB). A larger tissue is a mosaic of fields (below) |
 | `--params` | | A JSON file of parameters, each overriding the preset's; `--print-params` prints them all, with their names |
 | `--quiet` | | Print only the summary |
 
 The folder must not exist: it is written under a temporary name beside it and renamed into place
 when complete, so an interrupted run (Ctrl+C) leaves nothing behind.
+
+**A mosaic** (`tiles_across` and `tiles_down` in the parameters, 0 or 1 for one field) is a tissue
+too large to make whole: tiles of the field's size, each a whole number of 512-pixel blocks each
+way, side by side. Each tile is a tissue of its own (its layout, cells, molecules and stain, from
+streams of its own), sharing the panel and every other parameter; the first is the single field
+the same parameters make. The tiles are made one at a time and joined into one bundle, so memory
+is a tile's whatever the mosaic's size: cell and nucleus ids, transcript ids and fields of view
+are numbered across the mosaic, and coordinates placed in it.
 
 | File | Holds |
 | --- | --- |

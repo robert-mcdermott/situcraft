@@ -34,10 +34,16 @@ type refineFixture struct {
 
 func newRefineFixture(t *testing.T, register bool) *refineFixture {
 	t.Helper()
+	return newRefineFixtureOf(t, register, 80, 60)
+}
+
+// newRefineFixtureOf is a fixture of a tissue of this size (µm).
+func newRefineFixtureOf(t *testing.T, register bool, width, height float64) *refineFixture {
+	t.Helper()
 	dir := t.TempDir()
 	folder := filepath.Join(dir, "simulated")
 	p := simulate.Presets["small"]
-	p.WidthUm, p.HeightUm = 80, 60
+	p.WidthUm, p.HeightUm = width, height
 	if _, err := simulate.Run(context.Background(), p, folder, "test", nil); err != nil {
 		t.Fatal(err)
 	}

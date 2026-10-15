@@ -10,6 +10,17 @@ package refine
 //     a gap of each other (single linkage), each group's box grown by the margin, and groups whose
 //     boxes then overlap merged. Each is refined apart, with a model of its own: unrelated tissues
 //     on one slide do not share expression states.
+//   - Patches (requirements S12): a region holding more transcripts than one run should (above
+//     twice patchTarget, or the area's own patch size) is refined in overlapping patches, so that a run's memory is bounded whatever
+//     the tissue's size. Its rectangle is cut into equal squares of about patchTarget transcripts
+//     each; a patch refines the cells whose seeds lie within patchOverlapUm of its square, with
+//     the cells about it held. The stitched segmentation takes each pixel and transcript from the
+//     patch whose square holds it (and each cell's certainty and limitations from the patch whose
+//     square holds its seed): each patch decides where it is most inside, its cells there refined
+//     with at least the overlap of refined cells about them. Cells keep the instrument's numbering
+//     in every patch, so the patches' labels agree where they meet. The decision depends on the
+//     data and the settings only, never on the computer, so a run is the same everywhere.
+//     Patch-based processing of large sections: Blampey et al. (2024), Nat Commun 15:4981.
 
 import (
 	"errors"
@@ -68,6 +79,9 @@ type Area struct {
 	Regions []Region `json:"regions,omitempty"`
 	// GapUm is the gap between cells that separates sections (mode sections).
 	GapUm float64 `json:"section_gap_um,omitempty"`
+	// PatchTranscripts is about how many modelled transcripts a patch holds (0: patchTarget); a
+	// region of more than twice as many is refined in patches.
+	PatchTranscripts int `json:"patch_transcripts,omitempty"`
 }
 
 // The margin about a region holding its neighbours (µm), and the default gap between sections.
@@ -75,6 +89,80 @@ const (
 	marginUm     = 20.0
 	sectionGapUm = 100.0
 )
+
+// Patches: a region of more than twice patchTarget modelled transcripts (or the area's own
+// PatchTranscripts) is cut into squares of about that many, each refining its cells and those
+// within patchOverlapUm of it.
+const (
+	patchTarget    = 2_000_000
+	patchOverlapUm = 40.0
+)
+
+// Unit is a run of a refinement: the cells whose seeds lie in Free are refined (those about it
+// held), and the stitched segmentation takes from it what lies in Own: the region itself, or a
+// patch's square. Region is the region it is of.
+type Unit struct {
+	Region Region `json:"region"`
+	Free   Region `json:"free"`
+	Own    Region `json:"own"`
+}
+
+// Units are an area's runs: its regions, each cut into patches when it holds more than twice a
+// patch's transcripts.
+func (in *Inputs) Units(a Area) ([]Unit, error) {
+	regions, err := in.Regions(a)
+	if err != nil {
+		return nil, err
+	}
+	count := make([]int, len(regions))
+	t := in.Transcripts
+	for i := range t.Gene {
+		x, y := float64(t.X[i]), float64(t.Y[i])
+		for r, reg := range regions {
+			if reg.Contains(x, y) {
+				count[r]++
+				break
+			}
+		}
+	}
+	target := a.PatchTranscripts
+	if target == 0 {
+		target = patchTarget
+	}
+	var out []Unit
+	for r, reg := range regions {
+		out = append(out, patches(reg, count[r], target)...)
+	}
+	return out, nil
+}
+
+// patches cuts a region of n modelled transcripts into equal rectangles of about target each (the
+// region itself, up to twice that), in rows from the top.
+func patches(r Region, n, target int) []Unit {
+	if n <= 2*target {
+		return []Unit{{r, r, r}}
+	}
+	// Enough patches to hold the transcripts at the target, in a grid close to the region's shape.
+	w, h := r.X1-r.X0, r.Y1-r.Y0
+	k := (n + target - 1) / target
+	nx := max(1, int(math.Round(math.Sqrt(float64(k)*w/h))))
+	ny := (k + nx - 1) / nx
+	var out []Unit
+	for j := 0; j < ny; j++ {
+		for i := 0; i < nx; i++ {
+			own := Region{r.X0 + w*float64(i)/float64(nx), r.Y0 + h*float64(j)/float64(ny), r.X0 + w*float64(i+1)/float64(nx), r.Y0 + h*float64(j+1)/float64(ny)}
+			// The last squares end exactly at the region's edge.
+			if i == nx-1 {
+				own.X1 = r.X1
+			}
+			if j == ny-1 {
+				own.Y1 = r.Y1
+			}
+			out = append(out, Unit{Region: r, Free: own.grown(patchOverlapUm).clipped(r), Own: own})
+		}
+	}
+	return out
+}
 
 // whole is the inputs' whole extent.
 func (in *Inputs) whole() Region {

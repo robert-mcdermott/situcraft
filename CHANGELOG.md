@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (0.3.0)
+## 0.3.0 (2026-10-15)
 
 Wave 3 of the [roadmap](situcraft-spec/roadmap.md): SituCraft's own transcript-informed
 segmentation, validated against simulated truth and independent reference outputs.
@@ -137,6 +137,35 @@ segmentation, validated against simulated truth and independent reference output
   - **A refinement records each cell's boundary certainty** (`certainty.bin`,
     [docs/FORMATS.md](docs/FORMATS.md)).
 
+- **Larger tissues (wave 3, slice 9).** A region of more than about 4 million modelled transcripts
+  is refined in patches of about 2 million, one after another, each also refining the cells within
+  40 µm of its square, and stitched into one segmentation: each pixel and transcript from the
+  patch whose square holds it, each cell counted once. The result is still the same for the same
+  seed on any computer. The preflight, the studio and `situcraft refine` say how many patches, and
+  the diagnostics keep each patch's summary.
+  - **As accurate as one run:** on the standard simulated tissue in four patches, 86.1% of
+    transcripts in their true cell (86.3% in one run), 87.4% within 20 µm of a seam.
+  - **Measured at scale:** a simulated tissue of 6.1 × 5.2 mm and 55 million transcripts was
+    refined in 25 patches in 5 to 6 GB of memory (an estimated 10.8 GB in one run). What still
+    grows with the tissue is about 100 bytes a transcript: a computer with 16 GB refines about 120
+    million.
+  - **The Viewer streams a segmentation's transcripts:** their cells and probabilities are written
+    once into the cache by tile and read by tile, never held whole. The dataset's own cells table
+    counts each cell's genes a row of tiles at a time, no longer holding a pair for every
+    transcript. At 55 million transcripts the
+    Viewer drawing a refinement peaked at 0.9 GB (1.8 GB before), and with the dataset alone at 0.2 GB (1.7 GB before).
+  - **`situcraft simulate --preset large`** makes that tissue: a mosaic of 7 × 6 standard fields,
+    made a field at a time and joined into one bundle (`tiles_across`, `tiles_down`;
+    [docs/FORMATS.md](docs/FORMATS.md)), in about 10 minutes and 3 GB of memory.
+  - **A weekly scale test** makes it, refines it, opens and draws it, each step's time and memory
+    within its budget, then deletes it (`validation/scale_test.go`).
+
+- **A third example: a simulated tissue with known truth,** made on this computer in seconds
+  (**Make it** on the start page; `open_example` with `simulated`). Its worked example scores the
+  instrument's nucleus expansion and SituCraft's refinement against the truth.
+- **A worked example on the Breast data refines the instrument's cells** from their transcripts,
+  compares the two, and shows where the refinement is unsure of itself.
+
 ### Changed
 
 - **Simulated tissues' background is of two kinds:** ambient RNA on the genes in proportion to
@@ -165,9 +194,12 @@ segmentation, validated against simulated truth and independent reference output
 - **Convergence is said to be judged only when it can be:** with fewer than 100 sweeps
   summarized, Geweke's diagnostic cannot judge it, and the page now says so instead of
   "settled".
-- `diagnostics.json` holds each region's summary and trace (`regions`); the recorded parameters
-  hold the area, the regions refined, the quality, the preset and a second seed
+- `diagnostics.json` holds each region's summary and trace (`regions`; a patch's with its square,
+  `patch`, and the summary's `patches`); the recorded parameters hold the area, the regions
+  refined, the patches, the quality, the preset and a second seed
   ([docs/FORMATS.md](docs/FORMATS.md)).
+- `situcraft refine`'s summary says what it refined in: "in one region", "in 3 regions" or "in 25
+  patches of one region".
 
 ### Fixed
 

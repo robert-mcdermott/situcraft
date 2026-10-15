@@ -833,9 +833,12 @@ each sweep.
 | 500 µm, 120 genes | 89 MB (89) | 1,352 kB (1,631) | 4.0 s (4.1) |
 | 500 µm, 1,000 genes, Low memory | 97 MB (97) | 1,713 kB (1,658) | 10.5 s (11.4) |
 | The Lung 2-FOV bundle, Balanced (600 sweeps), whole | 264 MB resident (251) | 4.45 MB (4.0) | 97 s (88) |
+| The large simulated tissue (§3.4), 25 patches | 5.1 GB resident (6.6) | 166 MB (224) | 626 s (about 600) |
 
 - A region's run is dominated by reading the bundle; a small panel's by the transcripts modelled; a
-  large panel's by the cells × genes.
+  large panel's by the cells × genes. In patches, the memory is the largest patch's run with
+  what is held throughout (large tissues, below); the large tissue's estimate is a fifth over
+  what it took, on the safe side.
 - The preflight refuses a run whose estimate passes 85% of the computer's memory (unless forced)
   or the free space where it is written, and warns past half of either.
 - *Found by measuring:* the first, linear model under-predicted small regions by a factor of four.
@@ -1040,14 +1043,88 @@ The refinement's diagnostics report the background (`diagnostics.json`; the stud
 the shares its rates account for, by kind, the negative controls that measured the false decodes,
 and the share left in no cell.
 
+#### Large tissues (verified, wave 3, slice 9)
+
+A run's memory grows with what it holds of its region: about 130 bytes a modelled transcript, 50
+a voxel and 17 a cell × gene (the cost model above). A tissue of tens of millions of transcripts
+cannot be held as one run on a laptop, so a large region is refined in patches, an approach
+after Blampey et al. (2024), *Nat Commun* 15:4981, doi:10.1038/s41467-024-48981-z.
+
+**Patches.**
+- **When:** a region of more than twice `patch_transcripts` modelled transcripts (2 million by
+  default, so above 4 million) is cut into equal rectangles: $k = \lceil n / \text{target} \rceil$
+  of them, $n_x = \operatorname{round}(\sqrt{k\,w/h})$ across and $\lceil k / n_x \rceil$ down, the
+  last ending exactly at the region's edges. They depend on the data and the settings only, never
+  on the threads or the memory, so a refinement is still the same bytes for the same seed.
+- **Each patch is a run** of the region's kind: it refines the cells whose seeds lie within 40 µm
+  of its rectangle (clipped to the region) and holds the cells about them as the instrument drew
+  them. A cell near a seam is refined with its neighbours on both sides, in every patch whose
+  margin reaches it.
+- **One at a time:** each patch's sampler is released when its run ends, so the sampling holds
+  one patch's state.
+- **Stitching:** each pixel and transcript is taken from the patch whose rectangle holds it, each
+  cell's boundary certainty and flags from the patch whose rectangle holds its seed, and each cell
+  is counted once. The diagnostics keep each patch's summary and trace, with its rectangle.
+
+**Validation.**
+- **Stitched as specified** (`TestPatchesAreStitched`, a 200 × 160 µm tissue in four patches):
+  the segmentation passes the check; every pixel is a cell its rectangle's patch refines where
+  its footprint has one; every cell is decided once and none is held. The patches and a run of
+  the whole agree on 89.7% of transcripts, two seeds of the whole on 90.7%: the patches differ
+  from the whole as chance does.
+- **As accurate as the whole** (`REFINE_PATCHES=standard`, the standard tissue in four patches,
+  Balanced): 86.1% of transcripts in their true cell and a median IoU of 0.719, against the
+  whole's 86.3% and 0.716; within 20 µm of a seam, 87.4%. The seams lose nothing.
+
+**At scale** (`validation/scale_test.go`, weekly; measured here on a 10-core laptop with 32 GB):
+the `large` simulated tissue (§3.4), 6.1 × 5.2 mm, 399,084 cells and 54,782,352
+transcripts, made, refined, opened and drawn, each step in a process of its own, then deleted.
+
+| Step | Time | Peak memory |
+|---|---|---|
+| Making the tissue, a field at a time | 621 s | 3.1 GB |
+| Refining it in 25 patches (40 sweeps) | 338 s | 6.2 GB |
+| Its derived data, the instrument's segmentation registered, the refinement imported | 128 s | 1.8 GB |
+| The Viewer with the dataset alone: its descriptor, cells and a region's transcripts | 20 s | 0.19 GB |
+| The Viewer drawing the refinement: its cells and all 2,688 transcript tiles | 38 s | 0.93 GB |
+
+- **The preflight** foresaw 25 patches of 1,219 µm, 49.4 million transcripts modelled (58.3
+  million with those the patches share) and 6.6 GB; without patches the run would need 10.8 GB.
+- **The refinement** (40 sweeps, the last 20 summarized: the test checks the scale, not the
+  chain) refined all 383,159 of the instrument's cells in 25 patches. With 100 sweeps, 50 summarized, it took
+  626 s at 5.1 GB, Geweke's z 0.0, and 93.5% of transcripts were in the same cell over both
+  halves of the summarized sweeps; Balanced's 600 sweeps are estimated at 53 minutes. Its peak
+  moves by a sixth from run to run with the collector's timing (5.1 to 6.2 GB over three runs),
+  always under the estimate.
+- **The Viewer** answers each transcript tile of the refinement, with every transcript's cell
+  and probability, in 12 ms at worst (2,688 tiles).
+
+**What still grows with the tissue.** Patches bound the sampling; the run still holds every
+modelled transcript's place and prior, each patch's results until the segmentation is written,
+and every row's assignment and probability as they are written: about 100 bytes a transcript and
+2 a pixel of the image. A computer with 16 GB thus refines about 120 million transcripts at this
+density, and the preflight says so before a run starts. Whole slides beyond that need the inputs
+and results streamed by patch (wave 10).
+
+**The Viewer's memory.** The dataset's cells table counts each cell's genes detected a row of
+tiles at a time: a first pass finds the last row each cell has a transcript in, and the second
+makes each row's (cell, gene) pairs unique with those carried from earlier rows, counting a cell
+at its last row (checked cell by cell against transcripts.parquet on both bundles). It held a pair
+for every transcript in a cell before: with the dataset alone at 55 million transcripts, the
+Viewer now peaks at 0.19 GB, against 1.65 GB. A segmentation's per-transcript files (its assignments and
+probabilities, 8 bytes a transcript) are never read whole: they are streamed once, to give each
+cell its transcripts' mean probability and to write the transcripts' cells and probabilities by
+the dataset's tiles into the cache, in batches of about 4 million transcripts, each batch sorted by
+row and picked out in one pass over the files. Each tile's are then read when it is drawn. At 55
+million transcripts the Viewer drawing a refinement peaked at 0.93 GB, against 1.8 GB reading
+the files whole.
+
 SituCraft's other choices where the publication leaves them open:
 - **Polygons** come from the summarized voxel labels by boundary tracing per z layer, and from
   the 2D footprint.
 - **Convergence.** Each sweep records the voxels moved, the transcripts repositioned and the
   log-likelihood (`diagnostics.json`).
-- **Large tissues** run as overlapping patches that are stitched. Patch-based processing of large
-  sections follows the approach of Blampey et al. (2024), *Nat Commun* 15:4981,
-  doi:10.1038/s41467-024-48981-z.
+- **Large tissues** run as overlapping patches that are stitched (above).
 
 Limitations to show in the interface: refinement cannot create cells absent from the prior
 segmentation; boundaries of cells with few transcripts, or in regions of homogeneous expression,
@@ -1234,6 +1311,28 @@ So molecules are drawn in parallel and merged in order. Every product is rounded
 logarithms and exponentials come from `internal/dmath`. The same parameters give the same bundle
 byte for byte on any number of threads, on arm64 and amd64 alike (the small preset's digest is
 pinned in the tests).
+
+**Mosaics** (wave 3, slice 9). A field holds its image whole, about 75 bytes a pixel, so one
+field stops at 50 million pixels (about 1.5 mm a side). A larger tissue is a mosaic of fields
+(`tiles_across` × `tiles_down`), each a whole number of the stain's 512-pixel tiles each way:
+- **each tile is a tissue of its own:** its layout, cells, molecules and stain come from streams
+  of its own, the seed mixed with SplitMix64's finalizer of the tile's number (Steele GL, Lea D,
+  Flood CH. Fast splittable pseudorandom number generators. *OOPSLA* 2014:453–472.
+  doi:10.1145/2660193.2660195); the panel is shared, and the first tile is the single field the
+  same parameters make, byte for byte;
+- **made one at a time and joined by streaming** into one bundle: the tables by row groups, the
+  masks a chunk per tile, the stain tile by tile at every level whose tiles hold whole tiles of
+  the field (the coarser levels assembled whole, being small), ids, fields of view and places
+  numbered across the mosaic. Memory is a tile's whatever the mosaic's size;
+- **its seams show:** no cell crosses one, a molecule displaced across one is lost as at the
+  field's edge, and each tile has its own domains. A mosaic is for measuring SituCraft at scale,
+  not a model of a larger tissue.
+
+The `large` preset is 7 × 6 standard fields of 4,096 pixels (870.4 µm), 12 domains each: 6.1 ×
+5.2 mm, 399,084 cells and 54,782,352 transcripts, made here in about 620 s with a peak of 3.1 GB and 4.0
+GB of disk. A mosaic of 2 × 2 small tiles validates as one bundle, with every metric the validator
+recomputes agreeing; its first tile is the single field, its transcript ids unique, its truth
+matching it row for row, and its masks whole (`TestAMosaicIsOneBundle`).
 
 **Validation** (`internal/simulate/gof_test.go`; fixed seeds, each test at the 0.001 level):
 - **Counts.** The randomized probability integral transform of every interior cell's count of

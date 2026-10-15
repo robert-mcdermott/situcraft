@@ -23,7 +23,7 @@ func (t *tissue) stain() *tiff.Plane16 {
 		if !c.nucleus {
 			continue
 		}
-		s := random.New(p.Seed, streamImage+uint64(k))
+		s := random.New(p.seed(streamImage), streamImage+uint64(k))
 		bright := s.LogNormal(dmath.Log(1800), 0.25)
 		for _, i := range c.nucleusPixel {
 			x, y := int(i)%t.w, int(i)/t.w
@@ -39,7 +39,7 @@ func (t *tissue) stain() *tiff.Plane16 {
 	}
 	out := &tiff.Plane16{Width: t.w, Height: t.h, Pix: make([]uint16, t.w*t.h)}
 	for y := 0; y < t.h; y++ {
-		s := random.New(p.Seed, streamImage+1<<30+uint64(y))
+		s := random.New(p.seed(streamImage), streamImage+1<<30+uint64(y))
 		for x := 0; x < t.w; x++ {
 			v := 80 + float64(img[y*t.w+x]) + mul(6, s.Normal())
 			out.Pix[y*t.w+x] = uint16(math.Max(0, math.Min(65535, math.Round(v))))

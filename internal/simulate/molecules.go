@@ -152,7 +152,7 @@ func (t *tissue) cellMolecules(k int, pn *panel, out []molecule) []molecule {
 	ps := p.PixelUm
 	c := &t.cells[k]
 	ty := p.Types[c.typ]
-	s := random.New(p.Seed, streamCells+uint64(k))
+	s := random.New(p.seed(streamCells), streamCells+uint64(k))
 	total := t.expectedTotal(k, s)
 	// The nucleus's pixels weigh the nuclear enrichment each, the others one.
 	nuclear := 0.0
@@ -212,7 +212,7 @@ func (t *tissue) background(tile int, pn *panel, out []molecule) []molecule {
 	cols := int(math.Ceil(p.WidthUm / backgroundTile))
 	x0, y0 := mul(float64(tile%cols), backgroundTile), mul(float64(tile/cols), backgroundTile)
 	w, h := math.Min(backgroundTile, p.WidthUm-x0), math.Min(backgroundTile, p.HeightUm-y0)
-	s := random.New(p.Seed, streamTiles+uint64(tile))
+	s := random.New(p.seed(streamTiles), streamTiles+uint64(tile))
 	area := mul(w, h)
 	draw := func(feature int, mean float64, origin uint8) {
 		n := s.Poisson(mean)

@@ -49,6 +49,8 @@ export function startTour(app, { tour, dataset }) {
     if (d.action === 'expand') return Boolean(role(`expansion-${d.distance}`));
     if (d.action === 'plant') return Boolean(role('planted'));
     if (d.action === 'compare') return Boolean(comparison(d.a, d.b));
+    if (d.action === 'refine') return Boolean(role('refined'));
+    if (d.action === 'import-truth') return Boolean(role('truth'));
     return true;
   }
 
@@ -60,6 +62,12 @@ export function startTour(app, { tour, dataset }) {
     if (!app.segmentationView) throw new Error('the Segmentation view did not open');
     if (d.action === 'expand') return app.segmentationView.expand(ds, d.distance);
     if (d.action === 'plant') return app.segmentationView.plant(ds, {});
+    if (d.action === 'refine') return app.segmentationView.refine(ds, { preset: d.preset ?? 'balanced' });
+    if (d.action === 'import-truth') {
+      // The truth folder beside the bundle's files, in the path's own separators.
+      const sep = ds.path.includes('\\') && !ds.path.includes('/') ? '\\' : '/';
+      return app.segmentationView.importSegmentation(ds, { format: 'xenium', paths: [`${ds.path.replace(/[\\/]+$/, '')}${sep}truth`] });
+    }
     if (d.action === 'compare') {
       const a = role(d.a);
       const b = role(d.b);
@@ -144,6 +152,11 @@ export function startTour(app, { tour, dataset }) {
       });
     } else {
       const view = stepView(step, dataset, i);
+      // A step's segmentation, by what it is.
+      if (view && step.segmentation) {
+        const s = role(step.segmentation);
+        view.segmentation = s && s.source !== 'instrument' ? s.id : 'instrument';
+      }
       if (view) app.applyView(view);
       else {
         app.focusItem({ kind: 'dataset', id: dataset });

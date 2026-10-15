@@ -10,7 +10,7 @@ import { h, icon, formatCount } from './dom.js';
 import { toast } from './overlays.js';
 import { comparisonsOf } from '../lib/segmentations.js';
 import {
-  GENERAL_LIMITATION, STUDIO_STEPS, areaText, background, bytes, convergence, duration, failureOf, isRefinement, limitations, load, memory, parseRegion,
+  GENERAL_LIMITATION, STUDIO_STEPS, areaText, background, bytes, convergence, patchesText, duration, failureOf, isRefinement, limitations, load, memory, parseRegion,
   presetSpec, readRecipe, regionText, settingProblem, settingValue, withSetting,
 } from '../lib/refine.js';
 
@@ -231,6 +231,7 @@ export function createStudio(app, hooks) {
           h('button.btn', { type: 'button', disabled: !viewed, title: viewed ? regionText(viewed) : 'Open the dataset in the Viewer and frame a region first', onclick: () => add(viewed) }, icon('rectangle'), 'Add the region in view')),
         h('p.muted.seg-note', 'The cells whose nuclei lie in a region are refined; those about it are held where the instrument drew them, so that no cell is cut at the region\'s edge. The rest of the tissue keeps the instrument\'s segmentation.')) : null,
       pre?.regions?.length ? h('p.seg-note', area.mode === 'whole' ? `The whole tissue: ${regionText(pre.regions[0])}.` : `${area.mode === 'sections' ? `${pre.regions.length === 1 ? 'One section' : `${pre.regions.length} sections`} found` : 'Refined'}: ${pre.regions.map(regionText).join('; ')}.`) : null,
+      patchesText(pre) ? h('p.seg-note', patchesText(pre)) : null,
       findings(pre, ['region']));
   }
 
@@ -260,7 +261,7 @@ export function createStudio(app, hooks) {
         meter('Memory', e.peakMemoryBytes, pre.memoryBytes, pre.memoryBytes > 0 ? `the computer's ${memory(pre.memoryBytes)}` : 'the computer\'s (unknown)', memory),
         meter('Disk', e.diskBytes, pre.freeDiskBytes, pre.freeDiskBytes >= 0 ? `${bytes(pre.freeDiskBytes)} free` : 'the free space (unknown)'),
         h('div.studio-meter', h('div.studio-meter-head', h('b', 'Time'), h('span', `about ${duration(e.seconds)}`, h('span.muted', ` on ${e.cores} thread${e.cores === 1 ? '' : 's'}${st.spec.seed_check ? ', both seeds' : ''}`))))) : h('p.muted.seg-note', 'The estimates follow the preflight.'),
-      e && e.regions ? h('p.seg-note', `It refines ${exact(e.cells)} cells${e.cellsHeld ? ` and holds ${exact(e.cellsHeld)} about them` : ''}: ${exact(e.transcripts)} transcripts in ${exact(e.voxels)} voxels${e.regions > 1 ? `, in ${e.regions} regions one after another (memory is the largest region's)` : ''}.`) : null,
+      e && e.regions ? h('p.seg-note', `It refines ${exact(e.cells)} cells${e.cellsHeld ? ` and holds ${exact(e.cellsHeld)} about them` : ''}: ${exact(e.transcripts)} transcripts in ${exact(e.voxels)} voxels${e.regions > 1 ? `, in ${e.regions} ${pre?.patches?.length ? 'patches' : 'regions'} one after another (memory is the largest ${pre?.patches?.length ? 'patch' : 'region'}'s)` : ''}.`) : null,
       findings(pre, ['memory', 'storage', 'time', 'transcripts']),
       (pre?.problems ?? []).some((f) => f.class === 'memory') ? h('label.studio-check', h('input', { type: 'checkbox', checked: st.force, onchange: (event) => {
         st.force = event.target.checked;

@@ -62,6 +62,9 @@ type Recorded struct {
 	// the preset; the rest is filled from the options, the inputs and the results.
 	Area    Area     `json:"area"`
 	Regions []Region `json:"regions"`
+	// Patches are each patch's square, when a region was refined in patches (Regions then holds
+	// each patch's region of refined cells).
+	Patches []Region `json:"patches,omitempty"`
 	// MinQV is the quality the modelled transcripts reach; the counts are of quality 20 or more,
 	// as every segmentation's.
 	MinQV            float64 `json:"min_qv"`
@@ -118,8 +121,9 @@ type DiagnosticsSummary struct {
 	NoNucleus      int `json:"cellsNoNucleus"`
 	Uncertain      int `json:"cellsUncertainBoundaries"`
 	LeftOut        int `json:"cellsLeftOut"`
-	// Regions are the regions refined.
+	// Regions are the regions refined; Patches the patches they were refined in, if any.
 	Regions int `json:"regions"`
+	Patches int `json:"patches,omitempty"`
 	// Transcripts are the modelled transcripts (in the regions' lattices).
 	Transcripts int `json:"transcripts"`
 	// The background (research.md §3.2): the shares of the modelled transcripts its rates account
@@ -135,9 +139,10 @@ type DiagnosticsSummary struct {
 	SeedAgreement *float64 `json:"seedAgreement,omitempty"`
 }
 
-// RegionDiagnostics are one region's.
+// RegionDiagnostics are one region's, or one patch's (Patch its square).
 type RegionDiagnostics struct {
 	Region  Region             `json:"region"`
+	Patch   *Region            `json:"patch,omitempty"`
 	Summary DiagnosticsSummary `json:"summary"`
 	Trace   []SweepTrace       `json:"trace"`
 }
@@ -149,6 +154,25 @@ type Diagnostics struct {
 	Regions     []RegionDiagnostics `json:"regions"`
 }
 
+// patched: a patch, which decides only its square; a region decides its whole lattice.
+func (r *Result) patched() bool { return r.Own != r.Region }
+
+// decidesCell: the run decides the cell it refines (a region every one, a patch those whose seeds
+// lie in its square), so the stitched segmentation takes the cell's certainty and flags from it.
+func (r *Result) decidesCell(in *Inputs, c int) bool {
+	return !r.patched() || r.Own.Contains(in.SeedX[c], in.SeedY[c])
+}
+
+// decidesTranscript: the run's transcript i lies where the stitched segmentation takes its cell
+// from the run (a region's every one, a patch's in its square).
+func (r *Result) decidesTranscript(in *Inputs, i int) bool {
+	if !r.patched() {
+		return true
+	}
+	j := r.Index[i]
+	return r.Own.Contains(float64(in.Transcripts.X[j]), float64(in.Transcripts.Y[j]))
+}
+
 // cellName is output cell k's id (k from 1).
 func cellName(k int) string { return "c" + strconv.Itoa(k) }
 
@@ -158,24 +182,33 @@ func WriteBundleOutputs(b *xenium.Bundle, in *Inputs, idx *BundleIndex, results 
 	n := in.Cells
 	img := in.Start
 	ps := img.PixelSize
-	// Which result refines each input cell (−1: none), and each result's footprint.
+	// The cells each run refines (free, or left out), which decides each (−1: none), and each
+	// run's footprint.
 	refinedBy := make([]int, n)
 	for c := range refinedBy {
 		refinedBy[c] = -1
 	}
 	footprints := make([][]uint32, len(results))
+	freeIn := make([]map[int]bool, len(results))
 	for r, res := range results {
 		footprints[r] = Footprint(res)
+		free := map[int]bool{}
 		for k, c := range res.Kept {
 			if !res.Frozen[k] {
-				refinedBy[c] = r
+				free[c] = true
 			}
 		}
 		for _, c := range res.LeftOut {
-			refinedBy[c] = r
+			free[c] = true
 		}
+		for c := range free {
+			if res.decidesCell(in, c) {
+				refinedBy[c] = r
+			}
+		}
+		freeIn[r] = free
 	}
-	// The raster: the instrument's, each region's lattice redrawn.
+	// The raster: the instrument's, each region's lattice (each patch's square) redrawn.
 	raster := &segment.Raster{Width: img.Width, Height: img.Height, PixelSize: ps, Rows: make([][]segment.Run, img.Height)}
 	row := make([]uint32, img.Width)
 	for y := 0; y < img.Height; y++ {
@@ -188,14 +221,18 @@ func WriteBundleOutputs(b *xenium.Bundle, in *Inputs, idx *BundleIndex, results 
 				continue
 			}
 			fp := footprints[r]
-			for x := range row {
-				cx := int(math.Floor((in.X0 + mul(float64(x), ps) + ps/2 - l.X0) / l.VoxelUm))
-				if cx < 0 || cx >= l.W {
+			// The image's pixels whose centres lie in the lattice.
+			x0 := max(0, int(math.Floor((l.X0-in.X0)/ps)))
+			x1 := min(len(row), int(math.Ceil((l.X0+mul(float64(l.W), l.VoxelUm)-in.X0)/ps))+1)
+			for x := x0; x < x1; x++ {
+				cxUm := in.X0 + mul(float64(x), ps) + ps/2
+				cx := int(math.Floor((cxUm - l.X0) / l.VoxelUm))
+				if cx < 0 || cx >= l.W || res.patched() && !res.Own.Contains(cxUm, cyUm) {
 					continue
 				}
 				if f := fp[cy*l.W+cx]; f > 0 && !res.Frozen[f-1] {
 					row[x] = uint32(res.Kept[f-1] + 1)
-				} else if c := row[x]; c > 0 && refinedBy[c-1] == r {
+				} else if c := row[x]; c > 0 && freeIn[r][int(c)-1] {
 					row[x] = 0 // a refined cell's pixel its footprint gave up
 				}
 			}
@@ -212,7 +249,9 @@ func WriteBundleOutputs(b *xenium.Bundle, in *Inputs, idx *BundleIndex, results 
 	}
 	for r, res := range results {
 		for i, j := range res.Index {
-			modelledAt[j] = place{int32(r), int32(i)}
+			if res.decidesTranscript(in, i) {
+				modelledAt[j] = place{int32(r), int32(i)}
+			}
 		}
 	}
 	rowOf := make([]int32, idx.Total)
@@ -238,7 +277,9 @@ func WriteBundleOutputs(b *xenium.Bundle, in *Inputs, idx *BundleIndex, results 
 		geneIndex[name] = uint32(g)
 	}
 	var q20Total, q20Assigned int64
-	pairs := map[uint64]uint32{}
+	// Each cell's genes and counts, (gene, count) pairs: a few dozen genes a cell, so a cell's list
+	// is searched rather than hashed, and the memory is the pairs' own.
+	perCell := make([][]uint32, n)
 	row0 := 0
 	err = tr.Each(func(batch *xenium.TranscriptBatch) error {
 		for i := 0; i < batch.Rows; i++ {
@@ -256,7 +297,7 @@ func WriteBundleOutputs(b *xenium.Bundle, in *Inputs, idx *BundleIndex, results 
 					case f == 0:
 						// The background, most often: so it stays, unless it lies on a held
 						// cell's pixel (assigned by place, below).
-						if pix := raster.AtMicrons(float64(batch.X[i])-in.X0, float64(batch.Y[i])-in.Y0); pix == 0 || refinedBy[pix-1] == int(at.result) {
+						if pix := raster.AtMicrons(float64(batch.X[i])-in.X0, float64(batch.Y[i])-in.Y0); pix == 0 || freeIn[at.result][int(pix)-1] {
 							c, p, assigned = 0, res.Probability[at.index], true
 						}
 					}
@@ -277,7 +318,18 @@ func WriteBundleOutputs(b *xenium.Bundle, in *Inputs, idx *BundleIndex, results 
 						genes = append(genes, name)
 					}
 					q20Assigned++
-					pairs[uint64(c-1)<<32|uint64(g)]++
+					list := perCell[c-1]
+					found := false
+					for k := 0; k < len(list); k += 2 {
+						if list[k] == g {
+							list[k+1]++
+							found = true
+							break
+						}
+					}
+					if !found {
+						perCell[c-1] = append(list, g, 1)
+					}
 				}
 			}
 		}
@@ -307,22 +359,26 @@ func WriteBundleOutputs(b *xenium.Bundle, in *Inputs, idx *BundleIndex, results 
 			cells[c-1].Assigned++
 		}
 	}
-	keys := make([]uint64, 0, len(pairs))
-	for key := range pairs {
-		keys = append(keys, key)
+	total := 0
+	for _, list := range perCell {
+		total += len(list) / 2
 	}
-	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
-	counts := &segment.Counts{Genes: genes, Offsets: make([]uint32, n+1)}
-	for _, key := range keys {
-		c, g := int(key>>32), uint32(key)
-		counts.Gene = append(counts.Gene, g)
-		counts.Count = append(counts.Count, pairs[key])
-		counts.Offsets[c+1]++
-		cells[c].Transcripts += pairs[key]
-		cells[c].Genes++
-	}
-	for c := 1; c <= n; c++ {
-		counts.Offsets[c] += counts.Offsets[c-1]
+	counts := &segment.Counts{Genes: genes, Offsets: make([]uint32, n+1), Gene: make([]uint32, 0, total), Count: make([]uint32, 0, total)}
+	order := []int{}
+	for c, list := range perCell {
+		order = order[:0]
+		for k := 0; k < len(list); k += 2 {
+			order = append(order, k)
+		}
+		sort.Slice(order, func(i, j int) bool { return list[order[i]] < list[order[j]] })
+		for _, k := range order {
+			counts.Gene = append(counts.Gene, list[k])
+			counts.Count = append(counts.Count, list[k+1])
+			cells[c].Transcripts += list[k+1]
+			cells[c].Genes++
+		}
+		counts.Offsets[c+1] = uint32(len(counts.Gene))
+		perCell[c] = nil
 	}
 
 	// Outlines: the raster's, simplified to half a voxel; and each layer's in the refined regions.
@@ -349,7 +405,7 @@ func WriteBundleOutputs(b *xenium.Bundle, in *Inputs, idx *BundleIndex, results 
 				}
 				ls := lr.Stats(len(res.Kept))
 				for k, c := range res.Kept {
-					if res.Frozen[k] {
+					if res.Frozen[k] || res.patched() && !res.decidesCell(in, c) {
 						continue
 					}
 					o := lr.TraceOutline(uint32(k+1), ls[k], outlineTolerance)
@@ -370,18 +426,18 @@ func WriteBundleOutputs(b *xenium.Bundle, in *Inputs, idx *BundleIndex, results 
 	}
 	for _, res := range results {
 		for k, x := range boundaryCertainty(res) {
-			if !res.Frozen[k] {
+			if !res.Frozen[k] && res.decidesCell(in, res.Kept[k]) {
 				certainty[res.Kept[k]] = float32(x)
 			}
 		}
 	}
 
 	// Diagnostics, and the description.
-	diag := diagnostics(results, cells, in, idx)
+	diag := diagnostics(results, cells, in, idx, refinedBy)
 	if len(rec.Second) == len(results) && len(results) > 0 {
 		var same, all int
 		for r, res := range results {
-			sr, ar := agreement(res, rec.Second[r])
+			sr, ar := agreement(res, rec.Second[r], in)
 			x := float64(sr) / float64(max(ar, 1))
 			diag.Regions[r].Summary.SeedAgreement = &x
 			same += sr
@@ -394,9 +450,13 @@ func WriteBundleOutputs(b *xenium.Bundle, in *Inputs, idx *BundleIndex, results 
 	}
 	rec.Regions = nil
 	rec.StartStages = nil
+	rec.Patches = nil
 	for _, res := range results {
 		rec.Regions = append(rec.Regions, res.Region)
 		rec.StartStages = append(rec.StartStages, res.StartStage+1)
+		if res.patched() {
+			rec.Patches = append(rec.Patches, res.Own)
+		}
 	}
 	if len(results) > 0 {
 		rec.Model = results[0].Model.H
@@ -453,27 +513,44 @@ func shift(o *segment.Outline, x0, y0 float64) {
 }
 
 // regionSummary summarizes one region's convergence and flags its refined cells.
-func regionSummary(res *Result, cells []segment.Cell, in *Inputs, lim *Limitations) DiagnosticsSummary {
+func regionSummary(res *Result, cells []segment.Cell, in *Inputs, lim *Limitations, refinedBy []int) DiagnosticsSummary {
 	var s DiagnosticsSummary
-	s.Sweeps, s.SplitHalf, s.Samples, s.Regions, s.Transcripts = len(res.Trace), res.SplitHalf, res.Samples, 1, len(res.Assigned)
+	s.Sweeps, s.SplitHalf, s.Samples, s.Regions = len(res.Trace), res.SplitHalf, res.Samples, 1
+	if res.patched() {
+		s.Patches = 1
+	}
 	samples := min(res.Samples, len(res.Trace))
+	// The transcripts it decides (a region every one; a patch those in its square); its background's
+	// shares are of all it modelled, as its rates were.
 	var sum float64
-	low := 0
-	for _, p := range res.Probability {
+	low, decided, background := 0, 0, 0
+	for i, p := range res.Probability {
+		if !res.decidesTranscript(in, i) {
+			continue
+		}
+		decided++
 		sum += float64(p)
 		if p < 0.5 {
 			low++
 		}
-	}
-	n := float64(max(1, len(res.Probability)))
-	s.MeanProbability, s.LowProbability = sum/n, float64(low)/n
-	s.FalseDecodeShare, s.AmbientShare, s.NegativeControls = res.FalseDecodes/n, res.Ambient/n, res.Controls
-	for _, c := range res.Assigned {
-		if c == 0 {
-			s.InBackground++
+		if res.Assigned[i] == 0 {
+			background++
 		}
 	}
-	s.InBackground /= n
+	s.Transcripts = decided
+	n := float64(max(1, decided))
+	s.MeanProbability, s.LowProbability, s.InBackground = sum/n, float64(low)/n, float64(background)/n
+	all := float64(max(1, len(res.Probability)))
+	s.FalseDecodeShare, s.AmbientShare, s.NegativeControls = res.FalseDecodes/all, res.Ambient/all, res.Controls
+	if res.patched() {
+		// The negative controls in its square.
+		s.NegativeControls = 0
+		for i := range in.ControlX {
+			if res.Own.Contains(float64(in.ControlX[i]), float64(in.ControlY[i])) {
+				s.NegativeControls++
+			}
+		}
+	}
 	if samples >= 2 {
 		window := res.Trace[len(res.Trace)-samples:]
 		var first, second float64
@@ -487,7 +564,7 @@ func regionSummary(res *Result, cells []segment.Cell, in *Inputs, lim *Limitatio
 				second += t.LogLikelihood / float64(samples-h)
 			}
 		}
-		s.LogLikelihoodDrift = (second - first) / n
+		s.LogLikelihoodDrift = (second - first) / all
 		s.GewekeZ, s.GewekeJudged = gewekeZ(ll)
 	}
 	tenth := max(1, len(res.Trace)/10)
@@ -498,8 +575,14 @@ func regionSummary(res *Result, cells []segment.Cell, in *Inputs, lim *Limitatio
 	certainty := boundaryCertainty(res)
 	for k, c := range res.Kept {
 		if res.Frozen[k] {
-			s.Held++
+			// Held, unless another run refines it.
+			if refinedBy == nil || refinedBy[c] < 0 {
+				s.Held++
+			}
 			continue
+		}
+		if !res.decidesCell(in, c) {
+			continue // a patch's cell another patch decides
 		}
 		s.Refined++
 		id := cells[c].ID
@@ -516,7 +599,11 @@ func regionSummary(res *Result, cells []segment.Cell, in *Inputs, lim *Limitatio
 			s.Uncertain++
 		}
 	}
-	s.LeftOut = len(res.LeftOut)
+	for _, c := range res.LeftOut {
+		if res.decidesCell(in, c) {
+			s.LeftOut++
+		}
+	}
 	return s
 }
 
@@ -539,7 +626,8 @@ func boundaryCertainty(res *Result) []float64 {
 
 // diagnostics summarizes a refinement: each region's convergence, the whole (weighted by each
 // region's modelled transcripts; Geweke's z the one farthest from 0), and the cells flagged.
-func diagnostics(results []*Result, cells []segment.Cell, in *Inputs, idx *BundleIndex) *Diagnostics {
+// refinedBy is the run deciding each cell (−1 none; nil: each run's own).
+func diagnostics(results []*Result, cells []segment.Cell, in *Inputs, idx *BundleIndex, refinedBy []int) *Diagnostics {
 	d := &Diagnostics{}
 	lim := &d.Limitations
 	lim.Thresholds.LowTranscripts, lim.Thresholds.UncertainShare = lowTranscripts, uncertainShare
@@ -547,12 +635,21 @@ func diagnostics(results []*Result, cells []segment.Cell, in *Inputs, idx *Bundl
 	all := &d.Summary
 	all.GewekeJudged = len(results) > 0
 	var weight float64
+	regions := map[Region]bool{}
 	for _, res := range results {
-		s := regionSummary(res, cells, in, lim)
+		s := regionSummary(res, cells, in, lim, refinedBy)
 		for _, c := range res.LeftOut {
-			lim.LeftOut = append(lim.LeftOut, idx.CellIDs[c])
+			if res.decidesCell(in, c) {
+				lim.LeftOut = append(lim.LeftOut, idx.CellIDs[c])
+			}
 		}
-		d.Regions = append(d.Regions, RegionDiagnostics{Region: res.Region, Summary: s, Trace: res.Trace})
+		rd := RegionDiagnostics{Region: res.Region, Summary: s, Trace: res.Trace}
+		if res.patched() {
+			own := res.Own
+			rd.Patch = &own
+			all.Patches++
+		}
+		d.Regions = append(d.Regions, rd)
 		w := float64(s.Transcripts)
 		weight += w
 		all.Sweeps, all.Samples = s.Sweeps, s.Samples
@@ -575,7 +672,10 @@ func diagnostics(results []*Result, cells []segment.Cell, in *Inputs, idx *Bundl
 		all.NoNucleus += s.NoNucleus
 		all.Uncertain += s.Uncertain
 		all.LeftOut += s.LeftOut
-		all.Regions++
+		if !res.patched() || !regions[res.Whole] {
+			regions[res.Whole] = true
+			all.Regions++
+		}
 		all.Transcripts += s.Transcripts
 	}
 	if weight > 0 {
@@ -592,7 +692,7 @@ func diagnostics(results []*Result, cells []segment.Cell, in *Inputs, idx *Bundl
 
 // agreement counts the modelled transcripts two runs of a region put in the same cell (or both
 // in the background), of those either puts in a refined cell.
-func agreement(a, b *Result) (same, all int) {
+func agreement(a, b *Result, in *Inputs) (same, all int) {
 	cellOf := func(res *Result, i int) (int, bool) {
 		k := res.Assigned[i]
 		if k == 0 {
@@ -603,7 +703,7 @@ func agreement(a, b *Result) (same, all int) {
 	for i := range a.Assigned {
 		ca, fa := cellOf(a, i)
 		cb, fb := cellOf(b, i)
-		if !fa && !fb {
+		if !fa && !fb || !a.decidesTranscript(in, i) {
 			continue
 		}
 		all++

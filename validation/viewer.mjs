@@ -35,7 +35,11 @@
 //   refinement, errors planted for practice) drawn as its files hold it: the cell found at points
 //   of each the one its label raster holds there, and the fill drawn there the color of that
 //   cell's value; the list, its default first; a saved view reopening with its segmentation and
-//   cell; show_tissue and select_cell in a segmentation; transcripts with their probabilities.
+//   cell; show_tissue and select_cell in a segmentation; transcripts with their probabilities;
+// - the examples and the release (wave 3, slice 9): the simulated example made here; the worked
+//   examples refining the Breast data and scoring segmentations against the simulated truth, as
+//   their cards expect; the projects saved by 0.2.0 and 0.3.0 reopened, every artifact they record
+//   made again with the same checksums.
 //
 // It builds the program, starts it on the bundles with an empty cache and library, builds their
 // derived data, and drives the page through window.situcraft (the app, app.js) and window.situcraftViewer
@@ -360,7 +364,11 @@ export async function viewerSuite({ check, MissingData, verbose }) {
 
     // --- The examples and their tours (wave 1, slice 7) ---
     const examples = await json(`${url}/api/examples`);
-    check('viewer', 'the example datasets are listed, and none is downloaded unasked', examples.examples.map((e) => `${e.name}: ${e.state}`).join(', '), examples.examples.length === 2 && examples.examples.every((e) => e.state === 'absent' && e.download > 0 && e.license), 'two, absent');
+    const downloads = examples.examples.filter((e) => !e.generated);
+    const generated = examples.examples.filter((e) => e.generated);
+    check('viewer', 'the example datasets are listed, and none is downloaded or made unasked', examples.examples.map((e) => `${e.name}: ${e.state}`).join(', '),
+      downloads.length === 2 && downloads.every((e) => e.state === 'absent' && e.download > 0 && e.license) && generated.length === 1 && generated[0].name === 'simulated-standard' && generated[0].state === 'absent' && !generated[0].download,
+      'two to download and one to make, all absent');
     for (const name of info.files.map((f) => f.name)) {
       const toured = await chrome.eval(`(async () => {
         const app = window.situcraft;
@@ -751,30 +759,30 @@ export async function viewerSuite({ check, MissingData, verbose }) {
         check('viewer', 'a region holding no nucleus fails, classified, with what to do, in the answer and the studio', `${failed.message ?? failed.error}; the studio: ${failure.replace(/\s+/g, ' ')}`,
           !failed.ok && /holds no cell's nucleus/.test(failed.message ?? failed.error ?? '') && /What to do/.test(failed.message ?? failed.error ?? '') && /What to do/.test(failure), 'refused by the job, with the region\'s remedy');
 
-        // The project as 0.2.0 saved it (validation/projects/0.2.0-lung.situcraft.json): written
-        // when asked (SITUCRAFT_WRITE_FIXTURE=1), the places of this run's folders made neutral and
-        // given its own id; then
-        // reopened, and every artifact SituCraft made that it records is made again by this build
-        // with the same files' checksums (a comparison by its differences: its comparison.json
-        // records the jobs' times).
-        const fixture2Path = join(root, 'validation', 'projects', '0.2.0-lung.situcraft.json');
+        // The projects as 0.2.0 and 0.3.0 saved them (validation/projects/<version>-lung.situcraft.json):
+        // this release's written when asked (SITUCRAFT_WRITE_FIXTURE=1), the places of this run's
+        // folders made neutral and given its own id; then each reopened, and every artifact
+        // SituCraft made that it records made again by this build with the same files' checksums
+        // (a comparison by its differences: its comparison.json records the jobs' times).
+        const fixtureOf = (v) => join(root, 'validation', 'projects', `${v}-lung.situcraft.json`);
         if (process.env.SITUCRAFT_WRITE_FIXTURE) {
           const doc = await chrome.eval(`(async () => {
             const app = window.situcraft;
             const { rename, serializeProject } = await import('/lib/project.js');
-            app.store.commit(rename(app.store.project, 'Lung example, as SituCraft 0.2.0 saved it'), 'Rename');
+            app.store.commit(rename(app.store.project, 'Lung example, as SituCraft 0.3.0 saved it'), 'Rename');
             return serializeProject(app.store.project);
           })()`);
           // Its own id: it grew from the 0.1.0 project in this run.
           const neutral = JSON.parse(doc.split(join(dataRoot, 'xenium-lung-2fov')).join('/data/examples/xenium-lung-2fov').split(work).join('/data/work'));
-          writeFileSync(fixture2Path, `${JSON.stringify({ ...neutral, id: 'p-situcraft-0-2-0-lung' }, null, 1)}\n`);
+          writeFileSync(fixtureOf('0.3.0'), `${JSON.stringify({ ...neutral, id: 'p-situcraft-0-3-0-lung' }, null, 1)}\n`);
         }
-        if (existsSync(fixture2Path)) {
-          const text2 = readFileSync(fixture2Path, 'utf8');
-          const fixture2 = JSON.parse(text2);
+        for (const v of ['0.2.0', '0.3.0']) {
+          if (!existsSync(fixtureOf(v))) continue;
+          const text = readFileSync(fixtureOf(v), 'utf8');
+          const fixture = JSON.parse(text);
           // An import of SituCraft's own export is not made again by another version: the export's
           // files name the SituCraft that wrote them, so their checksums, and the import's id, differ.
-          const made = fixture2.artifacts.filter((a) => (a.kind === 'segmentation' && a.source !== 'instrument' && a.method?.name !== 'SituCraft export') || a.kind === 'comparison');
+          const made = fixture.artifacts.filter((a) => (a.kind === 'segmentation' && a.source !== 'instrument' && a.method?.name !== 'SituCraft export') || a.kind === 'comparison');
           const differing = [];
           for (const a of made) {
             const m = await fetch(`${url}/api/artifacts/${encodeURIComponent(a.id)}`).then((r) => (r.ok ? r.json() : null));
@@ -789,22 +797,22 @@ export async function viewerSuite({ check, MissingData, verbose }) {
             const sums = new Map((m.files ?? []).map((f) => [f.path, f.sha256]));
             for (const f of a.files) if (sums.get(f.path) !== f.sha256) differing.push(`${a.name}: ${f.path}`);
           }
-          check('viewer', '0.2.0 Lung project: every artifact SituCraft made is made again with the same checksums', `${made.length} artifacts${differing.length ? `; ${differing.slice(0, 4).join('; ')}` : ', all the same'}`, made.length >= 5 && differing.length === 0, 'all the same');
-          const reopened2 = await chrome.eval(`(async () => {
+          check('viewer', `${v} Lung project: every artifact SituCraft made is made again with the same checksums`, `${made.length} artifacts${differing.length ? `; ${differing.slice(0, 4).join('; ')}` : ', all the same'}`, made.length >= 5 && differing.length === 0, 'all the same');
+          const reopened = await chrome.eval(`(async () => {
             const app = window.situcraft;
             const { promotedSegmentation, exportsOf } = await import('/lib/segmentations.js');
             const wait = async (f) => { for (let k = 0; k < 300; k += 1) { const v = f(); if (v) return v; await new Promise((r) => setTimeout(r, 100)); } return null; };
-            const doc = ${JSON.stringify(text2)};
-            const id = JSON.parse(doc).id;
-            await app.library.saveProject(id, doc);
-            await app.openProject(id);
+            const doc = ${JSON.stringify(text)};
+            const saved = JSON.parse(doc);
+            await app.library.saveProject(saved.id, doc);
+            await app.openProject(saved.id);
             const dataset = app.store.project.datasets[0];
             const before = (await wait(() => { const l = app.bundles.link(dataset.id); return l && l.state !== 'checking' ? l : null; }))?.state;
             const link = await app.bundles.locate(dataset.id, ${JSON.stringify(join(dataRoot, 'xenium-lung-2fov'))});
             const p = app.store.project;
-            return { before, after: link?.state, segmentations: p.artifacts.filter((a) => a.kind === 'segmentation').length, comparisons: p.artifacts.filter((a) => a.kind === 'comparison').length, decisions: p.decisions.length, exports: exportsOf(p, dataset.id).length, default: promotedSegmentation(p, dataset.id)?.record.source };
+            return { before, after: link?.state, segmentations: p.artifacts.filter((a) => a.kind === 'segmentation').length, comparisons: p.artifacts.filter((a) => a.kind === 'comparison').length, decisions: p.decisions.length, exports: exportsOf(p, dataset.id).length, default: promotedSegmentation(p, dataset.id)?.record.id, saved: promotedSegmentation(saved, saved.datasets[0].id)?.record.id };
           })()`);
-          check('viewer', '0.2.0 Lung project: it opens and finds its moved bundle; its segmentations, comparisons, decisions and exports are there, the instrument\'s the default', JSON.stringify(reopened2), reopened2.before === 'missing' && reopened2.after === 'ok' && reopened2.segmentations === fixture2.artifacts.filter((a) => a.kind === 'segmentation').length && reopened2.comparisons >= 2 && reopened2.decisions === fixture2.decisions.length && reopened2.exports >= 1 && reopened2.default === 'instrument', 'missing, then ok; all there');
+          check('viewer', `${v} Lung project: it opens and finds its moved bundle; its segmentations, comparisons, decisions and exports are there, and its default`, JSON.stringify(reopened), reopened.before === 'missing' && reopened.after === 'ok' && reopened.segmentations === fixture.artifacts.filter((a) => a.kind === 'segmentation').length && reopened.comparisons >= 2 && reopened.decisions === fixture.decisions.length && reopened.exports >= 1 && reopened.default && reopened.default === reopened.saved, 'missing, then ok; all there');
         }
 
         // The worked example on the Breast data: the instrument's cells, drawn from stains, against
@@ -827,7 +835,62 @@ export async function viewerSuite({ check, MissingData, verbose }) {
           check('viewer', 'the Breast worked example expands the nuclei, compares, and shows splits and merges first', steps.map((x) => x.ok ? `step ${x.data.step}` : x.message).join('; ') + (bc ? `; ${JSON.stringify(bc.classes)}; the first ${bc.selected?.class}` : ''),
             steps.every((x) => x.ok) && steps.at(-1).data.step === 4 && bc?.classes?.split === 263 && bc.classes.merged === 128 && bc.classes['only in A'] === 119 && ['split', 'merged', 'only in A'].includes(bc.selected?.class), 'step 4: 263 splits, 128 merges, 119 only in A; one of them first');
           await act('tour', { end: true });
+
+          // The worked example refining the Breast data (wave 3, slice 9): what its card says to
+          // expect, as it happens.
+          await chrome.eval(`(async () => {
+            const app = window.situcraft;
+            const { guideFor } = await import('/lib/tours.js');
+            const { startTour } = await import('/ui/tour.js');
+            const dataset = app.store.project.datasets.find((d) => d.name === 'xenium-breast-2fov');
+            startTour(app, { tour: guideFor('xenium-breast-2fov', 'refine-compare'), dataset: dataset.id });
+            return true;
+          })()`);
+          const rsteps = [];
+          for (let k = 0; k < 4; k += 1) rsteps.push(await act('tour', { run: true }));
+          const rc = rsteps.at(-1).data?.comparison;
+          const rn = await chrome.eval(`(async () => {
+            const app = window.situcraft;
+            const { segmentationsOf } = await import('/lib/segmentations.js');
+            const { segmentationByRole } = await import('/lib/tours.js');
+            const p = app.store.project;
+            const d = p.datasets.find((x) => x.name === 'xenium-breast-2fov');
+            const segs = segmentationsOf(p, d.id);
+            const inst = segmentationByRole(segs, 'instrument'), refined = segmentationByRole(segs, 'refined');
+            const c = p.artifacts.find((x) => x.kind === 'comparison' && x.a === inst?.id && x.b === refined?.id);
+            return { cells: refined?.summary?.cells, changed: c?.summary?.changedFraction, coA: c?.summary?.spuriousCoexpressionA, coB: c?.summary?.spuriousCoexpressionB };
+          })()`);
+          const near = (v, want, tol) => Number.isFinite(v) && Math.abs(v - want) <= tol;
+          check('viewer', 'the Breast refinement worked example refines, shows its certainty and what moved, as its card expects', `${rsteps.map((x) => x.ok ? `step ${x.data.step}` : x.message).join('; ')}; ${JSON.stringify(rc?.classes ?? {})}; ${JSON.stringify(rn)}`,
+            rsteps.every((x) => x.ok) && rsteps.at(-1).data.step === 5 && rn.cells === 7275 && near(rc?.classes?.['one-to-one'], 4700, 250) && near(rc?.classes?.expanded, 1700, 150) && near(rc?.classes?.contracted, 760, 80) && near(rn.changed, 0.23, 0.02) && near(rn.coA, 1.77, 0.03) && near(rn.coB, 1.83, 0.03),
+            '7,275 cells; about 4,700 the same, 1,700 grown, 760 shrunk; 23% of transcripts moved; co-expression 1.77 and 1.83');
+          await act('tour', { end: true });
         }
+
+        // The simulated example, made on this computer, and its worked example scoring the
+        // instrument's segmentation and a refinement against the truth (wave 3, slice 9).
+        const simulatedMade = await act('open_example', { example: 'simulated' });
+        await act('tour', { example: 'simulated-standard', name: 'score-against-truth' });
+        const tsteps = [];
+        for (let k = 0; k < 5; k += 1) tsteps.push(await act('tour', { run: true }));
+        const scores = await chrome.eval(`(async () => {
+          const app = window.situcraft;
+          const { segmentationsOf } = await import('/lib/segmentations.js');
+          const { segmentationByRole } = await import('/lib/tours.js');
+          const p = app.store.project;
+          const d = p.datasets.find((x) => x.name === 'simulated-standard');
+          const segs = segmentationsOf(p, d.id);
+          const truth = segmentationByRole(segs, 'truth');
+          const score = (role) => p.artifacts.find((x) => x.kind === 'comparison' && x.a === truth?.id && x.b === segmentationByRole(segs, role)?.id)?.summary;
+          const s = (role) => { const c = score(role); return c ? { iou: c.medianIoU, changed: c.changedFraction } : null; };
+          return { truth: Boolean(truth), instrument: s('instrument'), refined: s('refined') };
+        })()`);
+        const tc = tsteps.at(-1).data?.comparison;
+        const near = (v, want, tol) => Number.isFinite(v) && Math.abs(v - want) <= tol;
+        check('viewer', 'the simulated example is made here; its worked example imports the truth, refines, and scores both against it as its card expects', `${simulatedMade.message ?? simulatedMade.error}; ${tsteps.map((x) => x.ok ? `step ${x.data.step}` : x.message).join('; ')}; ${JSON.stringify(scores)}`,
+          simulatedMade.ok && tsteps.every((x) => x.ok) && tsteps.at(-1).data.step === 6 && tc?.mode === 'overlay' && scores.truth && near(scores.instrument?.iou, 0.62, 0.02) && near(scores.instrument?.changed, 0.20, 0.02) && near(scores.refined?.iou, 0.72, 0.02) && near(scores.refined?.changed, 0.17, 0.02),
+          'the instrument\'s: median IoU 0.62, 20% changed; the refinement\'s: 0.72, 17%');
+        await act('tour', { end: true });
       }
     }
     check('viewer', 'no uncaught errors in the page', errors.length ? errors.slice(0, 3).join(' | ') : 'none', errors.length === 0, 'none');
