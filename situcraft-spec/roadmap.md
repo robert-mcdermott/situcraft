@@ -1374,13 +1374,50 @@ independent reference outputs.
        Breast's assigned fraction fell from 98.80% to 97.03%, its co-expression from 1.94 to 1.83.
      - **The background is under-estimated:** on the simulated tissue SituCraft's accounts for
        0.68% of transcripts against the truth's 2.46%, from any start. It is the published model's
-       behaviour when cells cover nearly every transcript; an open question (research.md §9).
+       behaviour when cells cover nearly every transcript; slice 7 takes it up (research.md §9).
      - **Spurious co-expression does not rank methods by accuracy:** Proseg's is below the truth's
        own on the simulated tissue, while it puts 9.4 points fewer transcripts in their true cells.
      - **Proseg's four-layer default lost 61% of Lung's transcripts to the background** (4% with one
        layer). SituCraft's one-layer default stands.
      - **The simulated bundles lacked two of Xenium's columns,** so Proseg could not read them.
-7. **Larger tissues and release (S12, P6).**
+7. **The background's calibration (S2).** On the simulated tissue SituCraft's background accounts
+   for 0.68% of the modelled transcripts against the truth's 2.46% (Proseg 1.53%), whatever the
+   chain's start (research.md §3.2 and §9). The goal: at least Proseg's level, ideally the truth's,
+   without losing accuracy elsewhere.
+   - **Diagnose first,** on the simulated truth:
+     - the transcript density in SituCraft's background voxels against the true background's;
+     - the background molecules cells take in the gaps between them, against those inside cells
+       attributed to the cell;
+     - whether the shortfall grows with the background's level.
+
+     The leading suspicion is a selection effect: at 1 µm a voxel holds about 0.4 transcripts, so
+     cells gain by claiming the boundary voxels that hold one. The background's voxels are left
+     emptier than its density, and its rate is estimated low.
+   - **A benchmark harder to fool:**
+     - simulated tissues with several background levels (about 0.5%, 2.5% and 10%), and both
+       kinds: in proportion to expression (ambient) and uniform (decoding noise);
+     - the simulator's background checked against the 2-FOV bundles (the transcripts' density far
+       from any nucleus, the negative controls' rates).
+   - **Candidate fixes,** each judged on the simulated truth and the reference comparison, from the
+     publication's model and SituCraft's own design:
+     - evidence cells cannot take: the negative controls (never from a cell), the transcripts'
+       quality scores (the background is low-quality more often, as the controls show), and the
+       density far from any nucleus;
+     - the selection effect corrected directly, if the diagnosis confirms it (for example, a
+       smoothness cost on outlines beside the perimeter bound);
+     - a background varying with depth, which the publication names as an extension.
+
+     A change to the model extends its exactness tests (detailed balance, Geweke's joint test) and
+     keeps the same result on any number of threads and any processor.
+   - **Done when,** at every simulated background level:
+     - the background found is at least Proseg's 1.53%, ideally near the truth's;
+     - the transcripts in their true cell stay at least 85.0% and the median IoU at least 0.714;
+     - on Lung, the differences from Proseg in assigned fraction and co-expression shrink;
+     - the reference numbers are made again, and the explanations revised.
+
+     If the background of commonly expressed genes cannot be told from their cells' own, the
+     limit reached is documented.
+8. **Larger tissues and release (S12, P6).**
    - Overlapping patches with stitching, so that memory is bounded for any tissue size.
    - Memory guards.
    - A scale test on a generated tissue of ~50 million transcripts, created, measured and deleted

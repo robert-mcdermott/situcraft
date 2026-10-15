@@ -902,8 +902,8 @@ its reason. Differences beyond one are explained below or fixed.
     Proseg's outlines are more compact there (1.16 times the least perimeter against SituCraft's
     1.32). With Conservative's bound (1.3) SituCraft's agreement rises to 0.576; started from the
     nuclei, as Proseg starts, it stays at 0.557.
-- **The background, an open question (§9).** On the simulated tissue 2.46% of the modelled
-  transcripts are background. SituCraft's background rate accounts for 0.68% and Proseg's
+- **The background, an open question (§9; wave 3, slice 7).** On the simulated tissue 2.46% of the
+  modelled transcripts are background. SituCraft's background rate accounts for 0.68% and Proseg's
   assignments for 1.53%.
   - SituCraft's comes to the same 0.7% whether the chain starts with 2.5% or 10% of the
     transcripts in cells given to the background: the posterior prefers it, not the start.
@@ -1435,9 +1435,10 @@ Notes:
 
 - **The transcript-informed segmentation's background** (§3.2, against an independent reference):
   on the simulated tissue it accounts for a quarter of the true background. The posterior, not the
-  start, decides it, so it is the model's. A background held to the regions no cell can reach, or
-  informed by the negative controls, are the candidates; each is to be judged on simulated truth
-  and on the reference comparison.
+  start, decides it, so it is the model's. Wave 3, slice 7 takes it up (roadmap): a diagnosis on
+  simulated truth first; then evidence cells cannot take (the negative controls, the quality
+  scores, the density far from any nucleus), each judged on simulated truth and the reference
+  comparison.
 
 - The metrics left empty in the bundles in hand (polygon counts, nuclei without cells), when a
   bundle fills them: whether "non-simple polygon" means what SituCraft's check (and GEOS) means.
