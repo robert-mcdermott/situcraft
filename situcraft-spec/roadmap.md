@@ -916,13 +916,50 @@ other tools can be imported.
      - **The MECR's reference** had a wrong identifier in research.md: it is
        doi:10.1101/2024.01.11.575135.
      - **A segmentation's cost:** the instrument's showed its registration's time; it shows none.
-6. **The comparison workspace (V7, C4, C5).**
-   - Synchronized A/B canvases, overlay and flicker; a whole-tissue disagreement heatmap;
-     difference-class filters.
-   - The ranked review queue; the cell-matching table; the metrics header with uncertainty
-     warnings.
-   - The decision panel: promote, keep for exploration or reject, with a required rationale
-     recorded as an append-only event.
+6. **The comparison workspace (V7, C4, C5): done.**
+   - **The Compare view** (`ui/mode-compare.js`): a comparison's two segmentations on the tissue,
+     side by side with one camera, overlaid (B's outlines over A's, each in its colour) or in
+     turns (flicker); cells filled by the class of their difference, the classes chosen; the
+     chosen difference lit in both and described in the inspector; a disagreement map (each 50 µm
+     region shaded by its share of disagreeing pixels).
+   - **Each segmentation's outlines as tiles:** the instrument's are the dataset's geometry; any
+     other's are tiled once into a cache entry (`outlines`), served from `/api/outlines`; the
+     renderer draws a descriptor's tiles wherever they are, and on a transparent canvas.
+   - **The metrics header** with cautions (`lib/review.js`): few nuclei or gene pairs under the
+     spurious co-expression, few marker pairs in the panel, cells without outlines, few cells the
+     same in both.
+   - **The review queue:** the differences ranked by reassigned transcripts, contamination (pairs
+     of mutually exclusive markers in one cell of B more than of A; the comparison now records,
+     per difference, its cells' gene transcripts and most mixed pairs: method version 2), by
+     disagreement (class, then 1 − IoU) or by low counts, among the classes and the reassigned
+     transcripts the reviewer's rules keep; Next and Previous (`]`, `[`). **The cell-matching
+     table:** every difference, sortable, by pages.
+   - **The decision panel:** promote, keep for exploration or reject either segmentation, with a
+     reason (required) and the comparison it rests on, appended to the project's decisions
+     (`lib/segmentations.js`); the default cannot be rejected until another is promoted; the
+     dataset's decisions listed. Comparisons in the project tree and the inspector.
+   - **Remote control:** `show_comparison` and `decide_segmentation` (27 actions); `set_mode`
+     shows `compare`.
+   - **Screenshots:** the workspace with a split chosen; the overlay with the disagreement map.
+   - Validation:
+     - **Node tests:** the queue's rankings and the reviewer's rules on hand-made differences; the
+       cautions; decisions (a reason required, the default never rejected, appended with their
+       comparison, a rejected segmentation promoted again).
+     - **Go tests:** a segmentation's outline tiles built, served and opened; the comparison's
+       differences with every cell's id; the instrument's outlines from the dataset's geometry;
+       per-difference transcripts and mixed marker pairs.
+     - **In headless Chrome** (70 checks): `show_comparison` ranks the queue as asked (the Lung
+       cells, all one-to-one, least overlap first) and shows the first; both segmentations drawn
+       with one camera in each mode (B transparent over A in the overlay); `decide_segmentation`
+       refuses to reject the default and a decision without a reason, and records one with its
+       comparison.
+   - Found by slice 6:
+     - **A new canvas's default camera** (0, 0 at scale 1) overwrote the shared one on its first
+       frame: a canvas's camera now counts once the workspace has placed it.
+     - **Two requests for the same outlines** built them at once, and the second failed: builds
+       are serialized, and an entry that does not open is built again.
+     - **The tissue was fitted to the canvases' first size,** before the layout settled: it is
+       fitted again until the camera moves.
 7. **Exports and release (E1, E2, E3).**
    - SpatialData Zarr (shapes, points, AnnData table, transformations); AnnData Zarr; Parquet;
      CSV; Matrix Market; GeoJSON.

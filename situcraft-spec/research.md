@@ -621,6 +621,8 @@ Notes:
   for spatial omics. *Nat Methods* 2025;22:58–62. doi:10.1038/s41592-024-02212-x (imports).
 - Virshup I, Rybakov S, Theis FJ, Angerer P, Wolf FA. anndata: Access and store annotated data
   matrices. *J Open Source Softw* 2024;9(101):4371. doi:10.21105/joss.04371 (tables).
+- Okabe M, Ito K. Color Universal Design (CUD): how to make figures and presentations that are
+  friendly to colorblind people. J*FLY, 2008 (the comparison workspace's two overlay colours).
 - Hartman A, Satija R. Comparative analysis of multiplexed in situ gene expression profiling
   technologies. bioRxiv 2024. doi:10.1101/2024.01.11.575135 (the mutually exclusive
   co-expression rate).

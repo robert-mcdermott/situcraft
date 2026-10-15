@@ -321,6 +321,10 @@ func TestMECR(t *testing.T) {
 	if got := MECR(c, [][2]string{{"EPCAM", "PTPRC"}, {"EPCAM", "NOTINPANEL"}}); !near(got, 1.0/3) {
 		t.Errorf("MECR %v", got)
 	}
+	// The third cell expresses the pair together.
+	if got := MixedPairs(c, [][2]string{{"EPCAM", "PTPRC"}}); !reflect.DeepEqual(got, []uint32{0, 0, 1, 0}) {
+		t.Errorf("mixed pairs %v", got)
+	}
 	pairs := LineagePairs([]string{"EPCAM", "PTPRC", "CD3E", "MS4A1", "VIM"})
 	if !reflect.DeepEqual(pairs, [][2]string{{"MS4A1", "CD3E"}, {"MS4A1", "EPCAM"}, {"CD3E", "EPCAM"}}) {
 		t.Errorf("lineage pairs %v", pairs)

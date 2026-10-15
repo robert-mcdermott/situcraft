@@ -262,8 +262,16 @@ them for the co-expression reference). Rasters are compared run by run, without 
 correspondences are the connected sets of a graph whose edges are shared nuclei and overlaps
 holding half of a cell; each set is one difference with a class. A comparison is an artifact of
 kind `comparison` (its measures, its regions, and every difference with its cells), named by the
-two segmentations, the method's version and its parameters. The comparison workspace (slice 6)
-draws on it: the regions for the disagreement map, the differences for the review queue.
+two segmentations, the method's version and its parameters.
+
+The comparison workspace (`ui/mode-compare.js`, `lib/review.js`) draws on it. Each segmentation's
+outlines are geometry tiles on the dataset's grid: the instrument's are the dataset's own; any
+other's are tiled once into a cache entry of their own. Two renderers share one camera (side by
+side, or stacked: B transparent over A for the overlay, in turns for the flicker); cells are
+filled by their difference's class through the renderer's per-cell colours; the regions' counts
+give the disagreement map, drawn on a 2-D canvas over the tissue. The differences come to the page
+column by column; ranking and the reviewer's rules are pure functions, tested in Node. Decisions
+(promote, keep, reject) are appended to the project with their reason and comparison.
 
 ### Remote control
 

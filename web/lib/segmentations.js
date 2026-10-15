@@ -73,9 +73,11 @@ export function promoteSegmentation(project, { dataset, segmentation, rationale,
 
 // The dataset's promoted segmentation and the decision promoting it, or null.
 export function promotedSegmentation(project, datasetId) {
+  const rejected = new Set();
   for (let i = project.decisions.length - 1; i >= 0; i -= 1) {
     const d = project.decisions[i];
-    if (d.kind !== 'promote-segmentation' || d.dataset !== datasetId) continue;
+    if (d.kind === 'reject-segmentation' && d.dataset === datasetId) rejected.add(d.artifact);
+    if (d.kind !== 'promote-segmentation' || d.dataset !== datasetId || rejected.has(d.artifact)) continue;
     const record = project.artifacts.find((a) => a.kind === 'segmentation' && a.id === d.artifact && a.dataset === datasetId && a.state === 'complete');
     if (record) return { record, decision: d };
   }
@@ -133,5 +135,55 @@ export function addComparison(project, record, now = new Date().toISOString()) {
     modified: now,
     artifacts: [...project.artifacts, record],
     history: [...project.history, { time: now, action: 'comparison', detail: `Compared ${names(record.a)} (A) with ${names(record.b)} (B) (artifact ${record.id})` }],
+  };
+}
+
+// --- Decisions about segmentations ---------------------------------------------------------------
+
+// What can be decided of a segmentation: promote it (the dataset's default), keep it for
+// exploration, or reject it. Each decision has a reason, is appended, and is never removed; a
+// segmentation's status is its latest decision.
+export const DECISIONS = {
+  promote: { kind: 'promote-segmentation', label: 'Promote', done: 'Promoted' },
+  keep: { kind: 'keep-segmentation', label: 'Keep for exploration', done: 'Kept for exploration' },
+  reject: { kind: 'reject-segmentation', label: 'Reject', done: 'Rejected' },
+};
+
+// The latest decision about a segmentation of a dataset, or null.
+export function segmentationDecision(project, datasetId, segmentationId) {
+  for (let i = project.decisions.length - 1; i >= 0; i -= 1) {
+    const d = project.decisions[i];
+    if (d.dataset === datasetId && d.artifact === segmentationId && Object.values(DECISIONS).some((x) => x.kind === d.kind)) return d;
+  }
+  return null;
+}
+
+// The project with a decision about a segmentation: promote, keep or reject, with a reason
+// (required); comparison names the comparison it was made from, if any. The default cannot be
+// rejected (promote another first), and only a complete segmentation can be promoted or kept.
+export function decideSegmentation(project, { dataset, segmentation, decision, rationale, comparison = null, by = 'the user', now = new Date().toISOString() }) {
+  const what = DECISIONS[decision];
+  if (!what) throw new Error(`A decision is ${Object.keys(DECISIONS).join(', ')}.`);
+  const record = project.artifacts.find((a) => a.kind === 'segmentation' && a.id === segmentation && a.dataset === dataset);
+  if (!record) throw new Error('The dataset has no such segmentation.');
+  const reason = String(rationale ?? '').trim();
+  if (!reason) throw new Error('Say why: the reason is recorded with the decision.');
+  if (decision === 'promote') {
+    const next = promoteSegmentation(project, { dataset, segmentation, rationale: reason, by, now });
+    if (!comparison) return next;
+    const decisions = [...next.decisions];
+    decisions[decisions.length - 1] = { ...decisions.at(-1), comparison };
+    return { ...next, decisions };
+  }
+  if (record.state !== 'complete' && decision === 'keep') throw new Error(`${record.name} is ${record.state}: only a complete segmentation is kept for exploration.`);
+  if (decision === 'reject' && promotedSegmentation(project, dataset)?.record.id === segmentation) {
+    throw new Error(`${record.name} is the default: promote another before rejecting it.`);
+  }
+  const name = project.datasets.find((d) => d.id === dataset)?.name ?? dataset;
+  return {
+    ...project,
+    modified: now,
+    decisions: [...project.decisions, { kind: what.kind, dataset, artifact: segmentation, rationale: reason, by, time: now, ...(comparison ? { comparison } : {}) }],
+    history: [...project.history, { time: now, action: 'decision', detail: `${what.done} ${record.name.toLowerCase()} of ${name}: ${reason}` }],
   };
 }

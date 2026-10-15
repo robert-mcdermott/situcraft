@@ -15,6 +15,10 @@
 //   colormap.
 //
 // Coordinates are µm; the camera (lib/viewport.js) maps them to the canvas.
+//
+// A descriptor may name where its outline tiles are (polygonsBase): the comparison workspace
+// draws each segmentation's outlines on the same tissue. A transparent renderer draws only what
+// its layers ask on a clear canvas, for an overlay.
 
 import { createContext, createProgram, arrayBuffer, vertexArray, byteTexture, floatTexture, colorTexture, hexColor } from './gl.js';
 import { TileCache } from './tiles.js';
@@ -183,10 +187,11 @@ function priority(rect, side, tx, ty) {
 const POINT_TILES = { genes: 64, all: 24 };
 
 export class TissueRenderer {
-  constructor(canvas, { onChange } = {}) {
+  constructor(canvas, { onChange, transparent = false } = {}) {
     this.canvas = canvas;
     this.onChange = onChange;
-    this.gl = createContext(canvas);
+    this.transparent = transparent;
+    this.gl = createContext(canvas, { transparent });
     this.dataset = null;
     this.camera = { cx: 0, cy: 0, scale: 1 };
     this.layers = null;
@@ -409,7 +414,8 @@ export class TissueRenderer {
   async loadShapes(key, signal) {
     // key: geo:<set>:<level>:<tx>:<ty>
     const [, set, level, tx, ty] = key.split(':');
-    const { buffer, headers } = await this.fetch(`/api/cache/${this.dataset.entries.geometry}/polygons/${set}/${level}/${tx}/${ty}`, signal);
+    const base = this.dataset.polygonsBase ?? `/api/cache/${this.dataset.entries.geometry}/polygons`;
+    const { buffer, headers } = await this.fetch(`${base}/${set}/${level}/${tx}/${ty}`, signal);
     const tile = readPolygonTile(buffer, Number(headers.get('X-Polygons')), Number(headers.get('X-Vertices')));
     const gl = this.gl;
     const lines = outlineSegments(tile);
@@ -486,7 +492,7 @@ export class TissueRenderer {
     const gl = this.gl;
     const [w, h] = this.size();
     gl.viewport(0, 0, w, h);
-    gl.clearColor(0, 0, 0, 1);
+    gl.clearColor(0, 0, 0, this.transparent ? 0 : 1);
     gl.clearStencil(0);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
     const plan = this.plan();
@@ -754,7 +760,8 @@ export class TissueRenderer {
     gl.useProgram(prog.program);
     gl.uniformMatrix3fv(prog.u.u_view, false, view);
     gl.enable(gl.BLEND);
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    // On a transparent canvas the drawn alpha must add up as colour does.
+    gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.uniform1i(prog.u.u_colors, 1);
     gl.activeTexture(gl.TEXTURE1);
     const texture = { fill: this.cellColors?.texture, highlight: this.highlight?.texture }[kind] ?? this.noColors;

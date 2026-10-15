@@ -1272,4 +1272,41 @@ func TestRealInstrumentSegmentationAndInterruptedJobs(t *testing.T) {
 	if cs.Classes["one-to-one"] != 11898 || cs.PixelAgreement != 0.980629 {
 		t.Errorf("comparison summary %s", cm.Summary)
 	}
+
+	// The workspace: each segmentation's outline tiles, and the comparison's differences.
+	var outlines struct {
+		PolygonsBase string
+		Geometry     []struct {
+			Name     string
+			Polygons int
+		}
+		Cells int
+	}
+	rec := request(t, handler, http.MethodGet, "/api/local/0/segmentations/"+e.ID+"/outlines", nil, nil)
+	body := rec.Body.String()
+	json.Unmarshal([]byte(body), &outlines)
+	if rec.Code != http.StatusOK || !strings.HasPrefix(outlines.PolygonsBase, "/api/outlines/outlines-") || outlines.Cells != 11898 || len(outlines.Geometry) != 1 || outlines.Geometry[0].Polygons != 11898 {
+		t.Fatalf("the expansion's outlines: %d %+v %s", rec.Code, outlines, body)
+	}
+	if tile := request(t, handler, http.MethodGet, outlines.PolygonsBase+"/cells/0/0/0", nil, nil); tile.Code != http.StatusOK || tile.Header().Get("X-Polygons") == "" {
+		t.Errorf("an outline tile: %d %v", tile.Code, tile.Header())
+	}
+	rec = request(t, handler, http.MethodGet, "/api/local/0/segmentations/"+m.ID+"/outlines", nil, nil)
+	json.NewDecoder(rec.Body).Decode(&outlines)
+	if rec.Code != http.StatusOK || !strings.HasPrefix(outlines.PolygonsBase, "/api/cache/geometry-") || outlines.Cells != 11898 {
+		t.Errorf("the instrument's outlines: %d %+v", rec.Code, outlines)
+	}
+	var groups struct {
+		Classes []string
+		Class   []int
+		A, B    [][]int32
+		IDsA    []string `json:"idsA"`
+		IDsB    []string `json:"idsB"`
+		Changed []uint32
+	}
+	rec = request(t, handler, http.MethodGet, "/api/local/0/comparisons/"+cm.ID+"/groups", nil, nil)
+	json.NewDecoder(rec.Body).Decode(&groups)
+	if rec.Code != http.StatusOK || len(groups.Class) != 11898 || len(groups.IDsA) != 11898 || len(groups.IDsB) != 11898 || groups.Classes[groups.Class[0]] != "one-to-one" || len(groups.A[0]) != 1 {
+		t.Errorf("the comparison's differences: %d, %d groups, %d and %d ids", rec.Code, len(groups.Class), len(groups.IDsA), len(groups.IDsB))
+	}
 }

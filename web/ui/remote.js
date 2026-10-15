@@ -9,7 +9,8 @@ import { toast } from './overlays.js';
 import { cacheJobKey } from './bundles.js';
 import { datasetFilters, methodsMarkdown, showMethods, writeMethods } from './methods.js';
 import { ATTRIBUTES } from '../lib/cell-attributes.js';
-import { promotedSegmentation } from '../lib/segmentations.js';
+import { decideSegmentation, DECISIONS, promotedSegmentation } from '../lib/segmentations.js';
+import { CLASS_INFO, RANKS, cellNames, warnings } from '../lib/review.js';
 import { parseProject, rename, serializeProject } from '../lib/project.js';
 import { removeView, sameView, viewLink } from '../lib/views.js';
 
@@ -22,7 +23,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const frames = () => Promise.race([new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))), sleep(150)]);
 
 // The views by the names scripts use.
-const MODES = { start: 'welcome', welcome: 'welcome', data: 'data', viewer: 'viewer', tissue: 'viewer', qc: 'qc', segmentation: 'segmentation', celltypes: 'celltypes', 'cell types': 'celltypes', spatial: 'spatial', cohort: 'cohort', reports: 'reports', jobs: 'jobs' };
+const MODES = { start: 'welcome', welcome: 'welcome', data: 'data', viewer: 'viewer', tissue: 'viewer', qc: 'qc', segmentation: 'segmentation', compare: 'compare', comparison: 'compare', celltypes: 'celltypes', 'cell types': 'celltypes', spatial: 'spatial', cohort: 'cohort', reports: 'reports', jobs: 'jobs' };
 const FILLS = ['transcripts', 'total', 'area', 'nucleusArea', 'method'];
 
 // One of `options` (strings) by a forgiving name: exact, then ignoring case, then the one that
@@ -680,6 +681,72 @@ export function installRemote(app) {
         message: `${nameOf(a)} (A) and ${nameOf(b)} (B): ${classes}; ${(100 * d.pixelAgreement).toFixed(2)}% of pixels in the same cell, ${(100 * d.changesQ20.fraction).toFixed(2)}% of gene transcripts changed cell.`,
         data: { id: result.manifest.id, a: { id: a, name: nameOf(a), ...d.metricsA }, b: { id: b, name: nameOf(b), ...d.metricsB }, classes: d.classes, cellsA: d.cellsA, cellsB: d.cellsB, changes: d.changes, changesQ20: d.changesQ20, iou: d.iou, displacement: d.displacement, pixelAgreement: d.pixelAgreement, coexpression: d.coexpression, params: d.params },
       };
+    },
+
+    async show_comparison(args) {
+      const dataset = resolveDataset(args.dataset);
+      const p = project();
+      const list = p.artifacts.filter((a) => a.kind === 'comparison' && a.dataset === dataset.id && a.state === 'complete');
+      if (!list.length) throw new ActionError(`${dataset.name} has no comparison: compare_segmentations makes one.`);
+      const segName = (id) => p.artifacts.find((a) => a.kind === 'segmentation' && a.id === id)?.name ?? id;
+      const named = list.map((c) => ({ c, name: `${segName(c.a)} and ${segName(c.b)}` }));
+      let cmp = list.at(-1);
+      if (args.comparison !== undefined) {
+        const ref = String(args.comparison);
+        cmp = list.find((c) => c.id === ref) ?? named.find((x) => x.name === choose(ref, named.map((y) => y.name), 'comparison')).c;
+      }
+      await settleMode('compare');
+      const w = await app.compareView.open(cmp.id);
+      if (!w) throw new ActionError('The comparison could not be opened.');
+      if (args.mode !== undefined) w.setMode(choose(args.mode, ['side', 'overlay', 'flicker'], 'mode'));
+      const classes = args.classes === undefined ? undefined : args.classes.map((c) => choose(c, Object.keys(CLASS_INFO), 'class'));
+      const by = args.rank === undefined ? undefined : choose(args.rank, Object.keys(RANKS), 'order');
+      const queue = w.setRules({ classes, by, minChanged: args.min_changed === undefined ? undefined : finite(args.min_changed, 'min_changed'), map: args.map === undefined ? undefined : Boolean(args.map) });
+      let chosen = null;
+      if (args.cell !== undefined) {
+        const id = String(args.cell);
+        const a = w.prepared.idsA.indexOf(id);
+        const b = w.prepared.idsB.indexOf(id);
+        const g = a >= 0 ? w.prepared.ofA[a] : b >= 0 ? w.prepared.ofB[b] : -1;
+        if (g < 0) throw new ActionError(`Neither segmentation has a cell ${id}.`);
+        chosen = g;
+      } else if (args.difference !== undefined) {
+        const k = finite(args.difference, 'difference');
+        if (k < 1 || k > queue.length) throw new ActionError(`difference is from 1 to ${queue.length} (the queue's places).`);
+        chosen = queue[k - 1].index;
+      }
+      if (chosen !== null) w.select(chosen);
+      await frames();
+      const describe = (g) => {
+        const names = cellNames(w.prepared, g, 6);
+        return { difference: g.index, class: g.class, a: names.a, b: names.b, reassigned: g.changed, iou: g.a.length === 1 && g.b.length === 1 ? g.iou : null, mixedA: g.mixedA, mixedB: g.mixedB, x: g.x, y: g.y };
+      };
+      const d = w.description;
+      return {
+        message: `${w.names[0]} (A) and ${w.names[1]} (B), ${w.session.mode === 'side' ? 'side by side' : w.session.mode}: ${queue.length.toLocaleString('en-US')} differences in the queue, by ${RANKS[w.session.by].label.toLowerCase()}${chosen !== null ? `; showing a ${w.groups[chosen].class} difference` : ''}.`,
+        data: { id: cmp.id, mode: w.session.mode, map: w.session.map, rank: w.session.by, classes: [...w.session.classes], queue: queue.length, top: queue.slice(0, 10).map(describe), selected: chosen === null ? null : describe(w.groups[chosen]), cautions: warnings(d) },
+      };
+    },
+
+    async decide_segmentation(args) {
+      const dataset = resolveDataset(args.dataset);
+      const p = project();
+      const segs = p.artifacts.filter((a) => a.kind === 'segmentation' && a.dataset === dataset.id);
+      const ref = String(args.segmentation ?? '');
+      const seg = segs.find((s) => s.id === ref) ?? segs.find((s) => s.name === choose(ref, segs.map((x) => x.name), 'segmentation'));
+      const decision = choose(args.decision, Object.keys(DECISIONS), 'decision');
+      const comparison = args.comparison === undefined ? null : String(args.comparison);
+      if (comparison && !p.artifacts.some((a) => a.kind === 'comparison' && a.id === comparison)) throw new ActionError(`No comparison ${comparison}.`);
+      let next;
+      try {
+        next = decideSegmentation(p, { dataset: dataset.id, segmentation: seg.id, decision, rationale: args.rationale, comparison, by: 'a program, by remote control' });
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      app.store.commit(next, `${DECISIONS[decision].done} ${seg.name}`);
+      await frames();
+      const promoted = promotedSegmentation(app.store.project, dataset.id);
+      return { message: `${DECISIONS[decision].done} ${seg.name} of ${dataset.name}. The default is ${promoted?.record.name ?? 'none'}.`, data: { segmentation: seg.id, decision, default: promoted?.record.id ?? null, decisions: app.store.project.decisions.filter((d) => d.dataset === dataset.id).length } };
     },
 
     async jobs(args) {

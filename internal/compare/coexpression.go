@@ -221,6 +221,39 @@ func MECR(c *segment.Counts, pairs [][2]string) float64 {
 	return round6(sum / float64(n))
 }
 
+// MixedPairs counts, for each cell, the pairs of mutually exclusive markers it expresses together.
+func MixedPairs(c *segment.Counts, pairs [][2]string) []uint32 {
+	index := map[string]uint32{}
+	for i, g := range c.Genes {
+		index[g] = uint32(i)
+	}
+	type pair struct{ a, b uint32 }
+	var used []pair
+	for _, p := range pairs {
+		a, okA := index[p[0]]
+		b, okB := index[p[1]]
+		if okA && okB && a != b {
+			used = append(used, pair{a, b})
+		}
+	}
+	out := make([]uint32, max(0, len(c.Offsets)-1))
+	has := map[uint32]bool{}
+	for cell := range out {
+		clear(has)
+		for k := c.Offsets[cell]; k < c.Offsets[cell+1]; k++ {
+			if c.Count[k] > 0 {
+				has[c.Gene[k]] = true
+			}
+		}
+		for _, p := range used {
+			if has[p.a] && has[p.b] {
+				out[cell]++
+			}
+		}
+	}
+	return out
+}
+
 // LineageMarkers are genes that mark one lineage and not the others (SituCraft's table, from the
 // cell types' canonical markers), for the MECR's pairs when no reference gives them.
 var LineageMarkers = map[string][]string{

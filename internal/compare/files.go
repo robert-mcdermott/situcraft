@@ -6,7 +6,9 @@ package compare
 //	                 measure, and the regions
 //	groups.bin "SCCG"  each difference: its class, its cells in A and in B (indices), the IoU, the
 //	                 transcripts' Jaccard and the boundary displacement of one cell in each, the
-//	                 gene transcripts whose cell changed, and where it lies (µm)
+//	                 gene transcripts whose cell changed, where it lies (µm), its cells' gene
+//	                 transcripts in each, and the most mutually exclusive marker pairs a cell of it
+//	                 expresses in each
 //
 // groups.bin has SituCraft's binary envelope (internal/segment: magic, version, length, zlib).
 
@@ -31,7 +33,7 @@ const (
 var Roles = map[string]string{FileDescription: "description", FileGroups: "differences"}
 
 // MethodVersion is the version of the comparison's method, recorded with it.
-const MethodVersion = "1"
+const MethodVersion = "2"
 
 // Side names a compared segmentation.
 type Side struct {
@@ -87,6 +89,9 @@ func Write(dir string, a, b Side, r *Result) error {
 		buf.U32(g.Changed)
 		buf.F32(g.X)
 		buf.F32(g.Y)
+		for _, v := range []uint32{g.TranscriptsA, g.TranscriptsB, g.MixedA, g.MixedB} {
+			buf.U32(v)
+		}
 	}
 	return segment.WriteBinary(filepath.Join(dir, FileGroups), "SCCG", &buf)
 }
@@ -114,7 +119,7 @@ func ReadGroups(dir string) ([]Group, error) {
 	if err != nil {
 		return nil, err
 	}
-	n := r.Count(21)
+	n := r.Count(37)
 	out := make([]Group, 0, n)
 	for i := 0; i < n; i++ {
 		k := r.Byte()
@@ -132,6 +137,7 @@ func ReadGroups(dir string) ([]Group, error) {
 		g.IoU, g.Jaccard, g.Displacement = r.F32(), r.F32(), r.F32()
 		g.Changed = r.U32()
 		g.X, g.Y = r.F32(), r.F32()
+		g.TranscriptsA, g.TranscriptsB, g.MixedA, g.MixedB = r.U32(), r.U32(), r.U32(), r.U32()
 		out = append(out, g)
 	}
 	if err := r.Done(FileGroups); err != nil {

@@ -226,6 +226,26 @@ const scenes = {
     await js(`document.querySelector('.seg-compare-detail')?.scrollIntoView({ block: 'start' })`);
     await sleep(300);
   },
+  // The Breast example's comparison in the Compare workspace: A and B side by side with one camera,
+  // the review queue's first difference (a split) chosen (wave 2, slice 6).
+  async workspace() {
+    await act('open_example', { example: 'breast' });
+    await act('expand_nuclei', { distance_um: 5 });
+    await act('compare_segmentations', {});
+    await act('show_comparison', { mode: 'side', rank: 'reassigned', difference: 1 });
+    await js(`(async () => { const w = window.situcraft.compareView.current(); for (const r of w.state.renderers) await r.renderer.settled(); return true; })()`);
+    await sleep(500);
+  },
+  // The same comparison over the whole tissue: B's outlines over A's, and the map of where they
+  // disagree.
+  async 'workspace-map'() {
+    await act('open_example', { example: 'breast' });
+    await act('expand_nuclei', { distance_um: 5 });
+    await act('compare_segmentations', {});
+    await act('show_comparison', { mode: 'overlay', map: true });
+    await js(`(async () => { const w = window.situcraft.compareView.current(); for (const r of w.state.renderers) await r.renderer.settled(); return true; })()`);
+    await sleep(500);
+  },
   // The Lung example's segmentation imported from SpatialData (written by spatialdata-io:
   // validation/spatialdata.py), beside the instrument's, in the Segmentation view and the inspector
   // (wave 2, slice 4).

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createProject } from './project.js';
-import { addComparison, addSegmentation, comparisonRecord, comparisonsOf, INSTRUMENT_DEFAULT, promoteSegmentation, promotedSegmentation, segmentationRecord, segmentationsOf, withInstrumentSegmentation } from './segmentations.js';
+import { addComparison, addSegmentation, comparisonRecord, comparisonsOf, decideSegmentation, INSTRUMENT_DEFAULT, segmentationDecision, promoteSegmentation, promotedSegmentation, segmentationRecord, segmentationsOf, withInstrumentSegmentation } from './segmentations.js';
 
 const NOW = '2026-10-14T12:00:00.000Z';
 const manifest = (id, state = 'complete') => ({
@@ -122,4 +122,28 @@ test('a comparison is recorded with its two segmentations, once', () => {
   assert.match(p.history.at(-1).detail, /Compared Instrument segmentation \(A\) with exp-b \(B\)/);
   assert.equal(addComparison(p, record, NOW), p);
   assert.equal(segmentationsOf(p, 'd1').length, 1, 'a comparison is not a segmentation');
+});
+
+test('decisions: promote, keep or reject with a reason, appended; the default is never rejected', () => {
+  let p = withInstrumentSegmentation(project(), { id: 'd1', name: 'xenium-lung-2fov' }, manifest('seg-a'), NOW);
+  p = addSegmentation(p, { ...segmentationRecord({ id: 'd1' }, manifest('exp-b'), NOW), name: 'Nucleus expansion, 5 µm', source: 'situcraft' }, NOW);
+  p = addSegmentation(p, { ...segmentationRecord({ id: 'd1' }, manifest('imp-c'), NOW), name: 'Baysor (imported)', source: 'imported' }, NOW);
+  assert.throws(() => decideSegmentation(p, { dataset: 'd1', segmentation: 'exp-b', decision: 'keep', rationale: ' ' }), /reason/);
+  assert.throws(() => decideSegmentation(p, { dataset: 'd1', segmentation: 'exp-b', decision: 'adopt', rationale: 'x' }), /promote, keep, reject/);
+  assert.throws(() => decideSegmentation(p, { dataset: 'd1', segmentation: 'seg-a', decision: 'reject', rationale: 'too tight' }), /the default: promote another/);
+  p = decideSegmentation(p, { dataset: 'd1', segmentation: 'exp-b', decision: 'keep', rationale: 'A baseline', comparison: 'cmp-1', now: NOW });
+  assert.equal(segmentationDecision(p, 'd1', 'exp-b').kind, 'keep-segmentation');
+  assert.equal(segmentationDecision(p, 'd1', 'exp-b').comparison, 'cmp-1');
+  p = decideSegmentation(p, { dataset: 'd1', segmentation: 'imp-c', decision: 'promote', rationale: 'Fewer misassigned transcripts', comparison: 'cmp-2', now: NOW });
+  assert.equal(promotedSegmentation(p, 'd1').record.id, 'imp-c');
+  assert.equal(promotedSegmentation(p, 'd1').decision.comparison, 'cmp-2');
+  // The instrument's, no longer the default, can be rejected; the default stays.
+  p = decideSegmentation(p, { dataset: 'd1', segmentation: 'seg-a', decision: 'reject', rationale: 'Cells cut by the stain', now: NOW });
+  assert.equal(segmentationDecision(p, 'd1', 'seg-a').kind, 'reject-segmentation');
+  assert.equal(promotedSegmentation(p, 'd1').record.id, 'imp-c');
+  assert.equal(p.decisions.length, 4, 'every decision appended');
+  assert.match(p.history.at(-1).detail, /Rejected instrument segmentation of xenium-lung-2fov: Cells cut by the stain/);
+  // A rejected segmentation promoted again is the default again.
+  p = decideSegmentation(p, { dataset: 'd1', segmentation: 'seg-a', decision: 'promote', rationale: 'On second thought', now: NOW });
+  assert.equal(promotedSegmentation(p, 'd1').record.id, 'seg-a');
 });

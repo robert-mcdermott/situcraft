@@ -109,8 +109,16 @@ A segmentation is recorded in `artifacts` (kind `segmentation`) as the artifact 
 its id, name, dataset, state, method (name, version, citation, and the cells each of the
 instrument's methods segmented), software, the job that made or registered it, its parents, its
 files (path, role, size, SHA-256, and `bundle` for a file of the dataset's bundle), its summary and
-its check's findings. `decisions` records each promotion of a dataset's default segmentation:
-`{kind: "promote-segmentation", dataset, artifact, rationale, by, time}`; the latest holds.
+its check's findings; an import's also records its sources (each path imported, the number and
+size of the files read under it, and their digest). A comparison is recorded as kind `comparison`:
+its id, dataset, its two segmentations (`a`, `b`), state, method, parameters, the job that made it,
+its summary and findings.
+
+`decisions` records each decision about a dataset's segmentations, appended and never removed:
+`{kind, dataset, artifact, rationale, by, time, comparison}`, the kind `promote-segmentation` (its
+default), `keep-segmentation` (kept for exploration) or `reject-segmentation`, and `comparison`
+the comparison it rests on, when there is one. A segmentation's status is its latest decision; the
+default is the segmentation of the latest promotion not rejected since.
 
 ### Artifacts
 

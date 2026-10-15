@@ -183,6 +183,11 @@ type Group struct {
 	// changed; X, Y is where the group lies (µm).
 	Changed uint32
 	X, Y    float32
+	// TranscriptsA and TranscriptsB are the gene transcripts (quality 20+) of its cells in each.
+	TranscriptsA, TranscriptsB uint32
+	// MixedA and MixedB are, of its cells in each, the most pairs of mutually exclusive markers one
+	// cell expresses together: a sign of another cell's transcripts.
+	MixedA, MixedB uint32
 }
 
 // Changes count transcripts whose cell changed.
@@ -589,6 +594,22 @@ func Compare(ctx context.Context, in Inputs) (*Result, error) {
 	}
 	r.MECRPairs = pairs
 	r.A.MECR, r.B.MECR = Float(MECR(a.Counts, pairs)), Float(MECR(b.Counts, pairs))
+	mixedA, mixedB := MixedPairs(a.Counts, pairs), MixedPairs(b.Counts, pairs)
+	for gi := range r.Groups {
+		g := &r.Groups[gi]
+		for _, c := range g.A {
+			g.TranscriptsA += a.Cells[c].Transcripts
+			if int(c) < len(mixedA) {
+				g.MixedA = max(g.MixedA, mixedA[c])
+			}
+		}
+		for _, c := range g.B {
+			g.TranscriptsB += b.Cells[c].Transcripts
+			if int(c) < len(mixedB) {
+				g.MixedB = max(g.MixedB, mixedB[c])
+			}
+		}
+	}
 	return r, nil
 }
 

@@ -413,3 +413,38 @@ func (g *Geometry) Close() error {
 	}
 	return nil
 }
+
+// KindOutlines are the geometry tiles of a segmentation's cell outlines (one ring a cell), whose
+// polygons' cells are the segmentation's (by index).
+const KindOutlines = "outlines"
+
+// Outlines answers the entry of a segmentation's outline tiles on a grid, building it when it is not
+// there: key names the segmentation (its artifact), polygons are its outlines (µm), index maps their
+// ids to the segmentation's cells.
+func (c *Cache) Outlines(ctx context.Context, key string, grid Grid, polygons *xenium.Polygons, index map[string]int32) (string, *GeometrySummary, error) {
+	params := NewGeometryParams(grid)
+	// The segmentation is the entry's source (its parameters are a geometry entry's, as
+	// OpenGeometry reads them).
+	spec := Spec{Kind: KindOutlines, Params: params, Sources: []SourceFile{{Path: "segmentation " + key}}}
+	name, err := spec.Name()
+	if err != nil {
+		return "", nil, err
+	}
+	var summary GeometrySummary
+	if m, ok := c.Lookup(name); ok && json.Unmarshal(m.Summary, &summary) == nil {
+		return name, &summary, nil
+	}
+	b, err := c.begin(spec)
+	if err != nil {
+		return "", nil, err
+	}
+	s, err := buildGeometry(ctx, b, params, GeometryInput{Cells: polygons, CellIndex: index}, func(float64) {})
+	if err != nil {
+		b.release()
+		return "", nil, err
+	}
+	if _, err := b.commit(s); err != nil {
+		return "", nil, err
+	}
+	return name, s, nil
+}

@@ -207,6 +207,30 @@ mutually exclusive co-expression rate of Hartman and Satija). Between the two, t
 agree, the transcripts that changed cell, and how far the boundaries moved. The comparison runs
 as a job and is kept with the project.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/workspace-dark.webp">
+  <img alt="The Compare workspace: the Breast example's instrument segmentation and a 5 µm nucleus expansion side by side on the tissue, cells filled by the class of their difference, the review queue's first split chosen and described in the inspector" src="images/workspace-light.webp">
+</picture>
+
+**Open** (beside a comparison, or **Compare** in the views) shows the two on the tissue:
+
+- **Side by side** with one camera, **Overlay** (B's outlines over A's, each in its colour), or
+  **Flicker** (A and B in turns). Cells are filled by the class of their difference; the
+  **Disagreement map** shades each 50 µm region by the share of its pixels the two give to
+  different cells.
+- **The review queue** ranks the differences by reassigned transcripts, contamination (pairs of
+  markers of different lineages found in one cell of B and not of A), disagreement or low counts,
+  among the classes you keep and with at least the reassigned transcripts you set. **Next** and
+  **Previous** (or `]` and `[`) go through it; each difference opens where it lies, its cells lit
+  in both, and is described in the inspector. **Cell matching** lists every difference, sortable.
+- **Decide** promotes one segmentation as the dataset's default, keeps one for exploration, or
+  rejects one, with a reason. Decisions are appended to the project with the comparison they rest
+  on and never removed; the default cannot be rejected until another is promoted, and no
+  segmentation is ever deleted.
+
+The measures' header says when one rests on little (few nuclei for the spurious co-expression,
+few marker pairs in the panel, cells without outlines).
+
 **Import a segmentation** brings in one made by another tool: a SpatialData Zarr store, Baysor's
 `segmentation.csv` with its polygons, GeoJSON polygons with an optional transcript table (CSV or
 Parquet), or a Xenium Ranger output bundle of the same run. Say whether its coordinates are in µm
@@ -215,8 +239,7 @@ pixels): SituCraft does not guess, and the import's check says when the cells do
 the dataset's image. It also checks that the transcripts it names are the dataset's. The import
 runs as a job and becomes a segmentation of its own, kept with the SHA-256 of every file it read,
 its transcripts counted as every segmentation's are; one whose check finds a fatal problem is
-kept as invalid, for review. Later releases add the two segmentations side by side on the tissue,
-a queue of the differences to review, and choosing the default.
+kept as invalid, for review.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/jobs-dark.webp">

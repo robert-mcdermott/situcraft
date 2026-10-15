@@ -71,7 +71,7 @@ var remoteActions = []remoteAction{
 		"step":    map[string]any{"type": "integer", "minimum": 1, "description": "The step to show, from 1 (1 if not given)."},
 		"end":     flagArg("Close the tour."),
 	})},
-	{Name: "set_mode", Title: "Show a view", Description: "Shows a view: start, data, viewer, qc, segmentation, celltypes, spatial, cohort, reports or jobs.", InputSchema: schema(map[string]any{
+	{Name: "set_mode", Title: "Show a view", Description: "Shows a view: start, data, viewer, qc, segmentation, compare, celltypes, spatial, cohort, reports or jobs.", InputSchema: schema(map[string]any{
 		"mode": textArg("start, data, viewer, qc, segmentation, celltypes, spatial, cohort, reports or jobs."),
 	}, "mode")},
 	{Name: "focus", Title: "Focus an item", Description: "Shows an item in the inspector, and in the view that shows it: a dataset, filter, saved view or item on this computer, by name. With no name, clears the focus.", InputSchema: schema(map[string]any{
@@ -160,6 +160,24 @@ var remoteActions = []remoteAction{
 		"a":       textArg("Segmentation A, by name or artifact id."),
 		"b":       textArg("Segmentation B, by name or artifact id."),
 	}), long: true},
+	{Name: "show_comparison", Title: "Show a comparison", Description: "Opens a comparison of two segmentations (by id, or 'A and B' by their names; the dataset's latest if not given) in the Compare workspace: A and B side by side, overlaid or flickering, cells filled by the class of their difference, a map of disagreement. Ranks the review queue (reassigned transcripts, contamination, disagreement or low counts) among the classes and reassigned transcripts the rules keep, and shows a difference (by its place in the queue, or by a cell's id). Answers the queue's first ten, the difference shown and the cautions about the comparison's measures.", InputSchema: schema(map[string]any{
+		"dataset":     datasetArg,
+		"comparison":  textArg("A comparison, by artifact id or 'A and B' (the segmentations' names)."),
+		"mode":        textArg("side, overlay or flicker."),
+		"map":         flagArg("Show the disagreement map."),
+		"classes":     map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "The classes the queue and the fills keep (one-to-one, expanded, contracted, split, merged, rearranged, only in A, only in B, assignment-only); every differing class if not given."},
+		"rank":        textArg("reassigned, contamination, disagreement or low-counts."),
+		"min_changed": map[string]any{"type": "number", "minimum": 0, "description": "Keep only differences with at least this many reassigned transcripts."},
+		"difference":  map[string]any{"type": "number", "minimum": 1, "description": "Show the difference at this place in the queue (from 1)."},
+		"cell":        textArg("Show the difference of this cell (an id of either segmentation's)."),
+	}), long: true},
+	{Name: "decide_segmentation", Title: "Decide about a segmentation", Description: "Records a decision about one of a dataset's segmentations: promote (the dataset's default), keep (for exploration) or reject, with a reason (required), and optionally the comparison it rests on. Decisions are appended to the project and never removed; the default cannot be rejected (promote another first).", InputSchema: schema(map[string]any{
+		"dataset":      datasetArg,
+		"segmentation": textArg("The segmentation, by name or artifact id."),
+		"decision":     textArg("promote, keep or reject."),
+		"rationale":    textArg("Why (recorded with the decision)."),
+		"comparison":   textArg("The comparison it rests on (artifact id)."),
+	}, "segmentation", "decision", "rationale"), long: true},
 	{Name: "jobs", Title: "List and control jobs", Description: "The program's jobs (building derived data, downloading examples, registering segmentations…): each one's id, kind, state, progress, runs and error, and whether an interrupted one can be resumed. With job, that job with its whole log and its spec; with job and do, stops (cancel), resumes (resume) or forgets (discard) it. show: true shows the Jobs view.", InputSchema: schema(map[string]any{
 		"job":  textArg("A job's id."),
 		"do":   textArg("cancel, resume or discard."),

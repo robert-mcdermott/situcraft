@@ -291,7 +291,12 @@ export function mountSegmentation(app, container) {
       h('td.r', exact(s.classes?.['one-to-one'] ?? 0)),
       h('td.r', percent(s.pixelAgreement, 2)),
       h('td.r', percent(s.changedFraction, 2)),
-      h('td.r', Number.isFinite(s.medianIoU) ? s.medianIoU.toFixed(3) : '—'));
+      h('td.r', Number.isFinite(s.medianIoU) ? s.medianIoU.toFixed(3) : '—'),
+      h('td', h('button.btn.small', { type: 'button', title: 'Both segmentations on the tissue, the differences to review, and the decision', onclick: (event) => {
+        event.stopPropagation();
+        app.compareFocus = c.id;
+        app.setMode('compare');
+      } }, icon('eye'), 'Open')));
     });
     const detail = h('div.seg-compare-detail');
     const shown = done.find((c) => c.id === state.shown);
@@ -311,7 +316,7 @@ export function mountSegmentation(app, container) {
         h('div.btn-row', go, complete.length < 2 ? h('span.muted.seg-note', 'Expand the nuclei, or import a segmentation, to have two to compare.') : null),
         ...running,
         done.length ? h('div', { style: { overflowX: 'auto' } }, h('table.data.seg-table.seg-comparisons',
-          h('thead', h('tr', h('th', 'A'), h('th', 'B'), h('th.r', 'One-to-one'), h('th.r', { title: 'Pixels in the same cell, of those either gives a cell' }, 'Pixels agree'), h('th.r', { title: 'Gene transcripts (quality 20+) whose cell changed' }, 'Changed'), h('th.r', { title: 'Median intersection over union of the one-to-one cells' }, 'IoU'))),
+          h('thead', h('tr', h('th', 'A'), h('th', 'B'), h('th.r', 'One-to-one'), h('th.r', { title: 'Pixels in the same cell, of those either gives a cell' }, 'Pixels agree'), h('th.r', { title: 'Gene transcripts (quality 20+) whose cell changed' }, 'Changed'), h('th.r', { title: 'Median intersection over union of the one-to-one cells' }, 'IoU'), h('th', h('span.sr-only', 'Workspace')))),
           h('tbody', ...rows))) : null,
         detail));
   }

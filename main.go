@@ -84,6 +84,8 @@ type app struct {
 	artifacts *artifacts.Store
 	// views are the datasets open in the tissue viewer.
 	views *views
+	// outlines are segmentations' outline tiles opened for the comparison workspace.
+	outlines outlineEntries
 	// examples are the example datasets, downloaded on request.
 	examples *examples.Library
 	// control is the remote-control hub (remote.go), with --remote-control.
@@ -233,6 +235,7 @@ func (s *runningServer) stop(timeout time.Duration) {
 	defer cancel()
 	s.server.Shutdown(ctx)
 	s.app.views.closeAll()
+	s.app.outlines.closeAll()
 }
 
 func (s *runningServer) serve() error {
@@ -528,6 +531,7 @@ func (a *app) registerAPI(mux *http.ServeMux) {
 	a.registerExpansion(mux)
 	a.registerImports(mux)
 	a.registerComparisons(mux)
+	a.registerWorkspace(mux)
 	if a.control != nil {
 		a.control.register(mux)
 	}

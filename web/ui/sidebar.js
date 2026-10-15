@@ -59,6 +59,17 @@ const SECTIONS = [
     empty: 'The instrument\'s segmentation, SituCraft\'s own, and ones imported from other tools, each kept with how it was made.',
   },
   {
+    kind: 'comparison', title: 'Comparisons', icon: 'compare',
+    items: (project) => project.artifacts.filter((a) => a.kind === 'comparison'),
+    label: (a, app) => {
+      const segs = app.store.project.artifacts;
+      const name = (id) => segs.find((x) => x.kind === 'segmentation' && x.id === id)?.name ?? '?';
+      return `${name(a.a)} · ${name(a.b)}`;
+    },
+    meta: (a) => (Number.isFinite(a.summary?.pixelAgreement) ? `${(100 * a.summary.pixelAgreement).toFixed(1)}% agree` : a.state),
+    empty: 'Two segmentations compared: which cells correspond, how each differs, and what changed.',
+  },
+  {
     kind: 'labels', title: 'Label sets', icon: 'tag',
     items: (project) => project.artifacts.filter((a) => a.kind === 'labels'),
     label: (a) => a.name ?? 'Label set',

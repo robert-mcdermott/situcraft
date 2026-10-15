@@ -100,7 +100,20 @@ review and choose between. Built slice by slice; this section grows with each.
     Hartman and Satija (2024).
   - **Compare two segmentations** in the Segmentation view; each comparison is an artifact kept
     with the project. Remote control gains `compare_segmentations` (25 actions).
-- **Screenshots** of the documentation: 16 scenes in both themes, captured through remote control
+- **The comparison workspace (wave 2, slice 6).** The **Compare** view shows a comparison's two
+  segmentations on the tissue:
+  - **side by side** with one camera, **overlaid** in two colours, or in turns (**flicker**); cells
+    filled by the class of their difference; a **disagreement map** by 50 µm region;
+  - **the review queue:** the differences ranked by reassigned transcripts, contamination (markers
+    of different lineages in one cell), disagreement or low counts, among the classes and
+    reassigned transcripts you keep; each opens where it lies, lit in both and described in the
+    inspector; **cell matching** lists them all;
+  - **decisions:** promote one segmentation as the dataset's default, keep one for exploration, or
+    reject one, each with a reason and the comparison it rests on, appended and never removed;
+  - the measures' header warns when a measure rests on little.
+  - Comparisons appear in the project tree. Remote control gains `show_comparison` and
+    `decide_segmentation` (27 actions).
+- **Screenshots** of the documentation: 18 scenes in both themes, captured through remote control
   from the development bundles (`node docs/capture/capture.mjs`), in the README and the
   getting-started guide.
 - **A cell by its ID:** the program finds a cell by its `cell_id` as well as by its row.
@@ -119,6 +132,11 @@ review and choose between. Built slice by slice; this section grows with each.
 
 ### Validation
 
+- **The comparison workspace (slice 6):**
+  - **Node tests** of the review queue's rankings and rules, the cautions, and the decisions'
+    rules; **Go tests** of each segmentation's outline tiles and of a comparison's differences.
+  - **In headless Chrome** (70 checks): the queue ranked as asked, both segmentations drawn with
+    one camera in every mode, and decisions recorded only as the rules allow.
 - **Comparisons (slice 5):**
   - **Hand-drawn segmentations** of every class, each count and measure worked out by hand; a
     planted leak of transcripts raises the spurious co-expression; the MECR by hand.
@@ -191,7 +209,7 @@ review and choose between. Built slice by slice; this section grows with each.
   - the methods cite the data and SituCraft;
   - `export` writes the project only with the token.
 - **Every screenshot scene in both themes** passes axe-core's WCAG 2.1 A and AA rules
-  (`docs/capture/audit.json`, 32 captures, no violation).
+  (`docs/capture/audit.json`, 36 captures, no violation).
 
 ## 0.1.0 (2026-10-14)
 

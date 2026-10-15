@@ -140,6 +140,26 @@
   "violations": []
  },
  {
+  "scene": "workspace",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "workspace",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "workspace-map",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "workspace-map",
+  "theme": "light",
+  "violations": []
+ },
+ {
   "scene": "import",
   "theme": "dark",
   "violations": []

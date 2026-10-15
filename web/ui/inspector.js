@@ -149,6 +149,28 @@ export function mountInspector(app) {
       a.method.citation ? h('p.muted', { style: { margin: '8px 0 0', fontSize: '11.5px' } }, a.method.citation) : null);
   }
 
+  // A comparison: its two segmentations, its headline numbers, and the workspace.
+  function comparisonSection(c) {
+    const { project } = app.store;
+    const name = (id) => project.artifacts.find((a) => a.kind === 'segmentation' && a.id === id)?.name ?? id;
+    const s = c.summary ?? {};
+    const pct = (v) => (Number.isFinite(v) ? `${(100 * v).toFixed(2)}%` : '—');
+    return h('section.inspector-section',
+      h('h3', icon('compare'), 'Comparison'),
+      h('dl.kv',
+        h('dt', 'A'), h('dd', name(c.a)),
+        h('dt', 'B'), h('dd', name(c.b)),
+        h('dt', 'One-to-one'), h('dd', (s.classes?.['one-to-one'] ?? 0).toLocaleString('en-US')),
+        h('dt', 'Pixels agree'), h('dd', pct(s.pixelAgreement)),
+        h('dt', 'Changed cell'), h('dd', pct(s.changedFraction)),
+        h('dt', 'Artifact'), h('dd.mono', c.id)),
+      h('div.btn-row', { style: { marginTop: '8px' } }, h('button.btn.small.primary', { type: 'button', onclick: () => {
+        app.compareFocus = c.id;
+        app.setMode('compare');
+      } }, icon('eye'), 'Open in the workspace')),
+      c.method?.citation ? h('p.muted', { style: { margin: '8px 0 0', fontSize: '11.5px' } }, c.method.citation) : null);
+  }
+
   function focusSection() {
     const focus = app.store.ui.focus;
     if (focus?.kind === 'view') {
@@ -158,6 +180,10 @@ export function mountInspector(app) {
     if (focus?.kind === 'segmentation') {
       const a = app.store.project.artifacts.find((x) => x.kind === 'segmentation' && x.id === focus.id);
       if (a) return segmentationSection(a);
+    }
+    if (focus?.kind === 'comparison') {
+      const c = app.store.project.artifacts.find((a) => a.kind === 'comparison' && a.id === focus.id);
+      if (c) return comparisonSection(c);
     }
     if (focus?.kind === 'filter') {
       const filter = app.store.project.artifacts.find((a) => a.id === focus.id);
