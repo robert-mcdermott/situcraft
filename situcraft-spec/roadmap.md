@@ -1216,11 +1216,57 @@ independent reference outputs.
        so the default is one stage.
      - **A one-sided connectivity test** breaks detailed balance only where a voxel sits between
        two pieces of a cell; a test on a larger lattice was needed to catch it.
-4. **Outputs (S9, S11).**
-   - Polygons per z layer and in consensus; transcript assignments with probabilities; counts.
-   - Convergence diagnostics.
-   - The artifact enters the comparison workspace automatically.
-   - Limitations flagged per cell (low transcripts; no prior nucleus).
+4. **Outputs (S9, S11): done.**
+   - **Segmentation files** (`refine.WriteBundleOutputs`; FORMATS.md):
+     - the six of every segmentation: the 2D footprint at the image's resolution, holes filled,
+       outlines simplified to half a voxel; assignments; counts of gene transcripts of quality 20
+       or more;
+     - and three of its own: `probabilities.bin` (each transcript's posterior probability of its
+       cell), `layers.bin` (each layer's outlines, with more than one) and `diagnostics.json`
+       (every sweep's trace, convergence, the cells' limitations).
+
+     The segmentation check validates the optional files when present.
+   - **A job** (`api_refine.go`, `POST /api/local/{index}/refinement`):
+     - options: sweeps, samples, seed, layers; the artifact is named by the instrument's
+       segmentation and every option, so the same options give the same artifact;
+     - resumable after the program stops; recorded with its lineage and the resolved parameters.
+   - **Into the comparison workspace at once:** the page compares each refinement with the
+     instrument's segmentation as soon as it is recorded.
+   - **Convergence diagnostics:**
+     - Geweke's diagnostic of the log-likelihood over the summarized sweeps is the verdict;
+     - the split-half agreement of the assignments, the mean probability and the share below 0.5,
+       and the voxels still moving each sweep are reported alongside.
+   - **Limitations, per cell:** few transcripts (under 10), uncertain boundaries (under 75%), no
+     nucleus, left out. They are shown in the Segmentation view's new card, with what every
+     refinement shares, and listed with a difference's cells in the comparison workspace's
+     inspector.
+   - **The methods paragraph** describes a refined default segmentation: its start, schedule, seed
+     and summary, citing Jones et al.
+   - **Remote control:** `refine_segmentation` (28 actions).
+   - Validation:
+     - **Go tests:**
+       - a run's outputs pass the segmentation check, load, and compare with the instrument's;
+       - assignments and probabilities are the run's, row for row;
+       - the limitations' thresholds, and Geweke's diagnostic on noise, trends and constants;
+       - through the API on a simulated bundle: refused before the instrument's segmentation and
+         with bad options, recorded with its files and lineage, the same artifact asked again,
+         another for another seed.
+     - **Node tests:** the convergence and limitation statements, per-cell flags, the methods
+       sentence.
+     - **In headless Chrome:** `refine_segmentation` on the Lung bundle, recorded with its
+       probabilities and diagnostics, one comparison more, the card with its convergence and
+       limitations.
+     - **In the app:** a simulated tissue refined from the Segmentation view, compared at once, a
+       flagged cell's limitation shown in the workspace's inspector.
+   - **Reference numbers:** on the standard simulated tissue, 85.9% of transcripts in their true
+     cells and a median IoU of 0.678, against the instrument's 82.5% and 0.622 (research.md §3.2).
+   - Found by slice 4:
+     - **Holes:** in one layer about 8% of a cell's voxels are holes in the posterior's summary.
+       Filling enclosed background regions raised the median IoU from 0.663 to 0.678.
+     - **A stability figure is not a convergence test.** The split-half agreement plateaus near
+       95% because of the posterior's uncertainty. Geweke's diagnostic shows the log-likelihood
+       still drifting slowly after 600 sweeps; longer runs barely change the result against the
+       truth, and the page says so.
 5. **The segmentation studio (S3, S4, S5, S7).**
    - The Input → Compute → Model → Review → Run → Compare flow, with presets and expert settings
      in plain language.

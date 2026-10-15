@@ -213,7 +213,10 @@ Segmentation is SituCraft's own code (`internal/segment`), not an external progr
   seed regardless of thread count**: each parallel block draws from its own seeded random stream,
   in a fixed update order.
 - **Outputs** are converted to polygons (per z layer and consensus), transcript assignments with
-  probabilities, and counts. They enter the artifact system like any other segmentation.
+  probabilities, and counts. They enter the artifact system like any other segmentation, with
+  diagnostics: convergence (Geweke's diagnostic of the log-likelihood) and each cell's flagged
+  limitations, shown in the Segmentation view and the comparison workspace. Each refinement is
+  compared with the instrument's segmentation as soon as it is made.
 - **Imported segmentations** (`internal/segment/imports`) come from SpatialData Zarr,
   Baysor-style CSV plus GeoJSON, Xenium Ranger outputs, or GeoJSON polygons plus an assignment
   table. This is how results from external tools are compared, without SituCraft running those

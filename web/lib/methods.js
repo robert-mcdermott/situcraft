@@ -1,3 +1,5 @@
+import { REFINE_METHOD } from './refine.js';
+
 // A methods paragraph for a dataset, written from what the project records of it (its bundle's
 // metadata and validation, its filters) and SituCraft's version, with the references it cites.
 // Only what was done is said: nothing is written for a step that did not happen. Deterministic:
@@ -67,11 +69,15 @@ export function methodsParagraph({ dataset, report = null, filters = [], program
   if (r && r.source !== 'instrument') {
     const m = r.method ?? {};
     const citeMethod = m.citation ? ` ${cite(`segmentation:${m.name}`, m.citation)}` : '';
+    const p = r.parameters ?? {};
+    const stages = (p.stages ?? []).map((st) => `${st.voxel_um} µm voxels in ${st.layers === 1 ? 'one layer' : `${st.layers} layers`} for ${count(st.sweeps)} sweeps`);
     const how = r.source === 'imported'
       ? `with ${m.name}${m.version ? ` ${m.version}` : ''}${citeMethod}, imported into SituCraft and checked against the dataset's transcripts and image`
-      : r.parameters?.distance_um !== undefined
-        ? `with SituCraft's nucleus expansion (version ${m.version}): each nucleus grew by up to ${r.parameters.distance_um} µm, every pixel going to the nearest nucleus within that distance${citeMethod}`
-        : `with ${m.name}${citeMethod}`;
+      : p.distance_um !== undefined
+        ? `with SituCraft's nucleus expansion (version ${m.version}): each nucleus grew by up to ${p.distance_um} µm, every pixel going to the nearest nucleus within that distance${citeMethod}`
+        : m.name === REFINE_METHOD
+          ? `with SituCraft's transcript-informed segmentation (version ${m.version}), after Jones et al.${citeMethod}: starting from the instrument's cells and their nuclei, each cell's extent was sampled from its posterior given the transcripts (each cell's transcripts a Poisson process over a background, with a mixture of expression states and transcripts repositioned within their likely displacement) at ${joinList(stages)}, seed ${p.seed}, and the summary over the last ${count(p.samples)} sweeps taken, each transcript in its most probable cell`
+          : `with ${m.name}${citeMethod}`;
     const assigned = Number.isFinite(r.summary?.assignedFraction) ? `, ${(100 * r.summary.assignedFraction).toFixed(1)}% of the gene transcripts of quality 20 or more assigned to them` : '';
     sentences.push(`Cells were segmented again ${how}, giving ${count(r.summary?.cells ?? 0)} cells${assigned}.`);
     const d = segmentation.decision;

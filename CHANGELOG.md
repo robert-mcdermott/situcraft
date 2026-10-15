@@ -48,6 +48,20 @@ segmentation, validated against simulated truth and independent reference output
   cells overlap the true ones more (median IoU 0.663 against 0.622). Its moves are checked to keep
   the posterior exactly (detailed balance on every state of small lattices).
 
+- **Transcript-informed segmentation in the app (wave 3, slice 4).** **Refine from the
+  transcripts** in the Segmentation view redraws the cells from the transcripts as a job and
+  records the segmentation as an artifact. That artifact keeps each transcript's probability of
+  its cell, the run's diagnostics, and each layer's outlines when there are several. It is
+  compared with the instrument's segmentation at once, ready for review in the comparison
+  workspace.
+  - **The view shows** whether the run settled (Geweke's diagnostic), how stable its assignments
+    are, and which cells it is least sure of: few transcripts, uncertain boundaries, no nucleus.
+  - **The workspace** lists a chosen difference's flagged cells.
+  - **The methods paragraph** describes a refined segmentation.
+  - **Remote control** adds `refine_segmentation`.
+  - On a simulated tissue it puts 85.9% of transcripts in their true cells (the instrument's
+    expansion: 82.5%), with a median IoU of 0.678 (0.622).
+
 ### Fixed
 
 - **Nucleus expansion stopped with an internal error** when a bundle's cell mask

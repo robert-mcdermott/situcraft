@@ -23,6 +23,8 @@ type BundleIndex struct {
 	CellIDs []string
 	// Outside counts the gene transcripts beyond the image, left out.
 	Outside int
+	// Total is transcripts.parquet's rows.
+	Total int
 }
 
 // readMask reads a mask whole, as runs.
@@ -114,7 +116,7 @@ func BundleInputs(b *xenium.Bundle) (*Inputs, *BundleIndex, error) {
 		}
 	}
 	in := &Inputs{WidthUm: mul(float64(cellMask.Width), ps), HeightUm: mul(float64(cellMask.Height), ps), Cells: n, Start: cellMask,
-		SeedX: make([]float64, n), SeedY: make([]float64, n)}
+		SeedX: make([]float64, n), SeedY: make([]float64, n), NucleusUm2: make([]float64, n)}
 	// Seeds: the centre of the cell's largest nucleus, else of the cell.
 	seedPixels := make([]int64, n+1)
 	for c := 1; c <= n; c++ {
@@ -127,6 +129,11 @@ func BundleInputs(b *xenium.Bundle) (*Inputs, *BundleIndex, error) {
 		nuclei = append(nuclei, k)
 	}
 	sort.Slice(nuclei, func(i, j int) bool { return nuclei[i] < nuclei[j] })
+	for _, k := range nuclei {
+		if c := owner[k]; c > 0 {
+			in.NucleusUm2[c-1] += mul(float64(nucSum[k].n), mul(ps, ps))
+		}
+	}
 	for _, k := range nuclei {
 		s := nucSum[k]
 		c := owner[k]
@@ -181,6 +188,7 @@ func BundleInputs(b *xenium.Bundle) (*Inputs, *BundleIndex, error) {
 	if err != nil {
 		return nil, nil, err
 	}
+	idx.Total = row
 	if len(idx.Rows) == 0 {
 		return nil, nil, errors.New("refine: the bundle has no gene transcripts of quality 20 or more")
 	}

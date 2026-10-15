@@ -201,6 +201,19 @@ segmentation pixel by pixel and transcript by transcript, and what differs is de
 Lung example, segmented by the instrument the same way, 98.06% of pixels and 98.94% of transcripts
 are in the same cells.
 
+**Refine from the transcripts** redraws each cell from the transcripts (SituCraft's
+transcript-informed segmentation, after Jones et al. 2025). It starts from the instrument's cells
+and their nuclei. Each boundary moves to where the cell's own transcripts are, and each transcript
+may have drifted from the cell it came from. It runs as a job (a few minutes per square
+millimetre).
+
+The result is the posterior's summary over many samples: each transcript in its most probable
+cell, with that probability kept. The view says whether the run settled, and which cells its
+result is least sure of: those with few transcripts, uncertain boundaries, or no nucleus. It is
+compared with the instrument's segmentation as soon as it is made, so **Review the differences**
+opens the comparison workspace on it. There, a chosen difference's cells are listed with their
+limitations.
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/import-dark.webp">
   <img alt="The Segmentation view of the Lung example: the instrument's segmentation and one imported from a SpatialData store written by spatialdata-io, side by side, and the imported one's lineage in the inspector" src="images/import-light.webp">

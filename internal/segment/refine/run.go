@@ -91,6 +91,9 @@ type Inputs struct {
 	Cells        int
 	Start        *segment.Raster
 	SeedX, SeedY []float64
+	// NucleusUm2 is each cell's nuclei's area (µm²; 0 for a cell with no nucleus, whose seed is its
+	// own centre).
+	NucleusUm2 []float64
 }
 
 // SweepTrace is what a sweep did.
@@ -109,11 +112,17 @@ type Result struct {
 	State       *State
 	Model       *Model
 	Labels      []uint32
+	LabelShare  []float32
 	Assigned    []uint32
 	Probability []float32
 	Kept        []int
 	StartStage  int
 	Trace       []SweepTrace
+	// SplitHalf is the share of transcripts whose most frequent cell is the same over the first
+	// and the second half of the samples (a check that the summary has settled); Samples the
+	// sweeps summarized.
+	SplitHalf float64
+	Samples   int
 	// Overflow counts the tallies' labels beyond their slots (left uncounted).
 	Overflow int
 }
@@ -363,6 +372,7 @@ func Run(ctx context.Context, in *Inputs, opt Options, progress func(float64, st
 	}
 	done := 0
 	var voxels, transcripts *tally
+	var halves [2]*tally
 	for si := start; si < len(opt.Stages); si++ {
 		st := opt.Stages[si]
 		if si > start {
@@ -387,15 +397,22 @@ func Run(ctx context.Context, in *Inputs, opt Options, progress func(float64, st
 			if si == len(opt.Stages)-1 && k >= st.Sweeps-opt.Samples {
 				if voxels == nil {
 					voxels, transcripts = newTally(len(s.Labels)), newTally(len(s.voxel))
+					halves = [2]*tally{newTally(len(s.voxel)), newTally(len(s.voxel))}
+				}
+				half := halves[0]
+				if 2*(k-(st.Sweeps-opt.Samples)) >= opt.Samples {
+					half = halves[1]
 				}
 				for v, c := range s.Labels {
 					voxels.add(v, c)
 				}
 				for i, v := range s.voxel {
 					transcripts.add(i, s.Labels[v])
+					half.add(i, s.Labels[v])
 				}
 				voxels.samples++
 				transcripts.samples++
+				half.samples++
 			}
 			done++
 			progress(float64(done)/float64(max(1, total)), fmt.Sprintf("Sampling at %g µm (sweep %d of %d)", st.VoxelUm, k+1, st.Sweeps))
@@ -403,8 +420,21 @@ func Run(ctx context.Context, in *Inputs, opt Options, progress func(float64, st
 	}
 	res.State = s
 	res.Labels = make([]uint32, len(s.Labels))
+	res.LabelShare = make([]float32, len(s.Labels))
 	for v := range res.Labels {
-		res.Labels[v], _ = voxels.mode(v)
+		c, p := voxels.mode(v)
+		res.Labels[v], res.LabelShare[v] = c, float32(p)
+	}
+	if halves[1].samples > 0 {
+		same := 0
+		for i := range s.voxel {
+			a, _ := halves[0].mode(i)
+			b, _ := halves[1].mode(i)
+			if a == b {
+				same++
+			}
+		}
+		res.SplitHalf = float64(same) / float64(max(1, len(s.voxel)))
 	}
 	res.Assigned = make([]uint32, len(s.voxel))
 	res.Probability = make([]float32, len(s.voxel))
@@ -413,6 +443,7 @@ func Run(ctx context.Context, in *Inputs, opt Options, progress func(float64, st
 		res.Assigned[i], res.Probability[i] = c, float32(p)
 	}
 	res.Overflow = voxels.overflow + transcripts.overflow
+	res.Samples = voxels.samples
 	return res, nil
 }
 

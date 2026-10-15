@@ -10,6 +10,7 @@
 import { h, icon, clear, formatBytes, formatCount, relativeTime } from './dom.js';
 import { toast } from './overlays.js';
 import { EXPORT_FORMATS, comparisonsOf, exportsOf, promotedSegmentation, segmentationsOf } from '../lib/segmentations.js';
+import { GENERAL_LIMITATION, convergence, isRefinement, limitations } from '../lib/refine.js';
 
 const DEFAULT_DISTANCE = 5;
 const MAX_DISTANCE = 100;
@@ -98,7 +99,7 @@ export function mountSegmentation(app, container) {
   function sessionOf(dataset) {
     if (!sessions.has(dataset.id)) {
       sessions.set(dataset.id, {
-        shown: null, distance: DEFAULT_DISTANCE, compare: { a: '', b: '', shown: null },
+        shown: null, distance: DEFAULT_DISTANCE, refined: null, compare: { a: '', b: '', shown: null },
         import: { format: 'spatialdata', paths: ['', ''], units: 'um', fields: {}, tool: '', tool_version: '', citation: '' },
         export: { segmentation: '', formats: new Set(DEFAULT_EXPORTS), folder: '', overwrite: false, shown: null },
         answers: false,
@@ -243,6 +244,72 @@ export function mountSegmentation(app, container) {
         !t.item ? h('p.muted.seg-note', `${t.dataset.name}'s bundle was not found where the project records it: locate it in the Data view.`) : null,
         ...running,
         h('p.muted.seg-cite', 'Methods: a Voronoi partition of the tissue by the nuclei, clipped at the distance (Okabe et al. 2000), with exact Euclidean distances (Felzenszwalb & Huttenlocher 2012).')));
+  }
+
+  // --- Transcript-informed segmentation ---
+  async function refineRun(t, options = {}) {
+    const answer = await app.bundles.refineSegmentation(t.item, t.dataset.id, options);
+    const session = sessionOf(t.dataset);
+    session.refined = answer.manifest.id;
+    if (answer.comparison) session.compare.shown = answer.comparison.id;
+    render(true);
+    return answer;
+  }
+
+  function refinementCard(t, list, session) {
+    const instrument = list.find((a) => a.source === 'instrument' && a.state === 'complete');
+    const running = app.bundles.refinements(t.dataset.id).map((e) => {
+      const job = e.job ? app.jobs.get(e.job) : null;
+      const bar = h('div', { style: { width: `${Math.round((job?.progress ?? 0) * 100)}%` } });
+      const message = h('span.muted', job?.message ?? 'Starting…');
+      if (e.job) live.set(e.job, { bar, message });
+      return h('div.seg-running', h('div', h('b', 'Refining'), ' ', message), h('div.progress', bar));
+    });
+    const run = h('button.btn.primary', { type: 'button', disabled: !instrument || !t.item || running.length > 0, onclick: async () => {
+      try {
+        const { manifest, comparison } = await refineRun(t);
+        const s = manifest.summary ?? {};
+        toast(`${manifest.name} of ${t.dataset.name}: ${exact(s.cells)} cells, ${percent(s.assignedFraction)} of gene transcripts assigned${comparison ? `; ${percent(comparison.summary?.changedFraction, 2)} changed cell from the instrument's segmentation` : ''}.`, { kind: 'ok', timeout: 9000 });
+      } catch (error) {
+        toast(`The refinement of ${t.dataset.name}: ${error.message}`, { kind: 'error', timeout: 12000 });
+      }
+    } }, icon('play'), 'Refine from the transcripts');
+    const done = list.filter((a) => isRefinement(a));
+    const a = done.find((x) => x.id === session.refined) ?? done.at(-1);
+    let result = null;
+    if (a) {
+      const s = a.summary ?? {};
+      const d = s.diagnostics;
+      const cmp = instrument ? comparisonsOf(app.store.project, t.dataset.id).find((c) => c.a === instrument.id && c.b === a.id) : null;
+      const comparing = app.bundles.comparisons(t.dataset.id).some((e) => e.b === a.id);
+      result = h('div.seg-refined',
+        h('h3.seg-card-title', a.name, a.state !== 'complete' ? h('span.badge.warn', ` ${a.state}`) : null),
+        h('dl.kv.seg-kv',
+          h('dt', 'Cells'), h('dd', exact(s.cells), h('span.muted', ' started from the instrument\'s')),
+          h('dt', 'Assigned'), h('dd', percent(s.assignedFraction, 2), h('span.muted', ' of gene transcripts of quality 20 or more')),
+          h('dt', 'Median cell'), h('dd', `${count(s.medianTranscriptsPerCell)} transcripts, ${count(s.medianAreaUm2)} µm²`)),
+        d ? h('div.seg-differs', h('div.muted', 'Convergence'), h('ul', ...convergence(d).map((c) => h(`li${c.ok ? '' : '.warn'}`, c.text)))) : null,
+        h('div.seg-differs', h('div.muted', 'Limitations'), h('ul', ...limitations(d).map((l) => h('li', l.text)), h('li', GENERAL_LIMITATION))),
+        cmp
+          ? h('p.seg-note', `Compared with the instrument's segmentation: ${exact(cmp.summary?.classes?.['one-to-one'] ?? 0)} cells one to one, ${percent(cmp.summary?.changedFraction, 2)} of gene transcripts in another cell. `,
+            h('button.btn.small', { type: 'button', onclick: () => showInWorkspace(cmp.id) }, icon('eye'), 'Review the differences'))
+          : comparing ? h('p.muted.seg-note', 'Comparing it with the instrument\'s segmentation…') : null,
+        done.length > 1 ? h('p.muted.seg-note', 'Others: ', ...done.filter((x) => x.id !== a.id).flatMap((x, i) => [i ? ', ' : '', h('a', { href: '#', onclick: (event) => {
+          event.preventDefault();
+          session.refined = x.id;
+          render(true);
+        } }, x.name)])) : null);
+    }
+    return h('section.seg-section',
+      h('div.section-title', 'Transcript-informed segmentation'),
+      h('div.seg-card',
+        h('p', 'Each cell is redrawn from the transcripts: starting from the instrument\'s cells and their nuclei, its boundary moves to where its own transcripts are, and each transcript may have drifted from the cell it came from. The result is the posterior\'s summary over many samples, with each transcript\'s probability of its cell; it is compared with the instrument\'s segmentation when it is made.'),
+        h('div.seg-form', run, h('span.muted', 'A few minutes per square millimetre of tissue.')),
+        !instrument ? h('p.muted.seg-note', 'It starts from the instrument\'s segmentation, which is not registered yet.') : null,
+        !t.item ? h('p.muted.seg-note', `${t.dataset.name}'s bundle was not found where the project records it: locate it in the Data view.`) : null,
+        ...running,
+        result,
+        h('p.muted.seg-cite', 'Methods: after Jones et al. 2025 (Nat Methods 22:1331–1342): a Poisson model of each cell\'s transcripts over a background, a mixture of expression states, cells kept whole and compact, sampled by Metropolis–Hastings. SituCraft\'s model, sampler and their validation: research.md §3.2.')));
   }
 
   // --- Comparing two segmentations ---
@@ -709,7 +776,7 @@ export function mountSegmentation(app, container) {
     const session = sessionOf(t.dataset);
     if (t.focused && segmentationsOf(app.store.project, t.dataset.id).some((a) => a.id === t.focused && a.source === 'situcraft')) session.shown = t.focused;
     const list = segmentationsOf(app.store.project, t.dataset.id);
-    const next = JSON.stringify([t.dataset.id, Boolean(t.item), list.map((a) => [a.id, a.state]), session.shown, comparisonsOf(app.store.project, t.dataset.id).map((c) => c.id), session.compare, app.bundles.comparisons(t.dataset.id), app.bundles.expansions(t.dataset.id), app.bundles.imports(t.dataset.id), app.bundles.plantings(t.dataset.id), app.practice?.(), Boolean(app.examples?.forDataset(t.dataset)), app.bundles.exports(t.dataset.id), exportsOf(app.store.project, t.dataset.id).length, app.bundles.registeringSegmentation(t.dataset.id), promotedSegmentation(app.store.project, t.dataset.id)?.record.id]);
+    const next = JSON.stringify([t.dataset.id, Boolean(t.item), list.map((a) => [a.id, a.state]), session.shown, comparisonsOf(app.store.project, t.dataset.id).map((c) => c.id), session.compare, app.bundles.comparisons(t.dataset.id), app.bundles.expansions(t.dataset.id), app.bundles.refinements(t.dataset.id), session.refined, app.bundles.imports(t.dataset.id), app.bundles.plantings(t.dataset.id), app.practice?.(), Boolean(app.examples?.forDataset(t.dataset)), app.bundles.exports(t.dataset.id), exportsOf(app.store.project, t.dataset.id).length, app.bundles.registeringSegmentation(t.dataset.id), promotedSegmentation(app.store.project, t.dataset.id)?.record.id]);
     if (!force && next === shape) {
       updateLive();
       return;
@@ -728,6 +795,7 @@ export function mountSegmentation(app, container) {
       table(t, list, session),
       expansionCard(t, list, session),
       agreementCard(t, list, session),
+      refinementCard(t, list, session),
       comparisonCard(t, list, session),
       importCard(t, list, session),
       ...[practiceCard(t, list, session)].filter(Boolean),
@@ -797,6 +865,15 @@ export function mountSegmentation(app, container) {
       sessionOf(dataset).answers = true;
       render(true);
       document.querySelector('.seg-answers')?.closest('details')?.scrollIntoView({ block: 'start' });
+    },
+    refine: async (dataset, options) => {
+      const t = target();
+      if (!t || t.dataset.id !== dataset.id) app.focusItem({ kind: 'dataset', id: dataset.id });
+      const now = target();
+      if (!now.item) throw new Error(`${dataset.name}'s bundle was not found where the project records it.`);
+      const answer = await refineRun(now, options);
+      document.querySelector('.seg-refined')?.scrollIntoView({ block: 'center' });
+      return answer;
     },
     expand: async (dataset, distance) => {
       const t = target();

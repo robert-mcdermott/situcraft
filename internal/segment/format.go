@@ -11,6 +11,13 @@ package segment
 //	counts.bin   "SCCT"  the cell-by-gene counts of gene transcripts of quality 20 or more (CSR)
 //	outlines.bin "SCOL"  each cell's outline (µm), with its pieces and holes counted
 //
+// and, for methods that make them:
+//
+//	probabilities.bin "SCPR"  each transcript's posterior probability of its cell (NaN: assigned
+//	                     by place, not by the method's model)
+//	layers.bin   "SCLY"  each cell's outline in each z layer (µm), with the layers' depths
+//	diagnostics.json     the method's diagnostics: its convergence, and cells it flags
+//
 // Readers check every size against the file before allocating, and refuse a body more than 1032
 // times its compressed size (deflate's limit).
 
@@ -83,12 +90,23 @@ const (
 	FileAssignments = "assignments.bin"
 	FileCounts      = "counts.bin"
 	FileOutlines    = "outlines.bin"
+	// Optional files.
+	FileProbabilities = "probabilities.bin"
+	FileLayers        = "layers.bin"
+	FileDiagnostics   = "diagnostics.json"
 )
 
 // Roles name each file's role in an artifact's manifest.
 var Roles = map[string]string{
 	FileDescription: "description", FileCells: "cells", FileMask: "label raster",
 	FileAssignments: "transcript assignments", FileCounts: "counts", FileOutlines: "cell outlines",
+	FileProbabilities: "assignment probabilities", FileLayers: "cell outlines by layer", FileDiagnostics: "diagnostics",
+}
+
+// Layer is one z layer's outlines: its depths (µm) and each cell's outline in it.
+type Layer struct {
+	Z0, Z1   float32
+	Outlines []Outline
 }
 
 // --- Writing ---------------------------------------------------------------------------------
@@ -198,6 +216,32 @@ func WriteCounts(dir string, c *Counts) error {
 // WriteOutlines writes outlines.bin.
 func WriteOutlines(dir string, outlines []Outline) error {
 	var b buffer
+	outlinesBody(&b, outlines)
+	return writeFile(filepath.Join(dir, FileOutlines), "SCOL", b.Bytes())
+}
+
+// WriteLayers writes layers.bin: the layers, each its depths and outlines as outlines.bin holds
+// them.
+func WriteLayers(dir string, layers []Layer) error {
+	var b buffer
+	b.u32(uint32(len(layers)))
+	for _, l := range layers {
+		b.f32(l.Z0)
+		b.f32(l.Z1)
+		outlinesBody(&b, l.Outlines)
+	}
+	return writeFile(filepath.Join(dir, FileLayers), "SCLY", b.Bytes())
+}
+
+// WriteProbabilities writes probabilities.bin.
+func WriteProbabilities(dir string, p []float32) error {
+	var b buffer
+	b.u32(uint32(len(p)))
+	b.f32s(p)
+	return writeFile(filepath.Join(dir, FileProbabilities), "SCPR", b.Bytes())
+}
+
+func outlinesBody(b *buffer, outlines []Outline) {
 	b.u32(uint32(len(outlines)))
 	var at uint32
 	b.u32(0)
@@ -216,7 +260,6 @@ func WriteOutlines(dir string, outlines []Outline) error {
 		b.u32(uint32(o.Pieces))
 		b.u32(uint32(o.Holes))
 	}
-	return writeFile(filepath.Join(dir, FileOutlines), "SCOL", b.Bytes())
 }
 
 // WriteDescription writes segmentation.json.
@@ -443,6 +486,37 @@ func ReadOutlines(dir string) ([]Outline, error) {
 	if err != nil {
 		return nil, err
 	}
+	out := readOutlinesBody(r)
+	return out, done(r, FileOutlines)
+}
+
+// ReadLayers reads layers.bin.
+func ReadLayers(dir string) ([]Layer, error) {
+	r, err := readFile(filepath.Join(dir, FileLayers), "SCLY")
+	if err != nil {
+		return nil, err
+	}
+	n := r.count(12)
+	out := make([]Layer, 0, n)
+	for i := 0; i < n && r.err == nil; i++ {
+		l := Layer{Z0: r.f32(), Z1: r.f32()}
+		l.Outlines = readOutlinesBody(r)
+		out = append(out, l)
+	}
+	return out, done(r, FileLayers)
+}
+
+// ReadProbabilities reads probabilities.bin.
+func ReadProbabilities(dir string) ([]float32, error) {
+	r, err := readFile(filepath.Join(dir, FileProbabilities), "SCPR")
+	if err != nil {
+		return nil, err
+	}
+	out := r.f32s(r.count(4))
+	return out, done(r, FileProbabilities)
+}
+
+func readOutlinesBody(r *reader) []Outline {
 	n := r.count(16)
 	offsets := r.u32s(n + 1)
 	if r.err == nil {
@@ -465,7 +539,7 @@ func ReadOutlines(dir string) ([]Outline, error) {
 		a, b := offsets[i], offsets[i+1]
 		out[i] = Outline{X: xs[a:b], Y: ys[a:b], Pixels: int(r.u32()), Pieces: int(r.u32()), Holes: int(r.u32())}
 	}
-	return out, done(r, FileOutlines)
+	return out
 }
 
 // ReadDescription reads segmentation.json.

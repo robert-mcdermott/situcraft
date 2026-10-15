@@ -162,6 +162,21 @@ Readers check every size before reading, and the zlib checksum.
 
 These files are SituCraft's own; for other tools, export a segmentation (below).
 
+SituCraft's transcript-informed segmentation (`SituCraft transcript-informed segmentation`, from
+0.3.0) writes the six with what its model adds:
+- **Its cells** are named `c1`, `c2`, …, each with the id of the instrument's cell it started from.
+  Its raster is the 2D footprint of its voxels' most frequent labels, at the image's resolution;
+  its outlines are simplified to half a voxel.
+- **Its assignments** are, for the gene transcripts of quality 20 or more it models, each one's
+  most frequent cell over the summarized sweeps. Every other transcript (controls, low quality)
+  goes to the cell holding the pixel it was observed in.
+
+| File | Magic | Holds |
+| --- | --- | --- |
+| `probabilities.bin` | `SCPR` | Each transcript's posterior probability of its cell (`float32`, in the row order of `transcripts.parquet`): the share of the summarized sweeps it lay in that cell; NaN for a transcript assigned by place |
+| `diagnostics.json` | | `summary` (the sweeps and samples; the split-half agreement; the mean assignment probability and the share below 0.5; the log-likelihood's drift and Geweke's z; the voxels moved per sweep at the end; the cells flagged), `limitations` (the cells, by id, with fewer than 10 gene transcripts, uncertain boundaries, or no nucleus, and the instrument's cells left out; the thresholds) and `trace` (each sweep's stage, voxels moved, transcripts repositioned and log-likelihood) |
+| `layers.bin` | `SCLY` | With more than one layer: each layer's depths (µm) and each cell's outline in it, as `outlines.bin` holds them |
+
 A segmentation with errors planted for practice (`SituCraft planted errors`, simulated) is the
 instrument's segmentation with known errors in it, and keeps its answer key in `planted.json`:
 `format` (`"situcraft-planted-errors"`), `source` (the segmentation planted in), `params` (how many

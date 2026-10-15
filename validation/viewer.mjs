@@ -565,6 +565,21 @@ export async function viewerSuite({ check, MissingData, verbose }) {
         const back = await act('import_segmentation', { dataset: 'xenium-lung-2fov', format: 'spatialdata', paths: [join(folder, 'spatialdata.zarr')], tool: 'SituCraft export' });
         const bs = back.data?.summary ?? {};
         check('viewer', 'the exported SpatialData store imports back as the instrument\'s segmentation', back.message ?? back.error, back.ok && back.data.state === 'complete' && bs.cells === 11898 && Math.abs(bs.assignedFraction - segmentations.data.segmentations[0].summary.assignedFraction) < 1e-9, '11,898 cells, the same assigned fraction');
+        // The transcript-informed segmentation (wave 3, slice 4), a short run: recorded with its
+        // probabilities and diagnostics, compared with the instrument's segmentation at once, and
+        // shown with its convergence and limitations.
+        const comparisonsBefore = await chrome.eval(`window.situcraft.store.project.artifacts.filter((a) => a.kind === 'comparison').length`);
+        const refined = await act('refine_segmentation', { dataset: 'xenium-lung-2fov', sweeps: 40, samples: 20 });
+        const rs = refined.ok ? refined.data.summary : {};
+        check('viewer', 'remote control: refine_segmentation refines the Lung bundle\'s cells from its transcripts and compares them with the instrument\'s', refined.message ?? refined.error,
+          refined.ok && refined.data.state === 'complete' && rs.cells >= 11800 && rs.assignedFraction > 0.5 && rs.diagnostics?.samples === 20 && refined.data.comparison?.summary?.classes?.['one-to-one'] > 0, 'about 11,898 cells, their diagnostics, and a comparison with the instrument\'s');
+        const shownRefined = await chrome.eval(`(() => {
+          const app = window.situcraft;
+          const r = app.store.project.artifacts.find((a) => a.kind === 'segmentation' && a.method?.name === 'SituCraft transcript-informed segmentation');
+          return { files: r ? r.files.map((f) => f.path).sort().join() : '', comparisons: app.store.project.artifacts.filter((a) => a.kind === 'comparison').length, card: Boolean(document.querySelector('.seg-refined')), lines: document.querySelectorAll('.seg-refined .seg-differs li').length };
+        })()`);
+        check('viewer', 'the refinement is recorded with its probabilities and diagnostics, its comparison too, and shown with its convergence and limitations', JSON.stringify(shownRefined),
+          /diagnostics\.json/.test(shownRefined.files) && /probabilities\.bin/.test(shownRefined.files) && shownRefined.comparisons === comparisonsBefore + 1 && shownRefined.card && shownRefined.lines >= 5, 'its 8 files; one more comparison; the card with its convergence and limitations');
 
         // The project as 0.2.0 saved it (validation/projects/0.2.0-lung.situcraft.json): written
         // when asked (SITUCRAFT_WRITE_FIXTURE=1), the places of this run's folders made neutral and

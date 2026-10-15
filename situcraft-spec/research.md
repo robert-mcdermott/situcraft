@@ -632,7 +632,9 @@ section:
 | --- | --- | --- | --- |
 | The true cells, each transcript by where it was observed | 85.0% (the small tissue) | 1 | |
 | The instrument's 5 µm expansion (the start) | 82.5% | 0.622 | |
-| Default: 1 µm, one layer, 600 sweeps (500 summarized) | **85.9%** | **0.663** | 24 s |
+| Default: 1 µm, one layer, 600 sweeps (500 summarized), holes filled (slice 4) | **85.9%** | **0.678** | 20 s |
+| The same, holes left (slice 3) | 85.9% | 0.663 | 24 s |
+| 1 µm, one layer, 1,500 sweeps (the last 1,000 summarized) | 85.9% | 0.677 | 56 s |
 | 1 µm, four layers, 600 sweeps (500 summarized) | 85.1% | 0.630 | 51 s |
 | The publication's schedule, 4 → 2 → 1 µm (250 summarized) | 83.0% | 0.591 | 39 s |
 
@@ -652,11 +654,56 @@ expansion 83.4%), with a median IoU of 0.668 (0.634).
 - **Projecting 3D cells:** taking any layer's cell for a column spread cells over the gaps; the
   column's dominant label does not.
 
+#### The outputs (verified, wave 3, slice 4)
+
+A run is written as SituCraft's segmentation files (docs/FORMATS.md), checked, and compared with
+the instrument's segmentation as soon as it is made.
+
+- **The 2D footprint.** Each column's dominant label. *SituCraft's choice:* with every hole
+  filled, so that a region of the background enclosed by one cell (not reaching the region's
+  edge) is the cell's. In one layer an empty voxel inside a cell gains about 2.5 nats by going to
+  the background, so about 8% of a cell's voxels are holes in the summary where no transcript
+  happened to lie; cells have none. Filling them raised the standard tissue's median IoU from
+  0.663 to 0.678, and the small tissue's from 0.668 to 0.678.
+- **The raster and outlines.** The footprint at the image's resolution; outlines traced from it
+  and simplified to half a voxel, so that the voxels' steps are not drawn. With several layers,
+  each layer's outlines too (`layers.bin`).
+- **Assignments and probabilities.** Each modelled transcript's most frequent cell and its share
+  of the summarized sweeps; the others by the pixel they were observed in.
+- **Counts:** the gene transcripts of quality 20 or more, by assigned cell.
+- **Limitations, per cell** (shown in the Segmentation view and with a difference's cells in the
+  comparison workspace). *SituCraft's thresholds:*
+  - fewer than 10 gene transcripts: the boundary comes more from the prior than from the
+    transcripts;
+  - uncertain boundaries: the cell's voxels are its own in fewer than 75% of the summarized
+    sweeps, on average;
+  - no nucleus: the cell started without one, so no nuclear prior holds it;
+  - left out at the start;
+  - for every cell: no cell absent from the start can be created, and boundaries between cells
+    of like expression are uncertain.
+- **Convergence.** The verdict is Geweke's diagnostic of the log-likelihood over the summarized
+  sweeps: the means of their first tenth and last half compared, the standard errors from batch
+  means (Geweke J. Evaluating the accuracy of sampling-based approaches to the calculation of
+  posterior moments. In: *Bayesian Statistics 4*, Oxford University Press 1992:169–193). Within
+  ±2 the run has settled. The split-half agreement (each transcript's most frequent cell over
+  each half) describes stability. It is bounded below 1 by the posterior's own uncertainty: on
+  the small tissue it was 94.3% after 300 and 600 sweeps, 95.4% after 1,200 and 95.8% after 3,000,
+  about a third of transcripts having probabilities below 0.9.
+  - *What the diagnostic found:* the log-likelihood climbs for about a thousand sweeps on the
+    small tissue, while cells leave the gaps (their volume falling from 128,000 to 124,000 µm³)
+    and the expression states consolidate (10 to 7 used). It then drifts slowly. With the
+    defaults, Geweke's z is about 9.5 on the small tissue and 15 on the standard one, and still
+    4.6 after 1,500 sweeps on the standard tissue.
+  - Against the truth the result barely changes with longer runs (the table above). So the
+    defaults stand, and the page says plainly that the run is still drifting and that more
+    sweeps would make sure.
+  - Agreement between two seeds on a pilot region comes with the segmentation studio (slice 5).
+
 SituCraft's other choices where the publication leaves them open:
 - **Polygons** come from the summarized voxel labels by boundary tracing per z layer, and from
-  the 2D footprint (slice 4).
+  the 2D footprint.
 - **Convergence.** Each sweep records the voxels moved, the transcripts repositioned and the
-  log-likelihood. Agreement between two seeds on a pilot region comes with the outputs (slice 4).
+  log-likelihood (`diagnostics.json`).
 - **Large tissues** run as overlapping patches that are stitched. Patch-based processing of large
   sections follows the approach of Blampey et al. (2024), *Nat Commun* 15:4981,
   doi:10.1038/s41467-024-48981-z.
@@ -1110,6 +1157,9 @@ Notes:
   doi:10.1198/016214504000001132. Murray I, Ghahramani Z, MacKay DJC. MCMC for
   doubly-intractable distributions. *UAI* 2006 (the transcript-informed segmentation's model,
   §3.2).
+- Geweke J. Evaluating the accuracy of sampling-based approaches to the calculation of posterior
+  moments. In: Bernardo JM, Berger JO, Dawid AP, Smith AFM, eds. *Bayesian Statistics 4*. Oxford
+  University Press, 1992:169–193 (the transcript-informed segmentation's convergence diagnostic).
 - Kong TY, Rosenfeld A. Digital topology: introduction and survey. *Comput Vis Graph Image
   Process* 1989;48:357–393 (the sampler's connectivity test). Harary F, Harborth H. Extremal
   animals. *J Combin Inform System Sci* 1976;1:1–8 (the least perimeter of n voxels, the

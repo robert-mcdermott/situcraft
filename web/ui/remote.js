@@ -651,6 +651,34 @@ export function installRemote(app) {
       };
     },
 
+    async refine_segmentation(args) {
+      const dataset = resolveDataset(args.dataset);
+      const options = {};
+      for (const key of ['sweeps', 'samples', 'seed', 'layers']) {
+        if (args[key] === undefined) continue;
+        const v = finite(args[key], key);
+        if (!Number.isInteger(v) || v < 0) throw new ActionError(`${key} is a whole number.`);
+        options[key] = v;
+      }
+      await settleMode('segmentation');
+      let answer;
+      try {
+        answer = await app.segmentationView.refine(dataset, options);
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      await frames();
+      const m = answer.manifest;
+      const s = m.summary ?? {};
+      const d = s.diagnostics ?? {};
+      const c = answer.comparison;
+      const pc = (v) => `${(100 * v).toFixed(2)}%`;
+      return {
+        message: `${m.name} of ${dataset.name} (${m.state}): ${plural(s.cells ?? 0, 'cell')}, ${pc(s.assignedFraction ?? 0)} of gene transcripts assigned; ${pc(d.splitHalfAgreement ?? 0)} of transcripts in the same cell over both halves of the last ${d.samples ?? 0} sweeps${c ? `; compared with the instrument's segmentation, ${pc(c.summary?.changedFraction ?? 0)} of gene transcripts changed cell` : ''}.`,
+        data: { id: m.id, name: m.name, dataset: dataset.name, state: m.state, parameters: m.lineage?.parameters ?? null, summary: s, findings: m.findings ?? [], comparison: c ? { id: c.id, summary: c.summary ?? null } : null },
+      };
+    },
+
     async import_segmentation(args) {
       const dataset = resolveDataset(args.dataset);
       const format = choose(args.format, ['spatialdata', 'baysor', 'geojson', 'xenium'], 'format');

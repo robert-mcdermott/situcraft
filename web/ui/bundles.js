@@ -149,6 +149,52 @@ export function createBundles(app) {
     return entry.promise;
   }
 
+  // SituCraft's transcript-informed segmentation of a dataset (api_refine.go): a job refines the
+  // instrument's cells from the transcripts and records the segmentation as an artifact, which is
+  // recorded in the project and then compared with the instrument's segmentation (the comparison
+  // workspace's first comparison of it). Resolves with { manifest, comparison } (the comparison
+  // null when it could not be made, with why in the log).
+  const refining = new Map(); // dataset id → { dataset, job, promise }
+  function refineSegmentation(item, datasetId, options = {}) {
+    if (refining.has(datasetId)) return refining.get(datasetId).promise;
+    const entry = { dataset: datasetId, job: null, promise: null };
+    entry.promise = (async () => {
+      let manifest;
+      try {
+        const answer = await getJSON(`${item.url}/refinement`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(options) });
+        manifest = answer.artifact;
+        if (!manifest) {
+          entry.job = answer.job?.id ?? null;
+          notify();
+          const job = await app.jobs.finished(entry.job);
+          if (job?.state !== 'complete') throw new Error(`the refinement ${job?.state ?? 'ended'}${job?.error ? `: ${job.error}` : ''}`);
+          manifest = await getJSON(`/api/artifacts/${encodeURIComponent(answer.id)}`);
+        }
+        const dataset = app.store.project.datasets.find((d) => d.id === datasetId);
+        if (!dataset) throw new Error('the dataset is no longer in the project');
+        const next = addSegmentation(app.store.project, segmentationRecord(dataset, manifest));
+        if (next !== app.store.project) app.store.commit(next, `Add ${manifest.name.toLowerCase()} of ${dataset.name}`);
+      } finally {
+        refining.delete(datasetId);
+        notify();
+      }
+      // Into the comparison workspace: compared with the instrument's segmentation.
+      const instrument = segmentationsOf(app.store.project, datasetId).find((a) => a.source === 'instrument' && a.state === 'complete');
+      let comparison = null;
+      if (instrument && manifest.state === 'complete') {
+        try {
+          comparison = await compareSegmentations(item, datasetId, instrument.id, manifest.id);
+        } catch (error) {
+          app.log(`${manifest.name} could not be compared with the instrument's segmentation: ${error.message}`);
+        }
+      }
+      return { manifest, comparison };
+    })();
+    refining.set(datasetId, entry);
+    notify();
+    return entry.promise;
+  }
+
   // A segmentation made by another tool, imported into a dataset (api_import.go): a job reads the
   // files, checks them against the dataset and records the artifact, which is then recorded in the
   // project, complete or (when its check found a fatal problem) invalid, with what it found.
@@ -424,6 +470,7 @@ export function createBundles(app) {
     buildCache,
     registerSegmentation,
     expandNuclei,
+    refineSegmentation,
     importSegmentation,
     compareSegmentations,
     comparisonDescription,
@@ -440,6 +487,8 @@ export function createBundles(app) {
     imports: (id) => [...importing.entries()].filter(([, v]) => v.dataset === id).map(([job, v]) => ({ job, title: v.title })),
     // The expansions of a dataset under way: [{ distance, job }].
     expansions: (id) => [...expanding.values()].filter((e) => e.dataset === id).map(({ distance, job }) => ({ distance, job })),
+    // The refinement of a dataset under way: [{ job }].
+    refinements: (id) => [...refining.values()].filter((e) => e.dataset === id).map(({ job }) => ({ job })),
     // Whether a dataset's instrument segmentation is being registered.
     registeringSegmentation: (id) => registering.has(id),
     usage: () => usage,

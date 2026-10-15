@@ -68,3 +68,16 @@ test('a simulated dataset is said to be simulated, and no instrument or platform
   // The record alone (no report) says the same.
   assert.match(methodsParagraph({ dataset: simulated, program }).text, /^The data were simulated/);
 });
+
+test('a refined default segmentation is described with its schedule, seed and summary', () => {
+  const record = {
+    source: 'situcraft', name: 'Transcript-informed segmentation',
+    method: { name: 'SituCraft transcript-informed segmentation', version: '1', citation: 'Jones DC, et al. Cell simulation as cell segmentation. Nat Methods 2025;22(6):1331–1342. doi:10.1038/s41592-025-02697-0' },
+    parameters: { stages: [{ voxel_um: 1, layers: 1, sweeps: 600 }], seed: 20250, samples: 500 },
+    summary: { cells: 11890, assignedFraction: 0.912 },
+  };
+  const { text, references } = methodsParagraph({ dataset, report, program, segmentation: { record, decision: null } });
+  assert.match(text, /Cells were segmented again with SituCraft's transcript-informed segmentation \(version 1\), after Jones et al\. \[3\]: starting from the instrument's cells and their nuclei, each cell's extent was sampled from its posterior given the transcripts/);
+  assert.match(text, /at 1 µm voxels in one layer for 600 sweeps, seed 20250, and the summary over the last 500 sweeps taken, each transcript in its most probable cell, giving 11,890 cells, 91\.2% of the gene transcripts of quality 20 or more assigned to them\./);
+  assert.match(references[2], /^\[3\] Jones DC, et al\. Cell simulation as cell segmentation/);
+});

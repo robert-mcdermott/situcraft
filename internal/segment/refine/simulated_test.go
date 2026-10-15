@@ -234,7 +234,7 @@ func TestRecoversSimulatedCells(t *testing.T) {
 			byRow[r] = idx.CellIDs[res.Kept[c-1]]
 		}
 	}
-	consensus := res.State.Lat.Consensus(res.Labels)
+	consensus := Footprint(res)
 	if os.Getenv("REFINE_LAST") != "" {
 		consensus = res.State.Consensus()
 	}
@@ -322,6 +322,10 @@ func TestRecoversSimulatedCells(t *testing.T) {
 			}
 			return s
 		}())
+	}
+	if os.Getenv("REFINE_DIAG") != "" {
+		d := diagnostics(res, make([]segment.Cell, res.State.Cells), in, idx, res.State.Cells)
+		t.Logf("convergence: Geweke z %.2f, split-half %.4f, mean probability %.4f", d.Summary.GewekeZ, d.Summary.SplitHalf, d.Summary.MeanProbability)
 	}
 	t.Logf("instrument: %.1f%% of transcripts in their true cell, median IoU %.3f", 100*instrument.accuracy, instrument.medianIoU)
 	t.Logf("refined:    %.1f%% of transcripts in their true cell, median IoU %.3f", 100*refined.accuracy, refined.medianIoU)
