@@ -1267,13 +1267,77 @@ independent reference outputs.
        95% because of the posterior's uncertainty. Geweke's diagnostic shows the log-likelihood
        still drifting slowly after 600 sweeps; longer runs barely change the result against the
        truth, and the page says so.
-5. **The segmentation studio (S3, S4, S5, S7).**
-   - The Input → Compute → Model → Review → Run → Compare flow, with presets and expert settings
-     in plain language.
-   - Preflight memory and disk estimates (validated against measured runs); regions and separate
-     sections.
-   - Progress, cancellation and a failure classifier with remedies.
-   - Job specs saved as recipes (E5).
+5. **The segmentation studio (S3, S4, S5, S7, E5): done.**
+   - **The flow** (`web/ui/refine-studio.js`): Input (the transcripts' quality, the cells it
+     starts from, what it covers) → Compute (threads; memory, disk and time against the
+     computer's) → Model (a preset, every setting with what it does and costs) → Review (what will
+     run, its problems and risks, its recipe) → Run (progress, the log, Stop) → Compare
+     (convergence, limitations, the comparison with the instrument's). Every change asks for the
+     spec's preflight (`POST /api/local/{index}/refinement/preflight`).
+   - **Presets** (`refine.Presets`, version 1): Balanced, Conservative boundary, Flexible
+     morphology, Low memory, ROI pilot (a region, run with two seeds) and Expert. Each says what it
+     is for, changes and risks, with its measured accuracy; changing a setting but the seed makes
+     the settings Expert.
+   - **Regions and sections** (`refine.RunArea`): a region's cells refined on its lattice, the
+     cells about it held in a 20 µm margin, the rest of the tissue the instrument's; separate
+     sections by single linkage, each with a model of its own, one region in memory at a time.
+   - **The preflight** (`refine.Check`): the transcripts modelled and those left out, the cells and
+     nuclei, the regions, and estimates of memory (by phase: reading, sampling, writing), disk and
+     time. It refuses a run past 85% of the computer's memory (`internal/sysinfo`) or the free
+     disk, and warns past half of either.
+   - **Failures classified** with what to do (`jobs.Classified`): the cells to start from, the
+     bundle, memory, storage, the region, the settings; in the studio, the Jobs view and remote
+     control.
+   - **Recipes** (E5; `recipe.go`): a spec as readable JSON, saved and loaded in the studio, and
+     run headless by `situcraft refine`. The terminal's folder imports back (the `situcraft`
+     import format). App and terminal run one function, `refine.Refine`.
+   - **Remote control:** `refinement_preflight`, and `refine_segmentation` with a preset, regions
+     or sections, the quality, a second seed and threads (31 actions); `refine_segmentation` is now
+     a long action.
+   - **Less memory for every run:**
+     - smaller tallies, the split-half agreement on every eighth transcript;
+     - only the needed transcript columns decoded (`Transcripts.Only`);
+     - the collector run between phases and the sampler's state released before writing;
+     - a collection target of 50% (Low memory 20%).
+
+     On the standard tissue the peak fell from 172 to 89 MB, the result unchanged.
+   - Validation (research.md §3.2, the segmentation studio):
+     - **Go tests:**
+       - a region's run changes no pixel outside its lattice and none of a held cell; sections;
+       - estimates within 30% of six measured runs;
+       - presets well formed, and on the standard tissue each above the instrument, with
+         Conservative's outlines more compact than Balanced's and Flexible's less, Low memory
+         lighter, and the pilot's seeds agreeing (93.4%);
+       - through the API: presets, preflights (before the instrument's segmentation, quality,
+         a region outside), a pilot refined twice;
+       - a recipe from the app run by `situcraft refine` gives the app's files byte for byte, and
+         imports back; another image's folder is refused.
+     - **Node tests:** presets' specs, Expert resolution, bounds, regions, recipes, units, failures,
+       convergence not judged.
+     - **In headless Chrome:** the six steps; a pilot's preflight and run with its seeds'
+       agreement; a pilot without a region refused; a region without nuclei failing with what to
+       do (86 checks).
+     - **In the app:** a pilot on the standard simulated tissue set up step by step, run, and
+       compared; a failure shown with its remedy in the studio and the Jobs view.
+     - **On the Lung 2-FOV bundle,** a whole run in the terminal: memory 264 MB resident
+       (estimated 251), disk 4.45 MB (4.0), 97 s (88).
+   - **Reference numbers** (standard simulated tissue): the new default puts 86.3% of transcripts
+     in their true cells with a median IoU of 0.712 (the instrument's 82.5% and 0.622).
+   - Found by slice 5:
+     - **The perimeter bound decides the shapes.** A tighter bound improved every simulated cell
+       type, the elongated ones too, up to 1.3–1.4. The default became 1.6, the tightest that
+       still admits a cell four times as long as wide at any angle.
+     - **Low memory without repositioning** fell below the instrument (83.0% against 83.4%), so
+       Low memory keeps repositioning. Coarser voxels alone hardly lowered the peak; the
+       collector's target did.
+     - **Conservative's cells are not smaller:** a tight bound stops gaps from opening as much as
+       tendrils from growing, so its warning names elongated cells, not unassigned transcripts.
+     - **The first cost model under-predicted small regions fourfold:** reading and writing the
+       bundle cost more than sampling a small region. The model is now by phase.
+     - **A short run was shown as settled:** Geweke's z is 0 when there are too few sweeps to
+       judge. It is now recorded as not judged.
+     - **`refine_segmentation` was not a long action** in slice 4, so a long run could time out
+       remotely.
 6. **Validation against reference outputs.** On both 2-FOV bundles and on simulations, SituCraft's
    segmentation is compared with Proseg 3.2.0 as an independent reference. The reference
    outputs are generated by the maintainer and reduced to numbers in

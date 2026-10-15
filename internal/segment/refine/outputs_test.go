@@ -28,18 +28,18 @@ func TestOutputsAreASegmentation(t *testing.T) {
 			t.Fatal(err)
 		}
 		b := openBundle(t, folder)
-		in, idx, err := BundleInputs(b)
+		in, idx, err := BundleInputs(b, 20)
 		if err != nil {
 			t.Fatal(err)
 		}
 		opt := DefaultOptions()
 		opt.Stages, opt.Samples = []Stage{{1, layers, 60}}, 40
-		res, err := Run(context.Background(), in, opt, nil)
+		res, err := Run(context.Background(), in, Region{}, opt, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
 		dir := t.TempDir()
-		d, diag, err := WriteBundleOutputs(b, in, idx, res, opt, dir)
+		d, diag, err := WriteBundleOutputs(b, in, idx, []*Result{res}, opt, Recorded{}, dir)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -51,7 +51,7 @@ func TestOutputsAreASegmentation(t *testing.T) {
 		}
 		var summary segment.Summary
 		json.Unmarshal(m.Summary, &summary)
-		if summary.Cells != len(res.Kept) || summary.AssignedFraction < 0.8 || len(summary.Diagnostics) == 0 {
+		if summary.Cells != in.Cells || summary.AssignedFraction < 0.8 || len(summary.Diagnostics) == 0 {
 			t.Errorf("%d layers: summary %s", layers, m.Summary)
 		}
 		_, hasLayers := os.Stat(filepath.Join(dir, segment.FileLayers))
@@ -71,8 +71,12 @@ func TestOutputsAreASegmentation(t *testing.T) {
 		}
 		for r := range assignments {
 			if i, ok := isModelled[r]; ok {
-				if assignments[r] != res.Assigned[i] || prob[r] != res.Probability[i] {
-					t.Fatalf("row %d: cell %d (%g), the run's %d (%g)", r, assignments[r], prob[r], res.Assigned[i], res.Probability[i])
+				want := uint32(0)
+				if f := res.Assigned[i]; f > 0 {
+					want = uint32(res.Kept[f-1] + 1) // the instrument's cell it started from
+				}
+				if assignments[r] != want || prob[r] != res.Probability[i] {
+					t.Fatalf("row %d: cell %d (%g), the run's %d (%g)", r, assignments[r], prob[r], want, res.Probability[i])
 				}
 			} else if !math.IsNaN(float64(prob[r])) {
 				t.Fatalf("row %d, not modelled, has a probability %g", r, prob[r])
@@ -109,21 +113,28 @@ func TestOutputsAreASegmentation(t *testing.T) {
 	}
 }
 
-// The cells' limitations are flagged as their thresholds say.
+// The cells' limitations are flagged as their thresholds say, for the refined cells only.
 func TestLimitationsAreFlagged(t *testing.T) {
-	res := &Result{Kept: []int{0, 2}, Labels: []uint32{1, 1, 2, 0}, LabelShare: []float32{0.9, 0.8, 0.5, 1}, Probability: []float32{1}, Trace: []SweepTrace{{}}}
-	cells := []segment.Cell{{ID: "c1", Transcripts: 25}, {ID: "c2", Transcripts: 3}}
-	in := &Inputs{NucleusUm2: []float64{30, 20, 0}}
-	idx := &BundleIndex{CellIDs: []string{"a-1", "b-1", "c-1"}}
-	d := diagnostics(res, cells, in, idx, 2)
+	res := &Result{Kept: []int{0, 2, 1}, Frozen: []bool{false, false, true}, Labels: []uint32{1, 1, 2, 0, 3}, LabelShare: []float32{0.9, 0.8, 0.5, 1, 0.2},
+		Probability: []float32{1}, Assigned: []uint32{1}, Trace: []SweepTrace{{}}, LeftOut: []int{3}}
+	cells := []segment.Cell{{ID: "c1", Transcripts: 25}, {ID: "c2", Transcripts: 1}, {ID: "c3", Transcripts: 3}, {ID: "c4"}}
+	in := &Inputs{NucleusUm2: []float64{30, 0, 0, 10}}
+	idx := &BundleIndex{CellIDs: []string{"a-1", "b-1", "c-1", "d-1"}}
+	d := diagnostics([]*Result{res}, cells, in, idx)
 	l := d.Limitations
-	if len(l.LowTranscripts) != 1 || l.LowTranscripts[0] != "c2" || len(l.NoNucleus) != 1 || l.NoNucleus[0] != "c2" ||
-		len(l.Uncertain) != 1 || l.Uncertain[0] != "c2" || len(l.LeftOut) != 1 || l.LeftOut[0] != "b-1" {
+	// c2 (input cell 1) is held: never flagged; c3 is refined with 3 transcripts, no nucleus and
+	// an uncertain boundary; d-1 was left out.
+	if len(l.LowTranscripts) != 1 || l.LowTranscripts[0] != "c3" || len(l.NoNucleus) != 1 || l.NoNucleus[0] != "c3" ||
+		len(l.Uncertain) != 1 || l.Uncertain[0] != "c3" || len(l.LeftOut) != 1 || l.LeftOut[0] != "d-1" {
 		t.Errorf("limitations %+v", l)
+	}
+	if s := d.Summary; s.Refined != 2 || s.Held != 1 || s.Regions != 1 || s.LeftOut != 1 {
+		t.Errorf("summary %+v", s)
 	}
 }
 
-// Geweke's diagnostic: noise about a level is within ±2, a trend far beyond, a constant 0.
+// Geweke's diagnostic: noise about a level is within ±2, a trend far beyond, a constant 0; a
+// trace too short is not judged.
 func TestGewekeDiagnostic(t *testing.T) {
 	r := rand.New(rand.NewPCG(1, 2))
 	noise, trend, flat := make([]float64, 500), make([]float64, 500), make([]float64, 500)
@@ -131,16 +142,20 @@ func TestGewekeDiagnostic(t *testing.T) {
 		noise[i] = r.NormFloat64()
 		trend[i] = float64(i)*0.01 + r.NormFloat64()
 	}
-	if z := gewekeZ(noise); math.Abs(z) > 2 {
-		t.Errorf("noise: z %g", z)
+	if z, ok := gewekeZ(noise); math.Abs(z) > 2 || !ok {
+		t.Errorf("noise: z %g (%v)", z, ok)
 	}
-	if z := gewekeZ(trend); z < 5 {
-		t.Errorf("a trend: z %g", z)
+	if z, ok := gewekeZ(trend); z < 5 || !ok {
+		t.Errorf("a trend: z %g (%v)", z, ok)
 	}
-	if z := gewekeZ(flat); z != 0 {
-		t.Errorf("a constant: z %g", z)
+	if z, ok := gewekeZ(flat); z != 0 || !ok {
+		t.Errorf("a constant: z %g (%v)", z, ok)
 	}
-	if z := gewekeZ(noise[:20]); z != 0 {
-		t.Errorf("too short: z %g", z)
+	// Too short to judge: under minGeweke samples.
+	if z, ok := gewekeZ(noise[:minGeweke-1]); z != 0 || ok {
+		t.Errorf("too short: z %g (%v)", z, ok)
+	}
+	if _, ok := gewekeZ(noise[:minGeweke]); !ok {
+		t.Errorf("%d samples not judged", minGeweke)
 	}
 }

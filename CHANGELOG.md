@@ -62,8 +62,61 @@ segmentation, validated against simulated truth and independent reference output
   - On a simulated tissue it puts 85.9% of transcripts in their true cells (the instrument's
     expansion: 82.5%), with a median IoU of 0.678 (0.622).
 
+- **The segmentation studio (wave 3, slice 5).** The Segmentation view sets up and runs a
+  refinement in six steps: Input, Compute, Model, Review, Run, Compare. Each step shows what the
+  run would do on this bundle and this computer.
+  - **What it covers:** the whole tissue, its separate sections apart (each with a model of its
+    own), or chosen regions, typed in µm or the region last framed in the Viewer. Cells about a
+    region are held as the instrument drew them, so no cell is cut; the rest of the tissue keeps
+    the instrument's segmentation. The transcripts' quality is a setting (Q20 to start).
+  - **Presets:** Balanced, Conservative boundary, Flexible morphology, Low memory, ROI pilot and
+    Expert. Each says what it is for, what it changes and what it risks, with its measured
+    accuracy on a simulated tissue; every setting says what it does and what it costs. Changing
+    one but the seed makes the settings Expert.
+  - **The ROI pilot** refines a region twice with different seeds and reports how often the two
+    put transcripts in the same cell. On a simulated tissue it matched the whole tissue's run in
+    its region.
+  - **A preflight** counts the transcripts modelled and those left out, the cells it starts from,
+    and what it covers. It estimates memory, disk and time against what the computer has, and
+    refuses a run that would not fit. On the Lung example its estimates were within 5% of the
+    memory a whole run took, 10% of the disk and 10% of the time.
+  - **Progress, a log and Stop** while it runs. A failure (missing cells to start from, a
+    malformed bundle, memory, disk space, a region without cells) says what went wrong and what
+    to do, in the studio, the Jobs view and remote control.
+  - **Recipes:** **Save the recipe** keeps a refinement's settings as readable JSON. **Load a
+    recipe** applies one.
+  - **Remote control** adds `refinement_preflight`; `refine_segmentation` takes a preset, regions
+    or sections, the quality, a second seed and the threads.
+
+- **`situcraft refine`** runs a refinement in the terminal from a preset or a recipe, writing the
+  segmentation's files and its recipe to a new folder; `--preflight` says what it would need. The
+  same recipe gives the same files, byte for byte, as the app. The folder imports into the app
+  (**Import a segmentation**, SituCraft segmentation).
+
+### Changed
+
+- **The default perimeter bound is 1.6** (it was 2), the tightest that still admits a cell four
+  times as long as wide at any angle. On the standard simulated tissue the median IoU with the
+  true cells rose from 0.678 to 0.712 and the transcripts in their true cells from 85.9% to
+  86.3%, every cell type gaining. Refinements made with 0.3.0's earlier builds keep their own
+  settings.
+- **A refinement takes about half the memory:** the posterior's tallies are smaller (the
+  split-half agreement is estimated on every eighth transcript), only the columns it needs are
+  read, and the garbage collector keeps the heap closer to what it holds. On the standard
+  simulated tissue its peak fell from 172 to 89 MB; its result is unchanged.
+- **Convergence is said to be judged only when it can be:** with fewer than 100 sweeps
+  summarized, Geweke's diagnostic cannot judge it, and the page now says so instead of
+  "settled".
+- `diagnostics.json` holds each region's summary and trace (`regions`); the recorded parameters
+  hold the area, the regions refined, the quality, the preset and a second seed
+  ([docs/FORMATS.md](docs/FORMATS.md)).
+
 ### Fixed
 
+- **Discarding or resuming a job could read its state while it was changing** (a data race the
+  race detector found now and then). The state is read before the lock is let go.
+- **`refine_segmentation` could time out** under remote control on a long run: it is now a long
+  action.
 - **Nucleus expansion stopped with an internal error** when a bundle's cell mask
   (`cells.zarr.zip`) had more cells than its `cells.parquet`. It now refuses with the reason.
 

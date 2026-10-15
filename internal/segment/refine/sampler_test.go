@@ -103,14 +103,14 @@ func shortRun(t *testing.T, workers int) (*Result, *BundleIndex) {
 	if _, err := simulate.Run(context.Background(), p, folder, "test", nil); err != nil {
 		t.Fatal(err)
 	}
-	in, idx, err := BundleInputs(openBundle(t, folder))
+	in, idx, err := BundleInputs(openBundle(t, folder), 20)
 	if err != nil {
 		t.Fatal(err)
 	}
 	opt := DefaultOptions()
 	opt.Stages = []Stage{{2, 1, 10}, {1, 2, 30}}
 	opt.Samples, opt.Workers, opt.BlockUm = 10, workers, 16
-	res, err := Run(context.Background(), in, opt, nil)
+	res, err := Run(context.Background(), in, Region{}, opt, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,7 +154,7 @@ func TestRunsAreTheSameOnAnyThreadsAndProcessor(t *testing.T) {
 			t.Errorf("%d threads: digest %s, 1 thread %s", workers, got, want)
 		}
 	}
-	const pinned = "3274f2af263c0d6c"
+	const pinned = "5511d4da8868b0a0"
 	if want != pinned {
 		t.Errorf("the run's digest is %s, not %s (on %s)", want, pinned, runtime.GOARCH)
 	}

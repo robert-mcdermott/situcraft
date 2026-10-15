@@ -131,6 +131,15 @@ known. It writes the tissue as a Xenium output bundle labelled simulated, with t
 bundle on any computer. `situcraft simulate -h` lists the settings, and
 [Formats](docs/FORMATS.md#simulated-tissues-situcraft-simulate) describes the files.
 
+## Refinements in the terminal
+
+`situcraft refine <bundle> <new folder>` runs SituCraft's transcript-informed segmentation of a
+bundle without the app, from a preset or a recipe saved in the app (`--recipe`), and writes its
+segmentation files with the recipe beside them. The same recipe gives the same segmentation, byte
+for byte, in the app or the terminal; the folder imports back into the app. `situcraft refine -h`
+lists the settings, `--preflight` says what a run would need, and
+[Formats](docs/FORMATS.md#refinements-in-the-terminal-situcraft-refine) describes the files.
+
 ## Documentation
 
 - [Getting started](docs/GETTING-STARTED.md): from the examples to a saved, reproducible view.

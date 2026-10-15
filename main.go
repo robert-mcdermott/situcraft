@@ -90,6 +90,8 @@ type app struct {
 	examples *examples.Library
 	// control is the remote-control hub (remote.go), with --remote-control.
 	control *remoteHub
+	// refineInputs are the last bundle's inputs read for a refinement's preflight.
+	refineInputs refineInputs
 }
 
 func init() {
@@ -105,6 +107,9 @@ func main() {
 	// Commands that run in the terminal and exit (a path of the same name is given as ./simulate).
 	if len(os.Args) > 1 && os.Args[1] == "simulate" {
 		os.Exit(runSimulate(os.Args[2:], os.Stdout, os.Stderr))
+	}
+	if len(os.Args) > 1 && os.Args[1] == "refine" {
+		os.Exit(runRefine(os.Args[2:], os.Stdout, os.Stderr))
 	}
 	cfg, err := parseConfig(os.Args[1:])
 	if errors.Is(err, flag.ErrHelp) {

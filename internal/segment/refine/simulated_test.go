@@ -178,7 +178,7 @@ func TestRecoversSimulatedCells(t *testing.T) {
 		t.Fatal(err)
 	}
 	b := openBundle(t, folder)
-	in, idx, err := BundleInputs(b)
+	in, idx, err := BundleInputs(b, 20)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -200,8 +200,16 @@ func TestRecoversSimulatedCells(t *testing.T) {
 	if os.Getenv("REFINE_NOREPOSITION") != "" {
 		opt.Sampler.Reposition = false
 	}
+	for _, knob := range []struct {
+		name string
+		to   *float64
+	}{{"REFINE_PERIMETER", &opt.Sampler.PerimeterFactor}, {"REFINE_BUBBLE", &opt.Sampler.Bubble}, {"REFINE_NUCLEAR", &opt.Model.NuclearPrior}} {
+		if v := os.Getenv(knob.name); v != "" {
+			*knob.to, _ = strconv.ParseFloat(v, 64)
+		}
+	}
 	start := time.Now()
-	res, err := Run(context.Background(), in, opt, nil)
+	res, err := Run(context.Background(), in, Region{}, opt, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -324,7 +332,7 @@ func TestRecoversSimulatedCells(t *testing.T) {
 		}())
 	}
 	if os.Getenv("REFINE_DIAG") != "" {
-		d := diagnostics(res, make([]segment.Cell, res.State.Cells), in, idx, res.State.Cells)
+		d := diagnostics([]*Result{res}, make([]segment.Cell, in.Cells), in, idx)
 		t.Logf("convergence: Geweke z %.2f, split-half %.4f, mean probability %.4f", d.Summary.GewekeZ, d.Summary.SplitHalf, d.Summary.MeanProbability)
 	}
 	t.Logf("instrument: %.1f%% of transcripts in their true cell, median IoU %.3f", 100*instrument.accuracy, instrument.medianIoU)

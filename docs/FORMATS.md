@@ -63,6 +63,7 @@ reads a segmentation made by another tool into a dataset:
 | Baysor | `segmentation.csv`, and `segmentation_polygons.json` | each transcript's cell (`cell`; `0` and `is_noise` are none), by `transcript_id` when the table has it, else by `x`, `y` and `gene`; the cells' polygons |
 | GeoJSON | polygons (`.geojson`, `.json`), and optionally a table (`.csv`, `.csv.gz`, `.tsv`, `.parquet`) | the polygons, each feature naming its cell (`cell_id`, `cell`, `id`…, or the feature's id); each transcript's cell from the table (`transcript_id` and the cell), else from the polygon it lies in |
 | Xenium Ranger output | the bundle (folder, zip or `experiment.xenium`) of the same run | its cell mask, cells, boundaries, and each transcript's `cell_id` |
+| SituCraft segmentation | the folder `situcraft refine` wrote (below) | its files as they are, once their image's grid and their transcripts' count match the dataset's; a refinement is recorded as its method, with its parameters |
 
 Coordinates are read in µm unless the import says they are pixels of the morphology image: they
 are never guessed. A cell of `""`, `UNASSIGNED`, `NA`, `nan`, `None` or `-1` is none. The import is
@@ -164,17 +165,27 @@ These files are SituCraft's own; for other tools, export a segmentation (below).
 
 SituCraft's transcript-informed segmentation (`SituCraft transcript-informed segmentation`, from
 0.3.0) writes the six with what its model adds:
-- **Its cells** are named `c1`, `c2`, …, each with the id of the instrument's cell it started from.
-  Its raster is the 2D footprint of its voxels' most frequent labels, at the image's resolution;
-  its outlines are simplified to half a voxel.
-- **Its assignments** are, for the gene transcripts of quality 20 or more it models, each one's
-  most frequent cell over the summarized sweeps. Every other transcript (controls, low quality)
-  goes to the cell holding the pixel it was observed in.
+- **Its cells** are named `c1`, `c2`, …: cell *k* is the instrument's cell *k* (`cells.parquet`'s
+  row *k*), whose id it records, whether it was refined or not.
+- **Its raster** is the instrument's, with each refined region's lattice drawn again: there, each
+  refined cell's 2D footprint (its voxels' most frequent labels, at the image's resolution), and
+  the cells held about the region as the instrument drew them. Its outlines are simplified to half
+  a voxel.
+- **Its assignments** are, for the gene transcripts it models (of the quality it was given, in a
+  region's lattice), each one's most frequent cell over the summarized sweeps. Every other
+  transcript (controls, those below the quality or outside the regions) goes to the cell holding
+  the pixel it was observed in.
+- **Its parameters** (`segmentation.json`) are every setting after defaults: `model`, `sampler`,
+  `stages`, `block_um`, `seed`, `samples`; `area` as asked (`mode`: `whole`, `sections` or
+  `regions`, with `regions` and `section_gap_um`) and `regions`, the rectangles refined (µm:
+  `x0_um`, `y0_um`, `x1_um`, `y1_um`); `min_qv`, the quality modelled, and `counts_min_quality`
+  (20); `start` and `start_stages`, each region's first stage; `preset` and `presets_version`; and
+  `second_seed`, when a second run checked the first.
 
 | File | Magic | Holds |
 | --- | --- | --- |
 | `probabilities.bin` | `SCPR` | Each transcript's posterior probability of its cell (`float32`, in the row order of `transcripts.parquet`): the share of the summarized sweeps it lay in that cell; NaN for a transcript assigned by place |
-| `diagnostics.json` | | `summary` (the sweeps and samples; the split-half agreement; the mean assignment probability and the share below 0.5; the log-likelihood's drift and Geweke's z; the voxels moved per sweep at the end; the cells flagged), `limitations` (the cells, by id, with fewer than 10 gene transcripts, uncertain boundaries, or no nucleus, and the instrument's cells left out; the thresholds) and `trace` (each sweep's stage, voxels moved, transcripts repositioned and log-likelihood) |
+| `diagnostics.json` | | `summary` (the sweeps and samples; the split-half agreement, on every eighth transcript; the mean assignment probability and the share below 0.5; the log-likelihood's drift, Geweke's z and `gewekeJudged`, false when fewer than 100 sweeps were summarized; the voxels moved per sweep at the end; the cells refined, held and flagged; the regions; the transcripts modelled; `seedAgreement`, with a second seed: the share of transcripts either run put in a refined cell that both put in the same cell), `limitations` (the cells, by id, with fewer than 10 gene transcripts, uncertain boundaries, or no nucleus, and the instrument's cells left out; the thresholds) and `regions` (each region refined: its rectangle, its own `summary`, and its `trace`, each sweep's stage, voxels moved, transcripts repositioned and log-likelihood). Over several regions, the summary's Geweke's z is the one farthest from 0 |
 | `layers.bin` | `SCLY` | With more than one layer: each layer's depths (µm) and each cell's outline in it, as `outlines.bin` holds them |
 
 A segmentation with errors planted for practice (`SituCraft planted errors`, simulated) is the
@@ -262,6 +273,45 @@ morphology image's (a fatal finding when they differ), cells without a pixel (Xe
 cannot keep them), transcripts the segmentation assigns otherwise than its mask holds at their
 pixel (Xenium Ranger assigns by the mask), a dataset without a nucleus mask, and a zipped bundle
 (Xenium Ranger reads a folder).
+
+### Refinement recipes
+
+A recipe is a refinement's spec as readable JSON, to keep with its result, share, and run again
+(the Segmentation view's **Save the recipe**, `refinement_preflight`, and `situcraft refine`
+beside its output):
+
+| Field | Holds |
+| --- | --- |
+| `format`, `version`, `kind` | `"situcraft-recipe"`, 1, `"refinement"`. A newer version, another kind or a field this SituCraft does not know is refused |
+| `dataset` | The bundle it was made for: `name`, `path`, `run_name` and `region_name` from `experiment.xenium`, and `simulated` |
+| `refinement` | `preset`; `options` (`model`, `sampler`, `stages`, `block_um`, `samples`, `seed`, as `segmentation.json` records them); `area`; `min_qv`; `seed_check`; `gc_percent`, the memory target (it never changes the result) |
+| `presets_version`, `method`, `citation`, `software` | What made it |
+| `run` | How to run it again |
+
+The same recipe on the same bundle gives the same segmentation, byte for byte, in the app or the
+terminal, on any computer and any number of threads.
+
+### Refinements in the terminal (`situcraft refine`)
+
+`situcraft refine [flags] <bundle> <new folder>` refines a bundle's segmentation as the app does,
+without the app, and writes the segmentation's files (above) to the new folder with its
+`recipe.json`. The folder imports into the app as a SituCraft segmentation of the same dataset.
+
+| Flag | Sets |
+| --- | --- |
+| `--recipe` | A recipe to run (the bundle defaults to its `dataset.path`); the flags below change it |
+| `--preset` | `balanced` (the default), `conservative`, `flexible`, `low-memory`, `roi-pilot` or `expert` |
+| `--seed`, `--sweeps`, `--samples` | The seed, the last stage's sweeps and the sweeps summarized |
+| `--min-qv` | The quality the modelled transcripts reach (20) |
+| `--region x0,y0,x1,y1` | A region to refine, in µm (repeatable); `--sections` refines the tissue's separate sections apart |
+| `--seed-check` | Run again with the next seed and report the two runs' agreement |
+| `--threads` | Threads to run on (every core); the result does not depend on them |
+| `--force` | Run even when the estimate exceeds the computer's memory |
+| `--preflight`, `--print-recipe` | Print what it would model, cover and cost, or its recipe, and exit |
+
+The folder must not exist: it is written under a hidden name beside it and renamed into place when
+the segmentation check passes. A failure is printed with what to do; the exit code is 2 for a
+mistaken command, 1 for a failed run.
 
 ### Simulated tissues (`situcraft simulate`)
 

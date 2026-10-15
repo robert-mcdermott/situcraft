@@ -93,6 +93,9 @@ type State struct {
 	// perimeter bound.
 	area, perim []int32
 	tolerance   []float64
+	// frozen are the cells held where they are (nil: none): the cells about a region, whose seeds
+	// lie outside it. No move takes a voxel from a frozen cell or gives it one.
+	frozen []bool
 }
 
 // NewState places the transcripts on a labelled lattice (labels: each voxel's cell, 1 to cells,

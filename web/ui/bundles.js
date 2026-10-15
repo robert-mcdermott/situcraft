@@ -167,7 +167,7 @@ export function createBundles(app) {
           entry.job = answer.job?.id ?? null;
           notify();
           const job = await app.jobs.finished(entry.job);
-          if (job?.state !== 'complete') throw new Error(`the refinement ${job?.state ?? 'ended'}${job?.error ? `: ${job.error}` : ''}`);
+          if (job?.state !== 'complete') throw Object.assign(new Error(`the refinement ${job?.state ?? 'ended'}${job?.error ? `: ${job.error}` : ''}`), { job });
           manifest = await getJSON(`/api/artifacts/${encodeURIComponent(answer.id)}`);
         }
         const dataset = app.store.project.datasets.find((d) => d.id === datasetId);
@@ -193,6 +193,20 @@ export function createBundles(app) {
     refining.set(datasetId, entry);
     notify();
     return entry.promise;
+  }
+
+  // The segmentation studio's presets and settings' help (one request a session), and a spec's
+  // preflight on a bundle (api_refine.go).
+  let presets = null;
+  function refinementPresets() {
+    presets ??= getJSON('/api/refinement/presets').catch((error) => {
+      presets = null;
+      throw error;
+    });
+    return presets;
+  }
+  function refinementPreflight(item, request) {
+    return getJSON(`${item.url}/refinement/preflight`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) });
   }
 
   // A segmentation made by another tool, imported into a dataset (api_import.go): a job reads the
@@ -471,6 +485,8 @@ export function createBundles(app) {
     registerSegmentation,
     expandNuclei,
     refineSegmentation,
+    refinementPresets,
+    refinementPreflight,
     importSegmentation,
     compareSegmentations,
     comparisonDescription,

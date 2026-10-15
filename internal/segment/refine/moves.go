@@ -51,7 +51,7 @@ type Settings struct {
 
 // DefaultSettings are SituCraft's defaults (research.md §3.2).
 func DefaultSettings() Settings {
-	return Settings{PerimeterFactor: 2, Bubble: 0.05, Reposition: true, WideShare: 0.2, WideUm: 4, NarrowUm: 0.5}
+	return Settings{PerimeterFactor: 1.6, Bubble: 0.05, Reposition: true, WideShare: 0.2, WideUm: 4, NarrowUm: 0.5}
 }
 
 // Check refuses settings the sampler cannot use.
@@ -295,6 +295,9 @@ func (s *State) step(m *Model, r *random.Stream, v int, may func(uint32) bool) b
 		b = s.Labels[nb[r.IntN(n)]]
 	}
 	if b == a {
+		return false
+	}
+	if s.frozen != nil && (a > 0 && s.frozen[a-1] || b > 0 && s.frozen[b-1]) {
 		return false
 	}
 	if may != nil && !(may(a) && may(b)) {

@@ -144,17 +144,12 @@ var remoteActions = []remoteAction{
 		"dataset":     datasetArg,
 		"distance_um": map[string]any{"type": "number", "minimum": 0, "maximum": 100, "description": "How far each nucleus grows, in µm (5 if not given)."},
 	}), long: true},
-	{Name: "refine_segmentation", Title: "Refine the segmentation from the transcripts", Description: "SituCraft's transcript-informed segmentation of a dataset (after Jones et al. 2025): starting from the instrument's cells and their nuclei, each cell's boundary moves to where its own transcripts are, sampled from the posterior; the result is its summary over the last sweeps, with each transcript's probability of its cell. Runs as a job (minutes per square millimetre) in the Segmentation view, which shows its convergence and the limitations it flags; the segmentation artifact is recorded in the project and compared with the instrument's segmentation. Answers its summary, diagnostics and that comparison.", InputSchema: schema(map[string]any{
-		"dataset": datasetArg,
-		"sweeps":  map[string]any{"type": "integer", "minimum": 10, "maximum": 100000, "description": "Sweeps of the sampler (600 if not given)."},
-		"samples": map[string]any{"type": "integer", "minimum": 1, "description": "The last sweeps summarized (500 if not given, at most the sweeps)."},
-		"seed":    map[string]any{"type": "integer", "minimum": 0, "description": "The random seed (20250 if not given); a seed gives the same segmentation on any computer."},
-		"layers":  map[string]any{"type": "integer", "minimum": 1, "maximum": 16, "description": "Voxel layers in depth (1 if not given)."},
-	})},
-	{Name: "import_segmentation", Title: "Import a segmentation", Description: "Imports another tool's segmentation into a dataset, in the Segmentation view, which shows it: a SpatialData Zarr store (spatialdata), Baysor's segmentation.csv with its polygons (baysor), GeoJSON polygons with an optional transcript table (geojson), or a Xenium Ranger output bundle of the same run (xenium). A job reads it, checks it against the dataset (the transcripts it names, where its cells lie, its ids) and records it as a segmentation artifact with the files' SHA-256; an import whose check finds a fatal problem is recorded as invalid. Coordinates are read in units (um, else pixels of the morphology image), never guessed. Needs the token (it reads files).", InputSchema: schema(map[string]any{
+	{Name: "refine_segmentation", Title: "Refine the segmentation from the transcripts", Description: "SituCraft's transcript-informed segmentation of a dataset (after Jones et al. 2025), in the Segmentation view's studio: starting from the instrument's cells and their nuclei, each cell's boundary moves to where its own transcripts are, sampled from the posterior; the result is its summary over the last sweeps, with each transcript's probability of its cell. A preset sets the model (balanced if not given); regions or sections limit what it covers, the rest keeping the instrument's cells. Runs as a job (minutes per square millimetre); its failures are classified with what to do. The segmentation artifact is recorded in the project and compared with the instrument's segmentation. Answers its summary, diagnostics and that comparison.", InputSchema: schema(refineArgs()), long: true},
+	{Name: "refinement_preflight", Title: "Check a refinement before it runs", Description: "What a transcript-informed segmentation of a dataset would model, cover and cost, without running it: the transcripts at the quality, the cells it starts from, the regions or sections, its memory, disk and time against what the computer has, its problems (which stop it) and risks, and its recipe (JSON, to keep or run with `situcraft refine --recipe`). Takes the same arguments as refine_segmentation.", InputSchema: schema(refineArgs()), long: true},
+	{Name: "import_segmentation", Title: "Import a segmentation", Description: "Imports another tool's segmentation into a dataset, in the Segmentation view, which shows it: a SpatialData Zarr store (spatialdata), Baysor's segmentation.csv with its polygons (baysor), GeoJSON polygons with an optional transcript table (geojson), a Xenium Ranger output bundle of the same run (xenium), or a folder of SituCraft's own segmentation files, as `situcraft refine` writes them (situcraft). A job reads it, checks it against the dataset (the transcripts it names, where its cells lie, its ids) and records it as a segmentation artifact with the files' SHA-256; an import whose check finds a fatal problem is recorded as invalid. Coordinates are read in units (um, else pixels of the morphology image), never guessed. Needs the token (it reads files).", InputSchema: schema(map[string]any{
 		"dataset":           datasetArg,
-		"format":            textArg("spatialdata, baysor, geojson or xenium."),
-		"paths":             map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "The files: a store or bundle; or Baysor's segmentation.csv and its polygons; or GeoJSON polygons and a transcript table (CSV or Parquet)."},
+		"format":            textArg("spatialdata, baysor, geojson, xenium or situcraft."),
+		"paths":             map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "The files: a store or bundle; or Baysor's segmentation.csv and its polygons; or GeoJSON polygons and a transcript table (CSV or Parquet); or the folder situcraft refine wrote."},
 		"units":             textArg("um (the default) or pixels (of the morphology image)."),
 		"coordinate_system": textArg("SpatialData: the coordinate system (global)."),
 		"cells":             textArg("SpatialData: the shapes or labels element holding the cells."),
@@ -240,4 +235,21 @@ func actionNames() []string {
 		names[i] = action.Name
 	}
 	return names
+}
+
+// refineArgs are refine_segmentation's and refinement_preflight's arguments.
+func refineArgs() map[string]any {
+	return map[string]any{
+		"dataset":    datasetArg,
+		"preset":     textArg("The settings' preset: balanced (the default), conservative, flexible, low-memory, roi-pilot (a region, run with two seeds) or expert."),
+		"sweeps":     map[string]any{"type": "integer", "minimum": 10, "maximum": 100000, "description": "Sweeps of the sampler (the preset's if not given; changing it makes the settings expert)."},
+		"samples":    map[string]any{"type": "integer", "minimum": 1, "description": "The last sweeps summarized (the preset's if not given, at most the sweeps)."},
+		"seed":       map[string]any{"type": "integer", "minimum": 0, "description": "The random seed (20250 if not given); a seed gives the same segmentation on any computer."},
+		"layers":     map[string]any{"type": "integer", "minimum": 1, "maximum": 16, "description": "Voxel layers in depth (1 if not given)."},
+		"regions":    map[string]any{"type": "array", "items": map[string]any{"type": "array", "items": map[string]any{"type": "number"}, "minItems": 4, "maxItems": 4}, "description": "Regions to refine, each [x0, y0, x1, y1] in µm; the rest of the tissue keeps the instrument's cells."},
+		"sections":   flagArg("Refine the tissue's separate sections apart, each with a model of its own."),
+		"min_qv":     map[string]any{"type": "number", "minimum": 0, "maximum": 40, "description": "The quality the modelled transcripts reach (20 if not given)."},
+		"seed_check": flagArg("Run again with the next seed and report how many transcripts both runs put in the same cell."),
+		"threads":    map[string]any{"type": "integer", "minimum": 1, "description": "Threads to run on (every core if not given); the result does not depend on them."},
+	}
 }

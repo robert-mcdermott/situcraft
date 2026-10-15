@@ -539,11 +539,14 @@ reverse is (which detailed balance needs):
     moves whose reverse it forbids. The tests below catch that error.
 - **Perimeter.** In each layer a cell's perimeter, counted in voxel edges, is at most $f$ times the
   least any shape of its area can have: $2\lceil 2\sqrt{n}\rceil$ for $n$ voxels (Harary F,
-  Harborth H. Extremal animals. *J Combin Inform System Sci* 1976;1:1–8), $f = 2$.
+  Harborth H. Extremal animals. *J Combin Inform System Sci* 1976;1:1–8), $f = 1.6$ (2 until
+  slice 5).
   - *SituCraft's choice:* the publication bounds the perimeter against a circle's (a factor of
     1.3). In voxel edges, a digital disc's perimeter already exceeds the circle's by about 4/π.
     SituCraft bounds against the least digital perimeter instead. An elongated cell (an ellipse of
-    aspect 4 at 45°) reaches about 1.6 times it, a thin tendril far more.
+    aspect 4 at 45°) reaches about 1.6 times it, a thin tendril far more. $f = 1.6$ is the tightest
+    bound that still admits that ellipse at any angle; it was chosen by measurement (the
+    segmentation studio, below).
   - A cell that starts beyond the bound keeps its own starting ratio as its bound.
 
 **Parallel and deterministic.** The region is cut into square blocks (40 µm, all layers), coloured
@@ -587,7 +590,7 @@ so whether it belongs to the cell is decided by a few nats at most. Any one samp
 therefore as rough as the posterior is broad, and the summary is what estimates it.
 
 **Defaults** (SituCraft's choices, from the validation below): one stage of 1 µm voxels in one
-layer, 600 sweeps, the last 500 summarized.
+layer, 600 sweeps, the last 500 summarized; perimeters within 1.6 times the least (slice 5).
 - **The schedule** was the best of those tried on simulated truth. The publication's schedule (4 µm
   and one layer, then 2 µm and two, then 1 µm and four) is available. Coarse starts reach a higher
   likelihood on the simulations, but land further from the truth there. These simulated cells do
@@ -632,7 +635,8 @@ section:
 | --- | --- | --- | --- |
 | The true cells, each transcript by where it was observed | 85.0% (the small tissue) | 1 | |
 | The instrument's 5 µm expansion (the start) | 82.5% | 0.622 | |
-| Default: 1 µm, one layer, 600 sweeps (500 summarized), holes filled (slice 4) | **85.9%** | **0.678** | 20 s |
+| Default: 1 µm, one layer, 600 sweeps (500 summarized), perimeters within 1.6 times the least (slice 5) | **86.3%** | **0.712** | 22 s |
+| The same with perimeters within twice the least, holes filled (slice 4; the rows below too) | 85.9% | 0.678 | 20 s |
 | The same, holes left (slice 3) | 85.9% | 0.663 | 24 s |
 | 1 µm, one layer, 1,500 sweeps (the last 1,000 summarized) | 85.9% | 0.677 | 56 s |
 | 1 µm, four layers, 600 sweeps (500 summarized) | 85.1% | 0.630 | 51 s |
@@ -640,10 +644,10 @@ section:
 
 The refined segmentation assigns more transcripts to their true cells than the true cells
 themselves do by place. Repositioning estimates where each molecule came from, which no
-segmentation by place can. Its cells cover 173,181 µm² against the true 185,852 µm² (the
+segmentation by place can. Its cells cover 175,252 µm² against the true 185,852 µm² (the
 expansion's 245,477): the sparse edges of cells are left to the background. On the small tissue
-(the unit test: 300 sweeps, 250 summarized), 86.4% of transcripts are in their true cell (the
-expansion 83.4%), with a median IoU of 0.668 (0.634).
+(the unit test: 300 sweeps, 250 summarized), 86.8% of transcripts are in their true cell (the
+expansion 83.4%), with a median IoU of 0.712 (0.634).
 
 **Found by slice 3:**
 - **Attributions before rates.** The first attribution, drawn before any cell had rates, gave every
@@ -697,7 +701,139 @@ the instrument's segmentation as soon as it is made.
   - Against the truth the result barely changes with longer runs (the table above). So the
     defaults stand, and the page says plainly that the run is still drifting and that more
     sweeps would make sure.
-  - Agreement between two seeds on a pilot region comes with the segmentation studio (slice 5).
+  - Agreement between two seeds on a pilot region came with the segmentation studio (below).
+
+#### The segmentation studio (verified, wave 3, slice 5)
+
+**Regions and sections.** A refinement covers the whole tissue, its sections apart, or chosen
+regions (rectangles, µm).
+- **A region's cells** are those whose seed (their nucleus's centre) lies in it. They are refined
+  on a lattice covering the region and a margin of 20 µm about it. The cells about it are held
+  where the instrument drew them: no move takes a voxel from a held cell or gives it one. So the
+  region's edge never cuts a cell, and a refined cell near it keeps its whole extent. The rest of
+  the tissue keeps the instrument's segmentation, and its transcripts their pixel's cell.
+- **Regions** are clipped to the tissue. Regions whose margins would overlap are merged, so that no
+  cell is both refined and held.
+- **Sections** are the tissue's separate pieces: cells grouped where their boxes come within a gap
+  (100 µm unless set; single linkage, through a grid of the gap's size), each group's box grown by
+  the margin. Each is refined apart, with a model of its own: unrelated tissues on one slide do not
+  share expression states. Only one region's run is held in memory at a time.
+- *Validation:* a region's run changes no pixel outside its lattice and none of a held cell; its
+  outputs pass the segmentation check. Sections are found as the tissue's pieces and joined by a
+  wide enough gap.
+
+**Presets** (`refine.Presets`, version 1), each measured on the standard simulated tissue
+(`TestPresetsOnSimulatedTissue`, REFINE_PRESETS=standard). The scores are as above; "outlines" is
+the median ratio of each cell's outline (pixel edges) to the least its area can have.
+
+| Preset | What it changes from Balanced | In their true cell | Median IoU | Outlines | Memory (estimated) |
+| --- | --- | --- | --- | --- | --- |
+| The instrument's expansion | | 82.5% | 0.622 | 1.22 | |
+| Balanced (the defaults) | | 86.3% | 0.712 | 1.32 | 89 MB |
+| Conservative boundary | perimeters within 1.3 times the least; gaps proposed at 0.1; nuclear prior 0.9 | 86.2% | 0.727 | 1.21 | 89 MB |
+| Flexible morphology | perimeters within 2.5 times the least; nuclear prior 0.7 | 85.0% | 0.638 | 1.63 | 89 MB |
+| Low memory | 2 µm voxels; the collector's target 20% | 84.9% | 0.650 | 1.34 | 73 MB |
+| ROI pilot (a 200 µm square in the middle) | a region, run with two seeds | 86.9% in the region (Balanced on the whole tissue: 87.1%) | 0.719 (0.716) | | |
+
+- **Every preset puts more transcripts in their true cells than the instrument's segmentation.**
+- **The pilot reproduces the whole run in its region:** 86.9% and 0.719 against the whole run's
+  87.1% and 0.716 there. Its two seeds put 93.4% of the transcripts in refined cells in the same
+  cell; the split-half agreement is about 95%, both bounded by the posterior's own uncertainty.
+- **What did not work:**
+  - *Low memory without repositioning:* keeping transcripts where they were observed put only
+    83.0% of them in their true cells on the small tissue, below the instrument's 83.4%; with 2 µm
+    voxels as well, 78.2%. Low memory keeps repositioning.
+  - *Coarser voxels alone* hardly lowered the peak, since most memory goes with the transcripts.
+    The collector's target does lower it (below).
+- **The perimeter bound decides the shapes.** Conservative's three changes were tried apart on the
+  standard tissue. The bubble (0.1: IoU 0.688) and the nuclear prior (0.9: 0.681) moved little.
+  The perimeter bound moved most, and every simulated cell type gained from a tighter bound,
+  including the elongated ones:
+
+  | Perimeter bound | Median IoU | Endothelial-like (aspect up to 4) | Fibroblast-like (up to 3.2) | Epithelial-like | Immune-like |
+  | --- | --- | --- | --- | --- | --- |
+  | 2.5 | 0.642 | | | | |
+  | 2 (slice 4) | 0.678 | 0.641 | 0.694 | 0.738 | 0.663 |
+  | 1.8 | 0.697 | | | | |
+  | 1.6 (the default) | 0.712 | 0.665 | 0.716 | 0.775 | 0.701 |
+  | 1.4 | 0.724 | 0.673 | 0.718 | 0.780 | 0.720 |
+  | 1.3 | 0.724 | | | | |
+  | 1.2 | 0.716 | | | | |
+
+  - The bound acts mostly against ragged outlines rather than long ones: cells start from the
+    instrument's expansion, and a cell starting beyond the bound keeps its own ratio.
+  - *SituCraft's choice:* the default is 1.6, the tightest bound that still admits an ellipse
+    four times as long as wide at any angle, rather than the simulation's best (1.3–1.4).
+    Simulated outlines are smoother than many real cells', and a bound below 1.6 would hold real
+    elongated cells to shorter shapes than they have.
+  - Conservative takes the simulation's best, 1.3, for tissues of rounded cells. Its cells cover a
+    little more area than Balanced's, not less: a tight bound stops the background carving ragged
+    gaps as much as it stops cells growing tendrils. So its warning is about elongated cells, not
+    unassigned transcripts (0.02% unassigned, against Balanced's 0.01%).
+  - Slice 6's comparison on real data revisits the default.
+
+**Memory.** Measured with the heap in use sampled every 10 ms. The run now holds less:
+- **Tallies:** each transcript's tally keeps up to four labels with their counts (24 bytes; a slot
+  is free while its count is 0). The split-half agreement is estimated on every eighth transcript.
+  It is a share, and on 50,000 transcripts its standard error is about 0.1%. Before, two more
+  full tallies were kept for it. The live heap on the standard tissue fell from 75 to 53 MB; the
+  assignments are unchanged (the pinned digest held).
+- **Reading:** only the columns used are decoded from `transcripts.parquet` (gene, quality and
+  place). A row group then costs about 70 bytes a row instead of 135.
+- **Between phases** (after reading, after sampling) the collector runs, and the sampler's state is
+  let go before the segmentation is written (`Result.Release`).
+- **The collector's target:** refinements run with Go's collector keeping the heap within 50% of
+  its live size (Go's default is 100%). On the standard tissue the peak fell from 190 to 141 MB,
+  in 7.1 s against 7.0. Low memory sets 20%. The target never changes the result; a lower setting
+  of the user's own (GOGC) is kept.
+- With all of these, the standard tissue's peak fell from 172 MB (slice 4) to 89 MB.
+
+**Preflight estimates** (`refine.EstimateCost`). The peak memory is the largest of three phases:
+- reading: a block of each mask (its chunks' rows across), else a row group of the transcripts,
+  with the inputs;
+- sampling: the inputs, and the largest region's run (per modelled transcript, voxel, and cell ×
+  gene);
+- writing: a row group again, every row's assignment, and the regions' results.
+
+The phases' terms are scaled by the collector's target. Disk is counted per row (assignment), per
+modelled transcript (probability), per non-zero count, per cell (record, outline, label runs) and
+per sweep (the trace). Time is counted per modelled transcript and per cell × gene × component in
+each sweep.
+
+| Run (100 sweeps; ten cores) | Memory measured (estimated) | Disk | Time |
+| --- | --- | --- | --- |
+| Small simulated tissue, 120 genes | 8 MB (8) | 115 kB (140) | 0.4 s (0.3) |
+| 300 µm, 1,000 genes | 48 MB (47) | 648 kB (602) | 3.8 s (4.0) |
+| 300 µm, a region | 28 MB (28) | 401 kB (464) | 0.7 s (0.7) |
+| 500 µm, a small region | 75 MB (71) | 1,001 kB (1,051) | 0.7 s (0.9) |
+| 500 µm, 120 genes | 89 MB (89) | 1,352 kB (1,631) | 4.0 s (4.1) |
+| 500 µm, 1,000 genes, Low memory | 97 MB (97) | 1,713 kB (1,658) | 10.5 s (11.4) |
+| The Lung 2-FOV bundle, Balanced (600 sweeps), whole | 264 MB resident (251) | 4.45 MB (4.0) | 97 s (88) |
+
+- A region's run is dominated by reading the bundle; a small panel's by the transcripts modelled; a
+  large panel's by the cells × genes.
+- The preflight refuses a run whose estimate passes 85% of the computer's memory (unless forced)
+  or the free space where it is written, and warns past half of either.
+- *Found by measuring:* the first, linear model under-predicted small regions by a factor of four.
+  Reading and writing the bundle cost more than sampling a small region.
+
+**Failures, classified** (requirements S7): the cells to start from missing (`cells.zarr.zip`), a
+malformed bundle, memory, storage (also a full disk met while writing), a region holding no cell's
+nucleus or no transcript, and settings a run cannot use. Each failure carries what to do, shown in
+the studio, the Jobs view and the remote action's answer.
+
+**Convergence judged only when it can be.** Geweke's diagnostic needs a first tenth of five
+batches of two: 100 summarized sweeps. Below that the diagnostics say it was not judged
+(`gewekeJudged`), the page says so, and the preflight warns. *Found by slice 5:* a short run's z
+of 0, which means too short to judge, was shown as settled.
+
+**Recipes and the terminal** (requirements E5). A spec is kept as a recipe (docs/FORMATS.md) and
+run by the app's job or by `situcraft refine`, through one function (`refine.Refine`).
+- On a simulated bundle, a recipe from the app's preflight, run in the terminal on three threads,
+  gave every file the app's job made, byte for byte.
+- The terminal's folder imports back into the app as a refinement of the same dataset, with the
+  same files' SHA-256.
+- A folder of another image's size is refused.
 
 SituCraft's other choices where the publication leaves them open:
 - **Polygons** come from the summarized voxel labels by boundary tracing per z layer, and from

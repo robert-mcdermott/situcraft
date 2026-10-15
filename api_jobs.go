@@ -180,7 +180,7 @@ func (a *app) handleJobs() {
 			return nil, err
 		}
 		// A refinement starts again from its seed: the same seed gives the same segmentation.
-		return a.refineJob(p.Bundle, p.Options), nil
+		return a.refineJob(p), nil
 	}, func(id string, spec json.RawMessage) {
 		// Its staged files go with it.
 		p, err := refineOf(spec)
@@ -189,7 +189,7 @@ func (a *app) handleJobs() {
 		}
 		if b, err := xenium.Open(p.Bundle, xenium.Options{CacheDir: a.cacheDir}); err == nil {
 			if instrument := a.knownSegmentation(b); instrument != nil {
-				a.artifacts.Discard(refineID(instrument.ID, p.Options))
+				a.artifacts.Discard(refineID(instrument.ID, p.Spec))
 			}
 			b.Close()
 		}

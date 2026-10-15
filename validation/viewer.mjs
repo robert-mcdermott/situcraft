@@ -580,6 +580,27 @@ export async function viewerSuite({ check, MissingData, verbose }) {
         })()`);
         check('viewer', 'the refinement is recorded with its probabilities and diagnostics, its comparison too, and shown with its convergence and limitations', JSON.stringify(shownRefined),
           /diagnostics\.json/.test(shownRefined.files) && /probabilities\.bin/.test(shownRefined.files) && shownRefined.comparisons === comparisonsBefore + 1 && shownRefined.card && shownRefined.lines >= 5, 'its 8 files; one more comparison; the card with its convergence and limitations');
+        // The segmentation studio (wave 3, slice 5): its six steps; a pilot's preflight on a region
+        // (refused without one); the pilot run twice, its seeds' agreement recorded and the rest of
+        // the tissue kept; a region holding no nucleus failing, classified, with what to do.
+        const steps = await chrome.eval(`[...document.querySelectorAll('.studio .studio-step')].map((b) => b.textContent).join(' ')`);
+        const pilotArgs = { dataset: 'xenium-lung-2fov', preset: 'roi-pilot', regions: [[500, 300, 700, 450]], sweeps: 40, samples: 20 };
+        const preflight = await act('refinement_preflight', pilotArgs);
+        const pp = preflight.ok ? preflight.data.preflight : { problems: [], regions: [], estimate: {} };
+        check('viewer', 'the studio\'s six steps; refinement_preflight says what a pilot on a region models, covers and costs, with its recipe', `${steps}; ${preflight.message ?? preflight.error}`,
+          /Input.*Compute.*Model.*Review.*Run.*Compare/.test(steps) && preflight.ok && pp.problems.length === 0 && pp.regions.length === 1 && pp.estimate.cells > 0 && pp.estimate.cellsHeld > 0 && pp.estimate.peakMemoryBytes > 0 && preflight.data.recipe?.format === 'situcraft-recipe',
+          'no problems; one region, its cells refined and held; an estimate; a recipe');
+        const noRegion = await act('refinement_preflight', { dataset: 'xenium-lung-2fov', preset: 'roi-pilot' });
+        check('viewer', 'a pilot without a region is refused, saying why', noRegion.message ?? noRegion.error, !noRegion.ok && /no region was chosen/.test(noRegion.message ?? noRegion.error ?? ''), 'refused: no region was chosen');
+        const pilot = await act('refine_segmentation', pilotArgs);
+        const pd = pilot.ok ? pilot.data.summary.diagnostics ?? {} : {};
+        check('viewer', 'remote control: the pilot refines its region twice, records the seeds\' agreement, and keeps the instrument\'s cells elsewhere', pilot.message ?? pilot.error,
+          pilot.ok && pilot.data.state === 'complete' && pilot.data.summary.cells === 11898 && pd.regions === 1 && pd.cellsRefined > 0 && pd.cellsHeld > 0 && pd.seedAgreement > 0.5 && pilot.data.parameters?.second_seed === 20251,
+          'the region\'s cells refined, those about it held, a second seed\'s agreement');
+        const failed = await act('refine_segmentation', { dataset: 'xenium-lung-2fov', regions: [[600.11, 400.11, 600.13, 400.13]], sweeps: 20, samples: 10 });
+        const failure = await chrome.eval(`document.querySelector('.studio-failure')?.innerText ?? ''`);
+        check('viewer', 'a region holding no nucleus fails, classified, with what to do, in the answer and the studio', `${failed.message ?? failed.error}; the studio: ${failure.replace(/\s+/g, ' ')}`,
+          !failed.ok && /holds no cell's nucleus/.test(failed.message ?? failed.error ?? '') && /What to do/.test(failed.message ?? failed.error ?? '') && /What to do/.test(failure), 'refused by the job, with the region\'s remedy');
 
         // The project as 0.2.0 saved it (validation/projects/0.2.0-lung.situcraft.json): written
         // when asked (SITUCRAFT_WRITE_FIXTURE=1), the places of this run's folders made neutral and

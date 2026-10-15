@@ -201,18 +201,31 @@ segmentation pixel by pixel and transcript by transcript, and what differs is de
 Lung example, segmented by the instrument the same way, 98.06% of pixels and 98.94% of transcripts
 are in the same cells.
 
-**Refine from the transcripts** redraws each cell from the transcripts (SituCraft's
-transcript-informed segmentation, after Jones et al. 2025). It starts from the instrument's cells
-and their nuclei. Each boundary moves to where the cell's own transcripts are, and each transcript
-may have drifted from the cell it came from. It runs as a job (a few minutes per square
-millimetre).
+**Transcript-informed segmentation** redraws each cell from the transcripts (SituCraft's
+implementation, after Jones et al. 2025). It starts from the instrument's cells and their nuclei.
+Each boundary moves to where the cell's own transcripts are, and each transcript may have drifted
+from the cell it came from. Its studio takes you through six steps, each showing what the run
+would do on this bundle and this computer:
 
-The result is the posterior's summary over many samples: each transcript in its most probable
-cell, with that probability kept. The view says whether the run settled, and which cells its
-result is least sure of: those with few transcripts, uncertain boundaries, or no nucleus. It is
-compared with the instrument's segmentation as soon as it is made, so **Review the differences**
-opens the comparison workspace on it. There, a chosen difference's cells are listed with their
-limitations.
+1. **Input:** the transcripts' quality (Q20 to start), the cells it starts from, and what it
+   covers: the whole tissue, its separate sections apart, or chosen regions (typed in µm, or the
+   region last framed in the Viewer). Outside a region the instrument's cells stay as they are.
+2. **Compute:** the threads, and the memory, disk and time it needs against what the computer
+   has.
+3. **Model:** a preset (Balanced, Conservative boundary, Flexible morphology, Low memory, ROI pilot,
+   Expert), what it changes and what it risks, and every setting with what it does and costs.
+4. **Review:** what will run, anything that stops it (with what to do) and its risks; **Refine**
+   starts it, and **Save the recipe** keeps its settings as a file, to run again here or with
+   `situcraft refine` in a terminal.
+5. **Run:** its progress and log, and **Stop**. A failure says what went wrong and what to do.
+6. **Compare:** whether it settled, which cells its result is least sure of (few transcripts,
+   uncertain boundaries, no nucleus), and, for an ROI pilot, how often a second seed put the
+   transcripts in the same cells. **Review the differences** opens the comparison workspace on it
+   against the instrument's segmentation, made as soon as the refinement is.
+
+The ROI pilot is the place to start on a new tissue: a region of a few hundred µm takes seconds,
+and its two seeds show how much of the result is chance. The result itself is the summary of many
+samples from the model: each transcript in its most probable cell, with that probability kept.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/import-dark.webp">

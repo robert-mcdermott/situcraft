@@ -77,6 +77,20 @@ type Job struct {
 	Events []Event `json:"events,omitempty"`
 	// Resumable: orphaned, and its kind can make its work again.
 	Resumable bool `json:"resumable,omitempty"`
+	// Failure classifies why a failed job failed, with what to do about it, when its error says.
+	Failure *Failure `json:"failure,omitempty"`
+}
+
+// Failure is a failed job's class ("memory", "input", "prior", "storage", …) and remedy.
+type Failure struct {
+	Class  string `json:"class"`
+	Remedy string `json:"remedy"`
+}
+
+// Classified is an error that says what kind of failure it is and what to do about it.
+type Classified interface {
+	error
+	Failure() Failure
 }
 
 // ErrInvalid is wrapped by a run's error when its outputs failed their checks (the job ends
@@ -309,8 +323,9 @@ func (m *Manager) Resume(id string) (Job, error) {
 		return Job{}, fmt.Errorf("no job %s", id)
 	}
 	if e.job.State != Orphaned {
+		err := fmt.Errorf("%s is %s: only an interrupted job can be resumed", e.job.Title, e.job.State)
 		m.mu.Unlock()
-		return Job{}, fmt.Errorf("%s is %s: only an interrupted job can be resumed", e.job.Title, e.job.State)
+		return Job{}, err
 	}
 	k, known := m.kinds[e.job.Kind]
 	if !known || k.resume == nil {
@@ -333,8 +348,9 @@ func (m *Manager) Resume(id string) (Job, error) {
 	}
 	m.mu.Lock()
 	if e.job.State != Orphaned {
+		err := fmt.Errorf("%s is %s now", e.job.Title, e.job.State)
 		m.mu.Unlock()
-		return Job{}, fmt.Errorf("%s is %s now", e.job.Title, e.job.State)
+		return Job{}, err
 	}
 	e.fn, e.cancelled, e.done = fn, false, make(chan struct{})
 	e.job.State, e.job.Ended, e.job.Error = Queued, time.Time{}, ""
@@ -357,8 +373,9 @@ func (m *Manager) Discard(id string) error {
 		return fmt.Errorf("no job %s", id)
 	}
 	if !e.job.State.Finished() {
+		err := fmt.Errorf("%s is %s: cancel it first", e.job.Title, e.job.State) // read while it is locked
 		m.mu.Unlock()
-		return fmt.Errorf("%s is %s: cancel it first", e.job.Title, e.job.State)
+		return err
 	}
 	k := m.kinds[e.job.Kind]
 	delete(m.jobs, id)
@@ -451,6 +468,11 @@ func (m *Manager) run(id string) {
 		j.State, j.Error = Invalid, err.Error()
 	default:
 		j.State, j.Error = Failed, err.Error()
+		var c Classified
+		if errors.As(err, &c) {
+			f := c.Failure()
+			j.Failure = &f
+		}
 	}
 	if j.Error != "" {
 		j.Events = appendEvent(j.Events, Event{Time: j.Ended, Level: "error", Message: j.Error})

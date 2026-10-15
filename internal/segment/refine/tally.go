@@ -9,26 +9,27 @@ package refine
 // as overflow (rare: a voxel rarely changes among more than two cells and the background).
 const tallySlots = 4
 
+// tally counts, for each item, how often it had each of up to tallySlots labels. A slot is free
+// while its count is 0 (counts never wrap: samples are at most 65,535).
 type tally struct {
 	labels   [][tallySlots]uint32
 	counts   [][tallySlots]uint16
-	used     [][tallySlots]bool
 	overflow int
 	samples  int
 }
 
 func newTally(n int) *tally {
-	return &tally{labels: make([][tallySlots]uint32, n), counts: make([][tallySlots]uint16, n), used: make([][tallySlots]bool, n)}
+	return &tally{labels: make([][tallySlots]uint32, n), counts: make([][tallySlots]uint16, n)}
 }
 
 func (t *tally) add(i int, label uint32) {
 	for k := 0; k < tallySlots; k++ {
-		if t.used[i][k] && t.labels[i][k] == label {
-			t.counts[i][k]++
+		if t.counts[i][k] == 0 {
+			t.labels[i][k], t.counts[i][k] = label, 1
 			return
 		}
-		if !t.used[i][k] {
-			t.used[i][k], t.labels[i][k], t.counts[i][k] = true, label, 1
+		if t.labels[i][k] == label {
+			t.counts[i][k]++
 			return
 		}
 	}
@@ -39,10 +40,7 @@ func (t *tally) add(i int, label uint32) {
 func (t *tally) mode(i int) (uint32, float64) {
 	var best uint32
 	var bestN uint16
-	for k := 0; k < tallySlots; k++ {
-		if !t.used[i][k] {
-			break
-		}
+	for k := 0; k < tallySlots && t.counts[i][k] > 0; k++ {
 		if n, l := t.counts[i][k], t.labels[i][k]; n > bestN || n == bestN && l < best {
 			best, bestN = l, n
 		}

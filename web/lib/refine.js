@@ -19,8 +19,13 @@ export function convergence(s) {
   if (!s) return [];
   const out = [];
   const z = s.gewekeZ ?? 0;
+  // Artifacts before the studio did not record whether it was judged: it is when 100 or more
+  // sweeps were summarized.
+  const judged = s.gewekeJudged ?? s.samples >= 100;
   const settled = Math.abs(z) <= 2;
-  out.push({
+  if (!judged) {
+    out.push({ ok: false, text: `Not judged: only ${count(s.samples)} sweeps were summarized, and Geweke's diagnostic of convergence needs 100 or more. Run more sweeps to know whether the run settled.` });
+  } else out.push({
     ok: settled,
     text: settled
       ? `Settled: the log-likelihood's mean is the same early and late in the last ${count(s.samples)} sweeps (Geweke's z = ${z.toFixed(1)}).`
@@ -35,6 +40,13 @@ export function convergence(s) {
     text: `Each transcript's cell has a mean posterior probability of ${s.meanProbability.toFixed(3)}; ${pct(s.lowProbabilityShare)} of transcripts are in their cell in fewer than half of the sweeps.`,
   });
   out.push({ ok: true, text: `${count(Math.round(s.voxelsMovedPerSweep))} voxels still move each sweep at the end, as boundaries do under an uncertain posterior.` });
+  if (Number.isFinite(s.seedAgreement)) {
+    out.push({
+      ok: s.seedAgreement >= 0.9,
+      text: `A second seed put ${pct(s.seedAgreement)} of the transcripts in refined cells in the same cell${s.seedAgreement >= 0.9 ? '' : ': much of the result is chance here, so read its boundaries with care'}.`,
+    });
+  }
+  if (s.regions > 1 || s.cellsHeld) out.push({ ok: true, text: `${count(s.cellsRefined)} cell${s.cellsRefined === 1 ? '' : 's'} refined in ${s.regions === 1 ? 'one region' : `${count(s.regions)} regions`}${s.cellsHeld ? `, ${count(s.cellsHeld)} about ${s.cellsRefined === 1 ? 'it' : 'them'} held as the instrument drew them` : ''}.` });
   return out;
 }
 
@@ -74,4 +86,166 @@ export function cellFlags(diagnostics) {
 // A cell list's flags in words ("c12: few transcripts; c40: uncertain boundary"), or ''.
 export function flagsOf(flags, ids) {
   return ids.filter((id) => flags.has(id)).map((id) => `${id}: ${flags.get(id).join(', ')}`).join('; ');
+}
+
+// --- The segmentation studio (api_refine.go): its steps, and a spec as the page edits it ---
+
+export const STUDIO_STEPS = [
+  { id: 'input', label: 'Input', about: 'The transcripts, the cells it starts from, and what it covers' },
+  { id: 'compute', label: 'Compute', about: 'Threads, memory, disk and time' },
+  { id: 'model', label: 'Model', about: 'A preset, or every setting' },
+  { id: 'review', label: 'Review', about: 'What will run, what it risks, and its recipe' },
+  { id: 'run', label: 'Run', about: 'Its progress, and stopping it' },
+  { id: 'compare', label: 'Compare', about: 'Its convergence, its limitations and what changed' },
+];
+
+const copy = (x) => JSON.parse(JSON.stringify(x));
+
+// A canonical form for comparing settings: keys sorted at every level.
+function canonical(x) {
+  if (Array.isArray(x)) return x.map(canonical);
+  if (x && typeof x === 'object') return Object.fromEntries(Object.keys(x).sort().map((k) => [k, canonical(x[k])]));
+  return x;
+}
+const same = (a, b) => JSON.stringify(canonical(a)) === JSON.stringify(canonical(b));
+
+// A preset's spec, keeping what was chosen of the seed, the area and the quality: a preset is
+// settings, not data. The ROI pilot asks for regions.
+export function presetSpec(presets, id, from = null) {
+  const p = presets.find((x) => x.id === id);
+  if (!p) throw new Error(`No preset ${id}.`);
+  const spec = { preset: p.id, options: copy(p.options), area: { mode: 'whole' }, min_qv: 20, seed_check: Boolean(p.seedCheck) };
+  if (p.gcPercent) spec.gc_percent = p.gcPercent;
+  if (from) {
+    spec.options.seed = from.options.seed;
+    spec.area = copy(from.area);
+    spec.min_qv = from.min_qv;
+  }
+  if (p.area === 'regions' && spec.area.mode !== 'regions') spec.area = { mode: 'regions', regions: spec.area.regions ?? [] };
+  return spec;
+}
+
+// The preset a spec's settings are, as the program resolves it: its own while they are the
+// preset's but for the seed (and what it covers), Expert otherwise.
+export function resolvePreset(spec, presets) {
+  if (!spec.preset || spec.preset === 'expert') return spec.preset;
+  const p = presets.find((x) => x.id === spec.preset);
+  if (!p) return spec.preset;
+  const mine = { ...spec.options, seed: p.options.seed };
+  return same(mine, p.options) && Boolean(spec.seed_check) === Boolean(p.seedCheck) ? spec.preset : 'expert';
+}
+
+// Where a setting's key (refine.SettingsHelp) is in a spec: stages.* on the last stage.
+function place(spec, key) {
+  const [head, tail] = key.split('.');
+  if (!tail) {
+    if (key === 'seed' || key === 'samples' || key === 'block_um') return [spec.options, key];
+    return [spec, key];
+  }
+  if (head === 'stages') return [spec.options.stages.at(-1), tail];
+  return [spec.options[head], tail];
+}
+
+export function settingValue(spec, key) {
+  const [obj, k] = place(spec, key);
+  if (key === 'gc_percent') return obj[k] || 50;
+  if (key === 'seed_check') return Boolean(obj[k]);
+  return obj[k];
+}
+
+// A spec with a setting changed, its preset resolved again (the seed and the quality are the
+// data's choices, not the preset's).
+export function withSetting(spec, key, value, presets) {
+  const next = copy(spec);
+  const [obj, k] = place(next, key);
+  obj[k] = value;
+  if (key === 'stages.sweeps' && next.options.samples > value) next.options.samples = Math.max(1, Math.floor((value * 5) / 6));
+  next.preset = resolvePreset(next, presets);
+  return next;
+}
+
+// What is wrong with a setting's value, by its bounds ('' for nothing).
+export function settingProblem(setting, value) {
+  if (typeof value === 'boolean') return '';
+  if (!Number.isFinite(value)) return `${setting.name} is a number.`;
+  const whole = ['seed', 'samples', 'stages.sweeps', 'stages.layers', 'model.components', 'gc_percent'].includes(setting.key);
+  if (whole && !Number.isInteger(value)) return `${setting.name} is a whole number.`;
+  if ((setting.min || setting.max) && (value < setting.min || value > setting.max)) return `${setting.name} is from ${setting.min.toLocaleString('en-US')} to ${setting.max.toLocaleString('en-US')}${setting.unit && setting.unit !== '%' ? ` ${setting.unit}` : ''}.`;
+  return '';
+}
+
+// A region typed as "x0, y0, x1, y1" (µm).
+export function parseRegion(text) {
+  const v = String(text).split(/[\s,;]+/).filter(Boolean).map(Number);
+  if (v.length !== 4 || v.some((x) => !Number.isFinite(x))) throw new Error('A region is four numbers in µm: x0, y0, x1, y1.');
+  const [x0, y0, x1, y1] = v;
+  if (!(x1 > x0 && y1 > y0)) throw new Error('A region\'s second corner is right of and below its first.');
+  return { x0_um: x0, y0_um: y0, x1_um: x1, y1_um: y1 };
+}
+
+export const regionText = (r) => `(${Math.round(r.x0_um)}, ${Math.round(r.y0_um)})–(${Math.round(r.x1_um)}, ${Math.round(r.y1_um)}) µm`;
+
+// What an area covers, in words.
+export function areaText(area) {
+  if (area.mode === 'sections') return `the tissue's separate sections, each refined apart (cells more than ${area.section_gap_um || 100} µm apart are separate)`;
+  if (area.mode === 'regions') return area.regions?.length ? `${area.regions.length === 1 ? 'the region' : `${area.regions.length} regions:`} ${area.regions.map(regionText).join('; ')}` : 'a region, not chosen yet';
+  return 'the whole tissue';
+}
+
+// A recipe (recipe.go) read: its spec and the dataset it was made for. Throws why it is not one
+// this page reads.
+export function readRecipe(text) {
+  let r;
+  try {
+    r = JSON.parse(text);
+  } catch (error) {
+    throw new Error(`Not a recipe: ${error.message}`);
+  }
+  if (r?.format !== 'situcraft-recipe') throw new Error('Not a SituCraft recipe.');
+  if (!(r.version >= 1 && r.version <= 1)) throw new Error(`A recipe of version ${r.version}, which this SituCraft does not read: a newer one made it.`);
+  if (r.kind !== 'refinement') throw new Error(`A recipe for ${r.kind}, not a refinement.`);
+  const s = r.refinement;
+  if (!s?.options?.stages?.length) throw new Error('The recipe has no settings.');
+  return { spec: { preset: s.preset ?? 'expert', options: s.options, area: s.area ?? { mode: 'whole' }, min_qv: s.min_qv ?? 20, seed_check: Boolean(s.seed_check), ...(s.gc_percent ? { gc_percent: s.gc_percent } : {}) }, dataset: r.dataset ?? null };
+}
+
+// Sizes and times as the program writes them: memory in binary units, as computers state theirs
+// (refine.Memory); disk in decimal units, as disks do (refine.Bytes); times (refine.Duration).
+export function memory(n) {
+  if (!(n >= 0)) return 'unknown';
+  if (n >= 2 ** 30) return `${(n / 2 ** 30).toFixed(1)} GB`;
+  if (n >= 2 ** 20) return `${Math.round(n / 2 ** 20)} MB`;
+  if (n >= 2 ** 10) return `${Math.round(n / 2 ** 10)} kB`;
+  return `${n} bytes`;
+}
+
+export function bytes(n) {
+  if (!(n >= 0)) return 'unknown';
+  if (n >= 1e9) return `${(n / 1e9).toFixed(1)} GB`;
+  if (n >= 1e6) return `${Math.round(n / 1e6)} MB`;
+  if (n >= 1e3) return `${Math.round(n / 1e3)} kB`;
+  return `${n} bytes`;
+}
+
+export function duration(s) {
+  if (s >= 5400) return `${(s / 3600).toFixed(1)} hours`;
+  if (s >= 90) return `${Math.round(s / 60)} minutes`;
+  const n = Math.round(Math.max(1, s));
+  return `${n} second${n === 1 ? '' : 's'}`;
+}
+
+// How full a resource would be: its share, and a level (ok, warn: past half; danger: past the
+// preflight's stop, refine.memoryStop).
+export function load(need, have) {
+  if (!(have > 0) || !(need >= 0)) return { share: null, level: 'unknown' };
+  const share = need / have;
+  return { share, level: share > 0.85 ? 'danger' : share > 0.5 ? 'warn' : 'ok' };
+}
+
+const FAILURE_CLASS = { prior: 'The cells to start from', input: 'The bundle', memory: 'Memory', storage: 'Disk space', region: 'The region', settings: 'The settings' };
+
+// A failed job's classified failure, in words: { title, message, remedy } (null when it has none).
+export function failureOf(job) {
+  if (!job?.failure) return null;
+  return { title: FAILURE_CLASS[job.failure.class] ?? 'The refinement', message: job.error ?? '', remedy: job.failure.remedy };
 }

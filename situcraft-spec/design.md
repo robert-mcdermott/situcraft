@@ -217,9 +217,24 @@ Segmentation is SituCraft's own code (`internal/segment`), not an external progr
   diagnostics: convergence (Geweke's diagnostic of the log-likelihood) and each cell's flagged
   limitations, shown in the Segmentation view and the comparison workspace. Each refinement is
   compared with the instrument's segmentation as soon as it is made.
+- **The studio** (`web/ui/refine-studio.js`, `api_refine.go`) sets a refinement up in six steps
+  (Input, Compute, Model, Review, Run, Compare). Every change asks the program for the spec's
+  **preflight** (`refine.Check`): what it models and covers, its problems and risks, and its cost
+  against the computer's memory (`internal/sysinfo`) and the free disk. The cost model is fitted
+  to measured runs by phase: reading, sampling one region at a time, writing. The bundle's inputs
+  are kept between preflights.
+  - **Presets** (`refine.Presets`, versioned) and every setting's help come from the program, so
+    the page, the terminal and remote control say the same.
+  - **Regions** hold the cells about them, so a region never cuts a cell. **Sections** are found
+    by single linkage, and each gets a model of its own.
+- **One way to run** (`refine.Refine`): the app's job and `situcraft refine` read, check, sample,
+  release the sampler's state and write the same way, under a tighter target for Go's collector
+  (it never changes the result). A run's spec is kept as a **recipe** (`recipe.go`) that either
+  runs again, byte for byte. Failures carry a class and a remedy (`jobs.Classified`), which the
+  Jobs view and the studio show.
 - **Imported segmentations** (`internal/segment/imports`) come from SpatialData Zarr,
   Baysor-style CSV plus GeoJSON, Xenium Ranger outputs, or GeoJSON polygons plus an assignment
-  table. This is how results from external tools are compared, without SituCraft running those
+  table; SituCraft's own files (`situcraft refine`'s) are checked against the dataset and copied. This is how results from external tools are compared, without SituCraft running those
   tools. Each becomes SituCraft's own segmentation files: a label image resampled or polygons
   drawn at the morphology image's resolution, the tool's assignment matched to the dataset's
   transcripts (by id and position, or by position and gene), counts made as for every
@@ -404,7 +419,8 @@ CI jobs (all on fixed data):
 - **Installers:** syntax checks.
 
 Anything slow, large or external is not in per-commit CI. That covers the Breast bundle's full
-validation, scale tests, and regenerating reference numbers from external tools. These run in a
+validation, scale tests, the refinement's memory estimates against measured runs (which the race
+detector would distort), and regenerating reference numbers from external tools. These run in a
 weekly and on-demand workflow, or on the maintainer's machine, and their outputs are committed as
 reference JSON.
 

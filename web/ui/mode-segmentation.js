@@ -10,7 +10,7 @@
 import { h, icon, clear, formatBytes, formatCount, relativeTime } from './dom.js';
 import { toast } from './overlays.js';
 import { EXPORT_FORMATS, comparisonsOf, exportsOf, promotedSegmentation, segmentationsOf } from '../lib/segmentations.js';
-import { GENERAL_LIMITATION, convergence, isRefinement, limitations } from '../lib/refine.js';
+import { createStudio } from './refine-studio.js';
 
 const DEFAULT_DISTANCE = 5;
 const MAX_DISTANCE = 100;
@@ -49,6 +49,12 @@ export const IMPORT_FORMATS = {
     label: 'Xenium Ranger output',
     paths: [{ label: 'Output bundle', placeholder: '/data/ranger/outs', hint: 'its folder, zip or experiment.xenium' }],
     about: 'A bundle of the same run segmented anew (Xenium Ranger import-segmentation or resegment): its cell mask, cells, boundaries and each transcript\'s cell.',
+    options: [],
+  },
+  situcraft: {
+    label: 'SituCraft segmentation',
+    paths: [{ label: 'Folder', placeholder: '/data/refined', hint: 'the folder situcraft refine wrote' }],
+    about: 'SituCraft\'s own segmentation files, as the terminal\'s situcraft refine writes them: checked against this dataset\'s image and transcripts and recorded as they are, with the method that made them.',
     options: [],
   },
 };
@@ -113,7 +119,7 @@ export function mountSegmentation(app, container) {
     const spec = IMPORT_FORMATS[state.format];
     const options = { format: state.format, paths: spec.paths.map((_, i) => (state.paths[i] ?? '').trim()).filter(Boolean), units: state.units };
     for (const key of spec.options) if ((state.fields[key] ?? '').trim()) options[key] = state.fields[key].trim();
-    if (state.format !== 'xenium') {
+    if (state.format !== 'xenium' && state.format !== 'situcraft') {
       for (const key of ['tool', 'tool_version', 'citation']) if (state[key].trim()) options[key] = state[key].trim();
     }
     return options;
@@ -246,71 +252,21 @@ export function mountSegmentation(app, container) {
         h('p.muted.seg-cite', 'Methods: a Voronoi partition of the tissue by the nuclei, clipped at the distance (Okabe et al. 2000), with exact Euclidean distances (Felzenszwalb & Huttenlocher 2012).')));
   }
 
-  // --- Transcript-informed segmentation ---
-  async function refineRun(t, options = {}) {
-    const answer = await app.bundles.refineSegmentation(t.item, t.dataset.id, options);
-    const session = sessionOf(t.dataset);
-    session.refined = answer.manifest.id;
-    if (answer.comparison) session.compare.shown = answer.comparison.id;
+  // --- Transcript-informed segmentation: the studio (refine-studio.js) ---
+  async function refineRun(t, request = {}) {
+    const answer = await app.bundles.refineSegmentation(t.item, t.dataset.id, request);
+    adopt(t, answer.manifest, answer.comparison);
     render(true);
     return answer;
   }
 
-  function refinementCard(t, list, session) {
-    const instrument = list.find((a) => a.source === 'instrument' && a.state === 'complete');
-    const running = app.bundles.refinements(t.dataset.id).map((e) => {
-      const job = e.job ? app.jobs.get(e.job) : null;
-      const bar = h('div', { style: { width: `${Math.round((job?.progress ?? 0) * 100)}%` } });
-      const message = h('span.muted', job?.message ?? 'Starting…');
-      if (e.job) live.set(e.job, { bar, message });
-      return h('div.seg-running', h('div', h('b', 'Refining'), ' ', message), h('div.progress', bar));
-    });
-    const run = h('button.btn.primary', { type: 'button', disabled: !instrument || !t.item || running.length > 0, onclick: async () => {
-      try {
-        const { manifest, comparison } = await refineRun(t);
-        const s = manifest.summary ?? {};
-        toast(`${manifest.name} of ${t.dataset.name}: ${exact(s.cells)} cells, ${percent(s.assignedFraction)} of gene transcripts assigned${comparison ? `; ${percent(comparison.summary?.changedFraction, 2)} changed cell from the instrument's segmentation` : ''}.`, { kind: 'ok', timeout: 9000 });
-      } catch (error) {
-        toast(`The refinement of ${t.dataset.name}: ${error.message}`, { kind: 'error', timeout: 12000 });
-      }
-    } }, icon('play'), 'Refine from the transcripts');
-    const done = list.filter((a) => isRefinement(a));
-    const a = done.find((x) => x.id === session.refined) ?? done.at(-1);
-    let result = null;
-    if (a) {
-      const s = a.summary ?? {};
-      const d = s.diagnostics;
-      const cmp = instrument ? comparisonsOf(app.store.project, t.dataset.id).find((c) => c.a === instrument.id && c.b === a.id) : null;
-      const comparing = app.bundles.comparisons(t.dataset.id).some((e) => e.b === a.id);
-      result = h('div.seg-refined',
-        h('h3.seg-card-title', a.name, a.state !== 'complete' ? h('span.badge.warn', ` ${a.state}`) : null),
-        h('dl.kv.seg-kv',
-          h('dt', 'Cells'), h('dd', exact(s.cells), h('span.muted', ' started from the instrument\'s')),
-          h('dt', 'Assigned'), h('dd', percent(s.assignedFraction, 2), h('span.muted', ' of gene transcripts of quality 20 or more')),
-          h('dt', 'Median cell'), h('dd', `${count(s.medianTranscriptsPerCell)} transcripts, ${count(s.medianAreaUm2)} µm²`)),
-        d ? h('div.seg-differs', h('div.muted', 'Convergence'), h('ul', ...convergence(d).map((c) => h(`li${c.ok ? '' : '.warn'}`, c.text)))) : null,
-        h('div.seg-differs', h('div.muted', 'Limitations'), h('ul', ...limitations(d).map((l) => h('li', l.text)), h('li', GENERAL_LIMITATION))),
-        cmp
-          ? h('p.seg-note', `Compared with the instrument's segmentation: ${exact(cmp.summary?.classes?.['one-to-one'] ?? 0)} cells one to one, ${percent(cmp.summary?.changedFraction, 2)} of gene transcripts in another cell. `,
-            h('button.btn.small', { type: 'button', onclick: () => showInWorkspace(cmp.id) }, icon('eye'), 'Review the differences'))
-          : comparing ? h('p.muted.seg-note', 'Comparing it with the instrument\'s segmentation…') : null,
-        done.length > 1 ? h('p.muted.seg-note', 'Others: ', ...done.filter((x) => x.id !== a.id).flatMap((x, i) => [i ? ', ' : '', h('a', { href: '#', onclick: (event) => {
-          event.preventDefault();
-          session.refined = x.id;
-          render(true);
-        } }, x.name)])) : null);
-    }
-    return h('section.seg-section',
-      h('div.section-title', 'Transcript-informed segmentation'),
-      h('div.seg-card',
-        h('p', 'Each cell is redrawn from the transcripts: starting from the instrument\'s cells and their nuclei, its boundary moves to where its own transcripts are, and each transcript may have drifted from the cell it came from. The result is the posterior\'s summary over many samples, with each transcript\'s probability of its cell; it is compared with the instrument\'s segmentation when it is made.'),
-        h('div.seg-form', run, h('span.muted', 'A few minutes per square millimetre of tissue.')),
-        !instrument ? h('p.muted.seg-note', 'It starts from the instrument\'s segmentation, which is not registered yet.') : null,
-        !t.item ? h('p.muted.seg-note', `${t.dataset.name}'s bundle was not found where the project records it: locate it in the Data view.`) : null,
-        ...running,
-        result,
-        h('p.muted.seg-cite', 'Methods: after Jones et al. 2025 (Nat Methods 22:1331–1342): a Poisson model of each cell\'s transcripts over a background, a mixture of expression states, cells kept whole and compact, sampled by Metropolis–Hastings. SituCraft\'s model, sampler and their validation: research.md §3.2.')));
+  function adopt(t, manifest, comparison = null) {
+    const session = sessionOf(t.dataset);
+    session.refined = manifest.id;
+    if (comparison) session.compare.shown = comparison.id;
   }
+
+  const studio = createStudio(app, { render, live, refineRun, adopt, showInWorkspace: (id) => showInWorkspace(id) });
 
   // --- Comparing two segmentations ---
   async function runComparison(t, a, b) {
@@ -465,7 +421,7 @@ export function mountSegmentation(app, container) {
     const advanced = spec.options.map((key) => field(`seg-import-${key}`, OPTION_LABELS[key][0], text(`seg-import-${key}`, state.fields[key] ?? '', OPTION_LABELS[key][1], (v) => {
       state.fields[key] = v;
     })));
-    const tool = state.format === 'xenium' ? [] : [
+    const tool = state.format === 'xenium' || state.format === 'situcraft' ? [] : [
       field('seg-import-tool', 'Made by', text('seg-import-tool', state.tool, state.format === 'baysor' ? 'Baysor' : 'the tool\'s name', (v) => {
         state.tool = v;
       })),
@@ -787,7 +743,7 @@ export function mountSegmentation(app, container) {
     // Keep what is being typed when the view redraws (the import's fields keep their values in the
     // session; the distance its own).
     const focused = document.activeElement && body.contains(document.activeElement) ? document.activeElement.id : '';
-    const typing = focused === 'seg-distance' || focused === 'seg-export-folder' ? document.activeElement.value : null;
+    const typing = focused === 'seg-distance' || focused === 'seg-export-folder' || focused.startsWith('studio-') ? document.activeElement.value : null;
     const advancedOpen = body.querySelector('details.seg-advanced')?.open;
     if (advancedOpen !== undefined) session.import.open = advancedOpen;
     clear(body).append(
@@ -795,12 +751,12 @@ export function mountSegmentation(app, container) {
       table(t, list, session),
       expansionCard(t, list, session),
       agreementCard(t, list, session),
-      refinementCard(t, list, session),
+      studio.card(t, list, session),
       comparisonCard(t, list, session),
       importCard(t, list, session),
       ...[practiceCard(t, list, session)].filter(Boolean),
       exportCard(t, list, session));
-    if (typing !== null) body.querySelector(`#${focused}`).value = typing;
+    if (typing !== null && body.querySelector(`#${focused}`)) body.querySelector(`#${focused}`).value = typing;
     if (focused) body.querySelector(`#${CSS.escape(focused)}`)?.focus();
     updateLive();
   }
@@ -866,14 +822,21 @@ export function mountSegmentation(app, container) {
       render(true);
       document.querySelector('.seg-answers')?.closest('details')?.scrollIntoView({ block: 'start' });
     },
-    refine: async (dataset, options) => {
+    refine: async (dataset, request) => {
       const t = target();
       if (!t || t.dataset.id !== dataset.id) app.focusItem({ kind: 'dataset', id: dataset.id });
       const now = target();
       if (!now.item) throw new Error(`${dataset.name}'s bundle was not found where the project records it.`);
-      const answer = await refineRun(now, options);
+      const answer = await studio.run(now, sessionOf(dataset), request);
       document.querySelector('.seg-refined')?.scrollIntoView({ block: 'center' });
       return answer;
+    },
+    refinementPreflight: async (dataset, request) => {
+      const t = target();
+      if (!t || t.dataset.id !== dataset.id) app.focusItem({ kind: 'dataset', id: dataset.id });
+      const now = target();
+      if (!now.item) throw new Error(`${dataset.name}'s bundle was not found where the project records it.`);
+      return studio.preflight(now, sessionOf(dataset), request);
     },
     expand: async (dataset, distance) => {
       const t = target();

@@ -63,6 +63,21 @@ export function mountViewer(app, container) {
     clear(headActions);
     if (!current) return;
     sessions.set(current.dataset.id, { camera: current.renderer.camera, layers: current.layers, selected: current.selectedRow });
+    // The region last in view (µm), within the image, which the segmentation studio offers to
+    // refine.
+    const [w, h2] = current.renderer.size();
+    const grid = current.desc?.grid;
+    if (w > 0 && h2 > 0 && grid) {
+      const r = visibleRect(current.renderer.camera, w, h2);
+      const W = grid.width * grid.pixelSize;
+      const H = grid.height * grid.pixelSize;
+      const x0 = Math.max(0, r.x0);
+      const y0 = Math.max(0, r.y0);
+      const x1 = Math.min(W, r.x1);
+      const y1 = Math.min(H, r.y1);
+      app.viewedRegions ??= new Map();
+      if (x1 > x0 && y1 > y0) app.viewedRegions.set(current.dataset.id, { x0_um: x0, y0_um: y0, x1_um: x1, y1_um: y1 });
+    }
     current.dispose();
     current = null;
     app.inspector.setSection('viewer-cell', null);
