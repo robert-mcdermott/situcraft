@@ -95,7 +95,7 @@ export function mountData(app, container) {
     const chips = [];
     for (const d of project.datasets) {
       const active = target?.dataset?.id === d.id;
-      chips.push(h(`button.chip${active ? '.active' : ''}`, { type: 'button', onclick: () => app.focusItem({ kind: 'dataset', id: d.id }) }, icon('bundle'), d.name, h('span.count', 'in project')));
+      chips.push(h(`button.chip${active ? '.active' : ''}`, { type: 'button', onclick: () => app.focusItem({ kind: 'dataset', id: d.id }) }, icon('bundle'), d.name, h('span.count', d.validation?.support === 'simulated' ? 'simulated, in project' : 'in project')));
     }
     for (const item of app.bundles.items()) {
       if (app.bundles.datasetFor(item)) continue;
@@ -119,7 +119,8 @@ export function mountData(app, container) {
     if (dataset) badges.push(h('span.badge.ok', 'In the project'));
     else badges.push(h('span.badge', 'Not in the project'));
     if (link && LINK_STATES[link.state]) badges.push(h(`span.badge.${LINK_STATES[link.state][0]}`, LINK_STATES[link.state][1]));
-    if (report) badges.push(h(`span.badge.${report.support === 'supported' ? 'ok' : 'warn'}`, report.support === 'supported' ? `XOA ${report.version}` : `XOA ${report.version}: ${report.support}`));
+    if (report?.support === 'simulated') badges.push(h('span.badge.accent', { title: report.supportMessage }, 'Simulated'));
+    else if (report) badges.push(h(`span.badge.${report.support === 'supported' ? 'ok' : 'warn'}`, report.support === 'supported' ? `XOA ${report.version}` : `XOA ${report.version}: ${report.support}`));
     const actions = [];
     if (item && !dataset) {
       actions.push(h('button.btn.primary', {
@@ -160,7 +161,8 @@ export function mountData(app, container) {
     if (link?.state === 'missing') section.append(callout('danger', `The bundle is not where the project recorded it. ${link.error ?? ''} Locate it to reconnect the dataset.`));
     if (link?.state === 'changed') section.append(callout('warn', `Files changed since the dataset was added: ${link.files.slice(0, 6).join(', ')}${link.files.length > 6 ? '…' : ''}. Check it again before relying on earlier results.`));
     if (link?.state === 'different-run') section.append(callout('danger', 'What is there now is another run (or another analysis of it) than the one the dataset recorded.'));
-    if (report && report.support !== 'supported') section.append(callout('warn', report.supportMessage));
+    if (report?.support === 'simulated') section.append(callout('accent', report.supportMessage));
+    else if (report && report.support !== 'supported') section.append(callout('warn', report.supportMessage));
 
     if (entry?.state === 'validating' && !report) section.append(h('div.callout.accent', h('span.spinner'), ` Checking ${name}: reading its tables, matrix, boundaries and images…`));
     if (entry?.state === 'error') section.append(callout('danger', `It could not be checked: ${entry.error}`));

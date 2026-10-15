@@ -1,5 +1,41 @@
 # Changelog
 
+## Unreleased (0.3.0)
+
+Wave 3 of the [roadmap](situcraft-spec/roadmap.md): SituCraft's own transcript-informed
+segmentation, validated against simulated truth and independent reference outputs.
+
+### Added
+
+- **Simulated tissues (wave 3, slice 1).** `situcraft simulate` makes a tissue whose every cell,
+  nucleus and molecule is known, and writes it as a Xenium output bundle labelled simulated, with
+  the truth beside it ([docs/FORMATS.md](docs/FORMATS.md)).
+  - **The tissue:**
+    - cell types with their own sizes, shapes, densities and expression, in domains of different
+      composition;
+    - nuclei, some outside the section;
+    - negative-binomial expression; molecules diffused (a few far), background and negative
+      controls, quality scores and depth.
+  - **The simulated instrument** segments it by nucleus expansion. Its DAPI image is a tiled
+    OME-TIFF.
+  - **The truth** (`truth/`) imports into the simulated dataset as a Xenium Ranger bundle of the
+    same run, so any segmentation is scored against it with the comparison workspace.
+  - **Labelled simulated:** SituCraft marks the bundle simulated in the Data view, the inspector
+    and the dataset list. Its methods paragraph says that the data were simulated and implies no
+    instrument.
+  - **Read by other tools as Xenium data:** the counts are also written as the 10x Genomics
+    HDF5 matrix (`cell_feature_matrix.h5`, by SituCraft's own HDF5 writer). `cells.zarr.zip`
+    follows XOA 2's layout. spatialdata-io reads a simulated bundle with no warning.
+  - **Reproducible:** the same parameters and seed give the same bundle, byte for byte, on any
+    computer.
+  - **Validated:** goodness-of-fit tests show that the counts, places, displacements, quality
+    scores, background and cells follow the distributions they are drawn from.
+
+### Fixed
+
+- **Nucleus expansion stopped with an internal error** when a bundle's cell mask
+  (`cells.zarr.zip`) had more cells than its `cells.parquet`. It now refuses with the reason.
+
 ## 0.2.0 (2026-10-14)
 
 Wave 2 of the [roadmap](situcraft-spec/roadmap.md): segmentations become artifacts to compare,

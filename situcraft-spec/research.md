@@ -458,6 +458,161 @@ bundle). The scene has a cell with a hole, one of two polygons, one reaching bey
 without a polygon, transcripts the tool assigns outside every polygon, noise, and a transcript the
 dataset does not have.
 
+### 3.4 Simulated tissues (verified, wave 3, slice 1)
+
+A segmentation can be scored only against a truth, and no measured tissue has one. `situcraft
+simulate` (`internal/simulate`) makes tissues whose every cell, nucleus and molecule is known and
+writes each as a Xenium output bundle with its truth. The simulator shares no code with
+SituCraft's segmentation; only the file writers and the outline tracer are common. Its generative
+model differs from the one the transcript-informed segmentation fits (§3.2): fixed expression
+profiles by cell type rather than a gamma mixture, a different wide displacement (3 µm, not 4), and
+cell shapes that are not grown by the sampler's moves. A method scored only on data drawn from its
+own model is flattered (the "inverse crime": Wirgin A. The inverse crime. arXiv:math-ph/0401050,
+2004).
+
+**The tissue.**
+- **Domains.** The Voronoi regions of seeded centres. Each has a mix of the cell types, one
+  dominating it (a share of 0.6, the rest by gamma weights), and a direction its elongated cells
+  tend to follow.
+- **Cells** are placed by random sequential adsorption (Feder J. Random sequential adsorption.
+  *J Theor Biol* 1980;87:237–254. doi:10.1016/0022-5193(80)90358-6):
+  - a candidate's domain chooses its type, and the type its area (log-normal about the type's
+    median), elongation (uniform from 1 to the type's) and outline;
+  - a candidate closer to a placed cell than three quarters of their summed radii is refused;
+  - placement stops when the cells' nominal areas cover the fill asked for, or after 2,000
+    refusals in a row.
+- **Shapes.** A cell is an ellipse of its area and elongation. Its radius varies with direction
+  by second and third harmonics (σ 0.06 and 0.05). A pixel belongs to the cell whose scaled
+  distance to it is least, below 1. Neighbours meet where their outlines compete, and gaps remain
+  where none reaches. Each cell keeps its largest 4-connected piece; one under 8 µm² is dropped.
+- **Nuclei.** A smaller, rounder ellipse (the square root of the cell's elongation) near the
+  cell's centre, of the type's share of its radius. A share of cells (4%) have their nucleus
+  outside the section; so do nuclei of under 4 µm² within the cell.
+- **Depth.** Each cell spans its type's height, centred anywhere in the section and cut by its
+  faces; its nucleus spans the middle 60%.
+
+**The molecules.**
+- **Expression.** Each gene has a base level (gamma, shape 0.6). A type's profile is:
+  - the base levels;
+  - its markers' (base + 0.5) times its fold;
+  - the other types' markers at a fifth;
+  - all normalized to sum to one.
+
+  A cell's expected total is its type's density × its area × a size factor (log-normal, σ 0.25).
+  Each gene's count is negative binomial: mean = that total × the gene's share of the profile,
+  dispersion = the type's.
+- **Places.** A molecule lies at a uniform point of a pixel of its cell. A nucleus pixel weighs
+  the nuclear enrichment (1.5); any other pixel weighs one. It lies at a uniform depth of the cell
+  (of the nucleus, for a nuclear molecule).
+- **Displacement.** A molecule is observed displaced by a normal in x and y: σ 3 µm for a fifth
+  of molecules, 0.5 µm for the rest. In z it is displaced with σ 0.5 µm and held within the
+  section. One displaced out of the field is lost.
+- **Background.** In 50 µm tiles:
+  - each gene's count is Poisson (6 per 100 µm², spread over the genes in proportion to the
+    tissue's mean expression);
+  - each negative control probe's and codeword's is Poisson (0.05 per 100 µm²);
+  - background molecules lie uniformly in the tile and the section's depth.
+- **Quality.** A cell's molecule is below 20 with probability 0.08 (uniform in 4–20); otherwise
+  its quality is 40 less an exponential of mean 3, no lower than 20.1. Background and control
+  molecules are below 20 with probability 0.35.
+
+**The instrument and the image.**
+- **The simulated instrument** sees the nuclei in the section and grows each by 5 µm, every pixel
+  going to the nearest nucleus. Its distances are the 5-7-11 chamfer transform (Borgefors G.
+  Distance transformations in digital images. *Comput Vis Graph Image Process* 1986;34:344–371),
+  within 2% of Euclidean. This is an instrument's own approximation, deliberately not SituCraft's
+  exact expansion (§3.1). A transcript belongs to the cell holding the pixel it is observed in.
+- **The DAPI image:**
+  - each visible nucleus has a brightness (log-normal about 1,800, σ 0.25), falling to about two
+    thirds at its edge, with grain (each pixel times 1 + a normal of σ 0.15);
+  - the stain is blurred by two passes of a 3 × 3 mean, laid on a background of 80, and given
+    camera noise (a normal of σ 6);
+  - it is written as a tiled, deflate-compressed OME-TIFF with its reduced levels (lossless,
+    readable by every TIFF reader; Xenium's own images are JPEG 2000).
+
+**The bundle.** It holds every file the Xenium Onboard Analysis 2 layout requires (§1.1):
+- `experiment.xenium`: one experiment UUID for the run, derived from the parameters.
+  `analysis_sw_version` names the layout first (`xenium-2.0.0 layout, situcraft-simulate …`),
+  because readers choose how to read a bundle by it. spatialdata-io reads a bundle whose version it
+  cannot parse as XOA 1: it looks for the image elsewhere and reads cell ids another way.
+- `transcripts.parquet` with ids, instrument cells, nucleus overlap, fields of view and quality.
+- `cells.parquet` and both boundary tables.
+- The counts in both forms:
+  - `cell_feature_matrix.h5`: the 10x Genomics feature-barcode matrix in HDF5, which
+    spatialdata-io and scanpy read. It is written by SituCraft's own HDF5 writer
+    (`internal/hdf5`, from the HDF5 File Format Specification 3.0: superblock version 2, compact
+    groups, contiguous datasets, Jenkins' lookup3 checksums; h5py reads it).
+  - `cell_feature_matrix/`: Matrix Market.
+- `cells.zarr.zip` as XOA 2 lays it out: both masks, the 4 × 4 transform, the cell ids,
+  `cell_summary`, and both polygon sets with each polygon's cell (`cell_index`) and method.
+- The morphology image.
+- `metrics_summary.csv`, computed as SituCraft's validation recomputes it.
+- `gene_panel.json`.
+
+`situcraft-simulation.json` at the root says that the bundle is simulated and gives every
+parameter. SituCraft labels such a bundle simulated wherever it is shown, and its methods
+paragraph says that the data were simulated. `truth/` is a Xenium Ranger-shaped bundle of the same
+run, which SituCraft's Xenium import reads as a segmentation:
+- every true cell, with its type and whether its nucleus is in the section;
+- the true outlines, nuclei and masks;
+- every molecule's true cell, true place, origin (cell, background, control probe or codeword)
+  and kind of displacement.
+
+**Random numbers.** Each part has its own stream:
+- the layout and the panel each have one;
+- each cell has one, as does each background tile and each image row.
+
+So molecules are drawn in parallel and merged in order. Every product is rounded on its own, and
+logarithms and exponentials come from `internal/dmath`. The same parameters give the same bundle
+byte for byte on any number of threads, on arm64 and amd64 alike (the small preset's digest is
+pinned in the tests).
+
+**Validation** (`internal/simulate/gof_test.go`; fixed seeds, each test at the 0.001 level):
+- **Counts.** The randomized probability integral transform of every interior cell's count of
+  every gene (87,480 counts) is uniform (Kolmogorov–Smirnov). A studentized test of the
+  variance against the negative binomial's catches a dispersion 30% off.
+- **Places.** Every molecule's true place is in its cell, at a depth within its cell's (or
+  nucleus's). The share in nuclei matches the enrichment (z test).
+- **Displacements.** The wide and narrow displacements, divided by their σ, are standard normal
+  (Kolmogorov–Smirnov; catches a σ 5% off), as are the displacements in depth. The wide share is
+  binomial.
+- **Quality.** Both quality distributions and both low-quality shares (one catches an exponential
+  mean 3% off).
+- **Background.** Per-tile totals are Poisson (χ²; catches a density 3% off), genes are in
+  proportion to the tissue's mean expression, and places are uniform.
+- **Cells.** On a sparse tissue (1,012 cells), the standardized log areas are normal (catches a
+  median 5% off); the types are in their domains' proportions (χ²); and isolated cells' pixels
+  cover their nominal areas (median ratio within 0.97–1.04).
+- **End to end.** The small preset's bundle:
+  - passes SituCraft's validation with no warning;
+  - has every recomputed metric (16 of 16) agreeing with what it records;
+  - imports its truth through the Xenium import with no finding;
+  - is segmented and compared like a measured bundle.
+- **Other readers** (`validation/reference/read_simulation.py`; spatialdata-io 0.7.1, spatialdata
+  0.8.0, tifffile 2026.9.20, pyarrow 26.0.0). Both presets are read with no warning about the
+  bundle:
+  - spatialdata-io's Xenium reader gives the instrument's cells in `cells.parquet`'s order, each
+    labelled as its row + 1, and their gene counts;
+  - it also gives every transcript, both boundary sets, the labels and the image, each of the
+    simulation's size;
+  - tifffile reads the OME-TIFF's pixel size, channel and levels;
+  - pyarrow reads the truth's molecules by origin and its cells by type.
+
+**Reference numbers** (the standard preset, 500 × 500 µm, seed 20261014; 3.3 s and 29 MB):
+- **The tissue:** 3,030 cells (611 epithelial-like, 660 fibroblast-like, 1,113 immune-like, 646
+  endothelial-like), 2,925 nuclei in the section, 440,796 transcripts.
+- **Against the truth,** for gene transcripts of quality 20 or more:
+
+  | Segmentation | Median IoU | Assigned to a cell | Assigned to another cell than the true one |
+  |---|---|---|---|
+  | The nuclei alone | 0.27 | 32% | 68% |
+  | Nuclei grown 2 µm | 0.71 | 78% | 31% |
+  | The instrument's 5 µm expansion | 0.62 | 98.8% | 20% |
+
+  Most of the instrument's cells are larger than the true cells (1,915 of 2,925), as nucleus
+  expansion's are where it fills the gaps between cells. These are the baselines the
+  transcript-informed segmentation must beat (wave 3, slice 3).
+
 ## 4. Comparing segmentations (verified, wave 2, slice 5)
 
 Every segmentation is compared as SituCraft's own files (§3.1, §3.3): the instrument's is written
@@ -680,7 +835,30 @@ Notes:
   interquartile ranges).
 - Deutsch P, Gailly J-L. ZLIB compressed data format specification version 3.3. RFC 1950, 1996;
   Deutsch P. DEFLATE compressed data format specification version 1.3. RFC 1951, 1996 (the
-  cache's blocks, through Go's standard library).
+  cache's blocks, through Go's standard library; the simulated morphology images).
+- Feder J. Random sequential adsorption. *J Theor Biol* 1980;87:237–254.
+  doi:10.1016/0022-5193(80)90358-6 (placing simulated cells).
+- Borgefors G. Distance transformations in digital images. *Comput Vis Graph Image Process*
+  1986;34:344–371. doi:10.1016/S0734-189X(86)80047-0 (the simulated instrument's expansion).
+- Wirgin A. The inverse crime. arXiv:math-ph/0401050, 2004 (why the simulator's model differs
+  from the segmentation's).
+- O'Neill ME. PCG: a family of simple fast space-efficient statistically good algorithms for
+  random number generation. Harvey Mudd College technical report HMC-CS-2014-0905, 2014 (the
+  generator under `internal/random`, through Go's math/rand/v2).
+- Marsaglia G, Bray TA. A convenient method for generating normal variables. *SIAM Rev*
+  1964;6:260–264. Marsaglia G, Tsang WW. A simple method for generating gamma variables.
+  *ACM Trans Math Softw* 2000;26:363–372. Knuth DE. *The Art of Computer Programming*, vol. 2,
+  3rd ed., §3.4.1. Addison-Wesley, 1997 (normal, gamma and Poisson draws).
+- The HDF Group. HDF5 File Format Specification, version 3.0. 10x Genomics. Feature-barcode
+  matrices (HDF5 format), Cell Ranger and Xenium documentation (the simulated bundles'
+  `cell_feature_matrix.h5`). Jenkins B. lookup3.c, 2006, public domain (HDF5's metadata
+  checksums).
+- Sun Microsystems. fdlibm 5.3, 1993: the logarithm and exponential `internal/dmath` and
+  `web/lib/dmath.js` compute, the same in Go and JavaScript on every processor.
+- Abramowitz M, Stegun IA. *Handbook of Mathematical Functions*. National Bureau of Standards,
+  1964, 6.5.29 and 6.5.31 (the incomplete gamma function). Stephens MA. Use of the
+  Kolmogorov–Smirnov, Cramér–von Mises and related statistics without extensive tables. *J R
+  Stat Soc B* 1970;32:115–122 (the goodness-of-fit tests of `internal/stats`).
 
 ## 9. To verify before relying on it
 

@@ -9,6 +9,7 @@ package xenium
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -20,6 +21,9 @@ import (
 
 const (
 	manifestName = "experiment.xenium"
+	// SimulationFile, at a bundle's root, says the bundle is simulated (SituCraft's simulator
+	// writes it): its cells and molecules were made, with their truth, not measured.
+	SimulationFile = "situcraft-simulation.json"
 	// A folder with more files than this is not an output bundle (a mistaken home folder).
 	maxBundleFiles = 100000
 	// Small text files (manifest, metrics, panel) are read whole up to this size.
@@ -45,7 +49,9 @@ type Bundle struct {
 	// Metrics and Panel are nil when the bundle has none (or they cannot be read; see Problems).
 	Metrics *Metrics
 	Panel   *Panel
-	Files   []FileInfo
+	// Simulation is the simulation that made the bundle (nil for a measured one).
+	Simulation *Simulation
+	Files      []FileInfo
 	// Problems are what could not be read while opening (each also becomes a finding).
 	Problems []string
 	src      source
@@ -105,6 +111,13 @@ func Open(p string, opts Options) (*Bundle, error) {
 		if raw, err := b.ReadSmall("metrics_summary.csv"); err != nil {
 			b.Problems = append(b.Problems, err.Error())
 		} else if b.Metrics, err = parseMetrics(raw); err != nil {
+			b.Problems = append(b.Problems, err.Error())
+		}
+	}
+	if b.Has(SimulationFile) {
+		if raw, err := b.ReadSmall(SimulationFile); err != nil {
+			b.Problems = append(b.Problems, err.Error())
+		} else if b.Simulation, err = parseSimulation(raw); err != nil {
 			b.Problems = append(b.Problems, err.Error())
 		}
 	}
@@ -174,6 +187,8 @@ func (b *Bundle) ReadSmall(name string) ([]byte, error) {
 func (b *Bundle) Support() (level, message string) {
 	v := b.Version
 	switch {
+	case b.Simulation != nil:
+		return "simulated", fmt.Sprintf("Simulated by %s: every cell and molecule was made, not measured, and the files are laid out as Xenium Onboard Analysis 2 lays out its bundles. The truth is in %s/.", b.Simulation.Software, b.Simulation.Truth)
 	case v.Raw == "":
 		return "unknown", "The bundle does not say which software wrote it (analysis_sw_version); it is read as XOA 2.x."
 	case v.Major == 2:
@@ -262,6 +277,9 @@ func (b *Bundle) Inventory() []Item {
 	}
 	focus := add("morphology_focus", "Morphology images, in focus (DAPI and stains)", true)
 	focus.Format = "OME-TIFF (JPEG 2000)"
+	if b.Simulation != nil {
+		focus.Format = "OME-TIFF (deflate)"
+	}
 	for _, f := range b.focusFiles() {
 		focus.Files = append(focus.Files, f)
 		focus.Size += b.byPath[f].Size
@@ -275,6 +293,18 @@ func (b *Bundle) Inventory() []Item {
 	add("summary", "Web summary", false, "analysis_summary.html").Format = "HTML"
 	add("csv", "CSV copies of the tables", false, "transcripts.csv.gz", "cells.csv.gz", "cell_boundaries.csv.gz", "nucleus_boundaries.csv.gz").Format = "CSV"
 	add("aux", "Auxiliary outputs", false, "aux_outputs.tar.gz")
+	if b.Simulation != nil {
+		add("simulation", "The simulation's settings and what it made", false, SimulationFile).Format = "JSON"
+		truth := add("truth", "The simulation's truth (true cells, their types, every molecule's origin)", false)
+		prefix := strings.TrimSuffix(b.Simulation.Truth, "/") + "/"
+		for _, f := range b.Files {
+			if strings.HasPrefix(f.Path, prefix) {
+				truth.Files = append(truth.Files, f.Path)
+				truth.Size += f.Size
+				claimed[f.Path] = true
+			}
+		}
+	}
 	other := Item{Role: "other", Description: "Other files"}
 	for _, f := range b.Files {
 		if !claimed[f.Path] && !strings.HasPrefix(f.Path, "analysis/") && !strings.HasPrefix(f.Path, "aux_outputs/") {
@@ -286,6 +316,34 @@ func (b *Bundle) Inventory() []Item {
 		items = append(items, other)
 	}
 	return items
+}
+
+// Simulation is situcraft-simulation.json: what made a simulated bundle.
+type Simulation struct {
+	Format    string `json:"format"`
+	Simulated bool   `json:"simulated"`
+	Software  string `json:"software"`
+	// Truth is the folder (within the bundle) holding the truth, laid out as an output bundle of
+	// the same run.
+	Truth string `json:"truth"`
+	// Seed is the simulation's seed (in its parameters).
+	Parameters struct {
+		Seed uint64 `json:"seed"`
+	} `json:"parameters"`
+}
+
+func parseSimulation(raw []byte) (*Simulation, error) {
+	var s Simulation
+	if err := json.Unmarshal(raw, &s); err != nil {
+		return nil, fmt.Errorf("%s is not valid JSON: %w", SimulationFile, err)
+	}
+	if s.Format != "situcraft-simulation" || !s.Simulated {
+		return nil, fmt.Errorf("%s does not describe a SituCraft simulation", SimulationFile)
+	}
+	if s.Truth == "" || strings.Contains(s.Truth, "..") || strings.HasPrefix(s.Truth, "/") {
+		s.Truth = "truth"
+	}
+	return &s, nil
 }
 
 // experimentImage is the image file the manifest names, if the bundle has it, else the default.

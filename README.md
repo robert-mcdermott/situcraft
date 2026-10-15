@@ -122,6 +122,15 @@ QC, saved views and the methods paragraph.
 | `--dev` | off | Serve `web/` from the working directory (development) |
 | `--version` | | Print `situcraft X.Y.Z` and exit |
 
+## Simulated tissues
+
+`situcraft simulate <new folder>` makes a tissue whose every cell, nucleus and transcript is
+known. It writes the tissue as a Xenium output bundle labelled simulated, with the truth in its
+`truth/` folder, so that any segmentation can be scored against it. SituCraft and other tools
+(spatialdata-io among them) read the bundle as they read Xenium's. The same seed gives the same
+bundle on any computer. `situcraft simulate -h` lists the settings, and
+[Formats](docs/FORMATS.md#simulated-tissues-situcraft-simulate) describes the files.
+
 ## Documentation
 
 - [Getting started](docs/GETTING-STARTED.md): from the examples to a saved, reproducible view.

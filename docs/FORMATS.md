@@ -34,6 +34,10 @@ Coordinates are in microns throughout; images are related to them by the manifes
 (0.2125 µm at full resolution). Transcripts of quality 20 or more (Q20) are the ones counted, as
 by XOA.
 
+A bundle with `situcraft-simulation.json` at its root was made by `situcraft simulate` (below),
+not by an instrument. SituCraft reads it as any other bundle, labels it simulated wherever it is
+shown, and lists its truth (`truth/`) among its files.
+
 ### The underlying formats
 
 | Format | Specification | What SituCraft supports |
@@ -243,3 +247,41 @@ morphology image's (a fatal finding when they differ), cells without a pixel (Xe
 cannot keep them), transcripts the segmentation assigns otherwise than its mask holds at their
 pixel (Xenium Ranger assigns by the mask), a dataset without a nucleus mask, and a zipped bundle
 (Xenium Ranger reads a folder).
+
+### Simulated tissues (`situcraft simulate`)
+
+`situcraft simulate [flags] <new folder>` writes a simulated tissue as a Xenium output bundle, in
+the layout of Xenium Onboard Analysis 2, so that any tool reading Xenium data reads it. Every cell,
+nucleus and molecule is known, and the truth is written beside it. The method and its validation
+are in [research.md](../situcraft-spec/research.md) §3.4.
+
+| Flag | Default | Sets |
+| --- | --- | --- |
+| `--preset` | `standard` | The starting parameters: `standard` (500 × 500 µm, about 3,000 cells and 440,000 transcripts, in a few seconds) or `small` (160 × 120 µm) |
+| `--seed` | the preset's | The random seed. The same parameters and seed give the same bundle, byte for byte, on any computer |
+| `--width`, `--height` | the preset's | The field's size in µm: at least 20, and at most 50 million pixels in all (about 1.5 × 1.5 mm at 0.2125 µm, which needs about 4 GB of memory; 1 × 1 mm takes about 13 s and 1.7 GB) |
+| `--params` | | A JSON file of parameters, each overriding the preset's; `--print-params` prints them all, with their names |
+| `--quiet` | | Print only the summary |
+
+The folder must not exist: it is written under a temporary name beside it and renamed into place
+when complete, so an interrupted run (Ctrl+C) leaves nothing behind.
+
+| File | Holds |
+| --- | --- |
+| `situcraft-simulation.json` | `format` (`"situcraft-simulation"`), `version` (1), `simulated` (`true`), `software`, `about`, `truth` (the truth's folder), `parameters` (every parameter, with the seed) and `made` (the cells by type, nuclei in the section, the instrument's cells, the transcripts by origin) |
+| `experiment.xenium` | The run: one `experiment_uuid` derived from the parameters, the pixel size, the cell count and median transcripts per cell, the image's path. `analysis_sw_version` names the layout the files follow, then what wrote them (`xenium-2.0.0 layout, situcraft-simulate 0.3.0`): readers choose how to read a bundle by its version |
+| `transcripts.parquet` | Every observed molecule: `transcript_id` (its field of view of 250 µm in the top 16 bits), `cell_id` (the simulated instrument's cell, or `UNASSIGNED`), `feature_name`, `x_location`, `y_location`, `z_location` (µm), `qv`, `fov_name`, `overlaps_nucleus` |
+| `cells.parquet`, `cell_boundaries.parquet`, `nucleus_boundaries.parquet` | The simulated instrument's cells (Xenium's columns; `segmentation_method` "Segmented by nucleus expansion of 5.0µm") and their outlines along pixel edges |
+| `cell_feature_matrix.h5`, `cell_feature_matrix/` | Their counts of Q20 molecules of every feature: as a 10x Genomics feature-barcode matrix in HDF5 (`/matrix`: `barcodes`, `data`, `indices`, `indptr`, `shape`, and `features/` with `id`, `name`, `feature_type`, `genome`), and as Matrix Market |
+| `cells.zarr.zip` | Zarr format 2, zipped, as XOA 2 lays it out: `masks/0` (nuclei: label *p* + 1 is nucleus *p*) and `masks/1` (cells: label *k* + 1 is `cells.parquet`'s row *k*) as `uint32` labels on the image's pixels; `masks/homogeneous_transform` (4 × 4, µm to pixels); `cell_id`; `cell_summary`; and `polygon_sets/0` (nuclei) and `polygon_sets/1` (cells), each with its outlines' `vertices` and `num_vertices`, each polygon's `cell_index` and `method`; the root's attributes name the sets and the segmentation methods |
+| `morphology_focus/morphology_focus_0000.ome.tif` | The DAPI stain of the nuclei in the section: a tiled, deflate-compressed OME-TIFF with its reduced levels as SubIFDs (Xenium's own are JPEG 2000) |
+| `metrics_summary.csv`, `gene_panel.json` | The run's metrics, computed as SituCraft's validation recomputes them, and the panel: genes `SIM001`…, negative control probes `NegControlProbe_SIM01`… and codewords `NegControlCodeword_0500`… |
+| `truth/` | A Xenium Ranger-shaped bundle of the same run: `experiment.xenium`; `cells.parquet` (every true cell: `cell_type`, `nucleus_in_section`, areas, centroid, Q20 gene transcripts), both boundary tables and `cells.zarr.zip` of the true cells (the nuclei in the section numbered in their cells' order, `cell_index` naming each one's cell); `transcripts.parquet`, the observed molecules row for row with their true `cell_id`, `true_x_location`, `true_y_location`, `true_z_location`, `origin` (`cell`, `background`, `control probe`, `control codeword`) and `wide_displacement` |
+
+To score a segmentation against the truth, import `truth/` into the simulated dataset as a
+Xenium Ranger bundle (Segmentation view, **Import a segmentation**) and compare the two.
+
+Other tools read a simulated bundle as they read Xenium's: spatialdata-io's Xenium reader reads
+its table, transcripts, labels, boundaries and image with no warning, and tifffile and pyarrow
+its image and tables (`validation/reference/read_simulation.py` checks each against what the
+simulation made).

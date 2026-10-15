@@ -1061,18 +1061,77 @@ independent reference outputs.
 
 ### Wave 3
 
-1. **Simulated tissues first (S2).** `internal/simulate` and `situcraft simulate` build seeded
-   tissues with known cells. They have:
-   - shapes and densities by cell type;
-   - expression from a negative-binomial mixture;
-   - leakage and diffusion of molecules, background noise, and z structure;
-   - nuclei as the prior.
+1. **Simulated tissues first (S2): done.**
+   - **The foundations, the same on every processor:**
+     - `internal/random`: seeded PCG streams with normal, log-normal, exponential, gamma, Poisson
+       and negative binomial draws, every product rounded on its own;
+     - `internal/dmath`: fdlibm's logarithm and exponential in Go, bit for bit as
+       `web/lib/dmath.js`;
+     - `internal/stats`: the incomplete gamma function, Kolmogorov–Smirnov and χ² tests;
+     - a TIFF writer (`internal/tiff`): tiled, deflate-compressed OME-TIFF with SubIFD levels;
+     - an HDF5 writer (`internal/hdf5`): groups, fixed-length strings and integers, and
+       attributes, enough for the 10x Genomics feature-barcode matrix.
+   - **The simulator** (`internal/simulate`; research.md §3.4):
+     - domains of different composition; cell types with their own sizes, elongations, outlines,
+       densities, markers and dispersions, placed by random sequential adsorption and competing
+       for pixels;
+     - nuclei, a share outside the section; depth;
+     - negative-binomial expression by type, with a size factor;
+     - molecules enriched over nuclei, displaced by a wide/narrow normal mixture and in depth;
+       Poisson background and negative controls; quality scores;
+     - a simulated instrument segmenting by chamfer nucleus expansion; a DAPI image.
+   - **The bundle:**
+     - every file of the XOA 2 layout, so the validator, viewer, QC, expansion, imports and
+       comparison read it as a measured one;
+     - the counts also as `cell_feature_matrix.h5`, and `cells.zarr.zip` as XOA 2 lays it out,
+       so other tools (spatialdata-io) read it too;
+     - `situcraft-simulation.json` with every parameter;
+     - `truth/`, a Xenium Ranger-shaped bundle of the same run with each cell's type and each
+       molecule's true cell, place, origin and displacement.
+   - **`situcraft simulate`:**
+     - presets (`standard`, `small`), the seed, the field's size and a parameter file;
+     - written beside the folder and renamed into place; interruptible.
+   - **Labelled simulated:** the validator's support level `simulated` and an INFO finding instead
+     of the version warning; the Data view's badge and notice; the inspector; the dataset list.
+     The methods paragraph says that the data were simulated and implies no instrument.
+   - Validation:
+     - **Goodness of fit** (fixed seeds, the 0.001 level):
+       - each gene's count per cell against its negative binomial (probability integral
+         transform; a studentized variance test);
+       - molecules within their cells and depths, and the nuclear share;
+       - the displacement mixture and its share;
+       - quality scores; background per tile, by gene and in place;
+       - cell areas, types by domain, and isolated cells' pixel areas.
 
-   They are written as Xenium-shaped bundles (labeled simulated), so any segmentation, SituCraft's
-   or another tool's, can be scored against the truth. The simulator is independent of the
-   segmentation code.
-   - Validation: simulated counts and positions follow their specified distributions
-     (goodness-of-fit tests).
+       Each test was shown to fail on a deliberately wrong parameter (research.md §3.4 gives the
+       departures each catches).
+     - **End to end:**
+       - the small preset validates with no warning, every recomputed metric (16 of 16) agreeing;
+       - its truth imports through the Xenium import with no finding, and the truth's
+         transcripts match the bundle's row for row;
+       - the instrument's cells and SituCraft's expansion compare with the truth.
+     - **Reproducible:** the small preset's bundle has the same digest with one worker or many,
+       on arm64 and amd64 (pinned).
+     - **The command:** its summary, refusing an existing folder, unknown presets, parameters out
+       of range and misspelled parameter names.
+     - **In the app:** a standard bundle opened, checked, added and viewed (the stain, the
+       instrument's outlines); the QC view reproduces 14 of 14 run metrics; the methods
+       paragraph.
+     - **Other readers** (maintainer check, `validation/reference/read_simulation.py`):
+       spatialdata-io, tifffile and pyarrow read both presets as the simulation made them, with
+       no warning. h5py reads the HDF5 writer's files.
+   - **Reference numbers** (standard preset, research.md §3.4): 3,030 cells, 440,796
+     transcripts, written in 3.3 s and 29 MB. Against the truth, the instrument's 5 µm expansion
+     has a median IoU of 0.62 and puts 20% of Q20 transcripts in another cell than the true one;
+     nuclei grown 2 µm have 0.71 and 31%; the nuclei alone have 0.27 and 68%.
+   - Found by slice 1:
+     - **Nucleus expansion indexed past `cells.parquet`** when a bundle's cell mask had more
+       cells. It now refuses with the reason.
+     - **A sum of areas fused into a multiply-add on arm64,** changing `metrics_summary.csv`'s
+       last digit between processors. Products are rounded on their own.
+     - **spatialdata-io needs more than SituCraft:** the HDF5 matrix, `cells.zarr.zip`'s
+       polygon sets and cell summary, and a version it can parse. Without them it read the
+       bundle as XOA 1. All three are written.
 2. **The model (S2).**
    - Voxel lattice and cell state.
    - Poisson likelihood with per-gene background.
@@ -1125,7 +1184,9 @@ independent reference outputs.
    - Overlapping patches with stitching, so that memory is bounded for any tissue size.
    - Memory guards.
    - A scale test on a generated tissue of ~50 million transcripts, created, measured and deleted
-     (weekly workflow).
+     (weekly workflow). The simulator makes tissues that large in patches too: slice 1's holds
+     the whole image in memory, about 75 bytes a pixel, and stops at 50 million pixels (about
+     1.5 × 1.5 mm).
    - Examples (refine the Breast bundle's segmentation and compare; a simulation with known
      truth), documentation, release 0.3.0.
 

@@ -102,6 +102,10 @@ func init() {
 }
 
 func main() {
+	// Commands that run in the terminal and exit (a path of the same name is given as ./simulate).
+	if len(os.Args) > 1 && os.Args[1] == "simulate" {
+		os.Exit(runSimulate(os.Args[2:], os.Stdout, os.Stderr))
+	}
 	cfg, err := parseConfig(os.Args[1:])
 	if errors.Is(err, flag.ErrHelp) {
 		return
@@ -324,6 +328,7 @@ func parseConfig(args []string) (config, error) {
 	noOpen := flags.Bool("no-open", false, "same as --window none")
 	flags.Usage = func() {
 		fmt.Fprintln(flags.Output(), "Usage: situcraft [flags] [Xenium output bundles (folders or .zip), images (.ome.tif), tables (.parquet, .csv), polygons (.geojson), Zarr stores, projects (.scz) or folders of them...]")
+		fmt.Fprintln(flags.Output(), "       situcraft simulate [flags] <new output folder>   (a simulated tissue with its truth; situcraft simulate -h)")
 		flags.PrintDefaults()
 	}
 	files, err := parseArgs(flags, args)

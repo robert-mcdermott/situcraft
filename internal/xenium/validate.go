@@ -263,7 +263,11 @@ func (v *validator) checkInventory() error {
 				Remedy: "Unzipping the bundle once and opening the folder avoids the copy."})
 		}
 	}
-	if level := v.report.Support; level != "supported" {
+	if sim := v.b.Simulation; sim != nil {
+		v.add(Finding{Severity: Info, Code: "bundle.simulated", Title: "A simulated bundle",
+			Detail: fmt.Sprintf("Made by %s (seed %d), not by an instrument: every cell and molecule is known, and the truth is in %s/. Its files follow Xenium Onboard Analysis 2's layout.", sim.Software, sim.Parameters.Seed, sim.Truth),
+			Remedy: "To score a segmentation against the true cells, import " + sim.Truth + "/ into this dataset (the Segmentation view's Import a segmentation, as a Xenium Ranger bundle) and compare the two."})
+	} else if level := v.report.Support; level != "supported" {
 		v.add(Finding{Severity: Warning, Code: "version.untested", Title: "A version SituCraft has not been checked against", Detail: v.report.SupportMessage,
 			Remedy: "Read the rest of this report with care, and report anything that looks wrong."})
 	}

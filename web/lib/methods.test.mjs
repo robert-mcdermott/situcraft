@@ -50,3 +50,21 @@ test('a default segmentation other than the instrument\'s is described, with why
   // The instrument's own, the default, adds nothing.
   assert.equal(methodsParagraph({ dataset, report, program, segmentation: { record: { source: 'instrument' } } }).text, methodsParagraph({ dataset, report, program }).text);
 });
+
+test('a simulated dataset is said to be simulated, and no instrument or platform is implied', () => {
+  const simulated = {
+    name: 'sim-std', panel: 'SituCraft simulated panel', organism: 'Simulated', tissue: 'Simulated', region: 'simulated tissue, seed 20261014',
+    version: '2.0.0', software: 'xenium-2.0.0 layout, situcraft-simulate 0.3.0', cells: 2925, transcripts: 440796,
+    validation: { support: 'simulated', fatal: 0, warnings: 0, info: 2, metricsCompared: 16, metricsAgreeing: 16 },
+  };
+  const r = { support: 'simulated', summary: { q20GeneTranscripts: 397000, assignedFraction: 0.98, segmentationMethods: ['Segmented by nucleus expansion of 5.0µm'], segmentationCounts: [2925] } };
+  const { text, references } = methodsParagraph({ dataset: simulated, report: r, program });
+  assert.match(text, /^The data were simulated \(situcraft-simulate 0\.3\.0, simulated tissue, seed 20261014\): a tissue whose every cell, nucleus and transcript is known/);
+  assert.match(text, /The simulated instrument segmented 2,925 cells, all by nucleus expansion of 5\.0 µm\./);
+  assert.match(text, /only these were counted, as Xenium Onboard Analysis counts them/);
+  assert.match(text, /including the morphology image, checked/);
+  assert.doesNotMatch(text, /profiled|Xenium platform|JPEG 2000|analyzed by Xenium/);
+  assert.equal(references.length, 1);
+  // The record alone (no report) says the same.
+  assert.match(methodsParagraph({ dataset: simulated, program }).text, /^The data were simulated/);
+});

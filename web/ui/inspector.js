@@ -58,7 +58,7 @@ export function mountInspector(app) {
     return h('section.inspector-section',
       h('h3', icon('bundle'), d.name),
       h('dl.kv',
-        h('dt', 'Platform'), h('dd', `${d.platform} (XOA ${d.version})`),
+        h('dt', 'Platform'), h('dd', v.support === 'simulated' ? `Simulated, in ${d.platform}'s format` : `${d.platform} (XOA ${d.version})`),
         h('dt', 'Panel'), h('dd', d.panel || '—'),
         h('dt', 'Tissue'), h('dd', [d.organism, d.tissue].filter(Boolean).join(' ') || '—'),
         h('dt', 'Cells'), h('dd', Number(d.cells).toLocaleString('en-US')),

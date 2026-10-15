@@ -48,6 +48,13 @@ jobs:
         env:
           SITUCRAFT_EXPORT_DIR: ${{ runner.temp }}/exports
         run: uv run --with 'spatialdata==0.8.0' --with 'anndata==0.13.4' --with 'pyarrow==26.0.0' --with 'geopandas==1.2.0' --with 'scipy==1.18.1' python -I validation/reference/read_exports.py --check
+      - name: Simulated bundles read by spatialdata-io, tifffile and pyarrow as the simulation made them
+        run: |
+          go run . simulate --preset small --quiet "$RUNNER_TEMP/simulated-small"
+          go run . simulate --quiet "$RUNNER_TEMP/simulated-standard"
+          for b in simulated-small simulated-standard; do
+            uv run --with 'spatialdata-io==0.7.1' --with 'spatialdata==0.8.0' --with 'tifffile==2026.9.20' python -I validation/reference/read_simulation.py "$RUNNER_TEMP/$b"
+          done
       - name: The tissue viewer in headless Chrome against its data (exact samples, points, frame rate)
         env:
           SITUCRAFT_REQUIRE_DATA: '1'

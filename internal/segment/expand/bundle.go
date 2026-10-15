@@ -138,6 +138,11 @@ func FromBundle(ctx context.Context, b *xenium.Bundle, dir string, p Params, wor
 	if err != nil {
 		return nil, err
 	}
+	if ref != nil {
+		if top := maxLabel(ref); int(top) > len(cells.IDs) {
+			return nil, fmt.Errorf("the instrument's cell mask (cells.zarr.zip masks/1) has a cell %d, but cells.parquet has %d cells: the mask is not of these cells", top, len(cells.IDs))
+		}
+	}
 	rec := Recorded{
 		DistanceUm: p.DistanceUm, DistancePx: p.DistanceUm / nuc.pixelSize, Nuclei: nuc.source,
 		Distance:         "Euclidean, between pixel centres, from each nucleus's pixels",
