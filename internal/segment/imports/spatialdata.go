@@ -172,7 +172,8 @@ func scalarText(s zarr.Store, p string) string {
 	if err != nil {
 		return ""
 	}
-	if len(a.Shape) == 0 {
+	if len(a.Shape) == 0 && a.DType.Kind != 'O' {
+		// numpy's fixed-width text, one element (format 2's key "0" either way).
 		a.Shape, a.Chunks = []int{1}, []int{1}
 	}
 	v, err := a.ReadStrings()

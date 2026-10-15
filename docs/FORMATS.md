@@ -1,6 +1,6 @@
 # Formats SituCraft reads and writes
 
-What SituCraft 0.1.0 reads, what it writes, and how. Every format is read by SituCraft's own code;
+What SituCraft 0.2.0 reads, what it writes, and how. Every format is read by SituCraft's own code;
 the program needs no other software. The research notes
 ([research.md](../situcraft-spec/research.md), section 1) give the details and their sources.
 
@@ -84,9 +84,10 @@ A project is one JSON document, saved automatically in the library (`<data dir>/
 | `format`, `version` | `"situcraft-project"`, `1` |
 | `id`, `name`, `created`, `modified` | Its identity |
 | `datasets` | Each bundle: its place, run and analysis identifiers, panel, tissue, counts, pixel size, channels, a fingerprint of its files (each file's size; the SHA-256 of its manifest, metrics and panel), and its validation summary and findings |
-| `artifacts` | Results. In 0.1.0, filters: a name, a version, its parent version, its conditions, and its result (the number of cells, how many it keeps, and a checksum of which) |
+| `artifacts` | Results: filters (a name, a version, its parent version, its conditions, and its result: the number of cells, how many it keeps, and a checksum of which), and from 0.2.0 segmentations and comparisons (below) |
 | `decisions` | Recorded choices, with their reasons (from 0.2.0) |
 | `views` | Saved views (below) |
+| `exports` | The exports written from its segmentations (from 0.2.0; absent until the first) |
 | `history` | Every change, with its time |
 
 A filter's checksum is the SHA-256 of the cell count (32-bit unsigned, little-endian) followed by
@@ -102,8 +103,9 @@ view valid when the derived data are rebuilt. A link to a view is the page's add
 the project.
 
 SituCraft reads projects saved by any earlier version; a project saved by a newer version is
-refused with a message to update. A project saved by 0.1.0 is kept in
-`validation/projects/`, and every later release is checked to reopen it exactly.
+refused with a message to update. A project saved by each release (0.1.0, 0.2.0) is kept in
+`validation/projects/`, and every later release is checked to reopen it exactly and, for 0.2.0's,
+to make its artifacts again with the same checksums.
 
 A segmentation is recorded in `artifacts` (kind `segmentation`) as the artifact the program keeps:
 its id, name, dataset, state, method (name, version, citation, and the cells each of the
@@ -113,6 +115,11 @@ its check's findings; an import's also records its sources (each path imported, 
 size of the files read under it, and their digest). A comparison is recorded as kind `comparison`:
 its id, dataset, its two segmentations (`a`, `b`), state, method, parameters, the job that made it,
 its summary and findings.
+
+`exports` records each export: its id, dataset, segmentation (id and name), formats, folder, when,
+the SituCraft that wrote it, the number and size of its files, its totals and content fingerprints
+(below), what it found, and the Xenium Ranger command when it prepared one. The export's own
+`situcraft-export.json` lists every file by its SHA-256.
 
 `decisions` records each decision about a dataset's segmentations, appended and never removed:
 `{kind, dataset, artifact, rationale, by, time, comparison}`, the kind `promote-segmentation` (its
@@ -136,7 +143,7 @@ What jobs make and register is kept in `<data dir>/artifacts/<id>/`, beside a `m
 ### Segmentations SituCraft makes
 
 A segmentation SituCraft makes (nucleus expansion, from 0.2.0) or imports is an artifact of six
-files of its own. Each binary file starts with four magic bytes, a format version (`uint32`) and its body's
+files of its own; one with errors planted for practice has a seventh, `planted.json` (below). Each binary file starts with four magic bytes, a format version (`uint32`) and its body's
 length (`uint64`), little-endian, followed by the body compressed with zlib (RFC 1950/1951).
 Readers check every size before reading, and the zlib checksum.
 
@@ -149,7 +156,15 @@ Readers check every size before reading, and the zlib checksum.
 | `counts.bin` | `SCCT` | The cell-by-gene counts of gene transcripts of quality 20 or more: the genes' names, then compressed sparse rows (row offsets, gene indices, counts) |
 | `outlines.bin` | `SCOL` | Each cell's outline in µm (its largest piece, simplified to half a pixel), with its pixels, pieces and holes counted |
 
-These files are SituCraft's own; the open formats for exchange come later in wave 2.
+These files are SituCraft's own; for other tools, export a segmentation (below).
+
+A segmentation with errors planted for practice (`SituCraft planted errors`, simulated) is the
+instrument's segmentation with known errors in it, and keeps its answer key in `planted.json`:
+`format` (`"situcraft-planted-errors"`), `source` (the segmentation planted in), `params` (how many
+merges, splits, missed and grown cells, how far a grown cell reaches, the seed) and `errors`, each
+with its `kind` (`merge`, `split`, `missed`, `grown`), the source's `cells` it changed, the planted
+segmentation's cells they became (`into`), where it lies (`x`, `y`, µm) and a `note` saying what
+makes it an error. A planted segmentation is never promoted or exported.
 
 ### Comparisons
 
@@ -158,7 +173,7 @@ A comparison of two segmentations is an artifact of two files:
 | File | Magic | Holds |
 | --- | --- | --- |
 | `comparison.json` | | `format` (`"situcraft-comparison"`), `version`, `method`; the two segmentations (`a`, `b`: artifact id and name); `params` (the correspondence's and co-expression's thresholds, the regions' size, the seed); each segmentation's measures (`metricsA`, `metricsB`); the differences by class (`classes`, and each side's cells in each: `cellsA`, `cellsB`); the transcripts that changed cell (`changes`, `changesQ20`: gained, lost, moved); `iou` and `displacement` of the cells the same in both; `pixelAgreement`; the co-expression reference (`coexpression`) and the MECR's gene pairs (`mecrPairs`); and the same counts by region (`regions`: squares of `sizeUm`, row-major). A measure not taken is `null` |
-| `groups.bin` | `SCCG` | Each difference: its class (by its index in one-to-one, expanded, contracted, split, merged, rearranged, only in A, only in B, assignment-only), its cells in A and in B (indices into each segmentation's cells), the IoU, the transcripts' Jaccard and the boundary displacement (µm) of one cell in each, the gene transcripts whose cell changed, and where it lies (µm) |
+| `groups.bin` | `SCCG` | Each difference: its class (by its index in one-to-one, expanded, contracted, split, merged, rearranged, only in A, only in B, assignment-only), its cells in A and in B (indices into each segmentation's cells), the IoU, the transcripts' Jaccard and the boundary displacement (µm) of one cell in each, the gene transcripts whose cell changed, where it lies (µm), its cells' gene transcripts in A and in B, and the most pairs of mutually exclusive lineage markers one of its cells expresses together in A and in B (method version 2) |
 
 ### Jobs
 
@@ -177,5 +192,54 @@ beside it first, from its recorded place otherwise. The bundles themselves are n
 The cache (`--cache-dir`) holds what SituCraft builds from each bundle: image tiles at every zoom,
 a spatial index of the transcripts with density grids, and tiled cell outlines. These are internal
 files, versioned with SituCraft and rebuilt when their format changes; they can be deleted at any
-time. They are not for exchange: open formats for exchange (SpatialData, AnnData, Parquet,
-GeoJSON) arrive with 0.2.0.
+time. They are not for exchange: export a segmentation instead (below).
+
+### Exports
+
+An export writes one segmentation of a dataset into a folder the user names, in the formats asked
+for, beside `situcraft-export.json`. The folder is written under a temporary name beside it and
+renamed into place when complete; an existing folder is replaced only when asked and only when it
+is a SituCraft export. Coordinates are in µm, as the bundle's are; the counts are of gene
+transcripts of quality 20 or more, as every segmentation's in SituCraft. The same segmentation
+gives the same files.
+
+`situcraft-export.json`:
+
+| Field | Holds |
+| --- | --- |
+| `format`, `version` | `"situcraft-export"`, `1` |
+| `software`, `commit`, `created` | The SituCraft that wrote it, and when |
+| `dataset` | Its name, the run's experiment and analysis UUIDs, name and region, and the bundle's place |
+| `segmentation` | The segmentation's artifact id, name, method, version and citation |
+| `units` | `coordinates` (`µm`), `pixelSizeUm`, `rasterSizePx` (the label raster's width and height) |
+| `counts` | `cells`, `cellsWithOutline`, `cellsWithPixels`, `genes`, `transcripts`, `assignedTranscripts`, `countEntries`, `countSum` |
+| `content` | Fingerprints of what every format holds (below) |
+| `formats` | Each format written, with what its files hold |
+| `files` | Every file: `path`, `format`, `size`, `sha256` |
+| `findings` | What the export found (Xenium Ranger's inputs' checks): `format`, `severity`, `code`, `message`, `count` |
+| `xeniumRanger` | The prepared command: its `id`, `args` and `command` |
+
+The content fingerprints let a reader check, with any library, that it read the segmentation
+exactly, whatever the format; each is a SHA-256 in hex:
+
+- `labelsSha256`: the label raster as little-endian `uint32`, row by row (height × width);
+- `countsSha256`: a line `cell_id<TAB>gene<TAB>count<LF>` for each nonzero count, the cells in the
+  export's order and each cell's genes in the order of their names' bytes;
+- `assignmentsSha256`: a line `cell_id<LF>` for each transcript, in the order of the bundle's
+  `transcripts.parquet`, `UNASSIGNED` for a transcript in no cell.
+
+| Format | Files | Holds |
+| --- | --- | --- |
+| SpatialData Zarr (`spatialdata`) | `spatialdata.zarr/` | A SpatialData store (Marconato et al. 2025) in Zarr format 3, laid out as the spatialdata package writes one: `labels/cell_labels` (the label raster, single-scale, scaled by the pixel size into the `global` coordinate system in µm; label *k* is cell *k*), `shapes/cell_boundaries` (GeoParquet: one WKB polygon per cell with an outline, indexed by `cell_id`), `points/transcripts` (one Parquet part: `x`, `y`, `z`, `feature_name`, `cell_id`, `qv`, `transcript_id`), and `tables/table` (AnnData annotating `cell_labels`, region key `region`, instance key `cell_labels`; obs as below, with `cell_id`, `region` and `cell_labels`) |
+| AnnData Zarr (`anndata`) | `anndata.zarr/` | The counts as AnnData in Zarr format 2 (anndata's default write format until 0.13): `X` cells × genes in compressed sparse rows (`float32`), `obs` indexed by cell id with `x_centroid`, `y_centroid`, `transcript_counts`, `assigned_transcripts`, `detected_genes`, `cell_area`, `nucleus_area`, `nucleus_id`; `var` indexed by gene with `gene_ids` and `feature_types`; `obsm['spatial']` the centroids (µm); `uns['situcraft']` where it came from |
+| Parquet (`parquet`) | `parquet/*.parquet` | Four tables in Xenium's column names: `cells` (`cell_id`, `x_centroid`, `y_centroid`, `transcript_counts`, `assigned_transcripts`, `detected_genes`, `cell_area`, `nucleus_area`, `nucleus_id`), `transcripts` (`transcript_id`, `cell_id` or `UNASSIGNED`, `feature_name`, `x_location`, `y_location`, `z_location`, `qv`), `cell_boundaries` (`cell_id`, `vertex_x`, `vertex_y`: each outline's vertices, the first repeated last) and `counts` (`cell_id`, `feature_name`, `count`: the nonzero counts). GZIP-compressed pages, unsigned integers annotated as such |
+| CSV (`csv`) | `csv/*.csv.gz` | The same four tables, gzipped, numbers in their shortest exact form |
+| Matrix Market (`mex`) | `cell_feature_matrix/` | `matrix.mtx.gz` (genes × cells, 1-based, `integer general`, with a `%metadata_json` line), `features.tsv.gz` (gene id, name, `Gene Expression`) and `barcodes.tsv.gz` (cell ids), as Xenium and Cell Ranger write them |
+| GeoJSON (`geojson`) | `cell_boundaries.geojson` | A FeatureCollection: each cell with an outline as a Polygon feature (µm) whose `id` and `cell_id` name it, with its area, gene transcripts and nucleus id; a `situcraft` member says the units and the segmentation |
+| Xenium Ranger inputs (`xenium-ranger`) | `xenium-ranger/` | `cells.npy` (the label raster as a NumPy `uint32` array on the morphology image's pixels: label *k* is row *k* of `cell_labels.csv`, 0 none), `nuclei.npy` (the bundle's nucleus mask), `cell_labels.csv` (`label`, `cell_id`) and `command.sh`, Xenium Ranger's `import-segmentation` with those files and the bundle, which SituCraft does not run |
+
+Before Xenium Ranger's command is prepared, its inputs are checked: the masks' size against the
+morphology image's (a fatal finding when they differ), cells without a pixel (Xenium Ranger
+cannot keep them), transcripts the segmentation assigns otherwise than its mask holds at their
+pixel (Xenium Ranger assigns by the mask), a dataset without a nucleus mask, and a zipped bundle
+(Xenium Ranger reads a folder).

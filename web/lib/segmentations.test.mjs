@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createProject } from './project.js';
-import { addComparison, addSegmentation, comparisonRecord, comparisonsOf, decideSegmentation, INSTRUMENT_DEFAULT, segmentationDecision, promoteSegmentation, promotedSegmentation, segmentationRecord, segmentationsOf, withInstrumentSegmentation } from './segmentations.js';
+import { addComparison, addExport, addSegmentation, comparisonRecord, comparisonsOf, decideSegmentation, EXPORT_FORMATS, exportRecord, exportsOf, INSTRUMENT_DEFAULT, PLANTED_METHOD, segmentationDecision, promoteSegmentation, promotedSegmentation, segmentationRecord, segmentationsOf, withInstrumentSegmentation } from './segmentations.js';
 
 const NOW = '2026-10-14T12:00:00.000Z';
 const manifest = (id, state = 'complete') => ({
@@ -146,4 +146,47 @@ test('decisions: promote, keep or reject with a reason, appended; the default is
   // A rejected segmentation promoted again is the default again.
   p = decideSegmentation(p, { dataset: 'd1', segmentation: 'seg-a', decision: 'promote', rationale: 'On second thought', now: NOW });
   assert.equal(promotedSegmentation(p, 'd1').record.id, 'seg-a');
+});
+
+test('errors planted for practice are recorded as simulated, and never promoted', () => {
+  let p = withInstrumentSegmentation(project(), { id: 'd1', name: 'xenium-lung-2fov' }, manifest('seg-a'), NOW);
+  const planted = {
+    ...manifest('pla-c'), name: 'Planted errors (simulated)',
+    lineage: {
+      parents: [manifest('seg-a').lineage.parents[0], { kind: 'segmentation', id: 'seg-a', name: 'Instrument segmentation' }],
+      job: { id: 'j3-1', kind: 'plant', spec: {} },
+      method: { name: PLANTED_METHOD, version: '1' },
+      parameters: { merges: 20, splits: 20, missed: 10, grown: 10, grow_um: 1, seed: 20261014 },
+      software: [{ name: 'situcraft', version: '0.2.0' }],
+    },
+  };
+  p = addSegmentation(p, segmentationRecord({ id: 'd1' }, planted, NOW), NOW);
+  assert.equal(segmentationsOf(p, 'd1').find((a) => a.id === 'pla-c').source, 'planted');
+  assert.throws(() => decideSegmentation(p, { dataset: 'd1', segmentation: 'pla-c', decision: 'promote', rationale: 'Testing', now: NOW }), /simulated/);
+  const rejected = decideSegmentation(p, { dataset: 'd1', segmentation: 'pla-c', decision: 'reject', rationale: 'Its errors were found', now: NOW });
+  assert.equal(segmentationDecision(rejected, 'd1', 'pla-c').kind, 'reject-segmentation');
+});
+
+test('an export is recorded with its formats, folder, files and fingerprints', () => {
+  const p = withInstrumentSegmentation(project(), { id: 'd1', name: 'xenium-lung-2fov' }, manifest('seg-a'), NOW);
+  assert.deepEqual(exportsOf(p, 'd1'), [], 'a project without exports has none');
+  const record = segmentationsOf(p, 'd1')[0];
+  const m = {
+    created: NOW, software: 'situcraft 0.2.0', formats: { spatialdata: '…', parquet: '…' },
+    files: [{ path: 'spatialdata.zarr/zarr.json', size: 120 }, { path: 'parquet/cells.parquet', size: 880 }],
+    counts: { cells: 11898 }, content: { labelsSha256: 'ab' },
+    findings: [{ format: 'xenium-ranger', severity: 'warning', code: 'ranger.assigned-otherwise', message: '9 transcripts…', count: 9 }],
+    xeniumRanger: { command: 'xeniumranger import-segmentation --id=x' },
+  };
+  const next = addExport(p, exportRecord({ id: 'd1' }, record, m, '/data/out', NOW), NOW);
+  const [x] = exportsOf(next, 'd1');
+  assert.deepEqual(x.formats, ['spatialdata', 'parquet']);
+  assert.equal(x.files, 2);
+  assert.equal(x.size, 1000);
+  assert.equal(x.content.labelsSha256, 'ab');
+  assert.equal(x.xeniumRanger, 'xeniumranger import-segmentation --id=x');
+  assert.match(x.id, /^out-[0-9a-z]{6,}/);
+  assert.match(next.history.at(-1).detail, /Exported instrument segmentation of xenium-lung-2fov as spatialdata, parquet into \/data\/out \(2 files by SHA-256\)/);
+  assert.deepEqual(exportsOf(next, 'd2'), []);
+  for (const f of ['spatialdata', 'anndata', 'parquet', 'csv', 'mex', 'geojson', 'xenium-ranger']) assert.ok(EXPORT_FORMATS[f]?.label, f);
 });

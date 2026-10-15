@@ -36,12 +36,18 @@ jobs:
       - uses: astral-sh/setup-uv@v6
       - name: The Lung bundle as SpatialData, written by spatialdata-io (for the import test)
         run: uv run --with 'spatialdata-io==0.7.1' --with 'spatialdata==0.8.0' python -I validation/spatialdata.py
-      - name: Readers against independent readers, bundle validation (real, zipped and broken bundles), the derived-data cache, and segmentations made and imported
+      - name: Readers against independent readers, bundle validation (real, zipped and broken bundles), the derived-data cache, segmentations made and imported, and exports (kept for the next step)
         env:
           SITUCRAFT_REQUIRE_DATA: '1'
           SITUCRAFT_REQUIRE_SPATIALDATA: '1'
+          # Outside the cached folder: the exports are rewritten each run.
+          SITUCRAFT_EXPORT_DIR: ${{ runner.temp }}/exports
           JP2K_ZSTACK_ALL: '1'
-        run: go test -v -run 'Real|Readers|Bundle' . ./validation/ ./internal/jp2k/ ./internal/xenium/ ./internal/cache/ ./internal/view/ ./internal/segment/... ./internal/compare/
+        run: go test -v -run 'Real|Readers|Bundle' . ./validation/ ./internal/jp2k/ ./internal/xenium/ ./internal/cache/ ./internal/view/ ./internal/segment/... ./internal/compare/ ./internal/export/
+      - name: The exports read by spatialdata, anndata, pandas, scipy, geopandas and numpy, as the committed check recorded
+        env:
+          SITUCRAFT_EXPORT_DIR: ${{ runner.temp }}/exports
+        run: uv run --with 'spatialdata==0.8.0' --with 'anndata==0.13.4' --with 'pyarrow==26.0.0' --with 'geopandas==1.2.0' --with 'scipy==1.18.1' python -I validation/reference/read_exports.py --check
       - name: The tissue viewer in headless Chrome against its data (exact samples, points, frame rate)
         env:
           SITUCRAFT_REQUIRE_DATA: '1'

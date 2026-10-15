@@ -20,17 +20,21 @@ tissue-level spatial analysis one reproducible workflow:
 SituCraft runs as one self-contained program on macOS, Linux and Windows. It opens as a desktop
 window, needs no other software, and keeps your data on your computer.
 
-**Status:** 0.1.0, the first release. SituCraft opens a Xenium output bundle (folder or zip),
-reads every byte of it with its own readers, validates it (fatal problems, warnings and notes, and
-22 of the run's recorded values recomputed from its data) and records it in a project. It builds
-the dataset's derived data once, and its tissue viewer shows the morphology stains, the
-transcripts of chosen genes and the cells at any zoom, every image sample exactly as recorded. Its
-QC view explains the run's metrics, maps quality over the tissue, links plots to the tissue, and
-keeps cell filters as reproducible versions. Saved views reopen exactly, from the project or a
-link; a methods paragraph is written from what the project records; projects travel as archives
-with their bundles. Two public example datasets download in a click, each with a guided tour.
-Segmentation comes next (0.2.0 compares segmentations, 0.3.0 builds one in): see the
-[roadmap](situcraft-spec/roadmap.md) and the [changelog](CHANGELOG.md).
+**Status:** 0.2.0. SituCraft opens a Xenium output bundle (folder or zip), reads every byte of it
+with its own readers, validates it (fatal problems, warnings and notes, and 22 of the run's
+recorded values recomputed from its data) and records it in a project. Its tissue viewer shows the
+morphology stains, the transcripts of chosen genes and the cells at any zoom, every image sample
+exactly as recorded; its QC view explains the run's metrics, maps quality over the tissue and keeps
+cell filters as reproducible versions. Since 0.2.0, segmentations are artifacts with their lineage:
+the instrument's, SituCraft's own nucleus expansion, and other tools' imported from SpatialData,
+Baysor, GeoJSON or Xenium Ranger. Any two are compared cell by cell, with measures of transcripts
+given to the wrong cell; a workspace shows both on the tissue, ranks their differences for review,
+and records the decision that promotes one, with its reason. Any segmentation exports to
+SpatialData, AnnData, Parquet, CSV, Matrix Market and GeoJSON, or is prepared for Xenium Ranger,
+every file listed by its SHA-256. Programs drive the window by remote control. Two public example
+datasets download in a click, each with a guided tour and a worked example. Transcript-informed
+segmentation built in comes next (0.3.0): see the [roadmap](situcraft-spec/roadmap.md) and the
+[changelog](CHANGELOG.md).
 
 ## A look around
 
@@ -49,6 +53,14 @@ it can be recomputed from the data; quality mapped over the tissue; plots linked
 
 The Breast example's cells, colored by how the instrument found each one.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/workspace-dark.webp">
+  <img alt="The Compare workspace: the Breast example's instrument segmentation and a 5 µm nucleus expansion side by side on the tissue, cells filled by the class of their difference, the review queue's first split chosen and described in the inspector" src="docs/images/workspace-light.webp">
+</picture>
+
+The comparison workspace: two segmentations on the tissue with one camera, their differences
+ranked for review, and the decision recorded with its reason.
+
 More: [checking a bundle](docs/images/data-light.webp), [the tissue's stains](docs/images/viewer-light.webp),
 [transcripts outside cells](docs/images/qc-outside-light.webp), [filters as versions](docs/images/qc-filter-light.webp),
 [saved views](docs/images/saved-views-light.webp), [the methods paragraph](docs/images/methods-light.webp),
@@ -56,7 +68,9 @@ More: [checking a bundle](docs/images/data-light.webp), [the tissue's stains](do
 [nucleus expansion compared with the instrument's segmentation](docs/images/expansion-light.webp),
 [a segmentation imported from SpatialData](docs/images/import-light.webp),
 [two segmentations compared](docs/images/comparison-light.webp),
-[the comparison workspace](docs/images/workspace-light.webp) and [its disagreement map](docs/images/workspace-map-light.webp),
+[the comparison workspace's disagreement map](docs/images/workspace-map-light.webp),
+[a worked example finding planted errors](docs/images/worked-light.webp),
+[exporting a segmentation](docs/images/export-light.webp),
 [the Jobs view](docs/images/jobs-light.webp).
 
 ## Install
@@ -134,7 +148,7 @@ go run . --dev --window none             # serve web/ from disk at http://127.0.
 ```
 
 The web app is plain ES modules with no build step and no dependencies. CI tests each commit
-once. A release is a tag (`v0.1.0`) whose files CI has passed on; the release workflow builds the
+once. A release is a tag (`v0.2.0`) whose files CI has passed on; the release workflow builds the
 six binaries and drafts the release.
 
 ## Example data

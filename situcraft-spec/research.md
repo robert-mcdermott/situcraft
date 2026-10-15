@@ -527,6 +527,43 @@ On Breast, whose cells the instrument drew mostly from stains, the expansion ass
 transcripts (94.7% against 86.6%) at the cost of more spurious co-expression, as Jones et al.
 found of expansions; on Lung, segmented by the instrument the same way, the two are alike.
 
+### 4.1 Errors planted for practice (verified, wave 2, slice 7)
+
+The Lung worked example plants errors in the instrument's segmentation (`internal/segment/plant`,
+seed 20261014): 20 merges of neighbouring cells sharing at least 8 pixel edges, each with 30 gene
+transcripts or more, chosen first among the pairs whose merged cell would express two lineage
+markers neither does alone (the comparison's own marker pairs), then among the quarter least alike
+by the cosine of their counts; 20 splits of cells larger than the median with 40 gene transcripts
+or more, cut across their long axis (the pixels' second moments) through the centroid; 10 cells
+with 20 gene transcripts or more dropped; and 10 cells with three neighbours or more grown by
+1 µm into their neighbours' pixels and the background. Each error's cells and their neighbours are
+kept from every other error's. The transcripts of changed cells go to the cell holding their pixel
+afterwards; every other transcript keeps its cell.
+
+**Measured (Lung, the comparison of the instrument's segmentation with the planted one):** 11,811
+cells one-to-one; the 20 merges each a merged difference, every merged cell mixing more pairs of
+mutually exclusive markers than its two cells (so ranked by contamination they come first); the
+20 splits each a split; the 10 missed cells each only in the instrument's; the 10 grown cells each
+expanded (7 of their neighbours contracted); no other difference, and no other cell's transcripts
+changed. A first reach of 2 µm made four grown cells take more than half of a neighbour, and so
+"rearranged" differences: Lung's cells are small (median 48.5 µm²).
+
+### 4.2 Exports (verified, wave 2, slice 7)
+
+**Measured: the Lung instrument segmentation exported in every format** (11,898 cells, 289 genes,
+825,885 transcripts of which 809,249 assigned, 294,927 nonzero counts summing to 731,083). Read
+back by SituCraft, the SpatialData store imports as the same segmentation: every pixel, every
+transcript's cell and every count (the content fingerprints equal). Read by spatialdata 0.8.0,
+anndata 0.13.4 (zarr 3.4.1), pyarrow 26.0.0 and pandas 3.0.6, scipy 1.18.1, geopandas 1.2.0 and
+numpy 2.5.4 (`validation/reference/read_exports.py`, `exports.json`), every format gives the
+manifest's totals and the fingerprints it holds; spatialdata finds the table annotating the labels
+(region `cell_labels`, instance key `cell_labels`), the labels scaled by 0.2125 into µm and the
+points and shapes in µm. geopandas finds 44 of the 11,898 outlines invalid: the instrument's own
+polygons whose edges cross (§1, wave 1 found the same 44). Xenium Ranger's masks are the
+morphology image's size (5,791 × 3,553), with the bundle's nuclei; 9 transcripts (8 gene
+transcripts of quality 20 or more) are assigned by the instrument otherwise than its own mask holds
+at their pixel (§3.1: the 8 it records off its mask).
+
 ## 5. Cell typing (wave 4)
 
 - **Normalization:** library-size normalization and log1p.
@@ -618,16 +655,25 @@ Notes:
 - Okabe A, Boots B, Sugihara K, Chiu SN. *Spatial Tessellations: Concepts and Applications of
   Voronoi Diagrams*, 2nd ed. Wiley, 2000 (nucleus expansion).
 - Marconato L, Palla G, Yamauchi KA, et al. SpatialData: an open and universal data framework
-  for spatial omics. *Nat Methods* 2025;22:58–62. doi:10.1038/s41592-024-02212-x (imports).
+  for spatial omics. *Nat Methods* 2025;22:58–62. doi:10.1038/s41592-024-02212-x (imports and
+  exports).
 - Virshup I, Rybakov S, Theis FJ, Angerer P, Wolf FA. anndata: Access and store annotated data
-  matrices. *J Open Source Softw* 2024;9(101):4371. doi:10.21105/joss.04371 (tables).
+  matrices. *J Open Source Softw* 2024;9(101):4371. doi:10.21105/joss.04371 (tables; the AnnData
+  export).
 - Okabe M, Ito K. Color Universal Design (CUD): how to make figures and presentations that are
   friendly to colorblind people. J*FLY, 2008 (the comparison workspace's two overlay colours).
 - Hartman A, Satija R. Comparative analysis of multiplexed in situ gene expression profiling
   technologies. bioRxiv 2024. doi:10.1101/2024.01.11.575135 (the mutually exclusive
   co-expression rate).
 - Butler H, Daly M, Doyle A, Gillies S, Hagen S, Schaub T. The GeoJSON Format. RFC 7946, 2016;
-  OGC Simple Features (well-known binary); GeoParquet 1.0 (imports).
+  OGC Simple Features (well-known binary); GeoParquet 1.0 (imports and exports).
+- Boisvert RF, Pozo R, Remington KA. The Matrix Market exchange formats: initial design. NIST
+  Interagency Report 5935, 1996 (the Matrix Market export).
+- Kern R. A simple file format for NumPy arrays. NumPy Enhancement Proposal 1, 2007 (the `.npy`
+  masks for Xenium Ranger).
+- Apache Parquet format specification (parquet-format: file layout, `parquet.thrift`,
+  Encodings.md) and the Apache Thrift compact protocol specification (the Parquet reader and
+  writer); the Zarr storage specifications, formats 2 and 3 (the Zarr reader and writer).
 - Hyndman RJ, Fan Y. Sample quantiles in statistical packages. *Am Stat* 1996;50:361–365
   (the QC plots' quantiles, type 7).
 - Tukey JW. *Exploratory Data Analysis*. Addison-Wesley, 1977 (box plots, whiskers at 1.5

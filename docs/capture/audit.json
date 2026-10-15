@@ -170,6 +170,26 @@
   "violations": []
  },
  {
+  "scene": "worked",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "worked",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "export",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "export",
+  "theme": "light",
+  "violations": []
+ },
+ {
   "scene": "jobs",
   "theme": "dark",
   "violations": []

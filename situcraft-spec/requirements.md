@@ -156,10 +156,10 @@ Status: **planned (wave N)** until built. Then **done**, **partial** (the gap no
 
 | # | Requirement | Status |
 | --- | --- | --- |
-| E1 | SpatialData Zarr export (images optional, shapes, points, AnnData table, transformations) | planned (wave 2) |
-| E2 | AnnData Zarr, Parquet, CSV, Matrix Market and GeoJSON exports | planned (wave 2) |
-| E3 | A command for a user-installed Xenium Ranger `import-segmentation`, prepared with validated inputs | planned (wave 2) |
-| E4 | Methods text written from the actual metadata, citing every method used | partial (wave 1, slice 7: a paragraph per dataset from its record, validation and filters, citing the platform, the data's source and SituCraft's version; later waves add their methods, wave 8 the full record) |
+| E1 | SpatialData Zarr export (images optional, shapes, points, AnnData table, transformations) | done (wave 2, slice 7: Zarr format 3 as the spatialdata package writes it, without images: the label raster, GeoParquet outlines, transcripts as points with their cells, the AnnData table annotating the labels, each element's transformation to µm; read by spatialdata 0.8.0 exactly, and imported back by SituCraft as the same segmentation) |
+| E2 | AnnData Zarr, Parquet, CSV, Matrix Market and GeoJSON exports | done (wave 2, slice 7: each export's files listed by SHA-256 with content fingerprints every format shares; read back by SituCraft's readers, and by anndata, pyarrow, pandas, scipy and geopandas in a maintainer-run check whose result is committed) |
+| E3 | A command for a user-installed Xenium Ranger `import-segmentation`, prepared with validated inputs | done (wave 2, slice 7: the cells and the bundle's nuclei as NumPy label masks on the morphology image's pixels, checked for size, cells without pixels, transcripts assigned otherwise than the mask holds, a dataset without nuclei and a zipped bundle; the command written and shown, never run) |
+| E4 | Methods text written from the actual metadata, citing every method used | partial (wave 1, slice 7: a paragraph per dataset from its record, validation and filters, citing the platform, the data's source and SituCraft's version; wave 2, slice 7: a default segmentation other than the instrument's, its method, citation and the decision choosing it with the comparison it rests on; later waves add their methods, wave 8 the full record) |
 | E5 | Recipes: a job's spec as readable JSON, re-runnable headless | planned (waves 3, 9) |
 | E6 | Figures (SVG, PDF, PNG) with scale bar, legend and provenance | planned (wave 8) |
 | E7 | A certificate that `situcraft verify` checks by recomputing | planned (wave 8) |

@@ -1,9 +1,12 @@
 # Changelog
 
-## 0.2.0 (unreleased)
+## 0.2.0 (2026-10-14)
 
 Wave 2 of the [roadmap](situcraft-spec/roadmap.md): segmentations become artifacts to compare,
-review and choose between. Built slice by slice; this section grows with each.
+review and choose between, and to export. The instrument's segmentation is the first; SituCraft's
+nucleus expansion the second; other tools' are imported. Any two are compared cell by cell, reviewed
+on the tissue, and one promoted with its reason; any is exported in open formats, every file listed
+by its SHA-256.
 
 ### Added
 
@@ -113,13 +116,57 @@ review and choose between. Built slice by slice; this section grows with each.
   - the measures' header warns when a measure rests on little.
   - Comparisons appear in the project tree. Remote control gains `show_comparison` and
     `decide_segmentation` (27 actions).
-- **Screenshots** of the documentation: 18 scenes in both themes, captured through remote control
+- **Exports (wave 2, slice 7).** **Export a segmentation**, in the Segmentation view, writes any
+  of a dataset's segmentations into one folder, in the formats chosen:
+  - **SpatialData Zarr:** the cells as a label image and as polygons, the transcripts as points
+    with their cells, and the counts as an AnnData table annotating the labels, laid out as the
+    spatialdata package writes a store, in µm;
+  - **AnnData Zarr:** the counts with each cell's measures and centroid;
+  - **Parquet and CSV:** cells, transcripts with their cells, outlines and counts, in Xenium's
+    column names;
+  - **Matrix Market:** the counts as Xenium and Cell Ranger write them;
+  - **GeoJSON:** each cell's outline as a polygon naming it;
+  - **Xenium Ranger's inputs:** the cells and the bundle's nuclei as label masks on the morphology
+    image's pixels, checked (their size, cells without pixels, transcripts assigned otherwise than
+    the mask holds, a dataset without nuclei, a zipped bundle), and the `import-segmentation`
+    command, shown with a button to copy it. SituCraft does not run it.
+  - Beside the files, `situcraft-export.json` says what was exported, from what and by which
+    SituCraft, lists every file by its SHA-256, and fingerprints the label image, the counts and
+    the transcripts' cells, which every format holds the same.
+  - The export runs as a job, written under a temporary name and renamed into place; a folder
+    that exists is replaced only when asked, and only when it is a SituCraft export. The project
+    records each export.
+  - SituCraft's own writers: Parquet, Zarr (formats 2 and 3), AnnData, NumPy arrays, Matrix
+    Market and GeoJSON, each read back by its readers in the tests.
+- **Worked examples and practice (wave 2, slice 7).**
+  - Each example has a **worked example**, a question answered step by step, saying first what to
+    expect. Some steps run a job before going on (the card's button says what it does), others
+    open the comparison in the workspace as they describe it.
+    - **Breast:** the instrument's cells, drawn from stains, against a 5 µm nucleus expansion.
+    - **Lung:** find the planted errors.
+  - **Practice: find planted errors** copies the instrument's segmentation with known errors in
+    it (neighbouring cells of different lineages merged, large cells split, cells missed, cells
+    drawn too wide), recorded as a segmentation, simulated, with its answer key. The answer key
+    lists every error and takes you to it in the workspace. It is offered on the example datasets;
+    on your own, only once you turn on **Practice tools for every dataset** (the theme button's
+    menu). A planted segmentation is never promoted or exported.
+- **The methods paragraph** describes a dataset's default segmentation when it is not the
+  instrument's: its method and citation, the cells it gives, and the decision choosing it with the
+  comparison it rests on.
+- **Remote control** gains `plant_errors` and `export_segmentation` (29 actions; exporting needs
+  the token, as it writes files), and `tour` takes a worked example and does its steps' jobs.
+- **Screenshots** of the documentation: 20 scenes in both themes, captured through remote control
   from the development bundles (`node docs/capture/capture.mjs`), in the README and the
   getting-started guide.
 - **A cell by its ID:** the program finds a cell by its `cell_id` as well as by its row.
 
 ### Fixed
 
+- **A dataset opened by several requests at once** (the Compare view's, when no other view had
+  opened the dataset first) could be closed by one while another read it, and answered "damaged
+  cache file": one request now opens it while the others wait for it.
+- **A SpatialData table's region** written as a text scalar in Zarr format 3 was read from its
+  attributes only: zero-dimensional text arrays are now read.
 - **The viewer suite on CI,** which fetches only the Lung bundle: it counted the jobs of two
   bundles.
 - **The documentation's screenshots** no longer show a path of the computer that took them in a
@@ -132,6 +179,34 @@ review and choose between. Built slice by slice; this section grows with each.
 
 ### Validation
 
+- **Exports and worked examples (slice 7):**
+  - **Go tests:** the Parquet, Zarr and AnnData writers' files read back as written by SituCraft's
+    readers (and by pyarrow, zarr-python and anndata when they were written); every format of a
+    fixture segmentation read back, the SpatialData store imported as the same segmentation and the
+    GeoJSON polygons with the Parquet or CSV transcripts giving every transcript's cell; the same
+    segmentation giving the same files; an existing folder replaced only as the rules allow.
+  - **The Lung bundle's own segmentation exported in every format:** imported back from
+    SpatialData exactly (the same fingerprints); Xenium Ranger's masks of the morphology image's
+    size with the bundle's nuclei. **Read by spatialdata 0.8.0, anndata 0.13.4, pyarrow, pandas,
+    scipy, geopandas and numpy** (`validation/reference/read_exports.py`, run by the maintainer
+    and weekly), every format gives the manifest's totals and fingerprints; the result is
+    committed (`validation/reference/exports.json`) and the real-data tests check SituCraft still
+    writes it.
+  - **Planted errors:** on hand-made tissue and on the Lung bundle, the comparison finds each
+    planted error as what it is (every merge merged, mixing lineage markers; every split split;
+    every missed cell only in the instrument's; every grown cell expanded) and nothing else; the
+    same seed plants the same errors.
+  - **Node tests:** planted segmentations recorded as such and never promoted; exports recorded;
+    every worked example's steps doable in order; the methods' sentence for a default segmentation.
+  - **In headless Chrome** (80 checks): the Lung worked example plants, compares and opens the
+    queue on a planted error, and by contamination a merge comes first; every planted error is
+    the difference it should be, and a planted segmentation is never exported;
+    `export_segmentation` writes only with the token and the
+    SpatialData export imports back as the instrument's segmentation; the Breast worked example
+    gives 263 splits, 128 merges and 119 cells only in the instrument's; the project saved by 0.2.0
+    (`validation/projects/`) opens, and every artifact it records is made again with the same
+    checksums.
+  - **Every screenshot scene in both themes** passes axe-core (40 captures, no violation).
 - **The comparison workspace (slice 6):**
   - **Node tests** of the review queue's rankings and rules, the cautions, and the decisions'
     rules; **Go tests** of each segmentation's outline tiles and of a comparison's differences.
@@ -209,7 +284,7 @@ review and choose between. Built slice by slice; this section grows with each.
   - the methods cite the data and SituCraft;
   - `export` writes the project only with the token.
 - **Every screenshot scene in both themes** passes axe-core's WCAG 2.1 A and AA rules
-  (`docs/capture/audit.json`, 36 captures, no violation).
+  (`docs/capture/audit.json`, no violation).
 
 ## 0.1.0 (2026-10-14)
 

@@ -38,7 +38,7 @@
 
 import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -445,7 +445,7 @@ export async function viewerSuite({ check, MissingData, verbose }) {
         const recorded = JSON.parse(readFileSync(join(root, 'validation', 'projects', '0.1.0-lung.situcraft.json'), 'utf8')).artifacts.find((a) => a.version === 2).result;
         check('viewer', 'remote control: a filter saved by a program keeps the cells the 0.1.0 project\'s identical filter recorded', filter.ok ? `${filter.data.kept} kept, SHA-256 ${filter.data.sha256 === recorded.sha256 ? 'the same' : 'different'}` : filter.message, filter.ok && filter.data.kept === recorded.kept && filter.data.sha256 === recorded.sha256, 'the same cells and checksum');
         const methods = await act('methods', { dataset: 'xenium-lung-2fov' });
-        check('viewer', 'remote control: the methods paragraph, citing the data and SituCraft', methods.ok ? `${methods.data.references.length} references` : methods.message, methods.ok && /SituCraft 0\.1\.0/.test(methods.data.text) && methods.data.references.some((r) => r.includes('10x Genomics')), 'the version and the data cited');
+        check('viewer', 'remote control: the methods paragraph, citing the data and SituCraft', methods.ok ? `${methods.data.references.length} references` : methods.message, methods.ok && methods.data.text.includes(`SituCraft ${info.version}`) && methods.data.references.some((r) => r.includes('10x Genomics')), 'the version and the data cited');
         const target = join(work, 'project.json');
         const refused = await act('export', { what: 'project', path: target }, false);
         const exported = await act('export', { what: 'project', path: target });
@@ -510,6 +510,138 @@ export async function viewerSuite({ check, MissingData, verbose }) {
         if (present.includes('xenium-breast-2fov')) {
           const otherRun = await act('import_segmentation', { dataset: 'xenium-lung-2fov', format: 'xenium', paths: [join(dataRoot, 'xenium-breast-2fov')] });
           check('viewer', 'an output bundle of another run is refused, saying why', otherRun.message ?? otherRun.error, !otherRun.ok && /another run|of run/.test(otherRun.message ?? otherRun.error ?? ''), 'refused: another run');
+        }
+
+        // The worked example on the Lung data (wave 2, slice 7): errors planted for practice, found
+        // by the comparison, each as what it is; the planted segmentation rejected, never promoted.
+        const started = await chrome.eval(`(async () => {
+          const app = window.situcraft;
+          const { guideFor } = await import('/lib/tours.js');
+          const { startTour } = await import('/ui/tour.js');
+          const dataset = app.store.project.datasets.find((d) => d.name === 'xenium-lung-2fov');
+          startTour(app, { tour: guideFor('xenium-lung-2fov', 'planted-errors'), dataset: dataset.id });
+          return app.tour.tour.steps.length;
+        })()`);
+        const planting = await act('tour', { run: true });
+        const comparing = await act('tour', { run: true });
+        const pc = comparing.data?.comparison;
+        check('viewer', 'the worked example plants errors, compares, and opens the review queue on them', `${started} steps; ${planting.message ?? planting.error}; ${comparing.ok ? `step ${comparing.data.step}, ${pc?.queue} differences, the first ${pc?.selected?.class}` : comparing.message}`,
+          planting.ok && planting.data.step === 2 && comparing.ok && comparing.data.step === 3 && pc?.queue === 67 && ['merged', 'split', 'only in A'].includes(pc?.selected?.class), 'step 3: 67 differences, a planted one first');
+        const contamination = await act('tour', { step: 4 });
+        check('viewer', 'ranked by contamination, a planted merge comes first', contamination.message ?? contamination.error, contamination.ok && contamination.data.comparison?.rank === 'contamination' && contamination.data.comparison?.selected?.class === 'merged', 'merged');
+        const key = await act('plant_errors', { dataset: 'xenium-lung-2fov', reveal: true });
+        await act('show_comparison', { dataset: 'xenium-lung-2fov' });
+        const found = key.ok ? await chrome.eval(`(() => {
+          const w = window.situcraft.compareView.current();
+          const errors = ${JSON.stringify(key.data?.errors ?? [])};
+          const want = { merge: 'merged', split: 'split', missed: 'only in A', grown: 'expanded' };
+          const wrong = errors.filter((e) => {
+            const at = w.prepared.idsA.indexOf(e.cells[0]);
+            return at < 0 || w.groups[w.prepared.ofA[at]].class !== want[e.kind];
+          }).map((e) => e.kind + ' ' + e.cells[0]);
+          const planted = new Set(errors.flatMap((e) => e.cells));
+          const stray = w.groups.filter((g) => g.class !== 'one-to-one' && !g.a.some((c) => planted.has(w.prepared.idsA[c]))).length;
+          return { errors: errors.length, wrong, stray };
+        })()`) : null;
+        check('viewer', 'every planted error is the difference it should be, and nothing else differs', found ? `${found.errors} errors; ${found.wrong.length ? `wrong: ${found.wrong.slice(0, 4).join(', ')}` : 'each as planted'}; ${found.stray} other differences` : key.message, found && found.errors === 60 && !found.wrong.length && found.stray === 0, '60, each as planted; no other');
+        const promotePlanted = await act('decide_segmentation', { dataset: 'xenium-lung-2fov', segmentation: 'Planted errors (simulated)', decision: 'promote', rationale: 'Testing' });
+        const rejectPlanted = await act('decide_segmentation', { dataset: 'xenium-lung-2fov', segmentation: 'Planted errors (simulated)', decision: 'reject', rationale: 'Its planted errors were found' });
+        check('viewer', 'a planted segmentation is never promoted, and is rejected with its reason', `${promotePlanted.message}; ${rejectPlanted.message ?? rejectPlanted.error}`, !promotePlanted.ok && /simulated/.test(promotePlanted.message) && rejectPlanted.ok, 'refused; rejected');
+        await act('tour', { end: true });
+
+        // Exports (wave 2, slice 7): only with the token; the manifest's totals; recorded in the
+        // project; the SpatialData store imported back as the instrument's segmentation.
+        const folder = join(work, 'exports', 'xenium-lung-2fov instrument');
+        mkdirSync(join(work, 'exports'), { recursive: true });
+        const exportArgs = { dataset: 'xenium-lung-2fov', segmentation: 'Instrument segmentation', formats: ['spatialdata', 'parquet', 'xenium-ranger'], folder };
+        const refusedExport = await act('export_segmentation', exportArgs, false);
+        const exportedSeg = await act('export_segmentation', exportArgs);
+        const em = exportedSeg.data ?? {};
+        const recordedExport = await chrome.eval(`(() => (window.situcraft.store.project.exports ?? []).map((x) => ({ folder: x.folder, files: x.files, formats: x.formats.join(), labels: x.content?.labelsSha256 })))()`);
+        check('viewer', 'remote control: export_segmentation writes SpatialData, Parquet and Xenium Ranger\'s inputs only with the token, and the project records it', `${refusedExport.status} without; ${exportedSeg.message ?? exportedSeg.error}`,
+          refusedExport.status === 401 && exportedSeg.ok && em.counts?.cells === 11898 && em.files.length > 10 && /--cells=/.test(em.xeniumRanger?.command ?? '') && recordedExport.length === 1 && recordedExport[0].labels === em.content?.labelsSha256 && existsSync(join(folder, 'situcraft-export.json')), '401, then 11,898 cells written and recorded');
+        const plantedExport = await act('export_segmentation', { dataset: 'xenium-lung-2fov', segmentation: 'Planted errors (simulated)', formats: ['geojson'], folder: join(work, 'exports', 'planted') });
+        check('viewer', 'a planted segmentation is never exported', plantedExport.message ?? plantedExport.error, !plantedExport.ok && /simulated/.test(plantedExport.message ?? '') && !existsSync(join(work, 'exports', 'planted')), 'refused, nothing written');
+        const back = await act('import_segmentation', { dataset: 'xenium-lung-2fov', format: 'spatialdata', paths: [join(folder, 'spatialdata.zarr')], tool: 'SituCraft export' });
+        const bs = back.data?.summary ?? {};
+        check('viewer', 'the exported SpatialData store imports back as the instrument\'s segmentation', back.message ?? back.error, back.ok && back.data.state === 'complete' && bs.cells === 11898 && Math.abs(bs.assignedFraction - segmentations.data.segmentations[0].summary.assignedFraction) < 1e-9, '11,898 cells, the same assigned fraction');
+
+        // The project as 0.2.0 saved it (validation/projects/0.2.0-lung.situcraft.json): written
+        // when asked (SITUCRAFT_WRITE_FIXTURE=1), the places of this run's folders made neutral and
+        // given its own id; then
+        // reopened, and every artifact SituCraft made that it records is made again by this build
+        // with the same files' checksums (a comparison by its differences: its comparison.json
+        // records the jobs' times).
+        const fixture2Path = join(root, 'validation', 'projects', '0.2.0-lung.situcraft.json');
+        if (process.env.SITUCRAFT_WRITE_FIXTURE) {
+          const doc = await chrome.eval(`(async () => {
+            const app = window.situcraft;
+            const { rename, serializeProject } = await import('/lib/project.js');
+            app.store.commit(rename(app.store.project, 'Lung example, as SituCraft 0.2.0 saved it'), 'Rename');
+            return serializeProject(app.store.project);
+          })()`);
+          // Its own id: it grew from the 0.1.0 project in this run.
+          const neutral = JSON.parse(doc.split(join(dataRoot, 'xenium-lung-2fov')).join('/data/examples/xenium-lung-2fov').split(work).join('/data/work'));
+          writeFileSync(fixture2Path, `${JSON.stringify({ ...neutral, id: 'p-situcraft-0-2-0-lung' }, null, 1)}\n`);
+        }
+        if (existsSync(fixture2Path)) {
+          const text2 = readFileSync(fixture2Path, 'utf8');
+          const fixture2 = JSON.parse(text2);
+          // An import of SituCraft's own export is not made again by another version: the export's
+          // files name the SituCraft that wrote them, so their checksums, and the import's id, differ.
+          const made = fixture2.artifacts.filter((a) => (a.kind === 'segmentation' && a.source !== 'instrument' && a.method?.name !== 'SituCraft export') || a.kind === 'comparison');
+          const differing = [];
+          for (const a of made) {
+            const m = await fetch(`${url}/api/artifacts/${encodeURIComponent(a.id)}`).then((r) => (r.ok ? r.json() : null));
+            if (!m) {
+              differing.push(`${a.name}: not made again`);
+              continue;
+            }
+            if (a.kind === 'comparison') {
+              if (JSON.stringify(m.summary?.classes) !== JSON.stringify(a.summary?.classes) || m.summary?.pixelAgreement !== a.summary?.pixelAgreement) differing.push(`${a.name}: other differences`);
+              continue;
+            }
+            const sums = new Map((m.files ?? []).map((f) => [f.path, f.sha256]));
+            for (const f of a.files) if (sums.get(f.path) !== f.sha256) differing.push(`${a.name}: ${f.path}`);
+          }
+          check('viewer', '0.2.0 Lung project: every artifact SituCraft made is made again with the same checksums', `${made.length} artifacts${differing.length ? `; ${differing.slice(0, 4).join('; ')}` : ', all the same'}`, made.length >= 5 && differing.length === 0, 'all the same');
+          const reopened2 = await chrome.eval(`(async () => {
+            const app = window.situcraft;
+            const { promotedSegmentation, exportsOf } = await import('/lib/segmentations.js');
+            const wait = async (f) => { for (let k = 0; k < 300; k += 1) { const v = f(); if (v) return v; await new Promise((r) => setTimeout(r, 100)); } return null; };
+            const doc = ${JSON.stringify(text2)};
+            const id = JSON.parse(doc).id;
+            await app.library.saveProject(id, doc);
+            await app.openProject(id);
+            const dataset = app.store.project.datasets[0];
+            const before = (await wait(() => { const l = app.bundles.link(dataset.id); return l && l.state !== 'checking' ? l : null; }))?.state;
+            const link = await app.bundles.locate(dataset.id, ${JSON.stringify(join(dataRoot, 'xenium-lung-2fov'))});
+            const p = app.store.project;
+            return { before, after: link?.state, segmentations: p.artifacts.filter((a) => a.kind === 'segmentation').length, comparisons: p.artifacts.filter((a) => a.kind === 'comparison').length, decisions: p.decisions.length, exports: exportsOf(p, dataset.id).length, default: promotedSegmentation(p, dataset.id)?.record.source };
+          })()`);
+          check('viewer', '0.2.0 Lung project: it opens and finds its moved bundle; its segmentations, comparisons, decisions and exports are there, the instrument\'s the default', JSON.stringify(reopened2), reopened2.before === 'missing' && reopened2.after === 'ok' && reopened2.segmentations === fixture2.artifacts.filter((a) => a.kind === 'segmentation').length && reopened2.comparisons >= 2 && reopened2.decisions === fixture2.decisions.length && reopened2.exports >= 1 && reopened2.default === 'instrument', 'missing, then ok; all there');
+        }
+
+        // The worked example on the Breast data: the instrument's cells, drawn from stains, against
+        // a 5 µm nucleus expansion, as research.md §4 records them.
+        if (present.includes('xenium-breast-2fov')) {
+          await act('new_project', { name: 'Breast worked example' });
+          await act('open_paths', { paths: [join(dataRoot, 'xenium-breast-2fov')], add: true });
+          await chrome.eval(`(async () => {
+            const app = window.situcraft;
+            const { guideFor } = await import('/lib/tours.js');
+            const { startTour } = await import('/ui/tour.js');
+            const dataset = app.store.project.datasets.find((d) => d.name === 'xenium-breast-2fov');
+            for (let k = 0; k < 600 && !app.store.project.artifacts.some((a) => a.kind === 'segmentation' && a.dataset === dataset.id); k += 1) await new Promise((r) => setTimeout(r, 100));
+            startTour(app, { tour: guideFor('xenium-breast-2fov', 'compare-expansion'), dataset: dataset.id });
+            return true;
+          })()`);
+          const steps = [];
+          for (let k = 0; k < 3; k += 1) steps.push(await act('tour', { run: true }));
+          const bc = steps.at(-1).data?.comparison;
+          check('viewer', 'the Breast worked example expands the nuclei, compares, and shows splits and merges first', steps.map((x) => x.ok ? `step ${x.data.step}` : x.message).join('; ') + (bc ? `; ${JSON.stringify(bc.classes)}; the first ${bc.selected?.class}` : ''),
+            steps.every((x) => x.ok) && steps.at(-1).data.step === 4 && bc?.classes?.split === 263 && bc.classes.merged === 128 && bc.classes['only in A'] === 119 && ['split', 'merged', 'only in A'].includes(bc.selected?.class), 'step 4: 263 splits, 128 merges, 119 only in A; one of them first');
+          await act('tour', { end: true });
         }
       }
     }

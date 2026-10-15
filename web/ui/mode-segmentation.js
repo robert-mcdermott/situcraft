@@ -1,13 +1,15 @@
 // The Segmentation view: a dataset's segmentations side by side, by their numbers; SituCraft's
-// nucleus expansion run from here (api_expansion.go); and other tools' segmentations imported
-// (api_import.go). An expansion is compared with the instrument's segmentation it grew from, cell
-// by cell, pixel by pixel and transcript by transcript, and what differs is described
-// (internal/segment/expand). Comparing any two segmentations, reviewing their differences and
-// promoting one come later in wave 2 (situcraft-spec/roadmap.md).
+// nucleus expansion run from here (api_expansion.go); other tools' segmentations imported
+// (api_import.go); any two compared (api_compare.go), the comparison reviewed in the Compare view;
+// errors planted in a copy of the instrument's segmentation for practice, with their answer key
+// (api_plant.go); and any segmentation exported, in SpatialData, AnnData, Parquet, CSV, Matrix
+// Market and GeoJSON, or prepared for Xenium Ranger (api_export.go). An expansion is compared with
+// the instrument's segmentation it grew from, cell by cell, pixel by pixel and transcript by
+// transcript, and what differs is described (internal/segment/expand).
 
-import { h, icon, clear, formatCount } from './dom.js';
+import { h, icon, clear, formatBytes, formatCount, relativeTime } from './dom.js';
 import { toast } from './overlays.js';
-import { comparisonsOf, promotedSegmentation, segmentationsOf } from '../lib/segmentations.js';
+import { EXPORT_FORMATS, comparisonsOf, exportsOf, promotedSegmentation, segmentationsOf } from '../lib/segmentations.js';
 
 const DEFAULT_DISTANCE = 5;
 const MAX_DISTANCE = 100;
@@ -49,6 +51,8 @@ export const IMPORT_FORMATS = {
     options: [],
   },
 };
+
+const DEFAULT_EXPORTS = ['spatialdata', 'anndata'];
 
 // The classes of differences (internal/compare), with what each means.
 const CLASSES = [
@@ -92,7 +96,14 @@ export function mountSegmentation(app, container) {
   }
 
   function sessionOf(dataset) {
-    if (!sessions.has(dataset.id)) sessions.set(dataset.id, { shown: null, distance: DEFAULT_DISTANCE, compare: { a: '', b: '', shown: null }, import: { format: 'spatialdata', paths: ['', ''], units: 'um', fields: {}, tool: '', tool_version: '', citation: '' } });
+    if (!sessions.has(dataset.id)) {
+      sessions.set(dataset.id, {
+        shown: null, distance: DEFAULT_DISTANCE, compare: { a: '', b: '', shown: null },
+        import: { format: 'spatialdata', paths: ['', ''], units: 'um', fields: {}, tool: '', tool_version: '', citation: '' },
+        export: { segmentation: '', formats: new Set(DEFAULT_EXPORTS), folder: '', overwrite: false, shown: null },
+        answers: false,
+      });
+    }
     return sessions.get(dataset.id);
   }
 
@@ -167,7 +178,7 @@ export function mountSegmentation(app, container) {
         },
       },
       h('td', h('b', a.name), promoted?.record.id === a.id ? h('span.badge.accent', { style: { marginLeft: '6px' } }, 'default') : null, a.state !== 'complete' ? h('span.badge.danger', { style: { marginLeft: '6px' } }, a.state) : null),
-      h('td', own ? `SituCraft ${a.software.find((x) => x.name === 'situcraft')?.version ?? ''}` : a.source === 'imported' ? `${a.method.name}${a.method.version ? ` ${a.method.version}` : ''}, imported` : a.method.name.replace(/^Xenium cell segmentation \((.*)\)$/, '$1')),
+      h('td', own ? `SituCraft ${a.software.find((x) => x.name === 'situcraft')?.version ?? ''}` : a.source === 'planted' ? h('span', 'SituCraft, ', h('span.badge.warn', { title: 'Errors planted in the instrument\'s segmentation for practice' }, 'simulated')) : a.source === 'imported' ? `${a.method.name}${a.method.version ? ` ${a.method.version}` : ''}, imported` : a.method.name.replace(/^Xenium cell segmentation \((.*)\)$/, '$1')),
       h('td.r', exact(s.cells)),
       h('td.r', percent(s.assignedFraction)),
       h('td.r', Number.isFinite(s.medianTranscriptsPerCell) ? String(s.medianTranscriptsPerCell) : '—'),
@@ -180,7 +191,7 @@ export function mountSegmentation(app, container) {
           h('thead', h('tr', h('th', 'Segmentation'), h('th', 'Made by'), h('th.r', 'Cells'), h('th.r', { title: 'Gene transcripts of quality 20 or more assigned to a cell' }, 'Assigned'), h('th.r', { title: 'Gene transcripts of quality 20 or more per cell, median' }, 'Transcripts per cell'), h('th.r', { title: 'Median cell area, µm²' }, 'Area (µm²)'))),
           h('tbody', ...rows)))
         : h('p.muted.seg-note', app.bundles.registeringSegmentation(t.dataset.id) ? 'The instrument\'s segmentation is being registered…' : 'None yet: the instrument\'s segmentation is registered when the dataset\'s bundle is found.'),
-      h('p.muted.seg-note', 'The numbers are each segmentation\'s own: gene transcripts of quality 20 or more, as the QC view counts them. The default segmentation is the one later analyses use; choosing another comes with the comparison workspace.'));
+      h('p.muted.seg-note', 'The numbers are each segmentation\'s own: gene transcripts of quality 20 or more, as the QC view counts them. The default segmentation is the one later analyses use; another is chosen in the Compare view\'s Decide panel, with a reason, after comparing them.'));
   }
 
   function choose(a) {
@@ -422,9 +433,210 @@ export function mountSegmentation(app, container) {
         ...running));
   }
 
+  // --- Practice: errors planted in the instrument's segmentation ---
+  const KINDS = { merge: ['Merged', 'neighbouring cells of different lineages drawn as one'], split: ['Split', 'a large cell cut in two'], missed: ['Missed', 'a cell left out'], grown: ['Drawn too wide', 'a cell reaching into its neighbours'] };
+
+  // The comparison of the instrument's segmentation (A) with another (B), if made.
+  function comparisonOf(t, a, b) {
+    return comparisonsOf(app.store.project, t.dataset.id).find((c) => c.a === a && c.b === b && c.state === 'complete') ?? null;
+  }
+
+  // Opens a comparison in the Compare view, showing a cell's difference when one is named.
+  async function showInWorkspace(comparison, cell = null) {
+    app.compareFocus = comparison;
+    app.setMode('compare');
+    for (let k = 0; k < 200 && !app.compareView; k += 1) await new Promise((r) => setTimeout(r, 25));
+    const w = await app.compareView?.open(comparison);
+    if (!w || cell === null) return w;
+    const at = w.prepared.idsA.indexOf(cell);
+    const g = at >= 0 ? w.prepared.ofA[at] : -1;
+    if (g >= 0) w.select(g);
+    return w;
+  }
+
+  async function plant(t) {
+    try {
+      const manifest = await app.bundles.plantErrors(t.item, t.dataset.id);
+      toast(`Errors planted in a copy of ${t.dataset.name}'s segmentation: compare it with the instrument's to find them.`, { kind: 'ok' });
+      render(true);
+      return manifest;
+    } catch (error) {
+      toast(`Planting errors in ${t.dataset.name}'s segmentation: ${error.message}`, { kind: 'error' });
+      return null;
+    }
+  }
+
+  // Practice is offered on the example datasets (tutorial data), on any dataset when the user
+  // turns practice tools on, and wherever a planted segmentation already is (its answer key).
+  function practiceCard(t, list, session) {
+    const instrument = list.find((a) => a.source === 'instrument' && a.state === 'complete');
+    const planted = list.find((a) => a.source === 'planted' && a.state === 'complete');
+    if (!planted && !app.practice?.() && !app.examples?.forDataset(t.dataset) && !app.bundles.plantings(t.dataset.id).length) return null;
+    const running = app.bundles.plantings(t.dataset.id).map((e) => {
+      const job = e.job ? app.jobs.get(e.job) : null;
+      const bar = h('div', { style: { width: `${Math.round((job?.progress ?? 0) * 100)}%` } });
+      const message = h('span.muted', job?.message ?? 'Starting…');
+      if (e.job) live.set(e.job, { bar, message });
+      return h('div.seg-running', h('div', h('b', 'Planting errors'), ' ', message), h('div.progress', bar));
+    });
+    const body = h('div.seg-card',
+      h('p', 'Practise reviewing a comparison on errors whose answers are known: SituCraft plants them in a copy of the instrument\'s segmentation (neighbouring cells of different lineages merged, large cells split, cells missed, cells drawn too wide), and keeps where it put them. The copy is simulated, named so, and is never promoted or exported.'));
+    if (!planted) {
+      body.append(h('div.btn-row', h('button.btn.primary', { type: 'button', disabled: !instrument || !t.item || running.length > 0, onclick: () => plant(t) }, icon('sparkles'), 'Plant errors'),
+        !instrument ? h('span.muted.seg-note', 'The errors are planted in the instrument\'s segmentation, which is not registered yet.') : null), ...running);
+      return h('section.seg-section', h('div.section-title', 'Practice: find planted errors'), body);
+    }
+    const cmp = comparisonOf(t, instrument?.id, planted.id);
+    const compareButton = cmp
+      ? h('button.btn.primary', { type: 'button', onclick: () => showInWorkspace(cmp.id) }, icon('eye'), 'Review them in the workspace')
+      : h('button.btn.primary', { type: 'button', disabled: !instrument || !t.item, onclick: async () => {
+        try {
+          const m = await runComparison(t, instrument.id, planted.id);
+          await showInWorkspace(m.id);
+        } catch (error) {
+          toast(`The comparison: ${error.message}`, { kind: 'error', timeout: 12000 });
+        }
+      } }, icon('compare'), 'Compare with the instrument\'s');
+    const key = h('div.seg-answers');
+    const details = h('details.seg-advanced', session.answers ? { open: true } : {}, h('summary', 'The answer key'), key);
+    details.addEventListener('toggle', () => {
+      session.answers = details.open;
+      if (details.open && !key.childElementCount) fillKey();
+    });
+    function fillKey() {
+      key.append(h('p.muted.seg-note', 'Reading the answer key…'));
+      app.bundles.plantedErrors(planted.id).then((truth) => {
+        const byKind = Object.keys(KINDS).map((k) => [k, truth.errors.filter((e) => e.kind === k)]);
+        clear(key).append(
+          h('p.muted.seg-note', `${truth.errors.length} errors planted in ${truth.source} (seed ${truth.params.seed}). ${cmp ? 'Show takes you to each in the workspace.' : 'Compare the two to see them in the workspace.'}`),
+          h('div', { style: { overflowX: 'auto' } }, h('table.data.seg-table.seg-key',
+            h('thead', h('tr', h('th', 'Error'), h('th', 'Cells of the instrument\'s'), h('th', 'What makes it one'), h('th', h('span.sr-only', 'Show')))),
+            h('tbody', ...byKind.flatMap(([k, errors]) => errors.map((e) => h('tr',
+              h('td', h('b', KINDS[k][0]), h('span.muted', ` · ${KINDS[k][1]}`)),
+              h('td', e.cells.join(', ')),
+              h('td.muted', e.note),
+              h('td', cmp ? h('button.btn.small', { type: 'button', onclick: () => showInWorkspace(cmp.id, e.cells[0]) }, icon('eye'), 'Show') : null))))))));
+      }).catch((error) => {
+        clear(key).append(h('p.muted.seg-note', `The answer key could not be read: ${error.message}`));
+      });
+    }
+    if (session.answers) fillKey();
+    const p = planted.parameters ?? {};
+    body.append(
+      h('p', h('b', planted.name), h('span.muted', ` · ${exact(planted.summary?.cells)} cells; planted: ${p.merges ?? '—'} merges, ${p.splits ?? '—'} splits, ${p.missed ?? '—'} missed cells, ${p.grown ?? '—'} drawn ${p.grow_um ?? '—'} µm too wide.`)),
+      h('div.btn-row', compareButton),
+      h('p.muted.seg-note', 'In the workspace, rank the queue by disagreement or by contamination, step through it, and decide about the planted segmentation; then open the answer key to see what you found.'),
+      details);
+    return h('section.seg-section', h('div.section-title', 'Practice: find planted errors'), body);
+  }
+
+  // --- Exporting a segmentation ---
+  // A folder for an export beside the dataset's bundle, named for the dataset and segmentation.
+  function suggestFolder(t, seg) {
+    const path = t.dataset.path ?? '';
+    const sep = path.includes('\\') && !path.includes('/') ? '\\' : '/';
+    const parent = path.slice(0, Math.max(path.lastIndexOf(sep), 0));
+    const slug = `${t.dataset.name}-${seg?.name ?? 'segmentation'}`.replace(/µm/g, 'um').replace(/[^A-Za-z0-9_.-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80);
+    return parent ? `${parent}${sep}${slug}` : '';
+  }
+
+  async function runExport(t, options) {
+    const manifest = await app.bundles.exportSegmentation(t.item, t.dataset.id, options);
+    sessionOf(t.dataset).export.shown = options.folder;
+    render(true);
+    return manifest;
+  }
+
+  function exportCard(t, list, session) {
+    const state = session.export;
+    // A planted segmentation is simulated: it is never exported.
+    const complete = list.filter((a) => a.state === 'complete' && a.source !== 'planted');
+    const promoted = promotedSegmentation(app.store.project, t.dataset.id)?.record.id;
+    if (!complete.some((x) => x.id === state.segmentation)) {
+      state.segmentation = promoted ?? complete[0]?.id ?? '';
+      state.folder = '';
+    }
+    const seg = complete.find((x) => x.id === state.segmentation);
+    if (!state.folder) state.folder = suggestFolder(t, seg);
+    const pick = h('select.input', { id: 'seg-export-segmentation' }, ...complete.map((x) => h('option', { value: x.id }, x.name)));
+    pick.value = state.segmentation;
+    pick.addEventListener('change', () => {
+      const before = suggestFolder(t, seg);
+      state.segmentation = pick.value;
+      if (state.folder === before) state.folder = '';
+      render(true);
+    });
+    const folder = h('input.input', { id: 'seg-export-folder', type: 'text', value: state.folder, placeholder: '/data/exports/lung-instrument', spellcheck: false, autocomplete: 'off' });
+    folder.addEventListener('input', () => {
+      state.folder = folder.value;
+    });
+    const formats = h('fieldset.seg-formats', h('legend', 'Formats'), ...Object.entries(EXPORT_FORMATS).map(([k, f]) => {
+      const box = h('input', { type: 'checkbox', id: `seg-export-${k}`, checked: state.formats.has(k) });
+      box.addEventListener('change', () => {
+        if (box.checked) state.formats.add(k);
+        else state.formats.delete(k);
+        go.disabled = !ready();
+      });
+      return h('label.seg-format', { for: `seg-export-${k}` }, box, h('span', h('b', f.label), h('span.muted', ` · ${f.about}`)));
+    }));
+    const overwrite = h('input', { type: 'checkbox', id: 'seg-export-overwrite', checked: state.overwrite });
+    overwrite.addEventListener('change', () => {
+      state.overwrite = overwrite.checked;
+    });
+    const ready = () => Boolean(t.item && seg && state.formats.size);
+    const go = h('button.btn.primary', { type: 'button', disabled: !ready(), onclick: async () => {
+      const options = { segmentation: state.segmentation, formats: Object.keys(EXPORT_FORMATS).filter((k) => state.formats.has(k)), folder: state.folder.trim(), overwrite: state.overwrite };
+      try {
+        const m = await runExport(t, options);
+        const warnings = m.findings.filter((f) => f.severity !== 'info').length;
+        toast(`Exported ${seg.name} into ${options.folder}: ${m.files.length} files${warnings ? `; ${warnings} finding${warnings === 1 ? '' : 's'} to read` : ''}.`, { kind: warnings ? 'warn' : 'ok', timeout: 8000 });
+      } catch (error) {
+        toast(`The export: ${error.message}`, { kind: 'error', timeout: 12000 });
+      }
+    } }, icon('download'), 'Export');
+    const running = app.bundles.exports(t.dataset.id).map((e) => {
+      const job = app.jobs.get(e.job);
+      const bar = h('div', { style: { width: `${Math.round((job?.progress ?? 0) * 100)}%` } });
+      const message = h('span.muted', job?.message ?? 'Starting…');
+      live.set(e.job, { bar, message });
+      return h('div.seg-running', h('div', h('b', e.title), ' ', message), h('div.progress', bar));
+    });
+    const done = exportsOf(app.store.project, t.dataset.id);
+    const rows = [...done].reverse().map((x) => {
+      const findings = x.findings.filter((f) => f.severity !== 'info');
+      return h('li.seg-export',
+        h('div', h('b', x.name), h('span.muted', ` · ${x.formats.map((f) => EXPORT_FORMATS[f]?.label ?? f).join(', ')} · ${x.files} files, ${formatBytes(x.size)} · ${relativeTime(x.recorded)}`)),
+        h('div.seg-export-folder', h('code', x.folder)),
+        ...findings.map((f) => h('div.seg-export-finding', h(`span.badge.${f.severity === 'fatal' ? 'danger' : 'warn'}`, f.severity), ' ', f.message)),
+        x.xeniumRanger ? h('div.seg-command',
+          h('div.muted', 'Xenium Ranger (run where it is installed; SituCraft does not run it):'),
+          h('pre', h('code', x.xeniumRanger)),
+          h('button.btn.small', { type: 'button', onclick: async () => {
+            try {
+              await navigator.clipboard.writeText(`${x.xeniumRanger}\n`);
+              toast('The command is on the clipboard.', { kind: 'ok' });
+            } catch {
+              toast('The clipboard is not available: select the command and copy it.', { kind: 'error' });
+            }
+          } }, icon('copy'), 'Copy the command')) : null);
+    });
+    return h('section.seg-section',
+      h('div.section-title', 'Export a segmentation'),
+      h('div.seg-card',
+        h('p', 'A segmentation written for other tools, in one folder with situcraft-export.json: what was exported, from what and by which SituCraft, every file by its SHA-256, and fingerprints of the cells, counts and assignments that every format holds the same. Coordinates are in µm.'),
+        h('div.seg-import-grid',
+          h('label.field', { for: 'seg-export-segmentation' }, h('span', 'Segmentation'), pick),
+          h('label.field', { for: 'seg-export-folder' }, h('span', 'Into the folder'), folder, h('span.muted.seg-hint', 'made by the export; an absolute path'))),
+        formats,
+        h('label.seg-check', { for: 'seg-export-overwrite' }, overwrite, h('span', 'Replace an earlier export in that folder')),
+        h('div.btn-row', go, !t.item ? h('span.muted.seg-note', `${t.dataset.name}'s bundle was not found where the project records it.`) : null),
+        ...running,
+        done.length ? h('div', h('div.muted.seg-note', 'Exported'), h('ul.seg-exports', ...rows)) : null));
+  }
+
   // --- The agreement with the instrument's segmentation ---
   function agreementCard(t, list, session) {
-    const own = list.filter((a) => a.source === 'situcraft');
+    const own = list.filter((a) => a.source === 'situcraft' && a.parameters?.distance_um !== undefined);
     const a = own.find((x) => x.id === session.shown) ?? own[own.length - 1];
     const head = h('div.section-title', 'Agreement with the instrument\'s segmentation');
     if (!a) return h('section.seg-section', head, h('p.muted.seg-note', 'Expand the nuclei to compare the result with the instrument\'s segmentation: its cells, pixels and transcripts.'));
@@ -497,7 +709,7 @@ export function mountSegmentation(app, container) {
     const session = sessionOf(t.dataset);
     if (t.focused && segmentationsOf(app.store.project, t.dataset.id).some((a) => a.id === t.focused && a.source === 'situcraft')) session.shown = t.focused;
     const list = segmentationsOf(app.store.project, t.dataset.id);
-    const next = JSON.stringify([t.dataset.id, Boolean(t.item), list.map((a) => [a.id, a.state]), session.shown, comparisonsOf(app.store.project, t.dataset.id).map((c) => c.id), session.compare, app.bundles.comparisons(t.dataset.id), app.bundles.expansions(t.dataset.id), app.bundles.imports(t.dataset.id), app.bundles.registeringSegmentation(t.dataset.id), promotedSegmentation(app.store.project, t.dataset.id)?.record.id]);
+    const next = JSON.stringify([t.dataset.id, Boolean(t.item), list.map((a) => [a.id, a.state]), session.shown, comparisonsOf(app.store.project, t.dataset.id).map((c) => c.id), session.compare, app.bundles.comparisons(t.dataset.id), app.bundles.expansions(t.dataset.id), app.bundles.imports(t.dataset.id), app.bundles.plantings(t.dataset.id), app.practice?.(), Boolean(app.examples?.forDataset(t.dataset)), app.bundles.exports(t.dataset.id), exportsOf(app.store.project, t.dataset.id).length, app.bundles.registeringSegmentation(t.dataset.id), promotedSegmentation(app.store.project, t.dataset.id)?.record.id]);
     if (!force && next === shape) {
       updateLive();
       return;
@@ -508,7 +720,7 @@ export function mountSegmentation(app, container) {
     // Keep what is being typed when the view redraws (the import's fields keep their values in the
     // session; the distance its own).
     const focused = document.activeElement && body.contains(document.activeElement) ? document.activeElement.id : '';
-    const typing = focused === 'seg-distance' ? document.activeElement.value : null;
+    const typing = focused === 'seg-distance' || focused === 'seg-export-folder' ? document.activeElement.value : null;
     const advancedOpen = body.querySelector('details.seg-advanced')?.open;
     if (advancedOpen !== undefined) session.import.open = advancedOpen;
     clear(body).append(
@@ -517,8 +729,10 @@ export function mountSegmentation(app, container) {
       expansionCard(t, list, session),
       agreementCard(t, list, session),
       comparisonCard(t, list, session),
-      importCard(t, list, session));
-    if (typing !== null) body.querySelector('#seg-distance').value = typing;
+      importCard(t, list, session),
+      ...[practiceCard(t, list, session)].filter(Boolean),
+      exportCard(t, list, session));
+    if (typing !== null) body.querySelector(`#${focused}`).value = typing;
     if (focused) body.querySelector(`#${CSS.escape(focused)}`)?.focus();
     updateLive();
   }
@@ -552,6 +766,38 @@ export function mountSegmentation(app, container) {
       app.focusItem({ kind: 'segmentation', id: manifest.id });
       return manifest;
     },
+    plant: async (dataset, params) => {
+      const t = target();
+      if (!t || t.dataset.id !== dataset.id) app.focusItem({ kind: 'dataset', id: dataset.id });
+      const now = target();
+      if (!now.item) throw new Error(`${dataset.name}'s bundle was not found where the project records it.`);
+      const manifest = await app.bundles.plantErrors(now.item, dataset.id, params);
+      render(true);
+      document.querySelector('.seg-answers')?.closest('section')?.scrollIntoView({ block: 'center' });
+      return manifest;
+    },
+    exportSegmentation: async (dataset, options) => {
+      const t = target();
+      if (!t || t.dataset.id !== dataset.id) app.focusItem({ kind: 'dataset', id: dataset.id });
+      const now = target();
+      if (!now.item) throw new Error(`${dataset.name}'s bundle was not found where the project records it.`);
+      Object.assign(sessionOf(dataset).export, { segmentation: options.segmentation, formats: new Set(options.formats), folder: options.folder, overwrite: Boolean(options.overwrite) });
+      render(true);
+      const manifest = await runExport(now, options);
+      document.querySelector('.seg-exports')?.scrollIntoView({ block: 'center' });
+      return manifest;
+    },
+    showInWorkspace,
+    // Opens a planted segmentation's answer key.
+    revealAnswers: (datasetId) => {
+      const dataset = app.store.project.datasets.find((d) => d.id === datasetId);
+      if (!dataset) return;
+      const t = target();
+      if (!t || t.dataset.id !== datasetId) app.focusItem({ kind: 'dataset', id: datasetId });
+      sessionOf(dataset).answers = true;
+      render(true);
+      document.querySelector('.seg-answers')?.closest('details')?.scrollIntoView({ block: 'start' });
+    },
     expand: async (dataset, distance) => {
       const t = target();
       if (!t || t.dataset.id !== dataset.id) app.focusItem({ kind: 'dataset', id: dataset.id });
@@ -566,7 +812,7 @@ export function mountSegmentation(app, container) {
   };
   return {
     update(topics) {
-      if (topics.has('project') || topics.has('project-loaded') || topics.has('focus') || topics.has('bundles') || topics.has('mode')) render();
+      if (topics.has('project') || topics.has('project-loaded') || topics.has('focus') || topics.has('bundles') || topics.has('mode') || topics.has('examples')) render();
       else if (topics.has('jobs')) updateLive();
     },
     destroy() {

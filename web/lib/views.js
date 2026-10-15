@@ -21,7 +21,7 @@ export function captureView({ name, dataset, mode = 'viewer', state, desc, id = 
     dataset,
     mode,
     created: now,
-    // The instrument's segmentation (other segmentations arrive with wave 2).
+    // The segmentation the view draws: the instrument's (the Compare view draws any two).
     segmentation: 'instrument',
     // To 12 significant digits: converting back through another pixel ratio (viewCamera) and
     // capturing again would otherwise differ in the last bit.

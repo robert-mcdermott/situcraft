@@ -23,8 +23,10 @@ function joinList(parts) {
 
 // The paragraph and its references. inputs: { dataset (the project's record), report (its
 // validation report, or null), filters (the dataset's filter versions to describe), program:
-// { version, commit }, source: { title, attribution, license } for public data, or null }.
-export function methodsParagraph({ dataset, report = null, filters = [], program, source = null }) {
+// { version, commit }, source: { title, attribution, license } for public data, or null,
+// segmentation: the dataset's default when it is not the instrument's, { record, decision,
+// comparison: { other (the segmentation compared with), citation } or null }, or null }.
+export function methodsParagraph({ dataset, report = null, filters = [], program, source = null, segmentation = null }) {
   const refs = [];
   const cite = (key, text) => {
     let i = refs.findIndex((r) => r.key === key);
@@ -53,6 +55,24 @@ export function methodsParagraph({ dataset, report = null, filters = [], program
   const version = `SituCraft ${program.version}${program.commit ? ` (commit ${program.commit.slice(0, 7)})` : ''} ${cite('situcraft', `McDermott R. SituCraft, version ${program.version}. https://github.com/robert-mcdermott/situcraft`)}`;
   const checks = v.metricsCompared ? `, and recomputed ${count(v.metricsCompared)} of the values the run recorded from its data (${v.metricsAgreeing === v.metricsCompared ? 'all agreeing' : `${count(v.metricsAgreeing)} agreeing`})` : '';
   sentences.push(`The output bundle was read with ${version}, whose own readers decoded every file, including the JPEG 2000 morphology images (ITU-T T.800), checked the files' consistency (${count(v.fatal ?? 0)} fatal problems, ${count(v.warnings ?? 0)} warnings, ${count(v.info ?? 0)} notes)${checks}.`);
+  const r = segmentation?.record;
+  if (r && r.source !== 'instrument') {
+    const m = r.method ?? {};
+    const citeMethod = m.citation ? ` ${cite(`segmentation:${m.name}`, m.citation)}` : '';
+    const how = r.source === 'imported'
+      ? `with ${m.name}${m.version ? ` ${m.version}` : ''}${citeMethod}, imported into SituCraft and checked against the dataset's transcripts and image`
+      : r.parameters?.distance_um !== undefined
+        ? `with SituCraft's nucleus expansion (version ${m.version}): each nucleus grew by up to ${r.parameters.distance_um} µm, every pixel going to the nearest nucleus within that distance${citeMethod}`
+        : `with ${m.name}${citeMethod}`;
+    const assigned = Number.isFinite(r.summary?.assignedFraction) ? `, ${(100 * r.summary.assignedFraction).toFixed(1)}% of the gene transcripts of quality 20 or more assigned to them` : '';
+    sentences.push(`Cells were segmented again ${how}, giving ${count(r.summary?.cells ?? 0)} cells${assigned}.`);
+    const d = segmentation.decision;
+    const c = segmentation.comparison;
+    if (d) {
+      const compared = c ? ` after comparing it with ${c.other} cell by cell (cells corresponding when they share a nucleus or half of one lies within the other; the spurious co-expression and the mutually exclusive co-expression rate measuring transcripts given to the wrong cell${c.citation ? ` ${cite('comparison', c.citation)}` : ''})` : '';
+      sentences.push(`It was chosen as the dataset's segmentation${compared}: "${d.rationale}".`);
+    }
+  }
   for (const f of filters) {
     const conditions = (f.conditions ?? []).map((c) => c.text ?? '').filter(Boolean);
     const share = f.result.cells ? ` (${((100 * f.result.kept) / f.result.cells).toFixed(1)}%)` : '';

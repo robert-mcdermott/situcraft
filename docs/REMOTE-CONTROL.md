@@ -65,7 +65,7 @@ derived data or download an example may take minutes.
 | --- | --- |
 | 200 | The action ran; `ok` says whether it succeeded, `message` what happened or why not |
 | 400 | The request, or a path it names, is not usable |
-| 401 | The action opens paths or writes a file, and the token is missing or wrong |
+| 401 | The action opens paths, reads or writes files, and the token is missing or wrong |
 | 403 | The request did not come from this computer, or came from a web page of another site |
 | 503 | No SituCraft window is open (or it closed before answering) |
 | 504 | The window did not answer in time |
@@ -79,11 +79,13 @@ an optional argument or a field does not change it.
 
 - SituCraft listens on this computer only, and refuses requests that do not name it (DNS
   rebinding) and web pages of other sites.
-- Opening paths (`open_paths`) and writing files (`export`) also need the header
-  `X-SituCraft-Token` with the token from `remote.json`: another user of a shared computer can
-  reach the port, but not your files.
+- Opening paths (`open_paths`), reading files (`import_segmentation`) and writing them (`export`,
+  `export_segmentation`) also need the header `X-SituCraft-Token` with the token from
+  `remote.json`: another user of a shared computer can reach the port, but not your files.
 - A file is written only at an absolute path in a folder that exists, never over an existing file
-  unless `overwrite` is true, and through a temporary file renamed into place.
+  unless `overwrite` is true, and through a temporary file renamed into place. An export's folder
+  is written under a temporary name beside it and renamed into place; an existing folder is
+  replaced only with `overwrite`, and only when it is a SituCraft export.
 - Only a window opened from this run of SituCraft takes actions; a tab left open from an earlier
   run is asked to reload.
 
@@ -107,7 +109,7 @@ case, then the one name that starts with or contains what was given. An error li
 | `open_paths` | `paths` (absolute), `add` | Opens bundles (folder, `.zip`, `experiment.xenium`), project archives (`.scz`) or folders of them; with `add`, adds each bundle with no fatal problem to the project and waits for its derived data. Needs the token |
 | `add_dataset` | `bundle` (name or path), `wait` | Adds a bundle already opened to the project, checking it and building its derived data |
 | `open_example` | `example` (`lung`, `breast`, or their names), `download` | Opens an example dataset (in a new project when this one has other datasets); with `download`, downloads it first if needed |
-| `tour` | `example`, `step` (from 1), `end` | Starts an example's guided tour, goes to a step, or closes it |
+| `tour` | `example`, `name` (`tour`, or a worked example: `compare-expansion`, `planted-errors`), `step`, `run`, `end` | Starts an example's guided tour or worked example (opening the example), or goes to a step; `run` does the step's job (expanding, planting, comparing) and goes on; answers the step and the comparison it shows |
 
 ### Seeing the tissue
 
@@ -136,6 +138,8 @@ case, then the one name that starts with or contains what was given. An error li
 | `compare_segmentations` | `dataset`, `a`, `b` (names or artifact ids; the default segmentation and the latest other if not given) | Compares two segmentations as a job, in the Segmentation view: the differences by class, each segmentation's measures (with spurious and mutually exclusive co-expression), and the pixels and transcripts that changed; recorded as a comparison artifact |
 | `show_comparison` | `dataset`, `comparison` (id or "A and B"), `mode` (`side`, `overlay`, `flicker`), `map`, `classes`, `rank` (`reassigned`, `contamination`, `disagreement`, `low-counts`), `min_changed`, `difference` (a place in the queue) or `cell` (an id) | Opens a comparison in the Compare workspace as asked; answers the review queue's first ten, the difference shown, and the cautions about the measures |
 | `decide_segmentation` | `dataset`, `segmentation`, `decision` (`promote`, `keep`, `reject`), `rationale`, `comparison` | Records a decision about a segmentation with its reason, appended to the project; the default cannot be rejected |
+| `plant_errors` | `dataset`, `merges` (20), `splits` (20), `missed` (10), `grown` (10), `grow_um` (1), `seed`, `reveal` | For practice: a copy of the instrument's segmentation with known errors planted, simulated (never promoted or exported), recorded as a segmentation artifact with its answer key; `reveal` answers the key |
+| `export_segmentation` | `dataset`, `segmentation` (the default if not given), `formats` (`spatialdata`, `anndata`, `parquet`, `csv`, `mex`, `geojson`, `xenium-ranger`), `folder` (absolute), `overwrite` | Writes the segmentation in those formats into the folder as a job, in the Segmentation view, with `situcraft-export.json` (every file by SHA-256, totals and content fingerprints); `xenium-ranger` prepares Xenium Ranger's inputs and command, checked. A planted segmentation is refused. Records the export in the project and answers the manifest. Needs the token |
 | `jobs` | `job` (id), `do` (`cancel`, `resume`, `discard`), `show` | The jobs, or one job with its whole log and spec; stops, resumes or forgets one |
 
 ### Quality control

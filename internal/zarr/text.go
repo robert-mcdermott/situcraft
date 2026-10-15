@@ -115,8 +115,19 @@ func (a *Array) decodeShard(stored []byte, n int) ([]byte, error) {
 }
 
 // ReadStrings reads a one-dimensional array of text: of varying length (VLenUTF8), or numpy's
-// fixed 'U' (UTF-32) and 'S' (bytes) types, trailing NULs removed.
+// fixed 'U' (UTF-32) and 'S' (bytes) types, trailing NULs removed. A zero-dimensional array is
+// read as its one value.
 func (a *Array) ReadStrings() ([]string, error) {
+	if len(a.Shape) == 0 && a.DType.Kind == 'O' {
+		items, err := a.chunkStrings(-1)
+		if err != nil {
+			return nil, fmt.Errorf("zarr: %s: %w", a.Path, err)
+		}
+		if len(items) < 1 {
+			return nil, fmt.Errorf("zarr: %s holds no value", a.Path)
+		}
+		return items[:1], nil
+	}
 	if len(a.Shape) != 1 {
 		return nil, fmt.Errorf("zarr: %s has %d dimensions, not one", a.Path, len(a.Shape))
 	}
@@ -172,11 +183,18 @@ func trimNUL(b []byte) []byte {
 	return b
 }
 
-// chunkStrings decodes chunk c of a text array (a chunk never written is empty strings).
+// chunkStrings decodes chunk c of a text array (a chunk never written is empty strings); c < 0
+// is a zero-dimensional array's one chunk.
 func (a *Array) chunkStrings(c int) ([]string, error) {
-	stored, err := a.store.Get(a.chunkKey([]int{c}))
+	idx, size := []int{c}, 1
+	if c < 0 {
+		idx = nil
+	} else {
+		size = a.Chunks[0]
+	}
+	stored, err := a.store.Get(a.chunkKey(idx))
 	if errors.Is(err, ErrNotFound) {
-		return make([]string, a.Chunks[0]), nil
+		return make([]string, size), nil
 	}
 	if err != nil {
 		return nil, err

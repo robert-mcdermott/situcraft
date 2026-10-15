@@ -48,6 +48,21 @@ tour continues from there.
 Each example is used under its license; its source and license are linked on its card, and the
 methods paragraph (section 7) cites it.
 
+Each example also has a **worked example**: a question answered step by step, saying first what to
+expect. Some steps run a job before going on (the card's button says what it does: expand the
+nuclei, plant errors, compare), and others open the comparison in the Compare workspace with the
+view, the ranking and the difference the step talks about.
+
+| Example | Worked example | The question |
+| --- | --- | --- |
+| Breast | The instrument's cells against a nucleus expansion | Where does growing each nucleus by 5 µm disagree with the cells the instrument drew from its stains, and which does the evidence favour there? |
+| Lung | Find the planted errors (simulated) | Can you find a segmentation's errors with the comparison workspace, and which ranking finds which kind? |
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/worked-dark.webp">
+  <img alt="The Lung example's worked example in the Compare workspace: the instrument's segmentation and one with planted errors side by side, a planted merge chosen, and the worked example's card beside the queue" src="images/worked-light.webp">
+</picture>
+
 ## 3. Open your own bundle
 
 A Xenium output bundle is the folder the instrument or Xenium Ranger wrote, holding
@@ -241,15 +256,58 @@ runs as a job and becomes a segmentation of its own, kept with the SHA-256 of ev
 its transcripts counted as every segmentation's are; one whose check finds a fatal problem is
 kept as invalid, for review.
 
+**Practice: find planted errors**, on the example datasets, makes a copy of the instrument's
+segmentation with known errors in it: neighbouring cells of different lineages merged, large cells
+split in two, cells missed, and cells drawn too wide. Compare it with the instrument's, review the
+differences in the workspace, then open **The answer key** to see what was planted where (**Show**
+takes you to each). The copy is simulated, named so, and is never promoted or exported. On the Lung
+example, the comparison lists exactly the 60 planted errors, each in its class, and ranked by
+contamination the merges come first: their cells express markers of two lineages together. To
+practise on a dataset of your own, turn on **Practice tools for every dataset** in the menu of the
+theme button (top right); it is off unless you do.
+
+### Export a segmentation
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/export-dark.webp">
+  <img alt="The Segmentation view's Export a segmentation: the formats chosen, the folder, and an export of the Lung example's instrument segmentation listed with its files and the prepared Xenium Ranger command" src="images/export-light.webp">
+</picture>
+
+**Export a segmentation** writes any of a dataset's segmentations for other tools, into one folder
+you name:
+
+| Format | For | Holds |
+| --- | --- | --- |
+| SpatialData Zarr | spatialdata, napari-spatialdata | The cells as a label image and as polygons, the transcripts as points with their cells, the counts as an AnnData table |
+| AnnData Zarr | scanpy, anndata | The counts, with each cell's measures and centroid |
+| Parquet; CSV | DuckDB, pandas, R, polars | Cells, transcripts with their cells, outlines and counts, in Xenium's column names |
+| Matrix Market | Seurat (`Read10X`), scanpy | The counts as Xenium and Cell Ranger write them |
+| GeoJSON | QuPath, GIS tools | Each cell's outline as a polygon naming it |
+| Xenium Ranger inputs | Xenium Ranger's `import-segmentation` | The cells and nuclei as label masks on the morphology image's pixels, and the command |
+
+Coordinates are in µm. Beside the files, `situcraft-export.json` says what was exported, from what
+and by which SituCraft, lists every file by its SHA-256, and gives fingerprints of the label image,
+the counts and the transcripts' cells that every format holds the same (`docs/FORMATS.md`), so that
+you can check any reader got it exactly. The export runs as a job, is written under a temporary
+name and renamed into place when complete, and is recorded in the project. A folder that exists is
+replaced only when you ask, and only when it is an earlier SituCraft export.
+
+For **Xenium Ranger**, SituCraft prepares the inputs and the command, and does not run it. It
+checks first that the masks are the morphology image's size, which cells have no pixel (Xenium
+Ranger cannot keep them), and how many transcripts this segmentation assigns otherwise than its
+mask holds at their pixel (Xenium Ranger assigns by the mask). **Copy the command** puts it on the
+clipboard to run where Xenium Ranger is installed.
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/jobs-dark.webp">
   <img alt="The Jobs view: four finished jobs, building derived data and registering segmentations of both examples, one with its log open" src="images/jobs-light.webp">
 </picture>
 
 Long work runs as a job: building derived data, downloading an example, registering a
-segmentation, expanding nuclei, importing or comparing segmentations. The **Jobs** view shows what runs and waits, what finished, and each job's log and
-spec. Jobs keep running when the window reloads, and closing the window while one runs asks first.
-If SituCraft stops (or the computer does) in the middle of a job, the job is shown as interrupted
+segmentation, expanding nuclei, importing, comparing or exporting segmentations, planting errors.
+The **Jobs** view shows what runs and waits, what finished, and each job's log and spec. Jobs keep
+running when the window reloads, and closing the window while one runs asks first. If SituCraft
+stops (or the computer does) in the middle of a job, the job is shown as interrupted
 when SituCraft starts again: **Resume** continues it where it stopped, **Discard** forgets it.
 
 ## Keyboard

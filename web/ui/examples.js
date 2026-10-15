@@ -4,7 +4,7 @@
 import { openPaths } from './storage.js';
 import { confirmDialog, toast } from './overlays.js';
 import { exampleFor } from '../lib/examples.js';
-import { tourFor } from '../lib/tours.js';
+import { guideFor, tourFor } from '../lib/tours.js';
 import { startTour } from './tour.js';
 
 export function exampleJobKey(name) {
@@ -103,9 +103,10 @@ export function createExamples(app) {
     return { example, item: it, dataset };
   }
 
-  // Tours an example (lib/tours.js) in the project inProject chooses; answers the tour's card.
-  async function tour(name) {
-    const steps = tourFor(name);
+  // Tours an example (lib/tours.js), or takes one of its worked examples (by id), in the project
+  // inProject chooses; answers the tour's card.
+  async function tour(name, which = 'tour') {
+    const steps = guideFor(name, which);
     if (!byName(name) || !steps) return null;
     try {
       const { dataset } = await inProject(name);

@@ -22,6 +22,8 @@ type remoteAction struct {
 	output bool
 	// reads: opens items on this computer by their paths (local.go), so it needs the token.
 	reads bool
+	// writes: a job writes files on this computer where the arguments say, so it needs the token.
+	writes bool
 }
 
 func schema(properties map[string]any, required ...string) map[string]any {
@@ -66,11 +68,13 @@ var remoteActions = []remoteAction{
 		"example":  textArg("xenium-lung-2fov or xenium-breast-2fov (or lung, breast)."),
 		"download": flagArg("Download it first if it is not on this computer."),
 	}, "example"), long: true},
-	{Name: "tour", Title: "Take an example's tour", Description: "Starts the guided tour of an example (opening it as open_example does), or goes to one of its steps; end: true closes it. Returns the step's title and text.", InputSchema: schema(map[string]any{
+	{Name: "tour", Title: "Take an example's tour", Description: "Starts the guided tour of an example (opening it as open_example does), or one of its worked examples (name: compare-expansion on the Breast example, planted-errors on the Lung example: a question answered step by step, some steps running a job first), or goes to one of its steps; run: true does the step's job (expanding, planting, comparing) and goes on to the next; end: true closes it. Returns the step's title and text, and the comparison a step shows.", InputSchema: schema(map[string]any{
 		"example": textArg("xenium-lung-2fov or xenium-breast-2fov; the tour running if not given."),
+		"name":    textArg("tour (the default), or a worked example: compare-expansion, planted-errors."),
 		"step":    map[string]any{"type": "integer", "minimum": 1, "description": "The step to show, from 1 (1 if not given)."},
+		"run":     flagArg("Do the step's job, then go on to the next step."),
 		"end":     flagArg("Close the tour."),
-	})},
+	}), long: true},
 	{Name: "set_mode", Title: "Show a view", Description: "Shows a view: start, data, viewer, qc, segmentation, compare, celltypes, spatial, cohort, reports or jobs.", InputSchema: schema(map[string]any{
 		"mode": textArg("start, data, viewer, qc, segmentation, celltypes, spatial, cohort, reports or jobs."),
 	}, "mode")},
@@ -178,6 +182,23 @@ var remoteActions = []remoteAction{
 		"rationale":    textArg("Why (recorded with the decision)."),
 		"comparison":   textArg("The comparison it rests on (artifact id)."),
 	}, "segmentation", "decision", "rationale"), long: true},
+	{Name: "plant_errors", Title: "Plant errors in a segmentation", Description: "For practice: a copy of a dataset's instrument segmentation with known errors planted in it (neighbouring cells of different lineages merged, large cells split in two, cells missed, cells drawn too wide), simulated and named so (never promoted or exported), made as a job in the Segmentation view and recorded as a segmentation artifact with its answer key (planted.json). Compare it with the instrument's to find them. The same parameters (20 merges, 20 splits, 10 missed, 10 grown by 1 µm, seed 20261014 if not given) answer the same artifact. Answers its summary, and with reveal the answer key.", InputSchema: schema(map[string]any{
+		"dataset": datasetArg,
+		"merges":  map[string]any{"type": "integer", "minimum": 0, "maximum": 1000, "description": "Neighbouring cells merged (20 if not given)."},
+		"splits":  map[string]any{"type": "integer", "minimum": 0, "maximum": 1000, "description": "Cells split in two (20)."},
+		"missed":  map[string]any{"type": "integer", "minimum": 0, "maximum": 1000, "description": "Cells missed (10)."},
+		"grown":   map[string]any{"type": "integer", "minimum": 0, "maximum": 1000, "description": "Cells drawn too wide (10)."},
+		"grow_um": map[string]any{"type": "number", "minimum": 0, "maximum": 20, "description": "How far a grown cell reaches into its neighbours, µm (1)."},
+		"seed":    map[string]any{"type": "integer", "minimum": 0, "description": "The seed choosing the cells (20261014)."},
+		"reveal":  flagArg("Answer the planted errors: each one's kind, cells and place."),
+	}), long: true},
+	{Name: "export_segmentation", Title: "Export a segmentation", Description: "Writes a segmentation of a dataset (its default if not named) into a folder, in the formats asked for: spatialdata (a SpatialData Zarr store: the cells as labels and polygons, the transcripts as points with their cells, the counts as an AnnData table; µm), anndata (AnnData Zarr), parquet and csv (cells, transcripts with their cells, outlines and counts, in Xenium's column names), mex (Matrix Market, as Read10X reads it), geojson (the outlines) and xenium-ranger (label masks for Xenium Ranger's import-segmentation, the inputs checked, and the command, which SituCraft does not run). A job in the Segmentation view; situcraft-export.json lists every file by its SHA-256 with the totals and content fingerprints every format holds. A folder that exists is replaced only with overwrite, and only when it is a SituCraft export; a segmentation with planted errors is refused. Needs the token (it writes files). Answers the manifest.", InputSchema: schema(map[string]any{
+		"dataset":      datasetArg,
+		"segmentation": textArg("The segmentation, by name or artifact id (the dataset's default if not given)."),
+		"formats":      map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "spatialdata, anndata, parquet, csv, mex, geojson and xenium-ranger: one or more."},
+		"folder":       textArg("The export's folder, an absolute path; the export makes it."),
+		"overwrite":    flagArg("Replace the folder if it is an earlier SituCraft export."),
+	}, "formats", "folder"), long: true, writes: true},
 	{Name: "jobs", Title: "List and control jobs", Description: "The program's jobs (building derived data, downloading examples, registering segmentations…): each one's id, kind, state, progress, runs and error, and whether an interrupted one can be resumed. With job, that job with its whole log and its spec; with job and do, stops (cancel), resumes (resume) or forgets (discard) it. show: true shows the Jobs view.", InputSchema: schema(map[string]any{
 		"job":  textArg("A job's id."),
 		"do":   textArg("cancel, resume or discard."),

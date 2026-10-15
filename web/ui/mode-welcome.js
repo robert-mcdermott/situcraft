@@ -3,7 +3,7 @@
 
 import { h, icon, clear, relativeTime, formatBytes } from './dom.js';
 import { prefs } from './storage.js';
-import { tourFor } from '../lib/tours.js';
+import { tourFor, workedExamples } from '../lib/tours.js';
 
 // What a researcher brings (situcraft-spec/requirements.md, D1, D6, S10, R1).
 const INPUTS = [
@@ -88,6 +88,13 @@ export function mountWelcome(app, container) {
           example.licenseUrl ? h('a', { href: example.licenseUrl, target: '_blank', rel: 'noopener noreferrer' }, example.license.replace(/\s*\(.*\)$/, '')) : example.license,
           ` · ${formatBytes(example.download)} to download, ${formatBytes(example.size)} on disk`),
         actions);
+      const worked = workedExamples(example.name);
+      if (worked.length) {
+        card.insertBefore(h('div.example-worked', h('div.example-worked-title', 'Worked example'), ...worked.map((w) => h('div.example-worked-item',
+          h('div', h('b', w.title), w.simulated ? h('span.badge.warn', { style: { marginLeft: '6px' } }, 'simulated errors') : null),
+          h('p.muted', w.question),
+          example.state === 'ready' && !job ? h('button.btn.small', { type: 'button', 'data-worked': w.id, onclick: () => app.examples.tour(example.name, w.id) }, icon('flask'), 'Start') : null))), actions);
+      }
       if (job) {
         const bar = h('div');
         const label = h('span.muted');

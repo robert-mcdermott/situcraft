@@ -4,10 +4,15 @@
 // names (among those still complete). The instrument's segmentation is registered when its
 // dataset is added and promoted then, the dataset's only segmentation, with that reason recorded.
 
+// The method of segmentations with errors planted for practice (internal/segment/plant).
+export const PLANTED_METHOD = 'SituCraft planted errors';
+
 // Where a segmentation comes from: the instrument (a bundle's own, without parameters), an import
-// of another tool's (made from imported files), or SituCraft (computed).
+// of another tool's (made from imported files), errors planted for practice (simulated), or
+// SituCraft (computed).
 function sourceOf(lineage) {
   if (lineage.parents?.some((p) => p.kind === 'import')) return 'imported';
+  if (lineage.method?.name === PLANTED_METHOD) return 'planted';
   if (lineage.parents?.some((p) => p.kind === 'bundle') && !lineage.parameters) return 'instrument';
   return 'situcraft';
 }
@@ -60,6 +65,7 @@ export function promoteSegmentation(project, { dataset, segmentation, rationale,
   const record = project.artifacts.find((a) => a.kind === 'segmentation' && a.id === segmentation && a.dataset === dataset);
   if (!record) throw new Error('The dataset has no such segmentation.');
   if (record.state !== 'complete') throw new Error(`${record.name} is ${record.state}: only a complete segmentation can be promoted.`);
+  if (record.source === 'planted') throw new Error(`${record.name} is simulated, its errors planted for practice: it cannot become the default.`);
   const reason = String(rationale ?? '').trim();
   if (!reason) throw new Error('Say why it is promoted: the reason is recorded with the decision.');
   const name = project.datasets.find((d) => d.id === dataset)?.name ?? dataset;
@@ -185,5 +191,58 @@ export function decideSegmentation(project, { dataset, segmentation, decision, r
     modified: now,
     decisions: [...project.decisions, { kind: what.kind, dataset, artifact: segmentation, rationale: reason, by, time: now, ...(comparison ? { comparison } : {}) }],
     history: [...project.history, { time: now, action: 'decision', detail: `${what.done} ${record.name.toLowerCase()} of ${name}: ${reason}` }],
+  };
+}
+
+// --- Exports (internal/export) -------------------------------------------------------------------
+
+// The formats exported (internal/export), each with what it holds.
+export const EXPORT_FORMATS = {
+  spatialdata: { label: 'SpatialData Zarr', about: 'Cells as labels and polygons, transcripts as points with their cells, counts as an AnnData table; µm (spatialdata, napari-spatialdata)' },
+  anndata: { label: 'AnnData Zarr', about: 'Counts with each cell\'s measures and centroid (scanpy, anndata; Zarr format 2)' },
+  parquet: { label: 'Parquet', about: 'Cells, transcripts with their cells, outlines and counts, in Xenium\'s column names' },
+  csv: { label: 'CSV', about: 'The same four tables, gzipped' },
+  mex: { label: 'Matrix Market', about: 'The counts as Xenium and Cell Ranger write them (Seurat\'s Read10X)' },
+  geojson: { label: 'GeoJSON', about: 'Each cell\'s outline as a polygon naming it, µm (QuPath, GIS tools)' },
+  'xenium-ranger': { label: 'Xenium Ranger inputs', about: 'Label masks and the import-segmentation command, its inputs checked (uncompressed: about 8 bytes a pixel)' },
+};
+
+// The project's record of an export: what was written where, from which segmentation, by which
+// SituCraft, with its totals and content fingerprints (situcraft-export.json lists every file by
+// its SHA-256). An export leaves the project's keeping: the record says what it was.
+export function exportRecord(dataset, segmentation, manifest, folder, now = new Date().toISOString()) {
+  const random = globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
+  return {
+    kind: 'export',
+    id: `out-${random.replace(/-/g, '').slice(0, 16)}`,
+    dataset: dataset.id,
+    segmentation: segmentation.id,
+    name: segmentation.name,
+    formats: Object.keys(manifest.formats ?? {}),
+    folder,
+    created: manifest.created ?? now,
+    recorded: now,
+    software: manifest.software ?? '',
+    files: (manifest.files ?? []).length,
+    size: (manifest.files ?? []).reduce((sum, f) => sum + (f.size ?? 0), 0),
+    counts: manifest.counts ?? null,
+    content: manifest.content ?? null,
+    findings: (manifest.findings ?? []).map(({ format, severity, code, message }) => ({ format, severity, code, message })),
+    xeniumRanger: manifest.xeniumRanger?.command ?? null,
+  };
+}
+
+export function exportsOf(project, datasetId) {
+  return (project.exports ?? []).filter((e) => e.dataset === datasetId);
+}
+
+// The project with an export recorded.
+export function addExport(project, record, now = new Date().toISOString()) {
+  const dataset = project.datasets.find((d) => d.id === record.dataset);
+  return {
+    ...project,
+    modified: now,
+    exports: [...(project.exports ?? []), record],
+    history: [...project.history, { time: now, action: 'export', detail: `Exported ${record.name.toLowerCase()} of ${dataset?.name ?? record.dataset} as ${record.formats.join(', ')} into ${record.folder} (${record.files} files by SHA-256)` }],
   };
 }

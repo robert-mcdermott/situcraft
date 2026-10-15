@@ -19,6 +19,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -29,6 +30,7 @@ import (
 
 	"situcraft/internal/artifacts"
 	"situcraft/internal/examples"
+	"situcraft/internal/export"
 	"situcraft/internal/jobs"
 	"situcraft/internal/xenium"
 )
@@ -1055,7 +1057,7 @@ func TestRealInstrumentSegmentationAndInterruptedJobs(t *testing.T) {
 	if rec := post("/api/jobs/" + started.Job.ID + "/resume"); rec.Code != http.StatusOK {
 		t.Fatalf("resume: %d %s", rec.Code, rec.Body)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()
 	if j, _ := a.jobs.Wait(ctx, started.Job.ID); j.State != jobs.Complete || j.Runs != 2 {
 		t.Fatalf("the resumed build ended %s (%s), runs %d", j.State, j.Error, j.Runs)
@@ -1068,6 +1070,20 @@ func TestRealInstrumentSegmentationAndInterruptedJobs(t *testing.T) {
 	}
 	if err := a.cache.Check(status); err != nil {
 		t.Errorf("the resumed build's entries: %v", err)
+	}
+	// The dataset opened by several requests at once, as the Compare view asks for it first: each
+	// answered, none closing what another reads.
+	codes := make(chan string, 8)
+	for i := 0; i < 8; i++ {
+		go func() {
+			rec := request(t, handler, http.MethodGet, "/api/local/0/view", nil, nil)
+			codes <- fmt.Sprintf("%d %s", rec.Code, strings.TrimSpace(rec.Body.String())[:min(60, rec.Body.Len())])
+		}()
+	}
+	for i := 0; i < 8; i++ {
+		if c := <-codes; !strings.HasPrefix(c, "200 ") {
+			t.Errorf("a dataset opened by several requests at once: %s", c)
+		}
 	}
 
 	// Nucleus expansion starts from the instrument's segmentation, not registered yet.
@@ -1308,5 +1324,81 @@ func TestRealInstrumentSegmentationAndInterruptedJobs(t *testing.T) {
 	json.NewDecoder(rec.Body).Decode(&groups)
 	if rec.Code != http.StatusOK || len(groups.Class) != 11898 || len(groups.IDsA) != 11898 || len(groups.IDsB) != 11898 || groups.Classes[groups.Class[0]] != "one-to-one" || len(groups.A[0]) != 1 {
 		t.Errorf("the comparison's differences: %d, %d groups, %d and %d ids", rec.Code, len(groups.Class), len(groups.IDsA), len(groups.IDsB))
+	}
+
+	// Errors planted for practice: a simulated segmentation with its answer key, asked again the
+	// same artifact.
+	if rec := request(t, handler, http.MethodPost, "/api/local/0/plant", strings.NewReader(`{"merges": -1}`), nil); rec.Code != http.StatusBadRequest {
+		t.Errorf("planting -1 merges: %d", rec.Code)
+	}
+	var planted comparison
+	json.NewDecoder(post("/api/local/0/plant").Body).Decode(&planted)
+	if planted.Job == nil {
+		t.Fatalf("no planting job: %+v", planted)
+	}
+	if j, _ := a.jobs.Wait(ctx, planted.Job.ID); j.State != jobs.Complete {
+		t.Fatalf("the planting ended %s: %s", j.State, j.Error)
+	}
+	var plantedAgain comparison
+	json.NewDecoder(post("/api/local/0/plant").Body).Decode(&plantedAgain)
+	if pm := plantedAgain.Artifact; plantedAgain.Job != nil || pm == nil || pm.ID != planted.ID || pm.Name != "Planted errors (simulated)" || pm.State != artifacts.Complete || len(pm.Files) != 7 {
+		t.Fatalf("the planting again: %+v", plantedAgain)
+	}
+	rec = request(t, handler, http.MethodGet, "/api/artifacts/"+planted.ID+"/files/planted.json", nil, nil)
+	var key struct{ Errors []struct{ Kind string } }
+	json.NewDecoder(rec.Body).Decode(&key)
+	if rec.Code != http.StatusOK || len(key.Errors) != 60 {
+		t.Errorf("the answer key: %d, %d errors", rec.Code, len(key.Errors))
+	}
+	rec = request(t, handler, http.MethodGet, "/api/local/0/segmentations/"+planted.ID+"/outlines", nil, nil)
+	body = rec.Body.String()
+	json.Unmarshal([]byte(body), &outlines)
+	if rec.Code != http.StatusOK || !strings.HasPrefix(outlines.PolygonsBase, "/api/outlines/outlines-") || outlines.Cells != 11898-20-10+20 {
+		t.Fatalf("the planted segmentation's outlines: %d %+v %s", rec.Code, outlines, body)
+	}
+
+	// An export, from this computer only, into a folder that does not exist yet; its manifest.
+	local := func(method, target string, body io.Reader) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, target, body)
+		req.Host, req.RemoteAddr = "127.0.0.1:8840", "127.0.0.1:50000"
+		out := httptest.NewRecorder()
+		handler.ServeHTTP(out, req)
+		return out
+	}
+	folder := filepath.Join(t.TempDir(), "lung export")
+	exportBody := func(formats string) io.Reader {
+		return strings.NewReader(`{"segmentation": "` + e.ID + `", "formats": ` + formats + `, "folder": ` + strconv.Quote(folder) + `}`)
+	}
+	if rec := request(t, handler, http.MethodPost, "/api/local/0/export", exportBody(`["geojson"]`), nil); rec.Code != http.StatusForbidden {
+		t.Errorf("an export from elsewhere: %d", rec.Code)
+	}
+	for _, bad := range []string{`["hdf5"]`, `[]`} {
+		if rec := local(http.MethodPost, "/api/local/0/export", exportBody(bad)); rec.Code != http.StatusBadRequest {
+			t.Errorf("formats %s: %d", bad, rec.Code)
+		}
+	}
+	var exported struct {
+		Job    *jobs.Job
+		Folder string
+	}
+	json.NewDecoder(local(http.MethodPost, "/api/local/0/export", exportBody(`["spatialdata", "mex", "xenium-ranger"]`)).Body).Decode(&exported)
+	if exported.Job == nil || exported.Folder != folder {
+		t.Fatalf("no export job: %+v", exported)
+	}
+	if j, _ := a.jobs.Wait(ctx, exported.Job.ID); j.State != jobs.Complete {
+		t.Fatalf("the export ended %s: %s", j.State, j.Error)
+	}
+	var manifest export.Manifest
+	rec = local(http.MethodGet, "/api/exports?folder="+url.QueryEscape(folder), nil)
+	json.NewDecoder(rec.Body).Decode(&manifest)
+	if rec.Code != http.StatusOK || manifest.Segmentation.ID != e.ID || manifest.Counts.Cells != 11898 || len(manifest.Formats) != 3 || manifest.XeniumRanger == nil || !strings.Contains(manifest.XeniumRanger.Command, "--cells=") {
+		t.Fatalf("the export's manifest: %d %+v", rec.Code, manifest)
+	}
+	if rec := local(http.MethodPost, "/api/local/0/export", exportBody(`["geojson"]`)); rec.Code != http.StatusBadRequest {
+		t.Errorf("exporting again over it, unasked: %d", rec.Code)
+	}
+	plantedExport := strings.NewReader(`{"segmentation": "` + planted.ID + `", "formats": ["geojson"], "folder": ` + strconv.Quote(filepath.Join(t.TempDir(), "planted")) + `}`)
+	if rec := local(http.MethodPost, "/api/local/0/export", plantedExport); rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "simulated") {
+		t.Errorf("exporting the planted errors: %d %s", rec.Code, rec.Body)
 	}
 }

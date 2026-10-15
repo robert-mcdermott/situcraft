@@ -202,6 +202,42 @@ func (a *app) handleJobs() {
 			a.artifacts.Discard(comparisonID(p.A, p.B, compare.DefaultParams()))
 		}
 	})
+	a.jobs.Handle("plant", func(spec json.RawMessage) (jobs.Func, error) {
+		if a.cache == nil {
+			return nil, errors.New("SituCraft has no cache folder")
+		}
+		var p plantSpec
+		if json.Unmarshal(spec, &p) != nil || p.Bundle == "" || checkPlant(p.Params) != nil {
+			return nil, errors.New("its spec names no bundle and parameters")
+		}
+		return a.plantJob(p.Bundle, p.Params), nil
+	}, func(id string, spec json.RawMessage) {
+		var p plantSpec
+		if json.Unmarshal(spec, &p) == nil && p.Bundle != "" {
+			if b, err := xenium.Open(p.Bundle, xenium.Options{CacheDir: a.cacheDir}); err == nil {
+				if instrument := a.knownSegmentation(b); instrument != nil {
+					a.artifacts.Discard(plantID(instrument.ID, p.Params))
+				}
+				b.Close()
+			}
+		}
+	})
+	a.jobs.Handle("export", func(spec json.RawMessage) (jobs.Func, error) {
+		if a.cache == nil {
+			return nil, errors.New("SituCraft has no cache folder")
+		}
+		p, err := exportOf(spec)
+		if err != nil {
+			return nil, err
+		}
+		// An export starts again; what the interrupted one left beside its folder goes first.
+		removePartialExports(p.Folder)
+		return a.exportJob(p), nil
+	}, func(id string, spec json.RawMessage) {
+		if p, err := exportOf(spec); err == nil {
+			removePartialExports(p.Folder)
+		}
+	})
 	a.jobs.Handle("example", func(spec json.RawMessage) (jobs.Func, error) {
 		var p struct {
 			Example string `json:"example"`

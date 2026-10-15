@@ -257,7 +257,7 @@ func (h *remoteHub) serveAction(w http.ResponseWriter, r *http.Request) {
 		h.respond(w, r, event)
 		return
 	}
-	if (action.output || action.reads) && !h.hasToken(r) {
+	if (action.output || action.reads || action.writes) && !h.hasToken(r) {
 		what := "Writing files"
 		if action.reads {
 			what = "Reading files"

@@ -9,8 +9,9 @@ import { toast } from './overlays.js';
 import { cacheJobKey } from './bundles.js';
 import { datasetFilters, methodsMarkdown, showMethods, writeMethods } from './methods.js';
 import { ATTRIBUTES } from '../lib/cell-attributes.js';
-import { decideSegmentation, DECISIONS, promotedSegmentation } from '../lib/segmentations.js';
+import { decideSegmentation, DECISIONS, EXPORT_FORMATS, promotedSegmentation } from '../lib/segmentations.js';
 import { CLASS_INFO, RANKS, cellNames, warnings } from '../lib/review.js';
+import { workedExamples } from '../lib/tours.js';
 import { parseProject, rename, serializeProject } from '../lib/project.js';
 import { removeView, sameView, viewLink } from '../lib/views.js';
 
@@ -348,20 +349,42 @@ export function installRemote(app) {
         if (args.example === undefined) throw new ActionError('Name the example whose tour to take (xenium-lung-2fov or xenium-breast-2fov).');
         const example = resolveExample(args.example);
         if (example.state !== 'ready') throw new ActionError(`${example.title} is not on this computer: open_example with download: true downloads it.`);
-        card = await app.examples.tour(example.name);
-        if (!card) throw new ActionError(`${example.title}'s tour could not start.`);
-        const { item } = await app.examples.inProject(example.name);
+        const names = ['tour', ...workedExamples(example.name).map((w) => w.id)];
+        const name = args.name === undefined ? 'tour' : choose(args.name, names, 'tour or worked example');
+        card = await app.examples.tour(example.name, name);
+        if (!card) throw new ActionError(`${example.title}'s ${name === 'tour' ? 'tour' : `worked example ${name}`} could not start.`);
+        const { item, dataset } = await app.examples.inProject(example.name);
         await derivedData(item);
+        // A worked example's steps start from the dataset's segmentation.
+        await app.bundles.registerSegmentation(item, dataset.id);
       }
       const steps = card.tour.steps;
-      const at = args.step === undefined ? card.step() : Math.round(finite(args.step, 'step')) - 1;
-      if (at < 0 || at >= steps.length) throw new ActionError(`The tour has steps 1 to ${steps.length}.`);
-      card.go(at);
+      if (args.step !== undefined) {
+        const at = Math.round(finite(args.step, 'step')) - 1;
+        if (at < 0 || at >= steps.length) throw new ActionError(`The tour has steps 1 to ${steps.length}.`);
+        card.go(at);
+      }
+      if (args.run) {
+        const before = card.step();
+        await card.advance();
+        if (card.open() && card.step() === before) throw new ActionError(`Step ${before + 1} (${steps[before].title}) could not be done.`);
+      }
+      if (!card.open()) return { message: `${card.tour.title} is finished.`, data: { tour: card.tour.title, finished: true } };
+      const at = card.step();
       const step = steps[at];
+      await card.shown;
       const dataset = project().datasets.find((d) => d.id === card.dataset);
-      if (step.mode === 'data') await settleMode('data');
-      else await shown(step.mode, dataset);
-      return { message: `${card.tour.title}, step ${at + 1} of ${steps.length}: ${step.title}. ${step.text}`, data: { tour: card.tour.title, step: at + 1, steps: steps.length, title: step.title, text: step.text, mode: step.mode } };
+      if (step.mode === 'viewer' || step.mode === 'qc') await shown(step.mode, dataset);
+      else await settleMode(step.compare ? 'compare' : step.mode);
+      await frames();
+      const data = { tour: card.tour.title, step: at + 1, steps: steps.length, title: step.title, text: step.text, mode: step.mode, done: card.done() };
+      if (step.do) data.action = step.do.action;
+      const w = step.compare ? app.compareView?.current?.() : null;
+      if (w) {
+        data.comparison = { id: w.id, names: w.names, mode: w.session.mode, rank: w.session.by, tab: w.session.tab, queue: w.state.queue?.length ?? 0, classes: w.description.classes };
+        if (w.session.selected !== null) data.comparison.selected = { class: w.groups[w.session.selected].class, ...cellNames(w.prepared, w.groups[w.session.selected], 6) };
+      }
+      return { message: `${card.tour.title}, step ${at + 1} of ${steps.length}: ${step.title}. ${step.text}`, data };
     },
 
     async set_mode(args) {
@@ -650,6 +673,63 @@ export function installRemote(app) {
       return {
         message: `${manifest.name} into ${dataset.name} (${manifest.state}): ${plural(s.cells ?? 0, 'cell')}, ${((s.assignedFraction ?? 0) * 100).toFixed(2)}% of gene transcripts assigned${fatal.length ? `; ${fatal.map((f) => f.message).join(' ')}` : ''}.`,
         data: { id: manifest.id, name: manifest.name, dataset: dataset.name, state: manifest.state, method: manifest.lineage?.method ?? null, parameters: manifest.lineage?.parameters ?? null, summary: s, findings: manifest.findings ?? [] },
+      };
+    },
+
+    async plant_errors(args) {
+      const dataset = resolveDataset(args.dataset);
+      const params = {};
+      for (const key of ['merges', 'splits', 'missed', 'grown', 'seed']) {
+        if (args[key] === undefined) continue;
+        const v = finite(args[key], key);
+        if (!Number.isInteger(v) || v < 0) throw new ActionError(`${key} is a whole number, 0 or more.`);
+        params[key] = v;
+      }
+      if (args.grow_um !== undefined) params.grow_um = finite(args.grow_um, 'grow_um');
+      await settleMode('segmentation');
+      let manifest;
+      try {
+        manifest = await app.segmentationView.plant(dataset, params);
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      await frames();
+      const p = manifest.lineage?.parameters ?? {};
+      const data = { id: manifest.id, name: manifest.name, dataset: dataset.name, state: manifest.state, parameters: p, summary: manifest.summary ?? {}, findings: manifest.findings ?? [] };
+      if (args.reveal) data.errors = (await app.bundles.plantedErrors(manifest.id)).errors;
+      return {
+        message: `${manifest.name} in ${dataset.name}'s segmentation (${manifest.state}): ${p.merges} merges, ${p.splits} splits, ${p.missed} missed cells and ${p.grown} drawn ${p.grow_um} µm too wide, in ${plural(manifest.summary?.cells ?? 0, 'cell')}. Compare it with the instrument's to find them.`,
+        data,
+      };
+    },
+
+    async export_segmentation(args) {
+      const dataset = resolveDataset(args.dataset);
+      const p = project();
+      const segs = p.artifacts.filter((a) => a.kind === 'segmentation' && a.dataset === dataset.id && a.state === 'complete');
+      let seg = promotedSegmentation(p, dataset.id)?.record;
+      if (args.segmentation !== undefined) {
+        const ref = String(args.segmentation);
+        seg = segs.find((x) => x.id === ref) ?? segs.find((x) => x.name === choose(ref, segs.map((y) => y.name), 'segmentation'));
+      }
+      if (!seg) throw new ActionError(`${dataset.name} has no complete segmentation to export.`);
+      if (!Array.isArray(args.formats) || !args.formats.length) throw new ActionError(`formats is a list of one or more of ${Object.keys(EXPORT_FORMATS).join(', ')}.`);
+      const formats = [...new Set(args.formats.map((f) => choose(f, Object.keys(EXPORT_FORMATS), 'format')))];
+      const folder = String(args.folder ?? '').trim();
+      if (!folder) throw new ActionError('Give folder: the absolute path of the export\'s folder.');
+      await settleMode('segmentation');
+      let manifest;
+      try {
+        manifest = await app.segmentationView.exportSegmentation(dataset, { segmentation: seg.id, formats, folder, overwrite: Boolean(args.overwrite) });
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      await frames();
+      const size = manifest.files.reduce((sum, f) => sum + f.size, 0);
+      const notes = manifest.findings.filter((f) => f.severity !== 'info');
+      return {
+        message: `${seg.name} of ${dataset.name} exported as ${formats.join(', ')} into ${folder}: ${plural(manifest.files.length, 'file')}, ${(size / 1e6).toFixed(1)} MB${notes.length ? `; ${notes.map((f) => f.message).join(' ')}` : ''}.`,
+        data: manifest,
       };
     },
 

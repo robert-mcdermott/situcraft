@@ -172,6 +172,20 @@ kept) and say what it shows. The genes are among those the section's transcripts
 each zoomed step looks where its genes meet (the 300 µm square where their shares of the section's
 transcripts are highest together).
 
+A worked example is a tour that answers a question, saying first what to expect: its steps may run
+a job before going on (expanding the nuclei, planting errors, comparing), each named by the
+segmentations it needs ('instrument', 'expansion-5', 'planted') so that a step already done is
+not done again, and may show a comparison in the workspace as the step describes it (the view, the
+ranking, the classes kept, the difference shown, the side panel). The Lung example's practises on
+errors planted in its instrument segmentation (`internal/segment/plant`): neighbouring cells whose
+merged cell would mix markers of two lineages, large cells split across their long axis, cells
+dropped, and cells grown into their neighbours; each error kept apart from the others by its
+neighbours, so that each is one difference; seeded, so the same errors each time; recorded as a
+segmentation artifact with its answer key, simulated, never promoted and never exported. The
+Segmentation view offers it on the example datasets, and on others only once the user turns
+practice tools on (a preference of the browser, off by default), so that simulated cells stay out
+of real work unless asked for.
+
 ### Segmentation built in
 
 Segmentation is SituCraft's own code (`internal/segment`), not an external program:
@@ -272,6 +286,21 @@ filled by their difference's class through the renderer's per-cell colours; the 
 give the disagreement map, drawn on a 2-D canvas over the tissue. The differences come to the page
 column by column; ranking and the reviewer's rules are pure functions, tested in Node. Decisions
 (promote, keep, reject) are appended to the project with their reason and comparison.
+
+### Exports
+
+`internal/export` writes a segmentation from SituCraft's segmentation files and the dataset's
+transcripts, with writers of its own: Parquet (`internal/parquet`: flat schemas of required
+columns, PLAIN-encoded GZIP pages, the footer in Thrift's compact protocol), Zarr formats 2 and 3
+(`internal/zarr`: gzip, text of varying length), AnnData's on-disk encoding (`internal/anndata`),
+NumPy arrays, Matrix Market and GeoJSON, each read back by SituCraft's own readers in the tests.
+The SpatialData store follows the layout spatialdata writes, element by element, so that its own
+reader and the import read it; exports are written in streams (the label image by chunks, the
+transcripts by the bundle's row groups). The same segmentation gives the same files, and
+`situcraft-export.json` fingerprints the content (labels, counts, assignments) independently of
+any format's encoding, so that any reader can check it read the segmentation exactly. An export
+leaves SituCraft's keeping: it is not an artifact, and the project records it. Xenium Ranger's
+inputs are prepared and checked, and its command shown; SituCraft never runs another program.
 
 ### Remote control
 

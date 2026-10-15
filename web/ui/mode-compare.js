@@ -560,6 +560,10 @@ export function mountCompare(app, container) {
       names: [nameA, nameB],
       setMode,
       select,
+      setTab(id) {
+        session.tab = id;
+        renderSide();
+      },
       setRules(rules) {
         if (rules.classes) session.classes = new Set(rules.classes);
         if (rules.by) session.by = rules.by;

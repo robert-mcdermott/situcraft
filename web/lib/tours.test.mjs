@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { TOURS, stepView, tourGenes } from './tours.js';
+import { TOURS, WORKED, guideFor, segmentationByRole, stepView, tourGenes, workedExamples } from './tours.js';
 import { viewLayers } from './views.js';
 import { exampleFor, exampleSource } from './examples.js';
 
@@ -72,4 +72,51 @@ test('a dataset is known as its example by its manifest, wherever it is', () => 
   assert.equal(exampleFor({ fingerprint: [{ path: 'experiment.xenium', sha256: 'aa' }] }, null), null);
   assert.deepEqual(exampleSource(examples[0]), { title: 'Example A (XOA 2.0)', attribution: '10x Genomics', license: 'CC BY 4.0', url: 'https://example.org/a' });
   assert.equal(exampleSource(null), null);
+});
+
+test('every worked example asks its question, says what to expect, and its steps can be done', () => {
+  assert.deepEqual(Object.keys(WORKED).sort(), Object.keys(sources).sort());
+  const roles = new Set(['instrument', 'expansion-5', 'planted']);
+  for (const [name, list] of Object.entries(WORKED)) {
+    for (const w of list) {
+      assert.equal(guideFor(name, w.id), w);
+      assert.ok(w.question.endsWith('?') && w.expect.length > 80 && w.steps.length >= 5, w.id);
+      const made = new Set(['instrument']);
+      for (const step of w.steps) {
+        assert.ok(['segmentation', 'compare', 'viewer', 'qc', 'data'].includes(step.mode), step.title);
+        assert.ok(step.title && step.text.length > 40, step.title);
+        if (step.do) {
+          assert.ok(step.label, `${step.title} says what it does`);
+          if (step.do.action === 'expand') made.add(`expansion-${step.do.distance}`);
+          if (step.do.action === 'plant') made.add('planted');
+          if (step.do.action === 'compare') {
+            assert.ok(made.has(step.do.a) && made.has(step.do.b), `${step.title}: its segmentations are made before`);
+            made.add(`${step.do.a}|${step.do.b}`);
+          }
+        }
+        if (step.compare) {
+          assert.ok(roles.has(step.compare.a) && roles.has(step.compare.b), step.title);
+          assert.ok(made.has(`${step.compare.a}|${step.compare.b}`), `${step.title}: its comparison is made before`);
+        }
+      }
+    }
+  }
+  assert.equal(guideFor('xenium-lung-2fov'), TOURS['xenium-lung-2fov']);
+  assert.equal(guideFor('xenium-lung-2fov', 'nothing'), null);
+  assert.equal(workedExamples('nothing').length, 0);
+});
+
+test('segmentations are found by what they are', () => {
+  const segs = [
+    { id: 'a', source: 'instrument', state: 'complete' },
+    { id: 'b', source: 'situcraft', state: 'complete', parameters: { distance_um: 5 } },
+    { id: 'c', source: 'situcraft', state: 'complete', parameters: { distance_um: 10 } },
+    { id: 'd', source: 'planted', state: 'invalid' },
+    { id: 'e', source: 'planted', state: 'complete' },
+  ];
+  assert.equal(segmentationByRole(segs, 'instrument').id, 'a');
+  assert.equal(segmentationByRole(segs, 'expansion-5').id, 'b');
+  assert.equal(segmentationByRole(segs, 'expansion-10').id, 'c');
+  assert.equal(segmentationByRole(segs, 'planted').id, 'e', 'a complete one');
+  assert.equal(segmentationByRole(segs, 'expansion-2'), null);
 });

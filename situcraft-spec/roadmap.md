@@ -960,15 +960,90 @@ other tools can be imported.
        are serialized, and an entry that does not open is built again.
      - **The tissue was fitted to the canvases' first size,** before the layout settled: it is
        fitted again until the camera moves.
-7. **Exports and release (E1, E2, E3).**
-   - SpatialData Zarr (shapes, points, AnnData table, transformations); AnnData Zarr; Parquet;
-     CSV; Matrix Market; GeoJSON.
-   - A prepared Xenium Ranger `import-segmentation` command, with validated inputs, for users
-     who have it installed.
-   - Validation: exports are read back by SituCraft. A maintainer-run check reads them with the
-     `spatialdata` and `anndata` Python packages; its result is committed.
-   - Examples (compare the instrument's segmentation with an expansion; a planted bad
-     segmentation to find), documentation, release 0.2.0.
+7. **Exports and release (E1, E2, E3): done.**
+   - **Exports** (`internal/export`; FORMATS.md): any segmentation of a dataset, into one folder,
+     in the formats chosen:
+     - SpatialData Zarr (format 3, as the spatialdata package lays out a store): the label raster
+       scaled into µm, GeoParquet outlines, the transcripts as three-dimensional points with their
+       cells, the AnnData table annotating the labels; no images;
+     - AnnData Zarr (format 2, anndata's default write format); Parquet and gzipped CSV (cells,
+       transcripts, outlines and counts, in Xenium's column names); Matrix Market (as Xenium and
+       Cell Ranger write it); GeoJSON outlines;
+     - Xenium Ranger's inputs: the cells and the bundle's nuclei as NumPy label masks on the
+       morphology image's pixels, `cell_labels.csv`, and `command.sh`, after checks (the masks'
+       size, cells without pixels, transcripts assigned otherwise than the mask holds, no nuclei,
+       a zipped bundle). SituCraft does not run it.
+     - `situcraft-export.json`: what was exported, from what, by which SituCraft; every file by
+       SHA-256; totals; fingerprints of the labels, counts and assignments that every format holds
+       the same, so any reader can check it read the segmentation exactly.
+     - Written under a temporary name beside the folder and renamed into place; a folder replaced
+       only when asked and only when it is an export; the same segmentation gives the same files.
+       Recorded in the project (`exports`, absent until the first, so earlier projects open
+       unchanged).
+   - **Writers of SituCraft's own:** Parquet (`internal/parquet`: required flat columns, PLAIN,
+     GZIP, Thrift compact), Zarr formats 2 and 3 (`internal/zarr`: gzip, text of varying length),
+     AnnData (`internal/anndata`).
+   - **A job** (`api_export.go`, only from this computer), and the Segmentation view's **Export a
+     segmentation**: the segmentation, the formats, the folder; the exports listed with their
+     findings and Xenium Ranger's command (copied with a button).
+   - **Errors planted for practice** (`internal/segment/plant`, `api_plant.go`): a copy of the
+     instrument's segmentation with merges of neighbouring cells whose merged cell mixes lineage
+     markers, splits across the long axis, missed cells and cells grown 1 µm into their
+     neighbours, each kept apart from the others, seeded; a segmentation artifact with its answer
+     key (`planted.json`), simulated, never promoted or exported. The Segmentation view's
+     **Practice: find planted errors** plants, compares, and opens the answer key, each error shown
+     in the workspace; it is offered on the example datasets, and on others only when the user
+     turns on practice tools (off by default).
+   - **Worked examples** (`lib/tours.js`, `ui/tour.js`): a question and what to expect, steps that
+     run a job before going on or show a comparison as they describe it. The Breast example's: the
+     instrument's cells against a 5 µm expansion. The Lung example's: find the planted errors.
+     Listed on the example cards.
+   - **The methods paragraph** describes a default segmentation other than the instrument's: its
+     method and citation, and the decision choosing it with its comparison.
+   - **Remote control:** `plant_errors`, `export_segmentation` (29 actions; exports need the
+     token); `tour` takes a worked example and runs its steps.
+   - **Screenshots:** a worked example in the workspace; an export with Xenium Ranger's command
+     (20 scenes, 40 captures).
+   - **Release 0.2.0:** the version, the changelog, the documentation, every screenshot captured
+     again and audited, and the project the release saves (`validation/projects/0.2.0-lung`).
+   - Validation:
+     - **Go tests:** the writers' files read back as written; every format of a fixture
+       segmentation read back by SituCraft's readers (the SpatialData store imported as the same
+       segmentation; the GeoJSON polygons with the Parquet or CSV transcripts give every
+       assignment); reproducible files; the folder's rules; Xenium Ranger's checks; planted errors
+       on hand-made tissue each found as planted by the comparison; the program's plant and export
+       jobs; a dataset opened by several requests at once.
+     - **The Lung bundle** (`TestRealExports`, `TestRealPlantedErrors`): its own segmentation in
+       every format, imported back from SpatialData exactly; Xenium Ranger's masks of the image's
+       size, 9 transcripts assigned off the instrument's own mask; 60 errors planted, each found as
+       what it is, nothing else differing.
+     - **The maintainer's check** (`validation/reference/read_exports.py`; weekly with
+       `--check`): spatialdata 0.8.0, anndata 0.13.4, pyarrow, pandas, scipy, geopandas and numpy
+       read every format, giving the manifest's totals and fingerprints; its result
+       (`exports.json`) is committed and the real-data tests check SituCraft still writes it.
+     - **In headless Chrome** (80 checks): both worked examples run through by remote control;
+       every planted error found as planted; a planted segmentation never promoted or exported;
+       exports only
+       with the token, imported back; the 0.2.0 project reopens and its artifacts are made again
+       with the same checksums.
+   - Found by slice 7:
+     - **A dataset opened by several requests at once** could be closed by one while another read
+       it ("damaged cache file"): the Compare view opened first, before any Viewer, asks four
+       things at once. One request now opens it while the others wait.
+     - **Grown by 2 µm, Lung's small cells** took more than half of a neighbour and became
+       rearranged differences: they grow by 1 µm.
+     - **Merges chosen by unlike counts alone** mixed lineage markers in 5 of 20: they are chosen
+       first among pairs whose merged cell would.
+     - **spatialdata writes points with z in three dimensions:** the export does the same.
+     - **A project reopened must stay as it was saved:** exports are added to a project with its
+       first, not to every project opened.
+     - **Zarr format 3's text scalars** (a SpatialData table's region) were not read.
+     - **anndata 0.13 writes Zarr format 3 by default;** the AnnData export keeps format 2, which
+       every version reads.
+     - **Practice belongs with the tutorials:** offered on every dataset, planting errors put
+       simulated cells one click from a real project, and from an export. It is offered on the
+       example datasets only, unless the user turns practice tools on, and planted segmentations
+       are never exported.
 
 ## 0.3.0: transcript-informed segmentation, built in (wave 3)
 

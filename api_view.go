@@ -29,7 +29,9 @@ func (a *app) registerView(mux *http.ServeMux) {
 // views holds the datasets open for viewing: by the bundle's place, and by the names of their
 // entries (which the tile requests carry).
 type views struct {
-	mu      sync.Mutex
+	mu sync.Mutex
+	// opening is held while a dataset is opened (api_view.go, dataset).
+	opening sync.Mutex
 	byPath  map[string]*view.Dataset
 	byEntry map[string]*view.Dataset
 	order   []string // places, least recently opened first
@@ -101,7 +103,9 @@ func (v *views) closeAll() {
 }
 
 // dataset opens (or finds open) the dataset of the local item in the request. A dataset whose
-// derived data are not all built answers 409.
+// derived data are not all built answers 409. One request opens a dataset at a time: the
+// requests a page sends together (the Compare view's) wait for the first and use what it opened,
+// rather than each opening it and closing the others' while they read.
 func (a *app) dataset(w http.ResponseWriter, r *http.Request) (*view.Dataset, bool) {
 	if !a.needCache(w) {
 		return nil, false
@@ -111,23 +115,28 @@ func (a *app) dataset(w http.ResponseWriter, r *http.Request) (*view.Dataset, bo
 		writeError(w, http.StatusNotFound, "No such local item.")
 		return nil, false
 	}
-	if d, ok := a.views.path(file.path); ok {
-		// Still the same entries? A bundle that changed has new ones.
-		if b, ok := a.openBundle(w, r); ok {
-			status, err := a.cache.Status(b)
-			b.Close()
-			if err == nil && sameEntries(status, d.Entries) {
-				return d, true
-			}
-		} else {
-			return nil, false
-		}
-	}
 	b, ok := a.openBundle(w, r)
 	if !ok {
 		return nil, false
 	}
 	defer b.Close()
+	// Open already, with the same entries? A bundle that changed has new ones.
+	open := func() (*view.Dataset, bool) {
+		d, ok := a.views.path(file.path)
+		if !ok {
+			return nil, false
+		}
+		status, err := a.cache.Status(b)
+		return d, err == nil && sameEntries(status, d.Entries)
+	}
+	if d, ok := open(); ok {
+		return d, true
+	}
+	a.views.opening.Lock()
+	defer a.views.opening.Unlock()
+	if d, ok := open(); ok {
+		return d, true
+	}
 	d, err := view.Open(a.cache, b)
 	if errors.Is(err, view.ErrNotReady) {
 		writeError(w, http.StatusConflict, "Its derived data are not built yet; build them in the Data view.")

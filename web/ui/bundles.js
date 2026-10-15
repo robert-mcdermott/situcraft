@@ -6,7 +6,7 @@
 
 import { openPaths } from './storage.js';
 import { addDataset, compareFingerprint, datasetRecord, findDataset, relocateDataset, removeDataset } from '../lib/datasets.js';
-import { addComparison, addSegmentation, comparisonRecord, segmentationRecord, segmentationsOf, withInstrumentSegmentation } from '../lib/segmentations.js';
+import { addComparison, addExport, addSegmentation, comparisonRecord, exportRecord, segmentationRecord, segmentationsOf, withInstrumentSegmentation } from '../lib/segmentations.js';
 
 const BUNDLE_KINDS = new Set(['bundle', 'archive']);
 
@@ -211,6 +211,73 @@ export function createBundles(app) {
     return entry.promise;
   }
 
+  // Errors planted in a dataset's instrument segmentation, for practice (api_plant.go): a job
+  // writes the planted segmentation with its answer key and records it, simulated; it is then
+  // recorded in the project. Resolves with the artifact.
+  const planting = new Map(); // dataset id → { dataset, job, promise }
+  function plantErrors(item, datasetId, params = {}) {
+    if (planting.has(datasetId)) return planting.get(datasetId).promise;
+    const entry = { dataset: datasetId, job: null, promise: null };
+    entry.promise = (async () => {
+      try {
+        const answer = await getJSON(`${item.url}/plant`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(params) });
+        let manifest = answer.artifact;
+        if (!manifest) {
+          entry.job = answer.job?.id ?? null;
+          notify();
+          const job = await app.jobs.finished(entry.job);
+          if (job?.state !== 'complete') throw new Error(`the planting ${job?.state ?? 'ended'}${job?.error ? `: ${job.error}` : ''}`);
+          manifest = await getJSON(`/api/artifacts/${encodeURIComponent(answer.id)}`);
+        }
+        const dataset = app.store.project.datasets.find((d) => d.id === datasetId);
+        if (!dataset) throw new Error('the dataset is no longer in the project');
+        const next = addSegmentation(app.store.project, segmentationRecord(dataset, manifest));
+        if (next !== app.store.project) app.store.commit(next, `Plant errors in ${dataset.name}'s segmentation`);
+        return manifest;
+      } finally {
+        planting.delete(datasetId);
+        notify();
+      }
+    })();
+    planting.set(datasetId, entry);
+    notify();
+    return entry.promise;
+  }
+
+  // A planted segmentation's answer key (planted.json), read once.
+  const keys = new Map();
+  function plantedErrors(id) {
+    if (!keys.has(id)) {
+      const p = getJSON(`/api/artifacts/${encodeURIComponent(id)}/files/planted.json`);
+      p.catch(() => keys.delete(id));
+      keys.set(id, p);
+    }
+    return keys.get(id);
+  }
+
+  // An export of a segmentation (api_export.go): a job writes the formats into the folder; its
+  // manifest is then read and the export recorded in the project. Resolves with the manifest.
+  const exporting = new Map(); // job id → { dataset, title, folder }
+  async function exportSegmentation(item, datasetId, { segmentation, formats, folder, overwrite = false }) {
+    const answer = await getJSON(`${item.url}/export`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ segmentation, formats, folder, overwrite }) });
+    const jobId = answer.job?.id;
+    if (!jobId) throw new Error('no job was started');
+    exporting.set(jobId, { dataset: datasetId, title: answer.job.title, folder: answer.folder });
+    notify();
+    try {
+      const job = await app.jobs.finished(jobId);
+      if (job?.state !== 'complete') throw new Error(`the export ${job?.state ?? 'ended'}${job?.error ? `: ${job.error}` : ''}`);
+      const manifest = await getJSON(`/api/exports?folder=${encodeURIComponent(answer.folder)}`);
+      const dataset = app.store.project.datasets.find((d) => d.id === datasetId);
+      const record = app.store.project.artifacts.find((a) => a.kind === 'segmentation' && a.id === segmentation);
+      if (dataset && record) app.store.commit(addExport(app.store.project, exportRecord(dataset, record, manifest, answer.folder)), `Export ${record.name} of ${dataset.name}`);
+      return manifest;
+    } finally {
+      exporting.delete(jobId);
+      notify();
+    }
+  }
+
   // A comparison's full description (comparison.json), read once.
   const descriptions = new Map();
   function comparisonDescription(id) {
@@ -360,6 +427,13 @@ export function createBundles(app) {
     importSegmentation,
     compareSegmentations,
     comparisonDescription,
+    plantErrors,
+    plantedErrors,
+    exportSegmentation,
+    // The plantings in a dataset under way: [{ job }].
+    plantings: (id) => [...planting.values()].filter((e) => e.dataset === id).map(({ job }) => ({ job })),
+    // The exports of a dataset under way: [{ job, title, folder }].
+    exports: (id) => [...exporting.entries()].filter(([, v]) => v.dataset === id).map(([job, v]) => ({ job, title: v.title, folder: v.folder })),
     // The comparisons of a dataset under way: [{ a, b, job }].
     comparisons: (id) => [...comparing.values()].filter((e) => e.dataset === id).map(({ a, b, job }) => ({ a, b, job })),
     // The imports into a dataset under way: [{ job, title }].

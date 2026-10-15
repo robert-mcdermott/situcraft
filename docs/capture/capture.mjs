@@ -32,6 +32,7 @@ const SHOWN = {
   library: '~/Library/Application Support/SituCraft',
   examples: '~/Library/Application Support/SituCraft/examples',
   cache: '~/Library/Caches/situcraft',
+  exports: '~/Documents/SituCraft exports',
 };
 
 const args = process.argv.slice(2);
@@ -66,7 +67,7 @@ let places = {};
 // cache: a cache of the scene's own (the jobs scene, whose jobs build what the shared one holds).
 async function startSituCraft({ examples = DATA, cache = CACHE } = {}) {
   const library = mkdtempSync(join(temp, 'library-'));
-  places = { library, examples, cache };
+  places = { library, examples, cache, exports: mkdtempSync(join(temp, 'exports-')) };
   const flags = ['--remote-control', '--window', 'none', '--port', String(PORT), '--data-dir', library, '--cache-dir', cache, '--examples-dir', examples];
   const server = spawn(binary, flags, { cwd: temp, stdio: ['ignore', 'pipe', 'inherit'] });
   let output = '';
@@ -128,6 +129,10 @@ async function showPlaces() {
     for (let node = walker.nextNode(); node; node = walker.nextNode()) if (pairs.some(([from]) => node.nodeValue.includes(from))) node.nodeValue = fix(node.nodeValue);
     for (const el of document.querySelectorAll('[title]')) el.title = fix(el.title);
     for (const el of document.querySelectorAll('input[type=text]')) el.value = fix(el.value);
+    // A command's arguments, quoted as SituCraft quotes them once the places shown hold spaces.
+    for (const el of document.querySelectorAll('.seg-command code')) {
+      el.textContent = el.textContent.replace(/(--[a-z-]+=)([^'].*?)(?= --|$)/g, (all, flag, value) => (/\\s/.test(value) ? flag + "'" + value + "'" : all));
+    }
     return true;
   })()`);
 }
@@ -256,6 +261,27 @@ const scenes = {
     await act('import_segmentation', { format: 'spatialdata', paths: [store], units: 'pixels', tool: 'spatialdata-io', tool_version: '0.7.1' });
     await js(`document.querySelector('.workbench-scroll')?.scrollTo(0, 0)`);
     await sleep(300);
+  },
+  // The Lung example's worked example: errors planted for practice and compared with the
+  // instrument's segmentation, the review queue's first difference chosen, the example's card
+  // beside the queue (wave 2, slice 7).
+  async worked() {
+    await act('tour', { example: 'lung', name: 'planted-errors' });
+    await act('tour', { run: true });
+    const step = await act('tour', { run: true });
+    await waitFor(`Boolean(window.situcraft.compareView?.current?.()) || document.querySelector('.tour-note')?.textContent`);
+    const note = await js(`window.situcraft.compareView?.current?.() ? '' : document.querySelector('.tour-note')?.textContent`);
+    if (note) throw new Error(`step ${step.data?.step}: ${note}`);
+    await js(`(async () => { const w = window.situcraft.compareView.current(); for (const r of w.state.renderers) await r.renderer.settled(); return true; })()`);
+    await sleep(500);
+  },
+  // The Lung example's instrument segmentation exported as SpatialData, AnnData and Xenium
+  // Ranger's inputs: the formats, the folder, the export listed with the prepared command
+  // (wave 2, slice 7).
+  async export() {
+    await act('open_example', { example: 'lung' });
+    await act('export_segmentation', { formats: ['spatialdata', 'anndata', 'xenium-ranger'], folder: join(places.exports, 'xenium-lung-2fov-instrument') });
+    await scrollTo('.seg-exports', 'end');
   },
   // The Jobs view after both examples were opened: each job's state and times, one's log open.
   async jobs() {

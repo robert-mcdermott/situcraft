@@ -7,6 +7,7 @@ import { showDialog, toast } from './overlays.js';
 import { methodsParagraph } from '../lib/methods.js';
 import { describeCondition } from '../lib/filters.js';
 import { exampleSource } from '../lib/examples.js';
+import { promotedSegmentation } from '../lib/segmentations.js';
 
 // The dataset's filters, and the latest version of each.
 export function datasetFilters(project, dataset) {
@@ -22,7 +23,17 @@ export async function writeMethods(app, dataset, report, filters) {
   const source = exampleSource(app.examples.forDataset(dataset));
   const methods = report?.summary?.segmentationMethods ?? [];
   const described = filters.map((f) => ({ ...f, conditions: f.conditions.map((c) => ({ ...c, text: describeCondition(c, methods) })) }));
-  return methodsParagraph({ dataset, report, filters: described, program: { version: app.version, commit: app.commit }, source });
+  // The dataset's default segmentation, when another than the instrument's was chosen.
+  let segmentation = null;
+  const promoted = promotedSegmentation(app.store.project, dataset.id);
+  if (promoted && promoted.record.source !== 'instrument') {
+    const d = promoted.decision;
+    const cmp = d.comparison ? app.store.project.artifacts.find((a) => a.kind === 'comparison' && a.id === d.comparison) : null;
+    const otherId = cmp ? (cmp.a === promoted.record.id ? cmp.b : cmp.a) : null;
+    const other = otherId ? app.store.project.artifacts.find((a) => a.kind === 'segmentation' && a.id === otherId) : null;
+    segmentation = { record: promoted.record, decision: d, comparison: cmp ? { other: other ? other.name.toLowerCase().replace(/^instrument segmentation$/, 'the instrument\'s segmentation') : 'another segmentation', citation: cmp.method?.citation ?? '' } : null };
+  }
+  return methodsParagraph({ dataset, report, filters: described, program: { version: app.version, commit: app.commit }, source, segmentation });
 }
 
 // The paragraph as Markdown, with its references.

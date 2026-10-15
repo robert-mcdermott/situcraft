@@ -18,7 +18,7 @@ import { colorVisionFriendly, setColorVisionFriendly } from './lib/colormaps.js'
 import { createProject, isEmptyProject, parseProject, rename, serializeProject } from './lib/project.js';
 import { parseViewLink } from './lib/views.js';
 
-const VERSION = '0.1.0';
+const VERSION = '0.2.0';
 
 const toOpen = { label: 'Open a bundle', icon: 'bundle', run: (app) => app.openPathDialog() };
 
@@ -129,6 +129,9 @@ async function start() {
   store.state.ui.theme = themePref;
   store.state.ui.drawer = { open: prefs.get('drawerOpen', false), tab: prefs.get('drawerTab', 'history') };
   const app = { store, library, info, version: VERSION, commit: info.commit ?? '' };
+  // Practice tools (errors planted in a copy of a segmentation) for any dataset: off unless asked
+  // for; the example datasets offer them anyway, as tutorial data.
+  app.practice = () => prefs.get('practice', false);
   // What was handed to the program (command line, a later launch, Open a bundle): local.go's list.
   app.localItems = info.files ?? [];
   app.workers = {};
@@ -560,6 +563,8 @@ async function start() {
     ...[['light', 'Light', 'sun'], ['dark', 'Dark', 'moon'], ['system', 'Match the system', 'settings']].map(([id, label, glyph]) => ({ label, icon: glyph, checked: prefs.get('theme', 'system') === id, onSelect: () => setTheme(id) })),
     '-',
     { label: 'Color-vision-friendly colors', icon: 'eye', checked: colorVisionFriendly(), onSelect: () => toggleColorVision() },
+    { section: 'Learning' },
+    { label: 'Practice tools for every dataset', icon: 'school', checked: app.practice(), onSelect: () => togglePractice() },
   ]));
 
   function doUndo() {
@@ -580,6 +585,12 @@ async function start() {
     applyColorVision(next);
     store.notify(['theme', 'colors']);
     toast(next ? 'Color-vision-friendly colors: palettes and status colors stay distinguishable with red–green and blue–yellow color blindness.' : 'Default colors.', { timeout: 3500 });
+  }
+  function togglePractice() {
+    const next = !app.practice();
+    prefs.set('practice', next);
+    store.notify(['project']);
+    toast(next ? 'Practice tools: the Segmentation view offers to plant errors in a copy of any dataset\'s segmentation, simulated, to practise finding them.' : 'Practice tools only for the example datasets.', { timeout: 4000 });
   }
   function setTheme(next) {
     prefs.set('theme', next);
