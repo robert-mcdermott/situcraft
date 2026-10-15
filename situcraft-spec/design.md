@@ -206,7 +206,10 @@ Segmentation is SituCraft's own code (`internal/segment`), not an external progr
   and connectivity constraints, transcript repositioning, multi-resolution sampling, and
   initialization from nuclei (`research.md` §3). Its parameters are drawn by a partially
   collapsed Gibbs sweep in which every update is an exact draw (a gamma prior on the components'
-  rate parameters, where the publication uses Pólya–Gamma variables). Unlike the published implementation, it is **deterministic for a
+  rate parameters, where the publication uses Pólya–Gamma variables). The labelling's moves keep
+  detailed balance exactly (constraints that hold both ways); the reported segmentation is the
+  posterior's summary over the last sweeps; the default schedule is the one that recovers
+  simulated cells best (research.md §3.2). Unlike the published implementation, it is **deterministic for a
   seed regardless of thread count**: each parallel block draws from its own seeded random stream,
   in a fixed update order.
 - **Outputs** are converted to polygons (per z layer and consensus), transcript assignments with

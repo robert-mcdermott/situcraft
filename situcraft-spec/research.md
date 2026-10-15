@@ -361,9 +361,9 @@ its updates are written out below (notation is SituCraft's), then the sampler.
 **Space.** The region $R$ (a patch of the section, of volume $|R|$ µm³) is a lattice of voxels,
 each of volume $\nu$ (its side in x and y times the section's depth divided by the number of z
 layers). A labelling $\sigma$ gives each voxel $v$ a cell $\sigma(v) \in \{1, \dots, C\}$ or the
-background, $\sigma(v) = 0$. Cell $c$'s volume is $V_c = \nu \, |\{v : \sigma(v) = c\}|$. Sampling
-starts coarse (4 µm in x and y, one z layer) and doubles the resolution twice, to 1 µm and four
-layers; doubling splits voxels without changing which cell owns a region (slice 3).
+background, $\sigma(v) = 0$. Cell $c$'s volume is $V_c = \nu \, |\{v : \sigma(v) = c\}|$. A run
+can sample in stages of finer voxels, each splitting the last's without changing which cell owns
+a region (the sampler, below).
 
 **Molecules.** Transcript $i$ ($i = 1, \dots, N$; gene transcripts of quality 20 or more) has
 gene $g_i$ and lies in voxel $v(i)$; write $\sigma(i) = \sigma(v(i))$. The molecules of gene $g$
@@ -514,29 +514,149 @@ cell is refused.
 A sweep of the parameters at the standard simulation's size (3,000 cells, 120 genes, 10
 components) takes about 9 ms on ten cores; its cost grows with cells × genes × components.
 
-#### The sampler (wave 3, slice 3; as planned)
+#### The sampler (verified, wave 3, slice 3)
 
-- **Morphology.** A hard constraint, not an energy: each cell's perimeter in each z layer is
-  bounded relative to the perimeter of a circle of the same area (factor 1.3 by default).
-  Proposals that violate it are rejected.
-- **Connectivity.** Proposals that would change local connected components are rejected (an
-  articulation check in the Moore neighborhood). Cells are never annihilated. Background
-  "bubble" proposals (probability 0.05) let gaps form and close between cells.
-- **Sampler.** Metropolis–Hastings. A proposal copies a voxel's label to a neighbor with a
-  different label (von Neumann neighborhood), with the proposal-ratio correction. Parallel
-  updates use a checkerboard of blocks updated in four phases.
-- **Repositioning.** Each transcript's true position has a two-component normal mixture prior
-  around its observed position: a wide component (σ = 4 µm, weight 0.2) for leaked or diffused
-  molecules and a narrow one (σ = 0.5 µm). It is sampled jointly with the boundaries. A setting
-  disables diffusion, lowering memory use.
+Each sweep draws the attributions and the parameters (above), then the labelling, then the
+transcripts' places.
 
-SituCraft's choices where the publication leaves them open:
-- **Determinism.** Each block has its own seeded random stream and blocks are updated in a fixed
-  order, so a seed gives the same result on any number of threads.
-- **Polygons** come from voxel labels by boundary tracing per z layer. A consensus 2D polygon
-  assigns each x/y position to its dominant cell.
-- **Convergence.** Diagnostics are reported: assignment changes per sweep, log-likelihood trace,
-  and agreement between two seeds on a pilot region.
+**The labelling's moves** (Metropolis–Hastings). A voxel $v$ is chosen. With probability
+$p_b = 0.05$ the background is proposed for it (a "bubble", which lets gaps open between cells);
+otherwise the label of one of its face neighbours, chosen uniformly. A voxel's neighbours do not
+change when it moves, so the proposal's probability both ways is local,
+$q(a \to b) \propto p_b [b = 0] + (1 - p_b)\, n_b(v)/n(v)$ ($n_b(v)$ of its $n(v)$ face
+neighbours labelled $b$). The move is accepted with probability
+$\min\{1, e^{\Delta}\, q(b \to a)/q(a \to b)\}$.
+
+**The constraints,** each holding in both directions, so that a move is allowed exactly when its
+reverse is (which detailed balance needs):
+- **No cell is emptied.**
+- **Connectivity.** Among the 26 voxels about $v$, those of the cell losing $v$ and those of the
+  cell gaining it must each form exactly one face-connected piece touching $v$'s faces. Removing
+  $v$ then cannot disconnect the first, and adding it cannot join pieces of the second into a
+  loop. This is a local test of simple points (Kong TY, Rosenfeld A. Digital topology:
+  introduction and survey. *Comput Vis Graph Image Process* 1989;48:357–393).
+  - *SituCraft's choice:* the test applies to both cells. A test of the losing cell alone allows
+    moves whose reverse it forbids. The tests below catch that error.
+- **Perimeter.** In each layer a cell's perimeter, counted in voxel edges, is at most $f$ times the
+  least any shape of its area can have: $2\lceil 2\sqrt{n}\rceil$ for $n$ voxels (Harary F,
+  Harborth H. Extremal animals. *J Combin Inform System Sci* 1976;1:1–8), $f = 2$.
+  - *SituCraft's choice:* the publication bounds the perimeter against a circle's (a factor of
+    1.3). In voxel edges, a digital disc's perimeter already exceeds the circle's by about 4/π.
+    SituCraft bounds against the least digital perimeter instead. An elongated cell (an ellipse of
+    aspect 4 at 45°) reaches about 1.6 times it, a thin tendril far more.
+  - A cell that starts beyond the bound keeps its own starting ratio as its bound.
+
+**Parallel and deterministic.** The region is cut into square blocks (40 µm, all layers), coloured
+in a 2 × 2 checkerboard and shifted each sweep by an offset drawn from the sweep's stream. In each
+of four phases the blocks of one colour are updated in parallel. Each block proposes as many moves
+as it has voxels, at voxels chosen uniformly within it, from its own random stream.
+
+Blocks of one colour are a block apart, so a move in one never reads a voxel another changes. A
+cell may move in a phase only if its bounding box, grown by one voxel, meets exactly one of the
+phase's blocks. Blocks therefore change disjoint cells, and a phase is the same as its blocks
+updated one after another. A block's moves never change which cells it may move, so each phase
+keeps the target. A seed gives the same result, byte for byte, on any number of threads and on
+any processor.
+
+**Repositioning.** Each transcript's true place in x and y is its observed place displaced by a
+normal of σ 4 µm with probability 0.2, else of σ 0.5 µm (the publication's mixture). Its depth is
+kept: a section's layer is thicker than the displacement. Each sweep proposes a place for every
+transcript from that prior, about where it was observed, and accepts it with probability
+$\min\{1, \Lambda(\text{new})/\Lambda(\text{old})\}$: an independence sampler, whose proposal is the
+prior. $\Lambda$ is the gene's intensity at the place's voxel times the transcript's nuclear prior
+there. A place outside the region is refused.
+
+**The start.** The run starts from the instrument's cells (`cells.zarr.zip` masks/1):
+- **On the first lattice:** each column takes the label most of its pixels have, and each cell
+  keeps its piece holding its seed, the centre of its largest nucleus (masks/0).
+- **Prior cells:** each nucleus belongs to the cell holding most of its pixels, and each
+  transcript over a nucleus has that cell as its prior.
+- **Small cells:** a cell left without a column takes its seed's column. If a cell still has none
+  (two seeds in one voxel), the run starts at the next finer stage, and cells lost even at the
+  finest are left out and counted.
+- **Each finer stage** splits every voxel by whole factors, so no region changes owner.
+
+**What is reported** is the posterior's summary over the last sweeps, not one sample: each voxel's
+most frequent label, and each transcript's most frequent cell with its posterior probability (the
+share of samples). A cell's 2D footprint takes, in each column, the label holding most of its
+layers (the background counted like a cell; a tie between a cell and the background goes to the
+cell).
+
+At 1 µm a voxel at a cell's edge holds a transcript or two at most (in four layers, about 0.4),
+so whether it belongs to the cell is decided by a few nats at most. Any one sample's boundary is
+therefore as rough as the posterior is broad, and the summary is what estimates it.
+
+**Defaults** (SituCraft's choices, from the validation below): one stage of 1 µm voxels in one
+layer, 600 sweeps, the last 500 summarized.
+- **The schedule** was the best of those tried on simulated truth. The publication's schedule (4 µm
+  and one layer, then 2 µm and two, then 1 µm and four) is available. Coarse starts reach a higher
+  likelihood on the simulations, but land further from the truth there. These simulated cells do
+  not overlap in depth, which real tissue can.
+- **The samples:** summarizing more of them helped steadily. On the standard tissue, a summary of
+  100, 300 and 500 sweeps gave median IoUs of 0.610, 0.640 and 0.663.
+- Slice 6's comparison on real data revisits both.
+
+**Validation** (`internal/segment/refine`; fixed seeds):
+- **Detailed balance, exactly.** On lattices small enough to list every labelling (3 × 3 in one
+  layer, 2,136 states reachable; 2 × 2 × 2, 2,314), with the parameters held fixed:
+  - every move from every reachable state satisfies $\pi(\sigma)K(\sigma\to\sigma') = \pi(\sigma')K(\sigma'\to\sigma)$
+    to $10^{-9}$ (13,712 and 22,592 moves);
+  - no move is allowed one way only;
+  - every reachable state keeps the constraints, checked independently.
+- **The random steps sample it.** 20,000 chains started from exact draws of π, each run 200 steps,
+  end distributed as π (χ²). The same holds for the parallel sweep on a 4 × 2 lattice in blocks of
+  two voxels.
+- **Along a random walk** on a 9 × 8 × 2 lattice with six cells, where a voxel can sit between two
+  pieces of a cell, every proposed move balances against the target computed afresh.
+- **Repositioning:** 20,000 transcripts observed at one place, near cells of different rates and a
+  nuclear prior, end in each voxel as often as the displacement prior's mass, the intensity and
+  the prior say (χ²).
+- **Determinism:** a run gives the same digest on 1, 4 and 16 threads, on arm64 and amd64
+  (pinned).
+- **Power.** Each test was shown to fail on a deliberate error. Eight errors were tried:
+  - connectivity tested for the losing cell only;
+  - the proposal ratio left out, or the bubble left out of it;
+  - a step that always copies the first neighbour;
+  - the perimeter's change computed wrongly;
+  - repositioning without the nuclear prior, with one width for both components, or about the
+    current place instead of the observed one.
+
+  Every one was caught; the one-sided connectivity test only by the walk on the larger lattice.
+
+**Reference numbers.** On the standard simulated tissue (500 × 500 µm, seed 20261014: 2,925
+cells started from the instrument's, 394,490 gene transcripts of quality 20 or more; ten cores),
+scored on gene transcripts of quality 20 or more and on the true cells with a nucleus in the
+section:
+
+| Segmentation | Transcripts in their true cell | Median IoU | Time |
+| --- | --- | --- | --- |
+| The true cells, each transcript by where it was observed | 85.0% (the small tissue) | 1 | |
+| The instrument's 5 µm expansion (the start) | 82.5% | 0.622 | |
+| Default: 1 µm, one layer, 600 sweeps (500 summarized) | **85.9%** | **0.663** | 24 s |
+| 1 µm, four layers, 600 sweeps (500 summarized) | 85.1% | 0.630 | 51 s |
+| The publication's schedule, 4 → 2 → 1 µm (250 summarized) | 83.0% | 0.591 | 39 s |
+
+The refined segmentation assigns more transcripts to their true cells than the true cells
+themselves do by place. Repositioning estimates where each molecule came from, which no
+segmentation by place can. Its cells cover 173,181 µm² against the true 185,852 µm² (the
+expansion's 245,477): the sparse edges of cells are left to the background. On the small tissue
+(the unit test: 300 sweeps, 250 summarized), 86.4% of transcripts are in their true cell (the
+expansion 83.4%), with a median IoU of 0.668 (0.634).
+
+**Found by slice 3:**
+- **Attributions before rates.** The first attribution, drawn before any cell had rates, gave every
+  transcript to the background, and the chain never recovered. The start now attributes by place.
+- **One sample is not the segmentation.** On the small tissue at 1 µm in four layers, the last of
+  80 sweeps put 80.8% of transcripts in their true cells (median IoU 0.571), below the expansion.
+  The posterior summary is above it.
+- **Projecting 3D cells:** taking any layer's cell for a column spread cells over the gaps; the
+  column's dominant label does not.
+
+SituCraft's other choices where the publication leaves them open:
+- **Polygons** come from the summarized voxel labels by boundary tracing per z layer, and from
+  the 2D footprint (slice 4).
+- **Convergence.** Each sweep records the voxels moved, the transcripts repositioned and the
+  log-likelihood. Agreement between two seeds on a pilot region comes with the outputs (slice 4).
 - **Large tissues** run as overlapping patches that are stitched. Patch-based processing of large
   sections follows the approach of Blampey et al. (2024), *Nat Commun* 15:4981,
   doi:10.1038/s41467-024-48981-z.
@@ -990,6 +1110,10 @@ Notes:
   doi:10.1198/016214504000001132. Murray I, Ghahramani Z, MacKay DJC. MCMC for
   doubly-intractable distributions. *UAI* 2006 (the transcript-informed segmentation's model,
   §3.2).
+- Kong TY, Rosenfeld A. Digital topology: introduction and survey. *Comput Vis Graph Image
+  Process* 1989;48:357–393 (the sampler's connectivity test). Harary F, Harborth H. Extremal
+  animals. *J Combin Inform System Sci* 1976;1:1–8 (the least perimeter of n voxels, the
+  sampler's perimeter bound).
 - Feder J. Random sequential adsorption. *J Theor Biol* 1980;87:237–254.
   doi:10.1016/0022-5193(80)90358-6 (placing simulated cells).
 - Borgefors G. Distance transformations in digital images. *Comput Vis Graph Image Process*

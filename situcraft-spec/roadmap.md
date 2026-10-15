@@ -1170,18 +1170,52 @@ independent reference outputs.
    - Found by slice 2:
      - **Geweke's test needs long chains for ordering errors:** with 8 sweeps per chain it missed
        the rates drawn before the shapes; with 40 the error accumulates and is caught.
-3. **The sampler (S2, S8).**
-   - Proposals: voxel-label copy, Metropolis–Hastings with proposal correction, bubble proposals.
-   - Constraints: connectivity (articulation check) and the perimeter bound.
-   - Multi-resolution: 4 → 2 → 1 µm, with z layers.
-   - Repositioning: the transcript-repositioning mixture.
-   - Parallelism: checkerboard blocks, each with its own random stream.
-   - Validation:
-     - On lattices small enough to enumerate every state, sampled state frequencies match the
-       exact target distribution (detailed balance).
-     - A seed gives byte-identical output on 1, 4 and 16 threads.
-     - Cells are recovered on simulations (IoU and assignment accuracy against truth, better
-       than nucleus expansion where leakage is simulated).
+3. **The sampler (S2, S8): done.**
+   - **Moves** (`internal/segment/refine`; research.md §3.2, the sampler): Metropolis–Hastings
+     with a label copied from a face neighbour or a background "bubble", the proposal ratio local
+     and exact.
+   - **Constraints:** no cell emptied; connectivity by a local simple-point test applied to both
+     cells a move touches, so that a move is allowed exactly when its reverse is; a perimeter
+     bound in each layer against the least digital perimeter of the area (factor 2).
+   - **Parallel and deterministic:** a checkerboard of 40 µm blocks, shifted each sweep. A cell
+     moves in a phase only in the one block near it, so a phase equals its blocks one after
+     another. Each block draws from its own stream.
+   - **Repositioning:** an independence sampler from the displacement mixture about each
+     transcript's observed place.
+   - **Multi-resolution:** stages refined by whole factors; the run starts at the coarsest stage
+     that keeps every cell.
+   - **The start:** the instrument's cells (masks/1) on the first lattice by majority, each seeded
+     at its nucleus's centre; each transcript over a nucleus has that nucleus's cell as its prior.
+   - **Posterior summaries:** each voxel's most frequent label and each transcript's most frequent
+     cell with its probability, over the last sweeps; 2D footprints by each column's dominant
+     label.
+   - **Defaults from the validation:** one stage of 1 µm in one layer, 600 sweeps, the last 500
+     summarized. The publication's schedule is kept as `PublishedStages`, to be revisited on real
+     data in slice 6.
+   - Validation (research.md §3.2):
+     - **exact detailed balance** on every reachable state of two enumerable lattices (2D and
+       3D), with no move allowed one way only and every state within the constraints;
+     - **sampling:** chains from exact draws of π stay distributed as π, for single steps and for
+       the parallel sweep;
+     - every proposed move along a walk on a larger lattice balances against the recomputed
+       target;
+     - **repositioning** against its posterior;
+     - **the same digest** on 1, 4 and 16 threads, on arm64 and amd64.
+
+     Eight deliberate errors were each caught.
+   - **Recovery:** on the standard simulated tissue, 85.9% of transcripts in their true cells
+     against the instrument's 82.5%, and a median IoU of 0.663 against 0.622, in 24 s on ten
+     cores. On the small tissue (the unit test) 86.4% and 0.668 against 83.4% and 0.634.
+   - Found by slice 3:
+     - **Attributions drawn before rates** gave every transcript to the background, for good; the
+       start attributes by place.
+     - **One sample is not the segmentation:** the posterior summary is.
+     - **3D cells' footprints:** any layer's cell spread cells over gaps; the dominant label does
+       not.
+     - **Coarse starts** reach a higher likelihood on simulations but land further from the truth,
+       so the default is one stage.
+     - **A one-sided connectivity test** breaks detailed balance only where a voxel sits between
+       two pieces of a cell; a test on a larger lattice was needed to catch it.
 4. **Outputs (S9, S11).**
    - Polygons per z layer and in consensus; transcript assignments with probabilities; counts.
    - Convergence diagnostics.

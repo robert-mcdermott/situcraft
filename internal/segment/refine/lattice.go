@@ -69,38 +69,53 @@ type Transcripts struct {
 
 // State is a labelling of a lattice with its transcripts.
 type State struct {
-	Lat    Lattice
-	Labels []uint32
-	Cells  int
-	Genes  int
+	Lat      Lattice
+	Labels   []uint32
+	Cells    int
+	Genes    int
+	Settings Settings
 
 	cellVoxels []int
 	gene       []uint32
-	voxel      []int32
 	prior      []uint32
+	// Each transcript's observed place (µm), its place now (repositioning moves it in x and y),
+	// and its voxel.
+	obsX, obsY []float32
+	posX, posY []float64
+	posZ       []float32
+	voxel      []int32
 	// fromCell is each transcript's attribution: to its voxel's cell (true) or the background.
 	fromCell []bool
 	// The transcripts of voxel v are order[start[v]:start[v+1]].
 	start []int32
 	order []int32
+	// Each cell's voxels and perimeter (voxel edges) in each layer (c*L + z), and the factor of its
+	// perimeter bound.
+	area, perim []int32
+	tolerance   []float64
 }
 
 // NewState places the transcripts on a labelled lattice (labels: each voxel's cell, 1 to cells,
-// or 0). Every cell must have a voxel and every transcript lie in the region.
-func NewState(lat Lattice, labels []uint32, cells, genes int, t Transcripts) (*State, error) {
+// or 0). Every cell must have a voxel and be connected, and every transcript lie in the region.
+// Each cell's perimeter bound is the settings' factor, or its own if it starts beyond it.
+func NewState(lat Lattice, labels []uint32, cells, genes int, t Transcripts, settings Settings) (*State, error) {
 	if lat.W < 1 || lat.H < 1 || lat.L < 1 || !(lat.VoxelUm > 0) || !(lat.LayerUm > 0) {
 		return nil, errors.New("refine: a lattice of at least one voxel, of positive size")
 	}
 	if len(labels) != lat.Voxels() {
 		return nil, fmt.Errorf("refine: %d labels for %d voxels", len(labels), lat.Voxels())
 	}
+	if err := settings.Check(); err != nil {
+		return nil, err
+	}
 	n := len(t.Gene)
 	if len(t.X) != n || len(t.Y) != n || len(t.Z) != n || len(t.Prior) != n {
 		return nil, errors.New("refine: the transcripts' columns differ in length")
 	}
-	s := &State{Lat: lat, Labels: append([]uint32(nil), labels...), Cells: cells, Genes: genes,
+	s := &State{Lat: lat, Labels: append([]uint32(nil), labels...), Cells: cells, Genes: genes, Settings: settings,
 		cellVoxels: make([]int, cells), gene: append([]uint32(nil), t.Gene...), prior: append([]uint32(nil), t.Prior...),
-		voxel: make([]int32, n), fromCell: make([]bool, n)}
+		obsX: append([]float32(nil), t.X...), obsY: append([]float32(nil), t.Y...), posZ: append([]float32(nil), t.Z...),
+		posX: make([]float64, n), posY: make([]float64, n), voxel: make([]int32, n), fromCell: make([]bool, n)}
 	for _, l := range labels {
 		if int(l) > cells {
 			return nil, fmt.Errorf("refine: a voxel of cell %d, of %d cells", l, cells)
@@ -114,7 +129,9 @@ func NewState(lat Lattice, labels []uint32, cells, genes int, t Transcripts) (*S
 			return nil, fmt.Errorf("refine: cell %d has no voxel", c+1)
 		}
 	}
-	count := make([]int32, lat.Voxels()+1)
+	if c := s.disconnected(); c > 0 {
+		return nil, fmt.Errorf("refine: cell %d is in pieces", c)
+	}
 	for i := 0; i < n; i++ {
 		if int(t.Gene[i]) >= genes {
 			return nil, fmt.Errorf("refine: transcript %d is of gene %d, of %d genes", i, t.Gene[i], genes)
@@ -122,25 +139,121 @@ func NewState(lat Lattice, labels []uint32, cells, genes int, t Transcripts) (*S
 		if int(t.Prior[i]) > cells {
 			return nil, fmt.Errorf("refine: transcript %d's prior cell %d, of %d cells", i, t.Prior[i], cells)
 		}
-		v := lat.Voxel(float64(t.X[i]), float64(t.Y[i]), float64(t.Z[i]))
+		s.posX[i], s.posY[i] = float64(t.X[i]), float64(t.Y[i])
+		v := lat.Voxel(s.posX[i], s.posY[i], float64(t.Z[i]))
 		if v < 0 {
 			return nil, fmt.Errorf("refine: transcript %d at (%g, %g, %g) µm is outside the region", i, t.X[i], t.Y[i], t.Z[i])
 		}
 		s.voxel[i] = int32(v)
+	}
+	s.reindex()
+	s.measure()
+	return s, nil
+}
+
+// setLabels replaces the labelling, recounting the cells' voxels, areas and perimeters (and the
+// model's volumes when m is not nil) but keeping their perimeter bounds.
+func (s *State) setLabels(labels []uint32, m *Model) {
+	copy(s.Labels, labels)
+	clear(s.cellVoxels)
+	for _, c := range labels {
+		if c > 0 {
+			s.cellVoxels[c-1]++
+		}
+	}
+	tolerance := s.tolerance
+	s.measure()
+	s.tolerance = tolerance
+	if m != nil {
+		copy(m.Volume, s.Volumes())
+	}
+}
+
+// reindex lists the transcripts by voxel.
+func (s *State) reindex() {
+	count := make([]int32, s.Lat.Voxels()+1)
+	for _, v := range s.voxel {
 		count[v+1]++
 	}
 	for v := 1; v < len(count); v++ {
 		count[v] += count[v-1]
 	}
 	s.start = count
-	s.order = make([]int32, n)
-	next := append([]int32(nil), count[:lat.Voxels()]...)
-	for i := 0; i < n; i++ {
-		v := s.voxel[i]
+	if len(s.order) != len(s.voxel) {
+		s.order = make([]int32, len(s.voxel))
+	}
+	next := append([]int32(nil), count[:s.Lat.Voxels()]...)
+	for i, v := range s.voxel {
 		s.order[next[v]] = int32(i)
 		next[v]++
 	}
-	return s, nil
+}
+
+// measure counts each cell's voxels and perimeter in each layer, and sets each cell's perimeter
+// bound: the settings' factor, or the cell's own largest ratio if it starts beyond it.
+func (s *State) measure() {
+	l := s.Lat
+	s.area = make([]int32, s.Cells*l.L)
+	s.perim = make([]int32, s.Cells*l.L)
+	for z := 0; z < l.L; z++ {
+		for y := 0; y < l.H; y++ {
+			for x := 0; x < l.W; x++ {
+				c := s.Labels[l.Index(x, y, z)]
+				if c == 0 {
+					continue
+				}
+				i := int(c-1)*l.L + z
+				s.area[i]++
+				for _, d := range [4][2]int{{-1, 0}, {1, 0}, {0, -1}, {0, 1}} {
+					nx, ny := x+d[0], y+d[1]
+					if nx < 0 || ny < 0 || nx >= l.W || ny >= l.H || s.Labels[l.Index(nx, ny, z)] != c {
+						s.perim[i]++
+					}
+				}
+			}
+		}
+	}
+	s.tolerance = make([]float64, s.Cells)
+	for c := 0; c < s.Cells; c++ {
+		f := s.Settings.PerimeterFactor
+		for z := 0; z < l.L; z++ {
+			if a := s.area[c*l.L+z]; a > 0 {
+				f = math.Max(f, float64(s.perim[c*l.L+z])/float64(minPerimeter(int(a))))
+			}
+		}
+		s.tolerance[c] = f
+	}
+}
+
+// disconnected is a cell in more than one face-connected piece (0: none).
+func (s *State) disconnected() uint32 {
+	l := s.Lat
+	seen := make([]bool, l.Voxels())
+	pieces := make([]int, s.Cells+1)
+	var stack []int
+	for v0, c := range s.Labels {
+		if c == 0 || seen[v0] {
+			continue
+		}
+		pieces[c]++
+		if pieces[c] > 1 {
+			return c
+		}
+		stack = append(stack[:0], v0)
+		seen[v0] = true
+		var nb [6]int
+		for len(stack) > 0 {
+			v := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+			for _, u := range nb[:l.faceNeighbors(v, &nb)] {
+				if !seen[u] && s.Labels[u] == c {
+					seen[u] = true
+					stack = append(stack, u)
+				}
+			}
+		}
+	}
+	return 0
 }
 
 // Volumes are the cells' volumes (µm³).
@@ -187,6 +300,21 @@ func (s *State) Attribute(m *Model) {
 	}
 	close(next)
 	wg.Wait()
+	s.count(m)
+}
+
+// AttributeByPlace attributes every transcript in a cell to it and the rest to the background,
+// and sets the model's statistics: the start, before there are rates to draw attributions from.
+func (s *State) AttributeByPlace(m *Model) {
+	for i, v := range s.voxel {
+		s.fromCell[i] = s.Labels[v] != 0
+	}
+	s.count(m)
+}
+
+// count sets the model's statistics from the attributions and the labelling.
+func (s *State) count(m *Model) {
+	g := m.Genes
 	clear(m.Counts)
 	clear(m.BgCounts)
 	for i, own := range s.fromCell {
@@ -288,11 +416,24 @@ func (s *State) MoveDelta(m *Model, v int, b uint32) float64 {
 	return d
 }
 
-// Move gives voxel v to cell b (0: the background), keeping the model's volumes.
+// Move gives voxel v to cell b (0: the background), keeping the cells' areas and perimeters
+// and the model's volumes.
 func (s *State) Move(m *Model, v int, b uint32) {
 	a := s.Labels[v]
 	if a == b {
 		return
+	}
+	z := v / (s.Lat.W * s.Lat.H)
+	na, nb := s.layerNeighbors(v, a), s.layerNeighbors(v, b)
+	if a > 0 {
+		i := int(a-1)*s.Lat.L + z
+		s.area[i]--
+		s.perim[i] += int32(2*na - 4)
+	}
+	if b > 0 {
+		i := int(b-1)*s.Lat.L + z
+		s.area[i]++
+		s.perim[i] += int32(4 - 2*nb)
 	}
 	nu := s.Lat.VoxelVolume()
 	if a > 0 {

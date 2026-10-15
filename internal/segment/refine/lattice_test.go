@@ -54,7 +54,7 @@ func TestNewStateRefuses(t *testing.T) {
 		{"a gene beyond the panel", []uint32{1, 2, 0, 0}, 2, Transcripts{X: []float32{0}, Y: []float32{0}, Z: []float32{0}, Gene: []uint32{5}, Prior: []uint32{0}}, "of gene 5"},
 		{"a prior cell beyond the cells", []uint32{1, 2, 0, 0}, 2, Transcripts{X: []float32{0}, Y: []float32{0}, Z: []float32{0}, Gene: []uint32{0}, Prior: []uint32{4}}, "prior cell 4"},
 	} {
-		if _, err := NewState(l, c.labels, c.cells, 3, c.t); err == nil || !strings.Contains(err.Error(), c.want) {
+		if _, err := NewState(l, c.labels, c.cells, 3, c.t, DefaultSettings()); err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Errorf("%s: %v", c.name, err)
 		}
 	}
@@ -67,12 +67,34 @@ func randomState(t *testing.T, seed uint64) (*State, *Model) {
 	l := Lattice{X0: 5, Y0: 5, VoxelUm: 1, LayerUm: 3, W: 9, H: 8, L: 2}
 	s := random.New(seed, 1)
 	const cells, genes, n = 6, 4, 400
+	// Cells about random centres (each voxel to the nearest, within 3 voxels; the background
+	// beyond), the same in both layers: connected pieces.
 	labels := make([]uint32, l.Voxels())
-	for v := range labels {
-		labels[v] = uint32(s.IntN(cells + 1))
+	cx, cy := make([]int, cells), make([]int, cells)
+	taken := map[[2]int]bool{}
+	for c := range cx {
+		for {
+			cx[c], cy[c] = s.IntN(l.W), s.IntN(l.H)
+			if !taken[[2]int{cx[c], cy[c]}] {
+				taken[[2]int{cx[c], cy[c]}] = true
+				break
+			}
+		}
 	}
-	for c := 1; c <= cells; c++ {
-		labels[c*7] = uint32(c) // every cell has a voxel
+	for z := 0; z < l.L; z++ {
+		for y := 0; y < l.H; y++ {
+			for x := 0; x < l.W; x++ {
+				best, bestD := 0, 1<<30
+				for c := range cx {
+					if d := (x-cx[c])*(x-cx[c]) + (y-cy[c])*(y-cy[c]); d < bestD {
+						best, bestD = c+1, d
+					}
+				}
+				if bestD <= 9 {
+					labels[l.Index(x, y, z)] = uint32(best)
+				}
+			}
+		}
 	}
 	tr := Transcripts{}
 	for i := 0; i < n; i++ {
@@ -86,7 +108,7 @@ func randomState(t *testing.T, seed uint64) (*State, *Model) {
 		}
 		tr.Prior = append(tr.Prior, prior)
 	}
-	st, err := NewState(l, labels, cells, genes, tr)
+	st, err := NewState(l, labels, cells, genes, tr, DefaultSettings())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +118,7 @@ func randomState(t *testing.T, seed uint64) (*State, *Model) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	st.Attribute(m)
+	st.AttributeByPlace(m)
 	m.Init()
 	for i := 0; i < 5; i++ {
 		st.Attribute(m)
@@ -153,7 +175,7 @@ func TestAttributionsAreTheirShares(t *testing.T) {
 		tr.X, tr.Y, tr.Z = append(tr.X, x), append(tr.Y, 5), append(tr.Z, 5)
 		tr.Gene, tr.Prior = append(tr.Gene, uint32(i%4/2)), append(tr.Prior, 0)
 	}
-	st, err := NewState(l, []uint32{1, 0}, 1, 2, tr)
+	st, err := NewState(l, []uint32{1, 0}, 1, 2, tr, DefaultSettings())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -222,7 +244,7 @@ func TestSweepsAreTheSameOnEveryProcessor(t *testing.T) {
 		put(float64(k))
 	}
 	put(st.LogTarget(m), st.MoveDelta(m, 17, 2))
-	const pinned = "58274f36f28aeec6"
+	const pinned = "92aff03a9506b9c9"
 	if got := hex.EncodeToString(h.Sum(nil))[:16]; got != pinned {
 		t.Errorf("the sweeps' checksum is %s, not %s (on %s)", got, pinned, runtime.GOARCH)
 	}

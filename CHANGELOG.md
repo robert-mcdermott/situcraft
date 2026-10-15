@@ -39,6 +39,15 @@ segmentation, validated against simulated truth and independent reference output
   result on any number of threads and any processor. The equations are in
   [research.md §3.2](situcraft-spec/research.md).
 
+- **The sampler of SituCraft's transcript-informed segmentation (wave 3, slice 3),** not yet in
+  the app. It moves cells' boundaries voxel by voxel, keeping each cell whole and within a
+  perimeter bound, and repositions each transcript within its likely displacement. It runs in
+  parallel with the same result on any number of threads and any processor. It reports each
+  transcript's most probable cell with its probability. On a simulated tissue it puts 85.9% of
+  transcripts in their true cells, against 82.5% for the instrument's nucleus expansion, and its
+  cells overlap the true ones more (median IoU 0.663 against 0.622). Its moves are checked to keep
+  the posterior exactly (detailed balance on every state of small lattices).
+
 ### Fixed
 
 - **Nucleus expansion stopped with an internal error** when a bundle's cell mask
