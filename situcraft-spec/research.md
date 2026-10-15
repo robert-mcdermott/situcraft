@@ -702,7 +702,8 @@ the instrument's segmentation as soon as it is made.
   - fewer than 10 gene transcripts: the boundary comes more from the prior than from the
     transcripts;
   - uncertain boundaries: the cell's voxels are its own in fewer than 75% of the summarized
-    sweeps, on average;
+    sweeps, on average (that average, each cell's boundary certainty, is recorded since slice 8,
+    `certainty.bin`, and fills the cells in the Viewer);
   - no nucleus: the cell started without one, so no nuclear prior holds it;
   - left out at the start;
   - for every cell: no cell absent from the start can be created, and boundaries between cells
@@ -908,10 +909,10 @@ decodes):
 | In their true cell (instrument 82.2%) | | | | | **84.7%** | 75.2% |
 | Median IoU with the truth (instrument 0.622) | | | | | 0.719 | 0.727 |
 | Cells' transcripts left in no cell (instrument 1.17%) | | | | | **0.13%** | 1.42% |
-| Time, peak memory | 93 s, 264 MB | 156 s, 610 MB | 99 s, 282 MB | 122 s, 663 MB | 27 s, 106 MB | 22 s, 305 MB |
+| Time, peak memory | 93 s, 263 MB | 156 s, 610 MB | 83 s, 279 MB | 122 s, 663 MB | 23 s, 106 MB | 22 s, 305 MB |
 
-- **Met everywhere** on Breast and the simulated tissue, the budget included: Breast in 99 s and
-  282 MB.
+- **Met everywhere** on Breast and the simulated tissue, the budget included: Breast in 83 s and
+  279 MB.
 - **On the truth** SituCraft puts 9.5 points more transcripts in their true cells than Proseg, with
   outlines as close to the true ones (median IoU 0.719 against 0.727), and leaves a tenth as many
   of the cells' transcripts in no cell. On slice 6's tissue it put 85.0% in their true cell and

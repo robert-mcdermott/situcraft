@@ -79,9 +79,9 @@
    "medianAreaUm2": 89.770622,
    "spuriousCoexpression": 1.831728,
    "mecr": 0.049992,
-   "seconds": 98.7,
-   "peakResidentBytes": 296075264,
-   "digest": "bd3902fd27d6a58d2e45dedf188cda345e3d13fe3c5c67522cad0df01dd93936"
+   "seconds": 82.8,
+   "peakResidentBytes": 293322752,
+   "digest": "1f38b28d557d7c7cff0dad067a8ccd86da1e205c0faae3d8a688ac77622e82ac"
   },
   "situcraft-2": {
    "cells": 7275,
@@ -91,9 +91,9 @@
    "medianAreaUm2": 89.996407,
    "spuriousCoexpression": 1.838433,
    "mecr": 0.05054,
-   "seconds": 100.4,
-   "peakResidentBytes": 296402944,
-   "digest": "8a4ec33237f86ecc214645108b0195e638068eeff5898f12999d3a68713d6563"
+   "seconds": 86.4,
+   "peakResidentBytes": 297074688,
+   "digest": "d1083763c3e6692328a5c753b53c7a6153365e93fabcc4223ff97eed177e233e"
   }
  },
  "pairs": {
@@ -514,14 +514,14 @@
   {
    "name": "time (Breast)",
    "tolerance": "under 2 minutes on a laptop",
-   "value": 98.7,
+   "value": 82.8,
    "limit": 120,
    "pass": true
   },
   {
    "name": "memory (Breast)",
    "tolerance": "under 4 GB on a laptop",
-   "value": 296075264,
+   "value": 293322752,
    "limit": 4294967296,
    "pass": true
   }

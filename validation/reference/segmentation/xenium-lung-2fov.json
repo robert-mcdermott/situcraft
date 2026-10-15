@@ -79,9 +79,9 @@
    "medianAreaUm2": 37.118439,
    "spuriousCoexpression": 1.678085,
    "mecr": 0.008783,
-   "seconds": 92.8,
-   "peakResidentBytes": 277413888,
-   "digest": "e44589b510aa131725af7bcd8bb9a06e195efde832a2d6eed0e6195e9168cd08"
+   "seconds": 93.4,
+   "peakResidentBytes": 276791296,
+   "digest": "a35d1cfcbb718a83694a8e3235fab5484734ab8b53d3ead9f3c44546c3300831"
   },
   "situcraft-2": {
    "cells": 11898,
@@ -91,9 +91,9 @@
    "medianAreaUm2": 36.666874,
    "spuriousCoexpression": 1.704352,
    "mecr": 0.009212,
-   "seconds": 112.8,
-   "peakResidentBytes": 280363008,
-   "digest": "355b763b79d9876cbb646b7532f8100609c4b64121a532733f55abcc21c26130"
+   "seconds": 95.7,
+   "peakResidentBytes": 280903680,
+   "digest": "e6eb75f1f04ff17a4dd7c27bacca53c9e71bfd6eb5ed4ca0cb792194d4f8cbbb"
   }
  },
  "pairs": {

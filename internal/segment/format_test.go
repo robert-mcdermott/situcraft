@@ -3,6 +3,7 @@ package segment
 import (
 	"encoding/binary"
 	"encoding/json"
+	"math"
 	"math/rand/v2"
 	"os"
 	"path/filepath"
@@ -93,6 +94,16 @@ func TestFilesReadBackAsWritten(t *testing.T) {
 	if err != nil || len(o) != 2 || len(o[0].X) < 3 || o[1].Pixels != 6 {
 		t.Errorf("outlines %+v, %v", o, err)
 	}
+	// The boundary certainty, optional: one per cell, NaN for a cell not drawn by the method.
+	if err := WriteCertainty(dir, []float32{0.875, float32(math.NaN())}); err != nil {
+		t.Fatal(err)
+	}
+	if f := Check(dir, &m); len(fatalCodes(f)) > 0 {
+		t.Fatalf("a valid boundary certainty fails the check: %+v", f)
+	}
+	if b, err := ReadCertainty(dir); err != nil || len(b) != 2 || b[0] != 0.875 || !math.IsNaN(float64(b[1])) {
+		t.Errorf("certainty %v, %v", b, err)
+	}
 }
 
 // Each kind of damage is found, and named.
@@ -146,6 +157,12 @@ func TestTheCheckFindsDamage(t *testing.T) {
 			d.Q20GeneAssigned = 4
 			WriteDescription(dir, *d)
 		}, "counts.total"},
+		{"a boundary certainty for each cell", func(t *testing.T, dir string) {
+			WriteCertainty(dir, []float32{0.9})
+		}, "certainty.count"},
+		{"a boundary certainty above 1", func(t *testing.T, dir string) {
+			WriteCertainty(dir, []float32{0.9, 1.5})
+		}, "certainty.range"},
 		{"an outline outside the raster", func(t *testing.T, dir string) {
 			o, _ := ReadOutlines(dir)
 			o[0].X[0] = 100

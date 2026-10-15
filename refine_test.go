@@ -133,7 +133,7 @@ func TestRefinementIsASegmentationArtifact(t *testing.T) {
 	for _, file := range m.Files {
 		roles[file.Path] = true
 	}
-	for _, name := range []string{segment.FileMask, segment.FileAssignments, segment.FileProbabilities, segment.FileDiagnostics} {
+	for _, name := range []string{segment.FileMask, segment.FileAssignments, segment.FileProbabilities, segment.FileCertainty, segment.FileDiagnostics} {
 		if !roles[name] {
 			t.Errorf("no %s among %v", name, m.Files)
 		}

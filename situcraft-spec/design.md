@@ -125,6 +125,13 @@ The viewer draws with WebGL2 (`web/render/`), from the derived data's tiles:
 - **Transcripts** are points while few tiles are in view, and density grids farther out.
   **Cells** are outlines from the matching geometry level, fills colored through a per-cell color
   texture, and the selected cell drawn from its full-resolution polygon.
+- **Any segmentation** of the dataset can be drawn (wave 3, slice 8). The instrument's comes from
+  the dataset's own entries. Any other's outlines are tiled into an entry of their own, as the
+  comparison workspace's are. Its cells table, a cell's detail and its transcript tiles come from
+  its artifact's files (`api_segview.go`, kept read for the last few drawn): each transcript
+  carries its cell in that segmentation and, for a refinement, its probability. Tile keys name the
+  segmentation, so a tile of one is never drawn as another's; while one is read, the cells drawn
+  before are hidden rather than shown under its name. The nuclei stay the dataset's.
 - **Tiles** are addressed by cache entry, whose name hashes its sources. They never change, so
   the browser caches them for good, and the renderer keeps the GPU's copies within a budget.
 

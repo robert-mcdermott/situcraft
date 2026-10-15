@@ -189,13 +189,17 @@ export function mountSegmentation(app, container) {
       h('td.r', exact(s.cells)),
       h('td.r', percent(s.assignedFraction)),
       h('td.r', Number.isFinite(s.medianTranscriptsPerCell) ? String(s.medianTranscriptsPerCell) : '—'),
-      h('td.r', Number.isFinite(s.medianAreaUm2) ? s.medianAreaUm2.toFixed(1) : '—'));
+      h('td.r', Number.isFinite(s.medianAreaUm2) ? s.medianAreaUm2.toFixed(1) : '—'),
+      h('td', a.state === 'complete' ? h('button.icon-button', { type: 'button', title: `Show ${a.name} on the tissue`, 'aria-label': `Show ${a.name} on the tissue`, 'data-show-tissue': a.id, onclick: (event) => {
+        event.stopPropagation();
+        app.showOnTissue(a.dataset, a.id);
+      } }, icon('tissue')) : null));
     });
     return h('section.seg-section',
       h('div.section-title', `Segmentations of ${t.dataset.name}`),
       list.length
         ? h('div', { style: { overflowX: 'auto' } }, h('table.data.seg-table',
-          h('thead', h('tr', h('th', 'Segmentation'), h('th', 'Made by'), h('th.r', 'Cells'), h('th.r', { title: 'Gene transcripts of quality 20 or more assigned to a cell' }, 'Assigned'), h('th.r', { title: 'Gene transcripts of quality 20 or more per cell, median' }, 'Transcripts per cell'), h('th.r', { title: 'Median cell area, µm²' }, 'Area (µm²)'))),
+          h('thead', h('tr', h('th', 'Segmentation'), h('th', 'Made by'), h('th.r', 'Cells'), h('th.r', { title: 'Gene transcripts of quality 20 or more assigned to a cell' }, 'Assigned'), h('th.r', { title: 'Gene transcripts of quality 20 or more per cell, median' }, 'Transcripts per cell'), h('th.r', { title: 'Median cell area, µm²' }, 'Area (µm²)'), h('th', { title: 'Show it on the tissue, in the Viewer' }, h('span.sr-only', 'On the tissue')))),
           h('tbody', ...rows)))
         : h('p.muted.seg-note', app.bundles.registeringSegmentation(t.dataset.id) ? 'The instrument\'s segmentation is being registered…' : 'None yet: the instrument\'s segmentation is registered when the dataset\'s bundle is found.'),
       h('p.muted.seg-note', 'The numbers are each segmentation\'s own: gene transcripts of quality 20 or more, as the QC view counts them. The default segmentation is the one later analyses use; another is chosen in the Compare view\'s Decide panel, with a reason, after comparing them.'));
@@ -695,7 +699,8 @@ export function mountSegmentation(app, container) {
     return h('section.seg-section',
       head,
       h('div.seg-card',
-        h('h3.seg-card-title', a.name, h('span.muted', ` · compared with ${g.reference.replace(/^the instrument's segmentation: /, '')}`)),
+        h('h3.seg-card-title', a.name, h('span.muted', ` · compared with ${g.reference.replace(/^the instrument's segmentation: /, '')}`),
+          h('button.btn.small', { type: 'button', style: { marginLeft: '10px' }, onclick: () => app.showOnTissue(a.dataset, a.id) }, icon('tissue'), 'Show on the tissue')),
         h('dl.kv.seg-kv',
           ...kv('Cells', `SituCraft ${exact(c.situcraft)}, one for each nucleus; the instrument ${exact(c.instrument)}`, `(${pairing})`),
           ...kv('Pixels', percent(p.agreement, 2), 'in the same cell, of those either gives a cell'),

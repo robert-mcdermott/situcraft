@@ -84,8 +84,10 @@ type app struct {
 	artifacts *artifacts.Store
 	// views are the datasets open in the tissue viewer.
 	views *views
-	// outlines are segmentations' outline tiles opened for the comparison workspace.
+	// outlines are segmentations' outline tiles opened for the comparison workspace and the
+	// Viewer; segViews what the Viewer draws of the segmentations it shows (api_segview.go).
 	outlines outlineEntries
+	segViews segViews
 	// examples are the example datasets, downloaded on request.
 	examples *examples.Library
 	// control is the remote-control hub (remote.go), with --remote-control.
@@ -543,6 +545,7 @@ func (a *app) registerAPI(mux *http.ServeMux) {
 	a.registerImports(mux)
 	a.registerComparisons(mux)
 	a.registerWorkspace(mux)
+	a.registerSegView(mux)
 	a.registerPlant(mux)
 	a.registerExports(mux)
 	if a.control != nil {

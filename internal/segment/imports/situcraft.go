@@ -24,7 +24,7 @@ const SituCraft = "situcraft"
 
 // ownFiles are the files a SituCraft segmentation may hold, in the order they are copied.
 var ownFiles = []string{segment.FileDescription, segment.FileCells, segment.FileMask, segment.FileAssignments, segment.FileCounts, segment.FileOutlines,
-	segment.FileProbabilities, segment.FileDiagnostics, segment.FileLayers}
+	segment.FileProbabilities, segment.FileCertainty, segment.FileDiagnostics, segment.FileLayers}
 
 // copyOwn imports a folder of SituCraft's segmentation files made for the dataset.
 func copyOwn(ctx context.Context, ds Dataset, opt Options, dir string, progress func(float64, string)) (*segment.Description, []artifacts.Finding, []SourceFile, error) {

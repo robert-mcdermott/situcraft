@@ -193,6 +193,9 @@ type Points struct {
 	X, Y   []float32
 	Cell   []uint32
 	Row    []uint32 // the transcript's row in transcripts.parquet (not encoded)
+	// Probability is each point's probability of its cell, when the segmentation gives one (NaN
+	// for a transcript it assigned by place); encoded only when set.
+	Probability []float32
 }
 
 // Len is the number of points.
@@ -309,18 +312,26 @@ func (d *Dataset) RegionPoints(r Rect, genes Genes, minQ float32) (*Points, erro
 	return out, nil
 }
 
-// Encode writes the points ("SCVP"; points, genes present, 0):
+// Encode writes the points ("SCVP"; points, genes present, 1 with probabilities else 0):
 //
 //	starts u32[genes+1] | x f32[n] | y f32[n] | cell u32[n] | genes u16[genes] | padding
+//	| probability f32[n] (with probabilities)
 func (p *Points) Encode() []byte {
 	var w writer
-	w.header("SCVP", uint32(len(p.X)), uint32(len(p.Genes)), 0)
+	extra := uint32(0)
+	if p.Probability != nil {
+		extra = 1
+	}
+	w.header("SCVP", uint32(len(p.X)), uint32(len(p.Genes)), extra)
 	w.u32(p.Starts)
 	w.f32(p.X)
 	w.f32(p.Y)
 	w.u32(p.Cell)
 	w.u16(p.Genes)
 	w.pad()
+	if p.Probability != nil {
+		w.f32(p.Probability)
+	}
 	return w.buf
 }
 
@@ -449,6 +460,45 @@ func (d *Dataset) countCells() (*cellCounts, error) {
 		d.counts = out
 	})
 	return d.counts, d.countsErr
+}
+
+// SegmentationTable is any segmentation's cells, for the Viewer's fills when it draws one other
+// than the instrument's (the dataset's own are CellTable's).
+type SegmentationTable struct {
+	X, Y, Area, NucleusArea                      []float32 // µm, µm²
+	Transcripts, Assigned, Genes                 []uint32  // gene transcripts of Q20, every one, genes detected
+	Instrument                                   []uint32  // the instrument's row of its nucleus's cell (NoCell none)
+	Certainty, Probability                       []float32 // boundary certainty, transcripts' mean probability (NaN unknown)
+	Limitations                                  []uint8   // 1 few transcripts, 2 uncertain boundary, 4 no nucleus
+	HasLimitations, HasCertainty, HasProbability bool
+}
+
+// Encode writes the table ("SCVS"; cells, what it holds, 11 columns), "what it holds" being 1 with
+// limitations, 2 with boundary certainties, 4 with probabilities:
+//
+//	x f32[n] | y f32[n] | area f32[n] | nucleus area f32[n] | transcripts u32[n] |
+//	assigned u32[n] | genes u32[n] | instrument row u32[n] | certainty f32[n] |
+//	probability f32[n] | limitations u8[n] | padding
+func (t *SegmentationTable) Encode() []byte {
+	holds := uint32(0)
+	for bit, on := range []bool{t.HasLimitations, t.HasCertainty, t.HasProbability} {
+		if on {
+			holds |= 1 << bit
+		}
+	}
+	var w writer
+	w.header("SCVS", uint32(len(t.X)), holds, 11)
+	for _, c := range [][]float32{t.X, t.Y, t.Area, t.NucleusArea} {
+		w.f32(c)
+	}
+	for _, c := range [][]uint32{t.Transcripts, t.Assigned, t.Genes, t.Instrument} {
+		w.u32(c)
+	}
+	w.f32(t.Certainty)
+	w.f32(t.Probability)
+	w.u8(t.Limitations)
+	w.pad()
+	return w.buf
 }
 
 // CellTable encodes the cells ("SCVC"; cells, segmentation methods, columns), for coloring cells

@@ -82,7 +82,7 @@ var remoteActions = []remoteAction{
 		"kind": textArg("dataset, filter, view or local; found by name among all of them if not given."),
 		"name": textArg("Its name."),
 	})},
-	{Name: "show_tissue", Title: "Show the tissue", Description: "Shows a dataset in the Viewer as asked, everything else as the Viewer shows it now: where (a center in µm and µm per screen pixel, or a width in µm; the whole section with whole: true), the stains (by name: visible, color, brightness window, gamma), the transcripts of genes by name (up to 16) or all of them, their minimum quality and point size, the cell and nucleus outlines, a cell fill and its opacity, and a cell to select. Returns what it shows, as a saved view records it, and what the dataset lacks.", InputSchema: schema(map[string]any{
+	{Name: "show_tissue", Title: "Show the tissue", Description: "Shows a dataset in the Viewer as asked, everything else as the Viewer shows it now: where (a center in µm and µm per screen pixel, or a width in µm; the whole section with whole: true), the stains (by name: visible, color, brightness window, gamma), the transcripts of genes by name (up to 16) or all of them, their minimum quality and point size, which of the dataset's segmentations is drawn, the cell and nucleus outlines, a cell fill and its opacity, the transcripts colored by gene or by their assignment's probability, and a cell to select. Returns what it shows, as a saved view records it, and what the dataset lacks.", InputSchema: schema(map[string]any{
 		"dataset":         datasetArg,
 		"center":          map[string]any{"type": "array", "items": map[string]any{"type": "number"}, "minItems": 2, "maxItems": 2, "description": "The center, [x, y] in µm."},
 		"um_per_pixel":    numberArg("The zoom: µm per screen (CSS) pixel."),
@@ -96,12 +96,14 @@ var remoteActions = []remoteAction{
 		"channels":        map[string]any{"type": "object", "description": "By stain name (DAPI, ATP1A1/CD45/E-Cadherin, 18S, alphaSMA/Vimentin…): {visible, color (#rrggbb), window: [low, high], gamma}, each optional."},
 		"outlines":        flagArg("Draw the cell outlines."),
 		"nuclei":          flagArg("Draw the nucleus outlines."),
-		"fill":            textArg("Fill the cells by transcripts, total, area, nucleusArea or method; none for no fill."),
+		"segmentation":    textArg("The segmentation drawn: by its name or artifact ID, instrument for the instrument's, default for the dataset's default."),
+		"fill":            textArg("Fill the cells by transcripts, total, area, nucleusArea or method (the instrument's); limitations, certainty or probability (a refinement's); none for no fill."),
 		"opacity":         numberArg("The fill's opacity, 0 to 1."),
-		"cell":            textArg("A cell to select, by its ID (as cells.parquet names it)."),
+		"color_by":        textArg("Color the transcripts by gene (as listed) or probability (their assignment's, a refinement's; seen close up)."),
+		"cell":            textArg("A cell to select, by its ID in the segmentation drawn (as cells.parquet names the instrument's)."),
 	}), long: true},
-	{Name: "select_cell", Title: "Select a cell", Description: "Selects a cell in the Viewer and shows it in the inspector: its ID, position, areas, segmentation method, and its transcripts by gene. With no cell, clears the selection.", InputSchema: schema(map[string]any{
-		"cell":    textArg("The cell's ID (as cells.parquet names it), or its row from 0 as \"#123\"."),
+	{Name: "select_cell", Title: "Select a cell", Description: "Selects a cell of the segmentation the Viewer draws and shows it in the inspector: its ID, position, areas, segmentation method (or, for another segmentation, the instrument's cell it came from and what its method flags), and its transcripts by gene. With no cell, clears the selection.", InputSchema: schema(map[string]any{
+		"cell":    textArg("The cell's ID in the segmentation drawn (as cells.parquet names the instrument's), or its row from 0 as \"#123\"."),
 		"dataset": datasetArg,
 		"center":  flagArg("Center the view on it (true if not given)."),
 	}), long: true},

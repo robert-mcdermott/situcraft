@@ -224,7 +224,7 @@ func (a *app) importJob(path string, opt imports.Options) jobs.Func {
 		spec, _ := json.Marshal(importSpec{path, opt})
 		var own []artifacts.File
 		for _, f := range []string{segment.FileDescription, segment.FileCells, segment.FileMask, segment.FileAssignments, segment.FileCounts, segment.FileOutlines,
-			segment.FileProbabilities, segment.FileDiagnostics, segment.FileLayers} {
+			segment.FileProbabilities, segment.FileCertainty, segment.FileDiagnostics, segment.FileLayers} {
 			if _, err := os.Stat(filepath.Join(a.artifacts.Dir(), "staging", id, f)); err == nil || f == segment.FileDescription {
 				own = append(own, artifacts.File{Path: f, Role: segment.Roles[f]})
 			}

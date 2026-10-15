@@ -14,6 +14,7 @@ import { CLASS_INFO, RANKS, cellNames, warnings } from '../lib/review.js';
 import { workedExamples } from '../lib/tours.js';
 import { parseProject, rename, serializeProject } from '../lib/project.js';
 import { removeView, sameView, viewLink } from '../lib/views.js';
+import { SEG_FILLS, defaultChoice, segmentationChoices } from '../lib/segview.js';
 
 export class ActionError extends Error {}
 
@@ -26,6 +27,8 @@ const frames = () => Promise.race([new Promise((resolve) => requestAnimationFram
 // The views by the names scripts use.
 const MODES = { start: 'welcome', welcome: 'welcome', data: 'data', viewer: 'viewer', tissue: 'viewer', qc: 'qc', segmentation: 'segmentation', compare: 'compare', comparison: 'compare', celltypes: 'celltypes', 'cell types': 'celltypes', spatial: 'spatial', cohort: 'cohort', reports: 'reports', jobs: 'jobs' };
 const FILLS = ['transcripts', 'total', 'area', 'nucleusArea', 'method'];
+// A segmentation's fills besides those (lib/segview.js).
+const SEGMENTATION_FILLS = SEG_FILLS.map((f) => f.id).filter((id) => !FILLS.includes(id));
 
 // One of `options` (strings) by a forgiving name: exact, then ignoring case, then the one that
 // starts with or contains it. Errors list the choices.
@@ -181,7 +184,10 @@ export function installRemote(app) {
   // Applies a view (saved, or made here) and waits for it to be shown.
   async function apply(view, dataset) {
     app.applyView(view);
-    return shown(view.mode, dataset);
+    const hook = await shown(view.mode, dataset);
+    // The segmentation it draws, read.
+    await hook.segmentationReady?.();
+    return hook;
   }
 
   async function settleMode(mode) {
@@ -232,7 +238,8 @@ export function installRemote(app) {
   const link = (view) => viewLink(location.href, project().id, view.id);
 
   function viewData(v) {
-    return { id: v.id, name: v.name, dataset: datasetName(v.dataset), mode: v.mode, camera: v.camera, genes: v.transcripts?.genes ?? [], cell: v.cell?.id ?? null, ...(v.qc ? { qc: v.qc } : {}), link: link(v) };
+    const seg = v.segmentation && v.segmentation !== 'instrument' ? project().artifacts.find((a) => a.kind === 'segmentation' && a.id === v.segmentation) : null;
+    return { id: v.id, name: v.name, dataset: datasetName(v.dataset), mode: v.mode, segmentation: v.segmentation === 'instrument' || !v.segmentation ? 'instrument' : seg?.name ?? v.segmentation, camera: v.camera, genes: v.transcripts?.genes ?? [], cell: v.cell?.id ?? null, ...(v.qc ? { qc: v.qc } : {}), link: link(v) };
   }
 
   // What the Viewer or the QC view shows now, as a saved view records it.
@@ -505,12 +512,17 @@ export function installRemote(app) {
           if (patch.gamma !== undefined) c.gamma = Math.min(4, Math.max(0.2, finite(patch.gamma, 'gamma')));
         }
       }
-      // Cells.
+      // Cells: which segmentation, how drawn, which cell.
+      if (args.segmentation !== undefined) view.segmentation = segmentationRef(dataset, args.segmentation);
       if (args.outlines !== undefined) view.cells.outlines = Boolean(args.outlines);
       if (args.nuclei !== undefined) view.cells.nuclei = Boolean(args.nuclei);
-      if (args.fill !== undefined) view.cells.fill = args.fill === null || /^none$/i.test(String(args.fill)) ? null : choose(args.fill, FILLS, 'fill');
+      if (args.fill !== undefined) view.cells.fill = args.fill === null || /^none$/i.test(String(args.fill)) ? null : choose(args.fill, view.segmentation === 'instrument' ? FILLS : [...FILLS.filter((f) => f !== 'method'), ...SEGMENTATION_FILLS], 'fill');
       if (args.opacity !== undefined) view.cells.opacity = Math.min(1, Math.max(0, finite(args.opacity, 'opacity')));
-      if (args.cell !== undefined) view.cell = args.cell ? await cellRef(dataset, args.cell) : null;
+      if (args.color_by !== undefined) {
+        if (choose(args.color_by, ['gene', 'probability'], 'coloring') === 'probability') view.transcripts.colorBy = 'probability';
+        else delete view.transcripts.colorBy;
+      }
+      if (args.cell !== undefined) view.cell = args.cell ? await cellRef(dataset, args.cell, view.segmentation) : null;
       const shownNow = await apply(view, dataset);
       if (view.cell) await waitFor(() => shownNow.detail()?.row === view.cell.row, 30000, 'the cell to be read');
       const now = showing();
@@ -524,15 +536,24 @@ export function installRemote(app) {
         await v.select(-1);
         return { message: 'No cell selected.' };
       }
-      const ref = await cellRef(dataset, args.cell);
+      await v.segmentationReady?.();
+      const drawn = v.segmentation?.() ?? null;
+      const ref = await cellRef(dataset, args.cell, drawn ?? 'instrument');
       await v.select(ref.row);
-      const d = await waitFor(() => (v.detail()?.row === ref.row ? v.detail() : null), 30000, 'the cell to be read');
+      const d = await waitFor(() => (v.detail()?.row === ref.row && v.detail()?.id === ref.id ? v.detail() : null), 30000, 'the cell to be read');
       if (args.center !== false) {
         const cam = v.renderer.camera;
         v.setCamera({ ...cam, cx: d.x, cy: d.y });
         await v.settled();
       }
       await frames();
+      // A cell of a segmentation other than the instrument's.
+      if (d.segmentation) {
+        return {
+          message: `Cell ${d.id} of ${d.segmentation.name}: ${d.transcripts} gene transcripts (quality 20 or more) of ${d.genesDetected} genes${d.instrument ? `, from the instrument's cell ${d.instrument.id}` : ''}${d.limitations.length ? `; flagged: ${d.limitations.join(', ')}` : ''}.`,
+          data: { id: d.id, row: d.row, segmentation: d.segmentation, x: d.x, y: d.y, area: d.area, nucleusArea: d.nucleusArea, instrument: d.instrument, transcripts: d.transcripts, assigned: d.assigned, genesDetected: d.genesDetected, genes: d.genes.map((g) => ({ gene: g.name, count: g.count })), limitations: d.limitations, boundaryCertainty: d.boundaryCertainty, meanProbability: d.meanProbability },
+        };
+      }
       return {
         message: `Cell ${d.id}: ${d.counted.q20Genes} gene transcripts (quality 20 or more) of ${d.genesDetected} genes${d.method ? `, ${d.method.replace(/^Segmented /, 'segmented ')}` : ''}.`,
         data: { id: d.id, row: d.row, x: d.x, y: d.y, area: d.area ?? null, nucleusArea: d.nucleusArea ?? null, method: d.method ?? null, transcripts: d.counted, genesDetected: d.genesDetected, genes: d.genes.map((g) => ({ gene: g.name, count: g.count })), recorded: d.recorded },
@@ -962,14 +983,29 @@ export function installRemote(app) {
   };
 
   // A cell of a dataset by its ID, or by its row as "#123": { row, id }.
-  async function cellRef(dataset, ref) {
+  // A cell by its ID (or "#row") in a segmentation of a dataset ('instrument' for the dataset's
+  // own): { row, id }.
+  async function cellRef(dataset, ref, segmentation = 'instrument') {
     const item = bundleOf(dataset);
     const text = String(ref).trim();
     const name = /^#\d+$/.test(text) ? text.slice(1) : `id:${encodeURIComponent(text)}`;
-    const response = await fetch(`${item.url}/cells/${name}?top=0`, { cache: 'no-store' });
+    const base = segmentation && segmentation !== 'instrument' ? `${item.url}/segmentations/${encodeURIComponent(segmentation)}` : item.url;
+    const response = await fetch(`${base}/cells/${name}?top=0`, { cache: 'no-store' });
     const body = await response.json().catch(() => ({}));
     if (!response.ok) throw new ActionError(body.error ?? `No cell ${text} in ${dataset.name}.`);
     return { row: body.row, id: body.id };
+  }
+
+  // A segmentation of a dataset by its name or artifact ID ('instrument', 'default' too), as a view
+  // records it: 'instrument' or the artifact's ID.
+  function segmentationRef(dataset, ref) {
+    const list = segmentationChoices(project(), dataset.id);
+    const text = String(ref ?? '').trim();
+    let c;
+    if (/^default$/i.test(text)) c = defaultChoice(project(), dataset.id);
+    else if (/^(the )?instrument('s)?$/i.test(text)) c = list.find((x) => x.instrument) ?? { instrument: true };
+    else c = list.find((x) => x.id === text) ?? list.find((x) => x.name === choose(text, list.map((y) => y.name), 'segmentation'));
+    return !c || c.instrument ? 'instrument' : c.id;
   }
 
   // --- Connection -----------------------------------------------------------------------------

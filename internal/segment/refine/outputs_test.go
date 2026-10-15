@@ -85,6 +85,22 @@ func TestOutputsAreASegmentation(t *testing.T) {
 		if diag.Summary.Samples != 40 || diag.Summary.Sweeps != 60 || diag.Summary.SplitHalf < 0.8 || diag.Summary.MeanProbability < 0.5 {
 			t.Errorf("%d layers: diagnostics %+v", layers, diag.Summary)
 		}
+		// Each refined cell's boundary certainty, below the threshold exactly for those flagged
+		// uncertain.
+		certainty, err := segment.ReadCertainty(dir)
+		if err != nil || len(certainty) != in.Cells {
+			t.Fatalf("%d layers: %d boundary certainties for %d cells (%v)", layers, len(certainty), in.Cells, err)
+		}
+		uncertain := map[string]bool{}
+		for _, id := range diag.Limitations.Uncertain {
+			uncertain[id] = true
+		}
+		cellsOut, _ := segment.ReadCells(dir)
+		for c, x := range certainty {
+			if flagged := !(x >= uncertainShare); flagged != uncertain[cellsOut[c].ID] {
+				t.Fatalf("%d layers: cell %s's boundary certainty %g, flagged uncertain %v", layers, cellsOut[c].ID, x, uncertain[cellsOut[c].ID])
+			}
+		}
 		// The simulated tissue's background is about 2.5% of its transcripts, half of it false
 		// decodes, which its negative controls measure.
 		if s := diag.Summary; s.NegativeControls == 0 || !(s.FalseDecodeShare > 0.005 && s.FalseDecodeShare < 0.02) || !(s.AmbientShare > 0) || !(s.InBackground > 0) {

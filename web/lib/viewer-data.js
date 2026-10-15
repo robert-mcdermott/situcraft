@@ -13,9 +13,11 @@ function header(buffer, magic) {
 
 const pad4 = (n) => (n + 3) & ~3;
 
-// Points (SCVP): { n, genes: Uint16Array, starts: Uint32Array, x, y: Float32Array, cell: Uint32Array }.
+// Points (SCVP): { n, genes: Uint16Array, starts: Uint32Array, x, y: Float32Array, cell: Uint32Array,
+// probability: Float32Array or null }. A segmentation's points (api_segview.go) carry each
+// transcript's cell in it, and its probability of it when the segmentation gives one.
 export function readPoints(buffer) {
-  const [n, g] = header(buffer, 'SCVP');
+  const [n, g, extra] = header(buffer, 'SCVP');
   let at = 16;
   const starts = new Uint32Array(buffer, at, g + 1);
   at += 4 * (g + 1);
@@ -27,8 +29,13 @@ export function readPoints(buffer) {
   at += 4 * n;
   const genes = new Uint16Array(buffer, at, g);
   at = pad4(at + 2 * g);
+  let probability = null;
+  if (extra === 1) {
+    probability = new Float32Array(buffer, at, n);
+    at += 4 * n;
+  }
   if (at !== buffer.byteLength) throw new Error('a points answer of the wrong length');
-  return { n, genes, starts, x, y, cell };
+  return { n, genes, starts, x, y, cell, probability };
 }
 
 // Density grids (SCVD): { bins, genes, starts, count: Uint32Array, bin: Uint16Array }.

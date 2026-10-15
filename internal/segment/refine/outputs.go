@@ -363,6 +363,19 @@ func WriteBundleOutputs(b *xenium.Bundle, in *Inputs, idx *BundleIndex, results 
 		}
 	}
 
+	// Each refined cell's boundary certainty (NaN for the cells held, and those outside the regions).
+	certainty := make([]float32, n)
+	for c := range certainty {
+		certainty[c] = float32(math.NaN())
+	}
+	for _, res := range results {
+		for k, x := range boundaryCertainty(res) {
+			if !res.Frozen[k] {
+				certainty[res.Kept[k]] = float32(x)
+			}
+		}
+	}
+
 	// Diagnostics, and the description.
 	diag := diagnostics(results, cells, in, idx)
 	if len(rec.Second) == len(results) && len(results) > 0 {
@@ -412,6 +425,7 @@ func WriteBundleOutputs(b *xenium.Bundle, in *Inputs, idx *BundleIndex, results 
 		func() error { return segment.WriteCounts(dir, counts) },
 		func() error { return segment.WriteOutlines(dir, outlines) },
 		func() error { return segment.WriteProbabilities(dir, probability) },
+		func() error { return segment.WriteCertainty(dir, certainty) },
 		func() error {
 			return os.WriteFile(filepath.Join(dir, segment.FileDiagnostics), append(raw, '\n'), 0o644)
 		},
@@ -481,14 +495,7 @@ func regionSummary(res *Result, cells []segment.Cell, in *Inputs, lim *Limitatio
 		s.MovedLast += float64(t.Moved) / float64(tenth)
 	}
 	// The refined cells' limitations.
-	shares := make([]float64, len(res.Kept))
-	voxels := make([]int, len(res.Kept))
-	for v, c := range res.Labels {
-		if c > 0 {
-			shares[c-1] += float64(res.LabelShare[v])
-			voxels[c-1]++
-		}
-	}
+	certainty := boundaryCertainty(res)
 	for k, c := range res.Kept {
 		if res.Frozen[k] {
 			s.Held++
@@ -504,13 +511,30 @@ func regionSummary(res *Result, cells []segment.Cell, in *Inputs, lim *Limitatio
 			lim.NoNucleus = append(lim.NoNucleus, id)
 			s.NoNucleus++
 		}
-		if voxels[k] == 0 || shares[k]/float64(voxels[k]) < uncertainShare {
+		if !(certainty[k] >= uncertainShare) {
 			lim.Uncertain = append(lim.Uncertain, id)
 			s.Uncertain++
 		}
 	}
 	s.LeftOut = len(res.LeftOut)
 	return s
+}
+
+// boundaryCertainty is each of a region's cells' mean share of the summarized samples its voxels
+// were its (its voxels by their most frequent label; NaN for a cell with none).
+func boundaryCertainty(res *Result) []float64 {
+	shares := make([]float64, len(res.Kept))
+	voxels := make([]int, len(res.Kept))
+	for v, c := range res.Labels {
+		if c > 0 {
+			shares[c-1] += float64(res.LabelShare[v])
+			voxels[c-1]++
+		}
+	}
+	for k := range shares {
+		shares[k] /= float64(voxels[k]) // 0/0: NaN
+	}
+	return shares
 }
 
 // diagnostics summarizes a refinement: each region's convergence, the whole (weighted by each

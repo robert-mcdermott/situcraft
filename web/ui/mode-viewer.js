@@ -1,6 +1,8 @@
 // The tissue viewer: a dataset's morphology channels, transcripts and cells at any zoom
 // (render/renderer.js), with its layers panel (ui/viewer-panel.js), scale bar, coordinate readout,
-// minimap, and the cell under the pointer selected into the inspector.
+// minimap, and the cell under the pointer selected into the inspector. The cells are any of the
+// dataset's segmentations (wave 3, slice 8): its default when nothing says which, the instrument's
+// from the dataset's own data, any other from its artifact (api_segview.go).
 //
 // What is shown of each dataset (camera, channels, genes, layers) is kept for the session;
 // saved views keep it in the project (wave 1, slice 7).
@@ -13,6 +15,7 @@ import { fitCamera, scaleBar, screenToWorld, visibleRect, worldToScreen } from '
 import { attachNavigation } from './navigation.js';
 import { readCells, joinSamples, nearestCell } from '../lib/viewer-data.js';
 import { mountViewerPanel, defaultLayers, cellFillColors } from './viewer-panel.js';
+import { defaultChoice, readSegCells, segmentationChoices } from '../lib/segview.js';
 import { hexColor } from '../render/gl.js';
 import { categoricalColor } from '../lib/colormaps.js';
 
@@ -155,6 +158,8 @@ export function mountViewer(app, container) {
     renderer.setLayers(layers);
     const state = {
       dataset: t.dataset, item: t.item, desc, cells, renderer, layers, selectedRow: -1, detail: null,
+      // The segmentation drawn other than the dataset's own: { id, choice, cells }, or null.
+      seg: null, segGeneration: 0, segReady: Promise.resolve(),
       dispose() {
         observer.disconnect();
         navigation.dispose();
@@ -166,11 +171,21 @@ export function mountViewer(app, container) {
 
     // The layers panel, mounted again when a saved view replaces every setting.
     let panel = null;
+    // The dataset's segmentations, its default first; the one drawn (the instrument's when its
+    // own cells are).
+    const choices = () => segmentationChoices(app.store.project, t.dataset.id);
+    const drawnChoice = () => state.seg?.choice ?? choices().find((c) => c.instrument) ?? null;
+
     function mountPanel(start) {
       clear(panelHost);
-      panel = mountViewerPanel(panelHost, { desc, layers: start, cells, app, onChange: (next, what) => {
+      state.choiceKey = choices().map((c) => `${c.id}${c.isDefault ? '*' : ''}`).join();
+      panel = mountViewerPanel(panelHost, { desc, layers: start, cells: renderer.cells, app, segmentations: choices(), drawn: drawnChoice(), onChange: (next, what) => {
         state.layers = next;
         renderer.setLayers(next);
+        if (what === 'segmentation') {
+          drawSegmentation(next.cells.segmentation);
+          return;
+        }
         if (what === 'fill') applyFill();
         if (what === 'channels') drawMinimap();
         updateLegend();
@@ -180,15 +195,84 @@ export function mountViewer(app, container) {
     mountPanel(layers);
 
     function applyFill() {
-      renderer.setCellColors(cellFillColors(state.layers.cells.fill, cells, desc));
+      renderer.setCellColors(cellFillColors(state.layers.cells.fill, renderer.cells, desc));
     }
 
+    // The legend: which segmentation is drawn and how it was made, the fill's scale, and the
+    // transcripts' probability scale when they are colored by it.
     function updateLegend() {
       clear(legend);
-      const fill = state.layers.cells.fill;
-      const part = panel.legend?.();
-      if (fill && part) legend.append(part);
+      const c = drawnChoice();
+      const cellsShown = state.layers.cells.outlines || state.layers.cells.fill;
+      if (state.loadingSeg) legend.append(h('div.viewer-legend-seg', h('b', state.loadingSeg.name), h('div.muted', 'Reading its cells…')));
+      else if (c && cellsShown && choices().length > 1) legend.append(h('div.viewer-legend-seg', h('b', c.name), h('div.muted', `${c.about[0].toUpperCase()}${c.about.slice(1)}`)));
+      const part = state.layers.cells.fill ? panel.legend?.() : null;
+      if (part) legend.append(part);
+      const probability = panel.probabilityLegend?.();
+      if (probability) legend.append(probability);
       legend.hidden = !legend.childNodes.length;
+    }
+
+    // Draws a segmentation: undefined for the dataset's default, null for its own (the
+    // instrument's), else an artifact's id. Its outlines, cells table and transcripts come from
+    // its artifact; the selection, fills' colors and highlights go with the cells they were of.
+    function drawSegmentation(requested) {
+      const list = choices();
+      let c;
+      if (requested === undefined) c = defaultChoice(app.store.project, t.dataset.id);
+      else if (requested !== null) {
+        c = list.find((x) => x.id === requested);
+        if (!c) toast(`The segmentation ${requested} is not among ${t.dataset.name}'s (it may have been removed): the instrument's is drawn.`, { kind: 'error' });
+      }
+      if (c?.instrument) c = null;
+      const mine = (state.segGeneration += 1);
+      const settle = () => {
+        state.loadingSeg = null;
+        state.layers = { ...state.layers, cells: { ...state.layers.cells, segmentation: state.seg?.id ?? null } };
+        renderer.setLayers(state.layers);
+        state.detail = null;
+        state.selectedRow = -1;
+        app.inspector.setSection('viewer-cell', null);
+        mountPanel(state.layers);
+        applyFill();
+        state.showChosen?.();
+        updateLegend();
+      };
+      if ((c?.id ?? null) === (state.seg?.id ?? null)) {
+        if (c) state.seg.choice = c;
+        settle();
+        state.segReady = Promise.resolve();
+        return state.segReady;
+      }
+      if (!c) {
+        state.seg = null;
+        renderer.setSegmentation(null);
+        settle();
+        state.segReady = Promise.resolve();
+        return state.segReady;
+      }
+      const base = `${t.item.url}/segmentations/${encodeURIComponent(c.id)}`;
+      // While it is read, the cells drawn before are not shown as though they were its.
+      state.loadingSeg = c;
+      renderer.setLayers({ ...state.layers, cells: { ...state.layers.cells, outlines: false, fill: null } });
+      updateLegend();
+      state.segReady = (async () => {
+        try {
+          const [out, response] = await Promise.all([getJSON(`${base}/outlines`), fetch(`${base}/cells`)]);
+          if (!response.ok) throw new Error(`its cells: HTTP ${response.status}`);
+          const segCells = readSegCells(await response.arrayBuffer());
+          if (mine !== state.segGeneration || current !== state) return;
+          state.seg = { id: c.id, choice: c, cells: segCells };
+          renderer.setSegmentation({ id: c.id, polygonsBase: out.polygonsBase, geometry: out.geometry, cells: segCells, points: `${base}/points`, probability: segCells.holds.probability });
+          settle();
+        } catch (error) {
+          if (mine !== state.segGeneration || current !== state) return;
+          state.loadingSeg = null;
+          toast(`${c.name} could not be drawn: ${error.message}`, { kind: 'error' });
+          await drawSegmentation(null);
+        }
+      })();
+      return state.segReady;
     }
 
     // --- Size and camera ---
@@ -252,7 +336,7 @@ export function mountViewer(app, container) {
           // No outline loaded there (zoomed out): the nearest centroid within a cell's width.
           const [w, h2] = renderer.size();
           const [wx, wy] = screenToWorld(renderer.camera, w, h2, sx, sy);
-          row = nearestCell(cells, wx, wy, Math.max(8, 6 * (renderer.ratio || 1) / renderer.camera.scale));
+          row = nearestCell(renderer.cells, wx, wy, Math.max(8, 6 * (renderer.ratio || 1) / renderer.camera.scale));
         }
       }
       await selectRow(row);
@@ -266,12 +350,13 @@ export function mountViewer(app, container) {
         app.inspector.setSection('viewer-cell', null);
         return;
       }
+      const seg = state.seg;
       try {
-        const detail = await getJSON(`${t.item.url}/cells/${row}?top=12`);
-        if (state.selectedRow !== row || current !== state) return;
+        const detail = await getJSON(seg ? `${t.item.url}/segmentations/${encodeURIComponent(seg.id)}/cells/${row}?top=12` : `${t.item.url}/cells/${row}?top=12`);
+        if (state.selectedRow !== row || current !== state || state.seg !== seg) return;
         state.detail = detail;
         renderer.setSelected(detail);
-        app.inspector.setSection('viewer-cell', () => cellSection(detail));
+        app.inspector.setSection('viewer-cell', () => (seg ? segCellSection(detail) : cellSection(detail)));
       } catch (error) {
         toast(`That cell could not be read: ${error.message}`, { kind: 'error' });
       }
@@ -296,6 +381,34 @@ export function mountViewer(app, container) {
         d.genes.length ? h('div.viewer-genes',
           h('div.muted', { style: { fontSize: '11.5px', margin: '8px 0 4px' } }, 'Top genes (Q20 transcripts); click one to show it'),
           ...d.genes.map((g) => h('button.viewer-gene-bar', { type: 'button', title: `Show ${g.name}'s transcripts`, onclick: () => panel.addGene(g.gene) },
+            h('span.name', g.name), h('span.bar', h('span', { style: { width: `${(100 * g.count) / maxGene}%` } })), h('span.n', String(g.count))))) : null,
+        h('div.btn-row', { style: { marginTop: '10px' } },
+          h('button.btn.small', { type: 'button', onclick: () => centerOn(d) }, icon('target'), 'Center'),
+          h('button.btn.small', { type: 'button', onclick: () => selectRow(-1) }, icon('close'), 'Clear')));
+    }
+
+    // A cell of a segmentation other than the instrument's: where it came from, its counts, and
+    // what its method says of it (its limitations, its boundary's certainty, its transcripts').
+    function segCellSection(d) {
+      const fmtArea = (v) => (Number.isFinite(v) && v > 0 ? `${v.toFixed(1)} µm²` : '—');
+      const maxGene = d.genes[0]?.count || 1;
+      const certain = (v) => (v === null || v === undefined ? null : v.toFixed(2));
+      return h('section.inspector-section.viewer-cell',
+        h('h3', icon('cell'), `Cell ${d.id}`),
+        h('dl.kv',
+          h('dt', 'Segmentation'), h('dd', d.segmentation.name),
+          h('dt', 'From'), h('dd', d.instrument ? `the instrument's cell ${d.instrument.id}` : h('span.muted', 'no cell of the instrument\'s (its nucleus lies in none)')),
+          h('dt', 'Centroid'), h('dd', `${d.x.toFixed(1)}, ${d.y.toFixed(1)} µm`),
+          h('dt', 'Area'), h('dd', fmtArea(d.area)),
+          h('dt', 'Nucleus'), h('dd', fmtArea(d.nucleusArea)),
+          h('dt', 'Transcripts'), h('dd', `${formatCount(d.transcripts)} of genes (Q20)`, h('span.muted', `; ${formatCount(d.assigned)} of any kind or quality`)),
+          h('dt', 'Genes'), h('dd', String(d.genesDetected)),
+          certain(d.boundaryCertainty) ? [h('dt', 'Boundary'), h('dd', `certainty ${certain(d.boundaryCertainty)}`, h('span.muted', ': the mean share of the samples its pixels were its'))] : null,
+          certain(d.meanProbability) ? [h('dt', 'Assignments'), h('dd', `certainty ${certain(d.meanProbability)}`, h('span.muted', ': its transcripts\' mean probability of being its'))] : null),
+        d.limitations.length ? h('p.callout.warn', `Flagged: ${d.limitations.join(', ')}. ${d.limitations.includes('uncertain boundary') ? 'Its pixels were its in fewer than three quarters of the samples, on average. ' : ''}${d.limitations.includes('few transcripts') ? 'With so few transcripts its boundary comes more from the prior than from them. ' : ''}${d.limitations.includes('no nucleus') ? 'No nuclear prior held it.' : ''}`.trim()) : null,
+        d.genes.length ? h('div.viewer-genes',
+          h('div.muted', { style: { fontSize: '11.5px', margin: '8px 0 4px' } }, 'Top genes (Q20 transcripts); click one to show it'),
+          ...d.genes.map((g) => h('button.viewer-gene-bar', { type: 'button', disabled: g.gene < 0, title: g.gene < 0 ? `${g.name} is not among the dataset's features` : `Show ${g.name}'s transcripts`, onclick: () => panel.addGene(g.gene) },
             h('span.name', g.name), h('span.bar', h('span', { style: { width: `${(100 * g.count) / maxGene}%` } })), h('span.n', String(g.count))))) : null,
         h('div.btn-row', { style: { marginTop: '10px' } },
           h('button.btn.small', { type: 'button', onclick: () => centerOn(d) }, icon('target'), 'Center'),
@@ -407,14 +520,21 @@ export function mountViewer(app, container) {
       renderer.setCamera({ ...renderer.camera, cx: x, cy: y });
     });
 
-    applyFill();
-    updateLegend();
-    if (session?.selected >= 0) selectRow(session.selected);
+    // Cells chosen in the QC view are the instrument's: they show while its cells are drawn.
     state.showChosen = () => {
-      const chosen = app.selection?.dataset === t.dataset.id ? app.selection : null;
+      const chosen = app.selection?.dataset === t.dataset.id && !state.seg ? app.selection : null;
       renderer.setHighlight(chosen?.mask ?? null, '#ff4fd8', 0.6);
     };
+    applyFill();
+    updateLegend();
     state.showChosen();
+    // The segmentation to draw: one asked for (Show on the tissue), else the session's, else the
+    // default; then the session's cell.
+    const asked = app.pendingSegmentation?.dataset === t.dataset.id ? app.pendingSegmentation : null;
+    if (asked) app.pendingSegmentation = null;
+    drawSegmentation(asked ? asked.segmentation : layers.cells.segmentation).then(() => {
+      if (!asked && session?.selected >= 0) selectRow(session.selected);
+    });
 
     // --- Saved views ---
     function captureNow(name = '') {
@@ -428,10 +548,8 @@ export function mountViewer(app, container) {
       // Each gene in its color, as the panel colors them.
       next.transcripts.colors = next.transcripts.genes.map((_, i) => categoricalColor(i));
       state.layers = next;
-      mountPanel(next);
       renderer.setLayers(next);
-      applyFill();
-      updateLegend();
+      const drawn = drawSegmentation(next.cells.segmentation);
       drawMinimap();
       // A view without a place (a tour's step) shows the whole section.
       if (view.camera) {
@@ -439,15 +557,34 @@ export function mountViewer(app, container) {
         renderer.setCamera(viewCamera(view, window.devicePixelRatio || 1));
       } else if (state.placed) fitAll();
       else state.wholeSection = true;
-      if (view.cell) {
-        selectRow(view.cell.row).then(() => {
-          if (state.detail && state.detail.id !== view.cell.id) toast(`The view's cell ${view.cell.id} is now ${state.detail.id}: the cells changed since it was saved.`, { kind: 'error' });
-        });
-      } else selectRow(-1);
+      drawn.then(() => {
+        if (view.cell) {
+          selectRow(view.cell.row).then(() => {
+            if (state.detail && state.detail.id !== view.cell.id) toast(`The view's cell ${view.cell.id} is now ${state.detail.id}: the cells changed since it was saved.`, { kind: 'error' });
+          });
+        } else selectRow(-1);
+      });
       if (missing.length) toast(`Not in this dataset, so not shown: ${missing.join(', ')}.`, { kind: 'error' });
     }
 
+    // The segmentations listed again when the project's change (one made, promoted or removed).
+    state.refreshChoices = () => {
+      const key = choices().map((c) => `${c.id}${c.isDefault ? '*' : ''}`).join();
+      if (key === state.choiceKey) return;
+      if (state.seg && !choices().some((c) => c.id === state.seg.id)) drawSegmentation(null);
+      else {
+        if (state.seg) state.seg.choice = choices().find((c) => c.id === state.seg.id) ?? state.seg.choice;
+        mountPanel(state.layers);
+        updateLegend();
+      }
+    };
+
     state.takePending = () => {
+      const asked = app.pendingSegmentation;
+      if (asked?.dataset === t.dataset.id) {
+        app.pendingSegmentation = null;
+        drawSegmentation(asked.segmentation);
+      }
       const view = app.pendingView;
       if (view?.mode !== 'viewer' || view.dataset !== t.dataset.id) return;
       app.pendingView = null;
@@ -470,6 +607,28 @@ export function mountViewer(app, container) {
       dataset: t.dataset.id,
       // The selected cell's detail (internal/view), or null; the stage's size in CSS pixels.
       detail: () => state.detail,
+      // The segmentation drawn (an artifact's id, null for the dataset's own), drawing another,
+      // the cells table drawn, the choices, and the fill's colors per cell.
+      segmentation: () => state.seg?.id ?? null,
+      setSegmentation: (id) => drawSegmentation(id),
+      segmentationReady: () => state.segReady,
+      cellsDrawn: () => renderer.cells,
+      choices: () => choices(),
+      fillColors: () => cellFillColors(state.layers.cells.fill, renderer.cells, desc),
+      setCells: (patch) => {
+        state.layers = { ...state.layers, cells: { ...state.layers.cells, ...patch } };
+        renderer.setLayers(state.layers);
+        mountPanel(state.layers);
+        applyFill();
+        updateLegend();
+      },
+      setChannelsVisible: (on) => {
+        state.layers = { ...state.layers, channels: state.layers.channels.map((c) => ({ ...c, visible: on })) };
+        renderer.setLayers(state.layers);
+        mountPanel(state.layers);
+      },
+      pick: (x, y) => renderer.pick(x, y),
+      readColor: (x, y) => renderer.readColor(x, y),
       stageSize: () => [stage.clientWidth, stage.clientHeight],
       layers: () => state.layers,
       plan: () => renderer.plan(),
@@ -544,6 +703,7 @@ export function mountViewer(app, container) {
       }
       // Cells chosen in the QC view (a brushed plot) show here too.
       if (topics.has('selection') && current) current.showChosen();
+      if (topics.has('project') && current) current.refreshChoices();
       // A saved view of the dataset shown.
       if (current && (topics.has('view-pending') || topics.has('focus'))) current.takePending();
     },

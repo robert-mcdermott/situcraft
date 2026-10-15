@@ -30,7 +30,12 @@
 // - comparisons (wave 2, slice 5): the instrument's segmentation and the expansion compared by a
 //   program, as the expansion's own comparison counted, recorded and shown;
 // - the comparison workspace (wave 2, slice 6): its review queue ranked as asked, both
-//   segmentations drawn with one camera in each mode, decisions recorded as the rules allow.
+//   segmentations drawn with one camera in each mode, decisions recorded as the rules allow;
+// - segmentations on the tissue (wave 3, slice 8): each kind (an expansion, an import, a
+//   refinement, errors planted for practice) drawn as its files hold it: the cell found at points
+//   of each the one its label raster holds there, and the fill drawn there the color of that
+//   cell's value; the list, its default first; a saved view reopening with its segmentation and
+//   cell; show_tissue and select_cell in a segmentation; transcripts with their probabilities.
 //
 // It builds the program, starts it on the bundles with an empty cache and library, builds their
 // derived data, and drives the page through window.situcraft (the app, app.js) and window.situcraftViewer
@@ -43,7 +48,10 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { findChrome, launch, sleep } from './cdp.mjs';
-import { readCells } from '../web/lib/viewer-data.js';
+import { inflateSync } from 'node:zlib';
+import { attributeRange, readCells } from '../web/lib/viewer-data.js';
+import { certaintyColor, readSegCells } from '../web/lib/segview.js';
+import { colormapLUT, hexToRgb } from '../web/lib/colormaps.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const BUNDLES = ['xenium-lung-2fov', 'xenium-breast-2fov'];
@@ -71,6 +79,44 @@ async function json(url, options) {
   const response = await fetch(url, options);
   if (!response.ok) throw new Error(`${url}: HTTP ${response.status} ${await response.text()}`);
   return response.json();
+}
+
+// A segmentation's label raster (internal/segment mask.bin: a header, then zlib: width, height,
+// pixel size, each row's (label, length) runs as unsigned varints): { pixel, label(x, y) }.
+function readMask(buffer) {
+  if (buffer.subarray(0, 4).toString() !== 'SCMK') throw new Error('not a label raster');
+  const body = inflateSync(buffer.subarray(16));
+  let at = 0;
+  const width = body.readUInt32LE(0);
+  const height = body.readUInt32LE(4);
+  const pixel = body.readDoubleLE(8);
+  at = 16;
+  const uvarint = () => {
+    let x = 0;
+    for (let shift = 0; ; shift += 7) {
+      const b = body[at];
+      at += 1;
+      x += (b & 0x7f) * 2 ** shift;
+      if (b < 0x80) return x;
+    }
+  };
+  const rows = [];
+  for (let y = 0; y < height; y += 1) {
+    const runs = [];
+    for (let n = uvarint(); n > 0; n -= 1) runs.push([uvarint(), uvarint()]);
+    rows.push(runs);
+  }
+  return {
+    width, height, pixel,
+    label(x, y) {
+      let px = 0;
+      for (const [label, length] of rows[y] ?? []) {
+        if (x < px + length) return label;
+        px += length;
+      }
+      return 0;
+    },
+  };
 }
 
 // The points answer (internal/view): [{ gene, x, y }].
@@ -581,7 +627,108 @@ export async function viewerSuite({ check, MissingData, verbose }) {
             background: (document.querySelector('.seg-refined')?.textContent ?? '').match(/The model's background accounts for [\\d.]+% of the modelled transcripts: false decodes [\\d.]+%, measured by [\\d,]+ negative-control transcripts/)?.[0] ?? '' };
         })()`);
         check('viewer', 'the refinement is recorded with its probabilities and diagnostics, its comparison too, and shown with its convergence, background and limitations', JSON.stringify(shownRefined),
-          /diagnostics\.json/.test(shownRefined.files) && /probabilities\.bin/.test(shownRefined.files) && shownRefined.comparisons === comparisonsBefore + 1 && shownRefined.card && shownRefined.lines >= 5 && shownRefined.background !== '', 'its 8 files; one more comparison; the card with its convergence, background (the controls measuring the false decodes) and limitations');
+          /diagnostics\.json/.test(shownRefined.files) && /probabilities\.bin/.test(shownRefined.files) && shownRefined.comparisons === comparisonsBefore + 1 && shownRefined.card && shownRefined.lines >= 5 && shownRefined.background !== '', 'its 9 files; one more comparison; the card with its convergence, background (the controls measuring the false decodes) and limitations');
+
+        // Segmentations on the tissue (wave 3, slice 8). The list: every complete segmentation,
+        // the default first.
+        const lungItem = `${url}/api/local/${info.files.findIndex((f) => f.name === 'xenium-lung-2fov')}`;
+        await act('show_tissue', { dataset: 'xenium-lung-2fov', segmentation: 'default' });
+        const listed = await chrome.eval(`(async () => {
+          const app = window.situcraft;
+          const { promotedSegmentation } = await import('/lib/segmentations.js');
+          const dataset = app.store.project.datasets.find((d) => d.name === 'xenium-lung-2fov');
+          const complete = app.store.project.artifacts.filter((a) => a.kind === 'segmentation' && a.dataset === dataset.id && a.state === 'complete').map((a) => a.id);
+          const choices = window.situcraftViewer.choices();
+          return { complete, listed: choices.map((c) => c.id), first: choices[0]?.id, isDefault: choices[0]?.isDefault, promoted: promotedSegmentation(app.store.project, dataset.id)?.record.id, picker: [...document.querySelectorAll('.viewer-panel select[aria-label="Segmentation drawn"] option')].map((o) => o.value) };
+        })()`);
+        check('viewer', 'the Viewer lists every complete segmentation of the dataset, its default first', JSON.stringify({ listed: listed.listed.length, complete: listed.complete.length, first: listed.first === listed.promoted }),
+          listed.listed.length === listed.complete.length && listed.complete.every((id) => listed.listed.includes(id)) && listed.first === listed.promoted && listed.isDefault && listed.picker.join() === listed.listed.join(), 'all of them, in the picker; the default first');
+        // Each kind drawn as its files hold it: at cells' centroids (where its raster holds the
+        // cell itself), the cell found is that one, and the fill drawn is the color of its value.
+        const planted = await chrome.eval(`window.situcraft.store.project.artifacts.find((a) => a.kind === 'segmentation' && a.source === 'planted')?.id ?? null`);
+        const kinds = [['an expansion', expanded.data?.id, 'transcripts'], ['an import', selfImport.data?.id, 'transcripts'], ['a refinement', refined.data?.id, 'certainty'], ['errors planted for practice', planted, 'area']];
+        const viridis = colormapLUT('viridis');
+        for (const [kind, id, fill] of kinds) {
+          if (!id) {
+            check('viewer', `${kind} is drawn as its files hold it`, 'not made', false, 'made earlier in this suite');
+            continue;
+          }
+          const mask = readMask(Buffer.from(await (await fetch(`${url}/api/artifacts/${id}/files/mask.bin`)).arrayBuffer()));
+          const table = readSegCells(await (await fetch(`${lungItem}/segmentations/${id}/cells`)).arrayBuffer());
+          const [lo, hi] = attributeRange(table[fill === 'transcripts' ? 'transcripts' : fill === 'area' ? 'area' : 'certainty']);
+          const expected = (k) => {
+            if (fill === 'certainty') return Number.isFinite(table.certainty[k]) ? hexToRgb(certaintyColor(table.certainty[k])) : null;
+            const v = table[fill][k];
+            const i = Math.max(0, Math.min(255, Math.round((255 * (v - lo)) / (hi - lo))));
+            return [viridis[3 * i], viridis[3 * i + 1], viridis[3 * i + 2]];
+          };
+          // Pixels anywhere in its cells, each well inside its cell (its 7 × 7 pixels the same
+          // cell, clear of the outline's simplification), from a fixed sequence.
+          const samples = [];
+          let seed = 12345;
+          const next = () => {
+            seed = (seed * 1103515245 + 12345) % 2147483648;
+            return seed / 2147483648;
+          };
+          for (let tries = 0; samples.length < 24 && tries < 200000; tries += 1) {
+            const px = 3 + Math.floor(next() * (mask.width - 6));
+            const py = 3 + Math.floor(next() * (mask.height - 6));
+            const label = mask.label(px, py);
+            if (!label || !expected(label - 1)) continue;
+            let inside = true;
+            for (let dy = -3; dy <= 3 && inside; dy += 1) for (let dx = -3; dx <= 3 && inside; dx += 1) inside = mask.label(px + dx, py + dy) === label;
+            if (inside) samples.push({ cell: label - 1, x: (px + 0.5) * mask.pixel, y: (py + 0.5) * mask.pixel, color: expected(label - 1) });
+          }
+          const got = await chrome.eval(`(async () => {
+            const v = window.situcraftViewer;
+            await v.setSegmentation(${JSON.stringify(id)});
+            v.setChannelsVisible(false);
+            v.setTranscripts({ visible: false });
+            v.setCells({ outlines: true, nuclei: false, fill: ${JSON.stringify(fill)}, opacity: 1 });
+            const out = [];
+            for (const s of ${JSON.stringify(samples)}) {
+              v.setCamera({ cx: s.x, cy: s.y, scale: (window.devicePixelRatio || 1) / 0.25 });
+              await v.settled();
+              const [sx, sy] = v.worldToScreen(s.x, s.y);
+              out.push({ cell: s.cell, picked: v.pick(sx, sy), color: v.readColor(sx, sy).slice(0, 3) });
+            }
+            return { drawn: v.segmentation(), out };
+          })()`);
+          const wrongCell = got.out.filter((o) => o.picked !== o.cell);
+          const wrongColor = got.out.filter((o, i) => o.color.some((c, j) => Math.abs(c - samples[i].color[j]) > 1));
+          check('viewer', `${kind} is drawn as its files hold it`, `${got.out.length} cells; ${wrongCell.length} found as another (${wrongCell.slice(0, 2).map((o) => `${o.cell}→${o.picked}`).join(', ')}); ${wrongColor.length} filled otherwise`,
+            got.drawn === id && samples.length >= 20 && wrongCell.length === 0 && wrongColor.length === 0, `its cells where its raster has them, filled by ${fill}`);
+        }
+        // A view of the refinement, its fill, its transcripts by probability and a cell, saved,
+        // reopens with all of them; select_cell answers its cell.
+        const refinedShown = await act('show_tissue', { dataset: 'xenium-lung-2fov', segmentation: refined.data?.id, fill: 'certainty', opacity: 0.6, all_transcripts: true, color_by: 'probability', center: [750, 300], um_per_pixel: 0.25, cell: 'c100' });
+        const segPage = await chrome.eval(`(() => { const v = window.situcraftViewer; v.setChannelsVisible(true); return { seg: v.segmentation(), cell: v.detail()?.id, of: v.detail()?.segmentation?.id, colorBy: v.layers().transcripts.colorBy }; })()`);
+        check('viewer', 'remote control: show_tissue draws the segmentation asked, with its cell', refinedShown.ok ? JSON.stringify(segPage) : refinedShown.message,
+          refinedShown.ok && refinedShown.data.showing.segmentation === refined.data?.id && segPage.seg === refined.data?.id && segPage.cell === 'c100' && segPage.of === refined.data?.id && segPage.colorBy === 'probability', 'the refinement, its cell c100, transcripts by probability');
+        const points = await chrome.eval(`(async () => {
+          const v = window.situcraftViewer;
+          await v.settled();
+          const rect = { x0: 740, y0: 290, x1: 760, y1: 310 };
+          const loaded = v.loadedPoints(rect);
+          const n = v.cellsDrawn().n;
+          return { loaded: loaded.length, withP: loaded.filter((p) => p.probability !== null && (Number.isNaN(p.probability) || p.probability >= 0 && p.probability <= 1)).length, cells: loaded.filter((p) => p.cell === 0xffffffff || p.cell < n).length };
+        })()`);
+        const own = readPoints(await (await fetch(`${lungItem}/points?x0=740&y0=290&x1=760&y1=310&minq=20`)).arrayBuffer());
+        check('viewer', 'its transcripts carry their probability and their cell in it, the same transcripts as the dataset\'s', JSON.stringify({ ...points, dataset: own.length }),
+          points.loaded > 0 && points.loaded === own.length && points.withP === points.loaded && points.cells === points.loaded, 'every one, with a probability and a cell of the refinement');
+        const segView = await act('save_view', { name: 'The refinement on the tissue' });
+        await act('show_tissue', { dataset: 'xenium-lung-2fov', segmentation: 'instrument', fill: 'none', color_by: 'gene', all_transcripts: false, cell: null });
+        const segReopened = await act('open_view', { view: 'The refinement on the tissue' });
+        const reopenedPage = await chrome.eval(`(() => { const v = window.situcraftViewer; return { seg: v.segmentation(), cell: v.detail()?.id, fill: v.layers().cells.fill }; })()`);
+        check('viewer', 'a saved view reopens with its segmentation, its fill and its cell', `${segReopened.message ?? segReopened.error}; ${JSON.stringify(reopenedPage)}`,
+          segView.ok && segReopened.ok && segReopened.data.exact === true && reopenedPage.seg === refined.data?.id && reopenedPage.cell === 'c100' && reopenedPage.fill === 'certainty', 'exactly as saved: the refinement, certainty, c100');
+        const selectedSeg = await act('select_cell', { dataset: 'xenium-lung-2fov', cell: 'c200' });
+        check('viewer', 'remote control: select_cell selects a cell of the segmentation drawn, with the instrument\'s it came from', selectedSeg.message ?? selectedSeg.error,
+          selectedSeg.ok && selectedSeg.data.id === 'c200' && selectedSeg.data.segmentation?.id === refined.data?.id && selectedSeg.data.instrument?.id && Array.isArray(selectedSeg.data.limitations), 'c200 of the refinement, from an instrument\'s cell');
+        // The Viewer as the rest of the suite expects it: the instrument's cells, every stain.
+        await act('show_tissue', { dataset: 'xenium-lung-2fov', segmentation: 'instrument', fill: 'none', color_by: 'gene', all_transcripts: false, transcripts: true, cell: null });
+        await chrome.eval('window.situcraftViewer.setChannelsVisible(true)');
+        await act('set_mode', { mode: 'segmentation' });
         // The segmentation studio (wave 3, slice 5): its six steps; a pilot's preflight on a region
         // (refused without one); the pilot run twice, its seeds' agreement recorded and the rest of
         // the tissue kept; a region holding no nucleus failing, classified, with what to do.

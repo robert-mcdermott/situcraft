@@ -99,10 +99,12 @@ A filter's checksum is the SHA-256 of the cell count (32-bit unsigned, little-en
 one bit per cell, in the order of `cells.parquet`, the first cell in the lowest bit of the first
 byte, set when the cell is kept. Anyone can recompute it from the bundle and the conditions.
 
-A saved view records its dataset, its mode (Viewer or QC), the segmentation shown, the place and
-zoom (`camera`: the center in µm and the µm per CSS pixel), each stain by name with its visibility,
-color, window and gamma, the genes by name with the transcript settings, the cell layers, the
-selected cell (row and ID), and in the QC view the map and filter. Names rather than numbers keep a
+A saved view records its dataset, its mode (Viewer or QC), the segmentation shown (`segmentation`:
+`instrument` for the dataset's own, else the segmentation artifact's id), the place and zoom
+(`camera`: the center in µm and the µm per CSS pixel), each stain by name with its visibility,
+color, window and gamma, the genes by name with the transcript settings (`colorBy: "probability"`
+when transcripts are colored by their assignment's probability), the cell layers, the selected
+cell (its row and ID in the segmentation shown), and in the QC view the map and filter. Names rather than numbers keep a
 view valid when the derived data are rebuilt. A link to a view is the page's address with
 `#project=<project id>&view=<view id>`; it opens in SituCraft on the computer whose library holds
 the project.
@@ -186,6 +188,7 @@ SituCraft's transcript-informed segmentation (`SituCraft transcript-informed seg
 | File | Magic | Holds |
 | --- | --- | --- |
 | `probabilities.bin` | `SCPR` | Each transcript's posterior probability of its cell (`float32`, in the row order of `transcripts.parquet`): the share of the summarized sweeps it lay in that cell; NaN for a transcript assigned by place |
+| `certainty.bin` | `SCBC` | Each cell's boundary certainty (`float32`, in `cells.bin`'s order): the mean, over its pixels, of the share of the summarized sweeps each was its; NaN for a cell held or outside the regions refined. A cell is flagged uncertain below 0.75 |
 | `diagnostics.json` | | `summary` (the sweeps and samples; the split-half agreement, on every eighth transcript; the mean assignment probability and the share below 0.5; the log-likelihood's drift, Geweke's z and `gewekeJudged`, false when fewer than 100 sweeps were summarized; the voxels moved per sweep at the end; the cells refined, held and flagged; the regions; the transcripts modelled; the background: `falseDecodeShare` and `ambientShare`, the shares of the modelled transcripts its rates account for (their mean over the summarized sweeps), `negativeControls`, the negative controls' transcripts in the regions that measure the false decodes, and `inBackgroundShare`, the share the summary leaves in no cell; `seedAgreement`, with a second seed: the share of transcripts either run put in a refined cell that both put in the same cell), `limitations` (the cells, by id, with fewer than 10 gene transcripts, uncertain boundaries, or no nucleus, and the instrument's cells left out; the thresholds) and `regions` (each region refined: its rectangle, its own `summary`, and its `trace`, each sweep's stage, voxels moved, transcripts repositioned and log-likelihood). Over several regions, the summary's Geweke's z is the one farthest from 0 |
 | `layers.bin` | `SCLY` | With more than one layer: each layer's depths (µm) and each cell's outline in it, as `outlines.bin` holds them |
 

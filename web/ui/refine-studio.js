@@ -431,7 +431,8 @@ export function createStudio(app, hooks) {
     const cmp = instrument ? comparisonsOf(app.store.project, t.dataset.id).find((c) => c.a === instrument.id && c.b === a.id) : null;
     const comparing = app.bundles.comparisons(t.dataset.id).some((e) => e.b === a.id);
     return h('div.studio-pane.seg-refined',
-      h('h3.seg-card-title', a.name, a.state !== 'complete' ? h('span.badge.warn', ` ${a.state}`) : null),
+      h('h3.seg-card-title', a.name, a.state !== 'complete' ? h('span.badge.warn', ` ${a.state}`) : null,
+        a.state === 'complete' ? h('button.btn.small', { type: 'button', style: { marginLeft: '10px' }, onclick: () => app.showOnTissue(a.dataset, a.id) }, icon('tissue'), 'Show on the tissue') : null),
       h('dl.kv.seg-kv',
         h('dt', 'Cells'), h('dd', exact(s.cells), h('span.muted', ' started from the instrument\'s')),
         h('dt', 'Assigned'), h('dd', percent(s.assignedFraction, 2), h('span.muted', ' of gene transcripts of quality 20 or more')),

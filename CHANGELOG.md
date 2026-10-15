@@ -103,7 +103,7 @@ segmentation, validated against simulated truth and independent reference output
     against 1.42%).
   - Every tolerance is met on the Breast bundle and the simulated tissue. Three differences on the
     Lung bundle are explained in research.md.
-  - The Breast bundle refines in 99 s and 282 MB on a laptop.
+  - The Breast bundle refines in 83 s and 279 MB on a laptop.
 
 - **The background's calibration (wave 3, slice 7).** The refinement's background has two parts:
   false decodes, which fall on every codeword alike and which the panel's negative controls
@@ -118,6 +118,24 @@ segmentation, validated against simulated truth and independent reference output
   - **The limit, documented:** inside cells, ambient RNA cannot be told from the cells' own
     expression, so most of it stays counted in cells (research.md §3.2 and §9). On the real
     bundles false decodes are under 0.1% of the transcripts, and results there hardly change.
+
+- **Segmentations on the tissue (wave 3, slice 8).** The Viewer draws any of a dataset's
+  segmentations over its stains, chosen in its Cells layer: the instrument's, nucleus expansions,
+  refinements, imports. A Viewer opened afresh draws the dataset's default. The legend names the
+  segmentation drawn and says how it was made.
+  - **A refinement's uncertainty, shown:** cells filled by their flagged limitations (few
+    transcripts, uncertain boundary, no nucleus), by their boundary certainty or by their
+    transcripts' mean probability; transcripts colored by their assignment's probability, close
+    up. Doubtful cells and transcripts are drawn bright, certain ones dark.
+  - **The inspector** describes the segmentation's cell: the instrument's cell it came from, its
+    counts and top genes, and what its method flags.
+  - **Show on the tissue** on each segmentation in the Segmentation view and the inspector, and on
+    an expansion's and a refinement's result.
+  - **Saved views and links** keep the segmentation drawn, its cell and how transcripts are
+    colored. Remote control: `show_tissue` takes `segmentation`, the new fills and `color_by`;
+    `select_cell` selects a cell of the segmentation drawn.
+  - **A refinement records each cell's boundary certainty** (`certainty.bin`,
+    [docs/FORMATS.md](docs/FORMATS.md)).
 
 ### Changed
 

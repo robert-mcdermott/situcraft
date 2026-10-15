@@ -1430,29 +1430,53 @@ independent reference outputs.
      - **The diagnostics lost the controls' count:** a refinement releases its model before
        writing, so the count read from it was 0. The browser suite caught it on Lung; the count
        now travels with the result, and the summary's test releases its results first.
-8. **Segmentations on the tissue (V2, V5, V8).** Any segmentation can be looked at where it lies,
-   as scientists check one: its outlines over the stains. Today the Viewer draws only the
-   instrument's outlines, and SituCraft's own expansions and refinements appear on the tissue only
-   through a comparison.
-   - **The Viewer's cell layer draws any segmentation of the dataset,** chosen from a list (the
-     instrument's, nucleus expansions, refinements, imports), the project's default first. Its
-     outlines, nuclei and fills by its cells' attributes; a legend says which segmentation is drawn
-     and how it was made.
-   - **"Show on the tissue"** on every segmentation in the Segmentation view and on each result
-     (an expansion's, a refinement's, an import's), opening the Viewer with it drawn.
-   - **A refinement's uncertainty, shown:** cells filled by their flagged limitations (few
-     transcripts, uncertain boundary, no nucleus) or by how certain their boundaries are, and
-     transcripts by their assignment's probability, so the doubtful ones stand out.
-   - **The inspector** describes the chosen segmentation's cell: its id, the instrument's cell it
-     came from, its counts, and its limitations.
-   - **Saved views and links** record the segmentation drawn (V8), and the remote action
-     `show_tissue` takes one.
-   - Validation: in headless Chrome, each kind of segmentation drawn as its files hold it (outlines
-     and fills against the artifact's raster and cells), the list and the default, a saved view
-     reopening with its segmentation, and the remote action.
+8. **Segmentations on the tissue (V2, V5, V8): done.** Any segmentation is looked at where it
+   lies, its outlines over the stains, as scientists check one.
+   - **The Viewer draws any of the dataset's segmentations,** chosen in its Cells layer from the
+     complete ones, its default first; a Viewer opened afresh draws the default. The legend names
+     the segmentation and says how it was made: the instrument's methods, an expansion's distance,
+     a refinement's preset, sweeps and seed, an import's tool. The instrument's comes from the
+     dataset's own data; any other's from its artifact (`api_segview.go`): its outlines tiled as the
+     comparison workspace's are, its cells table, a cell's detail, and its transcripts, each with
+     its cell in that segmentation. The nuclei stay the dataset's.
+   - **Fills:** every segmentation's counts and areas; a refinement's flagged limitations
+     (unflagged cells left clear, so the flagged stand out), its boundary certainty and its
+     assignment certainty (its transcripts' mean probability), on one scale from 0.5, a coin's toss,
+     drawn brightest, to 1, every sample agreeing, drawn darkest.
+   - **Transcripts by their assignment's probability,** close up, on the same scale, so the
+     doubtful ones stand out; those assigned by place in grey.
+   - **Each refined cell's boundary certainty is recorded** (`certainty.bin`): the mean share of the
+     summarized sweeps its pixels were its, which the uncertain-boundary flag already measured.
+   - **The inspector** describes the segmentation's cell: the instrument's cell it came from, its
+     counts and top genes, its flagged limitations, its boundary and assignment certainty.
+   - **Show on the tissue** on every segmentation in the Segmentation view's table and in the
+     inspector, and on an expansion's and a refinement's result.
+   - **Saved views and links** record the segmentation drawn, its cell and the transcripts'
+     coloring; `show_tissue` takes a segmentation, a refinement's fills and `color_by`;
+     `select_cell` selects a cell of the segmentation drawn.
+   - **Validation:**
+     - Go: `certainty.bin` written, read and checked, and consistent with the uncertain-boundary
+       flags; the cells table, a cell's detail and the transcript tiles answer what the artifact's
+       files hold.
+     - In headless Chrome: each kind (an expansion, an import, a refinement, errors planted for
+       practice) drawn as its files hold it, at 24 points well inside its cells: the cell found is
+       the one its label raster holds, and the fill drawn is the color of that cell's value. The
+       list and its default; a view of a refinement (its fill, its transcripts by probability, a
+       cell) reopening exactly; `show_tissue` and `select_cell` in a segmentation, its transcripts
+       carrying their probabilities and cells. Shown to catch another segmentation's outlines
+       drawn in place of a refinement's, and a fill one cell off.
+   - Found by slice 8:
+     - **A segmentation showed under another's name while it was read:** the instrument's outlines
+       were drawn, named as the instrument's, until the asked-for one arrived. The cells drawn
+       before are now hidden while one is read, and the legend says which is being read.
+     - **Points at cells' centroids could not tell a segmentation from the instrument's** when it
+       numbers its cells as the instrument does. The suite now samples points well inside cells.
+       An expansion's and an import's still agree with the instrument's almost everywhere, by
+       design, so the refinement and the planted errors are the ones that tell.
 9. **Larger tissues and release (S12, P6).**
    - Overlapping patches with stitching, so that memory is bounded for any tissue size.
-   - Memory guards.
+   - Memory guards. The Viewer reads a drawn segmentation's assignments and probabilities whole
+     (8 bytes a transcript; 400 MB at 50 million): read them by tile instead.
    - A scale test on a generated tissue of ~50 million transcripts, created, measured and deleted
      (weekly workflow). The simulator makes tissues that large in patches too: slice 1's holds
      the whole image in memory, about 75 bytes a pixel, and stops at 50 million pixels (about

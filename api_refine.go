@@ -400,7 +400,7 @@ func (a *app) refineJob(p refineSpec) jobs.Func {
 		r.Progress(0.92, "Checking the segmentation")
 		files := []artifacts.File{}
 		for _, name := range []string{segment.FileDescription, segment.FileCells, segment.FileMask, segment.FileAssignments, segment.FileCounts, segment.FileOutlines,
-			segment.FileProbabilities, segment.FileDiagnostics, segment.FileLayers} {
+			segment.FileProbabilities, segment.FileCertainty, segment.FileDiagnostics, segment.FileLayers} {
 			if name == segment.FileLayers && p.Options.Stages[len(p.Options.Stages)-1].Layers == 1 {
 				continue
 			}

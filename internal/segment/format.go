@@ -16,6 +16,8 @@ package segment
 //	probabilities.bin "SCPR"  each transcript's posterior probability of its cell (NaN: assigned
 //	                     by place, not by the method's model)
 //	layers.bin   "SCLY"  each cell's outline in each z layer (µm), with the layers' depths
+//	certainty.bin "SCBC" each cell's boundary certainty: the mean share of the summarized samples
+//	                     its pixels were its (NaN: a cell the method did not draw)
 //	diagnostics.json     the method's diagnostics: its convergence, and cells it flags
 //
 // Readers check every size against the file before allocating, and refuse a body more than 1032
@@ -93,6 +95,7 @@ const (
 	// Optional files.
 	FileProbabilities = "probabilities.bin"
 	FileLayers        = "layers.bin"
+	FileCertainty     = "certainty.bin"
 	FileDiagnostics   = "diagnostics.json"
 )
 
@@ -100,7 +103,8 @@ const (
 var Roles = map[string]string{
 	FileDescription: "description", FileCells: "cells", FileMask: "label raster",
 	FileAssignments: "transcript assignments", FileCounts: "counts", FileOutlines: "cell outlines",
-	FileProbabilities: "assignment probabilities", FileLayers: "cell outlines by layer", FileDiagnostics: "diagnostics",
+	FileProbabilities: "assignment probabilities", FileLayers: "cell outlines by layer", FileCertainty: "boundary certainty",
+	FileDiagnostics: "diagnostics",
 }
 
 // Layer is one z layer's outlines: its depths (µm) and each cell's outline in it.
@@ -239,6 +243,14 @@ func WriteProbabilities(dir string, p []float32) error {
 	b.u32(uint32(len(p)))
 	b.f32s(p)
 	return writeFile(filepath.Join(dir, FileProbabilities), "SCPR", b.Bytes())
+}
+
+// WriteCertainty writes certainty.bin: each cell's boundary certainty, in cells.bin's order.
+func WriteCertainty(dir string, c []float32) error {
+	var b buffer
+	b.u32(uint32(len(c)))
+	b.f32s(c)
+	return writeFile(filepath.Join(dir, FileCertainty), "SCBC", b.Bytes())
 }
 
 func outlinesBody(b *buffer, outlines []Outline) {
@@ -514,6 +526,16 @@ func ReadProbabilities(dir string) ([]float32, error) {
 	}
 	out := r.f32s(r.count(4))
 	return out, done(r, FileProbabilities)
+}
+
+// ReadCertainty reads certainty.bin.
+func ReadCertainty(dir string) ([]float32, error) {
+	r, err := readFile(filepath.Join(dir, FileCertainty), "SCBC")
+	if err != nil {
+		return nil, err
+	}
+	out := r.f32s(r.count(4))
+	return out, done(r, FileCertainty)
 }
 
 func readOutlinesBody(r *reader) []Outline {

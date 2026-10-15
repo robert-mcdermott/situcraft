@@ -230,7 +230,8 @@ func Check(dir string, m *artifacts.Manifest) []artifacts.Finding {
 		fatal("counts.total", "The counts hold %d gene transcripts; the description says %d are assigned.", q20Assigned, desc.Q20GeneAssigned)
 	}
 	// The optional files, when written: one probability per transcript, in [0, 1] (NaN for one
-	// assigned by place); an outline for every cell in every layer; diagnostics with a summary.
+	// assigned by place); one boundary certainty per cell, in [0, 1] (NaN for one not drawn); an
+	// outline for every cell in every layer; diagnostics with a summary.
 	var diagnostics json.RawMessage
 	if exists(dir, FileProbabilities) {
 		p, err := ReadProbabilities(dir)
@@ -248,6 +249,25 @@ func Check(dir string, m *artifacts.Manifest) []artifacts.Finding {
 			}
 			if bad > 0 {
 				fatal("probabilities.range", "%d assignment probabilities are outside [0, 1], or zero for an assigned transcript.", bad)
+			}
+		}
+	}
+	if exists(dir, FileCertainty) {
+		c, err := ReadCertainty(dir)
+		switch {
+		case err != nil:
+			fatal("segmentation.unreadable", "%v", err)
+		case len(c) != n:
+			fatal("certainty.count", "%d boundary certainties for %d cells.", len(c), n)
+		default:
+			bad := 0
+			for _, v := range c {
+				if !math.IsNaN(float64(v)) && (v < 0 || v > 1) {
+					bad++
+				}
+			}
+			if bad > 0 {
+				fatal("certainty.range", "%d boundary certainties are outside [0, 1].", bad)
 			}
 		}
 	}

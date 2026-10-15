@@ -19,12 +19,18 @@
 // A descriptor may name where its outline tiles are (polygonsBase): the comparison workspace
 // draws each segmentation's outlines on the same tissue. A transparent renderer draws only what
 // its layers ask on a clear canvas, for an overlay.
+//
+// The Viewer draws any segmentation of the dataset (setSegmentation; wave 3, slice 8): its cells'
+// outlines and fills from its own tiles and table, the nuclei still the dataset's, its transcripts
+// each with its cell in that segmentation and, when it gives them, colored by their assignment's
+// probability.
 
 import { createContext, createProgram, arrayBuffer, vertexArray, byteTexture, floatTexture, colorTexture, hexColor } from './gl.js';
 import { TileCache } from './tiles.js';
 import { densityLevel, gridTileRange, imageLevel, tileRange, tileUm, viewMatrix, visibleRect, screenToWorld } from '../lib/viewport.js';
 import { readPolygonTile, outlineSegments, fillTriangles, pointInRing } from '../lib/polygons.js';
 import { readPoints, readDensity, densityGrid } from '../lib/viewer-data.js';
+import { probabilityColors, probabilitySlot } from '../lib/segview.js';
 
 const QUAD = new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]);
 
@@ -195,7 +201,9 @@ export class TissueRenderer {
     this.dataset = null;
     this.camera = { cx: 0, cy: 0, scale: 1 };
     this.layers = null;
-    this.cells = null; // the cells table (lib/viewer-data.js readCells)
+    this.cells = null; // the cells table drawn (lib/viewer-data.js readCells, lib/segview.js readSegCells)
+    this.ownCells = null; // the dataset's own
+    this.segmentation = null; // { id, polygonsBase, geometry, cells, points, probability }, or null for the dataset's own
     this.qcMap = null; // { ratio, num, den, q20Num, q20Den, minDen, scale, range, lut, opacity }
     this.highlight = null; // { texture }: cells chosen elsewhere, drawn over the tissue
     this.selected = null; // { row, boundaries: [Float32Array], nuclei: [Float32Array] }
@@ -250,11 +258,50 @@ export class TissueRenderer {
     for (const c of Object.values(this.caches)) c.clear();
     this.dataset = desc;
     this.cells = cells;
+    this.ownCells = cells;
+    this.segmentation = null;
     this.selected = null;
     this.setCellColors(null);
     this.setHighlight(null);
     this.setQCMap(null);
     this.request();
+  }
+
+  // The segmentation drawn: { id, polygonsBase (its outline tiles), geometry (their sets), cells
+  // (its table), points (where its transcript tiles are), probability (whether they carry one) },
+  // or null for the dataset's own. Its cells replace the dataset's: fills, highlights and the
+  // selection are cleared.
+  setSegmentation(seg) {
+    this.segmentation = seg ?? null;
+    this.caches.shapes.clear();
+    this.caches.points.clear();
+    this.cells = seg?.cells ?? this.ownCells;
+    this.selected = null;
+    this.setCellColors(null);
+    this.setHighlight(null);
+    this.request();
+  }
+
+  // Where a set's outline tiles are, and its summary: a segmentation's cells are its own, the
+  // nuclei always the dataset's.
+  shapeSource(set) {
+    const seg = set === 'cells' ? this.segmentation : null;
+    return {
+      key: seg ? encodeURIComponent(seg.id) : 'own',
+      base: seg ? seg.polygonsBase : this.dataset.polygonsBase ?? `/api/cache/${this.dataset.entries.geometry}/polygons`,
+      info: (seg ? seg.geometry : this.dataset.geometry).find((s) => s.name === set),
+    };
+  }
+
+  // How transcripts are colored: by gene, or by their assignment's probability when the
+  // segmentation drawn gives one and the layer asks for it.
+  pointColoring() {
+    return this.layers?.transcripts?.colorBy === 'probability' && this.segmentation?.probability ? 'probability' : 'gene';
+  }
+
+  pointsKey(genes, minQ, tx, ty) {
+    const seg = this.segmentation ? encodeURIComponent(this.segmentation.id) : 'own';
+    return `pts:${seg}:${this.pointColoring()}:${genes}:${minQ}:${tx}:${ty}`;
   }
 
   setCamera(cam) {
@@ -369,12 +416,15 @@ export class TissueRenderer {
   }
 
   async loadPoints(key, signal) {
-    // key: pts:<genes>:<minQ>:<tx>:<ty>
-    const [, genes, minQ, tx, ty] = key.split(':');
+    // key: pts:<segmentation>:<coloring>:<genes>:<minQ>:<tx>:<ty>
+    const [, segId, coloring, genes, minQ, tx, ty] = key.split(':');
     const query = `${genes === 'all' ? '' : `genes=${genes}&`}minq=${minQ}`;
-    const { buffer } = await this.fetch(`/api/cache/${this.dataset.entries.transcripts}/points/${tx}/${ty}?${query}`, signal);
+    const seg = segId === 'own' ? null : this.segmentation;
+    if (seg && encodeURIComponent(seg.id) !== segId) throw new Error('the segmentation drawn changed');
+    const { buffer } = await this.fetch(seg ? `${seg.points}/${tx}/${ty}?${query}` : `/api/cache/${this.dataset.entries.transcripts}/points/${tx}/${ty}?${query}`, signal);
     const p = readPoints(buffer);
     const slots = genes === 'all' ? null : new Map(genes.split(',').map((g, i) => [Number(g), i]));
+    const byProbability = coloring === 'probability' && p.probability;
     const positions = new Float32Array(2 * p.n);
     const attrs = new Float32Array(2 * p.n);
     for (let k = 0; k < p.genes.length; k += 1) {
@@ -382,7 +432,7 @@ export class TissueRenderer {
       for (let i = p.starts[k]; i < p.starts[k + 1]; i += 1) {
         positions[2 * i] = p.x[i];
         positions[2 * i + 1] = p.y[i];
-        attrs[2 * i] = slot;
+        attrs[2 * i] = byProbability ? probabilitySlot(p.probability[i]) : slot;
         attrs[2 * i + 1] = p.cell[i] === 0xffffffff ? -1 : p.cell[i];
       }
     }
@@ -412,9 +462,10 @@ export class TissueRenderer {
   }
 
   async loadShapes(key, signal) {
-    // key: geo:<set>:<level>:<tx>:<ty>
-    const [, set, level, tx, ty] = key.split(':');
-    const base = this.dataset.polygonsBase ?? `/api/cache/${this.dataset.entries.geometry}/polygons`;
+    // key: geo:<source>:<set>:<level>:<tx>:<ty>
+    const [, source, set, level, tx, ty] = key.split(':');
+    const { key: now, base } = this.shapeSource(set);
+    if (now !== source) throw new Error('the segmentation drawn changed');
     const { buffer, headers } = await this.fetch(`${base}/${set}/${level}/${tx}/${ty}`, signal);
     const tile = readPolygonTile(buffer, Number(headers.get('X-Polygons')), Number(headers.get('X-Vertices')));
     const gl = this.gl;
@@ -713,7 +764,7 @@ export class TissueRenderer {
     gl.uniform1f(prog.u.u_size, (t.pointSize ?? 3) * ratio * grow);
     gl.uniform1f(prog.u.u_selected, this.selected ? this.selected.row : -2);
     const colors = new Float32Array(48);
-    const list = t.all ? [t.allColor ?? '#ffd84d'] : t.colors;
+    const list = this.pointColoring() === 'probability' ? probabilityColors() : t.all ? [t.allColor ?? '#ffd84d'] : t.colors;
     list.slice(0, 16).forEach((hex, i) => colors.set(hexColor(hex), 3 * i));
     gl.uniform3fv(prog.u.u_colors, colors);
     gl.enable(gl.BLEND);
@@ -723,7 +774,7 @@ export class TissueRenderer {
     const minQ = t.minQ ?? 20;
     for (let ty = range.ty0; ty <= range.ty1; ty += 1) {
       for (let tx = range.tx0; tx <= range.tx1; tx += 1) {
-        const tile = this.caches.points.want(`pts:${genes}:${minQ}:${tx}:${ty}`, priority(plan.rect, side, tx, ty));
+        const tile = this.caches.points.want(this.pointsKey(genes, minQ, tx, ty), priority(plan.rect, side, tx, ty));
         if (!tile || !tile.count) continue;
         gl.bindVertexArray(tile.vao);
         gl.drawArrays(gl.POINTS, 0, tile.count);
@@ -736,7 +787,7 @@ export class TissueRenderer {
   // The geometry tiles in view at the image level, widened by the largest polygon.
   shapeTiles(plan, set) {
     const d = this.dataset;
-    const info = d.geometry.find((s) => s.name === set);
+    const { key, info } = this.shapeSource(set);
     if (!info) return [];
     const level = Math.min(plan.level, d.grid.levels - 1);
     const reach = info.maxExtent;
@@ -746,7 +797,7 @@ export class TissueRenderer {
     const out = [];
     for (let ty = range.ty0; ty <= range.ty1; ty += 1) {
       for (let tx = range.tx0; tx <= range.tx1; tx += 1) {
-        const tile = this.caches.shapes.want(`geo:${set}:${level}:${tx}:${ty}`, priority(plan.rect, side, tx, ty));
+        const tile = this.caches.shapes.want(`geo:${key}:${set}:${level}:${tx}:${ty}`, priority(plan.rect, side, tx, ty));
         if (tile) out.push(tile);
       }
     }
@@ -844,21 +895,22 @@ export class TissueRenderer {
   // --- Questions --------------------------------------------------------------------------------
 
   // The cell under a canvas position (device pixels): the row of the loaded cell (or nucleus)
-  // polygon containing it, else -1.
+  // polygon containing it, else -1. A segmentation's cells are found by its own outlines only (the
+  // nuclei are numbered as the dataset's cells).
   pick(sx, sy) {
     if (!this.dataset) return -1;
     const [w, h] = this.size();
     const [x, y] = screenToWorld(this.camera, w, h, sx, sy);
     const plan = this.plan();
     const level = Math.min(plan.level, this.dataset.grid.levels - 1);
-    for (const set of ['cells', 'nuclei']) {
-      const info = this.dataset.geometry.find((s) => s.name === set);
+    for (const set of this.segmentation ? ['cells'] : ['cells', 'nuclei']) {
+      const { key, info } = this.shapeSource(set);
       if (!info) continue;
       const r = { x0: x - info.maxExtent, y0: y - info.maxExtent, x1: x + info.maxExtent, y1: y + info.maxExtent };
       const range = gridTileRange(this.dataset.grid, level, r);
       for (let ty = range.ty0; ty <= range.ty1; ty += 1) {
         for (let tx = range.tx0; tx <= range.tx1; tx += 1) {
-          const tile = this.caches.shapes.peek(`geo:${set}:${level}:${tx}:${ty}`)?.tile;
+          const tile = this.caches.shapes.peek(`geo:${key}:${set}:${level}:${tx}:${ty}`)?.tile;
           if (!tile) continue;
           for (let i = 0; i < tile.cells.length; i += 1) {
             if (tile.cells[i] !== 0xffffffff && pointInRing(tile.xy, tile.starts[i], tile.starts[i + 1], x, y)) return tile.cells[i];
@@ -883,8 +935,8 @@ export class TissueRenderer {
     return Object.values(this.caches).reduce((n, c) => n + c.pending(), 0);
   }
 
-  // The points loaded for the current view inside a rectangle: [{ gene, x, y, cell }], for the
-  // validation harness.
+  // The points loaded for the current view inside a rectangle: [{ gene, x, y, cell, probability }],
+  // for the validation harness.
   loadedPoints(rect) {
     const plan = this.plan();
     if (plan?.transcripts?.mode !== 'points') return [];
@@ -893,16 +945,27 @@ export class TissueRenderer {
     const minQ = this.layers.transcripts.minQ ?? 20;
     for (let ty = range.ty0; ty <= range.ty1; ty += 1) {
       for (let tx = range.tx0; tx <= range.tx1; tx += 1) {
-        const p = this.caches.points.peek(`pts:${genes}:${minQ}:${tx}:${ty}`)?.points;
+        const p = this.caches.points.peek(this.pointsKey(genes, minQ, tx, ty))?.points;
         if (!p) continue;
         for (let k = 0; k < p.genes.length; k += 1) {
           for (let i = p.starts[k]; i < p.starts[k + 1]; i += 1) {
-            if (p.x[i] >= rect.x0 && p.x[i] < rect.x1 && p.y[i] >= rect.y0 && p.y[i] < rect.y1) out.push({ gene: p.genes[k], x: p.x[i], y: p.y[i], cell: p.cell[i] });
+            if (p.x[i] >= rect.x0 && p.x[i] < rect.x1 && p.y[i] >= rect.y0 && p.y[i] < rect.y1) out.push({ gene: p.genes[k], x: p.x[i], y: p.y[i], cell: p.cell[i], probability: p.probability ? p.probability[i] : null });
           }
         }
       }
     }
     return out;
+  }
+
+  // The color drawn at a canvas position (device pixels), [r, g, b, a] bytes: the frame drawn
+  // again and read back at once, for the validation harness.
+  readColor(sx, sy) {
+    this.draw();
+    const gl = this.gl;
+    const [, h] = this.size();
+    const out = new Uint8Array(4);
+    gl.readPixels(Math.round(sx), h - 1 - Math.round(sy), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, out);
+    return [...out];
   }
 
   // Draws one channel's raw samples at a level, one device pixel per sample, the sample at

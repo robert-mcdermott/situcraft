@@ -117,8 +117,8 @@ case, then the one name that starts with or contains what was given. An error li
 | --- | --- | --- |
 | `set_mode` | `mode` | Shows a view: `start`, `data`, `viewer`, `qc`, `segmentation`, `compare`, `celltypes`, `spatial`, `cohort`, `reports`, `jobs` |
 | `focus` | `kind` (`dataset`, `filter`, `view`, `local`), `name` | Shows an item in the inspector (a saved view opens); no name clears the focus |
-| `show_tissue` | `dataset`, `center` ([x, y] µm), `um_per_pixel` or `width_um` or `whole`, `genes`, `all_transcripts`, `transcripts`, `min_quality`, `point_size`, `channels` ({stain: {visible, color, window, gamma}}), `outlines`, `nuclei`, `fill` (`transcripts`, `total`, `area`, `nucleusArea`, `method`, `none`), `opacity`, `cell` (an ID) | Shows a dataset in the Viewer as asked, everything not given as it is; answers what it shows and what the dataset lacks |
-| `select_cell` | `cell` (ID, or row as `#123`), `dataset`, `center` | Selects a cell and answers its detail: position, areas, segmentation method, transcripts by gene |
+| `show_tissue` | `dataset`, `center` ([x, y] µm), `um_per_pixel` or `width_um` or `whole`, `genes`, `all_transcripts`, `transcripts`, `min_quality`, `point_size`, `channels` ({stain: {visible, color, window, gamma}}), `segmentation` (a segmentation's name or artifact ID, `instrument`, `default`), `outlines`, `nuclei`, `fill` (`transcripts`, `total`, `area`, `nucleusArea`, `method` for the instrument's; `limitations`, `certainty`, `probability` for a refinement's; `none`), `opacity`, `color_by` (`gene`, `probability`), `cell` (an ID in the segmentation shown) | Shows a dataset in the Viewer as asked, everything not given as it is; answers what it shows and what the dataset lacks |
+| `select_cell` | `cell` (ID in the segmentation shown, or row as `#123`), `dataset`, `center` | Selects a cell and answers its detail: position, areas, transcripts by gene, and the segmentation method or, for a segmentation other than the instrument's, the instrument's cell it came from and what its method flags |
 
 ### Saved views
 
