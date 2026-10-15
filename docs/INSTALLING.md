@@ -50,7 +50,7 @@ lists them):
 ```sh
 curl --proto '=https' --tlsv1.2 -fsSL \
   https://raw.githubusercontent.com/robert-mcdermott/situcraft/main/install.sh |
-  SITUCRAFT_VERSION=v0.1.0 sh
+  SITUCRAFT_VERSION=v0.2.0 sh
 ```
 
 To install somewhere else, use a directory you can write to:
@@ -64,7 +64,7 @@ curl --proto '=https' --tlsv1.2 -fsSL \
 A downloaded installer takes the same settings as options:
 
 ```sh
-sh install-situcraft.sh --version v0.1.0 --install-dir "$HOME/bin"
+sh install-situcraft.sh --version v0.2.0 --install-dir "$HOME/bin"
 ```
 
 `SITUCRAFT_REPOSITORY=owner/repository` installs from a fork. For a
@@ -110,7 +110,7 @@ Piping into `iex` cannot pass parameters. Set environment variables, which the
 piped form reads:
 
 ```powershell
-$env:SITUCRAFT_VERSION = 'v0.1.0'
+$env:SITUCRAFT_VERSION = 'v0.2.0'
 $env:SITUCRAFT_INSTALL_DIR = "$HOME\bin"
 irm https://raw.githubusercontent.com/robert-mcdermott/situcraft/main/install.ps1 | iex
 ```
@@ -119,7 +119,7 @@ or build a script block, which accepts parameters:
 
 ```powershell
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/robert-mcdermott/situcraft/main/install.ps1))) `
-  -Version v0.1.0 -InstallDir "$HOME\bin"
+  -Version v0.2.0 -InstallDir "$HOME\bin"
 ```
 
 | Parameter | Environment variable | Purpose |
@@ -231,7 +231,10 @@ if you no longer need those projects; deleted projects are first moved to its
 `trash` folder. Your Xenium bundles are never copied into the library, moved or
 changed: projects refer to them where they are. Example datasets you downloaded
 are in its `examples` folder (or `--examples-dir`); **Remove** on the start page
-deletes one, and it can be downloaded again.
+deletes one, and it can be downloaded again. Its `jobs` folder keeps the jobs (the Jobs view
+shows them), and its `artifacts` folder what jobs make and register (segmentations), which
+projects use. With `--remote-control`, SituCraft also
+keeps `remote.json` there while it runs ([remote control](REMOTE-CONTROL.md)).
 
 SituCraft also keeps a cache of what it derives from your bundles (image tiles,
 transcript indexes, tiled cell outlines) in `~/Library/Caches/situcraft` on

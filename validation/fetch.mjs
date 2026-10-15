@@ -28,10 +28,12 @@ const args = process.argv.slice(2);
 const names = args.filter((a) => !a.startsWith('--'));
 const record = args.includes('--record');
 const dataRoot = process.env.SITUCRAFT_DATA || `${here}/cache`;
+// The data sets, and the tools the checks use (axe-core): each an archive, or files under a base URL.
+const sets = { ...manifest.datasets, ...(manifest.tools ?? {}) };
 const USER_AGENT = 'SituCraft-validation (+https://github.com/robert-mcdermott/situcraft)';
 
 if (args.includes('--list')) {
-  for (const [name, set] of Object.entries(manifest.datasets)) {
+  for (const [name, set] of Object.entries(sets)) {
     const bytes = set.archive?.size ?? set.files.reduce((sum, f) => sum + f.size, 0);
     console.log(`${name}: ${set.title}, ${(bytes / 1e6).toFixed(1)} MB to download\n  ${set.source}\n  ${set.license}`);
   }
@@ -39,8 +41,8 @@ if (args.includes('--list')) {
 }
 
 for (const name of names) {
-  if (!manifest.datasets[name]) {
-    console.error(`Unknown data set ${name}. Data sets: ${Object.keys(manifest.datasets).join(', ')}`);
+  if (!sets[name]) {
+    console.error(`Unknown data set ${name}. Data sets: ${Object.keys(sets).join(', ')}`);
     process.exit(2);
   }
 }
@@ -182,12 +184,34 @@ async function extract(archive, root) {
 
 let failures = 0;
 let recorded = false;
-for (const [name, set] of Object.entries(manifest.datasets)) {
+for (const [name, set] of Object.entries(sets)) {
   if (names.length && !names.includes(name)) continue;
   const root = `${dataRoot}/${name}`;
   try {
     if (await intact(root, set.files)) {
       console.log(`✓ ${name}: already present (${set.title})`);
+      continue;
+    }
+    // Files under a base URL (a tool such as axe-core): each downloaded and checked.
+    if (set.base) {
+      await mkdir(root, { recursive: true });
+      for (const file of set.files) {
+        const target = join(root, file.path);
+        await mkdir(dirname(target), { recursive: true });
+        await download(new URL(file.path, set.base).href, `${target}.part`);
+        const info = await stat(`${target}.part`);
+        const [digest] = await hashFile(`${target}.part`);
+        if (record) {
+          file.size = info.size;
+          file.sha256 = digest;
+          recorded = true;
+        } else if (info.size !== file.size || digest !== file.sha256) {
+          await rm(`${target}.part`, { force: true });
+          throw new Error(`${file.path} does not match its record (got ${info.size} bytes, SHA-256 ${digest})`);
+        }
+        await rename(`${target}.part`, target);
+      }
+      console.log(`✓ ${name}: downloaded ${set.files.length} file${set.files.length === 1 ? '' : 's'}${record ? ', recorded in sources.json' : ''} (${set.title})`);
       continue;
     }
     if (!set.archive) throw new Error('no archive to download');

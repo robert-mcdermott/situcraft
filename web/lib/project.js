@@ -3,7 +3,8 @@
 // 0.8.0 web/lib/workspace.js.
 //
 // Wave 1, slice 1 defines the envelope; later slices fill it: datasets (slice 3), QC filter
-// versions (slice 6), saved views (slice 7), segmentation artifacts and decisions (wave 2).
+// versions (slice 6), saved views (slice 7), segmentation artifacts, decisions and exports
+// (wave 2).
 // Source bundles are never inside a project: a dataset refers to its bundle by path and checksums.
 
 export const PROJECT_FORMAT = 'situcraft-project';
@@ -34,6 +35,7 @@ export function createProject(name = 'Untitled project', options = {}) {
     decisions: [],
     // Saved views: viewport, layers, colors, genes and filters, reopened exactly.
     views: [],
+    // (exports: the exports written from its segmentations, added with the first; lib/segmentations.js.)
     // The log of material changes: [{ time, action, detail }].
     history: [],
   };
@@ -57,7 +59,7 @@ export function parseProject(text) {
     throw new Error(`The project was saved by a newer SituCraft (project version ${doc.version}; this program reads up to ${PROJECT_VERSION}). Update SituCraft to open it.`);
   }
   if (typeof doc.id !== 'string' || !ID_PATTERN.test(doc.id)) throw new Error('The project has no valid id.');
-  for (const field of ['datasets', 'artifacts', 'decisions', 'views', 'history']) {
+  for (const field of ['datasets', 'artifacts', 'decisions', 'views', 'exports', 'history']) {
     if (field in doc && !Array.isArray(doc[field])) throw new Error(`The project's ${field} is not a list.`);
   }
   const base = createProject(typeof doc.name === 'string' ? doc.name : 'Untitled project', { id: doc.id, now: doc.created ?? doc.modified });

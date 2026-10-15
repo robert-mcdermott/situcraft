@@ -1,7 +1,9 @@
 // WebGL2 helpers for the tissue renderer: compiling programs and making buffers and textures.
 
-export function createContext(canvas) {
-  const gl = canvas.getContext('webgl2', { antialias: false, alpha: false, depth: false, stencil: true, premultipliedAlpha: false, preserveDrawingBuffer: false, powerPreference: 'high-performance' });
+// transparent: the canvas shows what is behind it where nothing is drawn (the comparison
+// workspace's overlay).
+export function createContext(canvas, { transparent = false } = {}) {
+  const gl = canvas.getContext('webgl2', { antialias: false, alpha: transparent, depth: false, stencil: true, premultipliedAlpha: false, preserveDrawingBuffer: false, powerPreference: 'high-performance' });
   if (!gl) throw new Error('This browser cannot draw the tissue: it has no WebGL2.');
   return gl;
 }

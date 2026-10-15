@@ -1,0 +1,1405 @@
+{
+ "format": "situcraft-project",
+ "version": 1,
+ "id": "p-situcraft-0-2-0-lung",
+ "name": "Lung example, as SituCraft 0.2.0 saved it",
+ "created": "2026-10-14T18:31:18.778Z",
+ "modified": "2026-10-15T02:31:41.052Z",
+ "datasets": [
+  {
+   "id": "d-0ab2d717f6c64c09",
+   "name": "xenium-lung-2fov",
+   "platform": "Xenium",
+   "path": "/data/examples/xenium-lung-2fov",
+   "zipped": false,
+   "software": "xenium-2.0.0.10",
+   "version": "2.0.0",
+   "experimentUuid": "b3d47512-49f1-4932-8182-577862c181e7",
+   "analysisUuid": "38f7f730-e4f3-4484-ac26-ec89cf061ac5",
+   "panel": "Xenium Human Lung Gene Expression",
+   "organism": "Human",
+   "tissue": "Lung",
+   "run": "run",
+   "region": "region",
+   "runStart": "2023-05-05T20:50:27Z",
+   "cells": 11898,
+   "transcripts": 825885,
+   "pixelSizeUm": 0.2125,
+   "extentUm": [
+    1230.587,
+    755.012
+   ],
+   "channels": [
+    "DAPI (Nuclear)"
+   ],
+   "zPlanes": 11,
+   "fingerprint": [
+    {
+     "path": "analysis.tar.gz",
+     "size": 2499611
+    },
+    {
+     "path": "analysis.zarr.zip",
+     "size": 72566
+    },
+    {
+     "path": "analysis_summary.html",
+     "size": 9162592
+    },
+    {
+     "path": "aux_outputs.tar.gz",
+     "size": 4995907
+    },
+    {
+     "path": "cell_boundaries.csv.gz",
+     "size": 2750450
+    },
+    {
+     "path": "cell_boundaries.parquet",
+     "size": 1022286
+    },
+    {
+     "path": "cell_feature_matrix.h5",
+     "size": 407323
+    },
+    {
+     "path": "cell_feature_matrix.tar.gz",
+     "size": 1390310
+    },
+    {
+     "path": "cell_feature_matrix.zarr.zip",
+     "size": 563383
+    },
+    {
+     "path": "cells.csv.gz",
+     "size": 701012
+    },
+    {
+     "path": "cells.parquet",
+     "size": 233148
+    },
+    {
+     "path": "cells.zarr.zip",
+     "size": 6879546
+    },
+    {
+     "path": "experiment.xenium",
+     "size": 1673,
+     "sha256": "0d52de3573bbf6071bd7edb9a7bdc099672ddae8cddc612d7bec959bb361f380"
+    },
+    {
+     "path": "gene_panel.json",
+     "size": 158827,
+     "sha256": "77a8964e4c4be31473b984bf3a078553a1dc56f626c1b824b2e4ba96ebb05209"
+    },
+    {
+     "path": "metrics_summary.csv",
+     "size": 1818,
+     "sha256": "c4198fb000ed9afb778550b0512a53a81079ada33f265ca82df96c061a716e45"
+    },
+    {
+     "path": "morphology.ome.tif",
+     "size": 164869537
+    },
+    {
+     "path": "morphology_focus/morphology_focus_0000.ome.tif",
+     "size": 17487838
+    },
+    {
+     "path": "nucleus_boundaries.csv.gz",
+     "size": 2619718
+    },
+    {
+     "path": "nucleus_boundaries.parquet",
+     "size": 919858
+    },
+    {
+     "path": "transcripts.csv.gz",
+     "size": 34757095
+    },
+    {
+     "path": "transcripts.parquet",
+     "size": 15254903
+    },
+    {
+     "path": "transcripts.zarr.zip",
+     "size": 17593688
+    }
+   ],
+   "validation": {
+    "checked": "2026-10-14T18:31:19Z",
+    "support": "supported",
+    "fatal": 0,
+    "warnings": 0,
+    "info": 3,
+    "metricsCompared": 22,
+    "metricsAgreeing": 22,
+    "findings": [
+     {
+      "severity": "info",
+      "code": "transcripts.at-edge",
+      "title": "Transcripts just past the images' edge",
+      "count": 7
+     },
+     {
+      "severity": "info",
+      "code": "boundaries.self-intersecting",
+      "title": "Cell boundaries with edges that cross (not a simple polygon)",
+      "count": 44
+     },
+     {
+      "severity": "info",
+      "code": "boundaries.self-intersecting",
+      "title": "Nucleus boundaries with edges that cross (not a simple polygon)",
+      "count": 54
+     }
+    ]
+   },
+   "added": "2026-10-14T18:31:20.874Z"
+  }
+ ],
+ "artifacts": [
+  {
+   "kind": "filter",
+   "id": "f-91b5160712a04ead",
+   "name": "Enough signal",
+   "version": 1,
+   "parent": null,
+   "dataset": "d-0ab2d717f6c64c09",
+   "created": "2026-10-14T18:31:20.977Z",
+   "conditions": [
+    {
+     "attribute": "transcripts",
+     "min": 20,
+     "max": null
+    }
+   ],
+   "result": {
+    "cells": 11898,
+    "kept": 11303,
+    "sha256": "1eeec4bcfe970745f72c385af0988a9b845efe9ca4a12d8daef4c9b6f6edf860"
+   }
+  },
+  {
+   "kind": "filter",
+   "id": "f-9a74e37a63cd4228",
+   "name": "Enough signal",
+   "version": 2,
+   "parent": "f-91b5160712a04ead",
+   "dataset": "d-0ab2d717f6c64c09",
+   "created": "2026-10-14T18:31:21.482Z",
+   "conditions": [
+    {
+     "attribute": "transcripts",
+     "min": 20,
+     "max": null
+    },
+    {
+     "attribute": "area",
+     "min": 15,
+     "max": 400
+    }
+   ],
+   "result": {
+    "cells": 11898,
+    "kept": 11254,
+    "sha256": "eb128cae88e1654e43ee2198db1d46fb44820ae34661024afb1a5fe38360a7c5"
+   }
+  },
+  {
+   "kind": "segmentation",
+   "id": "seg-2fec30e8d6bb2310839d",
+   "name": "Instrument segmentation",
+   "dataset": "d-0ab2d717f6c64c09",
+   "source": "instrument",
+   "state": "complete",
+   "created": "2026-10-15T02:31:01.321751Z",
+   "registered": "2026-10-15T02:31:21.532Z",
+   "method": {
+    "name": "Xenium cell segmentation (Xenium Onboard Analysis)",
+    "version": "xenium-2.0.0.10",
+    "citation": "Janesick A, Shelansky R, Gottscho AD, et al. High resolution mapping of the tumor microenvironment using integrated single-cell, spatial and in situ analysis. Nat Commun. 2023;14:8353. doi:10.1038/s41467-023-43458-x",
+    "methods": [
+     {
+      "method": "Segmented by nucleus expansion of 5.0µm",
+      "cells": 11898
+     }
+    ]
+   },
+   "parameters": null,
+   "software": [
+    {
+     "name": "Xenium Onboard Analysis",
+     "version": "xenium-2.0.0.10"
+    },
+    {
+     "name": "situcraft",
+     "version": "0.2.0",
+     "commit": "92f88a57d33f5cbe1c02ffc270e7dfbea6dfb6b3-dirty"
+    }
+   ],
+   "job": {
+    "id": "jmv8x9gtv-3",
+    "kind": "segmentation"
+   },
+   "parents": [
+    {
+     "kind": "bundle",
+     "id": "38f7f730-e4f3-4484-ac26-ec89cf061ac5",
+     "name": "xenium-lung-2fov",
+     "sha256": "0d52de3573bbf6071bd7edb9a7bdc099672ddae8cddc612d7bec959bb361f380"
+    }
+   ],
+   "files": [
+    {
+     "path": "cell_boundaries.parquet",
+     "role": "cell boundaries",
+     "size": 1022286,
+     "sha256": "c95d4fe79b80b8d92261437245190bb5dec76abdbab340bc2f17dec27cf8330a",
+     "location": "bundle"
+    },
+    {
+     "path": "cell_feature_matrix.zarr.zip",
+     "role": "counts",
+     "size": 563383,
+     "sha256": "853dac57a9b052564749f799d48f2908259d4431340695a2914c9416286e1916",
+     "location": "bundle"
+    },
+    {
+     "path": "cells.parquet",
+     "role": "cells",
+     "size": 233148,
+     "sha256": "b24a6cc4b176f76d16f3a153a44fbd86214a7a6a03b5a5c6bcf776c0cac2568a",
+     "location": "bundle"
+    },
+    {
+     "path": "cells.zarr.zip",
+     "role": "segmentation masks and methods",
+     "size": 6879546,
+     "sha256": "d6b8d0e503ea115f2b56122614f4aa7258d10f7c3d3bd714f4117a4d081fe320",
+     "location": "bundle"
+    },
+    {
+     "path": "nucleus_boundaries.parquet",
+     "role": "nucleus boundaries",
+     "size": 919858,
+     "sha256": "b34dc28366cf476fbb6e020db96fe5a929ba272aad96957cb95da9084b2ddf9b",
+     "location": "bundle"
+    },
+    {
+     "path": "transcripts.parquet",
+     "role": "transcript assignments",
+     "size": 15254903,
+     "sha256": "9e41a0fbf11520a15e59957ffa21dca17ccf08a66dfdeb663e16b813075a4cf9",
+     "location": "bundle"
+    }
+   ],
+   "sources": [],
+   "summary": {
+    "assignedFraction": 0.979724,
+    "cells": 11898,
+    "medianAreaUm2": 48.52039238624275,
+    "medianTranscriptsPerCell": 56,
+    "methods": [
+     {
+      "method": "Segmented by nucleus expansion of 5.0µm",
+      "cells": 11898
+     }
+    ],
+    "q20GeneTranscripts": 746213
+   },
+   "findings": [
+    {
+     "severity": "info",
+     "code": "boundaries.self-intersecting",
+     "message": "Cell boundaries with edges that cross (not a simple polygon)",
+     "count": 44
+    },
+    {
+     "severity": "info",
+     "code": "boundaries.self-intersecting",
+     "message": "Nucleus boundaries with edges that cross (not a simple polygon)",
+     "count": 54
+    }
+   ]
+  },
+  {
+   "kind": "filter",
+   "id": "f-661465d075e04843",
+   "name": "By remote control",
+   "version": 1,
+   "parent": null,
+   "dataset": "d-0ab2d717f6c64c09",
+   "created": "2026-10-15T02:31:28.468Z",
+   "conditions": [
+    {
+     "attribute": "transcripts",
+     "min": 20,
+     "max": null
+    },
+    {
+     "attribute": "area",
+     "min": 15,
+     "max": 400
+    }
+   ],
+   "result": {
+    "cells": 11898,
+    "kept": 11254,
+    "sha256": "eb128cae88e1654e43ee2198db1d46fb44820ae34661024afb1a5fe38360a7c5"
+   }
+  },
+  {
+   "kind": "segmentation",
+   "id": "exp-8ffe267a82963f83a0b7",
+   "name": "Nucleus expansion, 5 µm",
+   "dataset": "d-0ab2d717f6c64c09",
+   "source": "situcraft",
+   "state": "complete",
+   "created": "2026-10-15T02:31:29.331781Z",
+   "registered": "2026-10-15T02:31:29.536Z",
+   "method": {
+    "name": "SituCraft nucleus expansion",
+    "version": "1",
+    "citation": "Okabe A, Boots B, Sugihara K, Chiu SN. Spatial Tessellations: Concepts and Applications of Voronoi Diagrams, 2nd ed. Wiley, 2000; distances: Felzenszwalb PF, Huttenlocher DP. Distance Transforms of Sampled Functions. Theory Comput. 2012;8:415–428. doi:10.4086/toc.2012.v008a019",
+    "methods": []
+   },
+   "parameters": {
+    "distance_um": 5,
+    "distance_px": 23.529411764705884,
+    "nuclei": "the instrument's nucleus mask (cells.zarr.zip masks/0)",
+    "nucleus_cells": "each nucleus belongs to the instrument's cell holding most of its pixels (cells.zarr.zip masks/1)",
+    "distance": "Euclidean, between pixel centres, from each nucleus's pixels",
+    "assignment": "a transcript belongs to the cell holding the pixel it lies in",
+    "counts_min_quality": 20,
+    "outline_tolerance_px": 0.5,
+    "ties": "a pixel equally near two nuclei goes to the upper one in its column, else the left one in its row"
+   },
+   "software": [
+    {
+     "name": "situcraft",
+     "version": "0.2.0",
+     "commit": "92f88a57d33f5cbe1c02ffc270e7dfbea6dfb6b3-dirty"
+    }
+   ],
+   "job": {
+    "id": "jmv8xa23e-5",
+    "kind": "expansion"
+   },
+   "parents": [
+    {
+     "kind": "bundle",
+     "id": "38f7f730-e4f3-4484-ac26-ec89cf061ac5",
+     "name": "xenium-lung-2fov",
+     "sha256": "0d52de3573bbf6071bd7edb9a7bdc099672ddae8cddc612d7bec959bb361f380"
+    },
+    {
+     "kind": "segmentation",
+     "id": "seg-2fec30e8d6bb2310839d",
+     "name": "Instrument segmentation"
+    }
+   ],
+   "files": [
+    {
+     "path": "assignments.bin",
+     "role": "transcript assignments",
+     "size": 1282266,
+     "sha256": "3f41f2b11913515d05bf79cc313ff2177e95c8b9f8cedde7df4470fbfcff84f8",
+     "location": ""
+    },
+    {
+     "path": "cells.bin",
+     "role": "cells",
+     "size": 320554,
+     "sha256": "546da0f1fc753ddaf991d97d64381a7c256fa7a8ad5ad5fb7d68fc3b2daacdab",
+     "location": ""
+    },
+    {
+     "path": "counts.bin",
+     "role": "counts",
+     "size": 549535,
+     "sha256": "c590e27dec1979eac5c0042924d304329e15b0c3be4a578de12dd4444099261a",
+     "location": ""
+    },
+    {
+     "path": "mask.bin",
+     "role": "label raster",
+     "size": 1130887,
+     "sha256": "c829d4770e7a879237083c88a244c56da5293550153d40466d31e4809ab90611",
+     "location": ""
+    },
+    {
+     "path": "outlines.bin",
+     "role": "cell outlines",
+     "size": 2387716,
+     "sha256": "bef33693e36692e160cf151ed080cb8e509e0a886263a98d7eef0f90df290456",
+     "location": ""
+    },
+    {
+     "path": "segmentation.json",
+     "role": "description",
+     "size": 2230,
+     "sha256": "1bad6b6b3cb7016f41b52e8d2393c3b440641846161176bdd7d4f161d574b1ed",
+     "location": ""
+    }
+   ],
+   "sources": [],
+   "summary": {
+    "cells": 11898,
+    "emptyCells": 0,
+    "q20GeneTranscripts": 746213,
+    "assignedFraction": 0.982819,
+    "medianTranscriptsPerCell": 56,
+    "medianAreaUm2": 48.678436279296875,
+    "multipieceCells": 68,
+    "method": "nucleus expansion 1",
+    "parameters": {
+     "distance_um": 5,
+     "distance_px": 23.529411764705884,
+     "nuclei": "the instrument's nucleus mask (cells.zarr.zip masks/0)",
+     "nucleus_cells": "each nucleus belongs to the instrument's cell holding most of its pixels (cells.zarr.zip masks/1)",
+     "distance": "Euclidean, between pixel centres, from each nucleus's pixels",
+     "assignment": "a transcript belongs to the cell holding the pixel it lies in",
+     "counts_min_quality": 20,
+     "outline_tolerance_px": 0.5,
+     "ties": "a pixel equally near two nuclei goes to the upper one in its column, else the left one in its row"
+    },
+    "agreement": {
+     "reference": "the instrument's segmentation: cells.zarr.zip masks/1, transcripts.parquet's cell_id and cells.parquet's cell_area",
+     "cells": {
+      "situcraft": 11898,
+      "instrument": 11898,
+      "paired": 11898,
+      "instrumentWithoutNucleus": 0,
+      "instrumentWithSeveralNuclei": 0,
+      "nucleiOutsideCells": 0
+     },
+     "pixels": {
+      "same": 14089469,
+      "otherCell": 122016,
+      "situcraftOnly": 156308,
+      "instrumentOnly": 0,
+      "agreement": 0.980629
+     },
+     "transcripts": {
+      "same": 803059,
+      "otherCell": 6190,
+      "situcraftOnly": 2534,
+      "instrumentOnly": 0,
+      "neither": 14102,
+      "agreement": 0.989437
+     },
+     "area": {
+      "medianRelativeDifference": 0.002506,
+      "within5Percent": 0.970415,
+      "within10Percent": 0.999496
+     },
+     "assignedFraction": {
+      "situcraft": 0.982819,
+      "instrument": 0.979724
+     },
+     "differences": {
+      "situcraftOnlyDistanceUm": [
+       4.562568,
+       4.979034
+      ],
+      "instrumentOnlyDistanceUm": [
+       0,
+       0
+      ],
+      "instrumentOnlyNoNucleus": 0,
+      "otherCellGapUm": 0.340769,
+      "otherCellNoNucleus": 0,
+      "transcriptsOffMask": 8
+     }
+    }
+   },
+   "findings": [
+    {
+     "severity": "info",
+     "code": "geometry.multipiece",
+     "message": "Cells in more than one piece (the largest is outlined)",
+     "count": 68
+    }
+   ]
+  },
+  {
+   "kind": "segmentation",
+   "id": "imp-e5a617afc05f56fc8a66",
+   "name": "Xenium Onboard Analysis (imported)",
+   "dataset": "d-0ab2d717f6c64c09",
+   "source": "imported",
+   "state": "complete",
+   "created": "2026-10-15T02:31:30.30919Z",
+   "registered": "2026-10-15T02:31:30.413Z",
+   "method": {
+    "name": "Xenium Onboard Analysis",
+    "version": "xenium-2.0.0.10",
+    "citation": "",
+    "methods": []
+   },
+   "parameters": {
+    "format": "xenium",
+    "units": "um",
+    "read": {
+     "analysis_uuid": "38f7f730-e4f3-4484-ac26-ec89cf061ac5",
+     "bundle": "xenium-lung-2fov",
+     "outlines": "cell_boundaries.parquet",
+     "raster": "cells.zarr.zip masks/1",
+     "table_agrees": "11898 of 11898 cells",
+     "transcripts_by": "transcript_id"
+    },
+    "raster": "the tool's label image, resampled to the morphology image's pixels (nearest)",
+    "assignment": "the tool's assignment, matched to the dataset's transcripts by their ids",
+    "outlines": "the tool's polygons (each cell's largest)",
+    "counts": "gene transcripts of quality 20 or more in each cell, from the assignment",
+    "tool": "Xenium Onboard Analysis",
+    "tool_version": "xenium-2.0.0.10"
+   },
+   "software": [
+    {
+     "name": "Xenium Onboard Analysis",
+     "version": "xenium-2.0.0.10"
+    },
+    {
+     "name": "situcraft",
+     "version": "0.2.0",
+     "commit": "92f88a57d33f5cbe1c02ffc270e7dfbea6dfb6b3-dirty"
+    }
+   ],
+   "job": {
+    "id": "jmv8xa2yx-6",
+    "kind": "import"
+   },
+   "parents": [
+    {
+     "kind": "bundle",
+     "id": "38f7f730-e4f3-4484-ac26-ec89cf061ac5",
+     "name": "xenium-lung-2fov",
+     "sha256": "0d52de3573bbf6071bd7edb9a7bdc099672ddae8cddc612d7bec959bb361f380"
+    },
+    {
+     "kind": "import",
+     "id": "758e5b6bfdb9e242",
+     "name": "xenium-lung-2fov",
+     "sha256": "758e5b6bfdb9e24288ef892dfb4e7b303a724fdb1c8f1ef9f666a5970e439bb6"
+    }
+   ],
+   "files": [
+    {
+     "path": "assignments.bin",
+     "role": "transcript assignments",
+     "size": 1281170,
+     "sha256": "afc95949c2f62d4afd2575c5b4b23465fa767902e6f9648e255f82b9c1488919",
+     "location": ""
+    },
+    {
+     "path": "cells.bin",
+     "role": "cells",
+     "size": 264756,
+     "sha256": "71b40a15218956b96247d52e92094dbb65a04435ff44c31b5d365fd6f27995fa",
+     "location": ""
+    },
+    {
+     "path": "counts.bin",
+     "role": "counts",
+     "size": 548458,
+     "sha256": "56c7b7a2628373992c8436d17281aee2b662756ffe8af52bd20af6c8e4ba2fc1",
+     "location": ""
+    },
+    {
+     "path": "mask.bin",
+     "role": "label raster",
+     "size": 1139451,
+     "sha256": "db358caba5a30c6b04186886ec5f93a3961167cafec171049952c1b0c14df264",
+     "location": ""
+    },
+    {
+     "path": "outlines.bin",
+     "role": "cell outlines",
+     "size": 1091557,
+     "sha256": "d6393dbdd28ad89b25dc28775b73fb6a2147711fab018e89ead2eb70809c2464",
+     "location": ""
+    },
+    {
+     "path": "segmentation.json",
+     "role": "description",
+     "size": 1111,
+     "sha256": "02febca10637d3e807f010c16ebf71d837379dd954802998afefebce07370249",
+     "location": ""
+    }
+   ],
+   "sources": [
+    {
+     "path": "/data/examples/xenium-lung-2fov",
+     "files": 5,
+     "size": 23391556,
+     "sha256": "758e5b6bfdb9e24288ef892dfb4e7b303a724fdb1c8f1ef9f666a5970e439bb6"
+    }
+   ],
+   "summary": {
+    "cells": 11898,
+    "emptyCells": 0,
+    "q20GeneTranscripts": 746213,
+    "assignedFraction": 0.979724,
+    "medianTranscriptsPerCell": 56,
+    "medianAreaUm2": 48.5203914642334,
+    "multipieceCells": 0,
+    "method": "imported xenium 1",
+    "parameters": {
+     "format": "xenium",
+     "units": "um",
+     "read": {
+      "analysis_uuid": "38f7f730-e4f3-4484-ac26-ec89cf061ac5",
+      "bundle": "xenium-lung-2fov",
+      "outlines": "cell_boundaries.parquet",
+      "raster": "cells.zarr.zip masks/1",
+      "table_agrees": "11898 of 11898 cells",
+      "transcripts_by": "transcript_id"
+     },
+     "raster": "the tool's label image, resampled to the morphology image's pixels (nearest)",
+     "assignment": "the tool's assignment, matched to the dataset's transcripts by their ids",
+     "outlines": "the tool's polygons (each cell's largest)",
+     "counts": "gene transcripts of quality 20 or more in each cell, from the assignment",
+     "tool": "Xenium Onboard Analysis",
+     "tool_version": "xenium-2.0.0.10"
+    }
+   },
+   "findings": []
+  },
+  {
+   "kind": "comparison",
+   "id": "cmp-3eab4a364f2971b33b89",
+   "name": "Instrument segmentation and Nucleus expansion, 5 µm",
+   "dataset": "d-0ab2d717f6c64c09",
+   "a": "seg-2fec30e8d6bb2310839d",
+   "b": "exp-8ffe267a82963f83a0b7",
+   "state": "complete",
+   "created": "2026-10-15T02:31:33.31433Z",
+   "registered": "2026-10-15T02:31:33.521Z",
+   "method": {
+    "name": "SituCraft segmentation comparison",
+    "version": "2",
+    "citation": "Spurious co-expression: Jones DC, Elz AE, Hadadianpour A, et al. Cell simulation as cell segmentation. Nat Methods. 2025;22:1331–1342. doi:10.1038/s41592-025-02697-0; mutually exclusive co-expression rate: Hartman A, Satija R. Comparative analysis of multiplexed in situ gene expression profiling technologies. bioRxiv 2024. doi:10.1101/2024.01.11.575135"
+   },
+   "parameters": {
+    "within": 0.5,
+    "area_change": 1.25,
+    "region_um": 50,
+    "coexpression_depth": 50,
+    "coexpression_fold": 1.5,
+    "coexpression_min_cells": 20,
+    "seed": 20250
+   },
+   "job": {
+    "id": "jmv8xa3l3-7",
+    "kind": "comparison"
+   },
+   "summary": {
+    "a": {
+     "id": "seg-2fec30e8d6bb2310839d",
+     "name": "Instrument segmentation"
+    },
+    "b": {
+     "id": "exp-8ffe267a82963f83a0b7",
+     "name": "Nucleus expansion, 5 µm"
+    },
+    "classes": {
+     "one-to-one": 11898
+    },
+    "pixelAgreement": 0.980629,
+    "changedFraction": 0.01063,
+    "medianIoU": 0.979452,
+    "spuriousCoexpressionA": 1.870334,
+    "spuriousCoexpressionB": 1.885714,
+    "mecrA": 0.009058,
+    "mecrB": 0.00909
+   },
+   "findings": []
+  },
+  {
+   "kind": "segmentation",
+   "id": "pla-5c981f8d8c480f0bd89e",
+   "name": "Planted errors (simulated)",
+   "dataset": "d-0ab2d717f6c64c09",
+   "source": "planted",
+   "state": "complete",
+   "created": "2026-10-15T02:31:35.382293Z",
+   "registered": "2026-10-15T02:31:35.587Z",
+   "method": {
+    "name": "SituCraft planted errors",
+    "version": "1",
+    "citation": "",
+    "methods": []
+   },
+   "parameters": {
+    "merges": 20,
+    "splits": 20,
+    "missed": 10,
+    "grown": 10,
+    "grow_um": 1,
+    "seed": 20261014
+   },
+   "software": [
+    {
+     "name": "situcraft",
+     "version": "0.2.0",
+     "commit": "92f88a57d33f5cbe1c02ffc270e7dfbea6dfb6b3-dirty"
+    }
+   ],
+   "job": {
+    "id": "jmv8xa6vf-9",
+    "kind": "plant"
+   },
+   "parents": [
+    {
+     "kind": "bundle",
+     "id": "38f7f730-e4f3-4484-ac26-ec89cf061ac5",
+     "name": "xenium-lung-2fov",
+     "sha256": "0d52de3573bbf6071bd7edb9a7bdc099672ddae8cddc612d7bec959bb361f380"
+    },
+    {
+     "kind": "segmentation",
+     "id": "seg-2fec30e8d6bb2310839d",
+     "name": "Instrument segmentation"
+    }
+   ],
+   "files": [
+    {
+     "path": "assignments.bin",
+     "role": "transcript assignments",
+     "size": 1279676,
+     "sha256": "5e3a65a2e45c0c8b05bc66f92cdf4f73faecc7c79fd5f97786d796f6f99cad90",
+     "location": ""
+    },
+    {
+     "path": "cells.bin",
+     "role": "cells",
+     "size": 264613,
+     "sha256": "21da5252d9fe41fb7aad421f3ceb14ed7143771594a8884b611a5f203d10bf13",
+     "location": ""
+    },
+    {
+     "path": "counts.bin",
+     "role": "counts",
+     "size": 548126,
+     "sha256": "f91a089a1f10845f445e781c4a1cf50fd4d658d22ad70616f5b14399b4755b90",
+     "location": ""
+    },
+    {
+     "path": "mask.bin",
+     "role": "label raster",
+     "size": 1138495,
+     "sha256": "5cafdfd917078a8c13181a836052ed9d5f98fdd3dcfc55b0307fc450d388d3ba",
+     "location": ""
+    },
+    {
+     "path": "outlines.bin",
+     "role": "cell outlines",
+     "size": 1117372,
+     "sha256": "276ed10cf756f2d631a81d419130883a0774a78e24d343a0a933ad8d5e7ab8b3",
+     "location": ""
+    },
+    {
+     "path": "planted.json",
+     "role": "answer key",
+     "size": 17811,
+     "sha256": "9fcf14212f2447ccf185a8a65589bc568b39d4943403f036a1087603b0b23b10",
+     "location": ""
+    },
+    {
+     "path": "segmentation.json",
+     "role": "description",
+     "size": 478,
+     "sha256": "9fe0590ad66813f1e66a857823d82f689860dc5516574e60899234051e20ee51",
+     "location": ""
+    }
+   ],
+   "sources": [],
+   "summary": {
+    "cells": 11888,
+    "emptyCells": 0,
+    "q20GeneTranscripts": 746213,
+    "assignedFraction": 0.978812,
+    "medianTranscriptsPerCell": 56,
+    "medianAreaUm2": 48.407501220703125,
+    "multipieceCells": 1,
+    "method": "SituCraft planted errors 1",
+    "parameters": {
+     "merges": 20,
+     "splits": 20,
+     "missed": 10,
+     "grown": 10,
+     "grow_um": 1,
+     "seed": 20261014
+    }
+   },
+   "findings": [
+    {
+     "severity": "info",
+     "code": "geometry.multipiece",
+     "message": "Cells in more than one piece (the largest is outlined)",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "kind": "comparison",
+   "id": "cmp-c463838efdfc21c90f20",
+   "name": "Instrument segmentation and Planted errors (simulated)",
+   "dataset": "d-0ab2d717f6c64c09",
+   "a": "seg-2fec30e8d6bb2310839d",
+   "b": "pla-5c981f8d8c480f0bd89e",
+   "state": "complete",
+   "created": "2026-10-15T02:31:36.26951Z",
+   "registered": "2026-10-15T02:31:36.473Z",
+   "method": {
+    "name": "SituCraft segmentation comparison",
+    "version": "2",
+    "citation": "Spurious co-expression: Jones DC, Elz AE, Hadadianpour A, et al. Cell simulation as cell segmentation. Nat Methods. 2025;22:1331–1342. doi:10.1038/s41592-025-02697-0; mutually exclusive co-expression rate: Hartman A, Satija R. Comparative analysis of multiplexed in situ gene expression profiling technologies. bioRxiv 2024. doi:10.1101/2024.01.11.575135"
+   },
+   "parameters": {
+    "within": 0.5,
+    "area_change": 1.25,
+    "region_um": 50,
+    "coexpression_depth": 50,
+    "coexpression_fold": 1.5,
+    "coexpression_min_cells": 20,
+    "seed": 20250
+   },
+   "job": {
+    "id": "jmv8xa7l5-10",
+    "kind": "comparison"
+   },
+   "summary": {
+    "a": {
+     "id": "seg-2fec30e8d6bb2310839d",
+     "name": "Instrument segmentation"
+    },
+    "b": {
+     "id": "pla-5c981f8d8c480f0bd89e",
+     "name": "Planted errors (simulated)"
+    },
+    "classes": {
+     "contracted": 7,
+     "expanded": 10,
+     "merged": 20,
+     "one-to-one": 11811,
+     "only in A": 10,
+     "split": 20
+    },
+    "pixelAgreement": 0.991478,
+    "changedFraction": 0.007951,
+    "medianIoU": 1,
+    "spuriousCoexpressionA": 1.870334,
+    "spuriousCoexpressionB": 1.836613,
+    "mecrA": 0.009058,
+    "mecrB": 0.009102
+   },
+   "findings": []
+  },
+  {
+   "kind": "segmentation",
+   "id": "imp-44080781fdda79f586a9",
+   "name": "SituCraft export (imported)",
+   "dataset": "d-0ab2d717f6c64c09",
+   "source": "imported",
+   "state": "complete",
+   "created": "2026-10-15T02:31:40.926992Z",
+   "registered": "2026-10-15T02:31:41.032Z",
+   "method": {
+    "name": "SituCraft export",
+    "version": "",
+    "citation": "Marconato L, Palla G, Yamauchi KA, et al. SpatialData: an open and universal data framework for spatial omics. Nat Methods. 2025;22:58–62. doi:10.1038/s41592-024-02212-x",
+    "methods": []
+   },
+   "parameters": {
+    "format": "spatialdata",
+    "units": "um",
+    "read": {
+     "cell_column": "cell_id",
+     "cells": "labels/cell_labels",
+     "coordinate_system": "global",
+     "label_ids": "the table's index (cell_labels holds each label)",
+     "outlines": "shapes/cell_boundaries",
+     "points": "transcripts",
+     "table": "table",
+     "table_agrees": "11898 of 11898 cells",
+     "transcripts_by": "transcript_id"
+    },
+    "raster": "the tool's label image, resampled to the morphology image's pixels (nearest)",
+    "assignment": "the tool's assignment, matched to the dataset's transcripts by their ids",
+    "outlines": "the tool's polygons (each cell's largest)",
+    "counts": "gene transcripts of quality 20 or more in each cell, from the assignment",
+    "tool": "SituCraft export",
+    "citation": "Marconato L, Palla G, Yamauchi KA, et al. SpatialData: an open and universal data framework for spatial omics. Nat Methods. 2025;22:58–62. doi:10.1038/s41592-024-02212-x"
+   },
+   "software": [
+    {
+     "name": "SituCraft export",
+     "version": ""
+    },
+    {
+     "name": "situcraft",
+     "version": "0.2.0",
+     "commit": "92f88a57d33f5cbe1c02ffc270e7dfbea6dfb6b3-dirty"
+    }
+   ],
+   "job": {
+    "id": "jmv8xaav5-12",
+    "kind": "import"
+   },
+   "parents": [
+    {
+     "kind": "bundle",
+     "id": "38f7f730-e4f3-4484-ac26-ec89cf061ac5",
+     "name": "xenium-lung-2fov",
+     "sha256": "0d52de3573bbf6071bd7edb9a7bdc099672ddae8cddc612d7bec959bb361f380"
+    },
+    {
+     "kind": "import",
+     "id": "46e2bc26e1041d3a",
+     "name": "spatialdata.zarr",
+     "sha256": "46e2bc26e1041d3a0b3b7d80b3b04ed7e80ae1468bfc84dc90ef14340d4efeb4"
+    }
+   ],
+   "files": [
+    {
+     "path": "assignments.bin",
+     "role": "transcript assignments",
+     "size": 1281170,
+     "sha256": "afc95949c2f62d4afd2575c5b4b23465fa767902e6f9648e255f82b9c1488919",
+     "location": ""
+    },
+    {
+     "path": "cells.bin",
+     "role": "cells",
+     "size": 264756,
+     "sha256": "71b40a15218956b96247d52e92094dbb65a04435ff44c31b5d365fd6f27995fa",
+     "location": ""
+    },
+    {
+     "path": "counts.bin",
+     "role": "counts",
+     "size": 548458,
+     "sha256": "56c7b7a2628373992c8436d17281aee2b662756ffe8af52bd20af6c8e4ba2fc1",
+     "location": ""
+    },
+    {
+     "path": "mask.bin",
+     "role": "label raster",
+     "size": 1139451,
+     "sha256": "db358caba5a30c6b04186886ec5f93a3961167cafec171049952c1b0c14df264",
+     "location": ""
+    },
+    {
+     "path": "outlines.bin",
+     "role": "cell outlines",
+     "size": 1091557,
+     "sha256": "d6393dbdd28ad89b25dc28775b73fb6a2147711fab018e89ead2eb70809c2464",
+     "location": ""
+    },
+    {
+     "path": "segmentation.json",
+     "role": "description",
+     "size": 1356,
+     "sha256": "def344467aa89b42d7997be5becea666e5c0185e5e404bdbc64b41cec3cc4604",
+     "location": ""
+    }
+   ],
+   "sources": [
+    {
+     "path": "/data/work/exports/xenium-lung-2fov instrument/spatialdata.zarr",
+     "files": 112,
+     "size": 16623446,
+     "sha256": "46e2bc26e1041d3a0b3b7d80b3b04ed7e80ae1468bfc84dc90ef14340d4efeb4"
+    }
+   ],
+   "summary": {
+    "cells": 11898,
+    "emptyCells": 0,
+    "q20GeneTranscripts": 746213,
+    "assignedFraction": 0.979724,
+    "medianTranscriptsPerCell": 56,
+    "medianAreaUm2": 48.5203914642334,
+    "multipieceCells": 0,
+    "method": "imported spatialdata 1",
+    "parameters": {
+     "format": "spatialdata",
+     "units": "um",
+     "read": {
+      "cell_column": "cell_id",
+      "cells": "labels/cell_labels",
+      "coordinate_system": "global",
+      "label_ids": "the table's index (cell_labels holds each label)",
+      "outlines": "shapes/cell_boundaries",
+      "points": "transcripts",
+      "table": "table",
+      "table_agrees": "11898 of 11898 cells",
+      "transcripts_by": "transcript_id"
+     },
+     "raster": "the tool's label image, resampled to the morphology image's pixels (nearest)",
+     "assignment": "the tool's assignment, matched to the dataset's transcripts by their ids",
+     "outlines": "the tool's polygons (each cell's largest)",
+     "counts": "gene transcripts of quality 20 or more in each cell, from the assignment",
+     "tool": "SituCraft export",
+     "citation": "Marconato L, Palla G, Yamauchi KA, et al. SpatialData: an open and universal data framework for spatial omics. Nat Methods. 2025;22:58–62. doi:10.1038/s41592-024-02212-x"
+    }
+   },
+   "findings": []
+  }
+ ],
+ "decisions": [
+  {
+   "kind": "promote-segmentation",
+   "dataset": "d-0ab2d717f6c64c09",
+   "artifact": "seg-2fec30e8d6bb2310839d",
+   "rationale": "The instrument's segmentation: the dataset's only segmentation when it was added.",
+   "by": "SituCraft",
+   "time": "2026-10-15T02:31:21.532Z"
+  },
+  {
+   "kind": "keep-segmentation",
+   "dataset": "d-0ab2d717f6c64c09",
+   "artifact": "exp-8ffe267a82963f83a0b7",
+   "rationale": "The same cells as the instrument's: kept as a baseline",
+   "by": "a program, by remote control",
+   "time": "2026-10-15T02:31:34.450Z",
+   "comparison": "cmp-3eab4a364f2971b33b89"
+  },
+  {
+   "kind": "reject-segmentation",
+   "dataset": "d-0ab2d717f6c64c09",
+   "artifact": "pla-5c981f8d8c480f0bd89e",
+   "rationale": "Its planted errors were found",
+   "by": "a program, by remote control",
+   "time": "2026-10-15T02:31:36.979Z"
+  }
+ ],
+ "views": [
+  {
+   "id": "v-d3f65b89e9784b43",
+   "name": "Epithelium, fibroblasts, vessels and macrophages",
+   "dataset": "d-0ab2d717f6c64c09",
+   "mode": "viewer",
+   "created": "2026-10-14T18:31:35.716Z",
+   "segmentation": "instrument",
+   "camera": {
+    "cx": 750,
+    "cy": 300,
+    "umPerCss": 0.4
+   },
+   "channels": [
+    {
+     "name": "DAPI",
+     "visible": true,
+     "color": "#8c8c8c",
+     "window": [
+      24,
+      3179
+     ],
+     "gamma": 1
+    }
+   ],
+   "transcripts": {
+    "visible": true,
+    "all": false,
+    "genes": [
+     "EPCAM",
+     "COL5A2",
+     "PLVAP",
+     "CD68"
+    ],
+    "minQ": 20,
+    "pointSize": 3,
+    "gain": 1
+   },
+   "cells": {
+    "outlines": true,
+    "nuclei": false,
+    "fill": null,
+    "opacity": 0.55
+   },
+   "cell": {
+    "row": 10867,
+    "id": "neddaiac-1"
+   }
+  },
+  {
+   "id": "v-bb017cedbf4e4c56",
+   "name": "Cells by gene transcripts",
+   "dataset": "d-0ab2d717f6c64c09",
+   "mode": "viewer",
+   "created": "2026-10-14T18:31:37.718Z",
+   "segmentation": "instrument",
+   "camera": {
+    "cx": 615.47435,
+    "cy": 377.50624999999997,
+    "umPerCss": 2.27162600576
+   },
+   "channels": [
+    {
+     "name": "DAPI",
+     "visible": true,
+     "color": "#4f7cff",
+     "window": [
+      24,
+      3179
+     ],
+     "gamma": 1
+    }
+   ],
+   "transcripts": {
+    "visible": true,
+    "all": false,
+    "genes": [],
+    "minQ": 20,
+    "pointSize": 3,
+    "gain": 1
+   },
+   "cells": {
+    "outlines": true,
+    "nuclei": true,
+    "fill": "transcripts",
+    "opacity": 0.7
+   },
+   "cell": null
+  },
+  {
+   "id": "v-270d2df0c6d3498b",
+   "name": "Gene transcripts outside cells, filtered",
+   "dataset": "d-0ab2d717f6c64c09",
+   "mode": "qc",
+   "created": "2026-10-14T18:31:39.324Z",
+   "segmentation": "instrument",
+   "camera": {
+    "cx": 600,
+    "cy": 400,
+    "umPerCss": 1.5
+   },
+   "channels": [
+    {
+     "name": "DAPI",
+     "visible": true,
+     "color": "#4f7cff",
+     "window": [
+      24,
+      3179
+     ],
+     "gamma": 1
+    }
+   ],
+   "transcripts": {
+    "visible": false,
+    "all": false,
+    "genes": [],
+    "minQ": 20,
+    "pointSize": 3,
+    "gain": 1
+   },
+   "cells": {
+    "outlines": true,
+    "nuclei": false,
+    "fill": null,
+    "opacity": 0.75
+   },
+   "cell": null,
+   "qc": {
+    "map": "bin:outside",
+    "filter": "f-9a74e37a63cd4228"
+   }
+  },
+  {
+   "id": "v-c560f73017ba4eef",
+   "name": "By remote control",
+   "dataset": "d-0ab2d717f6c64c09",
+   "mode": "viewer",
+   "created": "2026-10-15T02:31:28.188Z",
+   "segmentation": "instrument",
+   "camera": {
+    "cx": 750,
+    "cy": 300,
+    "umPerCss": 0.4
+   },
+   "channels": [
+    {
+     "name": "DAPI",
+     "visible": true,
+     "color": "#8c8c8c",
+     "window": [
+      24,
+      3179
+     ],
+     "gamma": 1
+    }
+   ],
+   "transcripts": {
+    "visible": true,
+    "all": false,
+    "genes": [
+     "EPCAM",
+     "PLVAP"
+    ],
+    "minQ": 20,
+    "pointSize": 3,
+    "gain": 1
+   },
+   "cells": {
+    "outlines": true,
+    "nuclei": false,
+    "fill": "transcripts",
+    "opacity": 0.55
+   },
+   "cell": {
+    "row": 10867,
+    "id": "neddaiac-1"
+   }
+  }
+ ],
+ "history": [
+  {
+   "time": "2026-10-14T18:31:20.874Z",
+   "action": "add-dataset",
+   "detail": "xenium-lung-2fov (/data/examples/xenium-lung-2fov)"
+  },
+  {
+   "time": "2026-10-14T18:31:20.979Z",
+   "action": "filter",
+   "detail": "Saved filter Enough signal (version 1): 11303 of 11898 cells kept"
+  },
+  {
+   "time": "2026-10-14T18:31:21.484Z",
+   "action": "filter",
+   "detail": "Saved filter Enough signal (version 2): 11254 of 11898 cells kept"
+  },
+  {
+   "time": "2026-10-14T18:31:35.716Z",
+   "action": "view",
+   "detail": "Saved view Epithelium, fibroblasts, vessels and macrophages"
+  },
+  {
+   "time": "2026-10-14T18:31:37.718Z",
+   "action": "view",
+   "detail": "Saved view Cells by gene transcripts"
+  },
+  {
+   "time": "2026-10-14T18:31:39.325Z",
+   "action": "view",
+   "detail": "Saved view Gene transcripts outside cells, filtered"
+  },
+  {
+   "time": "2026-10-15T02:31:21.522Z",
+   "action": "relocate-dataset",
+   "detail": "xenium-lung-2fov: /data/examples/xenium-lung-2fov → /data/examples/xenium-lung-2fov"
+  },
+  {
+   "time": "2026-10-15T02:31:21.532Z",
+   "action": "segmentation",
+   "detail": "Registered instrument segmentation of xenium-lung-2fov (artifact seg-2fec30e8d6bb2310839d, 6 files by SHA-256)"
+  },
+  {
+   "time": "2026-10-15T02:31:21.532Z",
+   "action": "decision",
+   "detail": "Promoted instrument segmentation as xenium-lung-2fov's segmentation: The instrument's segmentation: the dataset's only segmentation when it was added."
+  },
+  {
+   "time": "2026-10-15T02:31:28.188Z",
+   "action": "view",
+   "detail": "Saved view By remote control"
+  },
+  {
+   "time": "2026-10-15T02:31:28.469Z",
+   "action": "filter",
+   "detail": "Saved filter By remote control (version 1): 11254 of 11898 cells kept"
+  },
+  {
+   "time": "2026-10-15T02:31:29.536Z",
+   "action": "segmentation",
+   "detail": "Registered nucleus expansion, 5 µm of xenium-lung-2fov (artifact exp-8ffe267a82963f83a0b7, 6 files by SHA-256)"
+  },
+  {
+   "time": "2026-10-15T02:31:30.413Z",
+   "action": "segmentation",
+   "detail": "Registered xenium onboard analysis (imported) of xenium-lung-2fov (artifact imp-e5a617afc05f56fc8a66, 6 files by SHA-256)"
+  },
+  {
+   "time": "2026-10-15T02:31:33.521Z",
+   "action": "comparison",
+   "detail": "Compared Instrument segmentation (A) with Nucleus expansion, 5 µm (B) (artifact cmp-3eab4a364f2971b33b89)"
+  },
+  {
+   "time": "2026-10-15T02:31:34.450Z",
+   "action": "decision",
+   "detail": "Kept for exploration nucleus expansion, 5 µm of xenium-lung-2fov: The same cells as the instrument's: kept as a baseline"
+  },
+  {
+   "time": "2026-10-15T02:31:35.587Z",
+   "action": "segmentation",
+   "detail": "Registered planted errors (simulated) of xenium-lung-2fov (artifact pla-5c981f8d8c480f0bd89e, 7 files by SHA-256)"
+  },
+  {
+   "time": "2026-10-15T02:31:36.473Z",
+   "action": "comparison",
+   "detail": "Compared Instrument segmentation (A) with Planted errors (simulated) (B) (artifact cmp-c463838efdfc21c90f20)"
+  },
+  {
+   "time": "2026-10-15T02:31:36.979Z",
+   "action": "decision",
+   "detail": "Rejected planted errors (simulated) of xenium-lung-2fov: Its planted errors were found"
+  },
+  {
+   "time": "2026-10-15T02:31:39.805Z",
+   "action": "export",
+   "detail": "Exported instrument segmentation of xenium-lung-2fov as parquet, spatialdata, xenium-ranger into /data/work/exports/xenium-lung-2fov instrument (124 files by SHA-256)"
+  },
+  {
+   "time": "2026-10-15T02:31:41.032Z",
+   "action": "segmentation",
+   "detail": "Registered situcraft export (imported) of xenium-lung-2fov (artifact imp-44080781fdda79f586a9, 6 files by SHA-256)"
+  }
+ ],
+ "exports": [
+  {
+   "kind": "export",
+   "id": "out-b2ec15739ff342e8",
+   "dataset": "d-0ab2d717f6c64c09",
+   "segmentation": "seg-2fec30e8d6bb2310839d",
+   "name": "Instrument segmentation",
+   "formats": [
+    "parquet",
+    "spatialdata",
+    "xenium-ranger"
+   ],
+   "folder": "/data/work/exports/xenium-lung-2fov instrument",
+   "created": "2026-10-15T02:31:37Z",
+   "recorded": "2026-10-15T02:31:39.805Z",
+   "software": "situcraft 0.2.0",
+   "files": 124,
+   "size": 195986935,
+   "counts": {
+    "cells": 11898,
+    "cellsWithOutline": 11898,
+    "cellsWithPixels": 11898,
+    "genes": 289,
+    "transcripts": 825885,
+    "assignedTranscripts": 809249,
+    "countEntries": 294927,
+    "countSum": 731083
+   },
+   "content": {
+    "labelsSha256": "f07e70dfafd1068e1c921a0795e9a7dc2ce8f1eab9d1da4e019b5a52b0139954",
+    "countsSha256": "7e3252f9b87ae98f7f1968a39697b71bf3738b1a43925514a6c36cee7abd3a81",
+    "assignmentsSha256": "0a51f5e10ca8137b13738925dbaf79a2cbbbe14e8294dfe907142912e1eb401f"
+   },
+   "findings": [
+    {
+     "format": "xenium-ranger",
+     "severity": "warning",
+     "code": "ranger.assigned-otherwise",
+     "message": "9 transcripts (0.00%; 8 gene transcripts of quality 20 or more) are assigned by this segmentation otherwise than its mask holds at their pixel. Xenium Ranger assigns transcripts by the mask, so it will count them otherwise."
+    }
+   ],
+   "xeniumRanger": "xeniumranger import-segmentation --id=xenium-lung-2fov-Instrument-segmentation --xenium-bundle=/data/examples/xenium-lung-2fov --nuclei='/data/work/exports/xenium-lung-2fov instrument/xenium-ranger/nuclei.npy' --cells='/data/work/exports/xenium-lung-2fov instrument/xenium-ranger/cells.npy'"
+  }
+ ]
+}

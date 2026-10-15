@@ -1,5 +1,301 @@
 # Changelog
 
+## 0.2.0 (2026-10-14)
+
+Wave 2 of the [roadmap](situcraft-spec/roadmap.md): segmentations become artifacts to compare,
+review and choose between, and to export. The instrument's segmentation is the first; SituCraft's
+nucleus expansion the second; other tools' are imported. Any two are compared cell by cell, reviewed
+on the tissue, and one promoted with its reason; any is exported in open formats, every file listed
+by its SHA-256.
+
+### Added
+
+- **Remote control (wave 2, slice 1).** `situcraft --remote-control` lets programs on this
+  computer (scripts, notebooks, the documentation's screenshots) drive the open window, which
+  performs each action where you see it; what an action changes is in the history and can be
+  undone ([docs/REMOTE-CONTROL.md](docs/REMOTE-CONTROL.md)).
+  - **20 actions:**
+    - **the project:** describe it; start or open a project; open bundles and archives by path;
+      add a dataset; open an example; take a tour;
+    - **the tissue:** show a view; focus an item; show the tissue (place, zoom, stains, genes,
+      layers, a cell); select a cell;
+    - **saved views:** save, open and remove them;
+    - **QC:** read the metrics; show a QC map; choose cells; save a filter;
+    - **the record:** the methods paragraph; write the project, an archive or the methods to a
+      file.
+  - **Finding SituCraft:** scripts find it in `remote.json` (its address and a token), and
+    `/api/remote/tools` lists the actions with their arguments' schemas.
+  - **Safety:** it answers this computer only, and only the window opened from this run.
+    Opening paths and writing files also need the token, and a file is never written over an
+    existing one unless asked.
+- **Segmentations as artifacts (wave 2, slice 2).**
+  - **The artifact store** (`<data dir>/artifacts`): what jobs make and register, each with its
+    lineage (what it was made from, the job and its spec, the method and its version, the
+    software), the SHA-256 of every file, what its check found, and its state.
+    - Outputs are written to a staging folder and checked before they become an artifact.
+    - An artifact is never changed; one whose check finds a fatal problem is kept as invalid, for
+      review, and never used.
+  - **The instrument's segmentation** of each dataset is registered as an artifact by a job, when
+    the dataset is added or a project reopens (so 0.1.0 projects get theirs). It records:
+    - the bundle's files that make it (cells, boundaries, nuclei, transcript assignments, counts,
+      masks) by SHA-256, never copied;
+    - the cells each method segmented, and the software that did it;
+    - the findings of the bundle's validation that bear on it.
+  - **Promotion:** each dataset's default segmentation is promoted by a recorded decision with its
+    reason. The instrument's is promoted when it is the only one, and decisions are never removed.
+  - **The project tree** lists the segmentations, the default marked; the inspector shows a
+    segmentation's lineage, files, findings and the decision that made it the default.
+- **Jobs that survive the program (wave 2, slice 2).**
+  - Jobs are kept in `<data dir>/jobs`. A job SituCraft stopped, or that was running when it
+    crashed, is shown as interrupted when it starts again, and can be resumed or discarded.
+  - Resuming continues the work from where it stopped: a derived-data build keeps what it
+    finished.
+  - Closing the window while a job runs asks first; if it is closed anyway, SituCraft keeps
+    running until the job ends (Ctrl+C stops it, and the job can be resumed).
+  - **The Jobs view:** what runs and waits, what was interrupted, and what finished. Each job has
+    its state, progress, times and runs, its whole log and its spec, and Stop, Resume and Discard.
+  - The status bar's job opens the Jobs view.
+  - Remote control gains `segmentations` and `jobs` (list, read, stop, resume, discard).
+- **Nucleus expansion (wave 2, slice 3).** SituCraft's first segmentation of its own.
+  - **The method:** each nucleus grows into a cell of its own by up to a chosen distance (5 µm to
+    start), every pixel going to the nearest nucleus within it, by exact Euclidean distances. It
+    runs on every core in bands of rows, and gives the same cells however the work is split.
+    Transcripts belong to the cell holding the pixel they lie in; the counts are of gene
+    transcripts of quality 20 or more. Bundles without a nucleus mask have their nucleus polygons
+    drawn instead.
+  - **An artifact of its own:** its cells, label raster, transcript assignments, counts and
+    outlines ([docs/FORMATS.md](docs/FORMATS.md)), checked before it is recorded (geometry,
+    assignments, counts, metadata), with every parameter in its lineage. The same dataset and
+    distance give the same artifact.
+  - **Compared with the instrument's segmentation:** pixels and transcripts in the same cell, in
+    another or in only one; cell areas; the assigned fractions; and what differs, described.
+  - **The Segmentation view:** the dataset's segmentations side by side by their numbers;
+    **Expand the nuclei**, run as a job; the comparison.
+  - Remote control gains `expand_nuclei` (23 actions).
+- **Importing segmentations (wave 2, slice 4).** Segmentations made by other tools, imported to
+  compare with the others:
+  - **SpatialData Zarr** (format 2 or 3, as spatialdata and spatialdata-io write it): cells from
+    shapes or a label image, each transcript's cell from points, counts from the table;
+  - **Baysor's** `segmentation.csv` with its polygons;
+  - **GeoJSON** polygons, with or without a transcript table (CSV or Parquet);
+  - **Xenium Ranger** output bundles of the same run.
+  - Each is checked against the dataset: its coordinates' units, declared and never guessed (the
+    check says which units fit when the cells lie outside the image); the transcripts it names,
+    by id and position; an output bundle's run; its ids. It becomes a segmentation artifact of
+    SituCraft's own files, kept with the SHA-256 of every file read, and counted as every
+    segmentation is; one whose check finds a fatal problem is kept as invalid, for review.
+  - **Import a segmentation** in the Segmentation view; the inspector shows the files imported.
+  - Remote control gains `import_segmentation` (24 actions).
+  - **Readers:** AnnData in Zarr; Zarr's sharding and text of varying length (as anndata 0.11 and
+    later write); GeoJSON and WKB polygons; CSV, TSV and Parquet tables.
+- **Comparing segmentations (wave 2, slice 5).** Any two segmentations of a dataset compared,
+  cell by cell:
+  - **Which cells correspond:** a shared nucleus, or at least half of one within the other (or, for
+    cells without outlines, of their transcripts). Each set of corresponding cells is a
+    difference: one-to-one, expanded, contracted, split, merged, rearranged, only in one, or
+    assignment-only.
+  - **Measures:** each segmentation's cells, cells with a nucleus or several, assigned fraction,
+    transcripts per cell, areas, cells in pieces, job time and size; between the two, the pixels
+    that agree, the transcripts that changed cell (gained, lost, moved), the overlap (IoU) and how
+    far boundaries moved; and by regions of 50 µm.
+  - **Transcripts given to the wrong cell:** spurious co-expression of gene pairs relative to
+    nuclei alone, after Jones et al. (2025), and the mutually exclusive co-expression rate of
+    Hartman and Satija (2024).
+  - **Compare two segmentations** in the Segmentation view; each comparison is an artifact kept
+    with the project. Remote control gains `compare_segmentations` (25 actions).
+- **The comparison workspace (wave 2, slice 6).** The **Compare** view shows a comparison's two
+  segmentations on the tissue:
+  - **side by side** with one camera, **overlaid** in two colours, or in turns (**flicker**); cells
+    filled by the class of their difference; a **disagreement map** by 50 µm region;
+  - **the review queue:** the differences ranked by reassigned transcripts, contamination (markers
+    of different lineages in one cell), disagreement or low counts, among the classes and
+    reassigned transcripts you keep; each opens where it lies, lit in both and described in the
+    inspector; **cell matching** lists them all;
+  - **decisions:** promote one segmentation as the dataset's default, keep one for exploration, or
+    reject one, each with a reason and the comparison it rests on, appended and never removed;
+  - the measures' header warns when a measure rests on little.
+  - Comparisons appear in the project tree. Remote control gains `show_comparison` and
+    `decide_segmentation` (27 actions).
+- **Exports (wave 2, slice 7).** **Export a segmentation**, in the Segmentation view, writes any
+  of a dataset's segmentations into one folder, in the formats chosen:
+  - **SpatialData Zarr:** the cells as a label image and as polygons, the transcripts as points
+    with their cells, and the counts as an AnnData table annotating the labels, laid out as the
+    spatialdata package writes a store, in µm;
+  - **AnnData Zarr:** the counts with each cell's measures and centroid;
+  - **Parquet and CSV:** cells, transcripts with their cells, outlines and counts, in Xenium's
+    column names;
+  - **Matrix Market:** the counts as Xenium and Cell Ranger write them;
+  - **GeoJSON:** each cell's outline as a polygon naming it;
+  - **Xenium Ranger's inputs:** the cells and the bundle's nuclei as label masks on the morphology
+    image's pixels, checked (their size, cells without pixels, transcripts assigned otherwise than
+    the mask holds, a dataset without nuclei, a zipped bundle), and the `import-segmentation`
+    command, shown with a button to copy it. SituCraft does not run it.
+  - Beside the files, `situcraft-export.json` says what was exported, from what and by which
+    SituCraft, lists every file by its SHA-256, and fingerprints the label image, the counts and
+    the transcripts' cells, which every format holds the same.
+  - The export runs as a job, written under a temporary name and renamed into place; a folder
+    that exists is replaced only when asked, and only when it is a SituCraft export. The project
+    records each export.
+  - SituCraft's own writers: Parquet, Zarr (formats 2 and 3), AnnData, NumPy arrays, Matrix
+    Market and GeoJSON, each read back by its readers in the tests.
+- **Worked examples and practice (wave 2, slice 7).**
+  - Each example has a **worked example**, a question answered step by step, saying first what to
+    expect. Some steps run a job before going on (the card's button says what it does), others
+    open the comparison in the workspace as they describe it.
+    - **Breast:** the instrument's cells, drawn from stains, against a 5 µm nucleus expansion.
+    - **Lung:** find the planted errors.
+  - **Practice: find planted errors** copies the instrument's segmentation with known errors in
+    it (neighbouring cells of different lineages merged, large cells split, cells missed, cells
+    drawn too wide), recorded as a segmentation, simulated, with its answer key. The answer key
+    lists every error and takes you to it in the workspace. It is offered on the example datasets;
+    on your own, only once you turn on **Practice tools for every dataset** (the theme button's
+    menu). A planted segmentation is never promoted or exported.
+- **The methods paragraph** describes a dataset's default segmentation when it is not the
+  instrument's: its method and citation, the cells it gives, and the decision choosing it with the
+  comparison it rests on.
+- **Remote control** gains `plant_errors` and `export_segmentation` (29 actions; exporting needs
+  the token, as it writes files), and `tour` takes a worked example and does its steps' jobs.
+- **Screenshots** of the documentation: 20 scenes in both themes, captured through remote control
+  from the development bundles (`node docs/capture/capture.mjs`), in the README and the
+  getting-started guide.
+- **A cell by its ID:** the program finds a cell by its `cell_id` as well as by its row.
+
+### Fixed
+
+- **The same segmentation on every processor:** the outlines of an expansion (and of planted
+  errors) could differ in their last bits between Apple silicon and Intel or AMD processors, where
+  the compiler may fuse a multiply and an add; the outlines are now simplified with exact
+  arithmetic, and every product that reaches an artifact is rounded on its own. Found by the
+  continuous integration (Linux, amd64) reopening the 0.2.0 project made on a Mac (arm64).
+- **Job ids** could repeat when SituCraft was started again within the same millisecond, and a
+  new job then took an earlier one's record: an id already used is skipped.
+- **A dataset opened by several requests at once** (the Compare view's, when no other view had
+  opened the dataset first) could be closed by one while another read it, and answered "damaged
+  cache file": one request now opens it while the others wait for it.
+- **A SpatialData table's region** written as a text scalar in Zarr format 3 was read from its
+  attributes only: zero-dimensional text arrays are now read.
+- **The viewer suite on CI,** which fetches only the Lung bundle: it counted the jobs of two
+  bundles.
+- **The documentation's screenshots** no longer show a path of the computer that took them in a
+  text field.
+- **Accessibility, found by the audit of the screenshots** (axe-core, WCAG 2.1 A and AA):
+  - the view rail's separators sat inside its tab list;
+  - the project tree's sections were marked as lists with no items in them (and its rows,
+    buttons, as list items);
+  - a hidden stain's name and ranges were dimmed below the contrast text needs.
+
+### Validation
+
+- **Exports and worked examples (slice 7):**
+  - **Go tests:** the Parquet, Zarr and AnnData writers' files read back as written by SituCraft's
+    readers (and by pyarrow, zarr-python and anndata when they were written); every format of a
+    fixture segmentation read back, the SpatialData store imported as the same segmentation and the
+    GeoJSON polygons with the Parquet or CSV transcripts giving every transcript's cell; the same
+    segmentation giving the same files; an existing folder replaced only as the rules allow.
+  - **The Lung bundle's own segmentation exported in every format:** imported back from
+    SpatialData exactly (the same fingerprints); Xenium Ranger's masks of the morphology image's
+    size with the bundle's nuclei. **Read by spatialdata 0.8.0, anndata 0.13.4, pyarrow, pandas,
+    scipy, geopandas and numpy** (`validation/reference/read_exports.py`, run by the maintainer
+    and weekly), every format gives the manifest's totals and fingerprints; the result is
+    committed (`validation/reference/exports.json`) and the real-data tests check SituCraft still
+    writes it.
+  - **Planted errors:** on hand-made tissue and on the Lung bundle, the comparison finds each
+    planted error as what it is (every merge merged, mixing lineage markers; every split split;
+    every missed cell only in the instrument's; every grown cell expanded) and nothing else; the
+    same seed plants the same errors.
+  - **Node tests:** planted segmentations recorded as such and never promoted; exports recorded;
+    every worked example's steps doable in order; the methods' sentence for a default segmentation.
+  - **The same artifacts on every processor:** the Lung expansion's and planted errors' files have
+    the same SHA-256 built for arm64 and for amd64, and the browser suite passes with an amd64
+    build against the project saved on arm64.
+  - **In headless Chrome** (80 checks): the Lung worked example plants, compares and opens the
+    queue on a planted error, and by contamination a merge comes first; every planted error is
+    the difference it should be, and a planted segmentation is never exported;
+    `export_segmentation` writes only with the token and the
+    SpatialData export imports back as the instrument's segmentation; the Breast worked example
+    gives 263 splits, 128 merges and 119 cells only in the instrument's; the project saved by 0.2.0
+    (`validation/projects/`) opens, and every artifact it records is made again with the same
+    checksums.
+  - **Every screenshot scene in both themes** passes axe-core (40 captures, no violation).
+- **The comparison workspace (slice 6):**
+  - **Node tests** of the review queue's rankings and rules, the cautions, and the decisions'
+    rules; **Go tests** of each segmentation's outline tiles and of a comparison's differences.
+  - **In headless Chrome** (70 checks): the queue ranked as asked, both segmentations drawn with
+    one camera in every mode, and decisions recorded only as the rules allow.
+- **Comparisons (slice 5):**
+  - **Hand-drawn segmentations** of every class, each count and measure worked out by hand; a
+    planted leak of transcripts raises the spurious co-expression; the MECR by hand.
+  - **The instrument's segmentation against the 5 µm expansion:** on Lung every cell one-to-one,
+    with the 98.0629% of pixels and 8,724 changed transcripts that the expansion's own comparison
+    counted; on Breast every cell of both accounted for by class.
+  - **In headless Chrome** (67 checks): `compare_segmentations` by remote control.
+- **Imports (slice 4):**
+  - **The Lung bundle** imported into itself as an output bundle, and as spatialdata-io writes it
+    as SpatialData, gives the instrument's segmentation exactly: the raster identical to the cell
+    mask, every transcript's cell, every cell's count. Its polygons and assignments written as
+    GeoJSON with a table, and as a Baysor-style table without ids, give every assignment. The
+    Breast bundle is refused as another run.
+  - **Fixtures** written by each format's own libraries (spatialdata 0.8.0 and 0.2.6, geopandas,
+    pyarrow, pandas, anndata, zarr-python) import to the pixels and assignments their scene
+    defines, with each planted problem found.
+  - **In headless Chrome** (65 checks): `import_segmentation` by remote control, only with the
+    token; another run's bundle refused.
+- **Nucleus expansion (slice 3):**
+  - **The Lung bundle's own 5 µm expansion is reproduced:** 11,898 cells paired one to one with
+    the instrument's; 98.06% of pixels and 98.94% of transcripts in the same cells; cell areas'
+    median difference +0.25%, 97.0% within 5%; 98.28% of gene transcripts assigned (the
+    instrument: 97.97%). Every transcript given differently is explained: 2,534 on the
+    expansion's rim, 4.56–4.98 µm from their nucleus, which the instrument's cells do not reach;
+    6,182 where neighbouring cells meet, within 0.34 µm of equally near both nuclei; 8 the
+    instrument records in a cell other than its own mask's at their pixel.
+  - **Breast,** whose cells the instrument drew mostly from stains: 7,312 nuclei grown into cells,
+    and the instrument's 7,275 cells accounted for (6,752 holding one nucleus, 255 none, 268
+    several).
+  - **Go tests:** the distance transform against brute force; the same cells for any split of the
+    work; polygons drawn; the files read back as written, and the check finding each kind of
+    damage; masks read in bands; on Lung, drawn nucleus polygons agreeing with the mask on 98.56%
+    of pixels; the job and its artifact through the program's API.
+  - **In headless Chrome** (62 checks): `expand_nuclei` by remote control reproduces the Lung
+    expansion in the Segmentation view, and asking again answers the same artifact without a job.
+- **Segmentations and jobs (slice 2):**
+  - **Go tests:**
+    - the artifact store records checked outputs with their SHA-256, keeps an invalid one apart,
+      refuses unlisted outputs and paths leaving its folder, references bundle files without
+      copying them, verifies them again, and finds a changed file;
+    - jobs are kept on disk, read back after the program stops or crashes (interrupted ones
+      orphaned), resumed under the same id with their log, and discarded with what they left;
+    - on the Lung bundle, a derived-data build interrupted by the program stopping resumes, after
+      a restart, to entries that pass their check;
+    - the instrument segmentation's six files are recorded with the SHA-256 a direct reading
+      gives, and registering again gives the same artifact without a job.
+  - **In headless Chrome:**
+    - both bundles' instrument segmentations are registered, every file's SHA-256 as Node computes
+      it, promoted as the default;
+    - their methods account for every cell (Breast: 3,300 by boundary stain, 3,913 by interior
+      stain, 62 by nucleus expansion);
+    - the 0.1.0 project gets its own, the same artifact, and still reopens its views exactly;
+    - every job is complete.
+  - **By hand:**
+    - SituCraft killed in the middle of the Breast bundle's build: on restart the build is
+      interrupted, and resuming it continues the image pyramid where it stopped;
+    - every scene, the two new ones included, passes axe-core in both themes.
+- **Go tests of the remote-control hub:** actions reach the window and its answer returns, one at
+  a time; no window, a silent one, one that leaves and one of another run are each refused
+  plainly; only this computer, and no other site's page, may send actions; opening paths and
+  writing files need the token; exports never replace a file unasked; the connection file is
+  private and removed on stop; the window's action table, the program's list and
+  `docs/REMOTE-CONTROL.md` name the same actions.
+- **In headless Chrome** (`node validation/run.mjs viewer`, 52 checks):
+  - a program drives the window: `get_state` describes the open project;
+  - `show_tissue` shows exactly the genes, place, zoom, cell and fill asked for;
+  - a view it saves reopens exactly;
+  - a filter it saves keeps the cells, under the same SHA-256, that the 0.1.0 project's identical
+    filter recorded;
+  - the methods cite the data and SituCraft;
+  - `export` writes the project only with the token.
+- **Every screenshot scene in both themes** passes axe-core's WCAG 2.1 A and AA rules
+  (`docs/capture/audit.json`, no violation).
+
 ## 0.1.0 (2026-10-14)
 
 SituCraft's first release, wave 1 of the [roadmap](situcraft-spec/roadmap.md): open a Xenium

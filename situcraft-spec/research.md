@@ -273,15 +273,77 @@ from OpenJPEG 2.5.4.
 
 ## 3. Segmentation
 
-### 3.1 Nucleus expansion
+### 3.1 Nucleus expansion (verified, wave 2, slice 3)
 
-Each nucleus polygon is grown by up to *d* µm (Xenium's default 5 µm), and no point is assigned to
-more than one cell: a point belongs to the nearest nucleus within *d*. That is a Voronoi
-partition of the plane by nuclei, clipped at distance *d* (Okabe et al., *Spatial Tessellations*,
-2nd ed., Wiley 2000). Transcripts are assigned by point in polygon (or by label lookup in a
-raster at a resolution chosen to bound the error). Validation: the Lung 2-FOV was segmented this
-way by XOA 2.0 ("Segmented by nucleus expansion of 5.0 µm"), so SituCraft's expansion is checked
-against its cells, areas and assignments.
+**The method.** Each nucleus grows into a cell of its own by up to *d* µm (Xenium's default
+5 µm), and no pixel belongs to two cells: a pixel belongs to the nearest nucleus within *d*,
+measured between pixel centres to the nucleus's nearest pixel. That is a Voronoi partition of
+the plane by the nuclei, clipped at distance *d* (Okabe et al., *Spatial Tessellations*, 2nd ed.,
+Wiley 2000). Distances are exact: the distance transform of Felzenszwalb and Huttenlocher (2012),
+which also gives each pixel its nearest nucleus pixel. A pixel equally near two nuclei goes to the
+upper one in its column, else the left one in its row. The image is processed in bands of rows
+with a margin of *d*, on every core; the result is the same for any band height and number of
+workers (`internal/segment/expand`, tested against brute force). A transcript belongs to the cell
+holding the pixel it lies in. Each cell's outline follows its largest 4-connected piece's pixel
+edges, simplified to 0.5 pixel (Douglas and Peucker 1973).
+
+**What the bundles hold** (measured on the development bundles):
+
+- `cells.zarr.zip` holds `masks/0` (nuclei) and `masks/1` (cells), 32-bit labels at the
+  morphology image's resolution (Lung: 5,791 × 3,553 pixels in chunks of 445 × 724), with
+  `masks/homogeneous_transform` scaling µm to pixels by 4.705882 (1/0.2125). Label *k* of
+  `masks/1` is `cells.parquet`'s row *k*−1.
+- The instrument assigns a transcript to the cell holding pixel (⌊*x*/0.2125⌋, ⌊*y*/0.2125⌋) of
+  `masks/1`: on Lung that gives 825,869 of the 825,878 transcripts inside the mask their
+  `cell_id`; the other 9 lie on a pixel's exact edge, and 7 more lie outside the mask. `overlaps_nucleus` follows `masks/0` the same way
+  (17 such edge cases).
+- In Lung, segmented wholly by nucleus expansion, `masks/0` label *k* is cell *k*'s nucleus. In
+  Breast, whose cells were mostly drawn from cell stains, the nucleus mask has 7,312 labels for
+  7,275 cells and its labels are not the cells': 255 cells hold no nucleus and 268 several. So
+  SituCraft pairs each nucleus with the instrument's cell holding most of its pixels, and grows
+  every nucleus into a cell of its own.
+- The nucleus polygons (`nucleus_boundaries.parquet`) outline the mask, simplified; their
+  vertices lie on their edge pixels' own coordinates (pixel (*i*, *j*) at (*i*, *j*) × 0.2125 µm).
+  A bundle without `cells.zarr.zip` has its polygons drawn instead, a pixel belonging to a nucleus
+  when that point is inside the polygon or on its edge: on Lung the drawn nuclei agree with the
+  mask on 98.56% of their pixels (the rest where a simplified edge cuts a corner), and the cells
+  grown from them with the instrument's on 97.88%.
+
+**The Lung bundle's 5 µm expansion, reproduced** (5 µm = 23.53 pixels; reference numbers of
+`TestRealExpansionReproducesTheInstruments`, whose tolerances are in brackets):
+
+| | SituCraft | The instrument | Agreement [tolerance] |
+| --- | --- | --- | --- |
+| Cells | 11,898, one for each nucleus | 11,898 | paired one to one [exact] |
+| Pixels in the same cell | | | 98.06% of the 14,367,793 either gives a cell [≥ 98%] |
+| Transcripts in the same cell, or in none in both | | | 98.94% of 825,885 [≥ 98.5%] |
+| Cell area | median 48.7 µm² | | median difference +0.25%; 97.0% within 5% [≥ 96%], 99.95% within 10% [≥ 99.5%] |
+| Gene transcripts (Q20) assigned | 98.28% | 97.97% | SituCraft 0.31 points more [0 to 0.5] |
+
+Every difference is one of three kinds, and the test requires each to be:
+
+1. **The rim** (156,308 pixels, 2,534 transcripts): pixels within 5 µm of their nucleus that the
+   instrument's cells do not reach, each 4.56 to 4.98 µm (21.5 to 23.4 pixels) from it [4.5 to
+   5 µm]. The instrument's cells reach 23 pixels from their nucleus along the image's axes and
+   (16, 16) pixels along its diagonals, less far than 23.53 pixels in the directions between; no
+   pixel of an instrument cell lies more than 23 pixels from its nucleus. SituCraft keeps the
+   method's definition, an exact Euclidean distance, and records the difference.
+2. **Boundaries between neighbours** (122,016 pixels, 6,182 transcripts): pixels the two give
+   neighbouring cells, each at most 0.34 µm (1.6 pixels) nearer to SituCraft's cell's nucleus than
+   to the instrument's [0.4 µm]: almost equally far from both, where ties and near-ties are broken
+   differently.
+3. **The instrument's records** (8 transcripts): transcripts whose `cell_id` is not the cell the
+   instrument's own mask holds at their pixel.
+
+No pixel or transcript is in an instrument's cell and in none of SituCraft's. 68 cells are in more
+than one piece (the largest is outlined). The whole expansion of Lung (growing, assigning 825,885
+transcripts, counting, outlining 11,898 cells, comparing) takes about a second on an Apple M4.
+
+**Breast** (5 µm): 7,312 cells; of the instrument's 7,275, 6,752 hold one nucleus, 255 none and
+268 several. 72.1% of pixels and 80.7% of transcripts are in the same cells, and 94.7% of gene
+transcripts are assigned (the instrument: 86.6%): there the instrument drew most cells from their
+stains (3,300 by boundary stain, 3,913 by interior stain, 62 by nucleus expansion), so an expansion
+is another segmentation, not a reproduction.
 
 ### 3.2 Transcript-informed segmentation (after Jones et al. 2025)
 
@@ -336,33 +398,171 @@ Limitations to show in the interface: refinement cannot create cells absent from
 segmentation; boundaries of cells with few transcripts, or in regions of homogeneous expression,
 are uncertain.
 
-### 3.3 Importing other segmentations
+### 3.3 Importing other segmentations (verified, wave 2, slice 4)
 
 | Source | Read |
 | --- | --- |
-| SpatialData Zarr (written by several segmentation tools) | shapes (cell boundaries), points (transcripts with assignment), table (AnnData counts) |
-| Baysor-style transcript assignment CSV + cell polygon GeoJSON | assignment, polygons |
-| Xenium Ranger outputs (`import-segmentation`, `resegment`) | a new bundle, read as a bundle |
-| GeoJSON polygons + a transcript-to-cell table | polygons, assignment |
+| SpatialData Zarr (Marconato et al. 2025), format 2 or 3, a folder or a zip | the cells from a shapes element (GeoParquet: WKB polygons, ids in the index) or a labels element (a multiscale label image, its finest level); each transcript's cell from a points element (Parquet parts); the counts from an AnnData table (anndata's on-disk format: X as sparse rows, sparse columns or dense; obs and var data frames) annotating the cells |
+| Baysor (Petukhov et al. 2022): `segmentation.csv` with `segmentation_polygons.json` | each transcript's cell (`cell`; 0 and `is_noise` none), by `transcript_id` when the input kept it, else by position and gene; polygons as a GeoJSON GeometryCollection whose geometries carry their `cell` |
+| GeoJSON polygons (RFC 7946), with or without a transcript table (CSV, gzipped CSV, TSV or Parquet) | polygons and MultiPolygons, each feature naming its cell; each transcript's cell from the table, else from the polygon it lies in |
+| Xenium Ranger outputs (`import-segmentation`, `resegment`), and Xenium Onboard Analysis bundles of the same run | the cell mask (`cells.zarr.zip` masks/1), cells, boundaries, and `transcripts.parquet`'s `cell_id` by `transcript_id` |
 
-## 4. Comparing segmentations
+**What every import becomes.** The same files as SituCraft's own segmentations (§3.1): a label
+raster at the morphology image's resolution (a label image resampled, nearest pixel; else the
+polygons drawn, a pixel belonging to a polygon whose interior holds its centre), each of the
+dataset's transcripts' cell, counts of gene transcripts of quality 20 or more, and outlines (the
+tool's polygons, else traced). Counting the same way for every segmentation keeps comparisons
+fair; a count table the tool wrote is compared with the counts, cell by cell.
 
-- **Cell correspondence:** by shared nucleus where both derive from the same nuclei; otherwise by
-  polygon overlap (intersection over union on a raster at 0.25 µm, SituCraft's choice, which keeps
-  non-convex polygons exact enough and fast) and by transcript-assignment overlap (Jaccard). Pairs
-  are classified as one-to-one, expanded/contracted, split, merge, unmatched, or assignment-only.
-- **Spurious co-expression** (Jones et al. 2025): gene pairs whose conditional co-expression rises
-  at least 1.5-fold under a broader segmentation than under nuclei alone are flagged. The score is
-  normalized to nuclear segmentation. Cells are down-sampled to a fixed transcript count (50,
-  multinomial) so that discarding transcripts is not rewarded.
-- **Mutually exclusive co-expression rate (MECR)** for gene pairs known not to co-occur (Hartman &
-  Satija 2024, bioRxiv, doi:10.1101/2024.04.03.586404 (to verify the identifier)).
-- **Also reported:**
-  - cell and nucleus counts; assigned/unassigned fractions; transcripts per cell; areas;
-  - geometry validity;
-  - changed-assignment fraction; IoU and boundary displacement on matched cells;
-  - cell-type composition changes (after wave 4);
-  - runtime, peak memory and output size.
+**What is checked against the dataset.**
+
+- **Units are declared, never guessed.** The coordinates are read as µm, or as pixels of the
+  morphology image when the import says so. spatialdata-io's Xenium reader writes its global
+  coordinate system in the morphology image's pixels (its points and shapes carry a scale of
+  1/0.2125 to it, its labels the identity); other tools write µm. When the cells do not lie
+  within the dataset's image, the import is invalid, and the finding says how many would were the
+  coordinates read in the other unit.
+- **The transcripts it names are the dataset's.** By `transcript_id`, and where the import gives
+  positions too (SpatialData points, Xenium bundles) within 0.05 µm of the dataset's transcript of
+  that id: the two development bundles share transcript ids (each run numbers its own), so ids
+  alone would let another run's transcripts pass. Without ids, by position and gene within
+  0.01 µm.
+- **An output bundle is of the same run:** by its experiment UUID; the development bundles both
+  name their run "run" and their region "region" (anonymized for sharing).
+- **Ids:** cells named twice, cells the table names without a polygon, polygons whose cells no
+  transcript names; labels the table has no row for.
+
+**Measured on the Lung bundle** (`internal/segment/imports`, reference numbers of its tests):
+
+- The Lung bundle imported into itself as an output bundle gives the instrument's segmentation
+  exactly: 11,898 cells, the raster identical to `masks/1`, every transcript's cell its `cell_id`,
+  and `cells.parquet`'s counts equal to the assignment's for every cell.
+- Written by spatialdata-io 0.7.1 (spatialdata 0.8.0, Zarr format 3, AnnData's arrays sharded),
+  read in pixels: the cells from `labels/cell_labels`, each label named through the table's
+  `cell_labels` column, the outlines from `shapes/cell_boundaries`. The raster is identical to
+  `masks/1`, every assignment the instrument's, the table's counts equal for every cell. Read as
+  µm, 3 of the 11,898 cells lie within the image, and the import says that 11,898 would in
+  pixels.
+- The instrument's own polygons and assignments, written as GeoJSON with a table (by
+  `transcript_id`), or as a Baysor-style table without ids (by position and gene): every
+  assignment the instrument's. The polygons drawn agree with `masks/1` on 94.33% of pixels: the
+  Xenium polygons pass through their edge pixels' own coordinates (§3.1), half a pixel inside the
+  pixels' areas, so a pixel whose centre lies on the cell's edge is drawn in or out by a hair.
+- The Breast bundle is refused as an import into the Lung run (another experiment).
+
+**Fixtures** (`internal/segment/imports/testdata`), one hand-made scene written by the libraries
+that write each format: spatialdata 0.8.0 (shapes, points, table; a label image with its table
+and shapes in pixels), spatialdata 0.2.6 (Zarr format 2), geopandas and pyarrow (GeoJSON, Parquet
+and CSV tables), pandas (Baysor's tables), pyarrow and zarr-python (a Xenium Ranger-style
+bundle). The scene has a cell with a hole, one of two polygons, one reaching beyond the image, one
+without a polygon, transcripts the tool assigns outside every polygon, noise, and a transcript the
+dataset does not have.
+
+## 4. Comparing segmentations (verified, wave 2, slice 5)
+
+Every segmentation is compared as SituCraft's own files (§3.1, §3.3): the instrument's is written
+from its bundle (the cell mask, and each transcript's `cell_id` row by row), identical to the
+bundle's; the two rasters share the morphology image's pixels.
+
+**Correspondence** (SituCraft's documented strategy, `internal/compare`). Two cells, one of each,
+correspond when they share a nucleus of the dataset (a nucleus whose pixels lie mostly in each),
+or when at least half of one lies within the other; cells without area (an import without
+outlines) correspond the same way by their transcripts. A fragment split off a cell lies within
+it, a neighbour whose boundary moved does not: with a lower share (a fifth of either, first
+tried), two neighbours whose shared boundary moved one column became one "rearranged" difference.
+Each connected set of corresponding cells is one difference: one cell in each is one-to-one, or
+expanded (B's area over 1.25 times A's) or contracted (under 1/1.25); assignment-only when one has
+no area; one of A to several of B a split, several to one merged, several to several
+rearranged; a cell with none only in A or only in B. Hand-drawn fixtures check each class, and
+the numbers below by hand (`compare_test.go`).
+
+**Measures.** For each segmentation: cells, cells with a nucleus and with several, the assigned
+fraction and transcripts per cell (gene transcripts of quality 20 or more), median area, cells in
+several pieces, the job's time and the files' size. Between them: the pixels that agree (in the
+same cell, of those either gives a cell); the transcripts whose cell changed (gained, lost, moved
+between cells that are not the same cell); for cells the same in both, the intersection over
+union and the boundary displacement, the area between the two outlines over their mean perimeter
+(the mean distance the boundary moved: a cell shifted 1 µm sideways moves its two sides 1 µm and
+its top and bottom 0, 0.5 µm on average). The same counts by region (squares of 50 µm).
+
+**Spurious co-expression** (Jones DC, Elz AE, Hadadianpour A, et al. Cell simulation as cell
+segmentation. *Nat Methods* 2025;22:1331–1342, Methods, "Testing for spurious co-expression"):
+
+- co-expression of gene *i* given gene *j*: the share of cells expressing *j* (one transcript or
+  more) that also express *i*;
+- spurious pairs: those whose co-expression rises at least 1.5-fold (log₂ ratio ≥ log₂ 1.5) from
+  nuclear segmentation to an intentionally coarse expansion of the nuclei;
+- a segmentation's score for a pair: its co-expression divided by the nuclei's;
+- every cell down-sampled to 50 transcripts (cells with fewer left out), a multinomial draw in its
+  own proportions, so that assigning fewer transcripts, or splitting cells, is not rewarded.
+
+Where the paper leaves a choice open, SituCraft's: the nuclei are the dataset's nucleus mask (each
+transcript by its pixel), the coarse expansion grows them by 10 µm; pairs need 20 cells expressing
+the conditioning gene in both; the pairs are found on the down-sampled cells too; a
+segmentation's score is the median over its pairs (the paper shows the pairs' distribution; 1 is
+as in nuclei alone); each cell draws from its own seeded stream, so scores are reproducible.
+
+**Mutually exclusive co-expression rate** (Hartman A, Satija R. Comparative analysis of
+multiplexed in situ gene expression profiling technologies. bioRxiv 2024,
+doi:10.1101/2024.01.11.575135; reviewed in eLife as 96949): for two genes that mark different
+cell types, MECR = P(both) / P(either) over cells (expressed: one transcript or more), averaged
+over the pairs. The paper takes its pairs from single-cell references; without one, SituCraft
+pairs canonical markers of different lineages (its own table: epithelial, T cell, B cell,
+myeloid, endothelial, fibroblast, smooth muscle, plasma cell, mast cell), as far as the panel has
+them; a reference's pairs can be given instead.
+
+**Measured: the instrument's segmentation (A) and SituCraft's 5 µm expansion (B).**
+
+| | Lung | Breast |
+| --- | --- | --- |
+| Differences | 11,898 one-to-one | 3,599 one-to-one, 2,829 expanded, 194 contracted, 263 split (into 550 cells), 128 merged (of 259), 6 rearranged, 119 only in A |
+| Pixels in the same cell | 98.0629% (as §3.1 counted, independently) | 66.50% |
+| Gene transcripts (Q20) that changed cell | 1.063% (all transcripts: 8,724, as §3.1: 2,534 gained, 6,190 moved) | 26.12% (94,904 gained, 10,540 lost, 165,082 moved) |
+| Median IoU, cells the same in both | 0.979 (11,898) | 0.719 (6,622) |
+| Boundary displacement, median | 0.027 µm | 0.60 µm |
+| Spurious co-expression, A and B | 1.870 and 1.886 (2,344 pairs, 1,376 nuclei of 50 transcripts or more) | 1.772 and 2.040 (10,235 pairs, 3,950 nuclei) |
+| MECR, A and B | 0.0091 and 0.0091 (251 pairs) | 0.0455 and 0.0501 (337 pairs) |
+
+On Breast, whose cells the instrument drew mostly from stains, the expansion assigns more
+transcripts (94.7% against 86.6%) at the cost of more spurious co-expression, as Jones et al.
+found of expansions; on Lung, segmented by the instrument the same way, the two are alike.
+
+### 4.1 Errors planted for practice (verified, wave 2, slice 7)
+
+The Lung worked example plants errors in the instrument's segmentation (`internal/segment/plant`,
+seed 20261014): 20 merges of neighbouring cells sharing at least 8 pixel edges, each with 30 gene
+transcripts or more, chosen first among the pairs whose merged cell would express two lineage
+markers neither does alone (the comparison's own marker pairs), then among the quarter least alike
+by the cosine of their counts; 20 splits of cells larger than the median with 40 gene transcripts
+or more, cut across their long axis (the pixels' second moments) through the centroid; 10 cells
+with 20 gene transcripts or more dropped; and 10 cells with three neighbours or more grown by
+1 µm into their neighbours' pixels and the background. Each error's cells and their neighbours are
+kept from every other error's. The transcripts of changed cells go to the cell holding their pixel
+afterwards; every other transcript keeps its cell.
+
+**Measured (Lung, the comparison of the instrument's segmentation with the planted one):** 11,811
+cells one-to-one; the 20 merges each a merged difference, every merged cell mixing more pairs of
+mutually exclusive markers than its two cells (so ranked by contamination they come first); the
+20 splits each a split; the 10 missed cells each only in the instrument's; the 10 grown cells each
+expanded (7 of their neighbours contracted); no other difference, and no other cell's transcripts
+changed. A first reach of 2 µm made four grown cells take more than half of a neighbour, and so
+"rearranged" differences: Lung's cells are small (median 48.5 µm²).
+
+### 4.2 Exports (verified, wave 2, slice 7)
+
+**Measured: the Lung instrument segmentation exported in every format** (11,898 cells, 289 genes,
+825,885 transcripts of which 809,249 assigned, 294,927 nonzero counts summing to 731,083). Read
+back by SituCraft, the SpatialData store imports as the same segmentation: every pixel, every
+transcript's cell and every count (the content fingerprints equal). Read by spatialdata 0.8.0,
+anndata 0.13.4 (zarr 3.4.1), pyarrow 26.0.0 and pandas 3.0.6, scipy 1.18.1, geopandas 1.2.0 and
+numpy 2.5.4 (`validation/reference/read_exports.py`, `exports.json`), every format gives the
+manifest's totals and the fingerprints it holds; spatialdata finds the table annotating the labels
+(region `cell_labels`, instance key `cell_labels`), the labels scaled by 0.2125 into µm and the
+points and shapes in µm. geopandas finds 44 of the 11,898 outlines invalid: the instrument's own
+polygons whose edges cross (§1, wave 1 found the same 44). Xenium Ranger's masks are the
+morphology image's size (5,791 × 3,553), with the bundle's nuclei; 9 transcripts (8 gene
+transcripts of quality 20 or more) are assigned by the instrument otherwise than its own mask holds
+at their pixel (§3.1: the 8 it records off its mask).
 
 ## 5. Cell typing (wave 4)
 
@@ -448,7 +648,32 @@ Notes:
   *IEEE TPAMI* 1991;13:376–380.
 - Douglas DH, Peucker TK. Algorithms for the reduction of the number of points required to
   represent a digitized line or its caricature. *Cartographica* 1973;10(2):112–122.
-  doi:10.3138/FM57-6770-U75U-7727 (polygon simplification in the geometry tiles).
+  doi:10.3138/FM57-6770-U75U-7727 (polygon simplification in the geometry tiles and segmentation
+  outlines).
+- Felzenszwalb PF, Huttenlocher DP. Distance transforms of sampled functions. *Theory Comput*
+  2012;8:415–428. doi:10.4086/toc.2012.v008a019 (nucleus expansion's exact distances).
+- Okabe A, Boots B, Sugihara K, Chiu SN. *Spatial Tessellations: Concepts and Applications of
+  Voronoi Diagrams*, 2nd ed. Wiley, 2000 (nucleus expansion).
+- Marconato L, Palla G, Yamauchi KA, et al. SpatialData: an open and universal data framework
+  for spatial omics. *Nat Methods* 2025;22:58–62. doi:10.1038/s41592-024-02212-x (imports and
+  exports).
+- Virshup I, Rybakov S, Theis FJ, Angerer P, Wolf FA. anndata: Access and store annotated data
+  matrices. *J Open Source Softw* 2024;9(101):4371. doi:10.21105/joss.04371 (tables; the AnnData
+  export).
+- Okabe M, Ito K. Color Universal Design (CUD): how to make figures and presentations that are
+  friendly to colorblind people. J*FLY, 2008 (the comparison workspace's two overlay colours).
+- Hartman A, Satija R. Comparative analysis of multiplexed in situ gene expression profiling
+  technologies. bioRxiv 2024. doi:10.1101/2024.01.11.575135 (the mutually exclusive
+  co-expression rate).
+- Butler H, Daly M, Doyle A, Gillies S, Hagen S, Schaub T. The GeoJSON Format. RFC 7946, 2016;
+  OGC Simple Features (well-known binary); GeoParquet 1.0 (imports and exports).
+- Boisvert RF, Pozo R, Remington KA. The Matrix Market exchange formats: initial design. NIST
+  Interagency Report 5935, 1996 (the Matrix Market export).
+- Kern R. A simple file format for NumPy arrays. NumPy Enhancement Proposal 1, 2007 (the `.npy`
+  masks for Xenium Ranger).
+- Apache Parquet format specification (parquet-format: file layout, `parquet.thrift`,
+  Encodings.md) and the Apache Thrift compact protocol specification (the Parquet reader and
+  writer); the Zarr storage specifications, formats 2 and 3 (the Zarr reader and writer).
 - Hyndman RJ, Fan Y. Sample quantiles in statistical packages. *Am Stat* 1996;50:361–365
   (the QC plots' quantiles, type 7).
 - Tukey JW. *Exploratory Data Analysis*. Addison-Wesley, 1977 (box plots, whiskers at 1.5
@@ -464,7 +689,6 @@ Notes:
 - Control-codeword prefixes across XOA versions (1.x, 2.x, 3.x, Prime 5K).
 - XOA 3.x and 4.x bundle differences (file names, Zarr versions, new files).
 - The H&E alignment matrix orientation on a real file.
-- The MECR reference's identifier.
 - JPEG 2000 options of XOA versions other than 2.0 (the bundles in hand were written by OpenJPEG
   2.5.1; other versions may use other progressions or code-block styles, which the decoder reads
   but which have not been seen on real Xenium files).

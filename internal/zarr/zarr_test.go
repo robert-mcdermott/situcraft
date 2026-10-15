@@ -66,13 +66,90 @@ func TestStoresFromZarrPython(t *testing.T) {
 	}
 }
 
+// Text, of varying length (format 2's VLenUTF8 filter; format 3's string type, plain and sharded)
+// and of numpy's fixed types, read as zarr-python wrote it.
+func TestTextFromZarrPython(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("testdata", "expected.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		Texts []struct {
+			Store, Path string
+			Values      []string
+		} `json:"texts"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatal(err)
+	}
+	if len(doc.Texts) != 4 {
+		t.Fatalf("%d texts in expected.json", len(doc.Texts))
+	}
+	all := stores(t)
+	for _, want := range doc.Texts {
+		a, err := OpenArray(all[want.Store], want.Path)
+		if err != nil {
+			t.Fatalf("%s %s: %v", want.Store, want.Path, err)
+		}
+		got, err := a.ReadStrings()
+		if err != nil {
+			t.Fatalf("%s %s: %v", want.Store, want.Path, err)
+		}
+		if strings.Join(got, "|") != strings.Join(want.Values, "|") {
+			t.Errorf("%s %s: %q, want %q", want.Store, want.Path, got, want.Values)
+		}
+		if _, err := a.ReadAll(); err == nil {
+			t.Errorf("%s %s: text read as bytes", want.Store, want.Path)
+		}
+	}
+	for path, want := range map[string]string{"text": "DAPI|Boundary|Interior RNA|18S", "bytes": "aiaafdpo-1|bbbbcccc-1"} {
+		a, err := OpenArray(all["v2.zarr"], path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := a.ReadStrings()
+		if err != nil || strings.Join(got, "|") != want {
+			t.Errorf("%s: %q %v", path, got, err)
+		}
+	}
+}
+
+// Damaged text and shards are refused, not misread.
+func TestDamagedTextAndShards(t *testing.T) {
+	for _, bad := range [][]byte{nil, {1, 0, 0}, {9, 0, 0, 0, 1, 0, 0, 0}, {1, 0, 0, 0, 5, 0, 0, 0, 'a', 'b'}, {1, 0, 0, 0, 1, 0, 0, 0, 0xff}} {
+		if _, err := vlenUTF8(bad); err == nil {
+			t.Errorf("% x read as text", bad)
+		}
+	}
+	got, err := vlenUTF8([]byte{2, 0, 0, 0, 1, 0, 0, 0, 'a', 0, 0, 0, 0})
+	if err != nil || len(got) != 2 || got[0] != "a" || got[1] != "" {
+		t.Errorf("%q %v", got, err)
+	}
+	a, err := OpenArray(stores(t)["v3.zarr"], "sharded")
+	if err != nil {
+		t.Fatal(err)
+	}
+	shard, err := a.store.Get(a.chunkKey([]int{0, 0}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, damaged := range map[string][]byte{
+		"truncated":       shard[:10],
+		"index corrupted": append(append([]byte(nil), shard[:len(shard)-5]...), shard[len(shard)-5]^1, 0, 0, 0, 0),
+	} {
+		if _, err := a.decodeShard(damaged, 16*16*a.DType.Size); err == nil {
+			t.Errorf("a %s shard read", name)
+		}
+	}
+}
+
 func TestMetadataAndListing(t *testing.T) {
 	s := stores(t)["v2.zarr.zip"]
 	arrays, err := Arrays(s)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(arrays) != 15 {
+	if len(arrays) != 16 {
 		t.Fatalf("%d arrays: %v", len(arrays), arrays)
 	}
 	attrs, err := Attributes(s, "")
@@ -86,8 +163,8 @@ func TestMetadataAndListing(t *testing.T) {
 	if a.Order != 'F' || a.Codec != "blosc" || a.Shape[0] != 37 || a.Chunks[1] != 8 {
 		t.Fatalf("order_f: %+v", a)
 	}
-	if _, err := OpenArray(stores(t)["v3.zarr"], "sharded"); err == nil || !strings.Contains(err.Error(), "sharded") {
-		t.Fatalf("sharded array: %v", err)
+	if sh, err := OpenArray(stores(t)["v3.zarr"], "sharded"); err != nil || sh.Codec != "sharded zstd" || sh.Chunks[0] != 16 {
+		t.Fatalf("sharded array: %+v %v", sh, err)
 	}
 	if _, err := OpenArray(s, "missing"); err == nil {
 		t.Fatal("a missing array opened")

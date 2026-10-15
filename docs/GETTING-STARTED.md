@@ -22,6 +22,11 @@ The start page offers your recent projects, the example datasets and **Open a bu
 
 ## 2. Try an example
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/start-dark.webp">
+  <img alt="SituCraft's start page: recent projects, and the two example datasets with their size, source and license, each with a Download button" src="images/start-light.webp">
+</picture>
+
 Under **Examples**, two public Xenium bundles from 10x Genomics (CC BY 4.0) are ready to download:
 
 | Example | Download | On disk | What it shows |
@@ -35,8 +40,28 @@ When it is ready, **Take the tour**: seven steps through the Data view, the View
 **Next** and **Back** on the card at the foot of the window; you can explore at any step, and the
 tour continues from there.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/tour-dark.webp">
+  <img alt="The Lung example's guided tour at its third step, a card over the Viewer saying what the four genes mark" src="images/tour-light.webp">
+</picture>
+
 Each example is used under its license; its source and license are linked on its card, and the
 methods paragraph (section 7) cites it.
+
+Each example also has a **worked example**: a question answered step by step, saying first what to
+expect. Some steps run a job before going on (the card's button says what it does: expand the
+nuclei, plant errors, compare), and others open the comparison in the Compare workspace with the
+view, the ranking and the difference the step talks about.
+
+| Example | Worked example | The question |
+| --- | --- | --- |
+| Breast | The instrument's cells against a nucleus expansion | Where does growing each nucleus by 5 µm disagree with the cells the instrument drew from its stains, and which does the evidence favour there? |
+| Lung | Find the planted errors (simulated) | Can you find a segmentation's errors with the comparison workspace, and which ranking finds which kind? |
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/worked-dark.webp">
+  <img alt="The Lung example's worked example in the Compare workspace: the instrument's segmentation and one with planted errors side by side, a planted merge chosen, and the worked example's card beside the queue" src="images/worked-light.webp">
+</picture>
 
 ## 3. Open your own bundle
 
@@ -53,6 +78,11 @@ SituCraft reads a bundle where it is, and never changes, moves or copies it. Run
 <paths>` while SituCraft is open hands them to the open window.
 
 ## 4. Check it: the Data view
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/data-dark.webp">
+  <img alt="The Data view of the Lung example: the run's facts, its derived data built, and the check's three notes" src="images/data-light.webp">
+</picture>
 
 The Data view says what the bundle is (instrument software and version, panel, tissue, cells,
 transcripts, channels) and how far SituCraft supports it: Xenium Onboard Analysis 2.x fully,
@@ -76,6 +106,11 @@ needed. **View the tissue** opens the Viewer.
 
 ## 5. See the tissue: the Viewer
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/viewer-genes-dark.webp">
+  <img alt="The Viewer: transcripts of EPCAM, COL5A2, PLVAP and CD68 over the gray DAPI stain and the cell outlines, a selected cell's transcripts by gene in the inspector" src="images/viewer-genes-light.webp">
+</picture>
+
 - **Move:** drag to pan; scroll, pinch, **+** and **−**, or double-click to zoom; **0** shows the
   whole tissue; the minimap (top right) jumps to a place. The scale bar and position are in µm.
 - **Image:** each morphology stain with its color, brightness window (**Low**, **High**, or
@@ -95,6 +130,11 @@ link** gives a link that reopens it, **Rename** and **Remove** change it.
 
 ## 6. Check quality: the QC view
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/qc-dark.webp">
+  <img alt="The QC view: the run's metrics with SituCraft's recomputed values, cells colored by their gene transcripts, and a histogram" src="images/qc-light.webp">
+</picture>
+
 - **Run metrics:** every metric the run recorded, explained, with SituCraft's own value beside the
   recorded one where it can be recomputed (**Reproduced**), or why not.
 - **Maps over the tissue:** cells colored by an attribute (gene transcripts, genes detected,
@@ -108,9 +148,19 @@ link** gives a link that reopens it, **Rename** and **Remove** change it.
   version in the project, with the count and a checksum of the cells it keeps; it is checked to
   keep the same cells whenever the project reopens (**Reproduced**). Filters never change the data.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/qc-filter-dark.webp">
+  <img alt="The QC view's Filters tab: a filter's two conditions with their effects, and two saved versions, each reproduced" src="images/qc-filter-light.webp">
+</picture>
+
 **Save view** in the QC view keeps the map, the filter in use and the place.
 
 ## 7. Keep and share the record
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/saved-views-dark.webp">
+  <img alt="Three saved views in the project tree, one open in the Viewer, its details and Copy link in the inspector" src="images/saved-views-light.webp">
+</picture>
 
 - **Projects save themselves** to the library as you work; the start page and the project menu
   (the project's name, top left) reopen them. **Undo** and **Redo** (⌘Z, ⇧⌘Z) cover every change,
@@ -127,6 +177,138 @@ link** gives a link that reopens it, **Rename** and **Remove** change it.
   (datasets, filters, saved views, history) to a file you name. It does not contain the bundles:
   it records each one relative to the archive, so a folder holding the archive and its bundles can
   be moved, copied or shared, and opened with `situcraft project.scz` or **Open a bundle**.
+
+## Segmentations and jobs
+
+When a dataset is added, SituCraft registers the instrument's segmentation as an artifact: the
+cells, their boundaries, the nuclei, the transcripts' assignments and the counts, each file recorded
+by its SHA-256 (it stays in the bundle). Under **Segmentations** in the project tree, the default
+one is marked; the inspector shows how it was made (the methods and how many cells each found), its
+files, what its check found, and why it is the default.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/expansion-dark.webp">
+  <img alt="The Segmentation view of the Lung example: its nuclei expanded by 5 µm, compared with the instrument's segmentation, 98.06% of pixels and 98.94% of transcripts in the same cells, with what differs described" src="images/expansion-light.webp">
+</picture>
+
+The **Segmentation** view lists the dataset's segmentations side by side, with their cells, the
+share of gene transcripts each assigns, transcripts per cell and cell area. **Expand the nuclei**
+grows each nucleus by the distance you choose (5 µm, Xenium's default, to start) into a cell of its
+own: every pixel goes to the nearest nucleus within the distance, and transcripts to the cell
+holding the pixel they lie in. It runs as a job (about a second for the Lung example) and becomes a
+segmentation of its own, kept with its parameters. Below, it is compared with the instrument's
+segmentation pixel by pixel and transcript by transcript, and what differs is described: on the
+Lung example, segmented by the instrument the same way, 98.06% of pixels and 98.94% of transcripts
+are in the same cells.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/import-dark.webp">
+  <img alt="The Segmentation view of the Lung example: the instrument's segmentation and one imported from a SpatialData store written by spatialdata-io, side by side, and the imported one's lineage in the inspector" src="images/import-light.webp">
+</picture>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/comparison-dark.webp">
+  <img alt="The Segmentation view of the Breast example comparing the instrument's segmentation with a 5 µm nucleus expansion: the differences by class, each segmentation's measures, and the pixels and transcripts that changed" src="images/comparison-light.webp">
+</picture>
+
+**Compare two segmentations** chooses an A and a B and shows which cells correspond and how each
+differs: one-to-one, expanded or contracted (by more than 25% of its area), split, merged,
+rearranged, or only in one. Two cells correspond when they share a nucleus, or when at least half
+of one lies within the other. Beside each segmentation's own numbers (cells, cells with a nucleus,
+assigned transcripts, transcripts per cell, areas), two measure transcripts given to the wrong
+cell: the spurious co-expression of gene pairs relative to nuclei alone (Jones et al. 2025; 1 is
+as in nuclei), and how often markers of different lineages are found in the same cell (the
+mutually exclusive co-expression rate of Hartman and Satija). Between the two, the pixels that
+agree, the transcripts that changed cell, and how far the boundaries moved. The comparison runs
+as a job and is kept with the project.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/workspace-dark.webp">
+  <img alt="The Compare workspace: the Breast example's instrument segmentation and a 5 µm nucleus expansion side by side on the tissue, cells filled by the class of their difference, the review queue's first split chosen and described in the inspector" src="images/workspace-light.webp">
+</picture>
+
+**Open** (beside a comparison, or **Compare** in the views) shows the two on the tissue:
+
+- **Side by side** with one camera, **Overlay** (B's outlines over A's, each in its colour), or
+  **Flicker** (A and B in turns). Cells are filled by the class of their difference; the
+  **Disagreement map** shades each 50 µm region by the share of its pixels the two give to
+  different cells.
+- **The review queue** ranks the differences by reassigned transcripts, contamination (pairs of
+  markers of different lineages found in one cell of B and not of A), disagreement or low counts,
+  among the classes you keep and with at least the reassigned transcripts you set. **Next** and
+  **Previous** (or `]` and `[`) go through it; each difference opens where it lies, its cells lit
+  in both, and is described in the inspector. **Cell matching** lists every difference, sortable.
+- **Decide** promotes one segmentation as the dataset's default, keeps one for exploration, or
+  rejects one, with a reason. Decisions are appended to the project with the comparison they rest
+  on and never removed; the default cannot be rejected until another is promoted, and no
+  segmentation is ever deleted.
+
+The measures' header says when one rests on little (few nuclei for the spurious co-expression,
+few marker pairs in the panel, cells without outlines).
+
+**Import a segmentation** brings in one made by another tool: a SpatialData Zarr store, Baysor's
+`segmentation.csv` with its polygons, GeoJSON polygons with an optional transcript table (CSV or
+Parquet), or a Xenium Ranger output bundle of the same run. Say whether its coordinates are in µm
+or in pixels of the morphology image (stores written by spatialdata-io from Xenium data are in
+pixels): SituCraft does not guess, and the import's check says when the cells do not lie within
+the dataset's image. It also checks that the transcripts it names are the dataset's. The import
+runs as a job and becomes a segmentation of its own, kept with the SHA-256 of every file it read,
+its transcripts counted as every segmentation's are; one whose check finds a fatal problem is
+kept as invalid, for review.
+
+**Practice: find planted errors**, on the example datasets, makes a copy of the instrument's
+segmentation with known errors in it: neighbouring cells of different lineages merged, large cells
+split in two, cells missed, and cells drawn too wide. Compare it with the instrument's, review the
+differences in the workspace, then open **The answer key** to see what was planted where (**Show**
+takes you to each). The copy is simulated, named so, and is never promoted or exported. On the Lung
+example, the comparison lists exactly the 60 planted errors, each in its class, and ranked by
+contamination the merges come first: their cells express markers of two lineages together. To
+practise on a dataset of your own, turn on **Practice tools for every dataset** in the menu of the
+theme button (top right); it is off unless you do.
+
+### Export a segmentation
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/export-dark.webp">
+  <img alt="The Segmentation view's Export a segmentation: the formats chosen, the folder, and an export of the Lung example's instrument segmentation listed with its files and the prepared Xenium Ranger command" src="images/export-light.webp">
+</picture>
+
+**Export a segmentation** writes any of a dataset's segmentations for other tools, into one folder
+you name:
+
+| Format | For | Holds |
+| --- | --- | --- |
+| SpatialData Zarr | spatialdata, napari-spatialdata | The cells as a label image and as polygons, the transcripts as points with their cells, the counts as an AnnData table |
+| AnnData Zarr | scanpy, anndata | The counts, with each cell's measures and centroid |
+| Parquet; CSV | DuckDB, pandas, R, polars | Cells, transcripts with their cells, outlines and counts, in Xenium's column names |
+| Matrix Market | Seurat (`Read10X`), scanpy | The counts as Xenium and Cell Ranger write them |
+| GeoJSON | QuPath, GIS tools | Each cell's outline as a polygon naming it |
+| Xenium Ranger inputs | Xenium Ranger's `import-segmentation` | The cells and nuclei as label masks on the morphology image's pixels, and the command |
+
+Coordinates are in µm. Beside the files, `situcraft-export.json` says what was exported, from what
+and by which SituCraft, lists every file by its SHA-256, and gives fingerprints of the label image,
+the counts and the transcripts' cells that every format holds the same (`docs/FORMATS.md`), so that
+you can check any reader got it exactly. The export runs as a job, is written under a temporary
+name and renamed into place when complete, and is recorded in the project. A folder that exists is
+replaced only when you ask, and only when it is an earlier SituCraft export.
+
+For **Xenium Ranger**, SituCraft prepares the inputs and the command, and does not run it. It
+checks first that the masks are the morphology image's size, which cells have no pixel (Xenium
+Ranger cannot keep them), and how many transcripts this segmentation assigns otherwise than its
+mask holds at their pixel (Xenium Ranger assigns by the mask). **Copy the command** puts it on the
+clipboard to run where Xenium Ranger is installed.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/jobs-dark.webp">
+  <img alt="The Jobs view: four finished jobs, building derived data and registering segmentations of both examples, one with its log open" src="images/jobs-light.webp">
+</picture>
+
+Long work runs as a job: building derived data, downloading an example, registering a
+segmentation, expanding nuclei, importing, comparing or exporting segmentations, planting errors.
+The **Jobs** view shows what runs and waits, what finished, and each job's log and spec. Jobs keep
+running when the window reloads, and closing the window while one runs asks first. If SituCraft
+stops (or the computer does) in the middle of a job, the job is shown as interrupted
+when SituCraft starts again: **Resume** continues it where it stopped, **Discard** forgets it.
 
 ## Keyboard
 

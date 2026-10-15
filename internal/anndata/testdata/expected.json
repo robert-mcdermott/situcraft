@@ -1,0 +1,56 @@
+{
+ "anndata": "0.13.4",
+ "index": [
+  "c1",
+  "c2",
+  "c3",
+  "c4"
+ ],
+ "cell_id": [
+  "aaaiikim-1",
+  "bbbbcccc-1",
+  "\u00b5m-cell",
+  ""
+ ],
+ "region": [
+  "cell_labels",
+  "cell_labels",
+  null,
+  "nuclei"
+ ],
+ "label": [
+  1,
+  2,
+  null,
+  4
+ ],
+ "name": [
+  "a",
+  null,
+  "c",
+  "d"
+ ],
+ "kept": [
+  true,
+  false,
+  true,
+  true
+ ],
+ "area": [
+  10.5,
+  0.0,
+  33.25,
+  7.0
+ ],
+ "var": [
+  "ACTA2",
+  "EPCAM",
+  "VIM"
+ ],
+ "row_sums": [
+  3.0,
+  0.0,
+  7.0,
+  11.0
+ ]
+}

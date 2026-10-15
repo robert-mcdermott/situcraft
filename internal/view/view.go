@@ -38,6 +38,21 @@ type Dataset struct {
 	countsOnce sync.Once
 	counts     *cellCounts
 	countsErr  error
+
+	rowsOnce sync.Once
+	rows     map[string]int
+}
+
+// CellRow is the row of the cell with this ID (cells.parquet's cell_id).
+func (d *Dataset) CellRow(id string) (int, bool) {
+	d.rowsOnce.Do(func() {
+		d.rows = make(map[string]int, len(d.Cells.IDs))
+		for row, cell := range d.Cells.IDs {
+			d.rows[cell] = row
+		}
+	})
+	row, ok := d.rows[id]
+	return row, ok
 }
 
 // Open opens a bundle's dataset for viewing; its entries must be built (status Ready).

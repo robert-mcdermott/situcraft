@@ -45,6 +45,15 @@ v2array('slash_separator', grid, (10, 10), numcodecs.Zstd(level=1), chunk_key_en
 v2array('bools', (np.arange(100) % 3 == 0), (32,), numcodecs.Zlib())
 v2array('text', np.array(['DAPI', 'Boundary', 'Interior RNA', '18S'], dtype='<U12'), (4,), None)
 v2array('bytes', np.array([b'aiaafdpo-1', b'bbbbcccc-1'], dtype='|S10'), (2,), None)
+# Text of varying length: the object dtype with numcodecs' VLenUTF8 filter (as AnnData writes
+# strings in format 2), in chunks that do not divide it.
+words = ['cell_boundaries', '', 'µm', 'aaaiikim-1', 'UNASSIGNED', 'NegControlProbe_00022', 'x' * 300]
+texts = []
+def v2text(name, values, chunks, compressor):
+    arr = root.create_array(name, shape=(len(values),), chunks=chunks, dtype=str, compressors=compressor)
+    arr[...] = np.array(values, dtype=object)
+    texts.append({'store': 'v2.zarr', 'path': name, 'values': values})
+v2text('vlen_text', words, (3,), numcodecs.Zstd(level=1))
 # Partly written: the chunks never written read as the fill value.
 sparse = root.create_array('fill_value', shape=(30, 30), chunks=(10, 10), dtype='<f8', fill_value=-1.0, compressors=numcodecs.Zstd(level=1))
 sparse[0:10, 0:10] = 7.0
@@ -60,6 +69,8 @@ with zipfile.ZipFile(os.path.join(here, 'v2.zarr.zip'), 'w', zipfile.ZIP_STORED)
             z.write(full_path, os.path.relpath(full_path, v2))
 for e in list(expected):
     expected.append(dict(e, store='v2.zarr.zip'))
+for e in list(texts):
+    texts.append(dict(e, store='v2.zarr.zip'))
 
 # Format 3.
 v3 = os.path.join(here, 'v3.zarr')
@@ -74,10 +85,22 @@ v3array('blosc', grid, (16, 16), compressors=BloscCodec(cname='lz4', clevel=5, s
 v3array('gzip_crc32c', grid, (16, 16), compressors=[GzipCodec(level=5), Crc32cCodec()])
 v3array('big_endian', (np.arange(300) * 7).astype('>i8'), (100,), serializer=BytesCodec(endian='big'), compressors=None)
 v3array('transposed', grid, (10, 8), filters=[TransposeCodec(order=(1, 0))], compressors=ZstdCodec(level=1))
-sharded = root3.create_array('sharded', shape=grid.shape, chunks=(8, 8), shards=(16, 16), dtype=grid.dtype)
-sharded[...] = grid
+# Sharded, as AnnData 0.11 and later write: inner chunks in shards, the shards at the edges
+# partly outside the array; the index at the end (the default) or at the start.
+v3array('sharded', grid, (8, 8), shards=(16, 16))
+from zarr.codecs import ShardingCodec
+start = root3.create_array('sharded_index_start', shape=grid.shape, chunks=(16, 24), dtype=grid.dtype, serializer=ShardingCodec(chunk_shape=(8, 8), codecs=[BytesCodec(), ZstdCodec(level=1)], index_location='start'), compressors=None)
+start[...] = grid
+record('v3.zarr', 'sharded_index_start', grid)
+# Text: the string data type with the vlen-utf8 codec, plain and sharded.
+def v3text(name, values, chunks, **kw):
+    arr = root3.create_array(name, shape=(len(values),), chunks=chunks, dtype=str, **kw)
+    arr[...] = np.array(values, dtype=object)
+    texts.append({'store': 'v3.zarr', 'path': name, 'values': values})
+v3text('strings', words, (3,), compressors=ZstdCodec(level=1))
+v3text('strings_sharded', words, (2,), shards=(4,), compressors=ZstdCodec(level=0))
 
 with open(os.path.join(here, 'expected.json'), 'w') as f:
-    json.dump({'zarr': zarr.__version__, 'numcodecs': numcodecs.__version__, 'arrays': expected}, f, indent=1)
+    json.dump({'zarr': zarr.__version__, 'numcodecs': numcodecs.__version__, 'arrays': expected, 'texts': texts}, f, indent=1)
     f.write('\n')
-print(len(expected), 'arrays')
+print(len(expected), 'arrays,', len(texts), 'texts')

@@ -1,0 +1,116 @@
+{
+ "exports": {
+  "xenium-lung-2fov-instrument": {
+   "content": {
+    "assignmentsSha256": "0a51f5e10ca8137b13738925dbaf79a2cbbbe14e8294dfe907142912e1eb401f",
+    "countsSha256": "7e3252f9b87ae98f7f1968a39697b71bf3738b1a43925514a6c36cee7abd3a81",
+    "labelsSha256": "f07e70dfafd1068e1c921a0795e9a7dc2ce8f1eab9d1da4e019b5a52b0139954"
+   },
+   "counts": {
+    "assignedTranscripts": 809249,
+    "cells": 11898,
+    "cellsWithOutline": 11898,
+    "cellsWithPixels": 11898,
+    "countEntries": 294927,
+    "countSum": 731083,
+    "genes": 289,
+    "transcripts": 825885
+   },
+   "formats": {
+    "anndata": {
+     "agrees": true,
+     "cells": 11898,
+     "countEntries": 294927,
+     "countSum": 731083,
+     "countsSha256": "7e3252f9b87ae98f7f1968a39697b71bf3738b1a43925514a6c36cee7abd3a81",
+     "genes": 289,
+     "spatial": [
+      11898,
+      2
+     ]
+    },
+    "csv": {
+     "agrees": true,
+     "assignedTranscripts": 809249,
+     "assignmentsSha256": "0a51f5e10ca8137b13738925dbaf79a2cbbbe14e8294dfe907142912e1eb401f",
+     "cells": 11898,
+     "cellsWithOutline": 11898,
+     "countEntries": 294927,
+     "countSum": 731083,
+     "countsSha256": "7e3252f9b87ae98f7f1968a39697b71bf3738b1a43925514a6c36cee7abd3a81",
+     "transcripts": 825885
+    },
+    "geojson": {
+     "agrees": true,
+     "cellsWithOutline": 11898,
+     "invalid": 44,
+     "polygons": 11898
+    },
+    "mex": {
+     "agrees": true,
+     "cells": 11898,
+     "countEntries": 294927,
+     "countSum": 731083,
+     "countsSha256": "7e3252f9b87ae98f7f1968a39697b71bf3738b1a43925514a6c36cee7abd3a81",
+     "genes": 289
+    },
+    "parquet": {
+     "agrees": true,
+     "assignedTranscripts": 809249,
+     "assignmentsSha256": "0a51f5e10ca8137b13738925dbaf79a2cbbbe14e8294dfe907142912e1eb401f",
+     "cells": 11898,
+     "cellsWithOutline": 11898,
+     "countEntries": 294927,
+     "countSum": 731083,
+     "countsSha256": "7e3252f9b87ae98f7f1968a39697b71bf3738b1a43925514a6c36cee7abd3a81",
+     "transcripts": 825885
+    },
+    "spatialdata": {
+     "agrees": true,
+     "assignedTranscripts": 809249,
+     "assignmentsSha256": "0a51f5e10ca8137b13738925dbaf79a2cbbbe14e8294dfe907142912e1eb401f",
+     "cells": 11898,
+     "cellsWithOutline": 11898,
+     "cellsWithPixels": 11898,
+     "countEntries": 294927,
+     "countSum": 731083,
+     "countsSha256": "7e3252f9b87ae98f7f1968a39697b71bf3738b1a43925514a6c36cee7abd3a81",
+     "genes": 289,
+     "labelsSha256": "f07e70dfafd1068e1c921a0795e9a7dc2ce8f1eab9d1da4e019b5a52b0139954",
+     "labelsToGlobal": [
+      0.2125,
+      0.2125
+     ],
+     "pointsToGlobal": "Identity",
+     "shapesToGlobal": "Identity",
+     "table": {
+      "instance_key": "cell_labels",
+      "region": "cell_labels",
+      "region_key": "region"
+     },
+     "transcripts": 825885
+    },
+    "xenium-ranger": {
+     "agrees": true,
+     "cellsWithPixels": 11898,
+     "dtype": "uint32",
+     "labelsSha256": "f07e70dfafd1068e1c921a0795e9a7dc2ce8f1eab9d1da4e019b5a52b0139954",
+     "nuclei": {
+      "dtype": "uint32",
+      "shape": [
+       3553,
+       5791
+      ]
+     },
+     "shape": [
+      3553,
+      5791
+     ]
+    }
+   },
+   "segmentation": "Instrument segmentation",
+   "software": "situcraft test"
+  }
+ },
+ "generated_by": "spatialdata 0.8.0, anndata 0.13.4, zarr 3.4.1, pyarrow 26.0.0, pandas 3.0.6, geopandas 1.2.0, scipy 1.18.1, numpy 2.5.4"
+}

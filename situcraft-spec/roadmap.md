@@ -613,53 +613,445 @@ other tools can be imported.
 
 ### Wave 2
 
-1. **Remote control and screenshots (A1).** The remote-control hub, actions and `remote.json`
-   from MaveScape. The documentation's capture scenes drive the page through it in headless
-   Chrome, as in the siblings.
-2. **Segmentations as artifacts (D8, S6, S9).**
-   - The artifact store: states, lineage, temporary outputs promoted after validation.
-   - The instrument's segmentation registered as an artifact.
-   - The job system completed: jobs persisted; a warning before closing with a job running;
-     interrupted jobs marked orphaned on restart, with resume or discard.
-   - The Jobs view.
-3. **Nucleus expansion (S1).** `internal/segment/expand`: neighbor-bounded growth of nuclei to a
-   chosen distance, transcript assignment and counts; parallel and deterministic.
-   - Validation: the Lung bundle's own 5 µm expansion is reproduced. The documented tolerance
-     covers cell count (exact), per-cell area, the assigned fraction, and per-transcript
-     assignment agreement, with every disagreement explained (e.g. vertex simplification in the
-     bundle's polygons).
-4. **Importing segmentations (S10, D6).**
-   - SpatialData Zarr (shapes, points with assignments, AnnData table).
-   - Baysor-style assignment CSV plus GeoJSON polygons.
-   - Xenium Ranger output bundles.
-   - GeoJSON plus a transcript-to-cell table.
-   - Each import is validated against the dataset (IDs, coordinate system, extents).
-   - Validation: round trips through SituCraft's own exports (slice 7). Hand-made fixtures for
-     each format.
-5. **Cell matching and metrics (C1, C2, C3).** `internal/compare`:
-   - correspondence by shared nucleus, raster IoU and assignment overlap;
-   - difference classes;
-   - global and per-region metrics, including the spurious co-expression score of Jones et al.
-     (2025) and MECR.
-   - Validation: hand-auditable fixtures (two-cell splits, merges, shifted boundaries) with
-     expected classes and metrics. Instrument versus expansion on both bundles, with recorded
-     reference numbers.
-6. **The comparison workspace (V7, C4, C5).**
-   - Synchronized A/B canvases, overlay and flicker; a whole-tissue disagreement heatmap;
-     difference-class filters.
-   - The ranked review queue; the cell-matching table; the metrics header with uncertainty
-     warnings.
-   - The decision panel: promote, keep for exploration or reject, with a required rationale
-     recorded as an append-only event.
-7. **Exports and release (E1, E2, E3).**
-   - SpatialData Zarr (shapes, points, AnnData table, transformations); AnnData Zarr; Parquet;
-     CSV; Matrix Market; GeoJSON.
-   - A prepared Xenium Ranger `import-segmentation` command, with validated inputs, for users
-     who have it installed.
-   - Validation: exports are read back by SituCraft. A maintainer-run check reads them with the
-     `spatialdata` and `anndata` Python packages; its result is committed.
-   - Examples (compare the instrument's segmentation with an expansion; a planted bad
-     segmentation to find), documentation, release 0.2.0.
+1. **Remote control and screenshots (A1): done.** Programs on this computer drive the open
+   window, which performs each action where the user sees it.
+   - **The hub** (`remote.go`, `connection.go`, `output.go`, adapted from MaveScape 0.8), with
+     `--remote-control`:
+     - actions POSTed to `/api/remote/action` reach the page over server-sent events, one at a
+       time, and the page's answer returns;
+     - only this computer, no other site's page, and only the window opened from this run;
+     - opening paths and writing files need the token printed at startup and kept in
+       `remote.json` (mode 0600, removed on stop); a file is written through a one-use upload
+       slot, never over an existing one unless asked;
+     - `GET /api/remote/tools` lists the actions with their arguments' JSON schemas, under an
+       API version (also in `/api/info`).
+   - **20 actions** (`actions.go`; performed by `ui/remote.js`, whose table a test keeps equal to
+     the program's list and to `docs/REMOTE-CONTROL.md`):
+     - **state:** `get_state`;
+     - **projects and data:** `new_project`, `open_project`, `open_paths`, `add_dataset`,
+       `open_example`, `tour`;
+     - **seeing:** `set_mode`, `focus`, `show_tissue`, `select_cell`;
+     - **saved views:** `save_view`, `open_view`, `remove_view`;
+     - **QC:** `qc_metrics`, `set_qc_map`, `select_cells`, `save_filter`;
+     - **the record:** `methods`, `export` (the project document, an archive, the methods).
+   - **How the actions run:**
+     - `show_tissue` builds a view from its arguments and applies it as a saved view is applied;
+       its answer is the view as the page then captures it.
+     - An action closes a dialog left open, as Escape does.
+     - A cell is found by its ID (the host's cell endpoint now takes `id:<cell_id>`).
+     - The methods dialog moved to `ui/methods.js`, shared by the Data view and the `methods`
+       action.
+   - **Screenshots** (`docs/capture/capture.mjs`): 11 scenes (start, data, viewer, viewer-genes,
+     viewer-methods, qc, qc-outside, qc-filter, saved-views, methods, tour) on the development
+     bundles, in both themes. They are driven through remote control in headless Chrome, as
+     `docs/images/*.webp` (5.3 MB), and shown in the README and the getting-started guide.
+     - With `--audit`, axe-core 4.13.0 (`node validation/fetch.mjs axe-core`, a new `tools` entry
+       of `validation/sources.json`) checks each scene against WCAG 2.1 A and AA.
+     - The places shown are the default ones, not the run's temporary folders.
+   - **Documentation:** `docs/REMOTE-CONTROL.md` (starting, sending actions in curl and Python,
+     status codes, security, every action).
+   - Validation:
+     - **Go tests** (16 of the hub, most adapted from MaveScape's):
+       - an action reaches the page and its answer returns;
+       - one action runs at a time;
+       - no page, a silent page, a page that leaves and a page of another run are refused
+         plainly;
+       - only this computer may send actions, and no other site's page;
+       - opening paths and writing files need the token;
+       - exports never replace a file unasked, and an upload slot takes one upload;
+       - the connection file is private and removed on stop, and another server's is kept;
+       - without the flag there is no hub;
+       - the tools list is complete;
+       - the page's action table, the program's list and the documentation name the same actions;
+       - a cell is found by its ID.
+     - **In headless Chrome** (`node validation/run.mjs viewer`, 52 checks; the program now runs
+       with `--remote-control`):
+       - `get_state` describes the open project;
+       - `show_tissue` shows exactly the genes, place, zoom, cell and fill asked for;
+       - a view saved by a program reopens exactly;
+       - a program's filter keeps the cells, under the same SHA-256, that the 0.1.0 project's
+         identical filter recorded;
+       - the methods cite the data and SituCraft;
+       - `export` writes the project only with the token.
+     - **axe-core:** all 22 captures (11 scenes, 2 themes) have no violation.
+     - **By hand:** every action run from a script against the window, with its errors (unknown
+       names listing the choices, bad colors, unknown stains, a missing cell, a file that exists,
+       a missing token, another site's page).
+   - Found by slice 1:
+     - **The audit found three accessibility faults in 0.1.0,** now fixed:
+       - the view rail's separators inside its tab list;
+       - the project tree's empty sections marked as lists, and its rows (buttons) as list items;
+       - a hidden stain's name dimmed below WCAG contrast.
+     - **A dialog left open** (the methods, say) covered what later actions showed: actions now
+       close it first.
+2. **Segmentations as artifacts (D8, S6, S9): done.**
+   - **The artifact store** (`internal/artifacts`, `<data dir>/artifacts`):
+     - an artifact is a folder with `manifest.json`: its lineage (parents, the job and its spec,
+       the method with its version and citation, the parameters, the software), every file with
+       its role, size and SHA-256, its check's findings, and its state;
+     - a job writes outputs into `staging/<id>`; `Promote` checksums them, refuses unlisted outputs
+       and paths leaving the folder, runs the kind's check, and renames the folder into place,
+       complete or invalid (kept for review, never used); an artifact never changes;
+     - a file of the dataset's bundle is recorded by its path and SHA-256 and never copied;
+     - `Verify` checksums an artifact's files again.
+   - **The instrument's segmentation as an artifact** (`api_segmentations.go`):
+     - a job registers it, from the bundle's cells, cell and nucleus boundaries, transcripts (their
+       assignments), cell-by-gene counts and segmentation masks: each file's SHA-256 (from the
+       cache's record of checksums when it has them);
+     - its check is the bundle's validation, the findings that bear on the segmentation recorded
+       with it; a fatal one makes it invalid;
+     - its lineage names the bundle (analysis UUID, the manifest's SHA-256), the software, and the
+       cells each method segmented;
+     - its id hashes its files' checksums, so the same bundle gives the same artifact in any
+       project.
+   - **In the project** (`lib/segmentations.js`):
+     - a segmentation record mirrors the artifact;
+     - a dataset's default is set by `promote-segmentation` decisions, with a reason, by whom and
+       when, never removed: the latest one naming a complete segmentation holds;
+     - the instrument's is registered and promoted (as the dataset's only segmentation) when a
+       dataset is added, a project reopens (0.1.0 projects included) or a moved bundle is located.
+     - The project tree lists segmentations, the default marked; the inspector shows the lineage,
+       the cells by method, the files by SHA-256, the findings, and the decision that made it the
+       default.
+   - **Jobs completed** (`internal/jobs`):
+     - jobs are kept in `<data dir>/jobs`, one file each, written at each change of state and each
+       line of the log, with ids unique across runs;
+     - a job interrupted by the program stopping, or found running after a crash, is orphaned;
+       resumed by its kind's handler from its spec (same id, its log kept, its runs counted), or
+       discarded with what it left (a partial download);
+     - handlers for derived data, segmentation registration and example downloads.
+   - **Closing:** the window asks before closing with a job running; closed anyway, SituCraft
+     keeps running until the job ends (Ctrl+C stops it).
+   - **The Jobs view** (`ui/mode-jobs.js`):
+     - running and waiting, interrupted, and finished jobs;
+     - each with its state, progress, times and runs, its whole log and its spec;
+     - Stop, Resume and Discard; the status bar's job opens it.
+   - **Remote control:** `segmentations` and `jobs`; `open_example` and `add_dataset` wait for the
+     segmentation's registration; an action's wait for frames is bounded, so a hidden window still
+     answers.
+   - **Screenshots:** two more scenes (a segmentation in the inspector, the Jobs view); every scene
+     passes axe-core.
+   - Validation:
+     - **Go tests:** the artifact store (checked outputs recorded with their SHA-256, an invalid one
+       kept apart, unlisted outputs and escaping paths refused, bundle files referenced and
+       verified, a changed file found); jobs kept, orphaned, resumed and discarded across managers;
+       on the Lung bundle, a build interrupted by stopping resumes after a restart to entries that
+       pass their check, and the segmentation's six files carry the SHA-256 a direct reading gives.
+     - **In headless Chrome** (`node validation/run.mjs viewer`, 59 checks):
+       - both bundles' instrument segmentations registered, every file's SHA-256 as Node computes
+         it, promoted as the default, their methods accounting for every cell;
+       - the 0.1.0 project given its own, the same artifact;
+       - every job complete; `segmentations` and `jobs` by remote control.
+     - **Node tests:** records, promotion (a reason required, only a complete segmentation, the
+       latest decision holding), registering twice changing nothing.
+     - **By hand:** SituCraft killed in the middle of the Breast bundle's build; on restart the
+       build is interrupted, and resuming it continues the image pyramid where it stopped.
+   - Found by slice 2:
+     - **A hidden window draws no frames,** so a remote action waiting for two frames waited until
+       the window was shown: the wait is now bounded.
+     - **The documentation's capture shares one cache across scenes,** so a scene showing jobs
+       needs its own (in the second theme the builds were already done).
+3. **Nucleus expansion (S1, S9): done.**
+   - **The method** (`internal/segment/expand`; research.md §3.1):
+     - each nucleus grows into a cell of its own by up to the distance, every pixel going to the
+       nearest nucleus within it (a Voronoi partition clipped at the distance, Okabe et al. 2000),
+       by exact Euclidean distances between pixel centres (Felzenszwalb and Huttenlocher 2012);
+       ties broken by position;
+     - in bands of rows with a margin of the distance, on every core; the same result for any band
+       height and number of workers;
+     - the nuclei are the bundle's nucleus mask, or its nucleus polygons drawn when it has none;
+     - a transcript belongs to the cell holding its pixel, as the instrument assigns them; counts
+       of gene transcripts of quality 20 or more; outlines traced and simplified to half a pixel.
+   - **Segmentations as files** (`internal/segment`; FORMATS.md): a description, the cells, the
+     label raster in runs, each transcript's cell, the counts in sparse rows, and the outlines;
+     zlib-compressed with sizes checked on reading.
+   - **The check (S9)** before an expansion becomes an artifact: its files read and agree (the
+     raster's labels are cells, areas and centroids are the pixels', outlines lie in the raster,
+     every cell's assigned transcripts and counts add up); a fatal finding makes it invalid.
+   - **The comparison with the instrument's segmentation:**
+     - each nucleus is paired with the instrument's cell holding most of its pixels (a cell drawn
+       from a stain may hold none, or several);
+     - pixels and transcripts in the same cell, in another, or in only one segmentation; areas of
+       the cells paired one to one; the assigned fractions;
+     - what differs, described: how far from their nucleus the pixels only one gives a cell lie,
+       how near to equidistant the pixels given to different cells are, the instrument's cells
+       holding no nucleus, and transcripts the instrument records off its own mask.
+   - **A job** (`api_expansion.go`): staged, checked and promoted; the artifact's lineage names
+     the bundle and the instrument's segmentation it grew from, the method and its version, every
+     parameter and the software. Its id hashes the instrument's segmentation, the method's version
+     and the distance, so the same request answers the same artifact without a job.
+   - **The Segmentation view** (`ui/mode-segmentation.js`): the dataset's segmentations side by
+     side (cells, assigned fraction, transcripts per cell, area); **Expand the nuclei** with a
+     distance, its job's progress shown; the comparison with the instrument's segmentation.
+   - **Remote control:** `expand_nuclei` (23 actions).
+   - **Screenshots:** the Segmentation view after expanding the Lung example's nuclei.
+   - Validation:
+     - **The Lung bundle's 5 µm expansion reproduced** (`TestRealExpansionReproducesTheInstruments`):
+       11,898 cells paired one to one (exact); 98.06% of pixels and 98.94% of transcripts in the
+       same cells (at least 98% and 98.5%); cell areas' median difference +0.25% (under 0.5%),
+       97.0% within 5% and 99.95% within 10% (at least 96% and 99.5%); 98.28% of gene transcripts
+       assigned, the instrument 97.97% (at most 0.5 points more). Every transcript given
+       differently is explained, one by one: 2,534 on the rim (4.56–4.98 µm from their nucleus,
+       which the instrument's cells do not reach), 6,182 on boundaries between neighbours (within
+       0.34 µm of equidistant), 8 the instrument records off its own mask.
+     - **Breast:** 7,312 nuclei grown into cells; the instrument's 7,275 cells accounted for (6,752
+       with one nucleus, 255 with none, 268 with several).
+     - **Go tests:** the distance transform against brute force; expansion geometry; any band and
+       worker count the same; polygons drawn; counts; the files read back as written; the check
+       finding each kind of damage (truncation, sizes, areas, centroids, assignments, counts,
+       outlines); masks read in bands in either order; on Lung, the drawn polygons agree with the
+       mask on 98.56% of pixels; the job, its artifact and its lineage through the program's API.
+     - **In headless Chrome** (62 checks): `expand_nuclei` by remote control reproduces the Lung
+       expansion, recorded in the project and shown with what differs; the same distance again
+       answers the same artifact with no job.
+   - Found by slice 3:
+     - **Breast's nucleus labels are not its cells'.** Cells drawn from stains hold no nucleus or
+       several, and the nucleus mask numbers its nuclei on its own; the first expansion of Breast
+       failed. Each nucleus now grows into a cell of its own, paired with the instrument's cell it
+       lies in.
+     - **A truncated file read without error,** its last bytes (the zlib checksum) never read: each
+       file is now read to its end.
+     - **Nucleus polygons drawn by pixel centres missed their edge pixels** (92.0% of the mask's
+       pixels): the polygons' vertices lie on the edge pixels' own coordinates (98.56%).
+     - **The viewer suite counted jobs for two bundles,** failing on CI, which fetches one.
+4. **Importing segmentations (S10, D6): done.**
+   - **Formats** (`internal/segment/imports`; FORMATS.md):
+     - SpatialData Zarr, format 2 or 3, a folder or a zip: the cells from shapes (GeoParquet
+       polygons) or labels (a label image, named through the table annotating it), each
+       transcript's cell from points, the counts from the table; each element's coordinate
+       transformation;
+     - Baysor's `segmentation.csv` with its polygons (a GeoJSON GeometryCollection);
+     - GeoJSON polygons, with or without a transcript table (CSV, TSV, gzipped, or Parquet);
+     - Xenium Ranger output bundles (and XOA bundles) of the same run: the cell mask, cells,
+       boundaries and assignments.
+   - **Readers of SituCraft's own:** AnnData in Zarr (`internal/anndata`: data frames with text,
+     categorical, nullable and numeric columns; matrices as sparse rows, columns or dense); Zarr's
+     sharding and text of varying length; GeoJSON and WKB polygons; CSV and Parquet tables.
+   - **Each import becomes SituCraft's segmentation files:** a label image resampled, or polygons
+     drawn, at the morphology image's resolution; the tool's assignment matched to the dataset's
+     transcripts; counts of gene transcripts of quality 20 or more, as for every segmentation (a
+     count table the tool wrote is compared with them); the tool's outlines.
+   - **Checked against the dataset:**
+     - units declared (µm, or pixels of the morphology image), never guessed: cells outside the
+       image make the import invalid, and the finding says how many would fit in the other unit;
+     - the transcripts it names, by id and, where it gives them, position (within 0.05 µm), else
+       by position and gene (within 0.01 µm);
+     - an output bundle's run, by its experiment;
+     - ids: cells without polygons, labels without a table row, transcripts named twice.
+   - **A job** (`api_import.go`): only this computer may ask; the import is staged, named by the
+     dataset, the SHA-256 of the files read (not their places) and its options, checked and
+     promoted, invalid when a check is fatal. Its lineage names the bundle, the imported files
+     and the tool, with its version and citation.
+   - **In the project:** imported segmentations recorded as such, with their source files; the
+     Segmentation view's **Import a segmentation**; the inspector shows the files imported.
+   - **Remote control:** `import_segmentation` (24 actions; it reads files, so it needs the token).
+   - **Screenshots:** a segmentation imported from SpatialData beside the instrument's.
+   - Validation:
+     - **The Lung bundle:** imported into itself as an output bundle, and as spatialdata-io 0.7.1
+       writes it (`validation/spatialdata.py`; weekly in CI), it gives the instrument's
+       segmentation exactly: the raster identical to the cell mask, every transcript's cell, every
+       cell's count. Its polygons and assignments written as GeoJSON with a table and as a
+       Baysor-style table without ids give every assignment; drawn, the polygons agree with the
+       mask on 94.33% of pixels (Xenium's polygons pass through their edge pixels' coordinates).
+       The Breast bundle is refused as another run.
+     - **Fixtures:** one hand-made scene written by spatialdata 0.8.0 and 0.2.6 (Zarr formats 3
+       and 2), geopandas, pyarrow, pandas and zarr-python, imported to its pixels and
+       assignments exactly, with each finding planted. AnnData and Zarr text and shards as anndata
+       and zarr-python write them.
+     - **In headless Chrome** (65 checks): `import_segmentation` imports the Lung bundle into
+       itself only with the token; the Breast bundle is refused.
+     - Round trips through SituCraft's own exports come with them (slice 7).
+   - Found by slice 4:
+     - **The development bundles share their run's name, region and transcript ids** (anonymized
+       for sharing): the Breast bundle imported into the Lung dataset as if it were its own. An
+       output bundle's run is now its experiment's UUID, and transcripts named by id must lie
+       where the dataset's do.
+     - **spatialdata-io's global coordinate system is in pixels,** not µm: the units are declared
+       with each import, and the extent check names the unit that fits.
+     - **The documentation's capture showed a path of this computer** in a text field: text fields
+       are now shown with the places a user would see.
+5. **Cell matching and metrics (C1, C2, C3): done.**
+   - **Correspondence** (`internal/compare`; research.md §4): two cells correspond when they share
+     a nucleus of the dataset, or when at least half of one lies within the other; cells without
+     area by their transcripts. Each connected set is one difference: one-to-one, expanded or
+     contracted (area beyond 1.25 times), split, merged, rearranged, only in A or B,
+     assignment-only.
+   - **Measures:** each segmentation's cells, nuclei, assigned fraction, transcripts per cell,
+     areas, cells in pieces, job time and size; between two, the pixels that agree, the
+     transcripts that changed cell (gained, lost, moved), the IoU and boundary displacement of the
+     cells the same in both; by regions of 50 µm.
+   - **Spurious co-expression** after Jones et al. (2025): the gene pairs co-expressed at least 1.5
+     times as often once nuclei grow by 10 µm, each segmentation's co-expression of them relative
+     to the nuclei's, cells down-sampled to 50 transcripts; **the mutually exclusive co-expression
+     rate** of Hartman and Satija (2024), over pairs of lineage markers.
+   - **Every segmentation as SituCraft's files:** the instrument's written from its bundle (row by
+     row, so bundles without transcript ids too), with the nuclei and the coarse expansion, as
+     derived data in the cache (listed, counted and evicted as the cache's others).
+   - **A job** (`api_compare.go`) and an artifact of kind `comparison`: its measures, regions and
+     differences (`groups.bin`), checked (every cell in one difference whose class fits it, the
+     counts consistent); named by the two segmentations and the parameters, so asking again
+     answers it. An artifact's own files are served for the page.
+   - **The Segmentation view's Compare two segmentations:** A and B, the comparisons made, and a
+     comparison's differences by class, each segmentation's measures, and what changed.
+   - **Remote control:** `compare_segmentations` (25 actions).
+   - **Screenshots:** the Breast example's instrument segmentation compared with its expansion.
+   - Validation:
+     - **Hand-drawn fixtures** of each class, every count and measure worked out by hand: a cell
+       shifted one pixel (IoU 0.5, the boundary moved 0.5 µm on average), a boundary between
+       neighbours moved (contracted and expanded), a split, a merge, columns become rows, a cell in
+       one only, a cell without outline, two cells joined by a nucleus. A planted leak of
+       transcripts raises the spurious co-expression (the nuclei score 1); the MECR by hand.
+     - **The instrument's segmentation and the 5 µm expansion:** on Lung, 11,898 cells one to one,
+       98.0629% of pixels and 8,724 transcripts changed, as the expansion's own comparison counted
+       independently (slice 3); on Breast, every cell of both in its classes (3,599 one-to-one, 263
+       splits into 550 cells, 128 merges of 259, 119 only the instrument's), the expansion's
+       spurious co-expression 2.04 against the instrument's 1.77. Reference numbers in
+       research.md §4.
+     - **In headless Chrome** (67 checks): `compare_segmentations` by remote control, as the
+       expansion counted, recorded and shown.
+   - Found by slice 5:
+     - **A fifth of either cell was too little to correspond:** neighbours whose shared boundary
+       moved one column joined into one "rearranged" difference. Cells now correspond when half of
+       one lies within the other: fragments of a split still do, neighbours do not.
+     - **The MECR's reference** had a wrong identifier in research.md: it is
+       doi:10.1101/2024.01.11.575135.
+     - **A segmentation's cost:** the instrument's showed its registration's time; it shows none.
+6. **The comparison workspace (V7, C4, C5): done.**
+   - **The Compare view** (`ui/mode-compare.js`): a comparison's two segmentations on the tissue,
+     side by side with one camera, overlaid (B's outlines over A's, each in its colour) or in
+     turns (flicker); cells filled by the class of their difference, the classes chosen; the
+     chosen difference lit in both and described in the inspector; a disagreement map (each 50 µm
+     region shaded by its share of disagreeing pixels).
+   - **Each segmentation's outlines as tiles:** the instrument's are the dataset's geometry; any
+     other's are tiled once into a cache entry (`outlines`), served from `/api/outlines`; the
+     renderer draws a descriptor's tiles wherever they are, and on a transparent canvas.
+   - **The metrics header** with cautions (`lib/review.js`): few nuclei or gene pairs under the
+     spurious co-expression, few marker pairs in the panel, cells without outlines, few cells the
+     same in both.
+   - **The review queue:** the differences ranked by reassigned transcripts, contamination (pairs
+     of mutually exclusive markers in one cell of B more than of A; the comparison now records,
+     per difference, its cells' gene transcripts and most mixed pairs: method version 2), by
+     disagreement (class, then 1 − IoU) or by low counts, among the classes and the reassigned
+     transcripts the reviewer's rules keep; Next and Previous (`]`, `[`). **The cell-matching
+     table:** every difference, sortable, by pages.
+   - **The decision panel:** promote, keep for exploration or reject either segmentation, with a
+     reason (required) and the comparison it rests on, appended to the project's decisions
+     (`lib/segmentations.js`); the default cannot be rejected until another is promoted; the
+     dataset's decisions listed. Comparisons in the project tree and the inspector.
+   - **Remote control:** `show_comparison` and `decide_segmentation` (27 actions); `set_mode`
+     shows `compare`.
+   - **Screenshots:** the workspace with a split chosen; the overlay with the disagreement map.
+   - Validation:
+     - **Node tests:** the queue's rankings and the reviewer's rules on hand-made differences; the
+       cautions; decisions (a reason required, the default never rejected, appended with their
+       comparison, a rejected segmentation promoted again).
+     - **Go tests:** a segmentation's outline tiles built, served and opened; the comparison's
+       differences with every cell's id; the instrument's outlines from the dataset's geometry;
+       per-difference transcripts and mixed marker pairs.
+     - **In headless Chrome** (70 checks): `show_comparison` ranks the queue as asked (the Lung
+       cells, all one-to-one, least overlap first) and shows the first; both segmentations drawn
+       with one camera in each mode (B transparent over A in the overlay); `decide_segmentation`
+       refuses to reject the default and a decision without a reason, and records one with its
+       comparison.
+   - Found by slice 6:
+     - **A new canvas's default camera** (0, 0 at scale 1) overwrote the shared one on its first
+       frame: a canvas's camera now counts once the workspace has placed it.
+     - **Two requests for the same outlines** built them at once, and the second failed: builds
+       are serialized, and an entry that does not open is built again.
+     - **The tissue was fitted to the canvases' first size,** before the layout settled: it is
+       fitted again until the camera moves.
+7. **Exports and release (E1, E2, E3): done.**
+   - **Exports** (`internal/export`; FORMATS.md): any segmentation of a dataset, into one folder,
+     in the formats chosen:
+     - SpatialData Zarr (format 3, as the spatialdata package lays out a store): the label raster
+       scaled into µm, GeoParquet outlines, the transcripts as three-dimensional points with their
+       cells, the AnnData table annotating the labels; no images;
+     - AnnData Zarr (format 2, anndata's default write format); Parquet and gzipped CSV (cells,
+       transcripts, outlines and counts, in Xenium's column names); Matrix Market (as Xenium and
+       Cell Ranger write it); GeoJSON outlines;
+     - Xenium Ranger's inputs: the cells and the bundle's nuclei as NumPy label masks on the
+       morphology image's pixels, `cell_labels.csv`, and `command.sh`, after checks (the masks'
+       size, cells without pixels, transcripts assigned otherwise than the mask holds, no nuclei,
+       a zipped bundle). SituCraft does not run it.
+     - `situcraft-export.json`: what was exported, from what, by which SituCraft; every file by
+       SHA-256; totals; fingerprints of the labels, counts and assignments that every format holds
+       the same, so any reader can check it read the segmentation exactly.
+     - Written under a temporary name beside the folder and renamed into place; a folder replaced
+       only when asked and only when it is an export; the same segmentation gives the same files.
+       Recorded in the project (`exports`, absent until the first, so earlier projects open
+       unchanged).
+   - **Writers of SituCraft's own:** Parquet (`internal/parquet`: required flat columns, PLAIN,
+     GZIP, Thrift compact), Zarr formats 2 and 3 (`internal/zarr`: gzip, text of varying length),
+     AnnData (`internal/anndata`).
+   - **A job** (`api_export.go`, only from this computer), and the Segmentation view's **Export a
+     segmentation**: the segmentation, the formats, the folder; the exports listed with their
+     findings and Xenium Ranger's command (copied with a button).
+   - **Errors planted for practice** (`internal/segment/plant`, `api_plant.go`): a copy of the
+     instrument's segmentation with merges of neighbouring cells whose merged cell mixes lineage
+     markers, splits across the long axis, missed cells and cells grown 1 µm into their
+     neighbours, each kept apart from the others, seeded; a segmentation artifact with its answer
+     key (`planted.json`), simulated, never promoted or exported. The Segmentation view's
+     **Practice: find planted errors** plants, compares, and opens the answer key, each error shown
+     in the workspace; it is offered on the example datasets, and on others only when the user
+     turns on practice tools (off by default).
+   - **Worked examples** (`lib/tours.js`, `ui/tour.js`): a question and what to expect, steps that
+     run a job before going on or show a comparison as they describe it. The Breast example's: the
+     instrument's cells against a 5 µm expansion. The Lung example's: find the planted errors.
+     Listed on the example cards.
+   - **The methods paragraph** describes a default segmentation other than the instrument's: its
+     method and citation, and the decision choosing it with its comparison.
+   - **Remote control:** `plant_errors`, `export_segmentation` (29 actions; exports need the
+     token); `tour` takes a worked example and runs its steps.
+   - **Screenshots:** a worked example in the workspace; an export with Xenium Ranger's command
+     (20 scenes, 40 captures).
+   - **Release 0.2.0:** the version, the changelog, the documentation, every screenshot captured
+     again and audited, and the project the release saves (`validation/projects/0.2.0-lung`).
+   - Validation:
+     - **Go tests:** the writers' files read back as written; every format of a fixture
+       segmentation read back by SituCraft's readers (the SpatialData store imported as the same
+       segmentation; the GeoJSON polygons with the Parquet or CSV transcripts give every
+       assignment); reproducible files; the folder's rules; Xenium Ranger's checks; planted errors
+       on hand-made tissue each found as planted by the comparison; the program's plant and export
+       jobs; a dataset opened by several requests at once.
+     - **The Lung bundle** (`TestRealExports`, `TestRealPlantedErrors`): its own segmentation in
+       every format, imported back from SpatialData exactly; Xenium Ranger's masks of the image's
+       size, 9 transcripts assigned off the instrument's own mask; 60 errors planted, each found as
+       what it is, nothing else differing.
+     - **The maintainer's check** (`validation/reference/read_exports.py`; weekly with
+       `--check`): spatialdata 0.8.0, anndata 0.13.4, pyarrow, pandas, scipy, geopandas and numpy
+       read every format, giving the manifest's totals and fingerprints; its result
+       (`exports.json`) is committed and the real-data tests check SituCraft still writes it.
+     - **In headless Chrome** (80 checks): both worked examples run through by remote control;
+       every planted error found as planted; a planted segmentation never promoted or exported;
+       exports only
+       with the token, imported back; the 0.2.0 project reopens and its artifacts are made again
+       with the same checksums.
+   - Found by slice 7:
+     - **A dataset opened by several requests at once** could be closed by one while another read
+       it ("damaged cache file"): the Compare view opened first, before any Viewer, asks four
+       things at once. One request now opens it while the others wait.
+     - **Grown by 2 µm, Lung's small cells** took more than half of a neighbour and became
+       rearranged differences: they grow by 1 µm.
+     - **Merges chosen by unlike counts alone** mixed lineage markers in 5 of 20: they are chosen
+       first among pairs whose merged cell would.
+     - **spatialdata writes points with z in three dimensions:** the export does the same.
+     - **A project reopened must stay as it was saved:** exports are added to a project with its
+       first, not to every project opened.
+     - **Zarr format 3's text scalars** (a SpatialData table's region) were not read.
+     - **anndata 0.13 writes Zarr format 3 by default;** the AnnData export keeps format 2, which
+       every version reads.
+     - **Artifacts differed between processors:** CI (Linux, amd64) reopened the 0.2.0 project
+       written on a Mac (arm64), and the expansion's and planted errors' outlines had other
+       checksums. The compiler fuses multiply-adds on arm64 and not on amd64; the outline
+       simplification now uses exact arithmetic, and products reaching an artifact are rounded on
+       their own (conventions.md). The planted errors' sums over a map, whose order Go randomizes,
+       are taken in order. Both builds now give the same files.
+     - **Job ids repeated** when the program started again within the same millisecond (a test
+       restarting the job manager found it): an id in use is skipped.
+     - **Practice belongs with the tutorials:** offered on every dataset, planting errors put
+       simulated cells one click from a real project, and from an export. It is offered on the
+       example datasets only, unless the user turns practice tools on, and planted segmentations
+       are never exported.
 
 ## 0.3.0: transcript-informed segmentation, built in (wave 3)
 

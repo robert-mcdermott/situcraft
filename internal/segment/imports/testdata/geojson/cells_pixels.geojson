@@ -1,0 +1,12 @@
+{
+"type": "FeatureCollection",
+"name": "cells_pixels",
+"features": [
+{ "type": "Feature", "properties": { "cell_id": "A" }, "geometry": { "type": "Polygon", "coordinates": [ [ [ 20.0, 4.0 ], [ 20.0, 20.0 ], [ 4.0, 20.0 ], [ 4.0, 4.0 ], [ 20.0, 4.0 ] ] ] } },
+{ "type": "Feature", "properties": { "cell_id": "B" }, "geometry": { "type": "Polygon", "coordinates": [ [ [ 40.0, 4.0 ], [ 40.0, 16.0 ], [ 24.0, 16.0 ], [ 24.0, 4.0 ], [ 40.0, 4.0 ] ] ] } },
+{ "type": "Feature", "properties": { "cell_id": "C" }, "geometry": { "type": "Polygon", "coordinates": [ [ [ 4.0, 24.0 ], [ 20.0, 24.0 ], [ 20.0, 32.0 ], [ 12.0, 32.0 ], [ 12.0, 44.0 ], [ 4.0, 44.0 ], [ 4.0, 24.0 ] ] ] } },
+{ "type": "Feature", "properties": { "cell_id": "D" }, "geometry": { "type": "MultiPolygon", "coordinates": [ [ [ [ 52.0, 4.0 ], [ 52.0, 12.0 ], [ 44.0, 12.0 ], [ 44.0, 4.0 ], [ 52.0, 4.0 ] ] ], [ [ [ 64.0, 4.0 ], [ 64.0, 12.0 ], [ 56.0, 12.0 ], [ 56.0, 4.0 ], [ 64.0, 4.0 ] ] ] ] } },
+{ "type": "Feature", "properties": { "cell_id": "E" }, "geometry": { "type": "Polygon", "coordinates": [ [ [ 24.0, 24.0 ], [ 44.0, 24.0 ], [ 44.0, 44.0 ], [ 24.0, 44.0 ], [ 24.0, 24.0 ] ], [ [ 30.0, 30.0 ], [ 38.0, 30.0 ], [ 38.0, 38.0 ], [ 30.0, 38.0 ], [ 30.0, 30.0 ] ] ] } },
+{ "type": "Feature", "properties": { "cell_id": "F" }, "geometry": { "type": "Polygon", "coordinates": [ [ [ 88.0, 40.0 ], [ 88.0, 56.0 ], [ 68.0, 56.0 ], [ 68.0, 40.0 ], [ 88.0, 40.0 ] ] ] } }
+]
+}

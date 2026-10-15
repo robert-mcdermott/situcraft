@@ -19,6 +19,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -27,8 +28,11 @@ import (
 	"testing"
 	"time"
 
+	"situcraft/internal/artifacts"
 	"situcraft/internal/examples"
+	"situcraft/internal/export"
 	"situcraft/internal/jobs"
+	"situcraft/internal/xenium"
 )
 
 func testApp(t *testing.T, files ...string) (*app, http.Handler) {
@@ -818,6 +822,15 @@ func TestBundleViewEndpoints(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&cell); err != nil || cell.ID == "" || len(cell.Genes) > 5 || cell.Counted.Q20Genes == 0 {
 		t.Errorf("cell 42: %+v %v", cell, err)
 	}
+	// The same cell by its ID.
+	var byID struct {
+		Row int
+		ID  string
+	}
+	rec = get("/api/local/0/cells/id:" + cell.ID + "?top=1")
+	if err := json.NewDecoder(rec.Body).Decode(&byID); err != nil || byID.Row != 42 || byID.ID != cell.ID {
+		t.Errorf("cell %s by its ID: %d %+v %v", cell.ID, rec.Code, byID, err)
+	}
 	// A region's points.
 	rec = get("/api/local/0/points?x0=100&y0=100&x1=300&y1=250&minq=20")
 	if rec.Code != http.StatusOK || binary.LittleEndian.Uint32(rec.Body.Bytes()[4:]) == 0 {
@@ -831,6 +844,8 @@ func TestBundleViewEndpoints(t *testing.T) {
 		fmt.Sprintf("/api/cache/%s/points/0/0?genes=a", points):     http.StatusBadRequest,
 		fmt.Sprintf("/api/cache/%s/points/0/0?genes=99999", points): http.StatusNotFound,
 		"/api/local/0/cells/99999":                                  http.StatusNotFound,
+		"/api/local/0/cells/id:no-such-cell":                        http.StatusNotFound,
+		"/api/local/0/cells/x":                                      http.StatusBadRequest,
 		"/api/local/0/points?x0=1":                                  http.StatusBadRequest,
 	} {
 		if rec := get(target); rec.Code != code {
@@ -983,5 +998,407 @@ func TestExamplesDownloadOnlyWhenAsked(t *testing.T) {
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Errorf("the example is still there: %v", err)
+	}
+}
+
+// The instrument's segmentation is registered as an artifact: its files recorded by SHA-256 (the
+// same as a direct reading of each), never copied; registering again gives the same artifact.
+// A derived-data build interrupted by the program stopping is orphaned when it starts again, and
+// resumes to the derived data a whole build makes.
+func TestRealInstrumentSegmentationAndInterruptedJobs(t *testing.T) {
+	root := os.Getenv("SITUCRAFT_DATA")
+	if root == "" {
+		root = filepath.Join("validation", "cache")
+	}
+	bundle := filepath.Join(root, "xenium-lung-2fov")
+	if _, err := os.Stat(filepath.Join(bundle, "experiment.xenium")); err != nil {
+		t.Skip("the Lung bundle is not present (node validation/fetch.mjs xenium-lung-2fov)")
+	}
+	if testing.Short() {
+		t.Skip("short mode")
+	}
+	dir := t.TempDir()
+	cfg := config{dataDir: dir, cacheDir: filepath.Join(dir, "cache"), cacheLimit: 10e9, files: []string{bundle}}
+	a, err := newApp(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h, _ := a.handler()
+	handler := protect(h, "127.0.0.1", defaultPort)
+	post := func(target string) *httptest.ResponseRecorder {
+		return request(t, handler, http.MethodPost, target, nil, nil)
+	}
+	// Building, interrupted as the program stops while the job runs.
+	var started struct{ Job *jobs.Job }
+	json.NewDecoder(post("/api/local/0/cache").Body).Decode(&started)
+	if started.Job == nil {
+		t.Fatal("no build was started")
+	}
+	for deadline := time.Now().Add(time.Minute); ; time.Sleep(20 * time.Millisecond) {
+		if j, _ := a.jobs.Get(started.Job.ID); j.State == jobs.Running && j.Progress > 0.05 || time.Now().After(deadline) {
+			break
+		}
+	}
+	a.jobs.Close()
+	if j, _ := a.jobs.Get(started.Job.ID); j.State != jobs.Orphaned {
+		t.Fatalf("after stopping, the build is %s", j.State)
+	}
+	// The program again, on the same folders: the build is orphaned, and resumes.
+	a, err = newApp(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.jobs.Close()
+	h, _ = a.handler()
+	handler = protect(h, "127.0.0.1", defaultPort)
+	if j, ok := a.jobs.Get(started.Job.ID); !ok || j.State != jobs.Orphaned || !j.Resumable {
+		t.Fatalf("after starting again: %+v", j)
+	}
+	if rec := post("/api/jobs/" + started.Job.ID + "/resume"); rec.Code != http.StatusOK {
+		t.Fatalf("resume: %d %s", rec.Code, rec.Body)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+	defer cancel()
+	if j, _ := a.jobs.Wait(ctx, started.Job.ID); j.State != jobs.Complete || j.Runs != 2 {
+		t.Fatalf("the resumed build ended %s (%s), runs %d", j.State, j.Error, j.Runs)
+	}
+	b, _ := xenium.Open(bundle, xenium.Options{CacheDir: cfg.cacheDir})
+	status, err := a.cache.Status(b)
+	b.Close()
+	if err != nil || !status.Ready {
+		t.Fatalf("after resuming: %+v %v", status, err)
+	}
+	if err := a.cache.Check(status); err != nil {
+		t.Errorf("the resumed build's entries: %v", err)
+	}
+	// The dataset opened by several requests at once, as the Compare view asks for it first: each
+	// answered, none closing what another reads.
+	codes := make(chan string, 8)
+	for i := 0; i < 8; i++ {
+		go func() {
+			rec := request(t, handler, http.MethodGet, "/api/local/0/view", nil, nil)
+			codes <- fmt.Sprintf("%d %s", rec.Code, strings.TrimSpace(rec.Body.String())[:min(60, rec.Body.Len())])
+		}()
+	}
+	for i := 0; i < 8; i++ {
+		if c := <-codes; !strings.HasPrefix(c, "200 ") {
+			t.Errorf("a dataset opened by several requests at once: %s", c)
+		}
+	}
+
+	// Nucleus expansion starts from the instrument's segmentation, not registered yet.
+	if rec := post("/api/local/0/expansion"); rec.Code != http.StatusConflict {
+		t.Errorf("expansion before the instrument's segmentation: %d %s", rec.Code, rec.Body)
+	}
+	// The instrument's segmentation.
+	var none struct{ Artifact *artifacts.Manifest }
+	json.NewDecoder(request(t, handler, http.MethodGet, "/api/local/0/segmentation", nil, nil).Body).Decode(&none)
+	var registering struct {
+		Artifact *artifacts.Manifest
+		Job      *jobs.Job
+	}
+	json.NewDecoder(post("/api/local/0/segmentation").Body).Decode(&registering)
+	if registering.Job == nil {
+		t.Fatalf("no registration job: %+v", registering)
+	}
+	if j, _ := a.jobs.Wait(ctx, registering.Job.ID); j.State != jobs.Complete {
+		t.Fatalf("registration ended %s: %s", j.State, j.Error)
+	}
+	var got struct{ Artifact *artifacts.Manifest }
+	json.NewDecoder(request(t, handler, http.MethodGet, "/api/local/0/segmentation", nil, nil).Body).Decode(&got)
+	m := got.Artifact
+	if m == nil || m.State != artifacts.Complete || m.Kind != "segmentation" || len(m.Files) != 6 {
+		t.Fatalf("artifact %s, %v, %d files", m.ID, m.State, len(m.Files))
+	}
+	for _, f := range m.Files {
+		raw, err := os.ReadFile(filepath.Join(bundle, f.Path))
+		if err != nil {
+			t.Fatal(err)
+		}
+		sum := sha256.Sum256(raw)
+		if f.Location != artifacts.InBundle || f.SHA256 != hex.EncodeToString(sum[:]) || f.Size != int64(len(raw)) {
+			t.Errorf("%s recorded as %+v", f.Path, f)
+		}
+	}
+	var summary struct {
+		Cells   int
+		Methods []struct {
+			Method string
+			Cells  int
+		}
+	}
+	json.Unmarshal(m.Summary, &summary)
+	if summary.Cells != 11898 || len(summary.Methods) != 1 || summary.Methods[0].Cells != 11898 || !strings.Contains(summary.Methods[0].Method, "nucleus expansion") {
+		t.Errorf("summary %s", m.Summary)
+	}
+	if m.Lineage.Job == nil || m.Lineage.Job.ID != registering.Job.ID || m.Lineage.Method.Version != "xenium-2.0.0.10" || len(m.Lineage.Parents) != 1 || m.Lineage.Parents[0].ID == "" {
+		t.Errorf("lineage %+v", m.Lineage)
+	}
+	entries, _ := os.ReadDir(filepath.Join(dir, "artifacts", m.ID))
+	if len(entries) != 1 {
+		t.Errorf("the artifact's folder holds %d entries: bundle files were copied", len(entries))
+	}
+	// Registered: asking again answers the artifact at once, without a job.
+	var again struct {
+		Artifact *artifacts.Manifest
+		Job      *jobs.Job
+	}
+	json.NewDecoder(post("/api/local/0/segmentation").Body).Decode(&again)
+	if again.Job != nil || again.Artifact == nil || again.Artifact.ID != m.ID {
+		t.Errorf("registering again: %+v", again)
+	}
+	if none.Artifact != nil {
+		t.Error("an artifact was answered before it was registered")
+	}
+
+	// Nucleus expansion by 5 µm, an artifact made from the instrument's segmentation.
+	for _, bad := range []string{`{"distance_um":-1}`, `{"distance_um":101}`, `{"distance_um":"5"}`} {
+		if rec := request(t, handler, http.MethodPost, "/api/local/0/expansion", strings.NewReader(bad), nil); rec.Code != http.StatusBadRequest {
+			t.Errorf("expansion %s: %d", bad, rec.Code)
+		}
+	}
+	type expansion struct {
+		ID       string
+		Artifact *artifacts.Manifest
+		Job      *jobs.Job
+	}
+	var started5 expansion
+	json.NewDecoder(request(t, handler, http.MethodPost, "/api/local/0/expansion", strings.NewReader(`{"distance_um":5}`), nil).Body).Decode(&started5)
+	if started5.Job == nil || !strings.HasPrefix(started5.ID, "exp-") {
+		t.Fatalf("no expansion job: %+v", started5)
+	}
+	if j, _ := a.jobs.Wait(ctx, started5.Job.ID); j.State != jobs.Complete {
+		t.Fatalf("expansion ended %s: %s", j.State, j.Error)
+	}
+	var expanded expansion
+	json.NewDecoder(post("/api/local/0/expansion").Body).Decode(&expanded) // 5 µm when not given
+	e := expanded.Artifact
+	if expanded.Job != nil || e == nil || e.ID != started5.ID || e.State != artifacts.Complete || len(e.Files) != 6 {
+		t.Fatalf("expanding again: %+v", expanded)
+	}
+	if len(e.Lineage.Parents) != 2 || e.Lineage.Parents[0].Kind != "bundle" || e.Lineage.Parents[1].ID != m.ID || len(e.Lineage.Parameters) == 0 || e.Lineage.Job.ID != started5.Job.ID {
+		t.Errorf("expansion lineage %+v", e.Lineage)
+	}
+	for _, f := range e.Files {
+		info, err := os.Stat(filepath.Join(dir, "artifacts", e.ID, f.Path))
+		if f.Location != "" || err != nil || info.Size() != f.Size {
+			t.Errorf("expansion file %+v: %v", f, err)
+		}
+	}
+	var es struct {
+		Cells            int
+		AssignedFraction float64
+		Agreement        struct {
+			Transcripts struct{ Agreement float64 }
+		}
+	}
+	json.Unmarshal(e.Summary, &es)
+	if es.Cells != 11898 || es.AssignedFraction < 0.98 || es.Agreement.Transcripts.Agreement < 0.985 {
+		t.Errorf("expansion summary %s", e.Summary)
+	}
+	if staged, _ := os.ReadDir(filepath.Join(dir, "artifacts", "staging")); len(staged) != 0 {
+		t.Errorf("%d staging folders left", len(staged))
+	}
+
+	// An import: the Lung bundle, as a Xenium output bundle of its own run, imports as the
+	// instrument's segmentation; only this computer may ask; the same files again are the same
+	// artifact.
+	importBody := func() io.Reader {
+		return strings.NewReader(`{"format":"xenium","paths":[` + strconv.Quote(bundle) + `]}`)
+	}
+	if rec := request(t, handler, http.MethodPost, "/api/local/0/import", importBody(), nil); rec.Code != http.StatusForbidden {
+		t.Errorf("an import from another computer: %d", rec.Code)
+	}
+	runImport := func() artifacts.Manifest {
+		req := httptest.NewRequest(http.MethodPost, "/api/local/0/import", importBody())
+		req.Host, req.RemoteAddr = "127.0.0.1:8840", "127.0.0.1:50000"
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		var started struct{ Job *jobs.Job }
+		json.NewDecoder(rec.Body).Decode(&started)
+		if started.Job == nil {
+			t.Fatalf("no import job: %d %s", rec.Code, rec.Body)
+		}
+		j, _ := a.jobs.Wait(ctx, started.Job.ID)
+		if j.State != jobs.Complete {
+			t.Fatalf("the import ended %s: %s", j.State, j.Error)
+		}
+		full, _ := a.jobs.Get(j.ID)
+		var id string
+		for _, e := range full.Events {
+			if i := strings.Index(e.Message, "artifact imp-"); i >= 0 {
+				id = strings.Fields(e.Message[i+len("artifact "):])[0]
+				id = strings.TrimSuffix(id, ":")
+			}
+		}
+		m, err := a.artifacts.Get(id)
+		if err != nil {
+			t.Fatalf("artifact %q: %v", id, err)
+		}
+		return m
+	}
+	first := runImport()
+	if first.State != artifacts.Complete || len(first.Files) != 6 || len(first.Lineage.Parents) != 2 || first.Lineage.Parents[1].Kind != "import" || first.Lineage.Method.Name != "Xenium Onboard Analysis" {
+		t.Errorf("import %+v", first)
+	}
+	var is struct{ Cells int }
+	json.Unmarshal(first.Summary, &is)
+	if is.Cells != 11898 {
+		t.Errorf("import summary %s", first.Summary)
+	}
+	if again := runImport(); again.ID != first.ID {
+		t.Errorf("the same files imported again: %s, then %s", first.ID, again.ID)
+	}
+	if staged, _ := os.ReadDir(filepath.Join(dir, "artifacts", "staging")); len(staged) != 0 {
+		t.Errorf("%d staging folders left after importing", len(staged))
+	}
+
+	// A comparison of the instrument's segmentation and the expansion: every cell one-to-one; asked
+	// again, the same artifact without a job.
+	for _, bad := range []string{`{"a":"` + m.ID + `"}`, `{"a":"` + m.ID + `","b":"` + m.ID + `"}`, `{"a":"` + m.ID + `","b":"seg-0000000000000000000000"}`} {
+		if rec := request(t, handler, http.MethodPost, "/api/local/0/compare", strings.NewReader(bad), nil); rec.Code != http.StatusBadRequest {
+			t.Errorf("comparison %s: %d", bad, rec.Code)
+		}
+	}
+	type comparison struct {
+		ID       string
+		Artifact *artifacts.Manifest
+		Job      *jobs.Job
+	}
+	var cmpStarted comparison
+	cmpBody := `{"a":"` + m.ID + `","b":"` + e.ID + `"}`
+	json.NewDecoder(request(t, handler, http.MethodPost, "/api/local/0/compare", strings.NewReader(cmpBody), nil).Body).Decode(&cmpStarted)
+	if cmpStarted.Job == nil {
+		t.Fatalf("no comparison job: %+v", cmpStarted)
+	}
+	if j, _ := a.jobs.Wait(ctx, cmpStarted.Job.ID); j.State != jobs.Complete {
+		t.Fatalf("the comparison ended %s: %s", j.State, j.Error)
+	}
+	var cmpAgain comparison
+	json.NewDecoder(request(t, handler, http.MethodPost, "/api/local/0/compare", strings.NewReader(cmpBody), nil).Body).Decode(&cmpAgain)
+	cm := cmpAgain.Artifact
+	if cmpAgain.Job != nil || cm == nil || cm.ID != cmpStarted.ID || cm.Kind != "comparison" || cm.State != artifacts.Complete || len(cm.Lineage.Parents) != 3 {
+		t.Fatalf("the comparison again: %+v", cmpAgain)
+	}
+	var cs struct {
+		Classes        map[string]int
+		PixelAgreement float64
+	}
+	json.Unmarshal(cm.Summary, &cs)
+	if cs.Classes["one-to-one"] != 11898 || cs.PixelAgreement != 0.980629 {
+		t.Errorf("comparison summary %s", cm.Summary)
+	}
+
+	// The workspace: each segmentation's outline tiles, and the comparison's differences.
+	var outlines struct {
+		PolygonsBase string
+		Geometry     []struct {
+			Name     string
+			Polygons int
+		}
+		Cells int
+	}
+	rec := request(t, handler, http.MethodGet, "/api/local/0/segmentations/"+e.ID+"/outlines", nil, nil)
+	body := rec.Body.String()
+	json.Unmarshal([]byte(body), &outlines)
+	if rec.Code != http.StatusOK || !strings.HasPrefix(outlines.PolygonsBase, "/api/outlines/outlines-") || outlines.Cells != 11898 || len(outlines.Geometry) != 1 || outlines.Geometry[0].Polygons != 11898 {
+		t.Fatalf("the expansion's outlines: %d %+v %s", rec.Code, outlines, body)
+	}
+	if tile := request(t, handler, http.MethodGet, outlines.PolygonsBase+"/cells/0/0/0", nil, nil); tile.Code != http.StatusOK || tile.Header().Get("X-Polygons") == "" {
+		t.Errorf("an outline tile: %d %v", tile.Code, tile.Header())
+	}
+	rec = request(t, handler, http.MethodGet, "/api/local/0/segmentations/"+m.ID+"/outlines", nil, nil)
+	json.NewDecoder(rec.Body).Decode(&outlines)
+	if rec.Code != http.StatusOK || !strings.HasPrefix(outlines.PolygonsBase, "/api/cache/geometry-") || outlines.Cells != 11898 {
+		t.Errorf("the instrument's outlines: %d %+v", rec.Code, outlines)
+	}
+	var groups struct {
+		Classes []string
+		Class   []int
+		A, B    [][]int32
+		IDsA    []string `json:"idsA"`
+		IDsB    []string `json:"idsB"`
+		Changed []uint32
+	}
+	rec = request(t, handler, http.MethodGet, "/api/local/0/comparisons/"+cm.ID+"/groups", nil, nil)
+	json.NewDecoder(rec.Body).Decode(&groups)
+	if rec.Code != http.StatusOK || len(groups.Class) != 11898 || len(groups.IDsA) != 11898 || len(groups.IDsB) != 11898 || groups.Classes[groups.Class[0]] != "one-to-one" || len(groups.A[0]) != 1 {
+		t.Errorf("the comparison's differences: %d, %d groups, %d and %d ids", rec.Code, len(groups.Class), len(groups.IDsA), len(groups.IDsB))
+	}
+
+	// Errors planted for practice: a simulated segmentation with its answer key, asked again the
+	// same artifact.
+	if rec := request(t, handler, http.MethodPost, "/api/local/0/plant", strings.NewReader(`{"merges": -1}`), nil); rec.Code != http.StatusBadRequest {
+		t.Errorf("planting -1 merges: %d", rec.Code)
+	}
+	var planted comparison
+	json.NewDecoder(post("/api/local/0/plant").Body).Decode(&planted)
+	if planted.Job == nil {
+		t.Fatalf("no planting job: %+v", planted)
+	}
+	if j, _ := a.jobs.Wait(ctx, planted.Job.ID); j.State != jobs.Complete {
+		t.Fatalf("the planting ended %s: %s", j.State, j.Error)
+	}
+	var plantedAgain comparison
+	json.NewDecoder(post("/api/local/0/plant").Body).Decode(&plantedAgain)
+	if pm := plantedAgain.Artifact; plantedAgain.Job != nil || pm == nil || pm.ID != planted.ID || pm.Name != "Planted errors (simulated)" || pm.State != artifacts.Complete || len(pm.Files) != 7 {
+		t.Fatalf("the planting again: %+v", plantedAgain)
+	}
+	rec = request(t, handler, http.MethodGet, "/api/artifacts/"+planted.ID+"/files/planted.json", nil, nil)
+	var key struct{ Errors []struct{ Kind string } }
+	json.NewDecoder(rec.Body).Decode(&key)
+	if rec.Code != http.StatusOK || len(key.Errors) != 60 {
+		t.Errorf("the answer key: %d, %d errors", rec.Code, len(key.Errors))
+	}
+	rec = request(t, handler, http.MethodGet, "/api/local/0/segmentations/"+planted.ID+"/outlines", nil, nil)
+	body = rec.Body.String()
+	json.Unmarshal([]byte(body), &outlines)
+	if rec.Code != http.StatusOK || !strings.HasPrefix(outlines.PolygonsBase, "/api/outlines/outlines-") || outlines.Cells != 11898-20-10+20 {
+		t.Fatalf("the planted segmentation's outlines: %d %+v %s", rec.Code, outlines, body)
+	}
+
+	// An export, from this computer only, into a folder that does not exist yet; its manifest.
+	local := func(method, target string, body io.Reader) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, target, body)
+		req.Host, req.RemoteAddr = "127.0.0.1:8840", "127.0.0.1:50000"
+		out := httptest.NewRecorder()
+		handler.ServeHTTP(out, req)
+		return out
+	}
+	folder := filepath.Join(t.TempDir(), "lung export")
+	exportBody := func(formats string) io.Reader {
+		return strings.NewReader(`{"segmentation": "` + e.ID + `", "formats": ` + formats + `, "folder": ` + strconv.Quote(folder) + `}`)
+	}
+	if rec := request(t, handler, http.MethodPost, "/api/local/0/export", exportBody(`["geojson"]`), nil); rec.Code != http.StatusForbidden {
+		t.Errorf("an export from elsewhere: %d", rec.Code)
+	}
+	for _, bad := range []string{`["hdf5"]`, `[]`} {
+		if rec := local(http.MethodPost, "/api/local/0/export", exportBody(bad)); rec.Code != http.StatusBadRequest {
+			t.Errorf("formats %s: %d", bad, rec.Code)
+		}
+	}
+	var exported struct {
+		Job    *jobs.Job
+		Folder string
+	}
+	json.NewDecoder(local(http.MethodPost, "/api/local/0/export", exportBody(`["spatialdata", "mex", "xenium-ranger"]`)).Body).Decode(&exported)
+	if exported.Job == nil || exported.Folder != folder {
+		t.Fatalf("no export job: %+v", exported)
+	}
+	if j, _ := a.jobs.Wait(ctx, exported.Job.ID); j.State != jobs.Complete {
+		t.Fatalf("the export ended %s: %s", j.State, j.Error)
+	}
+	var manifest export.Manifest
+	rec = local(http.MethodGet, "/api/exports?folder="+url.QueryEscape(folder), nil)
+	json.NewDecoder(rec.Body).Decode(&manifest)
+	if rec.Code != http.StatusOK || manifest.Segmentation.ID != e.ID || manifest.Counts.Cells != 11898 || len(manifest.Formats) != 3 || manifest.XeniumRanger == nil || !strings.Contains(manifest.XeniumRanger.Command, "--cells=") {
+		t.Fatalf("the export's manifest: %d %+v", rec.Code, manifest)
+	}
+	if rec := local(http.MethodPost, "/api/local/0/export", exportBody(`["geojson"]`)); rec.Code != http.StatusBadRequest {
+		t.Errorf("exporting again over it, unasked: %d", rec.Code)
+	}
+	plantedExport := strings.NewReader(`{"segmentation": "` + planted.ID + `", "formats": ["geojson"], "folder": ` + strconv.Quote(filepath.Join(t.TempDir(), "planted")) + `}`)
+	if rec := local(http.MethodPost, "/api/local/0/export", plantedExport); rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "simulated") {
+		t.Errorf("exporting the planted errors: %d %s", rec.Code, rec.Body)
 	}
 }

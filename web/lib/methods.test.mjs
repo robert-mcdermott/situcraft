@@ -39,3 +39,14 @@ test('filters and public data are described when there are some, and nothing els
   const one = methodsParagraph({ dataset: { ...dataset, cells: 11898 }, report: { summary: { segmentationMethods: ['Segmented by nucleus expansion of 5.0µm'], segmentationCounts: [11898] } }, program });
   assert.match(one.text, /The instrument segmented 11,898 cells, all by nucleus expansion of 5\.0 µm\./);
 });
+
+test('a default segmentation other than the instrument\'s is described, with why it was chosen', () => {
+  const record = { source: 'situcraft', method: { name: 'SituCraft nucleus expansion', version: '1', citation: 'Okabe A, Boots B, Sugihara K, Chiu SN. Spatial Tessellations. 2000' }, parameters: { distance_um: 5 }, summary: { cells: 7312, assignedFraction: 0.9012 } };
+  const segmentation = { record, decision: { rationale: 'Fewer merged cells' }, comparison: { other: 'the instrument\'s segmentation', citation: 'Jones DC, et al. 2025; Hartman A, Satija R. 2024' } };
+  const { text, references } = methodsParagraph({ dataset, report, program, segmentation });
+  assert.match(text, /Cells were segmented again with SituCraft's nucleus expansion \(version 1\): each nucleus grew by up to 5 µm, every pixel going to the nearest nucleus within that distance \[3\], giving 7,312 cells, 90\.1% of the gene transcripts of quality 20 or more assigned to them\./);
+  assert.match(text, /It was chosen as the dataset's segmentation after comparing it with the instrument's segmentation cell by cell .* \[4\]\): "Fewer merged cells"\./);
+  assert.equal(references.length, 4);
+  // The instrument's own, the default, adds nothing.
+  assert.equal(methodsParagraph({ dataset, report, program, segmentation: { record: { source: 'instrument' } } }).text, methodsParagraph({ dataset, report, program }).text);
+});

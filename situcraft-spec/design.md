@@ -32,7 +32,8 @@ see `conventions.md`. For the methods, formats and datasets behind these choices
 │   security.go    loopback only, Host-header check, same-origin API, CSP                               │
 │   window.go      desktop window (Chrome/Edge/Brave --app with its own profile) or default browser     │
 │   store.go       library: projects/*.json, content-addressed files, trash                             │
-│   remote.go, actions.go, connection.go, mcp.go, run.go, verify.go   automation (later waves)          │
+│   remote.go, actions.go, connection.go, output.go   remote control (wave 2)                           │
+│   mcp.go, run.go, verify.go                         agents and headless runs (wave 9)                 │
 │ data plane (new)                                                                                      │
 │   internal/codec     zstd (RFC 8878), LZ4 block, Blosc, Snappy; deflate/gzip from the standard library │
 │   internal/parquet   Parquet reader (flat schemas) and writer                                         │
@@ -171,14 +172,34 @@ kept) and say what it shows. The genes are among those the section's transcripts
 each zoomed step looks where its genes meet (the 300 µm square where their shares of the section's
 transcripts are highest together).
 
+A worked example is a tour that answers a question, saying first what to expect: its steps may run
+a job before going on (expanding the nuclei, planting errors, comparing), each named by the
+segmentations it needs ('instrument', 'expansion-5', 'planted') so that a step already done is
+not done again, and may show a comparison in the workspace as the step describes it (the view, the
+ranking, the classes kept, the difference shown, the side panel). The Lung example's practises on
+errors planted in its instrument segmentation (`internal/segment/plant`): neighbouring cells whose
+merged cell would mix markers of two lineages, large cells split across their long axis, cells
+dropped, and cells grown into their neighbours; each error kept apart from the others by its
+neighbours, so that each is one difference; seeded, so the same errors each time; recorded as a
+segmentation artifact with its answer key, simulated, never promoted and never exported. The
+Segmentation view offers it on the example datasets, and on others only once the user turns
+practice tools on (a preference of the browser, off by default), so that simulated cells stay out
+of real work unless asked for.
+
 ### Segmentation built in
 
 Segmentation is SituCraft's own code (`internal/segment`), not an external program:
 
-- **Nucleus expansion.** Nuclei are grown up to a distance, bounded by their neighbors (a
-  distance-limited Voronoi partition), and transcripts are assigned by point in polygon. It is the
-  baseline, and the Lung example bundle lets us check it against the instrument's own 5 µm
-  expansion.
+- **Nucleus expansion** (`internal/segment/expand`). Each nucleus grows into a cell of its own,
+  up to a distance and bounded by its neighbors (a distance-limited Voronoi partition), on a label
+  raster at the morphology image's resolution: an exact Euclidean distance transform gives each
+  pixel its nearest nucleus, in bands of rows on every core, with the same result for any split.
+  Transcripts are assigned by the pixel they lie in, as the instrument assigns them. It is the
+  baseline; the Lung example reproduces the instrument's own 5 µm expansion (`research.md` §3.1).
+- **Segmentations as files** (`internal/segment`): a raster of cell labels in runs (lookups by
+  pixel or µm, per-label statistics, outlines traced and simplified), each transcript's cell, the
+  counts in sparse rows, and the cells, written zlib-compressed with checked sizes and checked
+  together (geometry, assignments, counts, metadata) before they become an artifact.
 - **Transcript-informed segmentation** follows the generative model and sampler of Jones et al.
   (2025): a voxel lattice, Poisson transcript likelihoods with per-gene background, a
   gamma–negative-binomial mixture of expression states, hard morphology and connectivity
@@ -188,9 +209,16 @@ Segmentation is SituCraft's own code (`internal/segment`), not an external progr
   in a fixed update order.
 - **Outputs** are converted to polygons (per z layer and consensus), transcript assignments with
   probabilities, and counts. They enter the artifact system like any other segmentation.
-- **Imported segmentations** come from SpatialData Zarr, Baysor-style CSV plus GeoJSON, Xenium
-  Ranger outputs, or GeoJSON polygons plus an assignment table. This is how results from external
-  tools are compared, without SituCraft running those tools.
+- **Imported segmentations** (`internal/segment/imports`) come from SpatialData Zarr,
+  Baysor-style CSV plus GeoJSON, Xenium Ranger outputs, or GeoJSON polygons plus an assignment
+  table. This is how results from external tools are compared, without SituCraft running those
+  tools. Each becomes SituCraft's own segmentation files: a label image resampled or polygons
+  drawn at the morphology image's resolution, the tool's assignment matched to the dataset's
+  transcripts (by id and position, or by position and gene), counts made as for every
+  segmentation. It is checked against the dataset: coordinates in units the import declares
+  (never guessed from the values), the transcripts it names, an output bundle's run, its ids.
+  The readers it needs are SituCraft's own: AnnData (`internal/anndata`), Zarr's sharding and
+  text, GeoJSON and WKB, CSV and Parquet tables.
 
 ### Jobs
 
@@ -205,8 +233,99 @@ Long computations (indexing, segmentation, comparison, registration, permutation
   resumed or discarded.
 - Progress and logs stream to the page over server-sent events. Cancellation is cooperative and
   checked often.
-- The first version (wave 1, slice 4) runs jobs in memory, one at a time and one per key (a
-  dataset's build); persisting them, orphaned jobs and the warning on closing come in wave 2.
+- Jobs run one at a time, one per key (a dataset's build). Each is kept in `<data dir>/jobs` as
+  a file, written at each change of state and each line of its log (not its progress), so that it
+  survives the program (wave 2, slice 2).
+- A job the program stopped, or one that was running when it crashed, is `orphaned` when the
+  program starts again. Its kind's handler makes its work again from its spec, so it resumes under
+  the same id and log; work that keeps what it finished (building derived data) continues from
+  there. Discarding one clears away what its kind leaves (a partial download).
+- Closing the window while a job runs asks first (`beforeunload`); a window closed anyway leaves
+  SituCraft running until the job ends.
+
+### Artifacts
+
+What jobs make, and what they register from a bundle, are artifacts (`internal/artifacts`, in
+`<data dir>/artifacts`), shared by every project of the library.
+- **The manifest** (`manifest.json`, format `situcraft-artifact` 1) records:
+  - the lineage: parents, the job and its spec, the method with its version and citation, the
+    parameters, and the software;
+  - every file with its role, size and SHA-256;
+  - the findings of the kind's check, and the state.
+- **Promotion:** a job writes its outputs into `staging/<id>`; `Promote` checksums them (refusing
+  a file the manifest does not list, or a path leaving the folder), runs the kind's check, and
+  renames the folder into place: `complete`, or `invalid` (kept for review) when the check finds a
+  fatal problem. Only complete artifacts are inputs or defaults; an artifact is never changed.
+- **Files by reference:** a file of the dataset's bundle (location `bundle`) is recorded by its
+  path and SHA-256 and never copied. The instrument's segmentation is such an artifact: its id
+  hashes its files' checksums, so the same bundle files give the same artifact in any project.
+  An artifact SituCraft computes is named by its inputs and parameters (a nucleus expansion: the
+  instrument's segmentation, the method's version and the distance), so asking again answers it
+  without a job. An import is named by the dataset, the SHA-256 of the files it read (not their
+  places) and its options, so importing the same files again answers the same artifact.
+- **In the project:** the project records each artifact it uses (an `artifacts` entry of kind
+  `segmentation` mirroring the manifest). A dataset's default segmentation is set by decisions
+  (`decisions`, kind `promote-segmentation`, with a reason, by whom, when), never removed; the
+  latest decision naming a complete segmentation holds.
+
+### Comparing segmentations
+
+`internal/compare` compares two segmentations as SituCraft's segmentation files (the instrument's
+written once from its bundle into the cache, beside the dataset's nuclei and a coarse expansion of
+them for the co-expression reference). Rasters are compared run by run, without decoding pixels;
+correspondences are the connected sets of a graph whose edges are shared nuclei and overlaps
+holding half of a cell; each set is one difference with a class. A comparison is an artifact of
+kind `comparison` (its measures, its regions, and every difference with its cells), named by the
+two segmentations, the method's version and its parameters.
+
+The comparison workspace (`ui/mode-compare.js`, `lib/review.js`) draws on it. Each segmentation's
+outlines are geometry tiles on the dataset's grid: the instrument's are the dataset's own; any
+other's are tiled once into a cache entry of their own. Two renderers share one camera (side by
+side, or stacked: B transparent over A for the overlay, in turns for the flicker); cells are
+filled by their difference's class through the renderer's per-cell colours; the regions' counts
+give the disagreement map, drawn on a 2-D canvas over the tissue. The differences come to the page
+column by column; ranking and the reviewer's rules are pure functions, tested in Node. Decisions
+(promote, keep, reject) are appended to the project with their reason and comparison.
+
+### Exports
+
+`internal/export` writes a segmentation from SituCraft's segmentation files and the dataset's
+transcripts, with writers of its own: Parquet (`internal/parquet`: flat schemas of required
+columns, PLAIN-encoded GZIP pages, the footer in Thrift's compact protocol), Zarr formats 2 and 3
+(`internal/zarr`: gzip, text of varying length), AnnData's on-disk encoding (`internal/anndata`),
+NumPy arrays, Matrix Market and GeoJSON, each read back by SituCraft's own readers in the tests.
+The SpatialData store follows the layout spatialdata writes, element by element, so that its own
+reader and the import read it; exports are written in streams (the label image by chunks, the
+transcripts by the bundle's row groups). The same segmentation gives the same files, and
+`situcraft-export.json` fingerprints the content (labels, counts, assignments) independently of
+any format's encoding, so that any reader can check it read the segmentation exactly. An export
+leaves SituCraft's keeping: it is not an artifact, and the project records it. Xenium Ranger's
+inputs are prepared and checked, and its command shown; SituCraft never runs another program.
+
+### Remote control
+
+With `--remote-control`, programs on this computer drive the open window (`remote.go`, adapted from
+MaveScape 0.8). An action POSTed to `/api/remote/action` goes to the page over server-sent events;
+the page performs it (`web/ui/remote.js`) and posts its answer back, which the program returns to
+the caller. The window is where the work happens, as when the user does it: an action shows what
+it does, its changes go into the project's history and can be undone, and the page's own code
+(saved views' path, the QC view's filters, the methods) is what runs, so a script and a person get
+the same result.
+
+- **One at a time,** to the window opened last from this run of the program; a window of an
+  earlier run is refused and asked to reload.
+- **The actions** are listed once in `actions.go` with JSON schemas for their arguments (served at
+  `/api/remote/tools`, under an API version), and performed by the page's table of the same names;
+  a test keeps the two, and `docs/REMOTE-CONTROL.md`, in step. Wave 9's MCP server offers the same
+  list to agents.
+- **Paths and files:** `open_paths` and `export` need the token in `remote.json` (mode 0600, in
+  the data folder, removed on stop). The program checks a file's path before asking the page, and
+  the page uploads the bytes to a one-use slot that writes them through a temporary file.
+- **Tissue views** are applied as saved views are (a view made from the arguments, not kept), so
+  `show_tissue` and `open_view` share the Viewer's one path; the answer is the view as the page
+  then captures it.
+- **The documentation's screenshots** (`docs/capture/capture.mjs`) are scenes of actions on the
+  development bundles, captured in headless Chrome in both themes and audited by axe-core.
 
 ### The host, from the siblings
 

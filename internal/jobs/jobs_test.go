@@ -2,8 +2,12 @@ package jobs
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -129,7 +133,7 @@ func TestSubscribersAreToldOfChanges(t *testing.T) {
 	}
 }
 
-func TestCloseCancelsTheRunningJob(t *testing.T) {
+func TestCloseInterruptsTheRunningJob(t *testing.T) {
 	m := NewManager()
 	started := make(chan struct{})
 	job, _, _ := m.Submit("test", "t", "", nil, func(ctx context.Context, r *Run) error {
@@ -137,10 +141,13 @@ func TestCloseCancelsTheRunningJob(t *testing.T) {
 		<-ctx.Done()
 		return ctx.Err()
 	})
+	queued, _, _ := m.Submit("test", "waits", "", nil, func(ctx context.Context, r *Run) error { return nil })
 	<-started
 	m.Close()
-	if j, _ := m.Get(job.ID); j.State != Cancelled {
-		t.Errorf("after Close: %s", j.State)
+	for _, id := range []string{job.ID, queued.ID} {
+		if j, _ := m.Get(id); j.State != Orphaned {
+			t.Errorf("after Close: %s", j.State)
+		}
 	}
 	if _, _, err := m.Submit("test", "late", "", nil, func(ctx context.Context, r *Run) error { return nil }); err == nil {
 		t.Error("a job was accepted after Close")
@@ -160,4 +167,120 @@ func TestTheLogKeepsItsFirstAndLastLines(t *testing.T) {
 	if len(j.Events) != maxEvents || j.Events[0].Message != "line 0" || j.Events[len(j.Events)-1].Message != fmt.Sprintf("line %d", maxEvents+99) {
 		t.Errorf("%d lines, first %q, last %q", len(j.Events), j.Events[0].Message, j.Events[len(j.Events)-1].Message)
 	}
+}
+
+// Jobs kept in a folder survive the program: finished ones are listed again with their logs, and
+// one interrupted (by the program stopping, or a crash) is orphaned, to be resumed or discarded.
+func TestJobsSurviveTheProgram(t *testing.T) {
+	dir := t.TempDir()
+	m, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	done, _, _ := m.Submit("build", "Derived data of lung", "lung", map[string]string{"path": "/data/lung"}, func(ctx context.Context, r *Run) error {
+		r.Log("info", "built %d tiles", 84)
+		return nil
+	})
+	wait(t, m, done.ID)
+	started := make(chan struct{})
+	steps := 0
+	interrupted, _, _ := m.Submit("build", "Derived data of breast", "breast", map[string]string{"path": "/data/breast"}, func(ctx context.Context, r *Run) error {
+		steps = 1
+		close(started)
+		<-ctx.Done()
+		return ctx.Err()
+	})
+	<-started
+	m.Close()
+
+	// A job whose file says it was running when the program crashed.
+	crashed := Job{ID: "jcrash-1", Kind: "build", Title: "Crashed", Key: "crashed", Spec: json.RawMessage(`{}`), State: Running, Created: time.Now()}
+	raw, _ := json.Marshal(crashed)
+	os.WriteFile(filepath.Join(dir, "jcrash-1.json"), raw, 0o644)
+
+	m2, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer m2.Close()
+	list := m2.List(10)
+	if len(list) != 3 {
+		t.Fatalf("%d jobs read back", len(list))
+	}
+	if j, _ := m2.Get(done.ID); j.State != Complete || len(j.Events) != 1 || j.Events[0].Message != "built 84 tiles" {
+		t.Errorf("the finished job: %+v", j)
+	}
+	for _, id := range []string{interrupted.ID, "jcrash-1"} {
+		if j, _ := m2.Get(id); j.State != Orphaned || j.Resumable || !strings.Contains(j.Events[len(j.Events)-1].Message, "Interrupted") {
+			t.Errorf("%s: %+v", id, j)
+		}
+	}
+	// Without a handler for its kind, it cannot be resumed.
+	if _, err := m2.Resume(interrupted.ID); err == nil {
+		t.Error("resumed without a handler")
+	}
+	var discarded []string
+	m2.Handle("build", func(spec json.RawMessage) (Func, error) {
+		var p struct{ Path string }
+		json.Unmarshal(spec, &p)
+		return func(ctx context.Context, r *Run) error {
+			steps++
+			r.Log("info", "resumed at %s", p.Path)
+			return nil
+		}, nil
+	}, func(id string, spec json.RawMessage) { discarded = append(discarded, id) })
+	if j, _ := m2.Get(interrupted.ID); !j.Resumable {
+		t.Error("an orphaned job of a known kind is not resumable")
+	}
+	if _, err := m2.Resume(done.ID); err == nil {
+		t.Error("a complete job was resumed")
+	}
+	resumed, err := m2.Resume(interrupted.ID)
+	if err != nil || resumed.ID != interrupted.ID {
+		t.Fatalf("resume: %v", err)
+	}
+	j := wait(t, m2, interrupted.ID)
+	if j.State != Complete || j.Runs != 2 || steps != 2 || j.Events[len(j.Events)-1].Message != "resumed at /data/breast" {
+		t.Errorf("resumed job: %+v", j)
+	}
+	if err := m2.Discard("jcrash-1"); err != nil || len(discarded) != 1 {
+		t.Errorf("discard: %v %v", err, discarded)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "jcrash-1.json")); !os.IsNotExist(err) {
+		t.Error("a discarded job's file is still there")
+	}
+	// What was written is what is read: the resumed job, complete.
+	m2.Close()
+	m3, _ := Open(dir)
+	defer m3.Close()
+	if j, _ := m3.Get(interrupted.ID); j.State != Complete || j.Runs != 2 {
+		t.Errorf("read again: %+v", j)
+	}
+	if len(m3.List(0)) != 2 {
+		t.Errorf("%d jobs after the discard", len(m3.List(0)))
+	}
+}
+
+// A running job cannot be discarded, and ids stay unique across runs of the program.
+func TestDiscardingAndIDs(t *testing.T) {
+	dir := t.TempDir()
+	m, _ := Open(dir)
+	release := make(chan struct{})
+	job, _, _ := m.Submit("test", "t", "", nil, func(ctx context.Context, r *Run) error {
+		<-release
+		return nil
+	})
+	if err := m.Discard(job.ID); err == nil {
+		t.Error("a running job was discarded")
+	}
+	close(release)
+	wait(t, m, job.ID)
+	m.Close()
+	m2, _ := Open(dir)
+	defer m2.Close()
+	again, _, _ := m2.Submit("test", "t", "", nil, func(ctx context.Context, r *Run) error { return nil })
+	if again.ID == job.ID {
+		t.Errorf("an id was used again: %s", again.ID)
+	}
+	wait(t, m2, again.ID)
 }

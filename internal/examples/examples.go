@@ -344,6 +344,15 @@ func copyChecked(m *zip.File, target string, f File) error {
 	return nil
 }
 
+// Clean removes what an interrupted download left (its partial archive and staging folder).
+func (l *Library) Clean(name string) {
+	if _, ok := l.source(name); !ok {
+		return
+	}
+	os.Remove(filepath.Join(l.Dir, "."+name+".zip.part"))
+	os.RemoveAll(filepath.Join(l.Dir, "."+name+".part"))
+}
+
 // Remove deletes a downloaded example.
 func (l *Library) Remove(name string) error {
 	if _, ok := l.source(name); !ok {

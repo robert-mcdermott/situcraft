@@ -452,6 +452,11 @@ export function mountViewer(app, container) {
       renderer,
       desc,
       cells,
+      dataset: t.dataset.id,
+      // The selected cell's detail (internal/view), or null; the stage's size in CSS pixels.
+      detail: () => state.detail,
+      stageSize: () => [stage.clientWidth, stage.clientHeight],
+      layers: () => state.layers,
       plan: () => renderer.plan(),
       settled: () => renderer.settled(),
       setCamera: (cam) => renderer.setCamera(cam),

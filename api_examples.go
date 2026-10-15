@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	_ "embed"
+	"fmt"
 	"log"
 	"net/http"
 
@@ -73,7 +74,31 @@ func (a *app) downloadExample(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "No such example.")
 		return
 	}
-	job, _, err := a.jobs.Submit("example", "Download "+title, exampleJobKey(name), map[string]string{"example": name}, func(ctx context.Context, run *jobs.Run) error {
+	fn, err := a.exampleJob(name)
+	if err != nil {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	job, _, err := a.jobs.Submit("example", "Download "+title, exampleJobKey(name), map[string]string{"example": name}, fn)
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, err.Error())
+		return
+	}
+	writeJSON(w, job)
+}
+
+// exampleJob downloads an example, then opens its bundle.
+func (a *app) exampleJob(name string) (jobs.Func, error) {
+	var title string
+	for _, s := range a.examples.Sources {
+		if s.Name == name {
+			title = s.Title
+		}
+	}
+	if title == "" {
+		return nil, fmt.Errorf("no example %q", name)
+	}
+	return func(ctx context.Context, run *jobs.Run) error {
 		run.Log("info", "Downloading %s into %s.", title, a.examples.Dir)
 		path, err := a.examples.Download(ctx, name, func(f float64, message string) { run.Progress(f, message) })
 		if err != nil {
@@ -83,10 +108,5 @@ func (a *app) downloadExample(w http.ResponseWriter, r *http.Request) {
 		// The bundle is now on this computer, ready to open.
 		a.files.add([]string{path})
 		return nil
-	})
-	if err != nil {
-		writeError(w, http.StatusServiceUnavailable, err.Error())
-		return
-	}
-	writeJSON(w, job)
+	}, nil
 }

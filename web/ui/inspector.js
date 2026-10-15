@@ -6,6 +6,7 @@
 import { h, icon, relativeTime, formatBytes } from './dom.js';
 import { promptDialog, toast } from './overlays.js';
 import { removeView, renameView, viewLink } from '../lib/views.js';
+import { promotedSegmentation } from '../lib/segmentations.js';
 import { KIND_ICONS, KIND_LABELS } from './sidebar.js';
 
 export function mountInspector(app) {
@@ -115,11 +116,74 @@ export function mountInspector(app) {
         } }, icon('trash'), 'Remove')));
   }
 
+  // A segmentation: what made it (method, software, the job), what it was made from, its files by
+  // SHA-256, what its check found, and whether it is its dataset's default (and why).
+  function segmentationSection(a) {
+    const { project } = app.store;
+    const dataset = project.datasets.find((d) => d.id === a.dataset);
+    const promoted = promotedSegmentation(project, a.dataset);
+    const isDefault = promoted?.record.id === a.id;
+    const short = (sum) => (sum ? `${sum.slice(0, 12)}…` : '—');
+    const severity = { fatal: 'danger', warning: 'warn', info: 'accent' };
+    return h('section.inspector-section.segmentation',
+      h('h3', icon('segment'), a.name),
+      h('dl.kv',
+        h('dt', 'Dataset'), h('dd', dataset?.name ?? a.dataset),
+        h('dt', 'State'), h('dd', h(`span.badge.${a.state === 'complete' ? 'ok' : 'danger'}`, a.state === 'complete' ? 'Complete' : a.state)),
+        h('dt', 'Default'), h('dd', isDefault ? 'yes' : 'no'),
+        h('dt', 'Method'), h('dd', a.method.name || '—'),
+        a.method.version ? [h('dt', 'Version'), h('dd', a.method.version)] : null,
+        Number.isFinite(a.summary?.cells) ? [h('dt', 'Cells'), h('dd', a.summary.cells.toLocaleString('en-US'))] : null,
+        Number.isFinite(a.summary?.assignedFraction) ? [h('dt', 'Assigned'), h('dd', `${(100 * a.summary.assignedFraction).toFixed(1)}% of gene transcripts (Q20)`)] : null,
+        h('dt', 'Artifact'), h('dd.mono', a.id),
+        a.job ? [h('dt', 'Made by'), h('dd', h('button.link', { type: 'button', title: 'Show the job in the Jobs view', onclick: () => { app.jobsFocus = a.job.id; app.setMode('jobs'); } }, `job ${a.job.id}`))] : null,
+        h('dt', 'Software'), h('dd', a.software.map((x) => `${x.name} ${x.version}`).join('; '))),
+      isDefault && promoted.decision ? h('p.muted', { style: { margin: '8px 0 0', fontSize: '12px' } }, `Default since ${new Date(promoted.decision.time).toLocaleString()}, by ${promoted.decision.by}: ${promoted.decision.rationale}`) : null,
+      a.method.methods?.length ? h('div.seg-methods', h('div.muted', 'Cells by method'), ...a.method.methods.map((m) => h('div.seg-method', h('span', m.method.replace(/^Segmented /, '')), h('span.mono', m.cells.toLocaleString('en-US'))))) : null,
+      a.sources?.length ? h('div.seg-files', h('div.muted', 'Imported from (by SHA-256 of the files read)'),
+        ...a.sources.map((f) => h('div.seg-file', { title: `${f.path}: ${f.files} files read, SHA-256 of their checksums ${f.sha256}` }, h('div', f.path.split(/[\\/]/).pop()), h('div.muted', `${f.files === 1 ? '1 file' : `${f.files.toLocaleString('en-US')} files`}, ${formatBytes(f.size)} · `, h('span.mono', short(f.sha256)))))) : null,
+      h('div.seg-files', h('div.muted', a.files.some((f) => f.location === 'bundle') ? 'Files (in the bundle, by SHA-256)' : 'Files (by SHA-256)'),
+        ...a.files.map((f) => h('div.seg-file', { title: `${f.path}: SHA-256 ${f.sha256}` }, h('div', f.path), h('div.muted', f.role, ' · ', h('span.mono', short(f.sha256)))))),
+      a.findings.length ? h('div.seg-findings', h('div.muted', 'Its check found'),
+        ...a.findings.map((f) => h('div.seg-finding', h(`span.badge.${severity[f.severity] ?? ''}`, f.severity), h('span', `${f.message}${f.count ? ` (${f.count.toLocaleString('en-US')})` : ''}`)))) : h('p.muted', { style: { fontSize: '12px' } }, 'Its check found nothing to report.'),
+      a.method.citation ? h('p.muted', { style: { margin: '8px 0 0', fontSize: '11.5px' } }, a.method.citation) : null);
+  }
+
+  // A comparison: its two segmentations, its headline numbers, and the workspace.
+  function comparisonSection(c) {
+    const { project } = app.store;
+    const name = (id) => project.artifacts.find((a) => a.kind === 'segmentation' && a.id === id)?.name ?? id;
+    const s = c.summary ?? {};
+    const pct = (v) => (Number.isFinite(v) ? `${(100 * v).toFixed(2)}%` : '—');
+    return h('section.inspector-section',
+      h('h3', icon('compare'), 'Comparison'),
+      h('dl.kv',
+        h('dt', 'A'), h('dd', name(c.a)),
+        h('dt', 'B'), h('dd', name(c.b)),
+        h('dt', 'One-to-one'), h('dd', (s.classes?.['one-to-one'] ?? 0).toLocaleString('en-US')),
+        h('dt', 'Pixels agree'), h('dd', pct(s.pixelAgreement)),
+        h('dt', 'Changed cell'), h('dd', pct(s.changedFraction)),
+        h('dt', 'Artifact'), h('dd.mono', c.id)),
+      h('div.btn-row', { style: { marginTop: '8px' } }, h('button.btn.small.primary', { type: 'button', onclick: () => {
+        app.compareFocus = c.id;
+        app.setMode('compare');
+      } }, icon('eye'), 'Open in the workspace')),
+      c.method?.citation ? h('p.muted', { style: { margin: '8px 0 0', fontSize: '11.5px' } }, c.method.citation) : null);
+  }
+
   function focusSection() {
     const focus = app.store.ui.focus;
     if (focus?.kind === 'view') {
       const view = app.store.project.views.find((v) => v.id === focus.id);
       if (view) return viewSection(view);
+    }
+    if (focus?.kind === 'segmentation') {
+      const a = app.store.project.artifacts.find((x) => x.kind === 'segmentation' && x.id === focus.id);
+      if (a) return segmentationSection(a);
+    }
+    if (focus?.kind === 'comparison') {
+      const c = app.store.project.artifacts.find((a) => a.kind === 'comparison' && a.id === focus.id);
+      if (c) return comparisonSection(c);
     }
     if (focus?.kind === 'filter') {
       const filter = app.store.project.artifacts.find((a) => a.id === focus.id);

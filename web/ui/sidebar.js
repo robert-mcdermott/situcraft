@@ -4,6 +4,7 @@
 // use it open on it. Adapted from MaveScape 0.8.0 web/ui/sidebar.js.
 
 import { h, icon, clear, formatBytes, formatCount } from './dom.js';
+import { promotedSegmentation } from '../lib/segmentations.js';
 
 // The icon of an item handed to the program, by its kind (local.go, fileKind and dirKind).
 export const KIND_ICONS = {
@@ -42,9 +43,31 @@ const SECTIONS = [
   {
     kind: 'segmentation', title: 'Segmentations', icon: 'segment',
     items: (project) => project.artifacts.filter((a) => a.kind === 'segmentation'),
-    label: (a) => a.name ?? 'Segmentation',
-    meta: (a) => a.method ?? '',
+    // With more than one dataset, each segmentation names its dataset.
+    label: (a, app) => {
+      const { datasets } = app.store.project;
+      const dataset = datasets.find((d) => d.id === a.dataset);
+      return datasets.length > 1 && dataset ? `${a.name} · ${dataset.name}` : a.name ?? 'Segmentation';
+    },
+    itemIcon: (a) => (a.state === 'complete' ? 'segment' : 'warning'),
+    meta: (a, app) => {
+      if (a.state !== 'complete') return a.state;
+      const promoted = promotedSegmentation(app.store.project, a.dataset)?.record.id === a.id;
+      const cells = a.summary?.cells;
+      return [promoted ? 'default' : '', Number.isFinite(cells) ? `${formatCount(cells)} cells` : ''].filter(Boolean).join(' · ');
+    },
     empty: 'The instrument\'s segmentation, SituCraft\'s own, and ones imported from other tools, each kept with how it was made.',
+  },
+  {
+    kind: 'comparison', title: 'Comparisons', icon: 'compare',
+    items: (project) => project.artifacts.filter((a) => a.kind === 'comparison'),
+    label: (a, app) => {
+      const segs = app.store.project.artifacts;
+      const name = (id) => segs.find((x) => x.kind === 'segmentation' && x.id === id)?.name ?? '?';
+      return `${name(a.a)} · ${name(a.b)}`;
+    },
+    meta: (a) => (Number.isFinite(a.summary?.pixelAgreement) ? `${(100 * a.summary.pixelAgreement).toFixed(1)}% agree` : a.state),
+    empty: 'Two segmentations compared: which cells correspond, how each differs, and what changed.',
   },
   {
     kind: 'labels', title: 'Label sets', icon: 'tag',
@@ -79,15 +102,15 @@ export function mountSidebar(app) {
     for (const section of SECTIONS) {
       const items = section.items(project, app);
       if (!items.length && section.hideWhenEmpty) continue;
-      const list = h('div', { role: 'list' });
+      // A list of its items (each a button in a list item), or what the section will hold.
+      const list = items.length ? h('div', { role: 'list' }) : h('div');
       for (const item of items) {
         const id = item.id ?? item.url;
         const selected = ui.focus?.kind === section.kind && ui.focus?.id === id;
-        list.append(h(`button.dataset-row${selected ? '.selected' : ''}`, {
+        list.append(h('div', { role: 'listitem' }, h(`button.dataset-row${selected ? '.selected' : ''}`, {
           type: 'button',
-          role: 'listitem',
           'aria-current': selected ? 'true' : null,
-          title: section.label(item),
+          title: section.label(item, app),
           onclick: () => {
             app.focusItem({ kind: section.kind, id });
             // Bundles and datasets are shown by the Data view; from the start page, go there.
@@ -97,7 +120,7 @@ export function mountSidebar(app) {
             if (section.kind === 'filter') app.setMode('qc');
             if (section.kind === 'view') app.applyView(item);
           },
-        }, icon(section.itemIcon?.(item) ?? section.icon), h('span.label', section.label(item)), h('span.meta', section.meta(item, app))));
+        }, icon(section.itemIcon?.(item) ?? section.icon), h('span.label', section.label(item, app)), h('span.meta', section.meta(item, app)))));
       }
       if (!items.length) {
         list.append(h('p.tree-empty', section.empty));

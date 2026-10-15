@@ -18,7 +18,7 @@ import { colorVisionFriendly, setColorVisionFriendly } from './lib/colormaps.js'
 import { createProject, isEmptyProject, parseProject, rename, serializeProject } from './lib/project.js';
 import { parseViewLink } from './lib/views.js';
 
-const VERSION = '0.1.0';
+const VERSION = '0.2.0';
 
 const toOpen = { label: 'Open a bundle', icon: 'bundle', run: (app) => app.openPathDialog() };
 
@@ -30,15 +30,8 @@ const MODES = [
   { id: 'data', label: 'Data', icon: 'database', load: () => import('./ui/mode-data.js').then((m) => m.mountData) },
   { id: 'viewer', label: 'Viewer', icon: 'tissue', load: () => import('./ui/mode-viewer.js').then((m) => m.mountViewer) },
   { id: 'qc', label: 'QC', icon: 'qc', load: () => import('./ui/mode-qc.js').then((m) => m.mountQC) },
-  {
-    id: 'segmentation', label: 'Segmentation', icon: 'segment',
-    load: async () => plannedMode({
-      title: 'Segmentation', icon: 'segment',
-      purpose: 'Cell boundaries as a decision: the instrument\'s segmentation, nucleus expansion, SituCraft\'s own transcript-informed segmentation, and segmentations imported from other tools, compared side by side and by their numbers (assigned transcripts, cell sizes, spurious co-expression, changed assignments). One is promoted with a recorded reason; none is ever deleted.',
-      steps: ['Open a bundle and check it.', 'Segment, or import another tool\'s result.', 'Compare, review the differences, and promote one.'],
-      actions: [toOpen],
-    }),
-  },
+  { id: 'segmentation', label: 'Segmentation', icon: 'segment', load: () => import('./ui/mode-segmentation.js').then((m) => m.mountSegmentation) },
+  { id: 'compare', label: 'Compare', icon: 'compare', load: () => import('./ui/mode-compare.js').then((m) => m.mountCompare) },
   'sep',
   {
     id: 'celltypes', label: 'Cell types', icon: 'tag',
@@ -72,14 +65,7 @@ const MODES = [
       steps: ['Analyze.', 'Choose the views, figures and results to report.', 'Export.'],
     }),
   },
-  {
-    id: 'jobs', label: 'Jobs', icon: 'jobs',
-    load: async () => plannedMode({
-      title: 'Jobs', icon: 'jobs',
-      purpose: 'Work that runs in the background (indexing a bundle, segmentation, comparisons, permutation tests): progress, logs and cancellation. Jobs keep running when the window reloads, and their results are checked before they can be used.',
-      steps: ['Start work that takes a while, in any view.', 'Follow it here, or keep working elsewhere.'],
-    }),
-  },
+  { id: 'jobs', label: 'Jobs', icon: 'jobs', load: () => import('./ui/mode-jobs.js').then((m) => m.mountJobs) },
 ];
 
 // --- Theme ---------------------------------------------------------------------------------------
@@ -143,6 +129,9 @@ async function start() {
   store.state.ui.theme = themePref;
   store.state.ui.drawer = { open: prefs.get('drawerOpen', false), tab: prefs.get('drawerTab', 'history') };
   const app = { store, library, info, version: VERSION, commit: info.commit ?? '' };
+  // Practice tools (errors planted in a copy of a segmentation) for any dataset: off unless asked
+  // for; the example datasets offer them anyway, as tutorial data.
+  app.practice = () => prefs.get('practice', false);
   // What was handed to the program (command line, a later launch, Open a bundle): local.go's list.
   app.localItems = info.files ?? [];
   app.workers = {};
@@ -161,6 +150,8 @@ async function start() {
   app.jobs = createJobs(app);
   app.bundles = createBundles(app);
   app.examples = createExamples(app);
+  // Remote control (situcraft --remote-control): programs on this computer drive this window.
+  if (info.remoteControl) import('./ui/remote.js').then((m) => { app.remote = m.installRemote(app); });
   app.sidebar = mountSidebar(app);
   app.inspector = mountInspector(app);
   app.drawer = mountDrawer(app);
@@ -178,7 +169,8 @@ async function start() {
     clear(rail);
     for (const mode of MODES) {
       if (mode === 'sep') {
-        rail.append(h('span.rail-sep', { role: 'separator' }));
+        // Drawn only: a tab list holds tabs alone.
+        rail.append(h('span.rail-sep', { 'aria-hidden': 'true' }));
         continue;
       }
       if (mode.hidden) continue;
@@ -571,6 +563,8 @@ async function start() {
     ...[['light', 'Light', 'sun'], ['dark', 'Dark', 'moon'], ['system', 'Match the system', 'settings']].map(([id, label, glyph]) => ({ label, icon: glyph, checked: prefs.get('theme', 'system') === id, onSelect: () => setTheme(id) })),
     '-',
     { label: 'Color-vision-friendly colors', icon: 'eye', checked: colorVisionFriendly(), onSelect: () => toggleColorVision() },
+    { section: 'Learning' },
+    { label: 'Practice tools for every dataset', icon: 'school', checked: app.practice(), onSelect: () => togglePractice() },
   ]));
 
   function doUndo() {
@@ -591,6 +585,12 @@ async function start() {
     applyColorVision(next);
     store.notify(['theme', 'colors']);
     toast(next ? 'Color-vision-friendly colors: palettes and status colors stay distinguishable with red–green and blue–yellow color blindness.' : 'Default colors.', { timeout: 3500 });
+  }
+  function togglePractice() {
+    const next = !app.practice();
+    prefs.set('practice', next);
+    store.notify(['project']);
+    toast(next ? 'Practice tools: the Segmentation view offers to plant errors in a copy of any dataset\'s segmentation, simulated, to practise finding them.' : 'Practice tools only for the example datasets.', { timeout: 4000 });
   }
   function setTheme(next) {
     prefs.set('theme', next);
@@ -654,7 +654,7 @@ async function start() {
     if (job) {
       // A running job: what it is doing, and how far it has got.
       jobLabel = h('span', jobText);
-      state = h('button.item.statusbar-link', { type: 'button', title: job.message ?? '', onclick: () => app.setMode('data') }, h('span.dot.busy'), jobLabel);
+      state = h('button.item.statusbar-link', { type: 'button', title: job.message ?? '', onclick: () => app.setMode('jobs') }, h('span.dot.busy'), jobLabel);
     }
     statusbar.append(
       state,
@@ -814,6 +814,9 @@ async function start() {
       saveNow();
       event.preventDefault();
     }
+    // A job under way: closing the window asks first (SituCraft keeps running until the job ends,
+    // and an interrupted job can be resumed, but the user should know).
+    if (app.jobs.running().length) event.preventDefault();
   });
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') saveNow();

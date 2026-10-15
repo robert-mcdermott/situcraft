@@ -1,0 +1,202 @@
+[
+ {
+  "scene": "start",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "start",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "data",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "data",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "viewer",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "viewer",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "viewer-genes",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "viewer-genes",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "viewer-methods",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "viewer-methods",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "qc",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "qc",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "qc-outside",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "qc-outside",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "qc-filter",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "qc-filter",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "saved-views",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "saved-views",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "methods",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "methods",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "tour",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "tour",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "segmentation",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "segmentation",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "expansion",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "expansion",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "comparison",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "comparison",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "workspace",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "workspace",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "workspace-map",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "workspace-map",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "import",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "import",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "worked",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "worked",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "export",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "export",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "jobs",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "jobs",
+  "theme": "light",
+  "violations": []
+ }
+]

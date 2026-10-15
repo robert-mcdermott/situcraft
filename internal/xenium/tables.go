@@ -253,6 +253,8 @@ type TranscriptBatch struct {
 	Feature         [][]byte
 	X, Y, Z, QV     []float32
 	OverlapsNucleus []int32 // nil when absent
+	// TranscriptID is each transcript's identity (nil when the file has no transcript_id column).
+	TranscriptID []uint64
 }
 
 // TranscriptColumns are the columns transcripts must have.
@@ -273,7 +275,7 @@ func (b *Bundle) OpenTranscripts() (*Transcripts, error) {
 		return nil, err
 	}
 	t := &Transcripts{File: p, f: f, idx: map[string]int{}}
-	for _, c := range append(TranscriptColumns, "overlaps_nucleus") {
+	for _, c := range append(TranscriptColumns, "overlaps_nucleus", "transcript_id") {
 		t.idx[c] = p.Index(c)
 	}
 	for _, c := range TranscriptColumns {
@@ -345,6 +347,17 @@ func (t *Transcripts) Each(fn func(*TranscriptBatch) error) error {
 				return err
 			}
 			batch.OverlapsNucleus = v.Int32
+		}
+		if t.idx["transcript_id"] >= 0 {
+			v, err := read("transcript_id")
+			if err != nil {
+				return err
+			}
+			ids := ints(v)
+			batch.TranscriptID = make([]uint64, len(ids))
+			for i, id := range ids {
+				batch.TranscriptID[i] = uint64(id)
+			}
 		}
 		if err := fn(batch); err != nil {
 			return err
