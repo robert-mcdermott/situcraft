@@ -1733,11 +1733,35 @@ same on every processor.
        genes passed (36% of Breast's cells).
      - **Averaging scores over each cell's neighbors in expression** labels more of Breast but
        loses every rare type and labels less of Lung: not taken.
-4. **Imported labels (T1).**
-   - Labels and confidence from CSV, Parquet or AnnData Zarr (an `obs` column), Xenium Explorer's
-     cell groups, and the instrument's clusters, matched to a segmentation's cells by id: ids not in
-     the segmentation refused with their count, cells without a label counted.
-   - Validation: files written by pandas, pyarrow and anndata read exactly; mismatched ids refused.
+4. **Imported labels (T1): done.**
+   - **Read** (`internal/label`'s `table.go`; research.md §5.4): CSV and TSV (gzipped or not),
+     Parquet, an AnnData object's `obs` in Zarr (format 2 or 3, a folder or a zip) or a SpatialData
+     store's table, Xenium Explorer's cell groups (`cell_id`, `group`, a group's color once), and
+     the instrument's graph-based and k-means clusters; each table whole, its columns described,
+     the ids', labels', confidence's and colors' columns suggested by their usual names.
+   - **Matched** to a segmentation's cells by id (`imported.go`): a table naming cells the
+     segmentation does not have refused with their count and the first few (and the dataset's
+     segmentation whose cells they are named, when one is); a cell named twice refused; cells the
+     table does not name, and empty labels, counted without a label.
+   - **Kept** as a label set (kind `labels`) with its source (format, file, SHA-256, columns, rows)
+     in place of a marker set: every cell's label and confidence, the labels' colors where given.
+     Each cluster's labels are counted in the page for the clustering shown, so one import serves
+     every clustering of its segmentation; the map, the tissue, the Viewer and names from labels
+     treat it as any label set.
+   - **In the app:** the Cell types view's **Labels made elsewhere**: a table read, its columns
+     chosen, how its ids match said before importing; or the instrument's clusters. Remote control:
+     `import_labels`.
+   - Validation:
+     - **Files written by pandas, pyarrow and anndata** (`internal/label/testdata`: CSV, gzipped TSV,
+       Parquet with dictionary-encoded text and float32 nulls, AnnData Zarr formats 3 and 2 with a
+       categorical column and missing values, a SpatialData table, Xenium Explorer's groups) read
+       exactly; tables naming another segmentation's cells, or a cell twice, refused.
+     - **The development bundles:** each bundle's graph-based clusters, written as a table, imported
+       for its instrument segmentation, every cell its cluster; the Lung table refused for the
+       Breast cells (checked weekly).
+     - **In the app:** a table of three Lung cells imported by remote control, those cells and no
+       other labeled; another dataset's table refused; the instrument's clusters imported (viewer
+       suite).
 5. **Label versions, evidence and review (T6, T7, T8).**
    - Predicted (markers, reference, imported), curated (a reviewer's relabeling of cells or
      clusters, each with a reason, appended) and consensus (a rule over chosen sets) side by side,

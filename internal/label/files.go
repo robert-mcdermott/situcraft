@@ -6,9 +6,14 @@ package label
 //	              parameter, each label's markers and control genes, the cells labeled at each
 //	              level and each cluster's cells by label
 //	markers.json  the marker set, as the labels were made from it
-//	labels.bin "SCLB"  the cells (indices in the segmentation's cells) and their clusters; each one's score for every
-//	              label and state (and its positive and negative markers' parts), its label and
-//	              lead at each level, its confidence, and the states it carries
+//	labels.bin "SCLB"  the cells (indices in the segmentation's cells) and their clusters; each
+//	              one's score for every label and state (and its positive and negative markers'
+//	              parts), its label and lead at each level, its confidence, and the states it
+//	              carries
+//
+// Labels imported from a table (imported.go) have a source in labels.json in place of the marker
+// set and the clustering, no markers.json, one level, and no scores in labels.bin; their cells are
+// all the segmentation's, in no cluster.
 //
 // labels.bin has SituCraft's binary envelope (internal/segment: magic, version, length, zlib).
 
@@ -51,8 +56,9 @@ type SetInfo struct {
 	Level            int      `json:"level"`
 	Parent           int      `json:"parent"`
 	State            bool     `json:"state,omitempty"`
-	Positive         []string `json:"positive"`
-	PositiveControls []string `json:"positiveControls"`
+	Color            string   `json:"color,omitempty"`
+	Positive         []string `json:"positive,omitempty"`
+	PositiveControls []string `json:"positiveControls,omitempty"`
 	Negative         []string `json:"negative,omitempty"`
 	NegativeControls []string `json:"negativeControls,omitempty"`
 	Cells            int      `json:"cells"`
@@ -60,11 +66,12 @@ type SetInfo struct {
 
 // Description is labels.json.
 type Description struct {
-	Format       string       `json:"format"`
-	Version      int          `json:"version"`
-	Method       string       `json:"method"`
-	Segmentation cluster.Side `json:"segmentation"`
-	Clustering   cluster.Side `json:"clustering"`
+	Format       string        `json:"format"`
+	Version      int           `json:"version"`
+	Method       string        `json:"method"`
+	Segmentation cluster.Side  `json:"segmentation"`
+	Clustering   *cluster.Side `json:"clustering,omitempty"`
+	Source       *Source       `json:"source,omitempty"`
 	Markers      struct {
 		Name     string `json:"name"`
 		Checksum string `json:"checksum"`
@@ -117,7 +124,7 @@ func names(genes []string, idx []int) []string {
 
 // describe makes labels.json from a result.
 func describe(seg, clu cluster.Side, r *Result) *Description {
-	d := &Description{Format: "situcraft-labels", Version: 1, Method: "SituCraft labels from markers " + MethodVersion, Segmentation: seg, Clustering: clu, Parameters: r.Params, Levels: r.Set.Levels, Clusters: r.Clusters, Seconds: r.Seconds}
+	d := &Description{Format: "situcraft-labels", Version: 1, Method: "SituCraft labels from markers " + MethodVersion, Segmentation: seg, Clustering: &clu, Parameters: r.Params, Levels: r.Set.Levels, Clusters: r.Clusters, Seconds: r.Seconds}
 	d.Markers.Name, d.Markers.Checksum = r.Set.Name, r.Set.Checksum()
 	d.Fixed.Expression = "the clustering's: each cell's counts scaled to the target total, then log1p"
 	d.Fixed.TargetSum = r.Target
@@ -291,30 +298,37 @@ func ReadMarkers(dir string) (*MarkerSet, error) {
 	return Parse(raw)
 }
 
-// ReadLabels reads labels.bin; negative says which sets have negative markers.
-func ReadLabels(dir string, negative []bool) (*Labels, error) {
+// ReadLabels reads labels.bin; negative says which sets have negative markers, scored whether it
+// holds scores (imported labels have none).
+func ReadLabels(dir string, negative []bool, scored bool) (*Labels, error) {
 	r, err := segment.ReadBinary(filepath.Join(dir, FileLabels), "SCLB")
 	if err != nil {
 		return nil, err
 	}
 	n := r.Count(8)
 	out := &Labels{Cells: r.U32s(n), Cluster: r.U32s(n)}
-	S := r.Count(8 * max(n, 1))
+	per := 1 // each label or state's bytes: its scores' when scored
+	if scored {
+		per = 8 * max(n, 1)
+	}
+	S := r.Count(per)
 	levels := r.Count(8 * max(n, 1))
 	states := r.Count(max(n, 1))
 	if S != len(negative) {
 		return nil, fmt.Errorf("%s holds %d labels and states; the description %d", FileLabels, S, len(negative))
 	}
-	for k := 0; k < S; k++ {
-		out.Score = append(out.Score, r.F32s(n))
-	}
-	for k := 0; k < S; k++ {
-		out.Positive = append(out.Positive, r.F32s(n))
-	}
 	out.Negative = make([][]float32, S)
-	for k := 0; k < S; k++ {
-		if negative[k] {
-			out.Negative[k] = r.F32s(n)
+	if scored {
+		for k := 0; k < S; k++ {
+			out.Score = append(out.Score, r.F32s(n))
+		}
+		for k := 0; k < S; k++ {
+			out.Positive = append(out.Positive, r.F32s(n))
+		}
+		for k := 0; k < S; k++ {
+			if negative[k] {
+				out.Negative[k] = r.F32s(n)
+			}
 		}
 	}
 	for l := 0; l < levels; l++ {
@@ -342,21 +356,23 @@ func ReadLabels(dir string, negative []bool) (*Labels, error) {
 	return out, r.Done(FileLabels)
 }
 
-// Read reads a label set's description, marker set and labels.
+// Read reads a label set's description, marker set (nil for imported labels) and labels.
 func Read(dir string) (*Description, *MarkerSet, *Labels, error) {
 	d, err := ReadDescription(dir)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	set, err := ReadMarkers(dir)
-	if err != nil {
-		return nil, nil, nil, err
+	var set *MarkerSet
+	if d.Source == nil {
+		if set, err = ReadMarkers(dir); err != nil {
+			return nil, nil, nil, err
+		}
 	}
 	negative := make([]bool, len(d.Sets))
 	for k, s := range d.Sets {
 		negative[k] = len(s.Negative) > 0
 	}
-	l, err := ReadLabels(dir, negative)
+	l, err := ReadLabels(dir, negative, d.Source == nil)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -375,34 +391,45 @@ func Digest(dir string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	set, err := ReadMarkers(dir)
-	if err != nil {
-		return "", err
-	}
 	bin, err := os.ReadFile(filepath.Join(dir, FileLabels))
 	if err != nil {
 		return "", err
 	}
 	h := sha256.New()
 	h.Write(raw)
-	h.Write(set.Canonical())
+	if d.Source == nil {
+		set, err := ReadMarkers(dir)
+		if err != nil {
+			return "", err
+		}
+		h.Write(set.Canonical())
+	}
 	h.Write(bin)
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
+// FilesOf lists a label set's files: imported labels have no marker set.
+func FilesOf(d *Description) []string {
+	if d.Source != nil {
+		return []string{FileDescription, FileLabels}
+	}
+	return Files
+}
+
 // Summary is what the check reports of a label set (the artifact's summary).
 type Summary struct {
-	Segmentation cluster.Side `json:"segmentation"`
-	Clustering   cluster.Side `json:"clustering"`
-	Markers      string       `json:"markers"`
-	Checksum     string       `json:"checksum"`
-	Cells        int          `json:"cells"`
-	Levels       []string     `json:"levels"`
-	Labeled      []int        `json:"labeled"`
-	Unlabeled    int          `json:"unlabeled"`
-	Labels       int          `json:"labels"`
-	States       int          `json:"states"`
-	Margin       float64      `json:"margin"`
+	Segmentation cluster.Side  `json:"segmentation"`
+	Clustering   *cluster.Side `json:"clustering,omitempty"`
+	Source       *Source       `json:"source,omitempty"`
+	Markers      string        `json:"markers,omitempty"`
+	Checksum     string        `json:"checksum,omitempty"`
+	Cells        int           `json:"cells"`
+	Levels       []string      `json:"levels"`
+	Labeled      []int         `json:"labeled"`
+	Unlabeled    int           `json:"unlabeled"`
+	Labels       int           `json:"labels"`
+	States       int           `json:"states"`
+	Margin       float64       `json:"margin,omitempty"`
 }
 
 // Check examines a staged label set: its files read and agree; the marker set is the one the
@@ -419,6 +446,9 @@ func Check(dir string, m *artifacts.Manifest) []artifacts.Finding {
 	if err != nil {
 		fatal("labels.unreadable", "%v", err)
 		return out
+	}
+	if d.Source != nil {
+		return checkImported(d, lab, m)
 	}
 	if set.Checksum() != d.Markers.Checksum {
 		fatal("labels.markers", "markers.json's checksum %.16s is not the description's %.16s.", set.Checksum(), d.Markers.Checksum)
@@ -617,4 +647,112 @@ func equal2(a, b [][]int) bool {
 
 func equal3(a, b [][][]int) bool {
 	return slices.EqualFunc(a, b, equal2)
+}
+
+// WriteImported writes an imported label set's files into dir: the segmentation's every cell, its
+// label (one level) and confidence.
+func WriteImported(dir string, seg cluster.Side, imp *Imported) error {
+	src := imp.Source
+	level := src.Column
+	if src.Title != "" {
+		level = src.Title
+	}
+	d := &Description{Format: "situcraft-labels", Version: 1, Method: "Imported labels", Segmentation: seg, Source: &src, Levels: []string{level}}
+	d.Fixed.Assignment = "each cell's label as the table gives it, matched by the cell's id"
+	n := len(imp.Label)
+	for k, name := range imp.Labels {
+		d.Sets = append(d.Sets, SetInfo{Name: name, Level: 0, Parent: -1, Color: imp.Colors[k], Cells: imp.Cells[k]})
+	}
+	d.Cells.Analyzed = n
+	d.Cells.Labeled = []int{0}
+	for _, k := range imp.Label {
+		if k >= 0 {
+			d.Cells.Labeled[0]++
+		}
+	}
+	d.Cells.Unlabeled = n - d.Cells.Labeled[0]
+	d.Composition, d.States = [][][]int{{}}, [][]int{}
+	raw, err := json.MarshalIndent(d, "", " ")
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(dir, FileDescription), append(raw, '\n'), 0o644); err != nil {
+		return err
+	}
+	var b segment.Buffer
+	b.U32(uint32(n))
+	for i := 0; i < n; i++ {
+		b.U32(uint32(i))
+	}
+	for i := 0; i < n; i++ {
+		b.U32(none)
+	}
+	b.U32(uint32(len(imp.Labels)))
+	b.U32(1)
+	b.U32(0)
+	for _, k := range imp.Label {
+		if k < 0 {
+			b.U32(none)
+		} else {
+			b.U32(uint32(k))
+		}
+	}
+	lead := make([]float32, n)
+	for i := range lead {
+		lead[i] = float32(math.NaN())
+	}
+	b.F32s(lead)
+	b.F32s(imp.Confidence)
+	return segment.WriteBinary(filepath.Join(dir, FileLabels), "SCLB", &b)
+}
+
+// checkImported examines a staged imported label set: one level; the cells every one of the
+// segmentation's, in order, in no cluster; each label an index among the sets, counted as the
+// description counts them; no lead; each confidence a number or none.
+func checkImported(d *Description, lab *Labels, m *artifacts.Manifest) []artifacts.Finding {
+	var out []artifacts.Finding
+	fatal := func(code, format string, args ...any) {
+		out = append(out, artifacts.Finding{Severity: "fatal", Code: code, Message: fmt.Sprintf(format, args...)})
+	}
+	n := len(lab.Cells)
+	if len(d.Levels) != 1 || len(lab.Label) != 1 || len(lab.State) != 0 || n != d.Cells.Analyzed {
+		fatal("labels.sizes", "Imported labels have one level and no state, for every cell: %d levels, %d states, %d cells (the description %d).", len(lab.Label), len(lab.State), n, d.Cells.Analyzed)
+		return out
+	}
+	if d.Source.SHA256 == "" || d.Source.IDColumn == "" || d.Source.Column == "" {
+		fatal("labels.source", "The source names no file checksum, id column or label column.")
+	}
+	counts := make([]int, len(d.Sets))
+	labeled := 0
+	for i := 0; i < n; i++ {
+		if lab.Cells[i] != uint32(i) || lab.Cluster[i] != none {
+			fatal("labels.cells", "Cell %d is not the segmentation's cell %d, in no cluster.", i, i)
+			return out
+		}
+		k := lab.Label[0][i]
+		if k >= int32(len(d.Sets)) {
+			fatal("labels.assignment", "Cell %d has label %d of %d.", i, k, len(d.Sets))
+			return out
+		}
+		if k >= 0 {
+			counts[k]++
+			labeled++
+		}
+		if !math.IsNaN(float64(lab.Lead[0][i])) || math.IsInf(float64(lab.Confidence[i]), 0) {
+			fatal("labels.values", "Cell %d has a lead, or a confidence that is not a number or none.", i)
+			return out
+		}
+	}
+	for k, s := range d.Sets {
+		if s.Cells != counts[k] || s.Level != 0 || s.Parent != -1 || s.State || s.Color != "" && !hexColor.MatchString(s.Color) {
+			fatal("labels.sets", "Label %q is not as the cells carry it (%d cells, the description %d).", s.Name, counts[k], s.Cells)
+			return out
+		}
+	}
+	if labeled != d.Cells.Labeled[0] || n-labeled != d.Cells.Unlabeled {
+		fatal("labels.sizes", "%d cells labeled (%d without); the description counts %d (%d).", labeled, n-labeled, d.Cells.Labeled[0], d.Cells.Unlabeled)
+	}
+	s := Summary{Segmentation: d.Segmentation, Source: d.Source, Cells: n, Levels: d.Levels, Labeled: d.Cells.Labeled, Unlabeled: d.Cells.Unlabeled, Labels: len(d.Sets)}
+	m.Summary, _ = json.Marshal(s)
+	return out
 }

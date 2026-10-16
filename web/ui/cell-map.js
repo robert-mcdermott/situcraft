@@ -16,7 +16,7 @@ import { readCells } from '../lib/viewer-data.js';
 import { readSegCells } from '../lib/segview.js';
 import { fitView, insidePolygon, nearestPoint, pointGrid, pointsInPolygon, rasterize, toPixel, toPlane, valueColors, zoomAt } from '../lib/scatter.js';
 import { clusterColors, mapWarning, mergedOf, nameOf } from '../lib/clusterings.js';
-import { labelColor, labelColors, labelsPerCell } from '../lib/labels.js';
+import { labelColor, labelColors, labelSetName, labelsPerCell } from '../lib/labels.js';
 
 async function getJSON(url) {
   const response = await fetch(url, { cache: 'no-store' });
@@ -153,8 +153,8 @@ export function mountCellMap(app, host, ctx) {
     const options = [
       ...clusterings.map((c) => h('option', { value: `clusters:${c.id}` }, `Clusters: ${c.summary?.source ? c.name : `resolution ${c.parameters?.resolution}`} (${c.summary?.clusters})`)),
       ...labelSets.flatMap((r) => [
-        ...(r.summary?.levels ?? []).map((level, l) => h('option', { value: `labels:${r.id}:${l}` }, `Labels by ${r.markers?.name ?? '?'}: ${level.toLowerCase()}`)),
-        h('option', { value: `confidence:${r.id}` }, `Labels by ${r.markers?.name ?? '?'}: confidence`),
+        ...(r.summary?.levels ?? []).map((level, l) => h('option', { value: `labels:${r.id}:${l}` }, r.source ? `Labels: ${labelSetName(r)}` : `${labelSetName(r)}: ${level.toLowerCase()}`)),
+        ...(!r.source || r.source.confidenceColumn ? [h('option', { value: `confidence:${r.id}` }, `${labelSetName(r)}: confidence`)] : []),
       ]),
       ...(c.kind === 'score' ? [h('option', { value: `score:${c.labels}:${c.set}` }, `Score: ${c.name ?? 'a label'}`)] : []),
       h('option', { value: 'gene' }, 'A gene…'),
@@ -245,12 +245,12 @@ export function mountCellMap(app, host, ctx) {
         if (c.kind === 'labels') {
           const unlabeled = sets.length;
           const per = labelsPerCell(cells, c.level, unlabeled);
-          state.colors = labelColors(per, unlabeled);
+          state.colors = labelColors(per, unlabeled, sets);
           state.groups = per;
           const counts = new Map();
           for (const k of per) if (k >= 0) counts.set(k, (counts.get(k) ?? 0) + 1);
           const entries = [...counts.entries()].sort((a, b) => (a[0] === unlabeled) - (b[0] === unlabeled) || b[1] - a[1])
-            .map(([k, size]) => ({ name: k === unlabeled ? 'No label' : sets[k].name, color: labelColor(k, unlabeled), cells: size, clusters: [k] }));
+            .map(([k, size]) => ({ name: k === unlabeled ? 'No label' : sets[k].name, color: labelColor(k, unlabeled, sets), cells: size, clusters: [k] }));
           state.legend = { kind: 'clusters', entries, labels: c.labels };
         } else {
           const values = new Float32Array(n).fill(NaN);
@@ -611,6 +611,8 @@ export function mountCellMap(app, host, ctx) {
       else recolor();
     },
     selectClusters,
+    // Selects the cells of some of the legend's groups (labels, when colored by labels).
+    selectGroups: (list, add = false) => selectGroups(state.groups, list, add),
     selectOnMap: (polygon, add) => selectOnMap(polygon, add),
     selectOnTissue: (polygon, add) => selectOnTissue(polygon, add),
     setColor(color) {

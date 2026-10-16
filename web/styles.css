@@ -1098,6 +1098,8 @@ td div.studio-problem { padding: 2px 6px; margin-top: 4px; font-size: 11.5px; }
 .lb-naming .field { max-width: 360px; }
 .lb-naming .muted { font-size: 12.5px; flex: 1 1 260px; }
 .lb-labels td:first-child, .lb-composition td:first-child { white-space: nowrap; }
+.lb-import-row { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; margin: 8px 0; }
+.lb-import-row .field { flex: 1 1 320px; }
 .lb-edit-table td { vertical-align: top; }
 .lb-edit-table td.muted { padding-top: 9px; white-space: nowrap; }
 .lb-edit-table td:first-child .input { min-width: 150px; }

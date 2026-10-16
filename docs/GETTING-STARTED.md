@@ -490,6 +490,28 @@ dominates, its own markers score low against control genes that are mostly its o
 many of its cells may stay without a label. Check each cluster's labels against its markers before
 naming it.
 
+### Labels made elsewhere
+
+Labels from another tool or an earlier analysis (a colleague's annotation, a reference mapping,
+the instrument's clusters) are imported under **Labels made elsewhere**, for the segmentation's
+cells. Name the table (its path on this computer) and **Read** it: a CSV or TSV file, a Parquet
+file, an AnnData object saved with `write_zarr` (or a SpatialData store), or Xenium Explorer's cell
+groups. SituCraft lists the columns and suggests which holds the cells' ids, which their labels,
+and, optionally, a confidence and colors; change them if they are wrong. Before you import, it
+says how the ids match: a table naming cells this segmentation does not have is refused (its labels
+were made for another segmentation, or another sample), and the cells it does not name will have
+no label. **Or the instrument's clusters** imports one of the instrument's clusterings as labels.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/imported-dark.webp">
+  <img alt="The Lung example's graph-based clusters from the instrument imported as labels: each of SituCraft's clusters by the instrument's clusters, the tumor clusters spread across many of them, the vessel and stroma clusters mostly one (80% to 85%)" src="images/imported-light.webp">
+</picture>
+
+An imported label set is shown like one from markers: each cluster's labels (here, how SituCraft's
+clusters of the Lung example split among the instrument's), names for the clusters from them, the
+map, the tissue and the Viewer colored by them, and a label's cells selected when you choose it.
+Its file is recorded by its SHA-256, so the project says exactly what was imported.
+
 ## Keyboard
 
 | Action | Keys |

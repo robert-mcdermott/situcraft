@@ -71,12 +71,36 @@ checked against the dataset (the transcripts it names, by id and, where it gives
 where its cells lie; its ids), and becomes a segmentation of SituCraft's own files (below), with
 the SHA-256 of every file it read.
 
+## Labels SituCraft imports
+
+The Cell types view's **Labels made elsewhere** (and the `import_labels` remote action) reads cells'
+labels made by another tool or an earlier analysis, for a segmentation's cells:
+
+| Format | Files | What is read |
+| --- | --- | --- |
+| CSV or TSV | `.csv`, `.tsv`, `.txt`, gzipped or not; a header row, comma or tab separated | every column; a column of numbers wherever every value is one (or missing) |
+| Parquet | `.parquet` (text, numbers and booleans; dictionary-encoded columns) | every column |
+| AnnData Zarr | an AnnData object's store (`.zarr` folder or its zip, format 2 or 3), or a SpatialData store with a table | its `obs`: the index and every column (text, categorical, nullable, numbers) |
+| Xenium Explorer cell groups | a CSV of `cell_id`, `group` and, optionally, `color` (`#rrggbb`, a group's given once) | the groups and their colors |
+| The instrument's clusters | the bundle's `analysis.tar.gz` (or `analysis/`) | a clustering's barcodes and clusters, labeled `Instrument cluster N` by the instrument's numbers |
+
+Four columns are chosen: the cells' **ids** (by default `cell_id`, `Cell ID`, `cell`, `barcode`,
+`id`, an AnnData index, else the first column of distinct text), their **labels** (`group`,
+`cell_type`, `celltype`, `label`, `annotation`, `cluster`, `leiden` …, else the first column of 2 to
+1,000 repeated values), and optionally a **confidence** (numbers) and **colors**. Each row's id is
+matched exactly to a cell's id in the segmentation (the bundle's own for the instrument's
+segmentation; SituCraft's for its own, as its exports write them). A table naming cells the
+segmentation does not have is refused, with how many and the first few; so is one naming a cell
+twice, or holding more than 1,000 labels. Cells the table does not name, and rows whose label is
+`""`, `NA`, `nan`, `None` or `null`, have no label. The import records the SHA-256 of the file
+read (of an AnnData store, its `obs`'s files).
+
 ## Other files
 
 SituCraft recognizes OME-TIFF images, Parquet and CSV tables, GeoJSON polygons and Zarr stores
 (on the command line or by **Open a bundle**) and lists them under **On this computer**. Reading
-them for analysis arrives with later releases: registered H&E and IF images, labels and
-annotations (see the [roadmap](../situcraft-spec/roadmap.md)).
+them for analysis arrives with later releases: registered H&E and IF images and annotations (see
+the [roadmap](../situcraft-spec/roadmap.md)).
 
 ## What SituCraft writes
 
@@ -289,8 +313,17 @@ A label set (from 0.4.0) is an artifact of three files:
 | `markers.json` | | The marker set, as above |
 | `labels.bin` | `SCLB` | The cells n (u32) and their indices into the segmentation's cells (u32 × n, increasing) and clusters (u32 × n); the sets S, levels L and states (u32 each); each set's score for each cell (f32, S × n, set-major) and its positive markers' part (f32, S × n); for each set with negative markers, their part (f32 × n); at each level each cell's label (u32 × n, an index among the sets, 0xFFFFFFFF where it took none), and its lead over the next label (f32 × n, NaN where the level was not reached); each cell's confidence (f32 × n); and for each state whether each cell carries it (u8 × n) |
 
+Labels imported from a table (above) are an artifact of two files: `labels.json` has a `source`
+(`format`, `file`, `sha256`, `path` in a store, `idColumn`, `column`, `confidenceColumn`,
+`colorColumn`, `rows`; for the instrument's clusters `tool`, `version` and `title`) in place of
+`markers`, `parameters` and `clustering`, one level named by the column, each label's `color` where
+the table gave one, and no composition; `labels.bin` holds every cell of the segmentation in order,
+in no cluster (0xFFFFFFFF), with no scores: after the sets, levels (1) and states (0), each cell's
+label, its lead (NaN) and its confidence (NaN where none was given). There is no `markers.json`.
+
 The project records each label set it uses (kind `labels`, with its dataset, segmentation,
-clustering, `markerSet`, the version's record id, `markers` and summary). The Viewer's fill
+clustering, `markerSet`, the version's record id, `markers` and summary; an imported one, its
+`source`). The Viewer's fill
 `labels:<artifact id>:<level>` colors cells by the label they carry at a level, from 0; saved views
 keep it.
 

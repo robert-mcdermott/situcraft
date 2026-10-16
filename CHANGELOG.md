@@ -67,6 +67,22 @@ Wave 4 of the [roadmap](situcraft-spec/roadmap.md): cell identities with their e
     every label's control genes scanpy's, every cell's score within 3e-7. On the simulated tissue
     97% of the cells take their true type.
 
+- **Imported labels (wave 4, slice 4).** Labels made elsewhere are imported for a segmentation's
+  cells and kept as a label set with their source.
+  - **Read:** CSV and TSV (gzipped or not), Parquet, an AnnData object's obs in Zarr (or a
+    SpatialData store's table), Xenium Explorer's cell groups with their colors, and the
+    instrument's own clusters. The columns of the cells' ids, their labels, a confidence and colors
+    are suggested by their usual names, and chosen before importing.
+  - **Matched by the cells' ids:** a table naming cells the segmentation does not have is refused,
+    with how many (and the segmentation whose cells they are, when the dataset has it); cells the
+    table does not name are counted.
+  - **Shown as any label set:** each cluster's labels for the clustering shown, names for the
+    clusters from them, the map, the tissue and the Viewer colored by them, a label's cells
+    selected.
+  - **Remote control:** `import_labels`.
+  - **Validated** on files written by pandas, pyarrow and anndata, read exactly, and on both
+    development bundles: their graph-based clusters, imported as a table, every cell its cluster.
+
 ### Changed
 
 - **A comparison can be removed from its project** (the inspector's **Remove**). The project's

@@ -1,7 +1,8 @@
-// Labels from markers (internal/label, api_labels.go): marker sets kept as versions in the project
-// (records of kind 'marker-set', each a file SituCraft reads), label sets the program makes from a
-// clustering and a marker set (artifacts of kind 'labels', recorded with the version they used),
-// and what the page says of them: each cluster's labels, names from them, colors and fills.
+// Labels (internal/label, api_labels.go): marker sets kept as versions in the project (records of
+// kind 'marker-set', each a file SituCraft reads), label sets the program makes from a clustering
+// and a marker set or imports from a table for a segmentation's cells (artifacts of kind 'labels',
+// recorded with the marker set version they used, or their source), and what the page says of
+// them: each cluster's labels, names from them, colors and fills.
 
 import { categoricalColor } from './colormaps.js';
 
@@ -195,6 +196,7 @@ export function labelsRecord(dataset, manifest, markerSet = null, now = new Date
   const lineage = manifest.lineage ?? {};
   const parent = (kind) => (lineage.parents ?? []).find((p) => p.kind === kind)?.id ?? null;
   const params = lineage.parameters ?? {};
+  const imported = lineage.method?.name === 'Imported labels';
   return {
     kind: 'labels',
     id: manifest.id,
@@ -203,7 +205,8 @@ export function labelsRecord(dataset, manifest, markerSet = null, now = new Date
     segmentation: parent('segmentation'),
     clustering: parent('clustering'),
     markerSet,
-    markers: params.markers ?? null,
+    markers: imported ? null : params.markers ?? null,
+    source: imported ? params : null,
     state: manifest.state,
     created: manifest.created,
     registered: now,
@@ -220,6 +223,20 @@ export function labelSetsOf(project, datasetId, clusteringId = null) {
   return project.artifacts.filter((a) => a.kind === 'labels' && a.dataset === datasetId && (!clusteringId || a.clustering === clusteringId));
 }
 
+// The label sets a clustering's cells carry: those made from it, and those imported for its
+// segmentation.
+export function labelSetsFor(project, clustering) {
+  return project.artifacts.filter((a) => a.kind === 'labels' && a.dataset === clustering.dataset && (a.clustering === clustering.id || (a.source && a.segmentation === clustering.segmentation)));
+}
+
+// A label set's name in a line: by its marker set, or its source.
+export function labelSetName(record) {
+  const src = record.source;
+  if (!src) return `Labels by ${record.markers?.name ?? '?'}`;
+  if (src.format === 'instrument') return `The instrument's ${String(src.title ?? 'clusters').toLowerCase()} clusters`;
+  return `${src.column} from ${src.file}`;
+}
+
 // The project with a label set recorded (unchanged when it already is).
 export function addLabels(project, record, now = new Date().toISOString()) {
   if (project.artifacts.some((a) => a.kind === 'labels' && a.id === record.id && a.dataset === record.dataset)) return project;
@@ -227,6 +244,15 @@ export function addLabels(project, record, now = new Date().toISOString()) {
   const ms = project.artifacts.find((a) => a.kind === 'marker-set' && a.id === record.markerSet);
   const s = record.summary ?? {};
   const level = s.levels?.[0] ?? 'top';
+  if (record.source) {
+    const seg = project.artifacts.find((a) => a.kind === 'segmentation' && a.id === record.segmentation);
+    return {
+      ...project,
+      modified: now,
+      artifacts: [...project.artifacts, record],
+      history: [...project.history, { time: now, action: 'labels', detail: `Imported ${labelSetName(record).charAt(0).toLowerCase()}${labelSetName(record).slice(1)} for the cells of ${(seg?.name ?? 'a segmentation').toLowerCase()}: ${s.labels ?? '?'} labels, ${s.labeled?.[0] ?? '?'} of ${s.cells ?? '?'} cells labeled (SHA-256 ${String(record.source.sha256 ?? '').slice(0, 12)}; artifact ${record.id})` }],
+    };
+  }
   return {
     ...project,
     modified: now,
@@ -238,6 +264,11 @@ export function addLabels(project, record, now = new Date().toISOString()) {
 // What a label set is, in a line.
 export function describeLabels(record) {
   const s = record.summary ?? {};
+  if (record.source) {
+    const src = record.source;
+    const from = src.format === 'instrument' ? `${src.tool ?? 'the instrument'} ${src.version ?? ''}`.trim() : `${src.file}, column ${src.column}${src.confidenceColumn ? `, confidence ${src.confidenceColumn}` : ''}`;
+    return `${s.labels ?? '?'} labels imported from ${from}, matched to the cells by ${src.idColumn}: ${(s.labeled?.[0] ?? 0).toLocaleString('en-US')} of ${(s.cells ?? 0).toLocaleString('en-US')} cells labeled`;
+  }
   const p = record.parameters ?? {};
   const pct = (v) => (s.cells ? `${Math.round((100 * v) / s.cells)}%` : '?');
   const levels = (s.levels ?? []).map((l, i) => `${l.toLowerCase()} ${pct(s.labeled?.[i] ?? 0)}`).join(', ');
@@ -287,20 +318,22 @@ export function labelsPerCell(data, level, unlabeled) {
   return out;
 }
 
-// A label's color: each label of the set its own categorical color, the unlabeled grey.
-export function labelColor(k, unlabeled) {
-  return k === unlabeled ? '#9a9a9a' : categoricalColor(k);
+// A label's color: its own where the table gave one (sets, the description's), else each label of
+// the set its own categorical color; the unlabeled grey.
+export function labelColor(k, unlabeled, sets = null) {
+  if (k === unlabeled) return '#9a9a9a';
+  return sets?.[k]?.color || categoricalColor(k);
 }
 
 // RGBA bytes per cell for labels per cell (labelsPerCell): cells not analyzed transparent.
-export function labelColors(perCell, unlabeled) {
+export function labelColors(perCell, unlabeled, sets = null) {
   const out = new Uint8Array(4 * perCell.length);
   const cache = new Map();
   for (let i = 0; i < perCell.length; i += 1) {
     const k = perCell[i];
     if (k < 0) continue;
     if (!cache.has(k)) {
-      const v = parseInt(labelColor(k, unlabeled).slice(1), 16);
+      const v = parseInt(labelColor(k, unlabeled, sets).slice(1), 16);
       cache.set(k, [(v >> 16) & 255, (v >> 8) & 255, v & 255, k === unlabeled ? 150 : 255]);
     }
     out.set(cache.get(k), 4 * i);
@@ -308,11 +341,29 @@ export function labelColors(perCell, unlabeled) {
   return out;
 }
 
+// A description's composition for a clustering's cells, counted here (imported labels are of a
+// segmentation's cells, in no clustering): each cluster's cells (cluster per segmentation cell, −1
+// for none) by the label they carry at each level, the last count those without a label.
+export function compositionOf(data, cluster, clusters) {
+  const sets = data.description.sets.length;
+  const levels = data.cells.levels;
+  const comp = Array.from({ length: levels }, () => Array.from({ length: clusters }, () => new Array(sets + 1).fill(0)));
+  for (let i = 0; i < data.cells.n; i += 1) {
+    const c = cluster[data.cells.cells[i]];
+    if (!(c >= 0 && c < clusters)) continue;
+    for (let l = 0; l < levels; l += 1) {
+      const k = data.cells.label[l][i];
+      comp[l][c][k >= 0 ? k : sets] += 1;
+    }
+  }
+  return comp;
+}
+
 // Each cluster's labels at a level (from the description's composition), largest first: [{ cluster,
 // cells, labels: [{ label (index, or null for none), name, count, share }] }].
 export function composition(description, level) {
   const sets = description.sets;
-  return (description.composition[level] ?? []).map((counts, c) => {
+  return (description.composition?.[level] ?? []).map((counts, c) => {
     const cells = counts.reduce((a, b) => a + b, 0);
     const labels = counts.map((count, k) => ({ label: k < sets.length ? k : null, name: k < sets.length ? sets[k].name : 'No label', count, share: cells ? count / cells : 0 }))
       .filter((e) => e.count > 0).sort((a, b) => b.count - a.count || (a.label ?? 1e9) - (b.label ?? 1e9));
@@ -343,7 +394,7 @@ export function labelFills(project, datasetId, segmentationId) {
     id: `labels:${r.id}:${l}`,
     labels: r.id,
     level: l,
-    label: `Labels by ${r.markers?.name ?? '?'}: ${level.toLowerCase()}`,
+    label: r.source ? `Labels: ${labelSetName(r)}` : `${labelSetName(r)}: ${level.toLowerCase()}`,
     help: describeLabels(r),
   })));
 }

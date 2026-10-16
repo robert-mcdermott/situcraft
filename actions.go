@@ -208,6 +208,16 @@ var remoteActions = []remoteAction{
 		"seed":          numberArg("The draws of control genes (20250)."),
 		"name_clusters": map[string]any{"description": "Name the clusters by their labels: true, or the share of a cluster's cells its label must hold (0.3 to 1; 0.5 for true)."},
 	}), long: true},
+	{Name: "import_labels", Title: "Import labels", Description: "Imports labels made elsewhere for a segmentation's cells, as a job: a table (CSV or TSV, gzipped or not; Parquet; an AnnData object's obs in Zarr, a folder or a zip, or a SpatialData store's table; Xenium Explorer's cell groups), its rows matched to the cells by id, or one of the instrument's clusterings. A table naming cells the segmentation does not have is refused, with how many; cells it does not name are counted. The columns are found by their usual names unless given. Recorded as a labels artifact with its source; asking again answers it. Answers the labels and their cells.", InputSchema: schema(map[string]any{
+		"dataset":           datasetArg,
+		"segmentation":      textArg("The segmentation whose cells the labels are, by name or artifact id, or instrument (the default if not given)."),
+		"path":              textArg("The table's path on this computer."),
+		"instrument":        textArg("Or the instrument's clusters: graph-based, k-means N, or its folder's name."),
+		"id_column":         textArg("The column of the cells' ids (cell_id, Cell ID, barcode, an AnnData index … if not given)."),
+		"column":            textArg("The column of the labels (group, cell_type, label, annotation, cluster … if not given)."),
+		"confidence_column": textArg("A column of numbers: each cell's confidence (optional)."),
+		"color_column":      textArg("A column of colors (#rrggbb), each label's (optional)."),
+	}), long: true},
 	{Name: "show_comparison", Title: "Show a comparison", Description: "Opens a comparison of two segmentations (by id, or 'A and B' by their names; the dataset's latest if not given) in the Compare workspace: A and B side by side, overlaid or flickering, cells filled by the class of their difference, a map of disagreement. Ranks the review queue (reassigned transcripts, contamination, disagreement or low counts) among the classes and reassigned transcripts the rules keep, and shows a difference (by its place in the queue, or by a cell's id). Answers the queue's first ten, the difference shown and the cautions about the comparison's measures.", InputSchema: schema(map[string]any{
 		"dataset":     datasetArg,
 		"comparison":  textArg("A comparison, by artifact id or 'A and B' (the segmentations' names)."),

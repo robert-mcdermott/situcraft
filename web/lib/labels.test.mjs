@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createProject } from './project.js';
-import { addLabel, addLabels, changeLabel, checkLabelParameters, composition, labelColors, labelFills, labelSetsOf, labelTree, labelsPerCell, labelsRecord, markerSetFile, markerSetVersions, markerSetsOf, namesFromLabels, parseGenes, parseLabelFill, readLabelCells, removeLabel, saveMarkerSet, withoutMissing } from './labels.js';
+import { addLabel, addLabels, changeLabel, checkLabelParameters, composition, compositionOf, describeLabels, labelColor, labelColors, labelFills, labelSetName, labelSetsFor, labelSetsOf, labelTree, labelsPerCell, labelsRecord, markerSetFile, markerSetVersions, markerSetsOf, namesFromLabels, parseGenes, parseLabelFill, readLabelCells, removeLabel, saveMarkerSet, withoutMissing } from './labels.js';
 import { categoricalColor } from './colormaps.js';
 
 const NOW = '2026-10-16T12:00:00.000Z';
@@ -142,4 +142,34 @@ test('a label set is recorded with its marker set version, and offered to the Vi
   assert.equal(fills[1].label, 'Labels by Two levels: type');
   assert.deepEqual(parseLabelFill('labels:lab-1:1'), { id: 'lab-1', level: 1 });
   assert.equal(parseLabelFill('clusters:clu-1'), null);
+});
+
+test('labels imported for a segmentation: recorded with their source, carried by its clusterings, counted by cluster, in their own colors', () => {
+  let p = createProject('Lung', { now: NOW });
+  p = { ...p, datasets: [{ id: 'd1', name: 'lung' }], artifacts: [{ kind: 'segmentation', id: 'seg-a', name: 'Instrument segmentation', dataset: 'd1' }, { kind: 'clustering', id: 'clu-1', name: 'Clusters', dataset: 'd1', segmentation: 'seg-a', state: 'complete' }, { kind: 'clustering', id: 'clu-2', name: 'Clusters of another', dataset: 'd1', segmentation: 'seg-b', state: 'complete' }] };
+  const source = { format: 'xenium-explorer', file: 'groups.csv', sha256: 'f'.repeat(64), idColumn: 'cell_id', column: 'group', colorColumn: 'color', rows: 4 };
+  const manifest = {
+    id: 'lab-9', kind: 'labels', name: 'Labels: group from groups.csv', state: 'complete', created: NOW,
+    lineage: { parents: [{ kind: 'bundle', id: 'b' }, { kind: 'segmentation', id: 'seg-a' }], method: { name: 'Imported labels', version: '1' }, parameters: source },
+    summary: { cells: 6, levels: ['group'], labeled: [4], unlabeled: 2, labels: 2 },
+  };
+  const record = labelsRecord({ id: 'd1' }, manifest, null, NOW);
+  assert.equal(record.clustering, null);
+  assert.deepEqual(record.source, source);
+  assert.equal(record.markers, null);
+  p = addLabels(p, record, NOW);
+  assert.match(p.history.at(-1).detail, /^Imported group from groups.csv for the cells of instrument segmentation: 2 labels, 4 of 6 cells labeled \(SHA-256 ffffffffffff; artifact lab-9\)$/);
+  assert.equal(labelSetName(record), 'group from groups.csv');
+  assert.equal(labelSetName({ source: { format: 'instrument', title: 'Graph-based' } }), 'The instrument\'s graph-based clusters');
+  assert.match(describeLabels(record), /^2 labels imported from groups.csv, column group, matched to the cells by cell_id: 4 of 6 cells labeled$/);
+  const clu1 = p.artifacts.find((a) => a.id === 'clu-1');
+  const clu2 = p.artifacts.find((a) => a.id === 'clu-2');
+  assert.deepEqual(labelSetsFor(p, clu1).map((r) => r.id), ['lab-9'], 'its segmentation\'s clusterings carry it');
+  assert.deepEqual(labelSetsFor(p, clu2), []);
+  assert.equal(labelFills(p, 'd1', 'seg-a')[0].label, 'Labels: group from groups.csv');
+  // Six cells: labels 0, 1, none, 0, none, 1; clusters 0, 0, 1, 1, −1 (not analyzed), 1.
+  const data = { description: { sets: [{ name: 'Tumour', color: '#1f77b4' }, { name: 'T cell' }] }, cells: { n: 6, levels: 1, cells: Uint32Array.from([0, 1, 2, 3, 4, 5]), label: [Int32Array.from([0, 1, -1, 0, -1, 1])] } };
+  assert.deepEqual(compositionOf(data, Int32Array.from([0, 0, 1, 1, -1, 1]), 2), [[[1, 1, 0], [1, 1, 1]]]);
+  assert.equal(labelColor(0, 2, data.description.sets), '#1f77b4', 'the table\'s color');
+  assert.equal(labelColor(1, 2, data.description.sets), categoricalColor(1));
 });

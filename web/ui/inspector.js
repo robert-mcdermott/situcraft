@@ -211,15 +211,25 @@ export function mountInspector(app) {
     const s = r.summary ?? {};
     const p = r.parameters ?? {};
     const pct = (v) => (s.cells ? `${Math.round((100 * v) / s.cells)}%` : '—');
+    const seg = project.artifacts.find((a) => a.kind === 'segmentation' && a.id === r.segmentation);
+    const src = r.source;
     return h('section.inspector-section',
       h('h3', icon('tag'), 'Label set'),
       h('dl.kv',
-        h('dt', 'Clustering'), h('dd', c?.name ?? r.clustering),
-        h('dt', 'Marker set'), h('dd', `${r.markers?.name ?? '?'}${ms ? ` (version ${ms.version})` : ''}`),
-        h('dt', 'Checksum'), h('dd.mono', (r.markers?.checksum ?? '').slice(0, 16)),
+        ...(src ? [
+          h('dt', 'Segmentation'), h('dd', seg?.name ?? r.segmentation),
+          h('dt', 'Imported from'), h('dd', src.format === 'instrument' ? `${src.tool} ${src.version}` : src.file),
+          h('dt', 'Column'), h('dd', src.format === 'instrument' ? src.title : src.column),
+          h('dt', 'Matched by'), h('dd', src.idColumn),
+          h('dt', 'SHA-256'), h('dd.mono', String(src.sha256 ?? '').slice(0, 16)),
+        ] : [
+          h('dt', 'Clustering'), h('dd', c?.name ?? r.clustering),
+          h('dt', 'Marker set'), h('dd', `${r.markers?.name ?? '?'}${ms ? ` (version ${ms.version})` : ''}`),
+          h('dt', 'Checksum'), h('dd.mono', (r.markers?.checksum ?? '').slice(0, 16)),
+        ]),
         h('dt', 'Cells'), h('dd', (s.cells ?? 0).toLocaleString('en-US')),
         ...(s.levels ?? []).flatMap((level, l) => [h('dt', level), h('dd', `${(s.labeled?.[l] ?? 0).toLocaleString('en-US')} (${pct(s.labeled?.[l] ?? 0)})`)]),
-        h('dt', 'Margin'), h('dd', `${p.margin ?? '—'} (minimum ${p.minimum ?? '—'})`),
+        src ? null : h('dt', 'Margin'), src ? null : h('dd', `${p.margin ?? '—'} (minimum ${p.minimum ?? '—'})`),
         h('dt', 'Method'), h('dd', `${r.method?.name ?? ''} ${r.method?.version ?? ''}`.trim()),
         h('dt', 'Artifact'), h('dd.mono', r.id)),
       r.state === 'complete' ? h('div.btn-row', { style: { marginTop: '8px' } },

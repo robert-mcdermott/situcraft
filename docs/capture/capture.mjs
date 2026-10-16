@@ -325,6 +325,16 @@ const scenes = {
     await scrollTo('.lb-shown', 'start');
     await sleep(300);
   },
+  // The Lung example's instrument clusters imported as labels (wave 4, slice 4): each of
+  // SituCraft's clusters by the instrument's, the labels with their cells.
+  async imported() {
+    await act('open_example', { example: 'lung' });
+    await act('cluster_cells', {});
+    await act('import_labels', { segmentation: 'instrument', instrument: 'graph-based' });
+    await waitFor(`Boolean(document.querySelector('.lb-composition tbody tr'))`);
+    await scrollTo('.lb-shown', 'start');
+    await sleep(300);
+  },
   // The Breast example's clusters on the tissue (wave 4, slice 1): the cells filled by cluster,
   // with the legend.
   async clusters() {

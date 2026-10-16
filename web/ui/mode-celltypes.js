@@ -54,7 +54,9 @@ export function mountCellTypes(app, container) {
   function target() {
     const { project, ui } = app.store;
     const focusedLabels = ui.focus?.kind === 'labels' ? project.artifacts.find((a) => a.kind === 'labels' && a.id === ui.focus.id) : null;
-    const focusedClu = ui.focus?.kind === 'clustering' || focusedLabels ? project.artifacts.find((a) => a.kind === 'clustering' && a.id === (focusedLabels?.clustering ?? ui.focus.id)) : null;
+    // An imported label set is of a segmentation: shown under its latest clustering.
+    const cluOf = (r) => r.clustering ?? project.artifacts.filter((a) => a.kind === 'clustering' && a.segmentation === r.segmentation && a.state === 'complete').at(-1)?.id;
+    const focusedClu = ui.focus?.kind === 'clustering' || focusedLabels ? project.artifacts.find((a) => a.kind === 'clustering' && a.id === (focusedLabels ? cluOf(focusedLabels) : ui.focus.id)) : null;
     const seg = ui.focus?.kind === 'segmentation' ? project.artifacts.find((a) => a.kind === 'segmentation' && a.id === ui.focus.id) : null;
     const id = focusedClu?.dataset ?? (ui.focus?.kind === 'dataset' ? ui.focus.id : seg?.dataset) ?? project.datasets[0]?.id;
     const dataset = project.datasets.find((d) => d.id === id) ?? project.datasets[0];
@@ -367,7 +369,8 @@ export function mountCellTypes(app, container) {
       h('td.r', percent(m.pctOut, 0)),
       h('td.r', fixed(m.score, 1)),
       h('td.r', pvalue(m.padj))));
-    const dot = h('div.ct-dotplot', h('p.muted.seg-note', 'Drawing the dot plot…'));
+    // Focusable: it scrolls sideways when the clusters' markers are many.
+    const dot = h('div.ct-dotplot', { tabIndex: 0, role: 'region', 'aria-label': 'Dot plot of each cluster\'s leading markers' }, h('p.muted.seg-note', 'Drawing the dot plot…'));
     dotPlot(t, c, d, names, dot);
     return [
       h('div.ct-summary', kv, scree),
@@ -592,7 +595,7 @@ export function mountCellTypes(app, container) {
     const seg = segs.find((s) => s.id === session.segmentation);
     const project = app.store.project;
     const kinds = new Set(['clustering', 'embedding', 'cluster-names', 'filter', 'labels']);
-    const next = JSON.stringify([t.dataset.id, Boolean(t.item), segs.map((s) => [s.id, s.isDefault]), project.artifacts.filter((a) => (kinds.has(a.kind) && a.dataset === t.dataset.id) || a.kind === 'marker-set').map((a) => [a.id, a.state]), session.segmentation, session.cells, session.shown, session.cluster, session.compare, app.bundles.clusterings(t.dataset.id), app.bundles.mappings(t.dataset.id), app.bundles.registeringAnalysis(t.dataset.id), app.bundles.labelings(t.dataset.id), Boolean(analyses.get(t.item?.path)?.clusterings)]);
+    const next = JSON.stringify([t.dataset.id, Boolean(t.item), segs.map((s) => [s.id, s.isDefault]), project.artifacts.filter((a) => (kinds.has(a.kind) && a.dataset === t.dataset.id) || a.kind === 'marker-set').map((a) => [a.id, a.state]), session.segmentation, session.cells, session.shown, session.cluster, session.compare, app.bundles.clusterings(t.dataset.id), app.bundles.mappings(t.dataset.id), app.bundles.registeringAnalysis(t.dataset.id), app.bundles.labelings(t.dataset.id), app.bundles.labelImports(t.dataset.id), Boolean(analyses.get(t.item?.path)?.clusterings)]);
     if (!force && next === shape) {
       updateLive();
       return;

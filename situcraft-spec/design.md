@@ -370,6 +370,13 @@ segmentation, made by a job, named by its inputs and parameters, and checked bef
   and saves marker sets, labels the shown clustering, and shows each cluster's labels, names from
   them, and each label's markers and controls; the map, the tissue and the Viewer color the cells
   by label (`labels:<id>:<level>` among the Viewer's fills), confidence or a label's score.
+- **Imported labels** (`internal/label`'s `table.go` and `imported.go`, slice 4): a CSV, TSV,
+  Parquet or AnnData Zarr table (or Xenium Explorer's cell groups, or the instrument's clusters)
+  read whole, its columns described and their roles suggested, its ids matched to a
+  segmentation's cells; a table naming cells the segmentation lacks refused. Kept as a label set
+  of kind `labels` with its source in place of a marker set (one level, no scores, every cell of
+  the segmentation), so that the map, the tissue, the Viewer and each cluster's labels treat it as
+  any label set; its composition is counted in the page for the clustering shown.
 - **The Cell types view** (`ui/mode-celltypes.js`, `lib/clusterings.js`) runs a clustering and
   shows its clusters, names, markers (a table and a dot plot) and the components' variances, and
   compares two clusterings. **The map and the tissue** (`ui/cell-map.js`, `lib/scatter.js`): the map

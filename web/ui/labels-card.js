@@ -1,14 +1,15 @@
-// Labels from markers in the Cell types view (internal/label, api_labels.go): a marker set chosen
-// (one of the project's, kept as versions, or one SituCraft ships), edited, saved as a file or
-// read from one; a clustering's cells labeled from it by a job; the label sets made; and the one
-// shown: its cells labeled at each level, each cluster's labels and their shares, names for the
-// clusters from them, each label's markers and control genes, and the map, the tissue and the
-// Viewer colored by its labels.
+// Labels in the Cell types view (internal/label, api_labels.go): a marker set chosen (one of the
+// project's, kept as versions, or one SituCraft ships), edited, saved as a file or read from one; a
+// clustering's cells labeled from it by a job; labels made elsewhere imported for the
+// segmentation's cells (a table, Xenium Explorer's cell groups, the instrument's clusters); the
+// label sets the clustering's cells carry; and the one shown: its cells labeled at each level, each
+// cluster's labels and their shares, names for the clusters from them, each label's markers and
+// control genes, and the map, the tissue and the Viewer colored by its labels.
 
 import { h, icon, clear, formatCount, relativeTime } from './dom.js';
 import { toast } from './overlays.js';
 import { clusterNames, nameClusters, nameOf } from '../lib/clusterings.js';
-import { LABEL_PARAMETERS, addLabel, changeLabel, checkLabelParameters, composition, describeLabels, labelColor, labelSetsOf, labelTree, markerSetFile, markerSetVersions, markerSetsOf, namesFromLabels, parseGenes, removeLabel, saveMarkerSet, withoutMissing } from '../lib/labels.js';
+import { LABEL_PARAMETERS, addLabel, changeLabel, checkLabelParameters, composition, compositionOf, describeLabels, labelColor, labelSetName, labelSetsFor, labelTree, markerSetFile, markerSetVersions, markerSetsOf, namesFromLabels, parseGenes, removeLabel, saveMarkerSet, withoutMissing } from '../lib/labels.js';
 
 const percent = (v, digits = 0) => (Number.isFinite(v) ? `${(100 * v).toFixed(digits)}%` : '—');
 const exact = (v) => (Number.isFinite(v) ? v.toLocaleString('en-US') : '—');
@@ -32,6 +33,23 @@ function startersFor(app, item, clusteringId) {
     offered.set(clusteringId, p);
   }
   return offered.get(clusteringId);
+}
+
+// Per bundle, the instrument's clusterings (its analysis), read once.
+const instrumentAnalyses = new Map();
+function instrumentClusterings(item, onRead) {
+  if (!item) return null;
+  if (!instrumentAnalyses.has(item.path)) {
+    const entry = { list: null };
+    instrumentAnalyses.set(item.path, entry);
+    fetch(`${item.url}/analysis`).then((r) => (r.ok ? r.json() : null)).then((a) => {
+      entry.list = a?.clusterings ?? [];
+      if (entry.list.length) onRead?.();
+    }).catch(() => {
+      entry.list = [];
+    });
+  }
+  return instrumentAnalyses.get(item.path).list;
 }
 
 // The markers of a set its panel lacks, by label (genes compared regardless of case).
@@ -118,7 +136,7 @@ export function labelsSections(app, ctx) {
   startersFor(app, t.item, clustering.id).then((offer) => {
     if (!host.isConnected && !document.body.contains(host)) return;
     clear(host).append(h('div.section-title', 'Labels from markers'), ...(st.editing ? editor(offer) : chooser(offer)));
-    clear(rest).append(...[listCard(), shownCard()].filter(Boolean));
+    clear(rest).append(...[importCard(), listCard(), shownCard()].filter(Boolean));
   }).catch((error) => clear(host).append(h('div.section-title', 'Labels from markers'), h('p.muted.seg-note', `The marker sets could not be read: ${error.message}`)));
 
   // --- Choosing a marker set, and labeling ---
@@ -354,9 +372,120 @@ export function labelsSections(app, ctx) {
     ];
   }
 
-  // --- The label sets of the clustering ---
+  // --- Labels made elsewhere, imported for the segmentation's cells ---
+  function importCard() {
+    const seg = ctx.seg;
+    if (!seg) return null;
+    st.imp ??= { path: '', read: null, roles: null, instrument: '', busy: false, problem: null };
+    const im = st.imp;
+    if (im.read && im.read.segmentation?.id !== seg.id) Object.assign(im, { read: null, roles: null, problem: null });
+    const instrument = seg.source === 'instrument';
+    const analysis = instrument ? instrumentClusterings(t.item, () => ctx.render(true)) : null;
+    const running = app.bundles.labelImports(t.dataset.id).filter((e) => e.segmentation === seg.id);
+    const pathInput = h('input.input', { type: 'text', id: 'lb-import-path', value: im.path, placeholder: '/data/annotations.csv', 'aria-label': 'The table of labels: its path' });
+    pathInput.addEventListener('change', () => {
+      im.path = pathInput.value.trim();
+    });
+    const read = async (columns = null) => {
+      im.path = pathInput.value.trim();
+      if (!im.path) {
+        toast('Name a table of labels: its path.', { kind: 'error' });
+        return;
+      }
+      im.busy = true;
+      im.problem = null;
+      ctx.render(true);
+      try {
+        im.read = await app.bundles.readLabelsTable(t.item, { path: im.path, segmentation: seg.id, ...(columns ? { columns } : {}) });
+        im.roles = { ...im.read.roles, ...(columns ? { id: columns.idColumn } : {}) };
+      } catch (error) {
+        im.read = null;
+        im.problem = error.message;
+      }
+      im.busy = false;
+      ctx.render(true);
+    };
+    const doImport = async (request) => {
+      try {
+        const m = await app.bundles.importLabels(t.item, t.dataset.id, request);
+        st.shown = m.id;
+        Object.assign(im, { read: null, roles: null, problem: null });
+        ctx.render(true);
+        toast(`Imported ${m.summary?.labels ?? '?'} labels for ${formatCount(m.summary?.labeled?.[0] ?? 0)} of ${formatCount(m.summary?.cells ?? 0)} cells.`, { kind: 'ok' });
+      } catch (error) {
+        im.problem = error.message;
+        ctx.render(true);
+      }
+    };
+    const parts = [
+      h('p', `Labels from another tool or an earlier analysis, matched to the cells of ${seg.name.toLowerCase()} by their ids: a CSV or TSV table, a Parquet file, an AnnData object's obs in Zarr (or a SpatialData store's table), or Xenium Explorer's cell groups (cell_id, group, color). A table naming cells this segmentation does not have is refused; its cells the table does not name are counted.`),
+      h('div.lb-import-row', h('label.field', { for: 'lb-import-path' }, h('span', 'Table'), pathInput), h('button.btn', { type: 'button', disabled: im.busy, 'data-action': 'read-labels', onclick: () => read() }, icon('file'), im.busy ? 'Reading…' : 'Read')),
+    ];
+    if (im.read) parts.push(...readout(im, seg, read, doImport));
+    if (im.problem) parts.push(h('div.lb-missing', icon('warning'), h('span', im.problem)));
+    if (analysis?.length) {
+      const pick = h('select.input', { id: 'lb-instrument', 'aria-label': 'The instrument\'s clusters' }, ...analysis.map((c) => h('option', { value: c.name }, `${c.title} (${c.clusters} clusters)`)));
+      if (im.instrument) pick.value = im.instrument;
+      pick.addEventListener('change', () => {
+        im.instrument = pick.value;
+      });
+      parts.push(h('div.lb-import-row', h('label.field', { for: 'lb-instrument' }, h('span', 'Or the instrument\'s clusters'), pick),
+        h('button.btn', { type: 'button', onclick: () => doImport({ instrument: pick.value, segmentation: seg.id }) }, icon('upload'), 'Import as labels')));
+    }
+    parts.push(...running.map((e) => {
+      const job = e.job ? app.jobs.get(e.job) : null;
+      return h('div.seg-running', h('div', h('b', 'Importing labels'), ' ', h('span.muted', job?.message ?? 'Starting…')), h('div.progress', h('div', { style: { width: `${Math.round((job?.progress ?? 0) * 100)}%` } })));
+    }));
+    return h('section.seg-section', h('div.section-title', 'Labels made elsewhere'), h('div.seg-card.lb-import', ...parts));
+  }
+
+  // What the program read of a table: its columns for each role, how its ids match, its labels.
+  function readout(im, seg, read, doImport) {
+    const r = im.read;
+    const roles = im.roles;
+    const text = r.columns.filter((c) => c.kind === 'text');
+    const numbers = r.columns.filter((c) => c.kind === 'number');
+    const pick = (id, label, list, value, optional, onchange) => {
+      const el = h('select.input', { id }, ...(optional ? [h('option', { value: '' }, 'none')] : []), ...list.map((c) => h('option', { value: c.name }, `${c.name} (${c.distinct.toLocaleString('en-US')} values${c.missing ? `, ${c.missing.toLocaleString('en-US')} missing` : ''}; ${c.examples.slice(0, 3).join(', ')})`)));
+      el.value = value ?? '';
+      el.addEventListener('change', () => onchange(el.value));
+      return h('label.field', { for: id }, h('span', label), el);
+    };
+    const m = r.match;
+    const labelCol = r.columns.find((c) => c.name === roles.label);
+    const refused = m && (m.notInSegmentation > 0 || m.duplicates > 0);
+    const matchText = !m ? 'Choose the column of the cells\' ids.'
+      : refused ? `${m.notInSegmentation ? `${m.notInSegmentation.toLocaleString('en-US')} of the ${m.rows.toLocaleString('en-US')} rows name cells ${seg.name.toLowerCase()} does not have (${m.examples.join(', ')})` : ''}${m.notInSegmentation && m.duplicates ? '; ' : ''}${m.duplicates ? `${m.duplicates.toLocaleString('en-US')} name a cell another row names (${m.duplicateExamples.join(', ')})` : ''}: the table cannot be imported for these cells.`
+        : `All ${m.matched.toLocaleString('en-US')} rows name cells of ${seg.name.toLowerCase()}; ${m.cellsNotNamed.toLocaleString('en-US')} of its ${m.cells.toLocaleString('en-US')} cells are not named, and will have no label.`;
+    const others = (r.others ?? []).filter((o) => o.notInSegmentation === 0);
+    return [
+      h('p.muted.seg-note', `${r.file}: ${r.format === 'xenium-explorer' ? 'Xenium Explorer\'s cell groups' : r.format === 'anndata' ? `an AnnData obs (${r.path})` : r.format === 'parquet' ? 'Parquet' : 'a table'}, ${r.rows.toLocaleString('en-US')} rows, ${r.columns.length} columns; SHA-256 ${r.sha256.slice(0, 12)}.`),
+      h('div.seg-import-grid',
+        pick('lb-col-id', 'The cells\' ids', r.columns, roles.id, false, (v) => read({ idColumn: v, column: roles.label })),
+        pick('lb-col-label', 'Their labels', text.concat(numbers), roles.label, false, (v) => {
+          roles.label = v;
+          ctx.render(true);
+        }),
+        pick('lb-col-confidence', 'Confidence', numbers, roles.confidence, true, (v) => {
+          roles.confidence = v;
+        }),
+        pick('lb-col-color', 'Colors', text, roles.color, true, (v) => {
+          roles.color = v;
+        })),
+      labelCol ? h('p.muted.seg-note', `${labelCol.name}: ${labelCol.distinct.toLocaleString('en-US')} labels (${labelCol.examples.join(', ')}${labelCol.distinct > labelCol.examples.length ? ', …' : ''})${labelCol.missing ? `; ${labelCol.missing.toLocaleString('en-US')} rows without one` : ''}.`) : null,
+      h(refused ? 'div.lb-missing' : 'p.seg-note', refused ? icon('warning') : null, h('span', matchText)),
+      others.length ? h('div.btn-row', h('span.muted', 'Its ids are the cells of '), ...others.map((o) => h('button.btn.small', { type: 'button', onclick: () => {
+        ctx.session.segmentation = o.id;
+        ctx.session.shown = null;
+        ctx.render(true);
+      } }, o.name))) : null,
+      h('div.btn-row', h('button.btn.primary', { type: 'button', 'data-action': 'import-labels', disabled: refused || !m || !roles.label || roles.label === roles.id, onclick: () => doImport({ path: im.path, segmentation: seg.id, columns: { idColumn: roles.id, column: roles.label, confidenceColumn: roles.confidence || '', colorColumn: roles.color || '' } }) }, icon('upload'), 'Import the labels')),
+    ];
+  }
+
+  // --- The label sets the clustering's cells carry ---
   function listCard() {
-    const list = labelSetsOf(app.store.project, t.dataset.id, clustering.id).filter((r) => r.state === 'complete');
+    const list = labelSetsFor(app.store.project, clustering).filter((r) => r.state === 'complete');
     if (!list.length) return null;
     if (!list.some((r) => r.id === st.shown)) st.shown = list.at(-1).id;
     const project = app.store.project;
@@ -374,8 +503,8 @@ export function labelsSections(app, ctx) {
           choose();
         }
       } },
-      h('td', r.markers?.name ?? '?', ms ? h('span.muted', ` v${ms.version}`) : null),
-      h('td.r', String(r.parameters?.margin ?? '—')),
+      h('td', r.source ? labelSetName(r) : r.markers?.name ?? '?', ms ? h('span.muted', ` v${ms.version}`) : null, r.source ? h('span.muted', ' (imported)') : null),
+      h('td.r', r.source ? '—' : String(r.parameters?.margin ?? '—')),
       ...(s.levels ?? []).slice(0, 3).map((_, l) => h('td.r', percent((s.labeled?.[l] ?? 0) / (s.cells || 1)))),
       ...Array.from({ length: Math.max(0, 3 - (s.levels?.length ?? 0)) }, () => h('td.r', '')),
       h('td.muted', relativeTime(r.created)),
@@ -387,25 +516,27 @@ export function labelsSections(app, ctx) {
     return h('section.seg-section',
       h('div.section-title', `Label sets of ${clustering.name.charAt(0).toLowerCase()}${clustering.name.slice(1)}`),
       h('div.table-wrap', h('table.data-table.seg-table',
-        h('thead', h('tr', h('th', 'Marker set'), h('th.r', 'Margin'), h('th.r', { title: 'The share of the cells labeled at the first level' }, 'Level 1'), h('th.r', 'Level 2'), h('th.r', 'Level 3'), h('th', 'Made'), h('th', ''))),
+        h('thead', h('tr', h('th', 'Labels'), h('th.r', 'Margin'), h('th.r', { title: 'The share of the cells labeled at the first level' }, 'Level 1'), h('th.r', 'Level 2'), h('th.r', 'Level 3'), h('th', 'Made'), h('th', ''))),
         h('tbody', ...rows))));
   }
 
   // --- The label set shown ---
   function shownCard() {
-    const r = labelSetsOf(app.store.project, t.dataset.id, clustering.id).find((x) => x.id === st.shown && x.state === 'complete');
+    const r = labelSetsFor(app.store.project, clustering).find((x) => x.id === st.shown && x.state === 'complete');
     if (!r) return null;
     const box = h('section.seg-section.lb-shown', h('div.section-title', 'The labels'), h('p.muted.seg-note', 'Reading the labels…'));
-    app.bundles.labelData(r.id).then((data) => {
+    Promise.all([app.bundles.labelData(r.id), r.source ? app.bundles.clusteringData(clustering.id) : null]).then(([data, cd]) => {
       if (!box.isConnected && !document.body.contains(box)) return;
-      clear(box).append(h('div.section-title', 'The labels'), ...shown(r, data));
+      // Imported labels are of the segmentation's cells: each cluster's counted here.
+      const d = cd ? { ...data.description, clusters: cd.sizes.length, composition: compositionOf(data, cd.cluster, cd.sizes.length) } : data.description;
+      clear(box).append(h('div.section-title', 'The labels'), ...shown(r, data, d));
     }).catch((error) => clear(box).append(h('div.section-title', 'The labels'), h('p.muted.seg-note', `The labels could not be read: ${error.message}`)));
     return box;
   }
 
-  function shown(r, data) {
-    const d = data.description;
+  function shown(r, data, d) {
     const sets = d.sets;
+    const src = r.source;
     const levels = d.levels;
     const level = Math.min(st.level, levels.length - 1);
     const n = d.cells.analyzed;
@@ -417,19 +548,26 @@ export function labelsSections(app, ctx) {
       ctx.cellMap?.setColor(color);
       document.querySelector('.ct-map-host')?.scrollIntoView({ block: 'nearest' });
     };
-    const levelButtons = h('div.lb-levels', { role: 'group', 'aria-label': 'Level' }, ...levels.map((name, l) => h(`button.btn.small${l === level ? '.primary' : ''}`, { type: 'button', 'aria-pressed': String(l === level), onclick: () => {
+    const levelButtons = levels.length > 1 ? h('div.lb-levels', { role: 'group', 'aria-label': 'Level' }, ...levels.map((name, l) => h(`button.btn.small${l === level ? '.primary' : ''}`, { type: 'button', 'aria-pressed': String(l === level), onclick: () => {
       st.level = l;
       ctx.render(true);
-    } }, name)));
-    const kv = h('dl.kv.seg-kv',
-      h('dt', 'Marker set'), h('dd', d.markers.name, ms ? ` (version ${ms.version})` : '', h('span.muted.mono', ` ${d.markers.checksum.slice(0, 12)}`)),
-      h('dt', 'Cells labeled'), h('dd', levels.map((name, l) => `${name.toLowerCase()} ${exact(d.cells.labeled[l])} (${percent(d.cells.labeled[l] / n)})`).join('; '), h('span.muted', ` of ${exact(n)}; ${exact(d.cells.unlabeled)} without a label`)),
-      ...sets.filter((s) => s.state).map((s) => [h('dt', s.name), h('dd', `${exact(s.cells)} cells (${percent(s.cells / n, 1)})`)]).flat(),
-      h('dt', 'Parameters'), h('dd', `margin ${d.parameters.margin}, minimum ${d.parameters.minimum}, state threshold ${d.parameters.state}; ${d.parameters.bins} bins, up to ${d.parameters.controls} controls per bin${d.parameters.lineage ? ', the lineage\'s markers left out of each label\'s controls' : ''}`),
-      h('dt', 'Artifact'), h('dd.mono', r.id));
+    } }, name))) : null;
+    const kv = src
+      ? h('dl.kv.seg-kv',
+        h('dt', 'Source'), h('dd', src.format === 'instrument' ? `${src.tool} ${src.version}: its ${String(src.title).toLowerCase()} clusters (${src.file})` : `${src.file}, column ${src.column}`, h('span.muted.mono', ` ${String(src.sha256).slice(0, 12)}`)),
+        h('dt', 'Matched by'), h('dd', `${src.idColumn}: ${exact(src.rows)} rows`),
+        src.confidenceColumn ? h('dt', 'Confidence') : null, src.confidenceColumn ? h('dd', src.confidenceColumn) : null,
+        h('dt', 'Cells labeled'), h('dd', `${exact(d.cells.labeled[0])} (${percent(d.cells.labeled[0] / n)})`, h('span.muted', ` of the segmentation's ${exact(n)}; ${exact(d.cells.unlabeled)} without a label`)),
+        h('dt', 'Artifact'), h('dd.mono', r.id))
+      : h('dl.kv.seg-kv',
+        h('dt', 'Marker set'), h('dd', d.markers.name, ms ? ` (version ${ms.version})` : '', h('span.muted.mono', ` ${d.markers.checksum.slice(0, 12)}`)),
+        h('dt', 'Cells labeled'), h('dd', levels.map((name, l) => `${name.toLowerCase()} ${exact(d.cells.labeled[l])} (${percent(d.cells.labeled[l] / n)})`).join('; '), h('span.muted', ` of ${exact(n)}; ${exact(d.cells.unlabeled)} without a label`)),
+        ...sets.filter((s) => s.state).map((s) => [h('dt', s.name), h('dd', `${exact(s.cells)} cells (${percent(s.cells / n, 1)})`)]).flat(),
+        h('dt', 'Parameters'), h('dd', `margin ${d.parameters.margin}, minimum ${d.parameters.minimum}, state threshold ${d.parameters.state}; ${d.parameters.bins} bins, up to ${d.parameters.controls} controls per bin${d.parameters.lineage ? ', the lineage\'s markers left out of each label\'s controls' : ''}`),
+        h('dt', 'Artifact'), h('dd.mono', r.id));
     // Each cluster's labels at the level, and names from them.
     const rows = composition(d, level).map((row) => {
-      const bar = h('div.ct-composition', { role: 'img', 'aria-label': `${nameOf(names, row.cluster)} by label` }, ...row.labels.map((e) => h('span', { style: { width: `${100 * e.share}%`, background: labelColor(e.label ?? unlabeled, unlabeled) }, title: `${e.name}: ${formatCount(e.count)} (${percent(e.share)})` })));
+      const bar = h('div.ct-composition', { role: 'img', 'aria-label': `${nameOf(names, row.cluster)} by label` }, ...row.labels.map((e) => h('span', { style: { width: `${100 * e.share}%`, background: labelColor(e.label ?? unlabeled, unlabeled, sets) }, title: `${e.name}: ${formatCount(e.count)} (${percent(e.share)})` })));
       const lead = row.labels.slice(0, 3).map((e) => `${e.name} ${percent(e.share)}`).join(', ');
       return h('tr', { 'data-cluster': row.cluster }, h('td', nameOf(names, row.cluster)), h('td.r', exact(row.cells)), h('td.lb-bar', bar), h('td', h('span.ct-genes', lead)));
     });
@@ -447,15 +585,24 @@ export function labelsSections(app, ctx) {
         toast('The clusters already have these names.', { kind: 'info' });
         return;
       }
-      app.store.commit(next, `Name the clusters of ${clustering.name} from ${d.markers.name}`);
+      app.store.commit(next, `Name the clusters of ${clustering.name} from ${labelSetName(r)}`);
       toast(`Named ${proposed} clusters from the labels (a new version of the names).`, { kind: 'ok' });
     };
+    // An imported label: its color and cells; chosen, its cells selected on the map and the tissue.
+    const importedRows = src ? sets.map((s, k) => h('tr', { tabIndex: 0, style: { cursor: 'pointer' }, title: `Select the cells of ${s.name} on the map and the tissue`, onclick: async () => {
+      await ctx.cellMap?.setColor({ kind: 'labels', labels: r.id, level: 0 });
+      ctx.cellMap?.selectGroups([k]);
+      document.querySelector('.ct-map-host')?.scrollIntoView({ block: 'nearest' });
+    } },
+      h('td', h('span.ct-swatch', { style: { background: labelColor(k, unlabeled, sets) }, 'aria-hidden': 'true' }), s.name),
+      h('td.r', exact(s.cells)),
+      h('td.r', percent(s.cells / n, 1)))) : [];
     // Each label: its level, cells, markers and controls; chosen, the map colored by its score.
-    const labelRows = labelTree({ labels: sets.filter((s) => !s.state).map((s) => ({ name: s.name, parent: s.parent >= 0 ? sets[s.parent].name : undefined })) }).map(({ label, depth }) => {
+    const labelRows = src ? [] : labelTree({ labels: sets.filter((s) => !s.state).map((s) => ({ name: s.name, parent: s.parent >= 0 ? sets[s.parent].name : undefined })) }).map(({ label, depth }) => {
       const k = sets.findIndex((s) => s.name === label.name && !s.state);
       const s = sets[k];
       return h('tr', { tabIndex: 0, style: { cursor: 'pointer' }, title: `Color the map and the tissue by ${s.name}'s score`, onclick: () => colorBy({ kind: 'score', labels: r.id, set: k, name: s.name }) },
-        h('td', h('span', { style: { marginLeft: `${depth * 16}px` } }, h('span.ct-swatch', { style: { background: labelColor(k, unlabeled) }, 'aria-hidden': 'true' }), s.name)),
+        h('td', h('span', { style: { marginLeft: `${depth * 16}px` } }, h('span.ct-swatch', { style: { background: labelColor(k, unlabeled, sets) }, 'aria-hidden': 'true' }), s.name)),
         h('td.muted', levels[s.level]),
         h('td.r', exact(s.cells)),
         h('td', h('span.ct-genes', s.positive.join(', '))),
@@ -468,23 +615,25 @@ export function labelsSections(app, ctx) {
       h('div.ct-summary', kv),
       h('div.btn-row', levelButtons,
         h('button.btn.small.primary', { type: 'button', 'data-action': 'color-labels', onclick: () => colorBy({ kind: 'labels', labels: r.id, level }) }, icon('tag'), 'Color the map and the tissue'),
-        h('button.btn.small', { type: 'button', onclick: () => colorBy({ kind: 'confidence', labels: r.id }) }, 'Confidence'),
+        !src || src.confidenceColumn ? h('button.btn.small', { type: 'button', onclick: () => colorBy({ kind: 'confidence', labels: r.id }) }, 'Confidence') : null,
         h('button.btn.small', { type: 'button', onclick: () => app.showLabels(r, level) }, icon('tissue'), 'Show in the Viewer')),
-      h('div.section-title', { style: { marginTop: '12px' } }, `Each cluster's labels: ${levels[level].toLowerCase()}`),
+      h('div.section-title', { style: { marginTop: '12px' } }, src ? 'Each cluster\'s labels' : `Each cluster's labels: ${levels[level].toLowerCase()}`),
       h('div.table-wrap', h('table.data-table.seg-table.lb-composition',
         h('thead', h('tr', h('th', 'Cluster'), h('th.r', 'Cells'), h('th', 'Labels'), h('th', 'Leading'))),
         h('tbody', ...rows))),
-      h('p.muted.seg-note', 'A cell that takes no label at a level is counted under the label above, where it stopped; "No label" cells took none at the top. A cluster split between labels may hold two kinds of cells, or cells whose outlines hold parts of two.'),
+      h('p.muted.seg-note', src ? `The imported labels of each cluster's cells ("No label": cells the table does not label). A cluster split between labels may hold two kinds of cells, or the clusters and the labels may part cells differently.` : 'A cell that takes no label at a level is counted under the label above, where it stopped; "No label" cells took none at the top. A cluster split between labels may hold two kinds of cells, or cells whose outlines hold parts of two.'),
       h('div.lb-naming',
         h('label.field', { for: 'lb-share' }, h('span', 'Name each cluster by the most specific label at least this share of its cells carry'), shareInput),
         h('button.btn.small', { type: 'button', disabled: !proposed, 'data-action': 'name-from-labels', onclick: applyNames }, icon('tag'), `Name ${proposed} cluster${proposed === 1 ? '' : 's'}`),
         h('span.muted', proposed ? `${proposal.map((p, k) => (p ? `${nameOf(null, k)} "${p}"` : null)).filter(Boolean).slice(0, 4).join(', ')}${proposed > 4 ? ', …' : ''}: a new version of the names; clusters without such a label keep theirs.` : 'No cluster has a label held by that share of its cells.')),
       h('div.section-title', { style: { marginTop: '12px' } }, 'Labels'),
-      h('div.table-wrap', h('table.data-table.seg-table.lb-labels',
+      src ? h('div.table-wrap', h('table.data-table.seg-table.lb-labels',
+        h('thead', h('tr', h('th', 'Label'), h('th.r', 'Cells'), h('th.r', { title: 'Of the segmentation\'s cells' }, 'Share'))),
+        h('tbody', ...importedRows))) : h('div.table-wrap', h('table.data-table.seg-table.lb-labels',
         h('thead', h('tr', h('th', 'Label'), h('th', 'Level'), h('th.r', { title: 'Cells carrying it as their most specific label' }, 'Cells'), h('th', 'Positive markers'), h('th', 'Negative markers'), h('th.r', { title: 'Control genes of its positive markers (hover a row for them)' }, 'Controls'))),
         h('tbody', ...labelRows))),
       stateRows.length ? h('div.table-wrap', h('table.data-table.seg-table.lb-labels', h('thead', h('tr', h('th', 'State'), h('th', 'Of'), h('th.r', 'Cells'), h('th', 'Positive markers'), h('th', 'Negative markers'), h('th.r', 'Controls'))), h('tbody', ...stateRows))) : null,
-      h('p.muted.seg-note', 'Choose a label to color the map and the tissue by its score: its markers\' mean expression less their control genes\'. The controls are genes of the markers\' bins of mean expression; on a targeted panel many of them are other types\' markers, so a type that dominates the tissue scores low against its own most expressed genes, and its cells may stay without a label.'),
+      h('p.muted.seg-note', src ? 'Choose a label to select its cells on the map and the tissue.' : 'Choose a label to color the map and the tissue by its score: its markers\' mean expression less their control genes\'. The controls are genes of the markers\' bins of mean expression; on a targeted panel many of them are other types\' markers, so a type that dominates the tissue scores low against its own most expressed genes, and its cells may stay without a label.'),
       h('p.muted.seg-cite', describeLabels(r)),
     ];
   }

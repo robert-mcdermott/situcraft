@@ -14,13 +14,17 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 
+	"situcraft/internal/anndata"
 	"situcraft/internal/artifacts"
 	"situcraft/internal/cluster"
 	"situcraft/internal/jobs"
 	"situcraft/internal/label"
+	"situcraft/internal/segment"
 	"situcraft/internal/simulate"
 	"situcraft/internal/xenium"
 )
@@ -66,6 +70,7 @@ func (a *app) registerLabels(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/labels/{id}", a.labelSet)
 	mux.HandleFunc("GET /api/labels/{id}/cells", a.labelCells)
 	mux.HandleFunc("GET /api/labels/{id}/scores", a.labelScores)
+	a.registerLabelImports(mux)
 }
 
 // markerStarter is a marker set offered for a clustering: SituCraft's, or the simulated tissue's,
@@ -348,7 +353,8 @@ func (a *app) labelsOf(w http.ResponseWriter, id string) (string, bool) {
 	return dir, true
 }
 
-// labelSet answers a label set's description and marker set: {description, markers}.
+// labelSet answers a label set's description and marker set (null for imported labels):
+// {description, markers}.
 func (a *app) labelSet(w http.ResponseWriter, r *http.Request) {
 	dir, ok := a.labelsOf(w, r.PathValue("id"))
 	if !ok {
@@ -359,10 +365,12 @@ func (a *app) labelSet(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
-	set, err := label.ReadMarkers(dir)
-	if err != nil {
-		writeError(w, http.StatusUnprocessableEntity, err.Error())
-		return
+	var set *label.MarkerSet
+	if d.Source == nil {
+		if set, err = label.ReadMarkers(dir); err != nil {
+			writeError(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
 	}
 	writeJSON(w, map[string]any{"description": d, "markers": set})
 }
@@ -431,8 +439,12 @@ func (a *app) labelCells(w http.ResponseWriter, r *http.Request) {
 	writeBinary(w, out, false)
 }
 
-// segmentationCells is the number of the segmentation's cells a label set's clustering records.
+// segmentationCells is the number of the segmentation's cells a label set's clustering records
+// (imported labels are of every cell).
 func (a *app) segmentationCells(d *label.Description) (int, error) {
+	if d.Clustering == nil {
+		return d.Cells.Analyzed, nil
+	}
 	dir, err := a.artifactFolder(d.Clustering.ID, cluster.FileDescription)
 	if err != nil {
 		return 0, err
@@ -455,6 +467,10 @@ func (a *app) labelScores(w http.ResponseWriter, r *http.Request) {
 	d, _, lab, err := label.Read(dir)
 	if err != nil {
 		writeError(w, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+	if d.Source != nil {
+		writeError(w, http.StatusBadRequest, "Imported labels have no scores.")
 		return
 	}
 	k, err := strconv.Atoi(r.URL.Query().Get("set"))
@@ -492,4 +508,293 @@ func (a *app) labelScores(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("X-Label", d.Sets[k].Name)
 	writeBinary(w, out, false)
+}
+
+// --- Labels imported from a table, or the instrument's clusters ---
+
+// importLabelsRequest names what to read: a table's path (only this computer may name one), or
+// one of the instrument's clusterings by name; the segmentation whose cells it labels; and, to
+// import, its columns.
+type importLabelsRequest struct {
+	Path         string           `json:"path,omitempty"`
+	Instrument   string           `json:"instrument,omitempty"`
+	Segmentation string           `json:"segmentation"`
+	Columns      label.ImportSpec `json:"columns"`
+}
+
+type importLabelsSpec struct {
+	Bundle string              `json:"bundle"`
+	Ask    importLabelsRequest `json:"ask"`
+	SHA256 string              `json:"sha256"`
+}
+
+func importedLabelsID(segmentation, sha string, spec label.ImportSpec) string {
+	cols, _ := json.Marshal(spec)
+	h := sha256.Sum256([]byte("import\n" + segmentation + "\n" + sha + "\n" + string(cols) + "\n" + label.MethodVersion))
+	return "lab-" + hex.EncodeToString(h[:10])
+}
+
+func (a *app) registerLabelImports(mux *http.ServeMux) {
+	mux.HandleFunc("POST /api/local/{index}/labels/read", a.readLabelsTable)
+	mux.HandleFunc("POST /api/local/{index}/labels/import", a.importLabels)
+}
+
+// instrumentTable is one of the instrument's clusterings as a table of labels: each cell's barcode
+// and "Instrument cluster N", N the instrument's number (apart from SituCraft's clusters' names);
+// its SHA-256 of the barcodes and labels read.
+func instrumentTable(b *xenium.Bundle, name string) (*label.Table, *xenium.AnalysisClustering, error) {
+	an, err := b.ReadAnalysis()
+	if err != nil {
+		return nil, nil, err
+	}
+	for i := range an.Clusterings {
+		c := &an.Clusterings[i]
+		if c.Name != name {
+			continue
+		}
+		ids := &anndata.Column{Name: "Barcode", Text: c.Barcodes}
+		clusters := &anndata.Column{Name: "Cluster", Text: make([]string, len(c.Cluster))}
+		h := sha256.New()
+		for k, v := range c.Cluster {
+			clusters.Text[k] = fmt.Sprintf("Instrument cluster %d", v)
+			fmt.Fprintf(h, "%s\t%s\n", c.Barcodes[k], clusters.Text[k])
+		}
+		return &label.Table{Format: label.FormatInstrument, File: an.Source, SHA256: hex.EncodeToString(h.Sum(nil)), Rows: len(c.Barcodes), Columns: []*anndata.Column{ids, clusters}}, c, nil
+	}
+	return nil, nil, fmt.Errorf("the instrument's analysis has no clustering %q", name)
+}
+
+// labelsTable reads what a request names, refusing a path from another computer.
+func (a *app) labelsTable(r *http.Request, b *xenium.Bundle, ask *importLabelsRequest) (*label.Table, error) {
+	if ask.Instrument != "" {
+		t, _, err := instrumentTable(b, ask.Instrument)
+		return t, err
+	}
+	if ask.Path == "" {
+		return nil, errors.New("name a table (its path) or one of the instrument's clusterings")
+	}
+	if r != nil && !isLoopbackRequest(r) {
+		return nil, errForbidden
+	}
+	abs, err := filepath.Abs(strings.TrimSpace(ask.Path))
+	if err != nil {
+		return nil, err
+	}
+	ask.Path = abs
+	return label.ReadTable(abs)
+}
+
+var errForbidden = errors.New("only this computer may name files to read")
+
+// segmentationCellIDs reads a segmentation of the bundle's dataset and its cells' ids.
+func (a *app) segmentationCellIDs(ctx context.Context, b *xenium.Bundle, id string) (artifacts.Manifest, []string, error) {
+	sm, err := a.segmentationOf(id, b.Experiment.AnalysisUUID)
+	if err != nil {
+		return sm, nil, err
+	}
+	dir, err := a.segmentationFolder(ctx, b, sm)
+	if err != nil {
+		return sm, nil, err
+	}
+	cells, err := segment.ReadCells(dir)
+	if err != nil {
+		return sm, nil, err
+	}
+	ids := make([]string, len(cells))
+	for i, c := range cells {
+		ids[i] = c.ID
+	}
+	return sm, ids, nil
+}
+
+// readLabelsTable reads a table of labels and says what it holds and how it matches the
+// segmentation's cells: {format, file, sha256, rows, path, columns, roles, match, others}, others
+// the dataset's other segmentations its ids match better.
+func (a *app) readLabelsTable(w http.ResponseWriter, r *http.Request) {
+	if !a.needCache(w) {
+		return
+	}
+	var ask importLabelsRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&ask); err != nil || ask.Segmentation == "" {
+		writeError(w, http.StatusBadRequest, "Send {\"path\" or \"instrument\", \"segmentation\", \"columns\": optional}.")
+		return
+	}
+	b, ok := a.openBundle(w, r)
+	if !ok {
+		return
+	}
+	defer b.Close()
+	t, err := a.labelsTable(r, b, &ask)
+	if errors.Is(err, errForbidden) {
+		writeError(w, http.StatusForbidden, "Only this computer may name files to read.")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+	columns, roles := label.Describe(t)
+	if ask.Columns.IDColumn != "" {
+		roles.ID = ask.Columns.IDColumn
+	}
+	sm, ids, err := a.segmentationCellIDs(r.Context(), b, ask.Segmentation)
+	if err != nil {
+		writeError(w, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+	out := map[string]any{"format": t.Format, "file": t.File, "sha256": t.SHA256, "rows": t.Rows, "path": t.Path, "columns": columns, "roles": roles, "segmentation": map[string]any{"id": sm.ID, "name": sm.Name, "cells": len(ids)}}
+	if c := t.Column(roles.ID); c != nil {
+		_, m := label.MatchIDs(c, ids)
+		out["match"] = m
+		// Another of the dataset's segmentations whose cells the ids name, when these do not.
+		others := []map[string]any{}
+		if m.NotInSegmentation > 0 {
+			list, _ := a.artifacts.List()
+			for _, om := range list {
+				if om.Kind != "segmentation" || om.ID == sm.ID || om.State != artifacts.Complete {
+					continue
+				}
+				if _, err := a.segmentationOf(om.ID, b.Experiment.AnalysisUUID); err != nil {
+					continue
+				}
+				_, oids, err := a.segmentationCellIDs(r.Context(), b, om.ID)
+				if err != nil {
+					continue
+				}
+				if _, o := label.MatchIDs(c, oids); o.NotInSegmentation < m.NotInSegmentation {
+					others = append(others, map[string]any{"id": om.ID, "name": om.Name, "notInSegmentation": o.NotInSegmentation, "matched": o.Matched})
+				}
+			}
+		}
+		out["others"] = others
+	}
+	writeJSON(w, out)
+}
+
+// importLabels starts the job importing a table's labels for a segmentation's cells, answering
+// {id, artifact, job}: the artifact at once when it was made already. The table is refused here,
+// with why, when its ids are not all the segmentation's.
+func (a *app) importLabels(w http.ResponseWriter, r *http.Request) {
+	if !a.needCache(w) {
+		return
+	}
+	var ask importLabelsRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&ask); err != nil || ask.Segmentation == "" {
+		writeError(w, http.StatusBadRequest, "Send {\"path\" or \"instrument\", \"segmentation\", \"columns\": {idColumn, column, confidenceColumn, colorColumn}}.")
+		return
+	}
+	b, ok := a.openBundle(w, r)
+	if !ok {
+		return
+	}
+	path := b.Path
+	defer b.Close()
+	t, err := a.labelsTable(r, b, &ask)
+	if errors.Is(err, errForbidden) {
+		writeError(w, http.StatusForbidden, "Only this computer may name files to read.")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+	if ask.Instrument != "" {
+		ask.Columns = label.ImportSpec{IDColumn: "Barcode", Column: "Cluster"}
+	}
+	sm, ids, err := a.segmentationCellIDs(r.Context(), b, ask.Segmentation)
+	if err != nil {
+		writeError(w, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+	if _, err := label.Import(t, ask.Columns, ids); err != nil {
+		writeErrorCode(w, http.StatusUnprocessableEntity, "labels.refused", err.Error())
+		return
+	}
+	id := importedLabelsID(sm.ID, t.SHA256, ask.Columns)
+	if m, err := a.artifacts.Get(id); err == nil {
+		writeJSON(w, map[string]any{"id": id, "artifact": m})
+		return
+	}
+	spec := importLabelsSpec{Bundle: path, Ask: ask, SHA256: t.SHA256}
+	job, _, err := a.jobs.Submit("label-import", "Labels from "+t.File+" ("+ask.Columns.Column+") for "+sm.Name, "label-import\x00"+id, spec, a.labelImportJob(spec, id))
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, err.Error())
+		return
+	}
+	writeJSON(w, map[string]any{"id": id, "artifact": nil, "job": job})
+}
+
+func (a *app) labelImportJob(spec importLabelsSpec, id string) jobs.Func {
+	return func(ctx context.Context, r *jobs.Run) error {
+		b, err := xenium.Open(spec.Bundle, xenium.Options{CacheDir: a.cacheDir})
+		if err != nil {
+			return err
+		}
+		defer b.Close()
+		ask := spec.Ask
+		r.Progress(0.05, "Reading the table")
+		t, err := a.labelsTable(nil, b, &ask)
+		if err != nil {
+			return err
+		}
+		if t.SHA256 != spec.SHA256 {
+			return fmt.Errorf("%s changed after it was read: read it again", t.File)
+		}
+		r.Progress(0.4, "Matching the cells")
+		sm, ids, err := a.segmentationCellIDs(ctx, b, ask.Segmentation)
+		if err != nil {
+			return err
+		}
+		imp, err := label.Import(t, ask.Columns, ids)
+		if err != nil {
+			return err
+		}
+		title, citation := ask.Columns.Column+" from "+t.File, ""
+		if ask.Instrument != "" {
+			_, c, err := instrumentTable(b, ask.Instrument)
+			if err != nil {
+				return err
+			}
+			imp.Source.Tool, imp.Source.Version, imp.Source.Title = "Xenium Onboard Analysis", b.Experiment.AnalysisSoftware, c.Title
+			title, citation = "the instrument's "+strings.ToLower(c.Title)+" clusters", instrumentAnalysisCitation
+		}
+		labeled := 0
+		for _, k := range imp.Label {
+			if k >= 0 {
+				labeled++
+			}
+		}
+		r.Log("info", "%d of %s's %d rows name cells of %s (%d of them without a label); %d of its %d cells have no label; %d labels.", imp.Match.Matched, t.File, imp.Match.Rows, sm.Name, imp.Match.Matched-labeled, len(ids)-labeled, len(ids), len(imp.Labels))
+		stage, err := a.artifacts.Stage(id)
+		if err != nil {
+			return err
+		}
+		if err := label.WriteImported(stage, cluster.Side{ID: sm.ID, Name: sm.Name}, imp); err != nil {
+			a.artifacts.Discard(id)
+			return err
+		}
+		r.Validating()
+		var parents []artifacts.Parent
+		for _, p := range sm.Lineage.Parents {
+			if p.Kind == "bundle" {
+				parents = append(parents, p)
+			}
+		}
+		parents = append(parents, artifacts.Parent{Kind: "segmentation", ID: sm.ID, Name: sm.Name})
+		params, _ := json.Marshal(imp.Source)
+		jobSpec, _ := json.Marshal(spec)
+		files := filesOf(label.FilesOf(&label.Description{Source: &imp.Source}), label.Roles)
+		m := artifacts.Manifest{
+			ID: id, Kind: "labels", Name: "Labels: " + title,
+			Lineage: artifacts.Lineage{
+				Parents:    parents,
+				Job:        &artifacts.Job{ID: r.ID(), Kind: "label-import", Spec: jobSpec},
+				Method:     artifacts.Method{Name: "Imported labels", Version: label.MethodVersion, Citation: citation},
+				Parameters: params,
+				Software:   []artifacts.Software{{Name: "situcraft", Version: version, Commit: buildCommit()}},
+			},
+			Files: files,
+		}
+		return a.promoteChecked(m, label.Check, "imported label set")
+	}
 }

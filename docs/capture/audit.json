@@ -230,6 +230,16 @@
   "violations": []
  },
  {
+  "scene": "imported",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "imported",
+  "theme": "light",
+  "violations": []
+ },
+ {
   "scene": "clusters",
   "theme": "dark",
   "violations": []

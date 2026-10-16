@@ -218,7 +218,7 @@ export function mountViewer(app, container) {
           const per = labelsPerCell(data.cells, asLabels.level, sets.length);
           const counts = new Map();
           for (const k of per) if (k >= 0) counts.set(k, (counts.get(k) ?? 0) + 1);
-          state.clusterFill = { labels: true, unlabeled: sets.length, sets, counts, analyzed: data.cells.n, cells: per.length, name: labelFills(app.store.project, t.dataset.id, drawnChoice()?.id).find((f) => f.id === fill)?.label ?? 'Labels', rgba: labelColors(per, sets.length) };
+          state.clusterFill = { labels: true, unlabeled: sets.length, sets, counts, analyzed: data.cells.n, cells: per.length, name: labelFills(app.store.project, t.dataset.id, drawnChoice()?.id).find((f) => f.id === fill)?.label ?? 'Labels', rgba: labelColors(per, sets.length, sets) };
           renderer.setCellColors(state.clusterFill.rgba);
           updateLegend();
         }).catch((error) => toast(`The labels could not be drawn: ${error.message}`, { kind: 'error' }));
@@ -256,7 +256,7 @@ export function mountViewer(app, container) {
         const entries = [...f.counts.entries()].sort((a, b) => (a[0] === f.unlabeled) - (b[0] === f.unlabeled) || b[1] - a[1]);
         const shown = entries.slice(0, 24);
         return h('div', h('b', f.name),
-          ...shown.map(([k, size]) => h('div.viewer-legend-item', h('span.dot', { style: { background: labelColor(k, f.unlabeled) } }), k === f.unlabeled ? 'No label' : f.sets[k].name, h('span.muted', formatCount(size)))),
+          ...shown.map(([k, size]) => h('div.viewer-legend-item', h('span.dot', { style: { background: labelColor(k, f.unlabeled, f.sets) } }), k === f.unlabeled ? 'No label' : f.sets[k].name, h('span.muted', formatCount(size)))),
           entries.length > shown.length ? h('div.muted', `and ${entries.length - shown.length} more labels`) : null,
           f.analyzed < f.cells ? h('div.muted', `${formatCount(f.cells - f.analyzed)} cells not analyzed are not filled.`) : null);
       }

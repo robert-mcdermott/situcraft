@@ -1789,6 +1789,62 @@ Found by slice 3:
   cells 28 to 0, plasma cells 11 to 0, B, NK and dendritic cells), and labels fewer of Lung (47% to
   28%): not taken.
 
+### 5.4 Imported labels (verified, wave 4, slice 4)
+
+Labels made elsewhere — another tool's predictions, an earlier analysis, a colleague's
+annotation, the instrument's own clusters — are imported for a segmentation's cells, matched by
+the cells' ids, and kept as an artifact of kind `labels` with their source (`internal/label`'s
+`table.go` and `imported.go`; `docs/FORMATS.md`, Labels SituCraft imports).
+
+**What is read.** A CSV or TSV table (gzipped or not; a column of numbers wherever every value is
+one); a Parquet file (text, numbers, booleans, dictionary-encoded columns); an AnnData object's
+`obs` in Zarr (format 2 or 3, a folder or a zip; its index and every column, with anndata's
+categorical and nullable encodings), or a SpatialData store's table; Xenium Explorer's cell groups
+(a CSV of `cell_id`, `group` and optionally `color`, a group's HEX color given once, as Xenium
+Explorer documents its import, 10x Genomics, *Xenium Explorer: Cells*); and the instrument's
+graph-based and k-means clusters from `analysis.tar.gz` (§5.2). h5ad files are not read: anndata
+writes Zarr with `write_zarr`, and whether to read HDF5 AnnData is decided with references (slice
+6).
+
+**Matching.** The cells' ids are matched exactly to the segmentation's (the bundle's own for the
+instrument's segmentation, SituCraft's for its own, as its exports write them). SituCraft's
+choices:
+- **A table naming a cell the segmentation does not have is refused**, with how many and the first
+  few: labels made for another segmentation, or another sample, would otherwise be attached to the
+  cells they happen to share ids with. The page names the dataset's other segmentations whose
+  cells the ids are, when one is.
+- **A cell named twice is refused**; so is a label column of more than 1,000 values (an id or a
+  measurement, not labels).
+- **Cells the table does not name have no label** and are counted; so are rows whose label is
+  empty or `NA`, `nan`, `None`, `null`.
+- **The columns are suggested by their usual names** (the ids `cell_id`, `Cell ID`, `cell`,
+  `barcode`, an AnnData index; the labels `group`, `cell_type`, `label`, `annotation`, `cluster`,
+  `leiden` …; a confidence column of numbers named for a score or probability; colors), and chosen
+  by the user.
+
+**The artifact** keeps each of the segmentation's cells' label and confidence (NaN where none was
+given), the labels by decreasing cells with their colors where the table gave them, and the
+source: its format, file and SHA-256 (of an AnnData store, of its `obs`'s files), the columns and
+rows. Each cluster's labels are counted in the page for the clustering shown, so one imported
+label set serves every clustering of its segmentation. The check requires every cell, in order,
+one level, each label an index among the labels and counted as described.
+
+**Validation:**
+- **Files written by pandas 3.0.6, pyarrow 26.0.0 and anndata 0.13.4** (`internal/label/testdata`:
+  CSV and gzipped TSV; Parquet with a dictionary-encoded column and float32 nulls; AnnData in Zarr
+  formats 3 and 2 with a categorical column and a missing value, the ids as the index; a
+  SpatialData-like store's table; Xenium Explorer's groups): every cell's label and confidence as
+  written, the columns' roles found.
+- **Refused:** a table naming a cell the segmentation does not have (with the count), one naming a
+  cell twice, a confidence column of text, a missing column.
+- **The development bundles:** each bundle's graph-based clusters written as a table and imported
+  for the instrument's segmentation, every cell its cluster (Lung 11,897 of 11,898 cells, Breast
+  7,273 of 7,275; the others not clustered by the instrument, without a label); the Lung table
+  refused for the Breast cells, all 11,897 rows counted.
+- **In the app:** a table of three Lung cells (their ids as `select_cell` answers them) imported by
+  remote control, those cells and no other labeled; a table naming another dataset's cell refused;
+  the instrument's graph-based clusters imported, 11,897 cells in 17 clusters (viewer suite).
+
 ## 6. Spatial analysis (wave 6) and cohorts (wave 7)
 
 - **Graphs:**

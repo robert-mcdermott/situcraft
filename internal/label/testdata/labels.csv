@@ -1,0 +1,9 @@
+cell_id,cell_type,confidence,sample
+aaaaeeee-1,T cell,0.91,s1
+aaaabbbb-1,Tumour,0.5,s1
+aaaaiiii-1,T cell,,s1
+µm-cell-2,Macrophage (M2),0.25,s1
+aaaacccc-1,,0.75,s1
+aaaagggg-1,Tumour,1.0,s1
+aaaadddd-1,Tumour,0.125,s1
+aaaajjjj-1,"Fibroblast, myo",0.0625,s1

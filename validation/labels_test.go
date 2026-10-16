@@ -19,6 +19,7 @@ package validation
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -264,5 +265,98 @@ func TestStarterSetsFitTheirPanels(t *testing.T) {
 		if _, err := s.Set.Resolve(genes); err != nil {
 			t.Errorf("%s: %v", s.ID, err)
 		}
+	}
+}
+
+// Labels imported for a bundle's own cells (wave 4, slice 4): each development bundle's graph-based
+// clusters, written as a table (Barcode, Cluster), read and matched to the instrument segmentation's
+// cells by id, every cell its cluster and the cells the instrument did not cluster without a label;
+// the Lung bundle's table refused for the Breast bundle's cells, every row counted.
+func TestImportedLabelsMatchTheBundles(t *testing.T) {
+	tables := map[string]string{}
+	cells := map[string][]string{}
+	for _, set := range []string{"xenium-lung-2fov", "xenium-breast-2fov"} {
+		dir := bundle(t, set)
+		b, err := xenium.Open(dir, xenium.Options{CacheDir: t.TempDir()})
+		if err != nil {
+			t.Fatal(err)
+		}
+		seg := filepath.Join(t.TempDir(), "instrument")
+		if err := os.MkdirAll(seg, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := imports.Instrument(context.Background(), b, seg, runtime.NumCPU()); err != nil {
+			t.Fatal(err)
+		}
+		segCells, err := segment.ReadCells(seg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		an, err := b.ReadAnalysis()
+		b.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		var graph *xenium.AnalysisClustering
+		for i := range an.Clusterings {
+			if an.Clusterings[i].Name == "gene_expression_graphclust" {
+				graph = &an.Clusterings[i]
+			}
+		}
+		if graph == nil {
+			t.Fatalf("%s: no graph-based clusters", set)
+		}
+		var sb strings.Builder
+		sb.WriteString("Barcode,Cluster\n")
+		want := map[string]string{}
+		for k, id := range graph.Barcodes {
+			fmt.Fprintf(&sb, "%s,Cluster %d\n", id, graph.Cluster[k])
+			want[id] = fmt.Sprintf("Cluster %d", graph.Cluster[k])
+		}
+		path := filepath.Join(t.TempDir(), set+".csv")
+		if err := os.WriteFile(path, []byte(sb.String()), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		tables[set] = path
+		ids := make([]string, len(segCells))
+		for i, c := range segCells {
+			ids[i] = c.ID
+		}
+		cells[set] = ids
+		tab, err := label.ReadTable(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		info, roles := label.Describe(tab)
+		if roles.ID != "Barcode" || roles.Label != "Cluster" || !info[0].Unique {
+			t.Errorf("%s: roles %+v", set, roles)
+		}
+		imp, err := label.Import(tab, label.ImportSpec{IDColumn: roles.ID, Column: roles.Label}, ids)
+		if err != nil {
+			t.Fatalf("%s: %v", set, err)
+		}
+		wrong, unlabeled := 0, 0
+		for i, id := range ids {
+			got := ""
+			if k := imp.Label[i]; k >= 0 {
+				got = imp.Labels[k]
+			} else {
+				unlabeled++
+			}
+			if got != want[id] {
+				wrong++
+			}
+		}
+		if wrong != 0 || unlabeled != len(ids)-len(graph.Barcodes) || imp.Match.Matched != len(graph.Barcodes) {
+			t.Errorf("%s: %d cells with another label, %d without one (the instrument clusters %d of %d)", set, wrong, unlabeled, len(graph.Barcodes), len(ids))
+		}
+		t.Logf("%s: %d of %d cells labeled from %d rows, %d labels", set, imp.Match.Matched, len(ids), tab.Rows, len(imp.Labels))
+	}
+	tab, err := label.ReadTable(tables["xenium-lung-2fov"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := label.Import(tab, label.ImportSpec{IDColumn: "Barcode", Column: "Cluster"}, cells["xenium-breast-2fov"]); err == nil || !strings.Contains(err.Error(), fmt.Sprintf("%d of xenium-lung-2fov.csv's %d rows name cells this segmentation does not have", tab.Rows, tab.Rows)) {
+		t.Errorf("the Lung table for the Breast cells: %v", err)
 	}
 }

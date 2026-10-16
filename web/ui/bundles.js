@@ -581,6 +581,45 @@ export function createBundles(app) {
     return entry.promise;
   }
 
+  // A table of labels read and described by the program, matched to a segmentation's cells
+  // (request { path or instrument, segmentation, columns }).
+  function readLabelsTable(item, request) {
+    return getJSON(`${item.url}/labels/read`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) });
+  }
+
+  // Imports a table's labels for a segmentation's cells, unless done already; recorded in the
+  // project. Answers the manifest.
+  const importingLabels = new Map(); // request JSON → { dataset, segmentation, job, promise }
+  function importLabels(item, datasetId, request) {
+    const key = JSON.stringify(request);
+    if (importingLabels.has(key)) return importingLabels.get(key).promise;
+    const entry = { dataset: datasetId, segmentation: request.segmentation, job: null, promise: null };
+    entry.promise = (async () => {
+      try {
+        const answer = await getJSON(`${item.url}/labels/import`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) });
+        let manifest = answer.artifact;
+        if (!manifest) {
+          entry.job = answer.job?.id ?? null;
+          notify();
+          const job = await app.jobs.finished(entry.job);
+          if (job?.state !== 'complete') throw new Error(`the import ${job?.state ?? 'ended'}${job?.error ? `: ${job.error}` : ''}`);
+          manifest = await getJSON(`/api/artifacts/${encodeURIComponent(answer.id)}`);
+        }
+        const dataset = app.store.project.datasets.find((d) => d.id === datasetId);
+        if (!dataset) throw new Error('the dataset is no longer in the project');
+        const next = addLabels(app.store.project, labelsRecord(dataset, manifest));
+        if (next !== app.store.project) app.store.commit(next, `Import labels into ${dataset.name}`);
+        return manifest;
+      } finally {
+        importingLabels.delete(key);
+        notify();
+      }
+    })();
+    importingLabels.set(key, entry);
+    notify();
+    return entry.promise;
+  }
+
   // A label set's description, marker set and cells, kept for the session.
   const labelSets = new Map();
   function labelData(id) {
@@ -772,6 +811,10 @@ export function createBundles(app) {
     labelCells,
     labelData,
     labelScores,
+    readLabelsTable,
+    importLabels,
+    // The label imports into a dataset under way: [{ segmentation, job }].
+    labelImports: (id) => [...importingLabels.values()].filter((e) => e.dataset === id).map(({ segmentation, job }) => ({ segmentation, job })),
     // The labelings of a dataset under way: [{ clustering, job }].
     labelings: (id) => [...labeling.values()].filter((e) => e.dataset === id).map(({ clustering, job }) => ({ clustering, job })),
     // The maps under way of a dataset: [{ clustering, job }].

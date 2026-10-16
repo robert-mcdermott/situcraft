@@ -6,7 +6,7 @@
 
 import { h, icon, clear, formatBytes, formatCount } from './dom.js';
 import { promotedSegmentation } from '../lib/segmentations.js';
-import { markerSetsOf } from '../lib/labels.js';
+import { labelSetName, markerSetsOf } from '../lib/labels.js';
 
 // The icon of an item handed to the program, by its kind (local.go, fileKind and dirKind).
 export const KIND_ICONS = {
@@ -86,12 +86,13 @@ const SECTIONS = [
     kind: 'labels', title: 'Label sets', icon: 'tag',
     items: (project) => project.artifacts.filter((a) => a.kind === 'labels'),
     label: (a, app) => {
+      if (a.source) return labelSetName(a);
       const c = app.store.project.artifacts.find((x) => x.kind === 'clustering' && x.id === a.clustering);
       return `${a.markers?.name ?? 'Labels'} · ${c?.summary?.source ? 'instrument' : `resolution ${c?.parameters?.resolution ?? '?'}`}`;
     },
     itemIcon: (a) => (a.state === 'complete' ? 'tag' : 'warning'),
     meta: (a) => (a.state === 'complete' && a.summary?.cells ? `${Math.round((100 * (a.summary.labeled?.[0] ?? 0)) / a.summary.cells)}% labeled` : a.state),
-    empty: 'Cells labeled from marker genes, each label set kept with its marker set and parameters.',
+    empty: 'Cells labeled from marker genes or imported from a table, each label set kept with what it came from.',
   },
   {
     kind: 'marker-set', title: 'Marker sets', icon: 'dna',

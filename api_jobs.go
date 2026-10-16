@@ -278,6 +278,21 @@ func (a *app) handleJobs() {
 			a.artifacts.Discard(lid)
 		}
 	})
+	a.jobs.Handle("label-import", func(spec json.RawMessage) (jobs.Func, error) {
+		if a.cache == nil {
+			return nil, errors.New("SituCraft has no cache folder")
+		}
+		var p importLabelsSpec
+		if json.Unmarshal(spec, &p) != nil || p.Bundle == "" || p.Ask.Segmentation == "" || p.SHA256 == "" {
+			return nil, errors.New("its spec names no bundle, segmentation and table")
+		}
+		return a.labelImportJob(p, importedLabelsID(p.Ask.Segmentation, p.SHA256, p.Ask.Columns)), nil
+	}, func(id string, spec json.RawMessage) {
+		var p importLabelsSpec
+		if json.Unmarshal(spec, &p) == nil && p.SHA256 != "" {
+			a.artifacts.Discard(importedLabelsID(p.Ask.Segmentation, p.SHA256, p.Ask.Columns))
+		}
+	})
 	a.jobs.Handle("analysis", func(spec json.RawMessage) (jobs.Func, error) {
 		if a.cache == nil {
 			return nil, errors.New("SituCraft has no cache folder")

@@ -16,7 +16,7 @@ import { parseProject, rename, serializeProject } from '../lib/project.js';
 import { removeView, sameView, viewLink } from '../lib/views.js';
 import { SEG_FILLS, defaultChoice, segmentationChoices } from '../lib/segview.js';
 import { clusterName, clusterNames, clusteringsOf, mapsOf, nameClusters } from '../lib/clusterings.js';
-import { composition as labelComposition, labelSetsOf, namesFromLabels } from '../lib/labels.js';
+import { composition as labelComposition, labelSetName, labelSetsFor, namesFromLabels } from '../lib/labels.js';
 
 export class ActionError extends Error {}
 
@@ -964,6 +964,60 @@ export function installRemote(app) {
       };
     },
 
+    async import_labels(args) {
+      const dataset = resolveDataset(args.dataset);
+      const link = app.bundles.link(dataset.id);
+      const item = link?.item ?? app.bundles.itemByPath(dataset.path);
+      if (!item) throw new ActionError(`${dataset.name}'s bundle was not found where the project records it.`);
+      const segs = project().artifacts.filter((a) => a.kind === 'segmentation' && a.dataset === dataset.id && a.state === 'complete' && a.source !== 'planted');
+      if (!segs.length) throw new ActionError(`${dataset.name} has no complete segmentation yet.`);
+      let seg = segs.find((a) => a.id === promotedSegmentation(project(), dataset.id)?.record.id) ?? segs[0];
+      if (args.segmentation !== undefined) {
+        const ref = String(args.segmentation);
+        seg = /^(the )?instrument('s)?$/i.test(ref) ? segs.find((a) => a.source === 'instrument') : segs.find((a) => a.id === ref) ?? segs.find((a) => a.name === choose(ref, segs.map((x) => x.name), 'segmentation'));
+        if (!seg) throw new ActionError(`${dataset.name} has no such segmentation.`);
+      }
+      if ((args.path === undefined) === (args.instrument === undefined)) throw new ActionError('Name a table (path) or one of the instrument\'s clusterings (instrument: graph-based, k-means N), not both.');
+      const request = { segmentation: seg.id };
+      if (args.instrument !== undefined) {
+        if (seg.source !== 'instrument') throw new ActionError('The instrument\'s clusters are of its own segmentation: segmentation instrument.');
+        const listed = await app.bundles.instrumentAnalysis(item);
+        if (!listed.clusterings?.length) throw new ActionError(`${dataset.name} holds no analysis of the instrument's.`);
+        const ref = String(args.instrument);
+        const titles = listed.clusterings.map((c) => c.title);
+        request.instrument = (listed.clusterings.find((c) => c.name === ref) ?? listed.clusterings.find((c) => c.title === choose(ref.replace(/^k-means (\d+)$/i, 'K-means ($1 clusters)'), titles, 'clustering'))).name;
+      } else {
+        request.path = String(args.path);
+        let read;
+        try {
+          read = await app.bundles.readLabelsTable(item, { path: request.path, segmentation: seg.id, ...(args.id_column ? { columns: { idColumn: String(args.id_column) } } : {}) });
+        } catch (error) {
+          throw new ActionError(error.message);
+        }
+        const roles = read.roles;
+        request.columns = {
+          idColumn: String(args.id_column ?? roles.id ?? ''),
+          column: String(args.column ?? roles.label ?? ''),
+          confidenceColumn: String(args.confidence_column ?? roles.confidence ?? ''),
+          colorColumn: String(args.color_column ?? roles.color ?? ''),
+        };
+        if (!request.columns.idColumn || !request.columns.column) throw new ActionError(`Name the columns: ${read.file} has ${read.columns.map((c) => c.name).join(', ')}; give id_column and column.`);
+      }
+      let manifest;
+      try {
+        manifest = await app.bundles.importLabels(item, dataset.id, request);
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      await settleMode('celltypes');
+      const record = project().artifacts.find((a) => a.kind === 'labels' && a.id === manifest.id);
+      const { description: d } = await app.bundles.labelData(manifest.id);
+      return {
+        message: `${labelSetName(record)} imported for ${seg.name} of ${dataset.name}: ${plural(d.sets.length, 'label')}, ${plural(d.cells.labeled[0], 'cell')} of ${d.cells.analyzed.toLocaleString('en-US')} labeled.`,
+        data: { id: manifest.id, segmentation: { id: seg.id, name: seg.name }, source: d.source, cells: d.cells, labels: d.sets.map((x) => ({ name: x.name, cells: x.cells, ...(x.color ? { color: x.color } : {}) })) },
+      };
+    },
+
     async instrument_clusters(args) {
       const dataset = resolveDataset(args.dataset);
       const link = app.bundles.link(dataset.id);
@@ -1208,7 +1262,8 @@ export function installRemote(app) {
 
   // A label set of a clustering by id, its latest if not given; and a level by name or number from 1.
   function labelsOf(dataset, clusteringId, ref) {
-    const sets = labelSetsOf(project(), dataset.id, clusteringId).filter((r) => r.state === 'complete');
+    const clustering = project().artifacts.find((a) => a.kind === 'clustering' && a.id === clusteringId);
+    const sets = labelSetsFor(project(), clustering).filter((r) => r.state === 'complete');
     if (!sets.length) throw new ActionError('The clustering has no label set: label_cells makes one.');
     if (!ref) return sets.at(-1);
     const r = sets.find((x) => x.id === ref);
