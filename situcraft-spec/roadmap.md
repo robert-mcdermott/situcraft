@@ -1550,6 +1550,15 @@ Outline; planned in detail when reached.
 - Labels per segmentation, and composition changes in the comparison's downstream-impact tab (C6).
 - Validation: clustering and embeddings against reference libraries on the development bundles
   (partition agreement, trustworthiness), marker scores against hand computation.
+- From testing 0.3.0:
+  - **A comparison can be removed from its project.** The project's history records the removal,
+    and the comparison's files move to SituCraft's trash once no project uses them. A comparison
+    that a decision cites cannot be removed (the methods paragraph tells how the default was
+    chosen from it), and the app says so.
+  - **A comparison made by an earlier method says so.** Opening one whose file layout this version
+    no longer reads names its method version and offers to compare the two segmentations again,
+    instead of "groups.bin: the file ends early" (the layout gained four numbers per difference
+    between methods 1 and 2).
 
 ## 0.5.0: the pathology bridge (wave 5)
 
