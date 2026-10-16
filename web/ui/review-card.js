@@ -69,14 +69,34 @@ export function reviewSections(app, ctx) {
     rv.lowFor = rv.set;
     const rec = reviewed?.kind === 'markers' || reviewed?.kind === 'reference' ? project.artifacts.find((a) => a.id === reviewed.id) : null;
     rv.low = lowConfidenceDefault(rec);
+    rv.againstChosen = false;
+  }
+  // Until one is chosen, the latest set made the same way on another segmentation (one made
+  // later, the labels made again there, is taken up).
+  if (!rv.againstChosen) {
     const origin = (v) => originOf(project.artifacts.find((a) => a.id === v.id), v.level);
     const mine = reviewed ? origin(reviewed) : null;
     rv.against = (mine && against.findLast((x) => origin(x.version) === mine)?.key) || null;
   }
   if (rv.against && !against.some((x) => x.key === rv.against)) rv.against = null;
   const evidenceHost = (st.evidenceHost ??= h('div.rv-evidence'));
-  // A cell chosen on the map or the tissue shows its evidence.
-  app.labelReview = { focusCell: (cell) => showEvidence(cell) };
+  // A cell chosen on the map or the tissue shows its evidence. A tour makes the queue as the card
+  // would, of a label set it names (its id and level; else the one chosen), and reads it.
+  app.labelReview = {
+    focusCell: (cell) => showEvidence(cell),
+    makeQueue: (id = null, level = 0) => {
+      const v = id ? versions.find((x) => x.id === id && x.level === level) : null;
+      if (v && versionKey(v) !== rv.set) {
+        rv.set = versionKey(v);
+        rv.queue = null;
+        // Rendered again, the set's defaults (its confidence, the segmentation against) taken.
+        ctx.render(true);
+        return app.labelReview.makeQueue();
+      }
+      return makeQueue(versions.find((x) => versionKey(x) === rv.set));
+    },
+    queue: () => rv.queue,
+  };
   return [versionsCard(), reviewCard()];
 
   // --- The versions, side by side ---
@@ -264,6 +284,7 @@ export function reviewSections(app, ctx) {
     el.disabled = !against.length;
     el.addEventListener('change', () => {
       rv.against = el.value || null;
+      rv.againstChosen = true;
     });
     return h('label.field', { for: 'rv-against', title: 'A cell is flagged when its counterparts under another segmentation (as a comparison of the two matches cells) carry another label in this set. Compare two segmentations in the Segmentation view, and make the labels again on the other (the label sets\' Make again).' }, h('span', 'Label changes against'), el);
   }

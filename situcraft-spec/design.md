@@ -195,9 +195,14 @@ transcripts are highest together).
 
 A worked example is a tour that answers a question, saying first what to expect: its steps may run
 a job before going on (expanding the nuclei, planting errors, refining, importing the simulated
-tissue's truth, comparing), each named by the segmentations it needs ('instrument',
-'expansion-5', 'planted', 'refined', 'truth') so that a step already done is not done again, and may show a comparison in the workspace as the step describes it (the view, the
-ranking, the classes kept, the difference shown, the side panel). The Lung example's practises on
+tissue's truth, comparing; clustering, labeling from a starter set, importing the truth's types,
+making a clustering and its labels again on another segmentation), each named by the
+segmentations it needs ('instrument', 'expansion-5', 'planted', 'refined', 'truth'; a
+segmentation's clustering its latest of SituCraft's, its labels that clustering's latest from
+markers) so that a step already done is not done again. A step may show a comparison in the
+workspace as it describes it (the view, the ranking, the classes kept, the difference shown, the
+side panel, the Labels tab), or a clustering in the Cell types view (the map's colors, clusters
+selected, a section in view, the review queue made). The Lung example's practises on
 errors planted in its instrument segmentation (`internal/segment/plant`): neighbouring cells whose
 merged cell would mix markers of two lineages, large cells split across their long axis, cells
 dropped, and cells grown into their neighbours; each error kept apart from the others by its

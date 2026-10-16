@@ -76,7 +76,11 @@ func readBundle(ctx context.Context, b *xenium.Bundle, own bool) (_ *source, err
 	e := b.Experiment
 	software := e.AnalysisSoftware
 	src.toolName = "Xenium Onboard Analysis"
-	if strings.Contains(strings.ToLower(software), "ranger") {
+	switch lower := strings.ToLower(software); {
+	case strings.Contains(lower, "situcraft-simulate") && strings.HasSuffix(lower, " truth"):
+		// A simulated tissue's true cells (internal/simulate), shaped as an output bundle of its run.
+		src.toolName = "Simulated truth"
+	case strings.Contains(lower, "ranger"):
 		src.toolName = "Xenium Ranger"
 	}
 	src.toolVer = software

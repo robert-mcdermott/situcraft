@@ -425,6 +425,16 @@ export function installRemote(app) {
       if (w) {
         data.comparison = { id: w.id, names: w.names, mode: w.session.mode, rank: w.session.by, tab: w.session.tab, queue: w.state.queue?.length ?? 0, classes: w.description.classes };
         if (w.session.selected !== null) data.comparison.selected = { class: w.groups[w.session.selected].class, ...cellNames(w.prepared, w.groups[w.session.selected], 6) };
+        // The Labels tab: the two label sets read through the comparison.
+        const im = w.session.tab === 'labels' ? w.session.impact?.data?.impact : null;
+        if (im) data.comparison.labels = { a: w.session.impact.a, b: w.session.impact.b, matched: { cells: im.matched.cells, labeled: im.matched.labeled, agreement: im.matched.agreement, labeledOne: im.matched.labeledOne }, split: im.split, merged: im.merged, sensitive: { a: im.sensitive[0], b: im.sensitive[1] }, mecr: im.mixing ? { a: im.mixing.allA.mecr, b: im.mixing.allB.mecr } : null, fill: Boolean(w.session.impact.fill) };
+      }
+      // A Cell types step: the clustering and the map shown, their colors and selection, and the
+      // review queue made.
+      if (step.celltypes) {
+        const st = app.cellTypesView?.map?.()?.state;
+        const queue = step.celltypes.review ? app.labelReview?.queue?.() : null;
+        data.celltypes = { clustering: st?.clustersOf ?? null, map: st?.mapId ?? null, cells: st?.map?.n ?? 0, color: st?.color ?? null, selected: st?.count ?? 0, ...(queue ? { review: queue.counts, against: queue.against } : {}) };
       }
       return { message: `${card.tour.title}, step ${at + 1} of ${steps.length}: ${step.title}. ${step.text}`, data };
     },

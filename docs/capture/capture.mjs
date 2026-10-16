@@ -385,6 +385,19 @@ const scenes = {
     await js(`(async () => { const w = window.situcraft.compareView.current(); for (const r of w.state.renderers) await r.renderer.settled(); })()`);
     await sleep(400);
   },
+  // The simulated tissue's labels against its truth, a worked example (wave 4, slice 9): its true
+  // types and the instrument's cells labeled from the types' markers read through their
+  // comparison, both tissues colored by type, the example's card beside the Labels tab.
+  async 'worked-labels'() {
+    await act('open_example', { example: 'simulated' });
+    await act('tour', { example: 'simulated', name: 'labels-against-truth' });
+    let step = null;
+    for (let k = 0; k < 6; k += 1) step = await act('tour', { run: true });
+    if (step?.data?.step !== 7) throw new Error(`the worked example stopped at step ${step?.data?.step}: ${step?.message}`);
+    await waitFor(`Boolean(document.querySelector('.cmp-impact-table tbody tr'))`);
+    await js(`(async () => { const w = window.situcraft.compareView.current(); for (const r of w.state.renderers) await r.renderer.settled(); })()`);
+    await sleep(400);
+  },
   // The Breast example's clusters on the tissue (wave 4, slice 1): the cells filled by cluster,
   // with the legend.
   async clusters() {

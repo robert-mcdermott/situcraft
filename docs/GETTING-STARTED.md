@@ -52,22 +52,31 @@ tour continues from there.
 Each example is used under its license; its source and license are linked on its card, and the
 methods paragraph (section 7) cites it.
 
-Each example also has a **worked example**: a question answered step by step, saying first what to
+Each example also has **worked examples**: a question answered step by step, saying first what to
 expect. Some steps run a job before going on (the card's button says what it does: expand the
-nuclei, plant errors, refine, import the truth, compare), and others open the comparison in the
-Compare workspace or the Viewer with the view, the ranking and the difference the step talks
-about.
+nuclei, plant errors, refine, import the truth, compare, cluster, label, make the labels again on
+another segmentation), and others open the comparison in the Compare workspace, the clustering in
+the Cell types view, or the Viewer, with the view, the ranking, the colors and the difference the
+step talks about.
 
 | Example | Worked example | The question |
 | --- | --- | --- |
 | Breast | The instrument's cells against a nucleus expansion | Where does growing each nucleus by 5 µm disagree with the cells the instrument drew from its stains, and which does the evidence favour there? |
 | Breast | Redraw the cells from their transcripts | How does SituCraft's transcript-informed segmentation redraw the instrument's cells, and where is it unsure of itself? |
+| Breast | Labels under two segmentations | How much do the cells' labels depend on the segmentation they were counted in, and which cells does the choice change? |
 | Lung | Find the planted errors (simulated) | Can you find a segmentation's errors with the comparison workspace, and which ranking finds which kind? |
+| Lung | Cluster and label the Lung cells | Which cells are in this section, as their expression groups them and as known markers name them, and how far can each label be trusted? |
 | Simulated | Score segmentations against the truth | When every cell is known, how close do the instrument's nucleus expansion and SituCraft's transcript-informed segmentation come to the true cells? |
+| Simulated | Labels against the truth | When every cell's type is known, how many cells do markers label correctly, and how much of the error is the segmentation's? |
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/worked-dark.webp">
   <img alt="The Lung example's worked example in the Compare workspace: the instrument's segmentation and one with planted errors side by side, a planted merge chosen, and the worked example's card beside the queue" src="images/worked-light.webp">
+</picture>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/worked-labels-dark.webp">
+  <img alt="The simulated tissue's worked example on labels in the Compare workspace: its true cells and the instrument's side by side, each colored by type (the true types and the labels from the types' markers), the Labels tab reading both through the comparison, and the worked example's card beside it" src="images/worked-labels-light.webp">
 </picture>
 
 ## 3. Open your own bundle

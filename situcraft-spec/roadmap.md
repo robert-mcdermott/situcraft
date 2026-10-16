@@ -1920,11 +1920,43 @@ same on every processor.
        test's typing peaked at 6.4 GB, two copies of a 28,672 × 24,576 mask (2.8 GB each) made
        when the clustering first asked for the instrument's segmentation files. Imports now make
        the raster a band of rows at a time.
-9. **Examples, documentation, release 0.4.0.**
-   - Tours: cluster and label the Lung bundle; the simulated tissue's labels against its truth;
-     labels under two segmentations.
-   - The project fixture `validation/projects/0.4.0-*.situcraft.json`; guide pages; CHANGELOG;
-     release.
+9. **Examples, documentation, release 0.4.0: done.**
+   - **Worked examples** (`web/lib/tours.js`), each asking its question and saying what to expect,
+     the card's button doing each step's job:
+     - *Cluster and label the Lung cells* (`cluster-label`): 29 clusters of 11,820 cells, the map
+       (trustworthiness 0.74), cluster 13 by its markers (VWF, CD34, KDR), labels from the panel's
+       starter set (47% a class, 12% a lineage, 1% a subtype), why the tumor's cells stay
+       unlabeled (57% of the largest cluster), the review queue (2,006 of 5,555 labeled cells),
+       the labels in the Viewer;
+     - *Labels against the truth* (`labels-against-truth`, the simulated example): the truth's
+       types imported as labels; the instrument's cells labeled from the types' markers, 98.3% of
+       the matched cells labeled taking their true type (marker mixing 0.22 against the true
+       cells' 0.06); the refinement's labels, 99.9% (mixing 0.09);
+     - *Labels under two segmentations* (`labels-two-segmentations`, Breast): the instrument's
+       cells and a 5 µm nucleus expansion labeled the same way and read through their comparison
+       (of 6,512 cells matched one to one, 96.9% of those labeled under both keep their class; 223
+       split and 106 merged cells; mixing 0.047 and 0.051), the 688 cells whose label changes in
+       the review queue.
+   - **What a step can do:** cluster a segmentation's cells, label its clustering from a starter
+     set, import the truth's types, make a clustering and its labels again on another
+     segmentation; show a clustering in the Cell types view (the map's colors, clusters selected,
+     a section in view, the review queue made for its labels); open the Compare view's Labels tab;
+     fill the Viewer's cells by a clustering or its labels. `tour` answers what a Cell types step
+     shows and what the Labels tab reads.
+   - **Documentation:** Getting started (the worked examples), the README, remote control,
+     FORMATS; the screenshots taken again, one added of the labels against the simulated truth.
+   - **Release 0.4.0:** a project saved by 0.4.0 kept in `validation/projects/` and reopened by
+     every later release, each clustering, map and label set from markers it records made again
+     with the same summary.
+   - **Validated** in the viewer suite: each worked example run step by step, its numbers those its
+     card states.
+   - Found by slice 9:
+     - **The review queue chose the segmentation to read against once:** opened before the labels
+       were made again on another segmentation, it never took them up, and listed no
+       segmentation-sensitive cell until one was chosen by hand. It now follows the latest until
+       the user chooses.
+     - **A lineage fill leaves most of a tumor section grey:** on Lung, 12% of the cells take a
+       lineage; the example fills the cells by class (47%) and names the lineage level.
 
 ## 0.5.0: the pathology bridge (wave 5)
 

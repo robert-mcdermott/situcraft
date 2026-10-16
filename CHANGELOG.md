@@ -1,8 +1,11 @@
 # Changelog
 
-## Unreleased (0.4.0)
+## 0.4.0 (2026-10-16)
 
-Wave 4 of the [roadmap](situcraft-spec/roadmap.md): cell identities with their evidence.
+Wave 4 of the [roadmap](situcraft-spec/roadmap.md): cell identities with their evidence. Cells are
+clustered, mapped and labeled from markers, imported tables or a reference, each label with its
+confidence and evidence, reviewed and kept as versions; every result is an artifact of its
+segmentation, so it can be made again on another and the two read against each other.
 
 ### Added
 
@@ -150,8 +153,25 @@ Wave 4 of the [roadmap](situcraft-spec/roadmap.md): cell identities with their e
     minutes on ten cores at a peak of 3.9 GB, the types' shares within 1.5% of the truth's, and
     the map of every cell drawn in the page in 20 seconds.
 
+- **Worked examples of cell identities (wave 4, slice 9).** Each asks a question, says what to
+  expect, and does its steps' jobs from its card.
+  - **Cluster and label the Lung cells:** 29 clusters, the map, a cluster by its markers, labels
+    from the panel's starter set, why a tumor's cells stay unlabeled by a normal lung's markers,
+    the review queue, and the labels in the Viewer.
+  - **Labels against the truth** (the simulated tissue): its true types imported as labels; the
+    instrument's cells labeled from the types' markers take their true type in 98.3% of matched
+    cells, the refinement's in 99.9%, with marker mixing nearer the true cells'.
+  - **Labels under two segmentations** (the Breast data): the instrument's cells and a 5 µm
+    nucleus expansion labeled the same way and read through their comparison (96.9% keep their
+    class), split and merged cells, and the cells whose label changes in the review queue.
+  - **Remote control:** `tour` answers what a Cell types step shows and what the Labels tab reads.
+
 ### Changed
 
+- **The review queue reads against another segmentation's labels by default** until another
+  choice is made, including labels made there after the queue was first opened.
+- **A simulated tissue's truth imports as "Simulated truth (imported)"**; it was named after the
+  instrument's software ("Xenium Onboard Analysis (imported)").
 - **A comparison can be removed from its project** (the inspector's **Remove**). The project's
   history records it, and its files go to SituCraft's trash once no saved project names them. A
   comparison a decision rests on cannot be removed, and the app says why.

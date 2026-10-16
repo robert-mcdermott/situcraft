@@ -270,6 +270,16 @@
   "violations": []
  },
  {
+  "scene": "worked-labels",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "worked-labels",
+  "theme": "light",
+  "violations": []
+ },
+ {
   "scene": "clusters",
   "theme": "dark",
   "violations": []

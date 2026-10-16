@@ -159,9 +159,10 @@ view valid when the derived data are rebuilt. A link to a view is the page's add
 the project.
 
 SituCraft reads projects saved by any earlier version; a project saved by a newer version is
-refused with a message to update. A project saved by each release (0.1.0, 0.2.0) is kept in
-`validation/projects/`, and every later release is checked to reopen it exactly and, for 0.2.0's,
-to make its artifacts again with the same checksums.
+refused with a message to update. A project saved by each release (0.1.0, 0.2.0, 0.3.0, 0.4.0) is
+kept in `validation/projects/`, and every later release is checked to reopen it exactly and, from
+0.2.0's, to make its artifacts again with the same checksums (a clustering, a map and a label set
+from markers, from 0.4.0's, with the same summary).
 
 A segmentation is recorded in `artifacts` (kind `segmentation`) as the artifact the program keeps:
 its id, name, dataset, state, method (name, version, citation, and the cells each of the
