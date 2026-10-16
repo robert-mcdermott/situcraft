@@ -1490,8 +1490,7 @@ at their pixel (§3.1: the 8 it records off its mask).
 ## 5. Cell typing (wave 4)
 
 - **Normalization:** library-size normalization and log1p.
-- **Embedding and graph:** principal components (exact, by a Lanczos or randomized SVD; Halko,
-  Martinsson & Tropp 2011, *SIAM Rev* 53:217–288); a kNN graph.
+- **Embedding and graph:** principal components; a kNN graph.
 - **Clustering:** Leiden (Traag, Waltman & van Eck 2019, *Sci Rep* 9:5233,
   doi:10.1038/s41598-019-41695-z).
 - **Display:** UMAP (McInnes, Healy & Melville 2018, arXiv:1802.03426).
@@ -1503,6 +1502,105 @@ at their pixel (§3.1: the 8 it records off its mask).
 - Benchmarks on Xenium show performance depends on the dataset (Cheng et al. 2025), so no method
   is the only default.
 - **Cluster markers:** Wilcoxon rank-sum, labeled exploratory (cells are not replicates).
+
+### 5.1 Clusters (verified, wave 4, slice 1)
+
+`internal/cluster` takes the steps of the common single-cell workflow (Wolf, Angerer & Theis 2018,
+SCANPY, *Genome Biol* 19:15, doi:10.1186/s13059-017-1382-0), with scanpy's defaults, so that a
+user who knows that workflow finds the same numbers:
+
+1. **The cells:** a segmentation's counts (gene transcripts of quality 20 or more), the cells with
+   at least 10 of them, or those a saved QC filter keeps (sent with the filter's checksum, which
+   the program checks). Cells without a gene transcript are left out and counted.
+2. **Normalization:** each cell's count of gene g, c, becomes log(1 + c/(t/T)), t its total and T
+   the median total of the cells analyzed (scanpy's `normalize_total` with `target_sum=None`, then
+   `log1p`).
+3. **Scaling:** each gene centered and divided by its standard deviation (n − 1 in the
+   denominator; 1 for a gene without variance), clipped at ±10 (scanpy's `scale(max_value=10)`).
+4. **Principal components, exact:** the eigenvectors of the genes' covariance, by Householder
+   reduction and the QL method with implicit shifts (Wilkinson & Reinsch 1971, procedures tred2
+   and tql2; Golub & Van Loan 2013, §8.3). SituCraft's choice: the covariance is computed from the
+   sparse counts without forming the dense matrix. A cell's scaled values are each gene's value at
+   zero, z₀ = clip(−μ/σ), plus a sparse difference d over the genes it expresses; with a = z₀ minus
+   the scaled values' mean, the covariance is (Σᵢ dᵢdᵢᵀ − n·aaᵀ)/(n − 1), exact for any clipping.
+   Its cost grows with the square of the genes each cell expresses, not of the panel. Each
+   component is signed so that its largest loading in magnitude is positive (scikit-learn's
+   convention, which scanpy follows). 50 components, or one fewer than the genes or cells.
+5. **Neighbors:** each cell's 14 nearest other cells in the components (15 neighbors counting the
+   cell, as scanpy and umap-learn count them), by Euclidean distance, exactly. Equal distances are
+   ordered by the cells' order, so the table does not depend on the number of threads.
+6. **The graph:** UMAP's fuzzy simplicial set of the neighbors (McInnes et al. 2018; umap-learn's
+   `fuzzy_simplicial_set` with its defaults, the graph scanpy clusters on): for cell i, ρᵢ is the
+   distance to its nearest neighbor and σᵢ is found by bisection so that
+   Σⱼ exp(−max(0, dᵢⱼ − ρᵢ)/σᵢ) = log₂ 15; the weight of i → j is exp(−(dᵢⱼ − ρᵢ)/σᵢ); the
+   undirected weight a + b − ab of the two directions'.
+7. **Leiden** (Traag et al. 2019) on the graph, optimizing modularity at a resolution γ (1 by
+   default; Reichardt & Bornholdt 2006): fast local moving, the refinement that merges only
+   well-connected subsets (randomness θ = 0.01, leidenalg's default), aggregation on the refined
+   partition; iterations repeat until one moves no cell (at most 50). Clusters are numbered by
+   decreasing size. Carried to Go from CytoWeave's `graph-cluster.js`, which follows the
+   arrangement of the authors' networkanalysis package.
+8. **Markers,** exploratory: each cluster against the other cells analyzed, gene by gene, by the
+   Wilcoxon rank-sum test (Mann & Whitney 1947) with ties corrected: z = (R − n₁(n + 1)/2)/σ,
+   σ² = n₁n₂(n + 1)/12 · (1 − Σ(t³ − t)/(n³ − n)); two-sided p-values from the normal
+   approximation, adjusted over the genes by Benjamini and Hochberg's procedure; the log₂ fold
+   change log₂((expm1(m₁) + 10⁻⁹)/(expm1(m₂) + 10⁻⁹)) of the clusters' mean log-normalized values
+   m₁ and m₂, and the shares of cells expressing the gene in and out, as scanpy's
+   `rank_genes_groups` (method `wilcoxon`, `tie_correct`) computes them. SituCraft's choice: cells
+   are ranked by their count over their total, compared exactly in integers, so that cells
+   expressing a gene equally tie. Ranking the rounded log-normalized values, as scanpy does, can
+   part two of them by a rounding (log(1 + x) and log1p(x) part different pairs), which moves a
+   score by up to a few hundredths.
+
+Every product is rounded on its own, sums are taken in a fixed order, logarithms, exponentials and
+the error function come from `internal/dmath` (fdlibm's), and Leiden draws from one seeded stream:
+the files are the same on any number of threads, on arm64 and amd64 (pinned digests).
+
+**A clustering is an artifact** of kind `clustering` (`docs/FORMATS.md`), named by the
+segmentation, the cells analyzed, the method's version and the parameters. Its check reads every
+file, requires every analyzed cell to be in a cluster numbered by size, makes the graph again from
+the neighbors and requires the recorded modularity, and requires every number finite and every
+p-value a probability.
+
+**Against scanpy 1.12.4, leidenalg 0.12.0, umap-learn 0.5.12 and scikit-learn 1.9.1**
+(`validation/reference/clustering/`, maintainer-run; the bundles read by scanpy from their own
+`cell_feature_matrix.h5`, in float64; checked weekly against SituCraft's clustering made again, byte
+for byte):
+
+| | Lung 2-FOV | Breast 2-FOV | Simulated (standard) |
+| --- | --- | --- | --- |
+| Cells analyzed (the same as scanpy's ≥ 10 counts) | 11,820 | 7,163 | 2,925 |
+| Components' variances, largest relative difference | 6.8 × 10⁻¹⁴ | 2.7 × 10⁻¹⁴ | 1.7 × 10⁻¹⁴ |
+| Components' directions (\|cos\|, all 50) | 1.000 | 1.000 | 1.000 |
+| Cells with the same neighbors as exact search | 100% | 100% | 100% |
+| Modularity on umap-learn's graph of the same neighbors, difference | 3 × 10⁻⁸ | 1 × 10⁻⁸ | 2 × 10⁻⁸ |
+| SituCraft's clusters, modularity | 29, 0.6177 | 15, 0.5982 | 5, 0.7166 |
+| leidenalg, ten seeds: clusters, modularity | 26–29, 0.6138–0.6173 | 12–16, 0.5927–0.6001 | 4–6, 0.7161–0.7167 |
+| Agreement (ARI) with leidenalg, median; leidenalg with itself | 0.711; 0.703 | 0.620; 0.662 | 0.983; 0.978 |
+| Markers: scores against the rank-sum test with exact ties (scipy) | identical | identical | identical |
+| Markers against scanpy: log₂ fold change; scores | 1 × 10⁻⁶; 0.017 | 1 × 10⁻⁶; 0.002 | 7 × 10⁻⁷; 0.002 |
+| Each cluster's first ten markers, the same as scanpy's | 100% | 100% | 100% |
+| scanpy's own pipeline (its neighbors and Leiden): clusters, ARI | 28, 0.736 | 13, 0.579 | 4, 0.983 |
+| The instrument's graph-based clusters: clusters, ARI | 17, 0.044 | 9, 0.431 | — |
+| Against the true cell types (4): ARI, SituCraft; scanpy | — | — | 0.955; 0.971 |
+
+The tolerances (`validation/clustering_test.go`), set before the comparison: variances within
+10⁻⁶, the first ten components within |cos| 0.9999 and the fifty's subspace within 0.999; 99.9% of
+cells with the same neighbors; modularity on umap-learn's graph within 10⁻⁵; Leiden's modularity
+no lower than leidenalg's lowest over ten seeds less 0.003, and its agreement with leidenalg no
+lower than leidenalg's with itself less 0.10; markers within 10⁻⁹ of the exact rank-sum test, 10⁻⁴
+of scanpy's fold changes, 0.05 of scanpy's scores, and the same first ten genes; on the simulated
+tissue, agreement with the truth no lower than scanpy's less 0.02 (and at least 0.85). All are met.
+
+What the numbers say: everything up to the graph is the same computation as scanpy's, to rounding.
+Leiden is random, and two of its runs with different seeds agree about as much as SituCraft's agrees
+with leidenalg's (on Lung, about 0.7: its clusters at resolution 1 are many and small); SituCraft's
+modularity is within leidenalg's range, above it on Lung. scanpy's own pipeline differs further on
+the real bundles because, above 4,096 cells, its neighbors are approximate (pynndescent). The
+instrument's graph-based clustering is not scanpy's: on Lung neither SituCraft's clusters nor
+scanpy's agree with it (ARI 0.044 and 0.048), though the instrument's largest cluster leads with
+the genes SituCraft's largest does (CD24, CXCL13, TM4SF4). On the simulated tissue, a type is split
+in two at resolution 1 (5 clusters for 4 types), as it is in two of leidenalg's ten runs.
 
 ## 6. Spatial analysis (wave 6) and cohorts (wave 7)
 
@@ -1638,7 +1736,17 @@ Notes:
   `cell_feature_matrix.h5`). Jenkins B. lookup3.c, 2006, public domain (HDF5's metadata
   checksums).
 - Sun Microsystems. fdlibm 5.3, 1993: the logarithm and exponential `internal/dmath` and
-  `web/lib/dmath.js` compute, the same in Go and JavaScript on every processor.
+  `web/lib/dmath.js` compute, the same in Go and JavaScript on every processor, and the
+  complementary error function `internal/dmath` computes (the markers' p-values).
+- Wilkinson JH, Reinsch C. *Handbook for Automatic Computation*, vol. II: *Linear Algebra*.
+  Springer, 1971 (procedures tred2 and tql2). Golub GH, Van Loan CF. *Matrix Computations*, 4th
+  ed. Johns Hopkins University Press, 2013, §8.3 (the principal components' eigenvectors,
+  `internal/linalg`).
+- Reichardt J, Bornholdt S. Statistical mechanics of community detection. *Phys Rev E*
+  2006;74:016110 (modularity with a resolution).
+- Mann HB, Whitney DR. On a test of whether one of two random variables is stochastically larger
+  than the other. *Ann Math Stat* 1947;18:50–60 (the clusters' markers).
+- Hubert L, Arabie P. Comparing partitions. *J Classif* 1985;2:193–218 (the adjusted Rand index).
 - Abramowitz M, Stegun IA. *Handbook of Mathematical Functions*. National Bureau of Standards,
   1964, 6.5.29 and 6.5.31 (the incomplete gamma function), 26.5.8 (the incomplete beta function). Stephens MA. Use of the
   Kolmogorov–Smirnov, Cramér–von Mises and related statistics without extensive tables. *J R

@@ -1,5 +1,5 @@
-// The project tree: what the project holds, by kind (datasets, segmentations, label sets, saved
-// views), and what was handed to SituCraft on this computer but is not in the project yet.
+// The project tree: what the project holds, by kind (datasets, segmentations, comparisons,
+// clusterings, label sets, filters, saved views), and what was handed to SituCraft on this computer but is not in the project yet.
 // Selecting an item focuses it (store.ui.focus): the inspector describes it, and the views that
 // use it open on it. Adapted from MaveScape 0.8.0 web/ui/sidebar.js.
 
@@ -70,6 +70,17 @@ const SECTIONS = [
     empty: 'Two segmentations compared: which cells correspond, how each differs, and what changed.',
   },
   {
+    kind: 'clustering', title: 'Clusterings', icon: 'dots',
+    items: (project) => project.artifacts.filter((a) => a.kind === 'clustering'),
+    label: (a, app) => {
+      const seg = app.store.project.artifacts.find((x) => x.kind === 'segmentation' && x.id === a.segmentation);
+      return `${seg?.name ?? 'Cells'} · resolution ${a.parameters?.resolution ?? '?'}`;
+    },
+    itemIcon: (a) => (a.state === 'complete' ? 'dots' : 'warning'),
+    meta: (a) => (a.state === 'complete' ? `${a.summary?.clusters ?? '?'} clusters` : a.state),
+    empty: 'Cells grouped by their expression, each clustering kept with every parameter.',
+  },
+  {
     kind: 'labels', title: 'Label sets', icon: 'tag',
     items: (project) => project.artifacts.filter((a) => a.kind === 'labels'),
     label: (a) => a.name ?? 'Label set',
@@ -118,6 +129,7 @@ export function mountSidebar(app) {
             if (bundle && app.store.ui.mode === 'welcome') app.setMode('data');
             // A filter is edited and compared in the QC view; a saved view opens.
             if (section.kind === 'filter') app.setMode('qc');
+            if (section.kind === 'clustering') app.setMode('celltypes');
             if (section.kind === 'view') app.applyView(item);
           },
         }, icon(section.itemIcon?.(item) ?? section.icon), h('span.label', section.label(item, app)), h('span.meta', section.meta(item, app)))));

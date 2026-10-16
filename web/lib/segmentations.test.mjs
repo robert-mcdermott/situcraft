@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createProject } from './project.js';
-import { addComparison, addExport, addSegmentation, comparisonRecord, comparisonsOf, decideSegmentation, EXPORT_FORMATS, exportRecord, exportsOf, INSTRUMENT_DEFAULT, PLANTED_METHOD, segmentationDecision, promoteSegmentation, promotedSegmentation, segmentationRecord, segmentationsOf, withInstrumentSegmentation } from './segmentations.js';
+import { addComparison, addExport, addSegmentation, comparisonRecord, comparisonsOf, decideSegmentation, decisionsCiting, removeComparison, EXPORT_FORMATS, exportRecord, exportsOf, INSTRUMENT_DEFAULT, PLANTED_METHOD, segmentationDecision, promoteSegmentation, promotedSegmentation, segmentationRecord, segmentationsOf, withInstrumentSegmentation } from './segmentations.js';
 
 const NOW = '2026-10-14T12:00:00.000Z';
 const manifest = (id, state = 'complete') => ({
@@ -122,6 +122,24 @@ test('a comparison is recorded with its two segmentations, once', () => {
   assert.match(p.history.at(-1).detail, /Compared Instrument segmentation \(A\) with exp-b \(B\)/);
   assert.equal(addComparison(p, record, NOW), p);
   assert.equal(segmentationsOf(p, 'd1').length, 1, 'a comparison is not a segmentation');
+});
+
+test('a comparison is removed with its history kept, unless a decision rests on it', () => {
+  let p = withInstrumentSegmentation(project(), { id: 'd1', name: 'xenium-lung-2fov' }, manifest('seg-a'), NOW);
+  p = addSegmentation(p, { ...segmentationRecord({ id: 'd1' }, manifest('exp-b'), NOW), name: 'Nucleus expansion, 5 µm', source: 'situcraft' }, NOW);
+  const cmp = (id) => ({ id, kind: 'comparison', name: 'A and B', state: 'complete', created: NOW, lineage: { parents: [{ kind: 'segmentation', id: 'seg-a' }, { kind: 'segmentation', id: 'exp-b' }], method: { version: '2' } } });
+  p = addComparison(p, comparisonRecord({ id: 'd1' }, cmp('cmp-1'), NOW), NOW);
+  p = addComparison(p, comparisonRecord({ id: 'd1' }, cmp('cmp-2'), NOW), NOW);
+  p = decideSegmentation(p, { dataset: 'd1', segmentation: 'exp-b', decision: 'promote', rationale: 'Fewer cells cut', comparison: 'cmp-2', now: NOW });
+  assert.throws(() => removeComparison(p, 'cmp-9'), /no such comparison/);
+  assert.equal(decisionsCiting(p, 'cmp-2').length, 1);
+  assert.throws(() => removeComparison(p, 'cmp-2'), /cannot be removed: nucleus expansion, 5 µm was promoted from it/);
+  const before = p.history.length;
+  const q = removeComparison(p, 'cmp-1', NOW);
+  assert.deepEqual(comparisonsOf(q, 'd1').map((c) => c.id), ['cmp-2']);
+  assert.equal(q.history.length, before + 1, 'the history keeps the comparison and records its removal');
+  assert.match(q.history.at(-1).detail, /Removed the comparison of Instrument segmentation \(A\) with Nucleus expansion, 5 µm \(B\) \(artifact cmp-1\)/);
+  assert.equal(comparisonsOf(p, 'd1').length, 2, 'the project given is not changed');
 });
 
 test('decisions: promote, keep or reject with a reason, appended; the default is never rejected', () => {

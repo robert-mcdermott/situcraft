@@ -277,7 +277,11 @@ cell: the spurious co-expression of gene pairs relative to nuclei alone (Jones e
 as in nuclei), and how often markers of different lineages are found in the same cell (the
 mutually exclusive co-expression rate of Hartman and Satija). Between the two, the pixels that
 agree, the transcripts that changed cell, and how far the boundaries moved. The comparison runs
-as a job and is kept with the project.
+as a job and is kept with the project. One you no longer need can be removed from the project
+(**Remove** in the inspector): the two segmentations stay, and it can be made again at any time.
+A comparison a decision rests on stays, since the methods paragraph tells how the default was
+chosen from it. A comparison made by an earlier SituCraft whose list of differences this version
+does not read says so, and offers to compare the two segmentations again.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/workspace-dark.webp">
@@ -361,11 +365,52 @@ clipboard to run where Xenium Ranger is installed.
 </picture>
 
 Long work runs as a job: building derived data, downloading an example, registering a
-segmentation, expanding nuclei, importing, comparing or exporting segmentations, planting errors.
+segmentation, expanding nuclei, importing, comparing or exporting segmentations, planting errors,
+clustering cells.
 The **Jobs** view shows what runs and waits, what finished, and each job's log and spec. Jobs keep
 running when the window reloads, and closing the window while one runs asks first. If SituCraft
 stops (or the computer does) in the middle of a job, the job is shown as interrupted
 when SituCraft starts again: **Resume** continues it where it stopped, **Discard** forgets it.
+
+## Cell types: clusters
+
+The **Cell types** view groups a segmentation's cells by their gene expression, the first step
+toward naming them. Choose the segmentation (the default to start) and the cells to analyze: those
+with at least 10 gene transcripts, or, for the instrument's segmentation, the cells one of your QC
+filters keeps. **Cluster the cells** runs the common single-cell workflow as a job (about a second
+for the examples):
+
+1. each cell's counts scaled to the median total and log-transformed;
+2. each gene scaled, so that every gene counts alike;
+3. principal components (50), computed exactly;
+4. each cell's 15 nearest neighbors in them, as a graph;
+5. Leiden communities of the graph: the clusters, numbered from the largest.
+
+**Parameters** shows each setting with what it does. They are scanpy's defaults, so the numbers
+match what the scanpy tutorials give. **Resolution** is the one you will change most: higher gives
+more and smaller clusters. There is no right value; make a few and compare their markers. Each
+clustering is kept as an artifact of its segmentation with every parameter and its seed, and the
+same seed gives the same clusters on any computer. Asking for one already made answers it at once.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/celltypes-dark.webp">
+  <img alt="The Cell types view of the Breast example: 15 clusters of 7,163 cells, each with its size and leading markers (TOP2A and MKI67 for dividing cells, CD68 for macrophages, LUM for fibroblasts, CD3E for T cells), the components' share of the variance, and the first cluster's markers against the other cells" src="images/celltypes-light.webp">
+</picture>
+
+Under each clustering are its numbers (the cells analyzed and left out, the components' share of
+the variance, the graph and the modularity Leiden reached) and its clusters, each with its size
+and leading markers. Choose a cluster to see its markers against all the other cells: how much
+higher its expression is (log₂ fold change), the share of cells expressing the gene in and out of
+it, and the rank-sum test's score and adjusted p-value. These are exploratory: the cells of one
+tissue are not independent replicates, so the p-values rank genes rather than test them.
+
+**Show on the tissue** opens the Viewer with the cells filled by cluster and a legend. The Viewer's
+**Fill by** lists every clustering of the segmentation drawn, and a saved view keeps the one shown.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/clusters-dark.webp">
+  <img alt="The Breast example in the Viewer, its cells filled by their cluster: tumour nests and stroma in different clusters, with the clusters' legend" src="images/clusters-light.webp">
+</picture>
 
 ## Keyboard
 

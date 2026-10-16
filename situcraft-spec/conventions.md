@@ -2,8 +2,8 @@
 
 SituCraft is a workbench for imaging-based spatial transcriptomics, starting with 10x Genomics
 Xenium. A Go program, built on the standard library, serves an embedded web app and does the heavy
-data work: reading bundles, decoding images, indexing, segmentation and comparison. The browser
-renders and runs cell-level analytics. License: Apache-2.0. No third-party runtime dependencies,
+data work: reading bundles, decoding images, indexing, segmentation, comparison, and the analyses
+that make a result (clusters, embeddings, labels). The browser renders, and explores results. License: Apache-2.0. No third-party runtime dependencies,
 in Go or JavaScript.
 
 SituCraft is a sibling of Proteoscope, CytoWeave and MaveScape (`~/mycode/…`). It copies their
@@ -28,6 +28,9 @@ internal/xenium/     bundle scanning, version detection, validation, typed acces
 internal/cache/      derived data: tile pyramids, transcript index, geometry tiles
 internal/segment/    nucleus expansion, transcript-informed segmentation
 internal/compare/    cell matching, difference classes, metrics
+internal/cluster/    normalization, principal components, Leiden clusters, markers
+internal/graph/      nearest neighbors, UMAP's fuzzy graph, Leiden
+internal/linalg/     symmetric eigendecomposition
 internal/jobs/       durable background jobs
 internal/simulate/   seeded simulated tissues
 web/index.html, web/styles.css, web/app.js     app shell

@@ -33,14 +33,7 @@ const MODES = [
   { id: 'segmentation', label: 'Segmentation', icon: 'segment', load: () => import('./ui/mode-segmentation.js').then((m) => m.mountSegmentation) },
   { id: 'compare', label: 'Compare', icon: 'compare', load: () => import('./ui/mode-compare.js').then((m) => m.mountCompare) },
   'sep',
-  {
-    id: 'celltypes', label: 'Cell types', icon: 'tag',
-    load: async () => plannedMode({
-      title: 'Cell types', icon: 'tag',
-      purpose: 'Cell identities with their evidence: clusters, marker-based labels at several levels (class, lineage, subtype, state), imported labels and mapping to a reference, each with its confidence and the markers for and against it. Predicted, curated and consensus labels stay side by side.',
-      steps: ['Promote a segmentation.', 'Cluster, score markers or import labels.', 'Review the cells with low confidence.'],
-    }),
-  },
+  { id: 'celltypes', label: 'Cell types', icon: 'tag', load: () => import('./ui/mode-celltypes.js').then((m) => m.mountCellTypes) },
   {
     id: 'spatial', label: 'Spatial', icon: 'graph',
     load: async () => plannedMode({
@@ -390,14 +383,16 @@ async function start() {
 
   // Shows a segmentation on its dataset's tissue: the Viewer draws it (wave 3, slice 8), keeping
   // where it was and what else it showed.
-  app.showOnTissue = (datasetId, segmentationId) => {
+  app.showOnTissue = (datasetId, segmentationId, fill = undefined) => {
     if (!store.project.datasets.some((d) => d.id === datasetId)) return;
     const record = store.project.artifacts.find((a) => a.kind === 'segmentation' && a.id === segmentationId && a.dataset === datasetId);
-    app.pendingSegmentation = { dataset: datasetId, segmentation: !record || record.source === 'instrument' ? null : record.id };
+    app.pendingSegmentation = { dataset: datasetId, segmentation: !record || record.source === 'instrument' ? null : record.id, fill };
     app.focusItem({ kind: 'dataset', id: datasetId });
     if (store.ui.mode === 'viewer') store.notify(['view-pending']);
     else app.setMode('viewer');
   };
+  // A clustering's clusters on the tissue: its segmentation drawn, its cells filled by cluster.
+  app.showClusters = (clustering) => app.showOnTissue(clustering.dataset, clustering.segmentation, `clusters:${clustering.id}`);
 
   // A deep link (#project=…&view=…) opens its project from the library and shows the view.
   async function openLink(hash) {

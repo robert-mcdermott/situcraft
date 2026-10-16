@@ -8,6 +8,7 @@ import { promptDialog, toast } from './overlays.js';
 import { removeView, renameView, viewLink } from '../lib/views.js';
 import { promotedSegmentation } from '../lib/segmentations.js';
 import { KIND_ICONS, KIND_LABELS } from './sidebar.js';
+import { askRemoveComparison } from './comparisons.js';
 
 export function mountInspector(app) {
   const root = document.getElementById('inspector');
@@ -168,7 +169,36 @@ export function mountInspector(app) {
       h('div.btn-row', { style: { marginTop: '8px' } }, h('button.btn.small.primary', { type: 'button', onclick: () => {
         app.compareFocus = c.id;
         app.setMode('compare');
-      } }, icon('eye'), 'Open in the workspace')),
+      } }, icon('eye'), 'Open in the workspace'),
+      h('button.btn.small.ghost.danger', { type: 'button', title: 'Remove it from this project (the segmentations stay)', onclick: () => askRemoveComparison(app, c) }, icon('trash'), 'Remove')),
+      c.method?.citation ? h('p.muted', { style: { margin: '8px 0 0', fontSize: '11.5px' } }, c.method.citation) : null);
+  }
+
+  // A clustering: its segmentation, its numbers, how it was made, and the tissue.
+  function clusteringSection(c) {
+    const { project } = app.store;
+    const seg = project.artifacts.find((a) => a.kind === 'segmentation' && a.id === c.segmentation);
+    const s = c.summary ?? {};
+    const p = c.parameters ?? {};
+    return h('section.inspector-section',
+      h('h3', icon('dots'), 'Clustering'),
+      h('dl.kv',
+        h('dt', 'Segmentation'), h('dd', seg?.name ?? c.segmentation),
+        h('dt', 'Cells'), h('dd', (s.cells ?? 0).toLocaleString('en-US')),
+        h('dt', 'Analyzed'), h('dd', s.filter ? `filter ${s.filter.name}` : `≥ ${p.minTranscripts} gene transcripts`),
+        h('dt', 'Clusters'), h('dd', String(s.clusters ?? '—')),
+        h('dt', 'Resolution'), h('dd', String(p.resolution ?? '—')),
+        h('dt', 'Neighbors'), h('dd', `${p.neighbors} in ${s.components ?? p.components} components`),
+        h('dt', 'Modularity'), h('dd', Number.isFinite(s.modularity) ? s.modularity.toFixed(4) : '—'),
+        h('dt', 'Seed'), h('dd', String(p.seed ?? '—')),
+        h('dt', 'Method'), h('dd', `${c.method?.name ?? ''} ${c.method?.version ?? ''}`.trim()),
+        h('dt', 'Artifact'), h('dd.mono', c.id)),
+      c.state === 'complete' ? h('div.btn-row', { style: { marginTop: '8px' } },
+        h('button.btn.small.primary', { type: 'button', onclick: () => app.showClusters(c) }, icon('tissue'), 'Show on the tissue'),
+        h('button.btn.small', { type: 'button', onclick: () => {
+          app.focusItem({ kind: 'clustering', id: c.id });
+          app.setMode('celltypes');
+        } }, icon('dots'), 'Its clusters')) : null,
       c.method?.citation ? h('p.muted', { style: { margin: '8px 0 0', fontSize: '11.5px' } }, c.method.citation) : null);
   }
 
@@ -185,6 +215,10 @@ export function mountInspector(app) {
     if (focus?.kind === 'comparison') {
       const c = app.store.project.artifacts.find((a) => a.kind === 'comparison' && a.id === focus.id);
       if (c) return comparisonSection(c);
+    }
+    if (focus?.kind === 'clustering') {
+      const c = app.store.project.artifacts.find((a) => a.kind === 'clustering' && a.id === focus.id);
+      if (c) return clusteringSection(c);
     }
     if (focus?.kind === 'filter') {
       const filter = app.store.project.artifacts.find((a) => a.id === focus.id);

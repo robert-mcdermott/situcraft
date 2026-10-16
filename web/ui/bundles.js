@@ -5,8 +5,9 @@
 // project: the project keeps each dataset's summary and findings (lib/datasets.js).
 
 import { openPaths } from './storage.js';
+import { addClustering, clusteringRecord } from '../lib/clusterings.js';
 import { addDataset, compareFingerprint, datasetRecord, findDataset, relocateDataset, removeDataset } from '../lib/datasets.js';
-import { addComparison, addExport, addSegmentation, comparisonRecord, exportRecord, segmentationRecord, segmentationsOf, withInstrumentSegmentation } from '../lib/segmentations.js';
+import { addComparison, addExport, addSegmentation, comparisonRecord, exportRecord, removeComparison as withoutComparison, segmentationRecord, segmentationsOf, withInstrumentSegmentation } from '../lib/segmentations.js';
 
 const BUNDLE_KINDS = new Set(['bundle', 'archive']);
 
@@ -271,6 +272,17 @@ export function createBundles(app) {
     return entry.promise;
   }
 
+  // Removes a comparison from the project (undoable), saves, then asks the program to move its files
+  // to the trash, which it does once no saved project names it. Answers the program's answer:
+  // { trashed, usedBy: [project names], missing }.
+  async function removeComparison(id) {
+    const record = app.store.project.artifacts.find((a) => a.kind === 'comparison' && a.id === id);
+    const next = withoutComparison(app.store.project, id);
+    app.store.commit(next, `Remove the comparison ${record?.name ?? id}`);
+    await app.saveNow?.();
+    return getJSON(`/api/artifacts/${encodeURIComponent(id)}/trash`, { method: 'POST' });
+  }
+
   // Errors planted in a dataset's instrument segmentation, for practice (api_plant.go): a job
   // writes the planted segmentation with its answer key and records it, simulated; it is then
   // recorded in the project. Resolves with the artifact.
@@ -340,6 +352,61 @@ export function createBundles(app) {
 
   // A comparison's full description (comparison.json), read once.
   const descriptions = new Map();
+  // Clusters a segmentation's cells (api_clustering.go): request { segmentation, filter,
+  // parameters }. A job makes the clustering unless it was made already; it is recorded in the
+  // project. Answers its manifest.
+  const clustering = new Map(); // `${dataset}|${segmentation}` → { dataset, segmentation, job, promise }
+  function clusterCells(item, datasetId, request) {
+    const key = `${datasetId}|${request.segmentation}`;
+    if (clustering.has(key)) return clustering.get(key).promise;
+    const entry = { dataset: datasetId, segmentation: request.segmentation, job: null, promise: null };
+    entry.promise = (async () => {
+      try {
+        const answer = await getJSON(`${item.url}/cluster`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) });
+        let manifest = answer.artifact;
+        if (!manifest) {
+          entry.job = answer.job?.id ?? null;
+          notify();
+          const job = await app.jobs.finished(entry.job);
+          if (job?.state !== 'complete') throw new Error(`the clustering ${job?.state ?? 'ended'}${job?.error ? `: ${job.error}` : ''}`);
+          manifest = await getJSON(`/api/artifacts/${encodeURIComponent(answer.id)}`);
+        }
+        const dataset = app.store.project.datasets.find((d) => d.id === datasetId);
+        if (!dataset) throw new Error('the dataset is no longer in the project');
+        const next = addClustering(app.store.project, clusteringRecord(dataset, manifest));
+        if (next !== app.store.project) app.store.commit(next, `Cluster the cells of ${dataset.name}`);
+        return manifest;
+      } finally {
+        clustering.delete(key);
+        notify();
+      }
+    })();
+    clustering.set(key, entry);
+    notify();
+    return entry.promise;
+  }
+
+  // A clustering's description, each cell's cluster (Int32Array over the segmentation's cells, −1
+  // for one not analyzed) and its markers, kept for the session.
+  const clusterData = new Map();
+  function clusteringData(id) {
+    if (!clusterData.has(id)) {
+      const p = (async () => {
+        const [description, cells] = await Promise.all([
+          getJSON(`/api/artifacts/${encodeURIComponent(id)}/files/clustering.json`),
+          getJSON(`/api/clusterings/${encodeURIComponent(id)}/cells`),
+        ]);
+        return { description, cluster: Int32Array.from(cells.cluster), sizes: cells.sizes };
+      })();
+      p.catch(() => clusterData.delete(id));
+      clusterData.set(id, p);
+    }
+    return clusterData.get(id);
+  }
+  function clusteringMarkers(id, top = 25) {
+    return getJSON(`/api/clusterings/${encodeURIComponent(id)}/markers?top=${top}`);
+  }
+
   function comparisonDescription(id) {
     if (!descriptions.has(id)) {
       const p = getJSON(`/api/artifacts/${encodeURIComponent(id)}/files/comparison.json`);
@@ -490,6 +557,12 @@ export function createBundles(app) {
     importSegmentation,
     compareSegmentations,
     comparisonDescription,
+    removeComparison,
+    clusterCells,
+    clusteringData,
+    clusteringMarkers,
+    // The clusterings of a dataset under way: [{ segmentation, job }].
+    clusterings: (id) => [...clustering.values()].filter((e) => e.dataset === id).map(({ segmentation, job }) => ({ segmentation, job })),
     plantErrors,
     plantedErrors,
     exportSegmentation,

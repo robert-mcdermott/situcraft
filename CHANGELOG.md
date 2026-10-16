@@ -1,5 +1,40 @@
 # Changelog
 
+## Unreleased (0.4.0)
+
+Wave 4 of the [roadmap](situcraft-spec/roadmap.md): cell identities with their evidence.
+
+### Added
+
+- **Clusters (wave 4, slice 1).** The **Cell types** view clusters a segmentation's cells by their
+  gene expression, as a job, and records the clustering as an artifact of that segmentation with
+  every parameter.
+  - **The steps,** as the common single-cell workflow takes them: the cells with at least 10 gene
+    transcripts (or those a saved QC filter keeps), each cell's counts scaled to the median total
+    and log-transformed, each gene scaled, exact principal components (50), each cell's 15 nearest
+    neighbors weighted as UMAP's graph, and Leiden communities at a resolution, numbered by size.
+    The same seed gives the same clusters on any computer.
+  - **What it shows:** each cluster's size and leading markers (the Wilcoxon rank-sum test against
+    the other cells, with log₂ fold changes and the shares expressing; exploratory, since cells
+    are not replicates), the components' share of the variance, and **Show on the tissue**: the
+    cells filled by cluster in the Viewer, with a legend. The Viewer's **Fill by** lists each
+    clustering of the segmentation drawn.
+  - **Remote control:** `cluster_cells`; `show_tissue` fills by `clusters`.
+  - **Validated** against scanpy, leidenalg, umap-learn and scikit-learn on both development
+    bundles and the standard simulated tissue: the same principal components (variances within
+    1e-13), the same neighbors, modularity within leidenalg's range over ten seeds, markers' scores
+    identical to the rank-sum test with exact ties, and the same leading markers as scanpy. On the
+    simulated tissue the clusters agree with the true cell types (adjusted Rand index 0.95).
+
+### Changed
+
+- **A comparison can be removed from its project** (the inspector's **Remove**). The project's
+  history records it, and its files go to SituCraft's trash once no saved project names them. A
+  comparison a decision rests on cannot be removed, and the app says why.
+- **A comparison made by an earlier SituCraft says so** when its list of differences is in a
+  layout this version does not read, and offers to compare the two segmentations again (it said
+  "groups.bin: the file ends early"). A comparison whose files are missing offers the same.
+
 ## 0.3.0 (2026-10-15)
 
 Wave 3 of the [roadmap](situcraft-spec/roadmap.md): SituCraft's own transcript-informed

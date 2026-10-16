@@ -308,6 +308,23 @@ func (s *Store) Get(id string) (Manifest, error) {
 	return m, nil
 }
 
+// Trash moves an artifact's folder into trash (made if needed) as <id>-<time>, and answers where
+// it went. Nothing else changes: a project that still names the artifact finds it missing.
+func (s *Store) Trash(id, trash string, now time.Time) (string, error) {
+	if err := checkID(id); err != nil {
+		return "", err
+	}
+	from := filepath.Join(s.dir, id)
+	if _, err := os.Stat(filepath.Join(from, manifestName)); errors.Is(err, fs.ErrNotExist) {
+		return "", ErrNotFound
+	}
+	if err := os.MkdirAll(trash, 0o755); err != nil {
+		return "", err
+	}
+	to := filepath.Join(trash, id+"-"+now.UTC().Format("20060102T150405Z"))
+	return to, os.Rename(from, to)
+}
+
 // List reads every artifact's manifest, oldest first.
 func (s *Store) List() ([]Manifest, error) {
 	entries, err := os.ReadDir(s.dir)

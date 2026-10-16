@@ -89,7 +89,7 @@ A project is one JSON document, saved automatically in the library (`<data dir>/
 | `format`, `version` | `"situcraft-project"`, `1` |
 | `id`, `name`, `created`, `modified` | Its identity |
 | `datasets` | Each bundle: its place, run and analysis identifiers, panel, tissue, counts, pixel size, channels, a fingerprint of its files (each file's size; the SHA-256 of its manifest, metrics and panel), and its validation summary and findings |
-| `artifacts` | Results: filters (a name, a version, its parent version, its conditions, and its result: the number of cells, how many it keeps, and a checksum of which), and from 0.2.0 segmentations and comparisons (below) |
+| `artifacts` | Results: filters (a name, a version, its parent version, its conditions, and its result: the number of cells, how many it keeps, and a checksum of which), from 0.2.0 segmentations and comparisons, and from 0.4.0 clusterings (below) |
 | `decisions` | Recorded choices, with their reasons (from 0.2.0) |
 | `views` | Saved views (below) |
 | `exports` | The exports written from its segmentations (from 0.2.0; absent until the first) |
@@ -215,6 +215,27 @@ A comparison of two segmentations is an artifact of two files:
 | --- | --- | --- |
 | `comparison.json` | | `format` (`"situcraft-comparison"`), `version`, `method`; the two segmentations (`a`, `b`: artifact id and name); `params` (the correspondence's and co-expression's thresholds, the regions' size, the seed); each segmentation's measures (`metricsA`, `metricsB`); the differences by class (`classes`, and each side's cells in each: `cellsA`, `cellsB`); the transcripts that changed cell (`changes`, `changesQ20`: gained, lost, moved; `changesQ20OfAssignedA`, of those A assigns to a cell: with the truth as A, the rest are in their true cell); `iou` and `displacement` of the cells the same in both; `pixelAgreement`; the co-expression reference (`coexpression`) and the MECR's gene pairs (`mecrPairs`); and the same counts by region (`regions`: squares of `sizeUm`, row-major). A measure not taken is `null` |
 | `groups.bin` | `SCCG` | Each difference: its class (by its index in one-to-one, expanded, contracted, split, merged, rearranged, only in A, only in B, assignment-only), its cells in A and in B (indices into each segmentation's cells), the IoU, the transcripts' Jaccard and the boundary displacement (µm) of one cell in each, the gene transcripts whose cell changed, where it lies (µm), its cells' gene transcripts in A and in B, and the most pairs of mutually exclusive lineage markers one of its cells expresses together in A and in B (method version 2) |
+
+A comparison can be removed from its project; its folder then moves to the library's
+`trash/artifacts/<id>-<time>/` once no saved project names it.
+
+### Clusterings
+
+A clustering of a segmentation's cells (from 0.4.0) is an artifact of five files. The binary ones
+have the envelope above (`segmentation`'s: magic, version, length, zlib); arrays are
+little-endian, a string is its length (unsigned varint) then its UTF-8 bytes.
+
+| File | Magic | Holds |
+| --- | --- | --- |
+| `clustering.json` | | `format` (`"situcraft-clustering"`), `version`, `method`; the `segmentation` (artifact id and name); `parameters` (`minTranscripts`, `components`, `neighbors`, `resolution`, `seed`); `fixed` (the normalization and its `targetSum`, the median total; `clip`; the metric, graph, quality and Leiden's `randomness`; the markers' test); `cells` (the segmentation's, those `analyzed`, `excluded` by the rule or the `filter` with its id, name and checksum, `withoutTranscripts`); `genes` (`count`, `notDetected`, `medianCellsExpressing`); `pca` (`components`, each one's `variance` and `varianceRatio`, `totalVariance`); `graph` (`neighbors`, `edges`); `clusters` (`count`, `sizes` from the largest, `modularity`, `iterations`); `top`, each cluster's first ten markers (`gene`, `score`, `logfc`, `padj`, `pctIn`, `pctOut`); `seconds`, the run's timings |
+| `cells.bin` | `SCKC` | The cells analyzed (u32 count; u32 indices into the segmentation's cells, increasing) and each one's cluster (u32, 0 the largest) |
+| `pca.bin` | `SCPC` | The genes (u32 count; strings), the components k (u32), each gene's mean and standard deviation of the log-normalized values (f64), the loadings (f64, genes × k, row-major), and each analyzed cell's scores (u32 count; f32, cells × k) |
+| `neighbors.bin` | `SCKN` | The cells n and the neighbors k of each (u32, u32: the parameter less one, the cell itself not listed), each one's neighbors nearest first (u32 indices among the cells analyzed, n × k) and their Euclidean distances in the components (f64) |
+| `markers.bin` | `SCMR` | The clusters c and genes g (u32, u32), then six arrays of f64, each c × g, cluster-major: the rank-sum test's z-score, the log₂ fold change, the p-value, the Benjamini–Hochberg adjusted p-value, and the shares of cells expressing the gene in the cluster and out of it |
+
+The project records each clustering it uses (an `artifacts` entry of kind `clustering`, with its
+dataset, segmentation, parameters and summary). The Viewer's fill `clusters:<artifact id>` colors
+cells by a clustering of the segmentation drawn; saved views keep it.
 
 ### Jobs
 

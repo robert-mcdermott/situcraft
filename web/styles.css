@@ -1034,3 +1034,14 @@ td div.studio-problem { padding: 2px 6px; margin-top: 4px; font-size: 11.5px; }
 @container (max-width: 640px) { .cmp-stage[data-mode="side"] { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; } .cmp-stage { min-height: 520px; } }
 .cmp-legend-item .dot, .cmp-item .dot, .cmp-chip .dot, .cmp-pane-label .dot, .cmp-table .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; flex: none; }
 .cmp-map-key { display: inline-block; width: 42px; height: 9px; border-radius: 2px; background: linear-gradient(90deg, rgba(240, 70, 60, 0.08), rgba(240, 70, 60, 0.7)); border: 1px solid var(--line); }
+
+/* --- Cell types (ui/mode-celltypes.js) --- */
+.ct-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 7px; vertical-align: -1px; }
+.ct-genes { font-size: 12px; color: var(--text-2); }
+.ct-summary { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 14px; align-items: start; margin-bottom: 10px; }
+.ct-scree-figure { margin: 0; }
+.ct-scree { width: 100%; height: auto; display: block; }
+.ct-scree rect { fill: var(--accent); opacity: 0.8; }
+.ct-scree text { font-size: 10px; fill: var(--text-2); }
+.ct-markers td:first-child, .ct-clusters td:first-child { white-space: nowrap; }
+@media (max-width: 720px) { .ct-summary { grid-template-columns: 1fr; } }

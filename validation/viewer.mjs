@@ -505,6 +505,33 @@ export async function viewerSuite({ check, MissingData, verbose }) {
         const exported = await act('export', { what: 'project', path: target });
         const written = existsSync(target) ? JSON.parse(readFileSync(target, 'utf8')) : null;
         check('viewer', 'remote control: export writes the project only with the token', `${refused.status} without, ${exported.ok ? 'written' : exported.message} with`, refused.status === 401 && exported.ok && written?.views?.length === 4 && written.artifacts.filter((a) => a.kind === 'filter').length === 3 && written.artifacts.filter((a) => a.kind === 'segmentation').length === 1, '401, then the project written');
+        // Clusters (wave 4, slice 1): the instrument's segmentation clustered by a program, and its
+        // clusters drawn on the tissue: each cell in its cluster's color, cells not analyzed clear.
+        const clustered = await act('cluster_cells', { dataset: 'xenium-lung-2fov' });
+        const shownClusters = await act('show_tissue', { fill: 'clusters', whole: true });
+        const clusterFill = await chrome.eval(`(async () => {
+          const v = window.situcraftViewer;
+          for (let k = 0; k < 300 && !v.clusterFill(); k += 1) await new Promise((r) => setTimeout(r, 100));
+          const f = v.clusterFill();
+          if (!f) return null;
+          const cells = await fetch('/api/clusterings/' + f.id + '/cells').then((r) => r.json());
+          const { categoricalColor } = await import('/lib/colormaps.js');
+          const rgba = v.fillColors();
+          let wrong = 0;
+          let clear = 0;
+          for (let i = 0; i < cells.cluster.length; i += 1) {
+            const c = cells.cluster[i];
+            if (c < 0) {
+              if (rgba[4 * i + 3] === 0) clear += 1;
+              else wrong += 1;
+              continue;
+            }
+            const hex = '#' + [0, 1, 2].map((j) => rgba[4 * i + j].toString(16).padStart(2, '0')).join('');
+            if (hex !== categoricalColor(c).toLowerCase() || rgba[4 * i + 3] !== 255) wrong += 1;
+          }
+          return { cells: cells.cluster.length, drawn: v.cellsDrawn().n, wrong, clear, clusters: cells.clusters, legend: document.querySelectorAll('.viewer-legend-item').length };
+        })()`);
+        check('viewer', 'remote control: cluster_cells clusters the Lung cells, and the tissue shows each cell in its cluster\'s color', clustered.ok && shownClusters.ok ? `${clustered.message} ${JSON.stringify(clusterFill)}` : clustered.message ?? shownClusters.message, clustered.ok && clustered.data.cells.analyzed === 11820 && clusterFill?.cells === 11898 && clusterFill.drawn === 11898 && clusterFill.wrong === 0 && clusterFill.clear === 78 && clusterFill.legend >= Math.min(24, clusterFill.clusters), 'every cell in its cluster\'s color, the 78 not analyzed clear, a legend');
         // Nucleus expansion (wave 2, slice 3), run by a program in the Segmentation view.
         const expanded = await act('expand_nuclei', { dataset: 'xenium-lung-2fov', distance_um: 5 });
         const g = expanded.ok ? expanded.data.summary.agreement : null;

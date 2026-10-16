@@ -22,6 +22,7 @@ import { categoricalColor, hexToRgb } from '../lib/colormaps.js';
 import { comparisonsOf, decideSegmentation, DECISIONS, promotedSegmentation, segmentationDecision, segmentationsOf } from '../lib/segmentations.js';
 import { CLASS_INFO, DIFFERING, RANKS, cellNames, prepare, rank, warnings } from '../lib/review.js';
 import { cellFlags, flagsOf } from '../lib/refine.js';
+import { askRemoveComparison } from './comparisons.js';
 
 const CLASSES = Object.keys(CLASS_INFO);
 // A's and B's colours in the overlay (Okabe and Ito's palette, told apart with any colour vision).
@@ -37,7 +38,7 @@ const num = (v, digits = 3) => (Number.isFinite(v) ? v.toLocaleString('en-US', {
 async function getJSON(url) {
   const response = await fetch(url, { cache: 'no-store' });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw Object.assign(new Error(body.error ?? `HTTP ${response.status}`), { status: response.status });
+  if (!response.ok) throw Object.assign(new Error(body.error ?? `HTTP ${response.status}`), { status: response.status, code: body.code });
   return body;
 }
 
@@ -117,6 +118,26 @@ export function mountCompare(app, container) {
       if (mine !== generation) return;
       if (error.status === 409) {
         message('layers', 'Its derived data are being built', 'The workspace opens when they are ready.', [h('button.btn', { type: 'button', onclick: () => app.setMode('data') }, icon('database'), 'Go to Data')]);
+        return;
+      }
+      if (error.code === 'comparison.earlier-method' || error.code === 'comparison.missing') {
+        const cmp = t.comparison;
+        const again = h('button.btn.primary', { type: 'button', onclick: async () => {
+          again.disabled = true;
+          try {
+            const m = await app.bundles.compareSegmentations(t.item, t.dataset.id, cmp.a, cmp.b);
+            app.compareFocus = m.id;
+            failed = null;
+            show();
+          } catch (e) {
+            again.disabled = false;
+            toast(`The comparison: ${e.message}`, { kind: 'error', timeout: 12000 });
+          }
+        } }, icon('compare'), 'Compare again');
+        const remove = h('button.btn.ghost.danger', { type: 'button', onclick: async () => {
+          if (await askRemoveComparison(app, cmp)) show();
+        } }, icon('trash'), 'Remove it');
+        message('warning', error.code === 'comparison.missing' ? 'The comparison\'s files are missing' : 'Made by another SituCraft', error.message, [again, remove]);
         return;
       }
       message('warning', 'The comparison cannot be shown', error.message);

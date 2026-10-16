@@ -45,6 +45,11 @@ the reference. Three example datasets (two public Xenium bundles, downloaded in 
 simulated tissue with its truth) come with guided tours and worked examples. See the
 [roadmap](situcraft-spec/roadmap.md) and the [changelog](CHANGELOG.md).
 
+In development for 0.4.0: cell identities, starting with clusters of a segmentation's cells by
+their expression in the Cell types view, drawn on the tissue, with each cluster's markers. The
+steps and defaults are scanpy's, and the results are validated against scanpy, leidenalg and
+scikit-learn.
+
 ## A look around
 
 <picture>
@@ -82,6 +87,8 @@ More: [checking a bundle](docs/images/data-light.webp), [the tissue's stains](do
 [the segmentation studio](docs/images/studio-light.webp),
 [a refinement on the tissue, by its certainty](docs/images/refined-light.webp),
 [exporting a segmentation](docs/images/export-light.webp),
+[cells clustered by their expression](docs/images/celltypes-light.webp),
+[the clusters on the tissue](docs/images/clusters-light.webp),
 [the Jobs view](docs/images/jobs-light.webp).
 
 ## Install

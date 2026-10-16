@@ -200,6 +200,26 @@
   "violations": []
  },
  {
+  "scene": "celltypes",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "celltypes",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "clusters",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "clusters",
+  "theme": "light",
+  "violations": []
+ },
+ {
   "scene": "export",
   "theme": "dark",
   "violations": []

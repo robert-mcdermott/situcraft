@@ -10,10 +10,13 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"sync"
 
+	"situcraft/internal/artifacts"
 	"situcraft/internal/cache"
 	"situcraft/internal/compare"
 	"situcraft/internal/segment"
@@ -172,6 +175,17 @@ func (a *app) outlineTile(w http.ResponseWriter, r *http.Request) {
 	writeBinary(w, block, true)
 }
 
+// earlierMethod says why a comparison made by another version of the method is not shown. Its
+// headline numbers still read; its differences are laid out as that version wrote them.
+func earlierMethod(v string) string {
+	if n, err := strconv.Atoi(v); err == nil {
+		if m, _ := strconv.Atoi(compare.MethodVersion); n > m {
+			return fmt.Sprintf("This comparison was made by a newer SituCraft (comparison method %s; this one reads method %s). Open it with that version, or compare the two segmentations again here.", v, compare.MethodVersion)
+		}
+	}
+	return fmt.Sprintf("This comparison was made by an earlier SituCraft (comparison method %s), whose list of differences this version (method %s) does not read. Compare the two segmentations again to see them; the comparison made then replaces this one in the workspace.", v, compare.MethodVersion)
+}
+
 // comparisonGroups answers a comparison's differences, column by column, with the ids of the two
 // segmentations' cells: {classes, class, a, b, iou, jaccard, displacement, changed, x, y,
 // transcriptsA, transcriptsB, mixedA, mixedB, idsA, idsB}.
@@ -182,8 +196,16 @@ func (a *app) comparisonGroups(w http.ResponseWriter, r *http.Request) {
 	}
 	defer b.Close()
 	m, err := a.artifacts.Get(r.PathValue("id"))
+	if errors.Is(err, artifacts.ErrNotFound) {
+		writeErrorCode(w, http.StatusNotFound, "comparison.missing", "The comparison's files are not among SituCraft's artifacts (it was removed, or made on another computer). Compare the two segmentations again to make it here.")
+		return
+	}
 	if err != nil || m.Kind != "comparison" {
 		writeError(w, http.StatusNotFound, "No such comparison.")
+		return
+	}
+	if v := m.Lineage.Method.Version; v != compare.MethodVersion {
+		writeErrorCode(w, http.StatusUnprocessableEntity, "comparison.earlier-method", earlierMethod(v))
 		return
 	}
 	p, err := a.artifacts.Path(m.ID, compare.FileGroups)

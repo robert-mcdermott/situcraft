@@ -1540,25 +1540,156 @@ independent reference outputs.
 
 ## 0.4.0: cell identities (wave 4)
 
-Outline; planned in detail when reached.
-- Normalization, principal components, kNN graph and Leiden clustering, seeded and transparent
-  (T2). UMAP linked to the tissue (T3).
-- Marker-based hierarchical labels with inspectable scores (T4). Imported labels (T1). Optional
-  reference mapping (T5).
-- Evidence cards, label versions and the low-confidence queue (T6, T7, T8). Cluster markers,
-  labeled exploratory.
-- Labels per segmentation, and composition changes in the comparison's downstream-impact tab (C6).
-- Validation: clustering and embeddings against reference libraries on the development bundles
-  (partition agreement, trustworthiness), marker scores against hand computation.
-- From testing 0.3.0:
-  - **A comparison can be removed from its project.** The project's history records the removal,
-    and the comparison's files move to SituCraft's trash once no project uses them. A comparison
-    that a decision cites cannot be removed (the methods paragraph tells how the default was
-    chosen from it), and the app says so.
-  - **A comparison made by an earlier method says so.** Opening one whose file layout this version
-    no longer reads names its method version and offers to compare the two segmentations again,
-    instead of "groups.bin: the file ends early" (the layout gained four numbers per difference
-    between methods 1 and 2).
+Cells given identities with their evidence: clusters, a map, labels from markers, imported labels
+and an optional reference, each with its confidence, reviewed and kept as versions. Every analysis
+is an artifact of a segmentation, so it can be made again on another and the two compared.
+
+**Where the work runs.** The analyses that make a result (normalization, principal components,
+neighbors, clusters, the map, scores, labels) run in the program as jobs, as segmentation does, and
+their results are artifacts. The page draws and explores them. A cell table of a million cells
+with a 5,000-gene panel does not fit a page's memory, and the same jobs then run headless
+(`situcraft run`, wave 9) with nothing but the binary. CytoWeave's analyses are the starting point:
+its nearest neighbors, Leiden and UMAP are carried to Go, with an origin comment, and made the
+same on every processor.
+
+### Wave 4
+
+1. **Clusters (T2): done.**
+   - **The method** (`internal/cluster`; research.md §5.1), scanpy's steps and defaults:
+     - the cells: a segmentation's counts, those with at least 10 gene transcripts or those a saved
+       QC filter keeps (checked by the filter's checksum);
+     - each cell's counts scaled to the median total and log-transformed; each gene scaled,
+       clipped at ±10;
+     - exact principal components (50) of the sparse counts, without the dense matrix
+       (`internal/linalg`: Householder reduction and the QL method);
+     - each cell's 15 nearest neighbors (the cell included), exactly, weighted as UMAP's fuzzy
+       graph; Leiden at a resolution, seeded (`internal/graph`, carried to Go from CytoWeave's
+       analyses);
+     - each cluster's markers: the Wilcoxon rank-sum test with ties corrected, the log₂ fold
+       change and the shares expressing, labeled exploratory;
+     - the same files on any number of threads, on arm64 and amd64 (pinned digests);
+       `internal/dmath` gained fdlibm's complementary error function for the p-values.
+   - **An artifact** of kind `clustering` (`docs/FORMATS.md`): the cells and their clusters, the
+     components and scores, the neighbors, the markers; checked (every cell in a cluster numbered
+     by size, the graph made again to the recorded modularity). Asking again answers it; an
+     interrupted job resumes.
+   - **The Cell types view** (`ui/mode-celltypes.js`): the segmentation, the cells and the
+     parameters with their help; each clustering's numbers, the components' variances, the
+     clusters with their sizes and leading markers, a cluster's markers; **Show on the tissue**,
+     and the Viewer's **Fill by** lists each clustering of the segmentation drawn, with a legend.
+     The sidebar's **Clusterings** and the inspector. Remote control: `cluster_cells`, and
+     `show_tissue` fills by `clusters`.
+   - **From testing 0.3.0:**
+     - **A comparison can be removed from its project** (the inspector's **Remove**, or the
+       Compare view's): the history records it; its files go to the library's trash once no
+       saved project names it (`POST /api/artifacts/{id}/trash`); a comparison a decision cites
+       is refused, with why. Undoing brings the record back; its files, gone, are made again by
+       **Compare again**.
+     - **A comparison made by another method version says so** (code
+       `comparison.earlier-method`) and offers **Compare again** and **Remove it**; a comparison
+       whose files are missing says that (`comparison.missing`) and offers the same.
+   - Validation:
+     - **Exact cases:** eigenvalues of the second-difference matrix, random, rank-deficient and
+       repeated cases; the sparse covariance's components, scores and signs against the dense
+       computation; neighbors against brute force with ties; the fuzzy weights by hand;
+       modularity of two joined triangles (5/14); Leiden finding a ring of eight cliques and four
+       planted groups; normalization, scaling and the rank-sum test by hand (equal ratios tie);
+       Benjamini–Hochberg on a known case.
+     - **Against scanpy 1.12.4, leidenalg 0.12.0, umap-learn 0.5.12 and scikit-learn 1.9.1**
+       (`validation/reference/clustering/`, numbers in research.md §5.1), on both bundles and the
+       standard simulated tissue: the same cells; the components' variances within 7 × 10⁻¹⁴
+       and the same directions; the same neighbors; modularity on umap-learn's graph within
+       3 × 10⁻⁸; Leiden's modularity within leidenalg's range over ten seeds (above it on Lung),
+       its agreement with leidenalg as leidenalg's with itself; markers identical to the
+       rank-sum test with exact ties, scanpy's fold changes within 10⁻⁶, the same first ten
+       genes. Checked weekly against SituCraft's clustering made again, byte for byte.
+     - **Known truth:** on the standard simulated tissue the clusters agree with the true cell
+       types at an adjusted Rand index of 0.955 (scanpy's own pipeline 0.971).
+     - **In the app:** the Lung cells clustered by remote control and drawn on the tissue, every
+       cell in its cluster's color, the 78 not analyzed clear (viewer suite); both comparison
+       fixes over HTTP on the Lung bundle and in the page; capture scenes `celltypes` and
+       `clusters`, with no accessibility violation.
+   - **Reference numbers:** Lung 29 clusters of 11,820 cells (modularity 0.6177), Breast 15 of
+     7,163 (0.5982), the simulated tissue 5 of 2,925 (0.7166), each in about a second.
+   - Found by slice 1:
+     - **Ranking rounded values parts cells that express a gene equally:** two cells with the
+       same count over total can get log-normalized values a rounding apart (log(1 + x) and
+       log1p(x) part different pairs), which moved a marker's score by up to 0.017. The ranks
+       now come from count over total, compared exactly; scanpy's scores, which rank the rounded
+       values, differ from the exact test's by that much.
+     - **An adjusted p-value can be a rounding below its p-value** (p·m/m): the check allows it.
+     - **The instrument's graph-based clusters are not scanpy's:** on Lung neither SituCraft's
+       clusters nor scanpy's agree with them (adjusted Rand index 0.044 and 0.048), though the
+       largest clusters lead with the same genes; on Breast 0.431. Reported, not a tolerance.
+2. **The map (T3) and exploring clusters.**
+   - UMAP (McInnes, Healy & Melville 2018) on a clustering's graph: spectral initialization,
+     stochastic gradient descent with negative sampling, seeded and the same on every processor.
+     Its trustworthiness and neighbor preservation shown (Venna & Kaski 2001), with a plain
+     warning where the map distorts.
+   - The Cell types view's map, drawn by the renderer and linked to the tissue: cells selected on
+     either are selected on both; colored by cluster, a gene's expression or a QC attribute.
+     Markers as a dot plot and a table; clusters named and merged (a new version of the
+     clustering's names, the original kept).
+   - The instrument's own analysis (graph-based and k-means clusters, components and map), read
+     from the bundle and registered as artifacts, compared with SituCraft's clusters.
+   - Validation: trustworthiness against umap-learn's map of the same graph; the instrument's
+     clusters read against its CSV files; the map's selection and linking in the viewer suite.
+3. **Labels from markers (T4).**
+   - Marker sets: a hierarchy of labels (class, lineage, subtype, state), each with positive and
+     negative markers. Starter sets for the development bundles' panels from published marker
+     studies, cited; edited in the app, versioned, saved as files.
+   - Scores against control genes binned by expression (Tirosh et al. 2016); labels assigned from
+     the top of the hierarchy down, a level only when its best label leads the next by a margin,
+     else the cell stays at the level above. Confidence from the margin. Each cluster's labels and
+     their shares.
+   - A label set is an artifact of kind `labels`: each cell's label at each level, scores and
+     confidence, the marker set by its checksum.
+   - Validation: scores against scanpy's `score_genes` with the same control genes; on simulated
+     tissues, labels against the true types.
+4. **Imported labels (T1).**
+   - Labels and confidence from CSV, Parquet or AnnData Zarr (an `obs` column), Xenium Explorer's
+     cell groups, and the instrument's clusters, matched to a segmentation's cells by id: ids not in
+     the segmentation refused with their count, cells without a label counted.
+   - Validation: files written by pandas, pyarrow and anndata read exactly; mismatched ids refused.
+5. **Label versions, evidence and review (T6, T7, T8).**
+   - Predicted (markers, reference, imported), curated (a reviewer's relabeling of cells or
+     clusters, each with a reason, appended) and consensus (a rule over chosen sets) side by side,
+     in a table and on the tissue.
+   - The evidence card of a cell's label: confidence, supporting and contradicting markers,
+     counts, source, the labels of its neighbors in the tissue and in expression, its review
+     status, and its segmentation's flags.
+   - The review queue: low confidence, spatially implausible (a label its tissue neighbors rarely
+     share), segmentation-sensitive (slice 7). Reviewed cells are kept with who, when and why.
+   - Validation: consensus rules on built fixtures; on simulated tissues with planted mislabels,
+     the queue's recall.
+6. **Mapping to a reference (T5, optional).**
+   - A labeled single-cell reference (AnnData Zarr, or label-by-gene profiles as CSV or Parquet)
+     restricted to the panel's genes, the shared genes reported; each cell correlated with each
+     label's profile, then fine-tuned on the leading labels' genes (Aran et al. 2019), with a score
+     and a margin. Whether h5ad references need an HDF5 reader is decided here.
+   - Validation: against SingleR's labels on a public reference for both bundles (maintainer-run,
+     committed); on simulated tissues, against the true types.
+7. **Labels across segmentations (C6, T8).**
+   - A clustering or label set made again on another segmentation in one step; composition by label
+     under each; labels of the cells a comparison matches (agreement among one-to-one cells, the
+     labels of split and merged cells); marker mixing by label; the comparison workspace's
+     downstream-impact tab. Cells whose label changes with the segmentation join the review queue.
+   - Validation: built fixtures; on simulated tissues, labels under the truth, the instrument's
+     segmentation and the refinement.
+8. **Scale.**
+   - Nearest neighbors by NN-Descent (Dong, Moses & Li 2011) above a size where exact search is
+     slow, deterministic for a seed, its recall against exact search measured; the map's
+     optimization over all cores, the same for any number of workers.
+   - Principal components of panels of thousands of genes (Xenium Prime) by Lanczos iteration or
+     a parallel reduction: slice 1's dense eigendecomposition costs the cube of the panel's
+     genes, seconds at 500 and minutes at 5,000.
+   - The weekly scale test types the large simulated tissue (399,084 cells) within memory and time
+     budgets, and the map draws it.
+9. **Examples, documentation, release 0.4.0.**
+   - Tours: cluster and label the Lung bundle; the simulated tissue's labels against its truth;
+     labels under two segmentations.
+   - The project fixture `validation/projects/0.4.0-*.situcraft.json`; guide pages; CHANGELOG;
+     release.
 
 ## 0.5.0: the pathology bridge (wave 5)
 

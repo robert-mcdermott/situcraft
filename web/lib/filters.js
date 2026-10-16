@@ -44,13 +44,18 @@ export function evaluate(conditions, cells) {
   return { keep, kept, failing, only };
 }
 
-// The SHA-256 of which cells are kept: the count of cells (4 bytes, little-endian), then one bit
-// per cell, the first cell in the lowest bit.
-export function keepChecksum(keep) {
+// Which cells are kept, as bytes: the count of cells (4 bytes, little-endian), then one bit per
+// cell, the first cell in the lowest bit. The program reads them so (api_clustering.go).
+export function keepBytes(keep) {
   const bytes = new Uint8Array(4 + Math.ceil(keep.length / 8));
   new DataView(bytes.buffer).setUint32(0, keep.length, true);
   for (let i = 0; i < keep.length; i += 1) if (keep[i]) bytes[4 + (i >> 3)] |= 1 << (i & 7);
-  return sha256(bytes);
+  return bytes;
+}
+
+// The SHA-256 of keepBytes.
+export function keepChecksum(keep) {
+  return sha256(keepBytes(keep));
 }
 
 function newId() {

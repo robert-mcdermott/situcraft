@@ -225,6 +225,21 @@ func (a *app) handleJobs() {
 			a.artifacts.Discard(comparisonID(p.A, p.B, compare.DefaultParams()))
 		}
 	})
+	a.jobs.Handle("clustering", func(spec json.RawMessage) (jobs.Func, error) {
+		if a.cache == nil {
+			return nil, errors.New("SituCraft has no cache folder")
+		}
+		var p clusterSpec
+		if json.Unmarshal(spec, &p) != nil || p.Bundle == "" || p.Segmentation == "" || p.Parameters.Check() != nil {
+			return nil, errors.New("its spec names no bundle, segmentation and parameters")
+		}
+		return a.clusteringJob(p, clusteringID(p.Segmentation, p.Filter, p.Parameters)), nil
+	}, func(id string, spec json.RawMessage) {
+		var p clusterSpec
+		if json.Unmarshal(spec, &p) == nil && p.Segmentation != "" {
+			a.artifacts.Discard(clusteringID(p.Segmentation, p.Filter, p.Parameters))
+		}
+	})
 	a.jobs.Handle("plant", func(spec json.RawMessage) (jobs.Func, error) {
 		if a.cache == nil {
 			return nil, errors.New("SituCraft has no cache folder")

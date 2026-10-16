@@ -10,6 +10,7 @@ import (
 	"context"
 	"crypto/md5"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
@@ -29,6 +30,7 @@ import (
 	"time"
 
 	"situcraft/internal/artifacts"
+	"situcraft/internal/compare"
 	"situcraft/internal/examples"
 	"situcraft/internal/export"
 	"situcraft/internal/jobs"
@@ -1364,6 +1366,146 @@ func TestRealInstrumentSegmentationAndInterruptedJobs(t *testing.T) {
 	json.NewDecoder(rec.Body).Decode(&groups)
 	if rec.Code != http.StatusOK || len(groups.Class) != 11898 || len(groups.IDsA) != 11898 || len(groups.IDsB) != 11898 || groups.Classes[groups.Class[0]] != "one-to-one" || len(groups.A[0]) != 1 {
 		t.Errorf("the comparison's differences: %d, %d groups, %d and %d ids", rec.Code, len(groups.Class), len(groups.IDsA), len(groups.IDsB))
+	}
+
+	// A comparison made by another version of the method says so, with a code the page offers to
+	// compare again on.
+	manifestPath := filepath.Join(dir, "artifacts", cm.ID, "manifest.json")
+	original, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(manifestPath, bytes.Replace(original, []byte(`"version": "`+compare.MethodVersion+`"`), []byte(`"version": "1"`), 1), 0o600)
+	var coded struct{ Error, Code string }
+	rec = request(t, handler, http.MethodGet, "/api/local/0/comparisons/"+cm.ID+"/groups", nil, nil)
+	json.NewDecoder(rec.Body).Decode(&coded)
+	if rec.Code != http.StatusUnprocessableEntity || coded.Code != "comparison.earlier-method" || !strings.Contains(coded.Error, "comparison method 1") {
+		t.Errorf("an earlier method's comparison: %d %+v", rec.Code, coded)
+	}
+	os.WriteFile(manifestPath, original, 0o600)
+
+	// Its files go to the trash only once no saved project names it, and only when this computer
+	// asks; then the workspace says they are missing, and comparing again makes it anew.
+	trash := func() (answer struct {
+		Trashed bool
+		UsedBy  []string
+	}) {
+		req := httptest.NewRequest(http.MethodPost, "/api/artifacts/"+cm.ID+"/trash", nil)
+		req.Host, req.RemoteAddr = "127.0.0.1:8840", "127.0.0.1:50000"
+		out := httptest.NewRecorder()
+		handler.ServeHTTP(out, req)
+		if out.Code != http.StatusOK {
+			t.Fatalf("trash: %d %s", out.Code, out.Body)
+		}
+		json.NewDecoder(out.Body).Decode(&answer)
+		return answer
+	}
+	if rec := request(t, handler, http.MethodPost, "/api/artifacts/"+cm.ID+"/trash", nil, nil); rec.Code != http.StatusForbidden {
+		t.Errorf("trash from elsewhere: %d", rec.Code)
+	}
+	projectFile := filepath.Join(dir, "projects", "p-naming.json")
+	os.MkdirAll(filepath.Dir(projectFile), 0o755)
+	os.WriteFile(projectFile, []byte(`{"name":"Lung study","artifacts":[{"kind":"comparison","id":"`+cm.ID+`"}],"decisions":[]}`), 0o600)
+	if got := trash(); got.Trashed || len(got.UsedBy) != 1 || got.UsedBy[0] != "Lung study" {
+		t.Errorf("trash while a project names it: %+v", got)
+	}
+	os.Remove(projectFile)
+	if got := trash(); !got.Trashed {
+		t.Errorf("trash once no project names it: %+v", got)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "artifacts", cm.ID)); !os.IsNotExist(err) {
+		t.Errorf("the comparison's folder after the trash: %v", err)
+	}
+	if moved, _ := filepath.Glob(filepath.Join(dir, "trash", "artifacts", cm.ID+"-*", "groups.bin")); len(moved) != 1 {
+		t.Errorf("the trash holds %v", moved)
+	}
+	rec = request(t, handler, http.MethodGet, "/api/local/0/comparisons/"+cm.ID+"/groups", nil, nil)
+	json.NewDecoder(rec.Body).Decode(&coded)
+	if rec.Code != http.StatusNotFound || coded.Code != "comparison.missing" {
+		t.Errorf("a removed comparison's differences: %d %+v", rec.Code, coded)
+	}
+	var remade comparison
+	json.NewDecoder(request(t, handler, http.MethodPost, "/api/local/0/compare", strings.NewReader(cmpBody), nil).Body).Decode(&remade)
+	if remade.Job == nil || remade.ID != cm.ID {
+		t.Fatalf("comparing again: %+v", remade)
+	}
+	if j, _ := a.jobs.Wait(ctx, remade.Job.ID); j.State != jobs.Complete {
+		t.Fatalf("comparing again ended %s: %s", j.State, j.Error)
+	}
+
+	// Clusters of the instrument's segmentation: a job, then the same artifact without one; each
+	// cell's cluster and each cluster's markers; the cells of a QC filter, checked by its checksum.
+	var clustered comparison
+	json.NewDecoder(request(t, handler, http.MethodPost, "/api/local/0/cluster", strings.NewReader(`{"segmentation":"`+m.ID+`"}`), nil).Body).Decode(&clustered)
+	if clustered.Job == nil {
+		t.Fatalf("no clustering job: %+v", clustered)
+	}
+	if j, _ := a.jobs.Wait(ctx, clustered.Job.ID); j.State != jobs.Complete {
+		t.Fatalf("the clustering ended %s: %s", j.State, j.Error)
+	}
+	var clusteredAgain comparison
+	json.NewDecoder(request(t, handler, http.MethodPost, "/api/local/0/cluster", strings.NewReader(`{"segmentation":"`+m.ID+`","parameters":{"minTranscripts":10,"components":50,"neighbors":15,"resolution":1,"seed":20250}}`), nil).Body).Decode(&clusteredAgain)
+	cl := clusteredAgain.Artifact
+	if clusteredAgain.Job != nil || cl == nil || cl.ID != clustered.ID || cl.Kind != "clustering" || cl.State != artifacts.Complete || len(cl.Files) != 5 {
+		t.Fatalf("the clustering again: %+v", clusteredAgain)
+	}
+	var cells struct {
+		Cells, Clusters int
+		Sizes           []int
+		Cluster         []int32
+	}
+	rec = request(t, handler, http.MethodGet, "/api/clusterings/"+cl.ID+"/cells", nil, nil)
+	json.NewDecoder(rec.Body).Decode(&cells)
+	analyzed := 0
+	for _, c := range cells.Cluster {
+		if c >= 0 {
+			analyzed++
+		}
+	}
+	if rec.Code != http.StatusOK || cells.Cells != 11898 || len(cells.Cluster) != 11898 || cells.Clusters < 5 || analyzed < 10000 {
+		t.Errorf("each cell's cluster: %d, %d cells, %d clusters, %d analyzed", rec.Code, cells.Cells, cells.Clusters, analyzed)
+	}
+	var markers struct {
+		Genes    int
+		Clusters []struct {
+			Size    int
+			Markers []struct {
+				Gene  string
+				Score float64
+			}
+		}
+	}
+	rec = request(t, handler, http.MethodGet, "/api/clusterings/"+cl.ID+"/markers?top=3", nil, nil)
+	json.NewDecoder(rec.Body).Decode(&markers)
+	if rec.Code != http.StatusOK || len(markers.Clusters) != cells.Clusters || len(markers.Clusters[0].Markers) != 3 || markers.Clusters[0].Markers[0].Score <= 0 {
+		t.Errorf("the markers: %d %+v", rec.Code, markers)
+	}
+	keepBytes := make([]byte, 4+(11898+7)/8)
+	binary.LittleEndian.PutUint32(keepBytes, 11898)
+	for i := 0; i < 11898; i += 2 {
+		keepBytes[4+i/8] |= 1 << (i % 8)
+	}
+	keepSum := sha256.Sum256(keepBytes)
+	filterBody := func(sum string) io.Reader {
+		return strings.NewReader(`{"segmentation":"` + m.ID + `","filter":{"id":"f-1","name":"Even cells","checksum":"` + sum + `","keep":"` + base64.StdEncoding.EncodeToString(keepBytes) + `"}}`)
+	}
+	if rec := request(t, handler, http.MethodPost, "/api/local/0/cluster", filterBody(strings.Repeat("0", 64)), nil); rec.Code != http.StatusBadRequest {
+		t.Errorf("a filter whose cells do not have its checksum: %d", rec.Code)
+	}
+	var filtered comparison
+	json.NewDecoder(request(t, handler, http.MethodPost, "/api/local/0/cluster", filterBody(hex.EncodeToString(keepSum[:])), nil).Body).Decode(&filtered)
+	if filtered.Job == nil || filtered.ID == cl.ID {
+		t.Fatalf("no filtered clustering job: %+v", filtered)
+	}
+	if j, _ := a.jobs.Wait(ctx, filtered.Job.ID); j.State != jobs.Complete {
+		t.Fatalf("the filtered clustering ended %s: %s", j.State, j.Error)
+	}
+	rec = request(t, handler, http.MethodGet, "/api/clusterings/"+filtered.ID+"/cells", nil, nil)
+	json.NewDecoder(rec.Body).Decode(&cells)
+	for i, c := range cells.Cluster {
+		if i%2 == 1 && c >= 0 {
+			t.Fatalf("cell %d, which the filter leaves out, is in cluster %d", i, c)
+		}
 	}
 
 	// Errors planted for practice: a simulated segmentation with its answer key, asked again the

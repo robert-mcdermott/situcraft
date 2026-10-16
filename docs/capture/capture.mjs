@@ -293,6 +293,23 @@ const scenes = {
     await act('show_tissue', { segmentation: refined.data.id, fill: 'certainty', opacity: 0.6, all_transcripts: true, color_by: 'probability', channels: { DAPI: { color: '#8c8c8c' } }, center: [750, 300], um_per_pixel: 0.25, cell: 'c100' });
     await js(`window.situcraftViewer.settled()`);
   },
+  // The Breast example's cells clustered (wave 4, slice 1): the Cell types view, its clusters with
+  // their sizes and leading markers, the components' variances.
+  async celltypes() {
+    await act('open_example', { example: 'breast' });
+    await act('cluster_cells', {});
+    await waitFor(`Boolean(document.querySelector('.ct-markers tbody tr'))`);
+    await scrollTo('.ct-detail', 'start');
+  },
+  // The Breast example's clusters on the tissue (wave 4, slice 1): the cells filled by cluster,
+  // with the legend.
+  async clusters() {
+    await act('open_example', { example: 'breast' });
+    await act('cluster_cells', {});
+    await act('show_tissue', { fill: 'clusters', opacity: 0.8, transcripts: false, center: [620, 380], um_per_pixel: 0.75, channels: { DAPI: { color: '#8c8c8c' } } });
+    await waitFor(`Boolean(window.situcraftViewer?.clusterFill?.())`);
+    await js(`window.situcraftViewer.settled()`);
+  },
   // The Lung example's instrument segmentation exported as SpatialData, AnnData and Xenium
   // Ranger's inputs: the formats, the folder, the export listed with the prepared command
   // (wave 2, slice 7).

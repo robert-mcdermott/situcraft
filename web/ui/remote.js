@@ -15,6 +15,7 @@ import { workedExamples } from '../lib/tours.js';
 import { parseProject, rename, serializeProject } from '../lib/project.js';
 import { removeView, sameView, viewLink } from '../lib/views.js';
 import { SEG_FILLS, defaultChoice, segmentationChoices } from '../lib/segview.js';
+import { clusteringsOf } from '../lib/clusterings.js';
 
 export class ActionError extends Error {}
 
@@ -517,7 +518,7 @@ export function installRemote(app) {
       if (args.segmentation !== undefined) view.segmentation = segmentationRef(dataset, args.segmentation);
       if (args.outlines !== undefined) view.cells.outlines = Boolean(args.outlines);
       if (args.nuclei !== undefined) view.cells.nuclei = Boolean(args.nuclei);
-      if (args.fill !== undefined) view.cells.fill = args.fill === null || /^none$/i.test(String(args.fill)) ? null : choose(args.fill, view.segmentation === 'instrument' ? FILLS : [...FILLS.filter((f) => f !== 'method'), ...SEGMENTATION_FILLS], 'fill');
+      if (args.fill !== undefined) view.cells.fill = args.fill === null || /^none$/i.test(String(args.fill)) ? null : /^clusters\b/i.test(String(args.fill)) ? clusterFill(dataset, view.segmentation, String(args.fill)) : choose(args.fill, view.segmentation === 'instrument' ? FILLS : [...FILLS.filter((f) => f !== 'method'), ...SEGMENTATION_FILLS], 'fill');
       if (args.opacity !== undefined) view.cells.opacity = Math.min(1, Math.max(0, finite(args.opacity, 'opacity')));
       if (args.color_by !== undefined) {
         if (choose(args.color_by, ['gene', 'probability'], 'coloring') === 'probability') view.transcripts.colorBy = 'probability';
@@ -797,6 +798,44 @@ export function installRemote(app) {
       };
     },
 
+    async cluster_cells(args) {
+      const dataset = resolveDataset(args.dataset);
+      const segs = project().artifacts.filter((a) => a.kind === 'segmentation' && a.dataset === dataset.id && a.state === 'complete' && a.source !== 'planted');
+      if (!segs.length) throw new ActionError(`${dataset.name} has no complete segmentation yet.`);
+      let seg = segs.find((a) => a.id === promotedSegmentation(project(), dataset.id)?.record.id) ?? segs[0];
+      if (args.segmentation !== undefined) {
+        const ref = String(args.segmentation);
+        seg = segs.find((a) => a.id === ref) ?? segs.find((a) => a.name === choose(ref, segs.map((x) => x.name), 'segmentation'));
+      }
+      const parameters = {};
+      for (const [arg, key] of [['min_transcripts', 'minTranscripts'], ['components', 'components'], ['neighbors', 'neighbors'], ['resolution', 'resolution'], ['seed', 'seed']]) {
+        if (args[arg] !== undefined) parameters[key] = finite(args[arg], arg);
+      }
+      let filterId;
+      if (args.filter !== undefined) {
+        if (seg.source !== 'instrument') throw new ActionError('A QC filter chooses cells of the instrument\'s segmentation.');
+        const filters = project().artifacts.filter((a) => a.kind === 'filter' && a.dataset === dataset.id);
+        const named = filters.map((f) => `${f.name} v${f.version}`);
+        const ref = String(args.filter);
+        const byId = filters.find((f) => f.id === ref);
+        const latest = (name) => filters.filter((f) => f.name === name).sort((a, b) => b.version - a.version)[0];
+        filterId = byId?.id ?? (named.includes(ref) ? filters[named.indexOf(ref)].id : latest(choose(ref, [...new Set(filters.map((f) => f.name))], 'filter'))?.id);
+      }
+      await settleMode('celltypes');
+      let manifest;
+      try {
+        manifest = await app.cellTypesView.cluster(dataset, { segmentation: seg.id, parameters, filterId });
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      await frames();
+      const { description: d } = await app.bundles.clusteringData(manifest.id);
+      return {
+        message: `${seg.name} of ${dataset.name}: ${plural(d.clusters.count, 'cluster')} of ${plural(d.cells.analyzed, 'cell')} (resolution ${d.parameters.resolution}, modularity ${d.clusters.modularity.toFixed(4)}); the largest's leading markers ${(d.top[0] ?? []).slice(0, 3).map((m) => m.gene).join(', ')}.`,
+        data: { id: manifest.id, segmentation: { id: seg.id, name: seg.name }, parameters: d.parameters, cells: d.cells, genes: d.genes, components: d.pca.components, varianceRatio: d.pca.varianceRatio, edges: d.graph.edges, clusters: d.clusters, markers: d.top.map((list) => list.slice(0, 5).map(({ gene, logfc, pctIn, pctOut, padj }) => ({ gene, logfc, pctIn, pctOut, padj }))) },
+      };
+    },
+
     async export_segmentation(args) {
       const dataset = resolveDataset(args.dataset);
       const p = project();
@@ -999,6 +1038,15 @@ export function installRemote(app) {
 
   // A segmentation of a dataset by its name or artifact ID ('instrument', 'default' too), as a view
   // records it: 'instrument' or the artifact's ID.
+  // A fill by a clustering of the segmentation drawn: 'clusters' for its latest, 'clusters:<id>'.
+  function clusterFill(dataset, segRef, text) {
+    const seg = segRef === 'instrument' ? segmentationChoices(project(), dataset.id).find((c) => c.instrument)?.id : segRef;
+    const list = clusteringsOf(project(), dataset.id, seg).filter((c) => c.state === 'complete');
+    const id = text.includes(':') ? text.slice(text.indexOf(':') + 1).trim() : list.at(-1)?.id;
+    if (!list.some((c) => c.id === id)) throw new ActionError(list.length ? `No clustering ${id} of the segmentation drawn; its clusterings are ${list.map((c) => c.id).join(', ')}.` : 'The segmentation drawn has no clustering: cluster_cells makes one.');
+    return `clusters:${id}`;
+  }
+
   function segmentationRef(dataset, ref) {
     const list = segmentationChoices(project(), dataset.id);
     const text = String(ref ?? '').trim();

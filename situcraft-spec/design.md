@@ -47,6 +47,9 @@ see `conventions.md`. For the methods, formats and datasets behind these choices
 │ compute (new, goroutines)                                                                             │
 │   internal/segment   nucleus expansion; transcript-informed segmentation (sampler, outputs)           │
 │   internal/compare   cell matching, difference classes, comparison metrics                            │
+│   internal/cluster   normalization, principal components, Leiden clusters, markers (wave 4)           │
+│   internal/graph     nearest neighbors, UMAP's fuzzy graph, Leiden                                     │
+│   internal/linalg    symmetric eigendecomposition, the same on every processor                         │
 │   internal/register  image registration (later)                                                       │
 │   internal/spatial   graphs and spatial statistics on large tables (later)                            │
 │   internal/jobs      durable background jobs: spec, state, progress, cancellation, logs               │
@@ -71,8 +74,13 @@ and a segmentation run touches every transcript many times. So:
 - **Go owns** file I/O, decoding, indexing, viewport queries, segmentation, comparison over
   transcripts, and any statistic over transcript-scale tables. Go gives us goroutines across all
   cores, compact columnar caches, and a single cross-compiled binary.
-- **The browser owns** rendering, interaction, and cell-level analytics. Cell tables (10⁴–10⁶
-  rows) fit typed arrays and workers, as in the siblings.
+- **Go also owns the analyses that make a result** (wave 4): clusters, embeddings, scores and
+  labels run as jobs and become artifacts, as segmentations do. A cell table of a million cells
+  with a 5,000-gene panel does not fit a page's memory; the same jobs run headless with nothing
+  but the binary (wave 9); and a result kept as an artifact can be made again on another
+  segmentation and compared.
+- **The browser owns** rendering, interaction, and exploring results: coloring, selecting and
+  summarizing cells over typed arrays and workers, as in the siblings.
 - Unlike the siblings, the web app **needs its host**. There is no static-hosting mode, except the
   redacted static result package (wave 8), which ships precomputed tiles.
 
@@ -329,6 +337,23 @@ filled by their difference's class through the renderer's per-cell colours; the 
 give the disagreement map, drawn on a 2-D canvas over the tissue. The differences come to the page
 column by column; ranking and the reviewer's rules are pure functions, tested in Node. Decisions
 (promote, keep, reject) are appended to the project with their reason and comparison.
+
+### Cell identities
+
+Wave 4 types cells from their expression (`research.md` §5). Every analysis is an artifact of a
+segmentation, made by a job, named by its inputs and parameters, and checked before it is recorded.
+
+- **Clusters** (`internal/cluster`, `api_clustering.go`, slice 1): the cells analyzed (a rule, or a
+  QC filter's cells checked by its checksum), normalized and scaled; exact principal components of
+  the sparse counts (`internal/linalg`); each cell's nearest neighbors, exactly, weighted as UMAP's
+  graph, and Leiden (`internal/graph`, carried to Go from CytoWeave's analyses); each cluster's
+  markers. scanpy's defaults, so that its users find the same numbers; the same files on every
+  processor. The artifact (`docs/FORMATS.md`) keeps the cells and their clusters, the components
+  and scores, the neighbors and the markers; its check makes the graph again and requires the
+  recorded modularity.
+- **The Cell types view** (`ui/mode-celltypes.js`, `lib/clusterings.js`) runs a clustering and
+  shows its clusters, their sizes and markers and the components' variances; the Viewer fills the
+  cells by cluster (`clusters:<id>` among its fills), with a legend.
 
 ### Exports
 
