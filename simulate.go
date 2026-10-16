@@ -37,6 +37,7 @@ func runSimulate(args []string, stdout, stderr io.Writer) int {
 	paramsFile := flags.String("params", "", "a JSON file of parameters, each overriding the preset's (as --print-params writes them)")
 	printParams := flags.Bool("print-params", false, "print the parameters as JSON and exit")
 	quiet := flags.Bool("quiet", false, "print only the summary")
+	reference := flags.Int("reference", 0, "also write a single-cell reference of the tissue's types, this many cells of each, as an AnnData object in Zarr beside the bundle (<folder>-reference.zarr), to label its cells from")
 	flags.Usage = func() {
 		fmt.Fprintln(stderr, "Usage: situcraft simulate [flags] <new output folder>")
 		fmt.Fprintln(stderr, "Writes a simulated tissue as a Xenium-shaped output bundle, labelled simulated, with the truth in its truth/ folder.")
@@ -80,6 +81,10 @@ func runSimulate(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "situcraft simulate: %v\n", err)
 		return 2
 	}
+	if *reference < 0 || *reference > 100000 {
+		fmt.Fprintln(stderr, "situcraft simulate: --reference is a number of cells per type from 0 to 100000")
+		return 2
+	}
 	if *printParams {
 		raw, _ := json.MarshalIndent(p, "", "  ")
 		fmt.Fprintln(stdout, string(raw))
@@ -119,5 +124,13 @@ func runSimulate(args []string, stdout, stderr io.Writer) int {
 	fmt.Fprintf(stdout, "%d transcripts: %d from cells, %d background, %d negative controls.\n", sum.Transcripts, sum.MoleculesByOrigin["cell"], sum.MoleculesByOrigin["background"],
 		sum.MoleculesByOrigin["control probe"]+sum.MoleculesByOrigin["control codeword"])
 	fmt.Fprintf(stdout, "Written to %s (the truth in its truth/ folder). Open it with: situcraft %s\n", sum.Folder, sum.Folder)
+	if *reference > 0 {
+		path := strings.TrimRight(sum.Folder, "/") + "-reference.zarr"
+		if err := simulate.WriteReference(p, path, *reference, simulate.ReferenceDepth, p.Seed); err != nil {
+			fmt.Fprintf(stderr, "situcraft simulate: the reference: %v\n", err)
+			return 1
+		}
+		fmt.Fprintf(stdout, "A single-cell reference of its types (%d cells of each) is in %s.\n", *reference, path)
+	}
 	return 0
 }

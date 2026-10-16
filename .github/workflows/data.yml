@@ -44,7 +44,7 @@ jobs:
           # Outside the cached folder: the exports are rewritten each run.
           SITUCRAFT_EXPORT_DIR: ${{ runner.temp }}/exports
           JP2K_ZSTACK_ALL: '1'
-        run: go test -v -timeout 2h -run 'Real|Readers|Bundle|Estimates|ReferenceSegmentation|ReferenceClustering|ReferenceLabels|StarterSets|ImportedLabels|ReviewQueue' . ./validation/ ./internal/jp2k/ ./internal/xenium/ ./internal/cache/ ./internal/view/ ./internal/segment/... ./internal/compare/ ./internal/export/
+        run: go test -v -timeout 2h -run 'Real|Readers|Bundle|Estimates|ReferenceSegmentation|ReferenceClustering|ReferenceLabels|StarterSets|ImportedLabels|ReviewQueue|ReferenceMapping' . ./validation/ ./internal/jp2k/ ./internal/xenium/ ./internal/cache/ ./internal/view/ ./internal/segment/... ./internal/compare/ ./internal/export/
       - name: The exports read by spatialdata, anndata, pandas, scipy, geopandas and numpy, as the committed check recorded
         env:
           SITUCRAFT_EXPORT_DIR: ${{ runner.temp }}/exports

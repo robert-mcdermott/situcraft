@@ -31,7 +31,7 @@ internal/compare/    cell matching, difference classes, metrics
 internal/cluster/    normalization, principal components, Leiden clusters, markers
 internal/graph/      nearest neighbors, UMAP's fuzzy graph, Leiden
 internal/embed/      UMAP maps and their quality
-internal/label/      marker sets, scores, labels from the top of the hierarchy down
+internal/label/      marker sets, scores, labels from the top of the hierarchy down; references
 internal/linalg/     symmetric eigendecomposition
 internal/jobs/       durable background jobs
 internal/simulate/   seeded simulated tissues

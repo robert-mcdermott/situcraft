@@ -95,6 +95,31 @@ twice, or holding more than 1,000 labels. Cells the table does not name, and row
 `""`, `NA`, `nan`, `None` or `null`, have no label. The import records the SHA-256 of the file
 read (of an AnnData store, its `obs`'s files).
 
+## References SituCraft reads
+
+The Cell types view's **Labels from a reference** (and the `reference_labels` remote action) reads a
+labeled single-cell reference, restricted to the clustering's panel:
+
+| Format | Files | What is read |
+| --- | --- | --- |
+| AnnData Zarr | an AnnData object's store (`.zarr` folder or its zip, format 2 or 3) | the cells' labels from an `obs` column (2 to 500 labels); the genes' names from `var` (its index or a column); their expression from `layers/counts`, `raw/X` (named by `raw/var`) or `X` (sparse or dense): counts (whole numbers) or log-normalized values; scaled values (below 0) are refused |
+| A table of profiles | `.csv`, `.tsv`, `.txt` (gzipped or not) or `.parquet` | a row per label (a column of labels, each gene a numeric column named for it) or a row per gene (a column of genes, each label a numeric column named for it): each label's mean expression, as given |
+
+The usual names of label columns are suggested (`cell_type`, `celltype`, `cell_type_fine`,
+`cell_ontology_class`, `ann_finest_level`, `label.main` …), and the gene column naming most of the
+panel's genes. Genes are matched to the panel's by name, exactly, else ignoring case where that
+names one panel gene. Counts are scaled to the reference's median total and log-transformed (log1p)
+before each label's cells are averaged. The SHA-256 of the file read (of a store, of its files) is
+recorded. An `.h5ad` file is read once anndata has written it as Zarr:
+
+```python
+import anndata
+anndata.read_h5ad("reference.h5ad").write_zarr("reference.zarr")
+```
+
+`situcraft simulate --reference N <folder>` writes a reference of the simulated tissue's types,
+N cells of each, as `<folder>-reference.zarr` (its types in `obs`'s `cell_type`, counts in `X`).
+
 ## Other files
 
 SituCraft recognizes OME-TIFF images, Parquet and CSV tables, GeoJSON polygons and Zarr stores
@@ -321,9 +346,22 @@ the table gave one, and no composition; `labels.bin` holds every cell of the seg
 in no cluster (0xFFFFFFFF), with no scores: after the sets, levels (1) and states (0), each cell's
 label, its lead (NaN) and its confidence (NaN where none was given). There is no `markers.json`.
 
+Labels from a reference (above) are an artifact of three files: `labels.json` has a `reference`
+(`format`, `file`, `sha256`, `path`, `matrix`, `labelColumn`, `geneColumn`, `values`, `refCells`,
+`refGenes`, the `labels` and each one's reference `cells`, the panel's genes it lacks (`missing`),
+the `parameters` (`tune`, `margin`, `markers`), the genes per pair (`perPair`), the genes `shared`
+and those `compared` in the first round, and the cells `fineTuned` and `changed` by fine-tuning) in
+place of `markers` and `parameters`, one level named by the label column, and the composition;
+`reference.json` (`format` `"situcraft-reference-profiles"`, `version`, `labels`, `cells`, `genes`
+(the shared genes), `profiles`: each label's mean log-normalized expression over them) in place of
+`markers.json`; `labels.bin` is as above with each label's first-round correlation as its score and
+its last round's correlation as its positive part (NaN for labels not in that round, and for every
+label when there was one round), no negative parts, one level, the lead over the next label in the
+deciding round, the same lead as the confidence, and no states.
+
 The project records each label set it uses (kind `labels`, with its dataset, segmentation,
 clustering, `markerSet`, the version's record id, `markers` and summary; an imported one, its
-`source`).
+`source`; one from a reference, its `reference` and `parameters`).
 
 Label versions are the project's own records, made in the page:
 - **Curated labels** (kind `curated-labels`): `dataset`, `segmentation`, `base` (`labels`, a label
@@ -464,6 +502,7 @@ are in [research.md](../situcraft-spec/research.md) §3.4.
 | `--width`, `--height` | the preset's | The field's size in µm: at least 20, and at most 50 million pixels in all (about 1.5 × 1.5 mm at 0.2125 µm, which needs about 4 GB of memory; 1 × 1 mm takes about 13 s and 1.7 GB). A larger tissue is a mosaic of fields (below) |
 | `--params` | | A JSON file of parameters, each overriding the preset's; `--print-params` prints them all, with their names |
 | `--quiet` | | Print only the summary |
+| `--reference` | 0 | Also write a single-cell reference of the tissue's types, this many cells of each, as `<folder>-reference.zarr` (below) |
 
 The folder must not exist: it is written under a temporary name beside it and renamed into place
 when complete, so an interrupted run (Ctrl+C) leaves nothing behind.
@@ -490,6 +529,13 @@ are numbered across the mosaic, and coordinates placed in it.
 
 To score a segmentation against the truth, import `truth/` into the simulated dataset as a
 Xenium Ranger bundle (Segmentation view, **Import a segmentation**) and compare the two.
+
+**A reference of its types** (`--reference N`) is an AnnData object in Zarr (format 2) beside the
+bundle: N cells of each type (`obs`'s `cell_type`; the index `ref-000001`…), each drawn from its
+type's expression over the panel's genes (`var`, `SIM001`…) as the tissue's cells are, but clean of
+background and displaced molecules, at 1,000 expected transcripts (spread log-normally, σ 0.4), the
+counts in `X` (CSR, float32); its seed is the tissue's. Label the tissue's cells from it in the Cell
+types view (**Labels from a reference**) and compare them with the truth's types.
 
 Other tools read a simulated bundle as they read Xenium's: spatialdata-io's Xenium reader reads
 its table, transcripts, labels, boundaries and image with no warning, and tifffile and pyarrow

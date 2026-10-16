@@ -1,8 +1,9 @@
-// Labels (internal/label, api_labels.go): marker sets kept as versions in the project (records of
-// kind 'marker-set', each a file SituCraft reads), label sets the program makes from a clustering
-// and a marker set or imports from a table for a segmentation's cells (artifacts of kind 'labels',
-// recorded with the marker set version they used, or their source), and what the page says of
-// them: each cluster's labels, names from them, colors and fills.
+// Labels (internal/label, api_labels.go, api_references.go): marker sets kept as versions in the
+// project (records of kind 'marker-set', each a file SituCraft reads), label sets the program makes
+// from a clustering and a marker set or a reference, or imports from a table for a segmentation's
+// cells (artifacts of kind 'labels', recorded with the marker set version they used, their
+// reference, or their source), and what the page says of them: each cluster's labels, names from
+// them, colors and fills.
 
 import { categoricalColor } from './colormaps.js';
 
@@ -27,6 +28,26 @@ export function checkLabelParameters(p) {
     }
   }
   if (typeof p.lineage !== 'boolean') return 'Say whether a label\'s lineage\'s markers are left out of its controls.';
+  return null;
+}
+
+// A mapping to a reference's parameters, as the program names them (defaults from
+// /api/references/defaults).
+export const REFERENCE_PARAMETERS = [
+  { id: 'tune', label: 'Fine-tuning', step: 0.01, min: 0, max: 1, help: 'The labels whose correlation with a cell is within this of the best are scored again on the genes that set them apart, until one is left (0.05 is the method\'s published default; 0 takes the first round\'s best).' },
+  { id: 'margin', label: 'Margin', step: 0.01, min: 0, max: 1, help: 'How far a cell\'s best label must lead the next, in correlation, in the last round for the cell to take it; else it stays without a label. 0 takes the best unless two tie.' },
+  { id: 'markers', label: 'Genes per pair', step: 1, min: 0, max: 10000, help: 'For each pair of labels, the genes most higher in the first\'s profile than the second\'s are compared. 0 takes 500 × (2/3)^log₂(labels): 60 for 37 labels. On a panel of a few hundred genes that is most of them; fewer focus each comparison on the strongest differences.' },
+];
+
+// The mapping's parameters checked as the program checks them (RefParams.Check): an error's
+// message, or null.
+export function checkReferenceParameters(p) {
+  for (const spec of REFERENCE_PARAMETERS) {
+    const v = p[spec.id];
+    if (!Number.isFinite(v) || v < spec.min || v > spec.max || (spec.step === 1 && !Number.isInteger(v))) {
+      return `${spec.label} is ${spec.step === 1 ? 'a whole number ' : 'a number '}from ${spec.min.toLocaleString('en-US')} to ${spec.max.toLocaleString('en-US')}.`;
+    }
+  }
   return null;
 }
 
@@ -197,6 +218,7 @@ export function labelsRecord(dataset, manifest, markerSet = null, now = new Date
   const parent = (kind) => (lineage.parents ?? []).find((p) => p.kind === kind)?.id ?? null;
   const params = lineage.parameters ?? {};
   const imported = lineage.method?.name === 'Imported labels';
+  const reference = lineage.method?.name === 'SituCraft labels from a reference';
   return {
     kind: 'labels',
     id: manifest.id,
@@ -205,13 +227,14 @@ export function labelsRecord(dataset, manifest, markerSet = null, now = new Date
     segmentation: parent('segmentation'),
     clustering: parent('clustering'),
     markerSet,
-    markers: imported ? null : params.markers ?? null,
+    markers: imported || reference ? null : params.markers ?? null,
     source: imported ? params : null,
+    reference: reference ? params.reference ?? null : null,
     state: manifest.state,
     created: manifest.created,
     registered: now,
     method: { name: lineage.method?.name ?? '', version: lineage.method?.version ?? '', citation: lineage.method?.citation ?? '' },
-    parameters: lineage.parameters ?? null,
+    parameters: (reference ? params.parameters : lineage.parameters) ?? null,
     software: lineage.software ?? [],
     job: lineage.job ? { id: lineage.job.id, kind: lineage.job.kind } : null,
     summary: manifest.summary ?? null,
@@ -229,8 +252,24 @@ export function labelSetsFor(project, clustering) {
   return project.artifacts.filter((a) => a.kind === 'labels' && a.dataset === clustering.dataset && (a.clustering === clustering.id || (a.source && a.segmentation === clustering.segmentation)));
 }
 
-// A label set's name in a line: by its marker set, or its source.
+// Whether a label set has one level, named without it: imported, or from a reference.
+export function oneLevel(record) {
+  return Boolean(record?.source || record?.reference);
+}
+
+// The confidence below which the review queue lists a label set's cells, by default: from markers,
+// a lead under twice the margin; from a reference, a lead in correlation under twice the margin or
+// the fine-tuning threshold, whichever is more; null for a set without a confidence of its own.
+export function lowConfidenceDefault(record) {
+  if (!record || record.source) return null;
+  const p = record.parameters ?? {};
+  if (record.reference) return Math.max(2 * (p.margin ?? 0), p.tune ?? 0.05);
+  return 2 * (p.margin ?? 0.1);
+}
+
+// A label set's name in a line: by its marker set, its reference, or its source.
 export function labelSetName(record) {
+  if (record.reference) return `Labels from ${record.reference.file}${record.reference.labelColumn ? ` (${record.reference.labelColumn})` : ''}`;
   const src = record.source;
   if (!src) return `Labels by ${record.markers?.name ?? '?'}`;
   if (src.format === 'instrument') return `The instrument's ${String(src.title ?? 'clusters').toLowerCase()} clusters`;
@@ -244,6 +283,15 @@ export function addLabels(project, record, now = new Date().toISOString()) {
   const ms = project.artifacts.find((a) => a.kind === 'marker-set' && a.id === record.markerSet);
   const s = record.summary ?? {};
   const level = s.levels?.[0] ?? 'top';
+  if (record.reference) {
+    const ref = record.reference;
+    return {
+      ...project,
+      modified: now,
+      artifacts: [...project.artifacts, record],
+      history: [...project.history, { time: now, action: 'labels', detail: `Labeled the cells of ${(clustering?.name ?? 'a clustering').toLowerCase()} from the reference ${ref.file}${ref.labelColumn ? ` (${ref.labelColumn})` : ''}: ${s.labels ?? '?'} labels, ${s.reference?.shared ?? '?'} of the panel's genes shared; ${s.labeled?.[0] ?? '?'} of ${s.cells ?? '?'} cells labeled, fine-tuning ${record.parameters?.tune ?? '?'}, margin ${record.parameters?.margin ?? '?'} (SHA-256 ${String(ref.sha256 ?? '').slice(0, 12)}; artifact ${record.id})` }],
+    };
+  }
   if (record.source) {
     const seg = project.artifacts.find((a) => a.kind === 'segmentation' && a.id === record.segmentation);
     return {
@@ -264,6 +312,11 @@ export function addLabels(project, record, now = new Date().toISOString()) {
 // What a label set is, in a line.
 export function describeLabels(record) {
   const s = record.summary ?? {};
+  if (record.reference) {
+    const ref = record.reference;
+    const p = record.parameters ?? {};
+    return `${s.labels ?? '?'} labels from the reference ${ref.file}${ref.labelColumn ? ` (${ref.labelColumn})` : ''}, ${s.reference?.shared ?? '?'} of the panel's genes shared: ${(s.labeled?.[0] ?? 0).toLocaleString('en-US')} of ${(s.cells ?? 0).toLocaleString('en-US')} cells labeled by their correlation with each label's profile, fine-tuned within ${p.tune ?? '?'}, margin ${p.margin ?? '?'} (Aran et al. 2019)`;
+  }
   if (record.source) {
     const src = record.source;
     const from = src.format === 'instrument' ? `${src.tool ?? 'the instrument'} ${src.version ?? ''}`.trim() : `${src.file}, column ${src.column}${src.confidenceColumn ? `, confidence ${src.confidenceColumn}` : ''}`;
@@ -394,7 +447,7 @@ export function labelFills(project, datasetId, segmentationId) {
     id: `labels:${r.id}:${l}`,
     labels: r.id,
     level: l,
-    label: r.source ? `Labels: ${labelSetName(r)}` : `${labelSetName(r)}: ${level.toLowerCase()}`,
+    label: oneLevel(r) ? `Labels: ${labelSetName(r)}` : `${labelSetName(r)}: ${level.toLowerCase()}`,
     help: describeLabels(r),
   })));
 }

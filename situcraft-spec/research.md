@@ -1909,6 +1909,123 @@ words ("2 of 10 nearest share it; most are Epithelial").
   changed; a consensus of the set and its curated version agreeing everywhere but on that cell
   (viewer suite).
 
+### 5.6 Labels from a reference (verified, wave 4, slice 6)
+
+A clustering's cells are labeled from a labeled single-cell reference by correlating each cell with
+each label's expression profile, then again on the leading labels' own genes (Aran et al. 2019,
+*Nat Immunol* 20:163–172, doi:10.1038/s41590-018-0276-y), and kept as an artifact of kind `labels`
+with the reference in place of a marker set (`internal/label`'s `reference.go` and
+`reference_files.go`; `docs/FORMATS.md`, Labels from a reference).
+
+**What is read.** An AnnData object in Zarr (format 2 or 3, a folder or a zip): its cells' labels
+in an `obs` column, its genes' names in `var` (the index or a column), and its expression in
+`layers/counts`, `raw/X` or `X` (counts preferred; the first of these holding counts or
+log-normalized values is suggested, and each is described from its first chunk without reading it
+whole). Or a table of profiles (CSV, TSV or Parquet): a row per label (a column of labels, the
+genes the numeric columns) or a row per gene (a column of genes, the labels the numeric columns).
+The usual names of label columns (`cell_type`, `celltype`, `cell_ontology_class`, `ann_finest_level`,
+`label.main` …) are suggested. A matrix in sparse rows is read a chunk at a time, twice (each
+cell's total first, then each label's sums), so an atlas of hundreds of thousands of cells needs no
+more memory than a chunk (a simulated reference of 200,000 cells is read in 0.9 s). **h5ad files
+are not read:** SituCraft's own HDF5 reader would serve
+one format, and anndata writes the same object as Zarr in one line (`adata.write_zarr`); whether to
+read HDF5 is left until users ask for it (roadmap, the parking lot).
+
+**The reference restricted to the panel.** Gene names are matched exactly, else ignoring case where
+that names one panel gene; the genes shared are reported, and the panel's genes the reference lacks
+listed (the page warns below half: symbols against ids, or another species). SituCraft's choices:
+- **One profile per label:** its reference cells' mean log-normalized expression — counts scaled to
+  the reference's median total, then log1p, as SituCraft's clustering normalizes cells;
+  log-normalized values averaged as given; scaled values (below 0) refused, since their ranks are
+  not expression's. A table's profiles are taken as given. SingleR by default correlates a cell
+  with every reference cell or sample and takes a quantile of each label's; one profile per label
+  is what the evidence card can show, costs the same for any size of reference, and is measured
+  against the per-sample default below.
+- **At most 500 labels**, each pair of which is compared.
+
+**The genes compared.** For each ordered pair of labels (a, b), the shared genes most higher in a's
+profile than b's — at most 500 × (2/3)^log₂(labels), the published number (60 for 36 labels), only
+those higher at all, ties in the panel's order; for a set of labels, the union over its pairs. The
+number per pair is a parameter (**Genes per pair**; 0 for the published one).
+
+**The score** of a cell for a label is the Spearman correlation of its log-normalized values and the
+label's profile over the genes compared (equal values their mean rank). A cell's genes without
+transcripts tie at the lowest ranks, so the sums run over the genes it expresses; a cell expressing
+too few of them to rank (all equal) takes no label.
+
+**Fine-tuning.** The labels within **Fine-tuning** (0.05, the published threshold) of the best
+correlation are scored again over their own pairs' genes, until one is left or none drops; the cell
+takes the last round's best when it leads the next by the **margin** (SituCraft's; 0 by default:
+the best unless two tie). A cell's confidence is that lead, in correlation.
+
+**The artifact** keeps the reference as compared in `reference.json` (each label's reference cells
+and profile over the shared genes), every cell's first-round correlation with every label as its
+score, its last round's correlations (none where there was one round), its label and lead. The
+check requires `reference.json` to give the description's labels and shared genes, its pairs' genes
+the first round's genes, each cell's label the best of its deciding round by the margin and within
+the fine-tuning threshold of its first round's best, its lead its confidence, and the counts.
+
+**The evidence card** of a cell labeled from a reference maps it again from `reference.json`: each
+round's labels and correlations; the deciding round's best label and the next, with the genes most
+higher in each one's profile than the other's and the cell's transcripts of them (green: expressed
+for its label; red: expressed for the next; dashed: not expressed); and, when most of its nearest
+cells carry another label, where that label stood in the first round. The review queue's low
+confidence for these labels is, by default, a lead below the fine-tuning threshold or twice the
+margin, whichever is more.
+
+**A reference for the simulated tissue.** `situcraft simulate --reference N` writes, beside the
+bundle, N cells of each of its types drawn from the simulation's own expression profiles (clean of
+the tissue's background and displaced transcripts, 1,000 expected transcripts over the panel, spread
+log-normally), as an AnnData object in Zarr (`internal/simulate`'s `reference.go`).
+
+**Validation:**
+- **Exact cases** (`internal/label`): ranks with ties; a Spearman correlation by hand (√0.9); the
+  pairs' genes by hand; a cell's rounds by hand (0.4, 0.8 and −1.5/√22.5; within 0.5, a second round
+  over the two labels' genes, −1 and 1); the mapping against a plain one sorting every pair afresh
+  and ranking every value (20 random references with tied values, 1,000 cells, each round's labels,
+  genes and correlations within 10⁻¹²; 163 cells changing label in fine-tuning); a reference's
+  profiles by hand from AnnData counts (median scaling, a label missing); tables in both
+  orientations; scaled values and a label given twice refused; a tissue mapped to another draw of
+  its types (86% right; the same labels for any number of workers; the files checked and pinned on
+  arm64 and amd64); a cell's evidence equal to its recorded scores.
+- **Against SingleR 2.14.2** (R 4.6.1; `validation/reference/references/`), run as a separate program
+  on the same cells: the bundles mapped to the Human Primary Cell Atlas's 36 main labels (Mabbott et
+  al. 2013, *BMC Genomics* 14:632, doi:10.1186/1471-2164-14-632; celldex 1.22.0's log-expression,
+  each label's mean as its profile), the simulated tissue to its reference of 300 cells per type:
+
+| | Lung 2-FOV | Breast 2-FOV | Simulated (standard) |
+| --- | --- | --- | --- |
+| Genes shared; compared in the first round | 280; 280 | 270; 270 | 120; 120 |
+| Cells; fine-tuned; changed by fine-tuning | 11,820; 10,139; 1,472 | 7,163; 7,116; 696 | 2,925; 96; 0 |
+| SingleR given the same profiles: first-round correlations, max \|difference\| | 1.5 × 10⁻⁸ | 3.0 × 10⁻⁸ | 3.0 × 10⁻⁸ |
+| … cells labeled alike | 100% | 99.97% | 100% |
+| SingleR at its defaults (every sample or cell, 0.8 quantile): cells labeled alike | 72.0% | 62.5% | 99.3% |
+| Cells taking their true type: SituCraft; SingleR, same profiles; SingleR, defaults | | | 98.1%; 98.1%; 98.6% |
+
+  The two Breast cells labeled otherwise are ties SituCraft leaves without a label at a margin of
+  0. Checked weekly against SituCraft's labels made again, byte for byte (the atlas's sets where its
+  profiles are present).
+- **In the app:** the Lung cells mapped by remote control to a table of four classes' profiles over
+  15 of the panel's genes, each labeled cell drawn in its label's color and a cell's evidence its
+  recorded correlations; a reference sharing no gene with the panel refused (viewer suite); capture
+  scene `reference`, with no accessibility violation.
+
+**Found by slice 6:**
+- **On a targeted panel the published number of genes per pair covers the panel:** 60 genes for
+  each of 36 labels' pairs make every one of 270 to 280 genes compared, and fine-tuning compares
+  nearly the same genes again. On the simulated tissue fewer genes per pair label a few more cells
+  right (with fine-tuning: 20 per pair 98.9%, 5 per pair 98.9%, 2 per pair 94.9%; the published
+  98.1%). The published number is kept, comparable with SingleR's results, and is a parameter.
+- **A reference must be of the tissue:** the atlas of primary cells labels the Breast tumor's cells
+  embryonic stem cells, neuroepithelial cells and iPS cells, and the Lung tumor's hepatocytes and
+  epithelial cells — the nearest profiles it has. The correlations among those labels lie within a
+  few hundredths, so the evidence card and the review queue show the doubt; the labels follow the
+  reference chosen.
+- **One profile per label against every sample:** SingleR's per-sample default parts mostly where
+  the reference itself hardly tells labels apart (on Breast, embryonic stem cells, iPS cells,
+  neuroepithelial cells and neurons); on the simulated tissue, whose reference cells are of one type
+  each, the two agree on 99.3% of the cells and take the true type as often.
+
 ## 6. Spatial analysis (wave 6) and cohorts (wave 7)
 
 - **Graphs:**

@@ -49,10 +49,12 @@ In development for 0.4.0: cell identities, starting with clusters of a segmentat
 their expression in the Cell types view, with each cluster's markers, a map of the cells (UMAP)
 linked to the tissue (cells selected on either are selected on both), labels from marker genes
 (a hierarchy of cell types, each with positive and negative markers, starter sets for the example
-panels from published cell atlases, edited as versions), labels imported from CSV, Parquet,
-AnnData or Xenium Explorer's cell groups, and their review: curated and consensus versions side by
-side, each cell's evidence, and a queue of the cells most likely mislabeled. The steps and defaults are
-scanpy's, and the results are validated against scanpy, leidenalg, umap-learn and scikit-learn.
+panels from published cell atlases, edited as versions), labels from a labeled single-cell
+reference (each cell correlated with each label's profile, then fine-tuned on the leading labels'
+genes), labels imported from CSV, Parquet, AnnData or Xenium Explorer's cell groups, and their
+review: curated and consensus versions side by side, each cell's evidence, and a queue of the cells
+most likely mislabeled. The steps and defaults are scanpy's and SingleR's, and the results are
+validated against scanpy, leidenalg, umap-learn, scikit-learn and SingleR.
 
 ## A look around
 
@@ -95,6 +97,7 @@ More: [checking a bundle](docs/images/data-light.webp), [the tissue's stains](do
 [the clusters on the tissue](docs/images/clusters-light.webp),
 [the map of the cells beside the tissue](docs/images/cellmap-light.webp),
 [cells labeled from marker genes](docs/images/labels-light.webp),
+[cells labeled from a single-cell reference](docs/images/reference-light.webp),
 [the instrument's clusters imported as labels](docs/images/imported-light.webp),
 [the Jobs view](docs/images/jobs-light.webp).
 
@@ -154,7 +157,9 @@ known. It writes the tissue as a Xenium output bundle labelled simulated, with t
 `truth/` folder, so that any segmentation can be scored against it. SituCraft and other tools
 (spatialdata-io among them) read the bundle as they read Xenium's. The same seed gives the same
 bundle on any computer. `--preset large` makes a tissue of 6 × 5 mm and 55 million transcripts,
-a field at a time, for measuring at scale. `situcraft simulate -h` lists the settings, and
+a field at a time, for measuring at scale. `--reference N` also writes a single-cell reference of
+the tissue's types (N cells of each, as AnnData Zarr) to label its cells from. `situcraft simulate
+-h` lists the settings, and
 [Formats](docs/FORMATS.md#simulated-tissues-situcraft-simulate) describes the files.
 
 ## Refinements in the terminal

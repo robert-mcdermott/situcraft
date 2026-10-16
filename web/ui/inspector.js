@@ -222,6 +222,11 @@ export function mountInspector(app) {
           h('dt', 'Column'), h('dd', src.format === 'instrument' ? src.title : src.column),
           h('dt', 'Matched by'), h('dd', src.idColumn),
           h('dt', 'SHA-256'), h('dd.mono', String(src.sha256 ?? '').slice(0, 16)),
+        ] : r.reference ? [
+          h('dt', 'Clustering'), h('dd', c?.name ?? r.clustering),
+          h('dt', 'Reference'), h('dd', `${r.reference.file}${r.reference.labelColumn ? ` (${r.reference.labelColumn})` : ''}`),
+          h('dt', 'Genes shared'), h('dd', `${s.reference?.shared ?? '?'} (${s.reference?.missing ?? '?'} of the panel's not in it)`),
+          h('dt', 'SHA-256'), h('dd.mono', String(r.reference.sha256 ?? '').slice(0, 16)),
         ] : [
           h('dt', 'Clustering'), h('dd', c?.name ?? r.clustering),
           h('dt', 'Marker set'), h('dd', `${r.markers?.name ?? '?'}${ms ? ` (version ${ms.version})` : ''}`),
@@ -229,7 +234,7 @@ export function mountInspector(app) {
         ]),
         h('dt', 'Cells'), h('dd', (s.cells ?? 0).toLocaleString('en-US')),
         ...(s.levels ?? []).flatMap((level, l) => [h('dt', level), h('dd', `${(s.labeled?.[l] ?? 0).toLocaleString('en-US')} (${pct(s.labeled?.[l] ?? 0)})`)]),
-        src ? null : h('dt', 'Margin'), src ? null : h('dd', `${p.margin ?? '—'} (minimum ${p.minimum ?? '—'})`),
+        src ? null : h('dt', 'Margin'), src ? null : h('dd', r.reference ? `${p.margin ?? '—'} (fine-tuning ${p.tune ?? '—'})` : `${p.margin ?? '—'} (minimum ${p.minimum ?? '—'})`),
         h('dt', 'Method'), h('dd', `${r.method?.name ?? ''} ${r.method?.version ?? ''}`.trim()),
         h('dt', 'Artifact'), h('dd.mono', r.id)),
       r.state === 'complete' ? h('div.btn-row', { style: { marginTop: '8px' } },

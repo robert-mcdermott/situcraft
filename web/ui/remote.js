@@ -16,7 +16,7 @@ import { parseProject, rename, serializeProject } from '../lib/project.js';
 import { removeView, sameView, viewLink } from '../lib/views.js';
 import { SEG_FILLS, defaultChoice, segmentationChoices } from '../lib/segview.js';
 import { clusterName, clusterNames, clusteringsOf, mapsOf, nameClusters } from '../lib/clusterings.js';
-import { composition as labelComposition, labelSetName, labelSetsFor, namesFromLabels } from '../lib/labels.js';
+import { composition as labelComposition, labelSetName, labelSetsFor, lowConfidenceDefault, namesFromLabels } from '../lib/labels.js';
 import { RULES, appendEdit, createCurated, crossTable, curatedSetsOf, saveConsensus } from '../lib/curation.js';
 import { labelSource, labelVersions, refOf } from './label-sources.js';
 
@@ -966,6 +966,43 @@ export function installRemote(app) {
       };
     },
 
+    async reference_labels(args) {
+      const dataset = resolveDataset(args.dataset);
+      const list = clusteringsOf(project(), dataset.id).filter((c) => c.state === 'complete');
+      if (!list.length) throw new ActionError(`${dataset.name} has no clustering: cluster_cells makes one.`);
+      const c = clusteringRef(list, args.clustering);
+      if (args.path === undefined) throw new ActionError('Name the reference: path, an AnnData object in Zarr or a table of label profiles on this computer.');
+      const parameters = {};
+      for (const key of ['tune', 'margin', 'markers']) if (args[key] !== undefined) parameters[key] = finite(args[key], key);
+      await settleMode('celltypes');
+      let manifest;
+      try {
+        manifest = await app.cellTypesView.reference(dataset, c.id, { path: String(args.path), matrix: args.matrix === undefined ? '' : String(args.matrix), labelColumn: args.label_column === undefined ? '' : String(args.label_column), geneColumn: args.gene_column === undefined ? '' : String(args.gene_column), parameters });
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      await frames();
+      const { description: d } = await app.bundles.labelData(manifest.id);
+      const ref = d.reference;
+      const names = clusterNames(project(), c.id);
+      const clusters = labelComposition(d, 0).map((row) => ({ cluster: row.cluster + 1, name: names?.names?.[row.cluster] ?? null, cells: row.cells, labels: row.labels.slice(0, 3).map((e) => ({ label: e.name, share: Number(e.share.toFixed(4)) })) }));
+      let named = null;
+      if (args.name_clusters !== undefined && args.name_clusters !== false) {
+        const share = args.name_clusters === true ? 0.5 : finite(args.name_clusters, 'name_clusters');
+        if (share < 0.3 || share > 1) throw new ActionError('name_clusters is the share of a cluster\'s cells its label must hold, from 0.3 to 1 (or true for 0.5).');
+        const proposal = namesFromLabels(d, share);
+        const merged = proposal.map((p, k) => p ?? names?.names?.[k] ?? null);
+        const next = nameClusters(project(), { clustering: c.id, names: merged, by: 'remote control' });
+        if (next !== project()) store.commit(next, `Name the clusters of ${c.name} from ${ref.file}`);
+        named = { version: clusterNames(project(), c.id)?.version ?? 0, names: proposal };
+      }
+      const pct = (v) => `${Math.round((100 * v) / d.cells.analyzed)}%`;
+      return {
+        message: `${c.name} labeled from ${ref.file}: ${pct(d.cells.labeled[0])} of ${plural(d.cells.analyzed, 'cell')}, ${plural(d.sets.length, 'label')}; ${ref.shared.length} of the panel's genes shared, ${ref.compared.length} compared; ${plural(ref.fineTuned, 'cell')} fine-tuned${named ? `; ${named.names.filter(Boolean).length} clusters named from the labels (names version ${named.version})` : ''}.`,
+        data: { id: manifest.id, clustering: c.id, reference: { file: ref.file, sha256: ref.sha256, format: ref.format, matrix: ref.matrix ?? null, labelColumn: ref.labelColumn ?? null, geneColumn: ref.geneColumn ?? null, values: ref.values, labels: ref.labels.length, shared: ref.shared.length, missing: ref.missing, compared: ref.compared.length, perPair: ref.perPair }, parameters: ref.parameters, cells: d.cells, fineTuned: ref.fineTuned, changed: ref.changed, labels: d.sets.map((x, k) => ({ name: x.name, referenceCells: ref.cells[k], cells: x.cells })), clusters, named },
+      };
+    },
+
     async import_labels(args) {
       const dataset = resolveDataset(args.dataset);
       const link = app.bundles.link(dataset.id);
@@ -1026,7 +1063,7 @@ export function installRemote(app) {
       const neighbors = args.neighbors === undefined ? 10 : finite(args.neighbors, 'neighbors');
       const implausible = args.implausible === undefined ? 0.2 : finite(args.implausible, 'implausible');
       let low = args.low_confidence === undefined ? null : finite(args.low_confidence, 'low_confidence');
-      if (args.low_confidence === undefined && version.kind === 'markers') low = 2 * (project().artifacts.find((a) => a.id === version.id)?.parameters?.margin ?? 0.1);
+      if (args.low_confidence === undefined && (version.kind === 'markers' || version.kind === 'reference')) low = lowConfidenceDefault(project().artifacts.find((a) => a.id === version.id));
       const curated = version.kind === 'curated' ? project().artifacts.find((a) => a.id === version.id) : curatedSetsOf(project(), dataset.id, seg.id).find((c) => c.base.labels === version.id && c.base.level === version.level);
       const reviewed = [];
       if (curated) (await labelSource(app, refOf(curated.id))).edited.forEach((e, i) => e >= 0 && reviewed.push(i));
@@ -1067,10 +1104,16 @@ export function installRemote(app) {
       }
       const curated = curatedSetsOf(project(), seg.dataset, seg.id);
       const reviews = curated.flatMap((r) => r.edits.filter((e) => e.cells?.includes(cell)).map((e) => ({ set: r.name, kind: e.kind, label: e.label, reason: e.reason, by: e.by, time: e.time })));
+      // From a reference: each round's leading labels, and the genes for the best and the next.
+      const referenceOf = (e) => (e ? {
+        reference: e.reference, label: e.label >= 0 ? e.rounds.at(-1).scores[0].name : null, lead: e.lead,
+        rounds: e.rounds.map((r) => ({ genes: r.genes, scores: r.scores.slice(0, 5).map((x) => ({ label: x.name, correlation: Number(x.score.toFixed(4)) })) })),
+        forBest: e.forBest.map((g) => `${g.gene} ${g.count}`), forNext: e.forNext.map((g) => `${g.gene} ${g.count}`),
+      } : null);
       const levels = (ev.labels?.levels ?? []).map((lv) => ({ level: lv.level, label: lv.label >= 0 ? lv.evidence[0].name : null, lead: lv.lead, best: lv.evidence[0]?.name, next: lv.evidence[1]?.name ?? null, markers: lv.evidence.map((le) => ({ label: le.name, score: le.score, positive: le.positive.genes.map((g) => `${g.gene} ${g.count}`), negative: (le.negative?.genes ?? []).map((g) => `${g.gene} ${g.count}`) })) }));
       return {
         message: `Cell #${cell}: ${Object.entries(labels).map(([k, v]) => `${k}: ${v ?? 'no label'}`).join('; ')}${reviews.length ? `; reviewed ${reviews.length} time${reviews.length === 1 ? '' : 's'}` : ''}.`,
-        data: { cell, cluster: ev.cluster >= 0 ? ev.cluster + 1 : null, labels, levels, expressionNeighbors: ev.neighbors, reviews },
+        data: { cell, cluster: ev.cluster >= 0 ? ev.cluster + 1 : null, labels, levels, reference: referenceOf(ev.reference), expressionNeighbors: ev.neighbors, reviews },
       };
     },
 

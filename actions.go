@@ -208,6 +208,18 @@ var remoteActions = []remoteAction{
 		"seed":          numberArg("The draws of control genes (20250)."),
 		"name_clusters": map[string]any{"description": "Name the clusters by their labels: true, or the share of a cluster's cells its label must hold (0.3 to 1; 0.5 for true)."},
 	}), long: true},
+	{Name: "reference_labels", Title: "Label the cells from a reference", Description: "Labels a clustering's cells from a labeled single-cell reference, as a job, in the Cell types view: an AnnData object in Zarr (a folder or a zip; its cells' labels in an obs column, its counts or log-normalized values in X, raw/X or a layer), or a table of each label's mean expression (CSV, TSV or Parquet; a row per label or per gene). The reference is restricted to the panel's genes; each label's profile is its cells' mean log-normalized expression; each cell is correlated (Spearman) with each label's profile over the genes most higher in one label than another, then again on the leading labels' own genes until one is left (Aran et al. 2019), and takes the last round's best when it leads the next by the margin. An .h5ad file is read once written as Zarr (anndata's write_zarr). The columns are found by their usual names unless given. Recorded as a labels artifact; asking again answers it. Answers the genes shared, the cells labeled, each label's cells and each cluster's leading labels.", InputSchema: schema(map[string]any{
+		"dataset":       datasetArg,
+		"clustering":    textArg("A clustering, by artifact id or name; SituCraft's latest if not given."),
+		"path":          textArg("The reference's path on this computer: a .zarr folder, a zip of one, or a table of profiles."),
+		"matrix":        textArg("The AnnData object's matrix: X, raw/X or layers/<name> (counts preferred; found if not given)."),
+		"label_column":  textArg("The obs column of the reference cells' labels (or, for a table of a row per label, its labels' column)."),
+		"gene_column":   textArg("The var column of gene names (the index if not given; or, for a table of a row per gene, its genes' column)."),
+		"tune":          numberArg("Fine-tuning: the labels within this of the best correlation are scored again (0.05)."),
+		"margin":        numberArg("How far the best label must lead the next, in correlation (0)."),
+		"markers":       numberArg("Genes per pair of labels (0: 500 × (2/3)^log₂(labels))."),
+		"name_clusters": map[string]any{"description": "Name the clusters by their labels: true, or the share of a cluster's cells its label must hold (0.3 to 1; 0.5 for true)."},
+	}), long: true},
 	{Name: "import_labels", Title: "Import labels", Description: "Imports labels made elsewhere for a segmentation's cells, as a job: a table (CSV or TSV, gzipped or not; Parquet; an AnnData object's obs in Zarr, a folder or a zip, or a SpatialData store's table; Xenium Explorer's cell groups), its rows matched to the cells by id, or one of the instrument's clusterings. A table naming cells the segmentation does not have is refused, with how many; cells it does not name are counted. The columns are found by their usual names unless given. Recorded as a labels artifact with its source; asking again answers it. Answers the labels and their cells.", InputSchema: schema(map[string]any{
 		"dataset":           datasetArg,
 		"segmentation":      textArg("The segmentation whose cells the labels are, by name or artifact id, or instrument (the default if not given)."),

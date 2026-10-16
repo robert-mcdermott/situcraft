@@ -1,16 +1,17 @@
-// Labels in the Cell types view (internal/label, api_labels.go): a marker set chosen (one of the
-// project's, kept as versions, or one SituCraft ships), edited, saved as a file or read from one; a
-// clustering's cells labeled from it by a job; labels made elsewhere imported for the
-// segmentation's cells (a table, Xenium Explorer's cell groups, the instrument's clusters); the
-// label sets the clustering's cells carry; and the one shown: its cells labeled at each level, each
-// cluster's labels and their shares, names for the clusters from them, each label's markers and
-// control genes, and the map, the tissue and the Viewer colored by its labels.
+// Labels in the Cell types view (internal/label, api_labels.go, api_references.go): a marker set
+// chosen (one of the project's, kept as versions, or one SituCraft ships), edited, saved as a file
+// or read from one; a clustering's cells labeled from it, or from a labeled single-cell reference,
+// by a job; labels made elsewhere imported for the segmentation's cells (a table, Xenium Explorer's
+// cell groups, the instrument's clusters); the label sets the clustering's cells carry; and the one
+// shown: its cells labeled at each level, each cluster's labels and their shares, names for the
+// clusters from them, each label's markers and control genes (or reference profile), and the map,
+// the tissue and the Viewer colored by its labels.
 
 import { h, icon, clear, formatCount, relativeTime } from './dom.js';
 import { toast } from './overlays.js';
 import { reviewSections } from './review-card.js';
 import { clusterNames, nameClusters, nameOf } from '../lib/clusterings.js';
-import { LABEL_PARAMETERS, addLabel, changeLabel, checkLabelParameters, composition, compositionOf, describeLabels, labelColor, labelSetName, labelSetsFor, labelTree, markerSetFile, markerSetVersions, markerSetsOf, namesFromLabels, parseGenes, removeLabel, saveMarkerSet, withoutMissing } from '../lib/labels.js';
+import { LABEL_PARAMETERS, REFERENCE_PARAMETERS, addLabel, changeLabel, checkLabelParameters, checkReferenceParameters, composition, compositionOf, describeLabels, labelColor, labelSetName, labelSetsFor, labelTree, markerSetFile, markerSetVersions, markerSetsOf, namesFromLabels, oneLevel, parseGenes, removeLabel, saveMarkerSet, withoutMissing } from '../lib/labels.js';
 
 const percent = (v, digits = 0) => (Number.isFinite(v) ? `${(100 * v).toFixed(digits)}%` : '—');
 const exact = (v) => (Number.isFinite(v) ? v.toLocaleString('en-US') : '—');
@@ -118,6 +119,40 @@ export async function labelClustering(app, { t, session, clustering }, request =
   return m;
 }
 
+let refDefaults = null;
+export async function referenceDefaults() {
+  if (!refDefaults) {
+    const response = await fetch('/api/references/defaults');
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    refDefaults = await response.json();
+  }
+  return refDefaults;
+}
+
+// Labels a clustering's cells from a reference, by remote control or the card: request { path,
+// matrix, labelColumn, geneColumn, parameters }; the columns the program suggests where not given.
+// Answers the manifest.
+export async function referenceClustering(app, { t, session, clustering }, request = {}) {
+  const d = await referenceDefaults();
+  session.labels ??= { choice: '', params: null, editing: null, shown: null, level: 0, share: 0.5, open: false };
+  const st = session.labels;
+  const params = { ...d.parameters, ...(st.ref?.params ?? {}), ...(request.parameters ?? {}) };
+  const problem = checkReferenceParameters(params);
+  if (problem) throw new Error(problem);
+  if (!request.path) throw new Error('Name the reference: its path.');
+  let spec = { path: request.path, matrix: request.matrix ?? '', labelColumn: request.labelColumn ?? '', geneColumn: request.geneColumn ?? '' };
+  if (!spec.labelColumn && !spec.geneColumn) {
+    const read = await app.bundles.readReference(t.item, { path: request.path, clustering: clustering.id });
+    if (!read.preview) throw new Error(read.error ?? 'The reference could not be read.');
+    spec = { ...read.preview.spec, path: read.preview.spec.path, matrix: spec.matrix || read.preview.spec.matrix || '' };
+  }
+  const m = await app.bundles.mapReference(t.item, t.dataset.id, { ...spec, clustering: clustering.id, parameters: params });
+  st.ref ??= { path: '', read: null, spec: null, params: null, busy: false, problem: null, open: false };
+  st.ref.path = request.path;
+  st.shown = m.id;
+  return m;
+}
+
 // ctx: { t (the view's target), seg, session (the dataset's), clustering (the record shown),
 // cellMap, render(force) }. Answers the sections to show.
 export function labelsSections(app, ctx) {
@@ -137,7 +172,7 @@ export function labelsSections(app, ctx) {
   startersFor(app, t.item, clustering.id).then((offer) => {
     if (!host.isConnected && !document.body.contains(host)) return;
     clear(host).append(h('div.section-title', 'Labels from markers'), ...(st.editing ? editor(offer) : chooser(offer)));
-    clear(rest).append(...[importCard(), listCard(), shownCard(), ...reviewSections(app, ctx)].filter(Boolean));
+    clear(rest).append(...[referenceCard(), importCard(), listCard(), shownCard(), ...reviewSections(app, ctx)].filter(Boolean));
   }).catch((error) => clear(host).append(h('div.section-title', 'Labels from markers'), h('p.muted.seg-note', `The marker sets could not be read: ${error.message}`)));
 
   // --- Choosing a marker set, and labeling ---
@@ -373,6 +408,129 @@ export function labelsSections(app, ctx) {
     ];
   }
 
+  // --- Labels from a reference ---
+  function referenceCard() {
+    st.ref ??= { path: '', read: null, spec: null, params: null, busy: false, problem: null, open: false };
+    const rf = st.ref;
+    if (!rf.params) {
+      referenceDefaults().then((d) => {
+        rf.params ??= { ...d.parameters };
+        ctx.render(true);
+      }).catch((error) => toast(`The reference's defaults: ${error.message}`, { kind: 'error' }));
+      return null;
+    }
+    if (rf.read && rf.read.clustering !== clustering.id) Object.assign(rf, { read: null, spec: null, problem: null });
+    const running = app.bundles.referenceMappings(t.dataset.id).filter((e) => e.clustering === clustering.id);
+    const pathInput = h('input.input', { type: 'text', id: 'lb-ref-path', value: rf.path, placeholder: '/data/reference.zarr', 'aria-label': 'The reference: its path' });
+    pathInput.addEventListener('change', () => {
+      rf.path = pathInput.value.trim();
+    });
+    const read = async (spec = null) => {
+      rf.path = pathInput.value.trim() || rf.path;
+      if (!rf.path) {
+        toast('Name a reference: its path.', { kind: 'error' });
+        return;
+      }
+      rf.busy = true;
+      rf.problem = null;
+      ctx.render(true);
+      try {
+        const answer = await app.bundles.readReference(t.item, { path: rf.path, clustering: clustering.id, ...(spec ?? {}), parameters: { ...rf.params } });
+        rf.read = { ...answer, clustering: clustering.id };
+        rf.spec = answer.preview?.spec ?? { ...answer.description.suggested, ...(spec ?? {}) };
+      } catch (error) {
+        rf.read = null;
+        rf.problem = error.message;
+      }
+      rf.busy = false;
+      ctx.render(true);
+    };
+    const doMap = async () => {
+      const problem = checkReferenceParameters(rf.params);
+      if (problem) {
+        toast(problem, { kind: 'error' });
+        return;
+      }
+      try {
+        const m = await referenceClustering(app, ctx, { ...rf.spec, path: rf.path, parameters: { ...rf.params } });
+        Object.assign(rf, { read: null, spec: null, problem: null });
+        ctx.render(true);
+        const s = m.summary ?? {};
+        toast(`Labeled from ${s.reference?.file ?? 'the reference'}: ${formatCount(s.labeled?.[0] ?? 0)} of ${formatCount(s.cells ?? 0)} cells.`, { kind: 'ok' });
+      } catch (error) {
+        rf.problem = error.message;
+        ctx.render(true);
+      }
+    };
+    const parts = [
+      h('p', 'A labeled single-cell reference: an AnnData object in Zarr (a .zarr folder, or a zip of one) whose cells carry their labels in obs, or a table of each label\'s mean expression (CSV, TSV or Parquet; a row per label, or a row per gene). Each cell is correlated with each label\'s profile over the genes that set the labels apart, then again on the leading labels\' own genes until one is left. An .h5ad file is read once written as Zarr (anndata\'s write_zarr).'),
+      h('div.lb-import-row', h('label.field', { for: 'lb-ref-path' }, h('span', 'Reference'), pathInput), h('button.btn', { type: 'button', disabled: rf.busy, 'data-action': 'read-reference', onclick: () => read() }, icon('file'), rf.busy ? 'Reading…' : 'Read')),
+    ];
+    if (rf.read) parts.push(...referenceReadout(rf, read, doMap));
+    if (rf.problem) parts.push(h('div.lb-missing', icon('warning'), h('span', rf.problem)));
+    parts.push(...running.map((e) => {
+      const job = e.job ? app.jobs.get(e.job) : null;
+      return h('div.seg-running', h('div', h('b', 'Labeling from the reference'), ' ', h('span.muted', job?.message ?? 'Starting…')), h('div.progress', h('div', { style: { width: `${Math.round((job?.progress ?? 0) * 100)}%` } })));
+    }));
+    parts.push(h('p.muted.seg-cite', 'Method: each cell\'s Spearman correlation with each label\'s profile over the genes most higher in one label than another, fine-tuned on the leading labels\' genes (Aran et al. 2019, Nat Immunol 20:163–172).'));
+    return h('section.seg-section', h('div.section-title', 'Labels from a reference'), h('div.seg-card.lb-import.lb-reference', ...parts));
+  }
+
+  // What the program read of a reference: its matrix, label and gene columns, and how it meets the
+  // panel; the mapping's parameters.
+  function referenceReadout(rf, read, doMap) {
+    const { description: d, preview: pv, error } = rf.read;
+    const spec = rf.spec ?? {};
+    const select = (id, label, options, value, onchange) => {
+      const el = h('select.input', { id }, ...options.map((o) => h('option', { value: o.value }, o.label)));
+      el.value = value ?? '';
+      el.addEventListener('change', () => onchange(el.value));
+      return h('label.field', { for: id }, h('span', label), el);
+    };
+    const anndata = d.format === 'anndata';
+    const fields = [];
+    if (anndata) {
+      fields.push(select('lb-ref-matrix', 'Expression', d.matrices.map((m) => ({ value: m.name, label: `${m.name}: ${m.values} (${exact(m.rows)} × ${exact(m.cols)})` })), spec.matrix, (v) => read({ ...spec, matrix: v })));
+      fields.push(select('lb-ref-label', 'Labels (obs)', d.labels.map((c) => ({ value: c.name, label: `${c.name} (${exact(c.distinct)} labels; ${c.examples.slice(0, 3).join(', ')})` })), spec.labelColumn, (v) => read({ ...spec, labelColumn: v })));
+      fields.push(select('lb-ref-gene', 'Gene names (var)', d.genes.map((g) => ({ value: g.name, label: `${g.name || 'the index'} (${exact(g.shared)} of the panel's genes)` })), spec.geneColumn, (v) => read({ ...spec, geneColumn: v })));
+    } else {
+      const orientation = [{ value: '', label: `A row per label: the columns are genes (${exact(d.columnGenes)} of the panel's)` }, ...d.genes.map((g) => ({ value: g.name, label: `A row per gene, named in ${g.name} (${exact(g.shared)} of the panel's)` }))];
+      fields.push(select('lb-ref-gene', 'Layout', orientation, spec.geneColumn ?? '', (v) => read({ path: rf.path, geneColumn: v, labelColumn: v ? '' : d.labels[0]?.name ?? '' })));
+      if (!spec.geneColumn) fields.push(select('lb-ref-label', 'Labels', d.labels.map((c) => ({ value: c.name, label: `${c.name} (${exact(c.distinct)} values; ${c.examples.slice(0, 3).join(', ')})` })), spec.labelColumn, (v) => read({ ...spec, geneColumn: '', labelColumn: v })));
+    }
+    const inputs = REFERENCE_PARAMETERS.map((p) => {
+      const input = h('input.input', { type: 'number', id: `lb-ref-${p.id}`, min: String(p.min), max: String(p.max), step: String(p.step), value: String(rf.params[p.id]), title: p.help });
+      input.addEventListener('change', () => {
+        rf.params[p.id] = Number(input.value);
+      });
+      return h('label.field', { for: `lb-ref-${p.id}`, title: p.help }, h('span', p.label), input);
+    });
+    const out = [
+      h('p.muted.seg-note', `${d.file}: ${anndata ? `an AnnData object of ${exact(d.rows)} cells` : `a table of profiles, ${exact(d.rows)} rows`}.`),
+      h('div.seg-import-grid', ...fields),
+    ];
+    if (pv) {
+      const shownLabels = pv.labels.slice(0, 14).map((name, k) => (pv.cells[k] ? `${name} (${exact(pv.cells[k])})` : name)).join(', ');
+      const few = pv.labels.filter((_, k) => pv.cells[k] > 0 && pv.cells[k] < 10);
+      const sharedShare = pv.shared / (pv.shared + pv.missing.length);
+      out.push(h('dl.kv.seg-kv',
+        h('dt', 'Labels'), h('dd', `${exact(pv.labels.length)}: ${shownLabels}${pv.labels.length > 14 ? ', …' : ''}`),
+        h('dt', 'Genes'), h('dd', `${exact(pv.shared)} of the panel's ${exact(pv.shared + pv.missing.length)} are in the reference (of its ${exact(pv.refGenes)})`, pv.missing.length ? h('span.muted', { title: pv.missing.join(', ') }, `; it lacks ${pv.missing.slice(0, 8).join(', ')}${pv.missing.length > 8 ? `, and ${pv.missing.length - 8} more` : ''}`) : null),
+        h('dt', 'Compared'), h('dd', `${exact(pv.compared)} genes in the first round (up to ${exact(pv.perPair)} per pair of labels)`),
+        h('dt', 'Values'), h('dd', pv.values === 'counts' ? 'counts: each reference cell scaled to the median total, then log1p, and averaged by label' : pv.values === 'as given' ? 'each label\'s profile as given' : 'log-normalized, averaged by label as given')),
+      );
+      if (sharedShare < 0.5) out.push(h('div.lb-missing', icon('warning'), h('span', `The reference has only ${percent(sharedShare)} of the panel's genes: check the gene names column (symbols, not ids), or the species.`)));
+      if (few.length) out.push(h('p.muted.seg-note', `${few.length} label${few.length === 1 ? ' has' : 's have'} fewer than 10 reference cells (${few.slice(0, 5).join(', ')}${few.length > 5 ? ', …' : ''}): their profiles are noisy.`));
+    }
+    if (error) out.push(h('div.lb-missing', icon('warning'), h('span', error)));
+    out.push(h('details.seg-advanced', { open: rf.open, ontoggle: (event) => { rf.open = event.currentTarget.open; } },
+      h('summary', 'Parameters'),
+      h('div.seg-import-grid', ...inputs),
+      h('p.muted.seg-note', 'Hover a parameter for what it does. The fine-tuning threshold and the genes per pair are the published defaults; the margin is SituCraft\'s.')));
+    out.push(h('div.btn-row', h('button.btn.primary', { type: 'button', 'data-action': 'map-reference', disabled: !pv || Boolean(error), onclick: doMap }, icon('play'), 'Label the cells from the reference')));
+    return out;
+  }
+
   // --- Labels made elsewhere, imported for the segmentation's cells ---
   function importCard() {
     const seg = ctx.seg;
@@ -504,8 +662,8 @@ export function labelsSections(app, ctx) {
           choose();
         }
       } },
-      h('td', r.source ? labelSetName(r) : r.markers?.name ?? '?', ms ? h('span.muted', ` v${ms.version}`) : null, r.source ? h('span.muted', ' (imported)') : null),
-      h('td.r', r.source ? '—' : String(r.parameters?.margin ?? '—')),
+      h('td', oneLevel(r) ? labelSetName(r) : r.markers?.name ?? '?', ms ? h('span.muted', ` v${ms.version}`) : null, r.source ? h('span.muted', ' (imported)') : r.reference ? h('span.muted', ' (reference)') : null),
+      h('td.r', { title: r.reference ? 'The margin, and the fine-tuning threshold' : null }, r.source ? '—' : r.reference ? `${r.parameters?.margin ?? '—'} (${r.parameters?.tune ?? '—'})` : String(r.parameters?.margin ?? '—')),
       ...(s.levels ?? []).slice(0, 3).map((_, l) => h('td.r', percent((s.labeled?.[l] ?? 0) / (s.cells || 1)))),
       ...Array.from({ length: Math.max(0, 3 - (s.levels?.length ?? 0)) }, () => h('td.r', '')),
       h('td.muted', relativeTime(r.created)),
@@ -538,6 +696,7 @@ export function labelsSections(app, ctx) {
   function shown(r, data, d) {
     const sets = d.sets;
     const src = r.source;
+    const ref = d.reference;
     const levels = d.levels;
     const level = Math.min(st.level, levels.length - 1);
     const n = d.cells.analyzed;
@@ -553,7 +712,15 @@ export function labelsSections(app, ctx) {
       st.level = l;
       ctx.render(true);
     } }, name))) : null;
-    const kv = src
+    const kv = ref
+      ? h('dl.kv.seg-kv',
+        h('dt', 'Reference'), h('dd', `${ref.file}${ref.labelColumn ? `, labels from ${ref.labelColumn}` : ''}${ref.matrix ? `, ${ref.matrix}` : ''}`, h('span.muted.mono', ` ${String(ref.sha256).slice(0, 12)}`)),
+        h('dt', 'Genes'), h('dd', `${exact(ref.shared.length)} of the panel's genes shared`, ref.missing.length ? h('span.muted', { title: ref.missing.join(', ') }, ` (it lacks ${exact(ref.missing.length)})`) : null, `; ${exact(ref.compared.length)} compared in the first round, up to ${exact(ref.perPair)} per pair of labels`),
+        h('dt', 'Cells labeled'), h('dd', `${exact(d.cells.labeled[0])} (${percent(d.cells.labeled[0] / n)})`, h('span.muted', ` of ${exact(n)}; ${exact(d.cells.unlabeled)} without a label`)),
+        h('dt', 'Fine-tuning'), h('dd', `${exact(ref.fineTuned)} cells scored again on their leading labels' genes; ${exact(ref.changed)} took a label other than their first round's best`),
+        h('dt', 'Parameters'), h('dd', `fine-tuning within ${ref.parameters.tune}, margin ${ref.parameters.margin}, ${ref.parameters.markers ? `${ref.parameters.markers} genes per pair` : `genes per pair by the labels' number (${ref.perPair})`}`),
+        h('dt', 'Artifact'), h('dd.mono', r.id))
+      : src
       ? h('dl.kv.seg-kv',
         h('dt', 'Source'), h('dd', src.format === 'instrument' ? `${src.tool} ${src.version}: its ${String(src.title).toLowerCase()} clusters (${src.file})` : `${src.file}, column ${src.column}`, h('span.muted.mono', ` ${String(src.sha256).slice(0, 12)}`)),
         h('dt', 'Matched by'), h('dd', `${src.idColumn}: ${exact(src.rows)} rows`),
@@ -598,8 +765,15 @@ export function labelsSections(app, ctx) {
       h('td', h('span.ct-swatch', { style: { background: labelColor(k, unlabeled, sets) }, 'aria-hidden': 'true' }), s.name),
       h('td.r', exact(s.cells)),
       h('td.r', percent(s.cells / n, 1)))) : [];
+    // A reference's label: its reference cells and the cells taking it; chosen, the map colored by
+    // each cell's correlation with its profile.
+    const refRows = ref ? sets.map((s, k) => h('tr', { tabIndex: 0, style: { cursor: 'pointer' }, title: `Color the map and the tissue by each cell's correlation with ${s.name}'s profile`, onclick: () => colorBy({ kind: 'score', labels: r.id, set: k, name: s.name }) },
+      h('td', h('span.ct-swatch', { style: { background: labelColor(k, unlabeled, sets) }, 'aria-hidden': 'true' }), s.name),
+      h('td.r', ref.cells[k] ? exact(ref.cells[k]) : '—'),
+      h('td.r', exact(s.cells)),
+      h('td.r', percent(s.cells / n, 1)))) : [];
     // Each label: its level, cells, markers and controls; chosen, the map colored by its score.
-    const labelRows = src ? [] : labelTree({ labels: sets.filter((s) => !s.state).map((s) => ({ name: s.name, parent: s.parent >= 0 ? sets[s.parent].name : undefined })) }).map(({ label, depth }) => {
+    const labelRows = src || ref ? [] : labelTree({ labels: sets.filter((s) => !s.state).map((s) => ({ name: s.name, parent: s.parent >= 0 ? sets[s.parent].name : undefined })) }).map(({ label, depth }) => {
       const k = sets.findIndex((s) => s.name === label.name && !s.state);
       const s = sets[k];
       return h('tr', { tabIndex: 0, style: { cursor: 'pointer' }, title: `Color the map and the tissue by ${s.name}'s score`, onclick: () => colorBy({ kind: 'score', labels: r.id, set: k, name: s.name }) },
@@ -618,23 +792,26 @@ export function labelsSections(app, ctx) {
         h('button.btn.small.primary', { type: 'button', 'data-action': 'color-labels', onclick: () => colorBy({ kind: 'labels', labels: r.id, level }) }, icon('tag'), 'Color the map and the tissue'),
         !src || src.confidenceColumn ? h('button.btn.small', { type: 'button', onclick: () => colorBy({ kind: 'confidence', labels: r.id }) }, 'Confidence') : null,
         h('button.btn.small', { type: 'button', onclick: () => app.showLabels(r, level) }, icon('tissue'), 'Show in the Viewer')),
-      h('div.section-title', { style: { marginTop: '12px' } }, src ? 'Each cluster\'s labels' : `Each cluster's labels: ${levels[level].toLowerCase()}`),
+      h('div.section-title', { style: { marginTop: '12px' } }, src || ref ? 'Each cluster\'s labels' : `Each cluster's labels: ${levels[level].toLowerCase()}`),
       h('div.table-wrap', h('table.data-table.seg-table.lb-composition',
         h('thead', h('tr', h('th', 'Cluster'), h('th.r', 'Cells'), h('th', 'Labels'), h('th', 'Leading'))),
         h('tbody', ...rows))),
-      h('p.muted.seg-note', src ? `The imported labels of each cluster's cells ("No label": cells the table does not label). A cluster split between labels may hold two kinds of cells, or the clusters and the labels may part cells differently.` : 'A cell that takes no label at a level is counted under the label above, where it stopped; "No label" cells took none at the top. A cluster split between labels may hold two kinds of cells, or cells whose outlines hold parts of two.'),
+      h('p.muted.seg-note', ref ? 'Each cluster\'s cells by the reference\'s label they took ("No label": cells whose best label did not lead by the margin, or that express too few of the genes compared). A cluster split between labels may hold two kinds of cells, or the reference may part cells the panel cannot.' : src ? `The imported labels of each cluster's cells ("No label": cells the table does not label). A cluster split between labels may hold two kinds of cells, or the clusters and the labels may part cells differently.` : 'A cell that takes no label at a level is counted under the label above, where it stopped; "No label" cells took none at the top. A cluster split between labels may hold two kinds of cells, or cells whose outlines hold parts of two.'),
       h('div.lb-naming',
         h('label.field', { for: 'lb-share' }, h('span', 'Name each cluster by the most specific label at least this share of its cells carry'), shareInput),
         h('button.btn.small', { type: 'button', disabled: !proposed, 'data-action': 'name-from-labels', onclick: applyNames }, icon('tag'), `Name ${proposed} cluster${proposed === 1 ? '' : 's'}`),
         h('span.muted', proposed ? `${proposal.map((p, k) => (p ? `${nameOf(null, k)} "${p}"` : null)).filter(Boolean).slice(0, 4).join(', ')}${proposed > 4 ? ', …' : ''}: a new version of the names; clusters without such a label keep theirs.` : 'No cluster has a label held by that share of its cells.')),
       h('div.section-title', { style: { marginTop: '12px' } }, 'Labels'),
-      src ? h('div.table-wrap', h('table.data-table.seg-table.lb-labels',
+      ref ? h('div.table-wrap', h('table.data-table.seg-table.lb-labels',
+        h('thead', h('tr', h('th', 'Label'), h('th.r', { title: 'The reference\'s cells of the label, its profile made from them' }, 'Reference cells'), h('th.r', 'Cells'), h('th.r', { title: 'Of the cells labeled' }, 'Share'))),
+        h('tbody', ...refRows)))
+        : src ? h('div.table-wrap', h('table.data-table.seg-table.lb-labels',
         h('thead', h('tr', h('th', 'Label'), h('th.r', 'Cells'), h('th.r', { title: 'Of the segmentation\'s cells' }, 'Share'))),
         h('tbody', ...importedRows))) : h('div.table-wrap', h('table.data-table.seg-table.lb-labels',
         h('thead', h('tr', h('th', 'Label'), h('th', 'Level'), h('th.r', { title: 'Cells carrying it as their most specific label' }, 'Cells'), h('th', 'Positive markers'), h('th', 'Negative markers'), h('th.r', { title: 'Control genes of its positive markers (hover a row for them)' }, 'Controls'))),
         h('tbody', ...labelRows))),
       stateRows.length ? h('div.table-wrap', h('table.data-table.seg-table.lb-labels', h('thead', h('tr', h('th', 'State'), h('th', 'Of'), h('th.r', 'Cells'), h('th', 'Positive markers'), h('th', 'Negative markers'), h('th.r', 'Controls'))), h('tbody', ...stateRows))) : null,
-      h('p.muted.seg-note', src ? 'Choose a label to select its cells on the map and the tissue.' : 'Choose a label to color the map and the tissue by its score: its markers\' mean expression less their control genes\'. The controls are genes of the markers\' bins of mean expression; on a targeted panel many of them are other types\' markers, so a type that dominates the tissue scores low against its own most expressed genes, and its cells may stay without a label.'),
+      h('p.muted.seg-note', ref ? 'Choose a label to color the map and the tissue by each cell\'s correlation with its profile (the first round\'s, over the genes compared). A cell\'s confidence is its label\'s lead over the next, in correlation, in the round that decided it.' : src ? 'Choose a label to select its cells on the map and the tissue.' : 'Choose a label to color the map and the tissue by its score: its markers\' mean expression less their control genes\'. The controls are genes of the markers\' bins of mean expression; on a targeted panel many of them are other types\' markers, so a type that dominates the tissue scores low against its own most expressed genes, and its cells may stay without a label.'),
       h('p.muted.seg-cite', describeLabels(r)),
     ];
   }

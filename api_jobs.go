@@ -293,6 +293,20 @@ func (a *app) handleJobs() {
 			a.artifacts.Discard(importedLabelsID(p.Ask.Segmentation, p.SHA256, p.Ask.Columns))
 		}
 	})
+	a.jobs.Handle("label-reference", func(spec json.RawMessage) (jobs.Func, error) {
+		if a.cache == nil {
+			return nil, errors.New("SituCraft has no cache folder")
+		}
+		p, id, err := a.referenceJobOf(spec)
+		if err != nil {
+			return nil, err
+		}
+		return a.referenceJob(p, id), nil
+	}, func(id string, spec json.RawMessage) {
+		if _, lid, err := a.referenceJobOf(spec); err == nil {
+			a.artifacts.Discard(lid)
+		}
+	})
 	a.jobs.Handle("analysis", func(spec json.RawMessage) (jobs.Func, error) {
 		if a.cache == nil {
 			return nil, errors.New("SituCraft has no cache folder")

@@ -50,7 +50,7 @@ see `conventions.md`. For the methods, formats and datasets behind these choices
 │   internal/cluster   normalization, principal components, Leiden clusters, markers (wave 4)           │
 │   internal/graph     nearest neighbors (exact; a grid in two dimensions), UMAP's graph, Leiden         │
 │   internal/embed     UMAP maps and their quality                                                       │
-│   internal/label     marker sets, scores against binned control genes, hierarchical labels            │
+│   internal/label     marker sets and scores, hierarchical labels, references, imports, review         │
 │   internal/linalg    symmetric eigendecomposition, the same on every processor                         │
 │   internal/register  image registration (later)                                                       │
 │   internal/spatial   graphs and spatial statistics on large tables (later)                            │
@@ -377,6 +377,14 @@ segmentation, made by a job, named by its inputs and parameters, and checked bef
   of kind `labels` with its source in place of a marker set (one level, no scores, every cell of
   the segmentation), so that the map, the tissue, the Viewer and each cluster's labels treat it as
   any label set; its composition is counted in the page for the clustering shown.
+- **Labels from a reference** (`internal/label`'s `reference.go` and `reference_files.go`,
+  `api_references.go`, slice 6): an AnnData Zarr reference or a table of profiles read through the
+  same readers (`internal/anndata`, `table.go`), described from its matrices' first chunks, read a
+  chunk at a time (`anndata.EachRow`) and restricted to the panel's genes; one profile per label; a `Mapper` holding each pair of labels'
+  genes and, made once for each set of labels fine-tuning reaches, their ranks, correlating cells
+  in parallel over their expressed genes. Kept as a label set of kind `labels` with the reference as
+  compared (`reference.json`), from which a cell's evidence is mapped again. The page's card is
+  `ui/labels-card.js`'s; versions and review treat the set as any other.
 - **Label versions and review** (slice 5): curated sets (a base and a reviewer's edits, appended
   with reasons) and consensus sets (a rule over chosen sets) are the project's records
   (`lib/curation.js`), resolved with the predicted sets to each cell's label in the page

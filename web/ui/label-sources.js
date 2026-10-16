@@ -6,7 +6,7 @@
 
 import { categoricalColor } from '../lib/colormaps.js';
 import { applyCurated, consensusOf } from '../lib/curation.js';
-import { labelSetName } from '../lib/labels.js';
+import { labelSetName, oneLevel } from '../lib/labels.js';
 
 // A set's reference from its id: 'lab-…' a program's label set (at a level), 'cur-…' curated,
 // 'con-…' consensus.
@@ -35,7 +35,7 @@ export async function labelSource(app, ref, seen = new Set()) {
       confidence[c] = cells.confidence[i];
     }
     const record = project.artifacts.find((a) => a.kind === 'labels' && a.id === ref.id) ?? null;
-    const name = record ? (record.source ? labelSetName(record) : `${labelSetName(record)}: ${String(d.levels[level]).toLowerCase()}`) : ref.id;
+    const name = record ? (oneLevel(record) ? labelSetName(record) : `${labelSetName(record)}: ${String(d.levels[level]).toLowerCase()}`) : ref.id;
     return { kind: 'labels', id: ref.id, level, name, names: d.sets.map((s) => s.name), colors: d.sets.map((s, k) => s.color || categoricalColor(k)), label, analyzed, confidence, segCells: cells.segCells, record, description: d };
   }
   if (ref.kind === 'curated') {
@@ -90,7 +90,7 @@ export function perCell(src, unlabeled) {
 export function labelVersions(project, datasetId, segmentationId) {
   const out = [];
   for (const r of project.artifacts.filter((a) => a.kind === 'labels' && a.dataset === datasetId && a.segmentation === segmentationId && a.state === 'complete')) {
-    (r.summary?.levels ?? ['']).forEach((level, l) => out.push({ id: r.id, level: l, kind: r.source ? 'imported' : 'markers', name: r.source ? labelSetName(r) : `${labelSetName(r)}: ${String(level).toLowerCase()}` }));
+    (r.summary?.levels ?? ['']).forEach((level, l) => out.push({ id: r.id, level: l, kind: r.source ? 'imported' : r.reference ? 'reference' : 'markers', name: oneLevel(r) ? labelSetName(r) : `${labelSetName(r)}: ${String(level).toLowerCase()}` }));
   }
   for (const r of project.artifacts.filter((a) => a.kind === 'curated-labels' && a.dataset === datasetId && a.segmentation === segmentationId)) out.push({ id: r.id, level: 0, kind: 'curated', name: r.name });
   for (const r of project.artifacts.filter((a) => a.kind === 'consensus-labels' && a.dataset === datasetId && a.segmentation === segmentationId)) out.push({ id: r.id, level: 0, kind: 'consensus', name: r.name });

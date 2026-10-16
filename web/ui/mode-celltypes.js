@@ -2,10 +2,9 @@
 // cluster, api_clustering.go), each clustering an artifact with every parameter recorded; the map
 // of its cells (internal/embed, api_maps.go) beside the tissue, linked (ui/cell-map.js): colored by
 // cluster, gene or attribute, one selection on both; its clusters with their sizes, names and
-// markers, as a table and a dot plot; the markers of any selection; labels from markers (ui/
-// labels-card.js); the instrument's own clusters and map, registered from the bundle; and two
-// clusterings compared. Imported labels and a reference come in later slices of wave 4
-// (situcraft-spec/roadmap.md).
+// markers, as a table and a dot plot; the markers of any selection; labels from markers or a
+// reference, or imported, and their review (ui/labels-card.js, ui/review-card.js); the
+// instrument's own clusters and map, registered from the bundle; and two clusterings compared.
 
 import { h, icon, clear, formatCount, relativeTime } from './dom.js';
 import { toast } from './overlays.js';
@@ -15,7 +14,7 @@ import { evaluate, keepChecksum } from '../lib/filters.js';
 import { readCells } from '../lib/viewer-data.js';
 import { PARAMETERS, checkParameters, clusterName, clusterNames, clusteringsOf, contingency, describeClustering, filterRequest, mapsOf, mergedOf, nameClusters, nameOf } from '../lib/clusterings.js';
 import { mountCellMap } from './cell-map.js';
-import { labelClustering, labelsSections } from './labels-card.js';
+import { labelClustering, labelsSections, referenceClustering } from './labels-card.js';
 import { labelSetsOf } from '../lib/labels.js';
 
 const exact = (v) => (Number.isFinite(v) ? v.toLocaleString('en-US') : '—');
@@ -691,6 +690,23 @@ export function mountCellTypes(app, container) {
       session.shown = c.id;
       render(true);
       const manifest = await labelClustering(app, { t: now, session, clustering: c }, request);
+      render(true);
+      document.querySelector(`[data-labels="${CSS.escape(manifest.id)}"]`)?.scrollIntoView({ block: 'center' });
+      return manifest;
+    },
+    // Labels a clustering's cells from a reference (labels-card.js referenceClustering) and shows them.
+    reference: async (dataset, clusteringId, request) => {
+      const t = target();
+      if (!t || t.dataset.id !== dataset.id) app.focusItem({ kind: 'dataset', id: dataset.id });
+      const now = target();
+      if (!now.item) throw new Error(`${dataset.name}'s bundle was not found where the project records it.`);
+      const c = app.store.project.artifacts.find((a) => a.kind === 'clustering' && a.id === clusteringId);
+      if (!c) throw new Error(`No clustering ${clusteringId}.`);
+      const session = sessionOf(dataset);
+      session.segmentation = c.segmentation;
+      session.shown = c.id;
+      render(true);
+      const manifest = await referenceClustering(app, { t: now, session, clustering: c }, request);
       render(true);
       document.querySelector(`[data-labels="${CSS.escape(manifest.id)}"]`)?.scrollIntoView({ block: 'center' });
       return manifest;

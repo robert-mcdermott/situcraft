@@ -97,6 +97,28 @@ Wave 4 of the [roadmap](situcraft-spec/roadmap.md): cell identities with their e
   - **Validated** on built sets (the consensus rules), and on planted mislabels: the queue finds 95%
     of them on the Breast tissue and 75% on the simulated one, whose domains mix their types.
 
+- **Labels from a reference (wave 4, slice 6).** Under a clustering, the Cell types view labels each
+  cell from a labeled single-cell reference, as a job, and records the labels as an artifact with
+  the reference as it was compared.
+  - **References:** an AnnData object in Zarr (its labels in `obs`, its counts or log-normalized
+    values in `X`, `raw/X` or a layer), or a table of each label's mean expression (CSV, TSV or
+    Parquet, a row per label or per gene), its columns suggested and described before use: its
+    labels, how many of the panel's genes it has and which it lacks. An `.h5ad` file is read once
+    written as Zarr (anndata's `write_zarr`).
+  - **The method:** each cell's Spearman correlation with each label's profile over the genes that
+    set the labels apart, then again over the leading labels' own genes until one is left (Aran et
+    al. 2019, as SingleR maps cells); the label taken by a margin, its lead the cell's confidence.
+  - **Its evidence:** each round's correlations, and the genes higher in the cell's label's profile
+    and in the next's that the cell expresses; the review queue and versions treat these labels as
+    any others.
+  - **`situcraft simulate --reference N`** writes a reference of the simulated tissue's types beside
+    it.
+  - **Remote control:** `reference_labels`; `label_evidence` answers a reference's rounds.
+  - **Validated** against SingleR on both development bundles (the Human Primary Cell Atlas's main
+    labels) and the simulated tissue: given the same profiles, every cell's correlations within
+    3 × 10⁻⁸ and the same label on 99.97% to 100% of the cells. On the simulated tissue 98.1% of the
+    cells take their true type.
+
 ### Changed
 
 - **A comparison can be removed from its project** (the inspector's **Remove**). The project's

@@ -16,7 +16,7 @@ import { readCells } from '../lib/viewer-data.js';
 import { readSegCells } from '../lib/segview.js';
 import { fitView, insidePolygon, nearestPoint, pointGrid, pointsInPolygon, rasterize, toPixel, toPlane, valueColors, zoomAt } from '../lib/scatter.js';
 import { clusterColors, mapWarning, mergedOf, nameOf } from '../lib/clusterings.js';
-import { labelColor, labelColors, labelSetName } from '../lib/labels.js';
+import { labelColor, labelColors, labelSetName, oneLevel } from '../lib/labels.js';
 import { labelSource, labelVersions, perCell, refOf } from './label-sources.js';
 
 async function getJSON(url) {
@@ -154,7 +154,7 @@ export function mountCellMap(app, host, ctx) {
     const options = [
       ...clusterings.map((c) => h('option', { value: `clusters:${c.id}` }, `Clusters: ${c.summary?.source ? c.name : `resolution ${c.parameters?.resolution}`} (${c.summary?.clusters})`)),
       ...labelSets.flatMap((r) => [
-        ...(r.summary?.levels ?? []).map((level, l) => h('option', { value: `labels:${r.id}:${l}` }, r.source ? `Labels: ${labelSetName(r)}` : `${labelSetName(r)}: ${level.toLowerCase()}`)),
+        ...(r.summary?.levels ?? []).map((level, l) => h('option', { value: `labels:${r.id}:${l}` }, oneLevel(r) ? `Labels: ${labelSetName(r)}` : `${labelSetName(r)}: ${level.toLowerCase()}`)),
         ...(!r.source || r.source.confidenceColumn ? [h('option', { value: `confidence:${r.id}` }, `${labelSetName(r)}: confidence`)] : []),
       ]),
       ...labelVersions(app.store.project, state.ctx.dataset.id, state.ctx.segmentation.id).filter((v) => v.kind === 'curated' || v.kind === 'consensus').map((v) => h('option', { value: `labels:${v.id}:0` }, `${v.kind === 'curated' ? 'Curated' : 'Consensus'}: ${v.name}`)),

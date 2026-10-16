@@ -668,6 +668,42 @@ export async function viewerSuite({ check, MissingData, verbose }) {
         })()`) : null;
         const consensus = curated.ok ? await act('consensus_labels', { dataset: 'xenium-lung-2fov', segmentation: 'instrument', members: [markerSet, curated.data.id], rule: 'majority', min: 2, name: 'Agreed' }) : curated;
         check('viewer', 'remote control: review_labels ranks the cells to review; curate_labels relabels one with its reason, drawn in its new label\'s color, the others as before; consensus_labels agrees', queued.ok && curated.ok && consensus.ok ? `${queued.message} ${curated.message} ${JSON.stringify(curatedColors)} ${consensus.message}` : queued.message ?? curated.message ?? consensus.message, queued.ok && queued.data.queue.length > 0 && shares.every((v, i) => v <= 0.2 && (i === 0 || v >= shares[i - 1])) && curated.ok && curated.data.edits === 1 && curated.data.last.reason === 'two nuclei in one outline' && curatedFill.ok && curatedColors?.relabeled && curatedColors.newIndex === curatedColors.baseLabels && curatedColors.others === 0 && consensus.ok && consensus.data.labeled === consensus.data.covered - 1, 'the implausible by agreement, rising, at most 0.2; the cell its new color, no other changed; the two agree but on the cell relabeled');
+        // Labels from a reference (wave 4, slice 6): a table of four classes' profiles over their
+        // markers (a row per gene; one gene the panel lacks), the Lung cells mapped to it; each
+        // cell drawn in its label's color; a cell's evidence its recorded first-round scores; a
+        // reference of none of the panel's genes refused.
+        const classes = { Epithelial: ['EPCAM', 'CDH1', 'ELF3'], Immune: ['CD3E', 'CD2', 'MS4A1', 'CD68', 'AIF1'], Endothelial: ['CLDN5', 'VWF', 'RAMP2'], Stromal: ['PDGFRA', 'PDGFRB', 'FBN1', 'DES'] };
+        const genes = [...Object.values(classes).flat(), 'NOT_A_GENE'];
+        const profilesTable = join(work, 'profiles.csv');
+        writeFileSync(profilesTable, `gene,${Object.keys(classes).join(',')}\n${genes.map((g) => `${g},${Object.values(classes).map((list) => (list.includes(g) ? 2.5 : 0.1)).join(',')}`).join('\n')}\n`);
+        const elsewhere = join(work, 'elsewhere.csv');
+        writeFileSync(elsewhere, 'gene,A,B\nNOT_A,1,0\nNOT_B,0,1\n');
+        const mapped = await act('reference_labels', { dataset: 'xenium-lung-2fov', path: profilesTable });
+        const refusedReference = await act('reference_labels', { dataset: 'xenium-lung-2fov', path: elsewhere });
+        const referenceFill = mapped.ok ? await act('show_tissue', { fill: `labels:${mapped.data.id}`, whole: true }) : mapped;
+        const referenceCells = mapped.ok ? await chrome.eval(`(async () => {
+          const v = window.situcraftViewer;
+          for (let k = 0; k < 300 && !(v.clusterFill()?.labels === '${mapped.data.id}'); k += 1) await new Promise((r) => setTimeout(r, 100));
+          const buffer = await fetch('/api/labels/${mapped.data.id}/cells').then((r) => r.arrayBuffer());
+          const [segCells, n] = new Uint32Array(buffer, 0, 2);
+          const cells = new Uint32Array(buffer, 16, n);
+          const label = new Int32Array(buffer, 16 + 8 * n, n);
+          const { categoricalColor } = await import('/lib/colormaps.js');
+          const rgba = v.fillColors();
+          let wrong = 0;
+          for (let i = 0; i < n; i += 1) {
+            if (label[i] < 0) continue;
+            const hex = '#' + [0, 1, 2].map((j) => rgba[4 * cells[i] + j].toString(16).padStart(2, '0')).join('');
+            if (hex !== categoricalColor(label[i]).toLowerCase()) wrong += 1;
+          }
+          const scores = new Float32Array(await fetch('/api/labels/${mapped.data.id}/scores?set=0').then((r) => r.arrayBuffer()));
+          const app = window.situcraft;
+          const item = app.bundles.link(app.store.project.datasets.find((d) => d.name === 'xenium-lung-2fov').id).item;
+          const ev = await fetch(item.url + '/clusterings/${mapped.data.clustering}/cells/' + cells[7] + '/evidence?labels=${mapped.data.id}').then((r) => r.json());
+          const first = ev.reference?.rounds?.[0]?.scores.find((x) => x.label === 0)?.score;
+          return { segCells, n, wrong, evidence: Boolean(ev.reference), label: ev.reference?.label, recordedLabel: label[7], same: Math.fround(first) === scores[cells[7]] };
+        })()`) : null;
+        check('viewer', 'remote control: reference_labels labels the Lung cells from a table of profiles, each drawn in its label\'s color, a cell\'s evidence its recorded scores; a reference sharing no gene with the panel refused', mapped.ok ? `${mapped.message} ${JSON.stringify(referenceCells)}; refused: ${refusedReference.message}` : mapped.message, mapped.ok && mapped.data.reference.shared === 15 && mapped.data.reference.missing.length > 0 && mapped.data.labels.length === 4 && mapped.data.cells.analyzed === 11820 && referenceFill.ok && referenceCells?.wrong === 0 && referenceCells.evidence && referenceCells.label === referenceCells.recordedLabel && referenceCells.same && !refusedReference.ok && /shares 0 of the panel's genes/.test(refusedReference.message), 'four labels over the 15 genes the panel has; every labeled cell in its color; the evidence as recorded; refused');
         // Nucleus expansion (wave 2, slice 3), run by a program in the Segmentation view.
         const expanded = await act('expand_nuclei', { dataset: 'xenium-lung-2fov', distance_um: 5 });
         const g = expanded.ok ? expanded.data.summary.agreement : null;

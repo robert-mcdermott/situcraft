@@ -490,6 +490,36 @@ dominates, its own markers score low against control genes that are mostly its o
 many of its cells may stay without a label. Check each cluster's labels against its markers before
 naming it.
 
+### Labels from a reference
+
+When a labeled single-cell dataset of the same tissue exists (an atlas, or your own single-cell
+experiment), **Labels from a reference** labels each cell by the reference label it most resembles.
+Name the reference (its path on this computer) and **Read** it: an AnnData object saved with
+`write_zarr` (a `.zarr` folder, or a zip of one), whose cells carry their labels in an `obs` column,
+or a table of each label's mean expression (CSV, TSV or Parquet, a row per label or per gene). An
+`.h5ad` file is written as Zarr in one line of Python:
+`anndata.read_h5ad("reference.h5ad").write_zarr("reference.zarr")`.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/reference-dark.webp">
+  <img alt="The simulated example's reference read against its panel: an AnnData object of 1,200 cells, its counts in X, its labels in obs cell_type (four types of 300 cells each), all 120 of the panel's genes in the reference and compared; the button to label the cells from it" src="images/reference-light.webp">
+</picture>
+
+SituCraft suggests the reference's expression (counts preferred), its column of labels and its
+column of gene names, and says what it found: its labels and their cells, how many of the panel's
+genes it has (and which it lacks: if it has few, check that its genes are named by symbol, and the
+species), and how many will be compared. **Label the cells from the reference** then correlates
+each cell with each label's profile (its reference cells' mean expression) over the genes that set
+the labels apart, and scores the leading labels again on their own genes until one is left (as
+SingleR does, Aran et al. 2019). Each cell's **confidence** is how far its label led the next, in
+correlation. The label set is kept with the reference as it was compared and its SHA-256.
+
+The labels follow the reference: a reference of other cells (an atlas of healthy tissue for a
+tumor, say) gives each cell the nearest label it has, which may be wrong. The evidence card (below)
+shows, for each cell, how close the leading labels were and which genes set its label apart from
+the next. To try it, `situcraft simulate --reference 300 <folder>` writes a simulated tissue and a
+reference of its types beside it.
+
 ### Labels made elsewhere
 
 Labels from another tool or an earlier analysis (a colleague's annotation, a reference mapping,
@@ -515,7 +545,7 @@ Its file is recorded by its SHA-256, so the project says exactly what was import
 ### Reviewing labels
 
 Labels are predictions. Under **Label versions** each label set of the segmentation is listed:
-from markers, imported, curated and consensus. **Curate** begins a curated set from a predicted one:
+from markers or a reference, imported, curated and consensus. **Curate** begins a curated set from a predicted one:
 its labels, with your changes appended, each with its reason, who made it and when (the predicted
 set stays as the method made it). **Make a consensus…** combines sets by a rule: unanimous (every
 set gives the label), majority (at least so many sets, more than any other label) or in order (the
@@ -532,7 +562,9 @@ tissue share while most share another (a lone label among others is often a misl
 one outline, or a cell at a boundary), and those of low confidence. Choose a cell, in the list or
 on the map or the tissue, to see its **evidence**: its label in every version; for labels from
 markers, why it took its label and not the next, gene by gene in the cell (green, a marker it
-expresses; red, a negative marker it expresses), and why not the label its neighbors carry; its
+expresses; red, a negative marker it expresses), and why not the label its neighbors carry; for
+labels from a reference, each round's correlations and the genes higher in its label's profile and
+in the next's that the cell expresses; its
 neighbors' labels in the tissue and in expression; its transcripts and its segmentation's flags.
 **Accept** its label or **Relabel** it, saying why; the decision is added to a curated set and the
 next cell is shown.

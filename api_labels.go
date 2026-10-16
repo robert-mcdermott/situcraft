@@ -74,6 +74,7 @@ func (a *app) registerLabels(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/labels/{id}/scores", a.labelScores)
 	a.registerLabelImports(mux)
 	a.registerLabelReview(mux)
+	a.registerReferences(mux)
 }
 
 // markerStarter is a marker set offered for a clustering: SituCraft's, or the simulated tissue's,
@@ -356,8 +357,8 @@ func (a *app) labelsOf(w http.ResponseWriter, id string) (string, bool) {
 	return dir, true
 }
 
-// labelSet answers a label set's description and marker set (null for imported labels):
-// {description, markers}.
+// labelSet answers a label set's description and marker set (null for labels imported or from a
+// reference): {description, markers}.
 func (a *app) labelSet(w http.ResponseWriter, r *http.Request) {
 	dir, ok := a.labelsOf(w, r.PathValue("id"))
 	if !ok {
@@ -369,7 +370,7 @@ func (a *app) labelSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var set *label.MarkerSet
-	if d.Source == nil {
+	if d.FromMarkers() {
 		if set, err = label.ReadMarkers(dir); err != nil {
 			writeError(w, http.StatusUnprocessableEntity, err.Error())
 			return
@@ -921,7 +922,9 @@ func (a *app) reviewQueue(w http.ResponseWriter, r *http.Request) {
 // cellEvidence answers a segmentation cell's evidence in a clustering: {cell, index (among the
 // cells analyzed, −1 for none), cluster, neighbors (its nearest cells in expression, as
 // segmentation cells), labels (with ?labels=, a label set from markers made from the clustering:
-// its levels, candidates, markers and controls in the cell; with ?also=, another label's too)}.
+// its levels, candidates, markers and controls in the cell; with ?also=, another label's too) or
+// reference (with ?labels=, a label set from a reference: the cell's rounds and the genes that set
+// its label and the next apart)}.
 func (a *app) cellEvidence(w http.ResponseWriter, r *http.Request) {
 	e, d, ok := a.expressionOf(w, r)
 	if !ok {
@@ -967,7 +970,7 @@ func (a *app) cellEvidence(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if ld.Source != nil || ld.Clustering == nil || ld.Clustering.ID != r.PathValue("id") || len(lab.Cells) != len(e.Cells) {
-			writeError(w, http.StatusBadRequest, "The label set is not from markers of this clustering.")
+			writeError(w, http.StatusBadRequest, "The label set is not from markers or a reference of this clustering.")
 			return
 		}
 		also := -1
@@ -977,7 +980,21 @@ func (a *app) cellEvidence(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		out["labels"] = label.CellEvidence(e, ld, lab, i, also)
+		if ld.Reference != nil {
+			rp, err := label.ReadReferenceProfiles(ldir)
+			if err != nil {
+				writeError(w, http.StatusUnprocessableEntity, err.Error())
+				return
+			}
+			ev, err := label.CellRefEvidence(e, ld, rp, lab, i, also)
+			if err != nil {
+				writeError(w, http.StatusUnprocessableEntity, err.Error())
+				return
+			}
+			out["reference"] = ev
+		} else {
+			out["labels"] = label.CellEvidence(e, ld, lab, i, also)
+		}
 	}
 	writeJSON(w, out)
 }

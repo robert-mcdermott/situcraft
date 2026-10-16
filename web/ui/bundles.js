@@ -620,6 +620,45 @@ export function createBundles(app) {
     return entry.promise;
   }
 
+  // A reference read and described by the program against a clustering's panel (request { path,
+  // clustering, matrix, labelColumn, geneColumn, parameters }): { description, preview, error }.
+  function readReference(item, request) {
+    return getJSON(`${item.url}/references/read`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) });
+  }
+
+  // Labels a clustering's cells from a reference, unless done already; recorded in the project.
+  // Answers the manifest.
+  const mappingReference = new Map(); // request JSON → { dataset, clustering, job, promise }
+  function mapReference(item, datasetId, request) {
+    const key = JSON.stringify(request);
+    if (mappingReference.has(key)) return mappingReference.get(key).promise;
+    const entry = { dataset: datasetId, clustering: request.clustering, job: null, promise: null };
+    entry.promise = (async () => {
+      try {
+        const answer = await getJSON(`${item.url}/references/map`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) });
+        let manifest = answer.artifact;
+        if (!manifest) {
+          entry.job = answer.job?.id ?? null;
+          notify();
+          const job = await app.jobs.finished(entry.job);
+          if (job?.state !== 'complete') throw new Error(`the mapping ${job?.state ?? 'ended'}${job?.error ? `: ${job.error}` : ''}`);
+          manifest = await getJSON(`/api/artifacts/${encodeURIComponent(answer.id)}`);
+        }
+        const dataset = app.store.project.datasets.find((d) => d.id === datasetId);
+        if (!dataset) throw new Error('the dataset is no longer in the project');
+        const next = addLabels(app.store.project, labelsRecord(dataset, manifest));
+        if (next !== app.store.project) app.store.commit(next, `Label the cells of ${dataset.name} from a reference`);
+        return manifest;
+      } finally {
+        mappingReference.delete(key);
+        notify();
+      }
+    })();
+    mappingReference.set(key, entry);
+    notify();
+    return entry.promise;
+  }
+
   // A label set's description, marker set and cells, kept for the session.
   const labelSets = new Map();
   function labelData(id) {
@@ -813,6 +852,10 @@ export function createBundles(app) {
     labelScores,
     readLabelsTable,
     importLabels,
+    readReference,
+    mapReference,
+    // The mappings to a reference of a dataset under way: [{ clustering, job }].
+    referenceMappings: (id) => [...mappingReference.values()].filter((e) => e.dataset === id).map(({ clustering, job }) => ({ clustering, job })),
     // The label imports into a dataset under way: [{ segmentation, job }].
     labelImports: (id) => [...importingLabels.values()].filter((e) => e.dataset === id).map(({ segmentation, job }) => ({ segmentation, job })),
     // The labelings of a dataset under way: [{ clustering, job }].

@@ -1,5 +1,5 @@
 // Label versions and their review in the Cell types view (wave 4, slice 5): the segmentation's
-// predicted label sets (from markers, imported), curated sets (a reviewer's edits, each with its
+// predicted label sets (from markers or a reference, imported), curated sets (a reviewer's edits, each with its
 // reason) and consensus sets (a rule over chosen sets), side by side; the review queue (cells whose
 // label their tissue neighbors rarely share, or of low confidence, api_labels.go); and a cell's
 // evidence card: its label in each version, why (its markers and the next label's, in the cell),
@@ -10,6 +10,7 @@ import { h, icon, clear, formatCount, relativeTime } from './dom.js';
 import { toast } from './overlays.js';
 import { RULES, appendEdit, checkRule, createCurated, crossTable, curatedSetsOf, nearestCells, saveConsensus, tally } from '../lib/curation.js';
 import { labelSource, labelVersions, refOf } from './label-sources.js';
+import { lowConfidenceDefault } from '../lib/labels.js';
 
 const percent = (v, digits = 0) => (Number.isFinite(v) ? `${(100 * v).toFixed(digits)}%` : '—');
 const fixed = (v, digits = 2) => (Number.isFinite(v) ? v.toFixed(digits) : '—');
@@ -52,12 +53,12 @@ export function reviewSections(app, ctx) {
     rv.set = versionKey(versions.find((v) => v.id === st.shown) ?? versions[0]);
     rv.queue = null;
   }
-  // Low confidence, by default: from markers, a lead under twice the margin.
+  // Low confidence, by default: from markers or a reference, a lead under the set's threshold.
   const reviewed = versions.find((v) => versionKey(v) === rv.set);
   if (rv.lowFor !== rv.set) {
     rv.lowFor = rv.set;
-    const rec = reviewed?.kind === 'markers' ? project.artifacts.find((a) => a.id === reviewed.id) : null;
-    rv.low = rec ? 2 * (rec.parameters?.margin ?? 0.1) : null;
+    const rec = reviewed?.kind === 'markers' || reviewed?.kind === 'reference' ? project.artifacts.find((a) => a.id === reviewed.id) : null;
+    rv.low = lowConfidenceDefault(rec);
   }
   const evidenceHost = (st.evidenceHost ??= h('div.rv-evidence'));
   // A cell chosen on the map or the tissue shows its evidence.
@@ -110,7 +111,7 @@ export function reviewSections(app, ctx) {
     return h('section.seg-section',
       h('div.section-title', 'Label versions'),
       h('div.seg-card',
-        h('p', 'Predicted labels (from markers, imported), curated labels (a reviewer\'s changes to a predicted set, each with its reason, appended) and consensus labels (a rule over chosen sets), side by side. Each is kept in the project; the Viewer\'s Fill by and the map list them.'),
+        h('p', 'Predicted labels (from markers or a reference, imported), curated labels (a reviewer\'s changes to a predicted set, each with its reason, appended) and consensus labels (a rule over chosen sets), side by side. Each is kept in the project; the Viewer\'s Fill by and the map list them.'),
         h('div.table-wrap', h('table.data-table.seg-table', h('tbody', ...rows))),
         vs.building ? consensusBuilder() : h('div.btn-row', h('button.btn.small', { type: 'button', disabled: versions.length < 2, 'data-action': 'consensus', onclick: () => {
           // Two different sets by default (not two levels of one).
@@ -235,7 +236,7 @@ export function reviewSections(app, ctx) {
           h('label.field', { for: 'rv-set' }, h('span', 'Labels'), pick),
           num('rv-neighbors', 'Nearest cells', 'neighbors', 1, 'The labeled cells nearest each cell (by centroid) whose labels are counted.'),
           num('rv-implausible', 'Implausible at most', 'implausible', 0.05, 'A cell is flagged when at most this share of its nearest cells carry its label, and most carry another.'),
-          num('rv-low', 'Confidence below', 'low', 0.05, 'A cell is flagged when its confidence is below this (empty: not by confidence). From markers, the confidence is how far the label led the next; imported, the table\'s.')),
+          num('rv-low', 'Confidence below', 'low', 0.05, 'A cell is flagged when its confidence is below this (empty: not by confidence). From markers, the confidence is how far the label led the next; from a reference, how far it led the next in correlation; imported, the table\'s.')),
         h('div.btn-row', h('button.btn.primary', { type: 'button', disabled: rv.busy, 'data-action': 'review-queue', onclick: () => makeQueue(v) }, icon('stethoscope'), rv.busy ? 'Ranking…' : 'Make the queue')),
         queueHost,
         evidenceHost));
@@ -284,7 +285,7 @@ export function reviewSections(app, ctx) {
     const items = q.queue.slice(rv.page * per, (rv.page + 1) * per);
     const reason = (it) => [
       it.reasons.includes('implausible') ? `${Math.round(it.share * q.neighbors)} of ${q.neighbors} nearest share it; most are ${q.names[it.dominant] ?? '?'}` : null,
-      it.reasons.includes('low-confidence') ? `confidence ${fixed(it.confidence)}` : null,
+      it.reasons.includes('low-confidence') ? `confidence ${fixed(it.confidence, v?.kind === 'reference' ? 3 : 2)}` : null,
     ].filter(Boolean).join('; ');
     clear(host).append(
       h('p', h('b', `${formatCount(c.implausible + c.lowConfidence - c.both)} cells to review`), h('span.muted', ` of ${formatCount(c.labeled)} labeled: ${formatCount(c.implausible)} implausible, ${formatCount(c.lowConfidence)} of low confidence, ${formatCount(c.both)} both; ${formatCount(c.reviewed)} reviewed already. The first ${formatCount(q.queue.length)}, most doubtful first:`)),
@@ -318,6 +319,7 @@ export function reviewSections(app, ctx) {
       const shown = await labelSource(app, refOf(v.id, v.level));
       const all = [];
       for (const x of versions.slice(0, 10)) all.push([x, await labelSource(app, refOf(x.id, x.level))]);
+      // A set from markers or a reference of this clustering explains its labels (a curated set's base).
       const markerSet = shown.kind === 'labels' && shown.record && !shown.record.source && shown.record.clustering === clustering.id ? shown.id
         : shown.kind === 'curated' && shown.base?.kind === 'labels' && shown.base.record && !shown.base.record.source && shown.base.record.clustering === clustering.id ? shown.base.id : null;
       // The label most of its nearest cells carry, when it is not the cell's: why not that one.
@@ -344,7 +346,7 @@ export function reviewSections(app, ctx) {
     const cells = ctx.cellMap?.state?.cells;
     parts.push(h('div.rv-head', h('b', `Cell ${detail?.id ?? `#${cell}`}`), h('span.muted', ` of ${seg.name.toLowerCase()}${ev.index >= 0 ? `, cluster ${ev.cluster + 1} of ${clustering.name.toLowerCase()}` : ', not analyzed by the clustering'}`)));
     // Its labels in each version.
-    parts.push(h('div.section-title', 'Its labels'), h('dl.kv.seg-kv', ...all.flatMap(([x, src]) => [h('dt', x.name), h('dd', name(src, src.label[cell]), Number.isFinite(src.confidence?.[cell]) ? h('span.muted', ` (${x.kind === 'consensus' ? `${percent(src.confidence[cell])} of the sets` : `confidence ${fixed(src.confidence[cell])}`})`) : null)])));
+    parts.push(h('div.section-title', 'Its labels'), h('dl.kv.seg-kv', ...all.flatMap(([x, src]) => [h('dt', x.name), h('dd', name(src, src.label[cell]), Number.isFinite(src.confidence?.[cell]) ? h('span.muted', ` (${x.kind === 'consensus' ? `${percent(src.confidence[cell])} of the sets` : `confidence ${fixed(src.confidence[cell], x.kind === 'reference' ? 3 : 2)}`})`) : null)])));
     // Why, from markers.
     if (ev.labels) {
       const e = ev.labels;
@@ -367,6 +369,32 @@ export function reviewSections(app, ctx) {
       }
       if (e.also) parts.push(h('div.section-title', `Why not ${e.also.name}, as most of its neighbors?`), list(e.also));
       parts.push(h('p.muted.seg-note', 'Green: a positive marker the cell expresses; dashed: one it does not; red: a negative marker it expresses. Each with its transcripts in the cell; hover for its value against the cells\' mean.'));
+    }
+    // Why, from a reference.
+    if (ev.reference) {
+      const e = ev.reference;
+      const d = shown.description ?? shown.base?.description;
+      const margin = d?.reference?.parameters?.margin ?? 0;
+      if (!e.rounds.length) {
+        parts.push(h('div.section-title', `From ${e.reference}: no label`), h('p.muted.seg-note', 'The cell expresses too few of the genes compared to rank them against the labels\' profiles.'));
+      } else {
+        const last = e.rounds.at(-1);
+        const best = last.scores[0];
+        const next = last.scores[1];
+        const took = e.label >= 0;
+        const round = (r, n) => h('li', `Round ${n + 1}, ${r.genes} genes: `, ...r.scores.slice(0, 5).flatMap((x, j) => [j ? ', ' : '', h(x.label === best.label && n === e.rounds.length - 1 ? 'b' : 'span', `${x.name} ${fixed(x.score, 3)}`)]), r.scores.length > 5 ? h('span.muted', `, and ${r.scores.length - 5} more`) : null);
+        const chip = (g, against) => {
+          const on = g.count > 0;
+          return h(`span.rv-gene${on ? (against ? '.rv-against' : '.rv-for') : '.rv-missing'}`, { title: `${g.gene}: ${g.count} transcript${g.count === 1 ? '' : 's'}, ${fixed(g.value)} log-normalized; ${best.name}'s profile ${fixed(g.best)}, ${next.name}'s ${fixed(g.next)}` }, `${g.gene} ${g.count}`);
+        };
+        parts.push(h('div.section-title', `From ${e.reference}: ${took ? best.name : 'no label'}`),
+          h('p.muted.seg-note', took ? `${best.name} led ${next.name} by ${fixed(e.lead, 3)} in correlation${e.rounds.length > 1 ? `, after ${e.rounds.length - 1} round${e.rounds.length === 2 ? '' : 's'} of fine-tuning on the leading labels' genes` : ''} (the margin ${margin}).` : `${best.name} led ${next.name} by ${fixed(e.lead, 3)}, not more than the margin ${margin}: the cell stays without a label.`),
+          h('ul.inspector-list', ...e.rounds.map(round)),
+          h('div.rv-label', h('div', h('b', `For ${best.name}`), h('span.muted', `: genes higher in its profile than ${next.name}'s`)), h('div.rv-genes', ...e.forBest.map((g) => chip(g, false)))),
+          h('div.rv-label', h('div', h('b', `For ${next.name}`), h('span.muted', `: genes higher in its profile than ${best.name}'s`)), h('div.rv-genes', ...e.forNext.map((g) => chip(g, true)))));
+        if (e.also) parts.push(h('div.section-title', `Why not ${e.also.name}, as most of its neighbors?`), h('p.muted.seg-note', `${e.also.name} ranked ${e.alsoRank} of ${e.rounds[0].scores.length} in the first round, correlation ${fixed(e.also.score, 3)} against the best's ${fixed(e.rounds[0].scores[0].score, 3)}${e.alsoRank > 1 && e.rounds[0].scores[0].score - e.also.score > (d?.reference?.parameters?.tune ?? 0.05) ? ': beyond the fine-tuning threshold, so it was not scored again' : ''}.`));
+        parts.push(h('p.muted.seg-note', `Green: a gene higher in ${best.name}'s profile that the cell expresses; red: one higher in ${next.name}'s that it expresses; dashed: one it does not express. Each with its transcripts in the cell; hover for its value and the profiles'.`));
+      }
     }
     // Its neighbors' labels.
     const near = [];

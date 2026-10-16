@@ -33,6 +33,7 @@ const SHOWN = {
   examples: '~/Library/Application Support/SituCraft/examples',
   cache: '~/Library/Caches/situcraft',
   exports: '~/Documents/SituCraft exports',
+  references: '~/Documents/references',
 };
 
 const args = process.argv.slice(2);
@@ -347,6 +348,26 @@ const scenes = {
     await js(`document.querySelector('.rv-table tbody tr').click()`);
     await waitFor(`Boolean(document.querySelector('.rv-evidence .rv-decide'))`);
     await scrollTo('.rv-evidence', 'start');
+    await sleep(300);
+  },
+  // The simulated example labeled from a single-cell reference of its types (wave 4, slice 6),
+  // written by situcraft simulate --reference: the reference read against the panel, the cells'
+  // labels by cluster, each label's reference cells and cells.
+  async reference() {
+    places.references = join(temp, 'references');
+    mkdirSync(places.references, { recursive: true });
+    const made = join(places.references, 'simulated');
+    if (!existsSync(`${made}-reference.zarr`)) {
+      await new Promise((done, fail) => spawn(binary, ['simulate', '--quiet', '--reference', '300', made], { cwd: temp, stdio: 'ignore' }).on('exit', (code) => (code ? fail(new Error('situcraft simulate --reference failed')) : done())));
+    }
+    const path = `${made}-reference.zarr`;
+    await act('open_example', { example: 'simulated-standard' });
+    await act('cluster_cells', {});
+    await act('reference_labels', { path, name_clusters: true });
+    await waitFor(`Boolean(document.querySelector('.lb-shown .lb-labels tbody tr'))`);
+    await js(`(() => { const input = document.querySelector('#lb-ref-path'); input.value = ${JSON.stringify(path)}; input.dispatchEvent(new Event('change')); document.querySelector('[data-action=read-reference]').click(); })()`);
+    await waitFor(`Boolean(document.querySelector('[data-action=map-reference]'))`);
+    await scrollTo('section:has(> .lb-reference)', 'start');
     await sleep(300);
   },
   // The Breast example's clusters on the tissue (wave 4, slice 1): the cells filled by cluster,

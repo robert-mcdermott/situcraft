@@ -77,9 +77,9 @@ const (
 	tolTruthWrong = 0.02
 )
 
-// labelSet clusters a data set's instrument segmentation with the defaults and labels the cells
-// from the marker set offered for it, into out.
-func labelSet(t *testing.T, set, bundleDir, out string) (*label.Result, string) {
+// clustered clusters a data set's instrument segmentation with the defaults: its cells'
+// expression, its counts, and the clusters' number and target total.
+func clustered(t *testing.T, bundleDir string) (*cluster.Expression, *segment.Counts, int, float64) {
 	t.Helper()
 	ctx := context.Background()
 	b, err := xenium.Open(bundleDir, xenium.Options{CacheDir: t.TempDir()})
@@ -110,8 +110,21 @@ func labelSet(t *testing.T, set, bundleDir, out string) (*label.Result, string) 
 	if err != nil {
 		t.Fatal(err)
 	}
+	return e, counts, len(r.Partition.Sizes), r.Target
+}
+
+// labelSet clusters a data set's instrument segmentation with the defaults and labels the cells
+// from the marker set offered for it, into out.
+func labelSet(t *testing.T, set, bundleDir, out string) (*label.Result, string) {
+	t.Helper()
+	e, _, clusters, target := clustered(t, bundleDir)
+	b, err := xenium.Open(bundleDir, xenium.Options{CacheDir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
 	markers := markersFor(t, set, b)
-	res, err := label.Run(e, markers, len(r.Partition.Sizes), r.Target, label.DefaultParams())
+	b.Close()
+	res, err := label.Run(e, markers, clusters, target, label.DefaultParams())
 	if err != nil {
 		t.Fatal(err)
 	}

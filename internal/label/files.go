@@ -13,7 +13,8 @@ package label
 //
 // Labels imported from a table (imported.go) have a source in labels.json in place of the marker
 // set and the clustering, no markers.json, one level, and no scores in labels.bin; their cells are
-// all the segmentation's, in no cluster.
+// all the segmentation's, in no cluster. Labels from a reference (reference_files.go) have the
+// reference in labels.json and reference.json in place of markers.json.
 //
 // labels.bin has SituCraft's binary envelope (internal/segment: magic, version, length, zlib).
 
@@ -42,7 +43,7 @@ const (
 // Files lists them in order; Roles names each one's role in a manifest.
 var (
 	Files = []string{FileDescription, FileMarkers, FileLabels}
-	Roles = map[string]string{FileDescription: "description", FileMarkers: "markers", FileLabels: "labels"}
+	Roles = map[string]string{FileDescription: "description", FileMarkers: "markers", FileLabels: "labels", FileReference: "reference"}
 )
 
 // none is a level not taken, in labels.bin.
@@ -72,6 +73,7 @@ type Description struct {
 	Segmentation cluster.Side  `json:"segmentation"`
 	Clustering   *cluster.Side `json:"clustering,omitempty"`
 	Source       *Source       `json:"source,omitempty"`
+	Reference    *RefInfo      `json:"reference,omitempty"`
 	Markers      struct {
 		Name     string `json:"name"`
 		Checksum string `json:"checksum"`
@@ -356,14 +358,18 @@ func ReadLabels(dir string, negative []bool, scored bool) (*Labels, error) {
 	return out, r.Done(FileLabels)
 }
 
-// Read reads a label set's description, marker set (nil for imported labels) and labels.
+// FromMarkers says whether a label set was made from markers (not imported, not from a reference).
+func (d *Description) FromMarkers() bool { return d.Source == nil && d.Reference == nil }
+
+// Read reads a label set's description, marker set (nil for labels imported or from a reference)
+// and labels.
 func Read(dir string) (*Description, *MarkerSet, *Labels, error) {
 	d, err := ReadDescription(dir)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	var set *MarkerSet
-	if d.Source == nil {
+	if d.FromMarkers() {
 		if set, err = ReadMarkers(dir); err != nil {
 			return nil, nil, nil, err
 		}
@@ -373,6 +379,9 @@ func Read(dir string) (*Description, *MarkerSet, *Labels, error) {
 		negative[k] = len(s.Negative) > 0
 	}
 	l, err := ReadLabels(dir, negative, d.Source == nil)
+	if err == nil && d.Reference != nil && len(l.Score) != len(d.Sets) {
+		err = fmt.Errorf("%s holds %d labels' scores; the description %d", FileLabels, len(l.Score), len(d.Sets))
+	}
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -397,7 +406,14 @@ func Digest(dir string) (string, error) {
 	}
 	h := sha256.New()
 	h.Write(raw)
-	if d.Source == nil {
+	switch {
+	case d.Reference != nil:
+		ref, err := os.ReadFile(filepath.Join(dir, FileReference))
+		if err != nil {
+			return "", err
+		}
+		h.Write(ref)
+	case d.Source == nil:
 		set, err := ReadMarkers(dir)
 		if err != nil {
 			return "", err
@@ -408,10 +424,14 @@ func Digest(dir string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-// FilesOf lists a label set's files: imported labels have no marker set.
+// FilesOf lists a label set's files: imported labels have no marker set; labels from a reference
+// have reference.json in its place.
 func FilesOf(d *Description) []string {
-	if d.Source != nil {
+	switch {
+	case d.Source != nil:
 		return []string{FileDescription, FileLabels}
+	case d.Reference != nil:
+		return []string{FileDescription, FileReference, FileLabels}
 	}
 	return Files
 }
@@ -421,6 +441,7 @@ type Summary struct {
 	Segmentation cluster.Side  `json:"segmentation"`
 	Clustering   *cluster.Side `json:"clustering,omitempty"`
 	Source       *Source       `json:"source,omitempty"`
+	Reference    *RefSummary   `json:"reference,omitempty"`
 	Markers      string        `json:"markers,omitempty"`
 	Checksum     string        `json:"checksum,omitempty"`
 	Cells        int           `json:"cells"`
@@ -449,6 +470,9 @@ func Check(dir string, m *artifacts.Manifest) []artifacts.Finding {
 	}
 	if d.Source != nil {
 		return checkImported(d, lab, m)
+	}
+	if d.Reference != nil {
+		return checkReference(dir, d, lab, m)
 	}
 	if set.Checksum() != d.Markers.Checksum {
 		fatal("labels.markers", "markers.json's checksum %.16s is not the description's %.16s.", set.Checksum(), d.Markers.Checksum)

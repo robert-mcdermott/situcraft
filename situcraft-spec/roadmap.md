@@ -1793,13 +1793,51 @@ same on every processor.
        tissue's queue flags a quarter of its cells. Ranking by the share of neighbors agreeing finds
        planted mislabels earlier on Breast than a likelihood against each label's usual
        neighborhood, and is said in plain words.
-6. **Mapping to a reference (T5, optional).**
-   - A labeled single-cell reference (AnnData Zarr, or label-by-gene profiles as CSV or Parquet)
-     restricted to the panel's genes, the shared genes reported; each cell correlated with each
-     label's profile, then fine-tuned on the leading labels' genes (Aran et al. 2019), with a score
-     and a margin. Whether h5ad references need an HDF5 reader is decided here.
-   - Validation: against SingleR's labels on a public reference for both bundles (maintainer-run,
-     committed); on simulated tissues, against the true types.
+6. **Mapping to a reference (T5): done.**
+   - **Read** (`internal/label`'s `reference.go`; research.md §5.6): an AnnData object in Zarr (a
+     folder or a zip; its labels in an `obs` column, its genes' names in `var`, its counts or
+     log-normalized values in `layers/counts`, `raw/X` or `X`, each described without reading it
+     whole), or a table of profiles (CSV, TSV or Parquet; a row per label or per gene); the columns
+     suggested by their usual names. Restricted to the panel's genes, the genes shared and the
+     panel's genes it lacks reported; each label's profile its cells' mean log-normalized
+     expression.
+   - **Mapped:** each cell's Spearman correlation with each label's profile over, for each pair of
+     labels, the genes most higher in one than the other (the published number per pair, a
+     parameter); fine-tuned on the leading labels' own genes until one is left (Aran et al. 2019);
+     the label taken by a margin, its lead the cell's confidence.
+   - **Kept** as a label set (kind `labels`) with the reference as compared (`reference.json`), every
+     cell's correlations and rounds; the map, the tissue, the Viewer, names from labels, versions and
+     the review treat it as any label set. The evidence card shows a cell's rounds and the genes
+     setting its label and the next apart.
+   - **h5ad is not read:** anndata writes the same object as Zarr in one line (`write_zarr`), and an
+     HDF5 reader is left to the parking lot. `situcraft simulate --reference N` writes a single-cell
+     reference of a simulated tissue's types beside it.
+   - **In the app:** the Cell types view's **Labels from a reference**: a reference read against the
+     panel (its labels, the genes shared and compared, what its values are), its columns and the
+     parameters chosen. Remote control: `reference_labels`; `label_evidence` answers a reference's
+     rounds.
+   - Validation:
+     - **Exact cases:** Spearman with ties and a cell's rounds by hand; the mapping against a plain
+       one over random references; profiles by hand from AnnData counts and from tables in both
+       orientations; a typed tissue mapped, the files checked and pinned.
+     - **Against SingleR 2.14.2** (`validation/reference/references/`, maintainer-run, committed):
+       given the same profiles of the Human Primary Cell Atlas's 36 main labels, every cell's
+       first-round correlations within 3 × 10⁻⁸ and the same label on 100% (Lung), 99.97% (Breast)
+       and 100% (simulated) of the cells; SingleR at its per-sample defaults agrees on 72.0%,
+       62.5% and 99.3%. Checked weekly against SituCraft's labels made again, byte for byte.
+     - **Known truth:** on the standard simulated tissue mapped to a reference of its types, 98.1% of
+       the cells take their true type (SingleR at its defaults 98.6%).
+     - **In the app:** the Lung cells mapped by remote control to a table of four classes' profiles,
+       each drawn in its label's color, a cell's evidence its recorded correlations; a reference of
+       none of the panel's genes refused (viewer suite); capture scene `reference`, with no
+       accessibility violation.
+   - Found by slice 6:
+     - **On a targeted panel the published number of genes per pair covers the panel**, so
+       fine-tuning compares nearly the same genes again; fewer per pair label a few more simulated
+       cells right (98.9% at 20 or 5). The published number is kept and is a parameter.
+     - **A reference must be of the tissue:** an atlas of primary cells labels tumor cells with the
+       nearest profiles it has (Breast's embryonic stem and neuroepithelial cells, Lung's
+       hepatocytes), close in correlation, which the evidence and the review show.
 7. **Labels across segmentations (C6, T8).**
    - A clustering or label set made again on another segmentation in one step; composition by label
      under each; labels of the cells a comparison matches (agreement among one-to-one cells, the
@@ -1897,6 +1935,8 @@ Outline.
 - Deep-learning nucleus segmentation from stains (nuclei come from the bundle until then).
 - A remote/institutional multi-user mode (authentication, CSRF, audit).
 - HDF5 (`.h5ad`) export, if users need it beyond AnnData Zarr.
+- Reading `.h5ad` (references and imported labels) with an HDF5 reader of SituCraft's own, if
+  converting with anndata's `write_zarr` proves a burden.
 
 ## Risks
 

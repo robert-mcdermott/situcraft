@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createProject } from './project.js';
-import { addLabel, addLabels, changeLabel, checkLabelParameters, composition, compositionOf, describeLabels, labelColor, labelColors, labelFills, labelSetName, labelSetsFor, labelSetsOf, labelTree, labelsPerCell, labelsRecord, markerSetFile, markerSetVersions, markerSetsOf, namesFromLabels, parseGenes, parseLabelFill, readLabelCells, removeLabel, saveMarkerSet, withoutMissing } from './labels.js';
+import { addLabel, addLabels, changeLabel, checkLabelParameters, checkReferenceParameters, composition, compositionOf, describeLabels, labelColor, labelColors, labelFills, labelSetName, labelSetsFor, labelSetsOf, labelTree, labelsPerCell, labelsRecord, lowConfidenceDefault, markerSetFile, markerSetVersions, markerSetsOf, namesFromLabels, oneLevel, parseGenes, parseLabelFill, readLabelCells, removeLabel, saveMarkerSet, withoutMissing } from './labels.js';
 import { categoricalColor } from './colormaps.js';
 
 const NOW = '2026-10-16T12:00:00.000Z';
@@ -172,4 +172,35 @@ test('labels imported for a segmentation: recorded with their source, carried by
   assert.deepEqual(compositionOf(data, Int32Array.from([0, 0, 1, 1, -1, 1]), 2), [[[1, 1, 0], [1, 1, 1]]]);
   assert.equal(labelColor(0, 2, data.description.sets), '#1f77b4', 'the table\'s color');
   assert.equal(labelColor(1, 2, data.description.sets), categoricalColor(1));
+});
+
+test('labels from a reference: recorded with the reference and the mapping\'s parameters, named by it, one level, flagged for review below their threshold', () => {
+  let p = createProject('Lung', { now: NOW });
+  p = { ...p, datasets: [{ id: 'd1', name: 'lung' }], artifacts: [{ kind: 'clustering', id: 'clu-1', name: 'Clusters', dataset: 'd1', segmentation: 'seg-a', state: 'complete' }] };
+  const reference = { file: 'lung_atlas.zarr', sha256: 'a'.repeat(64), format: 'anndata', matrix: 'X', labelColumn: 'cell_type', geneColumn: '' };
+  const manifest = {
+    id: 'lab-7', kind: 'labels', name: 'Labels of Clusters from lung_atlas.zarr', state: 'complete', created: NOW,
+    lineage: { parents: [{ kind: 'bundle', id: 'b' }, { kind: 'segmentation', id: 'seg-a' }, { kind: 'clustering', id: 'clu-1' }], method: { name: 'SituCraft labels from a reference', version: '1' }, parameters: { parameters: { tune: 0.05, margin: 0, markers: 0 }, reference } },
+    summary: { cells: 10, levels: ['cell_type'], labeled: [9], unlabeled: 1, labels: 3, reference: { format: 'anndata', file: 'lung_atlas.zarr', labels: 3, shared: 280, missing: 20 } },
+  };
+  const record = labelsRecord({ id: 'd1' }, manifest, null, NOW);
+  assert.equal(record.clustering, 'clu-1');
+  assert.equal(record.markers, null);
+  assert.equal(record.source, null);
+  assert.deepEqual(record.reference, reference);
+  assert.deepEqual(record.parameters, { tune: 0.05, margin: 0, markers: 0 });
+  assert.ok(oneLevel(record) && oneLevel({ source: {} }) && !oneLevel({ markers: {} }));
+  assert.equal(labelSetName(record), 'Labels from lung_atlas.zarr (cell_type)');
+  p = addLabels(p, record, NOW);
+  assert.match(p.history.at(-1).detail, /^Labeled the cells of clusters from the reference lung_atlas.zarr \(cell_type\): 3 labels, 280 of the panel's genes shared; 9 of 10 cells labeled, fine-tuning 0.05, margin 0 \(SHA-256 aaaaaaaaaaaa; artifact lab-7\)$/);
+  assert.match(describeLabels(record), /^3 labels from the reference lung_atlas.zarr \(cell_type\), 280 of the panel's genes shared: 9 of 10 cells labeled by their correlation with each label's profile, fine-tuned within 0.05, margin 0/);
+  assert.equal(labelFills(p, 'd1', 'seg-a')[0].label, 'Labels: Labels from lung_atlas.zarr (cell_type)');
+  // The review's default threshold: the fine-tuning threshold, or twice the margin when more.
+  assert.equal(lowConfidenceDefault(record), 0.05);
+  assert.equal(lowConfidenceDefault({ ...record, parameters: { tune: 0.05, margin: 0.04 } }), 0.08);
+  assert.equal(lowConfidenceDefault({ markers: {}, parameters: { margin: 0.1 } }), 0.2);
+  assert.equal(lowConfidenceDefault({ source: {} }), null);
+  assert.equal(checkReferenceParameters({ tune: 0.05, margin: 0, markers: 0 }), null);
+  assert.equal(checkReferenceParameters({ tune: 0.05, margin: 0, markers: 2.5 }), 'Genes per pair is a whole number from 0 to 10,000.');
+  assert.equal(checkReferenceParameters({ tune: -1, margin: 0, markers: 0 }), 'Fine-tuning is a number from 0 to 1.');
 });
