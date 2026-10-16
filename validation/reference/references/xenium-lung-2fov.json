@@ -1,0 +1,303 @@
+{
+ "dataSet": "xenium-lung-2fov",
+ "tools": {
+  "R": "4.6.1",
+  "SingleR": "2.14.2",
+  "Matrix": "1.7.5",
+  "celldex": "1.22.0",
+  "numpy": "2.5.4",
+  "pandas": "3.0.6",
+  "pyarrow": "26.0.0"
+ },
+ "situcraft": {
+  "version": "SituCraft labels from a reference 1",
+  "digest": "0f567c8b92bc150b5066f694731e3fa99a12c3f406ebe8dc0941b33ab5a5a233",
+  "reference": "hpca-main.csv",
+  "sha256": "283c5a72b395076f9bef81362d88e14c9c11a456c3fe4d3518d4177c3097c5b4",
+  "cells": 11820,
+  "labeled": 11820,
+  "shared": 280,
+  "compared": 280,
+  "fineTuned": 10139,
+  "changed": 1472,
+  "parameters": {
+   "tune": 0.05,
+   "margin": 0,
+   "markers": 0
+  }
+ },
+ "singler": {
+  "aggregated": {
+   "scoreMaxAbsDiff": 1.4894390887310038e-08,
+   "scoresWithout": 0,
+   "agreement": 1.0,
+   "firstAgreement": 1.0,
+   "disagreements": []
+  },
+  "default": {
+   "agreement": 0.7198815566835871,
+   "pruned": 24,
+   "disagreements": [
+    {
+     "situcraft": "Hepatocytes",
+     "singler": "Epithelial_cells",
+     "cells": 1667
+    },
+    {
+     "situcraft": "Neurons",
+     "singler": "Epithelial_cells",
+     "cells": 183
+    },
+    {
+     "situcraft": "Embryonic_stem_cells",
+     "singler": "iPS_cells",
+     "cells": 162
+    },
+    {
+     "situcraft": "Gametocytes",
+     "singler": "Epithelial_cells",
+     "cells": 153
+    },
+    {
+     "situcraft": "Hepatocytes",
+     "singler": "iPS_cells",
+     "cells": 129
+    },
+    {
+     "situcraft": "Epithelial_cells",
+     "singler": "iPS_cells",
+     "cells": 102
+    },
+    {
+     "situcraft": "Neurons",
+     "singler": "iPS_cells",
+     "cells": 97
+    },
+    {
+     "situcraft": "Hepatocytes",
+     "singler": "Neurons",
+     "cells": 81
+    }
+   ]
+  }
+ },
+ "labels": [
+  {
+   "label": "Astrocyte",
+   "situcraft": 69,
+   "singlerAggregated": 69,
+   "singlerDefault": 59
+  },
+  {
+   "label": "BM",
+   "situcraft": 0,
+   "singlerAggregated": 0,
+   "singlerDefault": 0
+  },
+  {
+   "label": "BM & Prog.",
+   "situcraft": 0,
+   "singlerAggregated": 0,
+   "singlerDefault": 0
+  },
+  {
+   "label": "B_cell",
+   "situcraft": 0,
+   "singlerAggregated": 0,
+   "singlerDefault": 0
+  },
+  {
+   "label": "CMP",
+   "situcraft": 3,
+   "singlerAggregated": 3,
+   "singlerDefault": 3
+  },
+  {
+   "label": "Chondrocytes",
+   "situcraft": 40,
+   "singlerAggregated": 40,
+   "singlerDefault": 42
+  },
+  {
+   "label": "DC",
+   "situcraft": 2,
+   "singlerAggregated": 2,
+   "singlerDefault": 4
+  },
+  {
+   "label": "Embryonic_stem_cells",
+   "situcraft": 339,
+   "singlerAggregated": 339,
+   "singlerDefault": 381
+  },
+  {
+   "label": "Endothelial_cells",
+   "situcraft": 274,
+   "singlerAggregated": 274,
+   "singlerDefault": 267
+  },
+  {
+   "label": "Epithelial_cells",
+   "situcraft": 5898,
+   "singlerAggregated": 5898,
+   "singlerDefault": 7715
+  },
+  {
+   "label": "Erythroblast",
+   "situcraft": 0,
+   "singlerAggregated": 0,
+   "singlerDefault": 0
+  },
+  {
+   "label": "Fibroblasts",
+   "situcraft": 1,
+   "singlerAggregated": 1,
+   "singlerDefault": 6
+  },
+  {
+   "label": "GMP",
+   "situcraft": 0,
+   "singlerAggregated": 0,
+   "singlerDefault": 0
+  },
+  {
+   "label": "Gametocytes",
+   "situcraft": 277,
+   "singlerAggregated": 277,
+   "singlerDefault": 93
+  },
+  {
+   "label": "HSC_-G-CSF",
+   "situcraft": 0,
+   "singlerAggregated": 0,
+   "singlerDefault": 0
+  },
+  {
+   "label": "HSC_CD34+",
+   "situcraft": 9,
+   "singlerAggregated": 9,
+   "singlerDefault": 16
+  },
+  {
+   "label": "Hepatocytes",
+   "situcraft": 3893,
+   "singlerAggregated": 3893,
+   "singlerDefault": 1996
+  },
+  {
+   "label": "Keratinocytes",
+   "situcraft": 131,
+   "singlerAggregated": 131,
+   "singlerDefault": 202
+  },
+  {
+   "label": "MEP",
+   "situcraft": 5,
+   "singlerAggregated": 5,
+   "singlerDefault": 5
+  },
+  {
+   "label": "MSC",
+   "situcraft": 2,
+   "singlerAggregated": 2,
+   "singlerDefault": 13
+  },
+  {
+   "label": "Macrophage",
+   "situcraft": 12,
+   "singlerAggregated": 12,
+   "singlerDefault": 16
+  },
+  {
+   "label": "Monocyte",
+   "situcraft": 9,
+   "singlerAggregated": 9,
+   "singlerDefault": 7
+  },
+  {
+   "label": "Myelocyte",
+   "situcraft": 2,
+   "singlerAggregated": 2,
+   "singlerDefault": 0
+  },
+  {
+   "label": "NK_cell",
+   "situcraft": 8,
+   "singlerAggregated": 8,
+   "singlerDefault": 8
+  },
+  {
+   "label": "Neuroepithelial_cell",
+   "situcraft": 10,
+   "singlerAggregated": 10,
+   "singlerDefault": 14
+  },
+  {
+   "label": "Neurons",
+   "situcraft": 655,
+   "singlerAggregated": 655,
+   "singlerDefault": 315
+  },
+  {
+   "label": "Neutrophils",
+   "situcraft": 2,
+   "singlerAggregated": 2,
+   "singlerDefault": 3
+  },
+  {
+   "label": "Osteoblasts",
+   "situcraft": 31,
+   "singlerAggregated": 31,
+   "singlerDefault": 38
+  },
+  {
+   "label": "Platelets",
+   "situcraft": 0,
+   "singlerAggregated": 0,
+   "singlerDefault": 1
+  },
+  {
+   "label": "Pre-B_cell_CD34-",
+   "situcraft": 0,
+   "singlerAggregated": 0,
+   "singlerDefault": 0
+  },
+  {
+   "label": "Pro-B_cell_CD34+",
+   "situcraft": 1,
+   "singlerAggregated": 1,
+   "singlerDefault": 1
+  },
+  {
+   "label": "Pro-Myelocyte",
+   "situcraft": 1,
+   "singlerAggregated": 1,
+   "singlerDefault": 1
+  },
+  {
+   "label": "Smooth_muscle_cells",
+   "situcraft": 14,
+   "singlerAggregated": 14,
+   "singlerDefault": 17
+  },
+  {
+   "label": "T_cells",
+   "situcraft": 4,
+   "singlerAggregated": 4,
+   "singlerDefault": 4
+  },
+  {
+   "label": "Tissue_stem_cells",
+   "situcraft": 2,
+   "singlerAggregated": 2,
+   "singlerDefault": 5
+  },
+  {
+   "label": "iPS_cells",
+   "situcraft": 126,
+   "singlerAggregated": 126,
+   "singlerDefault": 588
+  }
+ ],
+ "truth": null
+}

@@ -3,12 +3,14 @@
 package main
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -107,6 +109,57 @@ func (s *store) projectPath(id string) (string, bool) {
 		return "", false
 	}
 	return filepath.Join(s.dir, "projects", id+".json"), true
+}
+
+// projectsNaming answers the names of the saved projects that record an artifact or cite it in a
+// decision.
+func (s *store) projectsNaming(id string) ([]string, error) {
+	entries, err := os.ReadDir(filepath.Join(s.dir, "projects"))
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+		raw, err := os.ReadFile(filepath.Join(s.dir, "projects", entry.Name()))
+		if err != nil {
+			return nil, err
+		}
+		if !bytes.Contains(raw, []byte(id)) {
+			continue
+		}
+		var p struct {
+			Name      string `json:"name"`
+			Artifacts []struct {
+				ID string `json:"id"`
+			} `json:"artifacts"`
+			Decisions []struct {
+				Artifact   string `json:"artifact"`
+				Comparison string `json:"comparison"`
+			} `json:"decisions"`
+		}
+		if err := json.Unmarshal(raw, &p); err != nil {
+			// A project that cannot be read may name it: keep the artifact.
+			names = append(names, strings.TrimSuffix(entry.Name(), ".json"))
+			continue
+		}
+		named := false
+		for _, a := range p.Artifacts {
+			named = named || a.ID == id
+		}
+		for _, d := range p.Decisions {
+			named = named || d.Artifact == id || d.Comparison == id
+		}
+		if named {
+			names = append(names, p.Name)
+		}
+	}
+	return names, nil
 }
 
 func (s *store) listProjects(w http.ResponseWriter, r *http.Request) {

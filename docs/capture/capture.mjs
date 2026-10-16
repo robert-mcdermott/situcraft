@@ -33,6 +33,7 @@ const SHOWN = {
   examples: '~/Library/Application Support/SituCraft/examples',
   cache: '~/Library/Caches/situcraft',
   exports: '~/Documents/SituCraft exports',
+  references: '~/Documents/references',
 };
 
 const args = process.argv.slice(2);
@@ -291,6 +292,119 @@ const scenes = {
     await act('open_example', { example: 'lung' });
     const refined = await act('refine_segmentation', { preset: 'balanced' });
     await act('show_tissue', { segmentation: refined.data.id, fill: 'certainty', opacity: 0.6, all_transcripts: true, color_by: 'probability', channels: { DAPI: { color: '#8c8c8c' } }, center: [750, 300], um_per_pixel: 0.25, cell: 'c100' });
+    await js(`window.situcraftViewer.settled()`);
+  },
+  // The Breast example's cells clustered (wave 4, slice 1): the Cell types view, its clusters with
+  // their sizes and leading markers, the components' variances.
+  async celltypes() {
+    await act('open_example', { example: 'breast' });
+    await act('cluster_cells', {});
+    await waitFor(`Boolean(document.querySelector('.ct-markers tbody tr'))`);
+    await scrollTo('.ct-detail', 'start');
+  },
+  // The Breast example's map beside its tissue (wave 4, slice 2): clusters named (the same name
+  // merging two), the T cells selected on both, the selection's composition.
+  async cellmap() {
+    await act('open_example', { example: 'breast' });
+    await act('cluster_cells', {});
+    await act('name_clusters', { names: { 1: 'Tumour', 5: 'Tumour', 3: 'Dividing tumour', 6: 'Macrophages', 7: 'Fibroblasts', 9: 'T cells', 12: 'Endothelium' } });
+    await act('show_map', { color_by: 'clusters', select: { clusters: [9] } });
+    await waitFor(`Boolean(document.querySelector('.ct-composition'))`);
+    await scrollTo('.cell-map', 'start');
+    await js(`window.situcraft.cellTypesView.map().settled()`);
+    await sleep(400);
+  },
+  // The Breast example labeled from the breast starter set (wave 4, slice 3): each cluster's labels
+  // at the lineage level as bars, names for the clusters from them, the labels with their markers.
+  async labels() {
+    await act('open_example', { example: 'breast' });
+    await act('cluster_cells', {});
+    await act('label_cells', { markers: 'breast' });
+    await waitFor(`Boolean(document.querySelector('.lb-composition tbody tr'))`);
+    await js(`[...document.querySelectorAll('.lb-levels button')].find((b) => b.textContent === 'Lineage')?.click()`);
+    await waitFor(`document.querySelector('.lb-levels button[aria-pressed="true"]')?.textContent === 'Lineage' && Boolean(document.querySelector('.lb-composition tbody tr'))`);
+    await scrollTo('.lb-shown', 'start');
+    await sleep(300);
+  },
+  // The Lung example's instrument clusters imported as labels (wave 4, slice 4): each of
+  // SituCraft's clusters by the instrument's, the labels with their cells.
+  async imported() {
+    await act('open_example', { example: 'lung' });
+    await act('cluster_cells', {});
+    await act('import_labels', { segmentation: 'instrument', instrument: 'graph-based' });
+    await waitFor(`Boolean(document.querySelector('.lb-composition tbody tr'))`);
+    await scrollTo('.lb-shown', 'start');
+    await sleep(300);
+  },
+  // The Breast example's labels reviewed (wave 4, slice 5): the queue, and the first cell's
+  // evidence — its markers, why not its neighbors' label, its neighbors.
+  async review() {
+    await act('open_example', { example: 'breast' });
+    await act('cluster_cells', {});
+    await act('label_cells', { markers: 'breast' });
+    await waitFor(`Boolean(document.querySelector('[data-action=review-queue]'))`);
+    await js(`document.querySelector('[data-action=review-queue]').click()`);
+    await waitFor(`Boolean(document.querySelector('.rv-table tbody tr'))`);
+    await js(`document.querySelector('.rv-table tbody tr').click()`);
+    await waitFor(`Boolean(document.querySelector('.rv-evidence .rv-decide'))`);
+    await scrollTo('.rv-evidence', 'start');
+    await sleep(300);
+  },
+  // The simulated example labeled from a single-cell reference of its types (wave 4, slice 6),
+  // written by situcraft simulate --reference: the reference read against the panel, the cells'
+  // labels by cluster, each label's reference cells and cells.
+  async reference() {
+    places.references = join(temp, 'references');
+    mkdirSync(places.references, { recursive: true });
+    const made = join(places.references, 'simulated');
+    if (!existsSync(`${made}-reference.zarr`)) {
+      await new Promise((done, fail) => spawn(binary, ['simulate', '--quiet', '--reference', '300', made], { cwd: temp, stdio: 'ignore' }).on('exit', (code) => (code ? fail(new Error('situcraft simulate --reference failed')) : done())));
+    }
+    const path = `${made}-reference.zarr`;
+    await act('open_example', { example: 'simulated-standard' });
+    await act('cluster_cells', {});
+    await act('reference_labels', { path, name_clusters: true });
+    await waitFor(`Boolean(document.querySelector('.lb-shown .lb-labels tbody tr'))`);
+    await js(`(() => { const input = document.querySelector('#lb-ref-path'); input.value = ${JSON.stringify(path)}; input.dispatchEvent(new Event('change')); document.querySelector('[data-action=read-reference]').click(); })()`);
+    await waitFor(`Boolean(document.querySelector('[data-action=map-reference]'))`);
+    await scrollTo('section:has(> .lb-reference)', 'start');
+    await sleep(300);
+  },
+  // The Breast example's labels under two segmentations (wave 4, slice 7): the instrument's and a
+  // 5 µm nucleus expansion compared, the clustering and its labels made again on the expansion,
+  // and the comparison's Labels tab with the tissue colored by each side's labels.
+  async impact() {
+    await act('open_example', { example: 'breast' });
+    await act('cluster_cells', {});
+    await act('label_cells', { markers: 'breast' });
+    await act('expand_nuclei', { distance_um: 5 });
+    await act('compare_segmentations', { a: 'Instrument segmentation', b: 'Nucleus expansion, 5 µm' });
+    await act('repeat_on_segmentation', { segmentation: 'Nucleus expansion, 5 µm' });
+    await act('label_impact', { color: true });
+    await waitFor(`Boolean(document.querySelector('.cmp-impact-table tbody tr'))`);
+    await js(`(async () => { const w = window.situcraft.compareView.current(); for (const r of w.state.renderers) await r.renderer.settled(); })()`);
+    await sleep(400);
+  },
+  // The simulated tissue's labels against its truth, a worked example (wave 4, slice 9): its true
+  // types and the instrument's cells labeled from the types' markers read through their
+  // comparison, both tissues colored by type, the example's card beside the Labels tab.
+  async 'worked-labels'() {
+    await act('open_example', { example: 'simulated' });
+    await act('tour', { example: 'simulated', name: 'labels-against-truth' });
+    let step = null;
+    for (let k = 0; k < 6; k += 1) step = await act('tour', { run: true });
+    if (step?.data?.step !== 7) throw new Error(`the worked example stopped at step ${step?.data?.step}: ${step?.message}`);
+    await waitFor(`Boolean(document.querySelector('.cmp-impact-table tbody tr'))`);
+    await js(`(async () => { const w = window.situcraft.compareView.current(); for (const r of w.state.renderers) await r.renderer.settled(); })()`);
+    await sleep(400);
+  },
+  // The Breast example's clusters on the tissue (wave 4, slice 1): the cells filled by cluster,
+  // with the legend.
+  async clusters() {
+    await act('open_example', { example: 'breast' });
+    await act('cluster_cells', {});
+    await act('show_tissue', { fill: 'clusters', opacity: 0.8, transcripts: false, center: [620, 380], um_per_pixel: 0.75, channels: { DAPI: { color: '#8c8c8c' } } });
+    await waitFor(`Boolean(window.situcraftViewer?.clusterFill?.())`);
     await js(`window.situcraftViewer.settled()`);
   },
   // The Lung example's instrument segmentation exported as SpatialData, AnnData and Xenium

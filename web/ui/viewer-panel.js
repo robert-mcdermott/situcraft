@@ -106,7 +106,7 @@ function certaintyLegend(label, help) {
     h('div.viewer-legend-range', h('span', `${CERTAINTY_RANGE[0]} or less`), h('span', String(CERTAINTY_RANGE[1]))), help ? h('div.muted', help) : null);
 }
 
-export function mountViewerPanel(host, { desc, layers, cells, onChange, segmentations = [], drawn = null }) {
+export function mountViewerPanel(host, { desc, layers, cells, onChange, segmentations = [], drawn = null, clusterings = [] }) {
   let state = structuredClone(layers);
   const emit = (what) => onChange(structuredClone(state), what);
   const genes = desc.transcripts?.genes ?? [];
@@ -301,7 +301,9 @@ export function mountViewerPanel(host, { desc, layers, cells, onChange, segmenta
   // --- Cells ---
   const outlines = h('input', { type: 'checkbox', checked: state.cells.outlines });
   const nuclei = h('input', { type: 'checkbox', checked: state.cells.nuclei });
-  const fills = fillsOf(cells, desc);
+  // The cells' own fills, then the clusterings and label sets of the segmentation drawn
+  // (lib/clusterings.js, lib/labels.js).
+  const fills = [...fillsOf(cells, desc), ...clusterings];
   const fill = h('select', { 'aria-label': 'Fill cells by' }, h('option', { value: '' }, 'No fill'), ...fills.map((f) => h('option', { value: f.id, title: f.help ?? '' }, f.label)));
   fill.value = fills.some((f) => f.id === state.cells.fill) ? state.cells.fill : '';
   // Which segmentation is drawn: the dataset's, its default first.
@@ -391,6 +393,8 @@ export function mountViewerPanel(host, { desc, layers, cells, onChange, segmenta
     // limitations' colors, or the certainty scale.
     legend() {
       const id = state.cells.fill;
+      // A clustering's or label set's legend is the Viewer's, once its cells are read.
+      if (id?.startsWith('clusters:') || id?.startsWith('labels:')) return null;
       if (cells?.kind === 'segmentation') {
         const spec = fills.find((f) => f.id === id);
         if (!spec) return null;

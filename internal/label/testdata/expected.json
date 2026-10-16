@@ -1,0 +1,41 @@
+{
+ "pandas": "3.0.6",
+ "pyarrow": "26.0.0",
+ "anndata": "0.13.4",
+ "cells": [
+  "aaaabbbb-1",
+  "aaaacccc-1",
+  "aaaadddd-1",
+  "aaaaeeee-1",
+  "aaaaffff-1",
+  "aaaagggg-1",
+  "aaaahhhh-1",
+  "aaaaiiii-1",
+  "aaaajjjj-1",
+  "µm-cell-2"
+ ],
+ "label": [
+  "Tumour",
+  null,
+  "Tumour",
+  "T cell",
+  null,
+  "Tumour",
+  null,
+  "T cell",
+  "Fibroblast, myo",
+  "Macrophage (M2)"
+ ],
+ "confidence": [
+  0.5,
+  0.75,
+  0.125,
+  0.91,
+  null,
+  1.0,
+  null,
+  null,
+  0.0625,
+  0.25
+ ]
+}

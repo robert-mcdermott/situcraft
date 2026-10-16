@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { TOURS, WORKED, guideFor, segmentationByRole, stepView, tourGenes, workedExamples } from './tours.js';
@@ -78,31 +78,65 @@ test('every worked example asks its question, says what to expect, and its steps
   // The downloaded examples', and the simulated one made on this computer (api_examples.go).
   assert.deepEqual(Object.keys(WORKED).sort(), [...Object.keys(sources), 'simulated-standard'].sort());
   const roles = new Set(['instrument', 'expansion-5', 'planted', 'refined', 'truth']);
+  // The starter marker sets (internal/label/starters), and the simulated tissue's own.
+  const starters = new Set(['simulated', ...readdirSync(join(root, 'internal', 'label', 'starters')).map((f) => f.replace(/\.json$/, ''))]);
   for (const [name, list] of Object.entries(WORKED)) {
     for (const w of list) {
       assert.equal(guideFor(name, w.id), w);
       assert.ok(w.question.endsWith('?') && w.expect.length > 80 && w.steps.length >= 5, w.id);
+      // What the steps have made: segmentations by role, comparisons (a|b), clusterings and labels
+      // of a segmentation (clustering:role, labels:role).
       const made = new Set(['instrument']);
       for (const step of w.steps) {
-        assert.ok(['segmentation', 'compare', 'viewer', 'qc', 'data'].includes(step.mode), step.title);
+        assert.ok(['segmentation', 'compare', 'viewer', 'qc', 'data', 'celltypes'].includes(step.mode), step.title);
         assert.ok(step.title && step.text.length > 40, step.title);
         if (step.do) {
+          const d = step.do;
           assert.ok(step.label, `${step.title} says what it does`);
-          if (step.do.action === 'expand') made.add(`expansion-${step.do.distance}`);
-          if (step.do.action === 'plant') made.add('planted');
+          if (d.action === 'expand') made.add(`expansion-${d.distance}`);
+          if (d.action === 'plant') made.add('planted');
           // A refinement is compared with the instrument's at once (api_refine.go).
-          if (step.do.action === 'refine') made.add('refined').add('instrument|refined');
-          if (step.do.action === 'import-truth') made.add('truth');
-          if (step.do.action === 'compare') {
-            assert.ok(made.has(step.do.a) && made.has(step.do.b), `${step.title}: its segmentations are made before`);
-            made.add(`${step.do.a}|${step.do.b}`);
+          if (d.action === 'refine') made.add('refined').add('instrument|refined');
+          if (d.action === 'import-truth') made.add('truth');
+          if (d.action === 'compare') {
+            assert.ok(made.has(d.a) && made.has(d.b), `${step.title}: its segmentations are made before`);
+            made.add(`${d.a}|${d.b}`);
+          }
+          // Cell types: in the Cell types view, of segmentations made before.
+          if (['cluster', 'label', 'import-truth-labels', 'remake'].includes(d.action)) assert.equal(step.mode, 'celltypes', step.title);
+          if (d.action === 'cluster') {
+            assert.ok(made.has(d.segmentation ?? 'instrument'), `${step.title}: its segmentation is made before`);
+            made.add(`clustering:${d.segmentation ?? 'instrument'}`);
+          }
+          if (d.action === 'label') {
+            assert.ok(made.has(`clustering:${d.segmentation ?? 'instrument'}`) && starters.has(d.markers), `${step.title}: its clustering is made before, its markers a starter set`);
+            made.add(`labels:${d.segmentation ?? 'instrument'}`);
+          }
+          if (d.action === 'import-truth-labels') {
+            assert.ok(made.has('truth'), `${step.title}: the truth is imported before`);
+            made.add('labels:truth');
+          }
+          if (d.action === 'remake') {
+            assert.ok(roles.has(d.to) && made.has(d.to) && made.has(`labels:${d.from}`), `${step.title}: its labels and the other segmentation are made before`);
+            made.add(`clustering:${d.to}`).add(`labels:${d.to}`);
           }
         }
         if (step.segmentation) assert.ok(step.mode === 'viewer' && roles.has(step.segmentation) && made.has(step.segmentation), `${step.title}: its segmentation is made before`);
         if (step.compare) {
           assert.ok(roles.has(step.compare.a) && roles.has(step.compare.b), step.title);
           assert.ok(made.has(`${step.compare.a}|${step.compare.b}`), `${step.title}: its comparison is made before`);
+          if (step.compare.tab === 'labels') assert.ok(made.has(`labels:${step.compare.a}`) && made.has(`labels:${step.compare.b}`), `${step.title}: both sides' labels are made before`);
         }
+        if (step.celltypes) {
+          const c = step.celltypes;
+          const r = c.segmentation ?? 'instrument';
+          assert.equal(step.mode, 'celltypes', step.title);
+          assert.ok(made.has(`clustering:${r}`), `${step.title}: its clustering is made before`);
+          if (/^(labels|confidence)/.test(c.color ?? '') || c.review || c.section === 'labels') assert.ok(made.has(`labels:${r}`), `${step.title}: its labels are made before`);
+          if (c.section) assert.ok(['map', 'selection', 'clusters', 'labels', 'review'].includes(c.section), step.title);
+        }
+        const fill = step.cells?.fill ?? '';
+        if (fill === 'clusters' || /^labels/.test(fill)) assert.ok(made.has(`${fill === 'clusters' ? 'clustering' : 'labels'}:${step.segmentation ?? 'instrument'}`), `${step.title}: what fills the cells is made before`);
       }
     }
   }

@@ -1,8 +1,9 @@
 // The scale test (wave 3, slice 9; requirements S12 and P6): a generated tissue of about 55
 // million transcripts (the simulator's large preset, made in tiles) is refined in patches and read
-// by the Viewer, each step in a process of its own, timed and its peak memory measured against its
-// budget; then everything is deleted. It needs about 8 GB of disk and, on four cores, about an
-// hour; the weekly workflow runs it:
+// by the Viewer, and its cells typed (wave 4, slice 8: the instrument's segmentation clustered,
+// mapped and labeled, and the map drawn in headless Chrome), each step in a process of its own,
+// timed and its peak memory measured against its budget; then everything is deleted. It needs
+// about 8 GB of disk and, on four cores, about an hour and a half; the weekly workflow runs it:
 //
 //	SITUCRAFT_SCALE=/a/folder/with/room go test ./validation/ -run Scale -v -timeout 3h
 //
@@ -41,6 +42,11 @@ const (
 	refineBudget   = 8 * gb   // and within a tenth over the preflight's estimate
 	deriveBudget   = 3 * gb   // the derived data, the instrument's segmentation and the import
 	viewerBudget   = 1.5 * gb // the Viewer: reading a refinement whole took 1.8 GB at this scale
+	typingBudget   = 5 * gb   // the instrument's segmentation made, and about 400,000 cells typed
+	mapBudget      = 2 * gb   // SituCraft serving the page that draws the map
+	// typingTime bounds the typing on four cores; mapTime the map's showing in the page.
+	typingTime = 30 * time.Minute
+	mapTime    = 60 * time.Second
 	// tileBudget is the slowest a transcript tile with its cells and probabilities may answer (the
 	// Viewer suite's query budget).
 	tileBudget = 500 * time.Millisecond
@@ -201,6 +207,155 @@ func TestScale(t *testing.T) {
 	}
 	if slowest > tileBudget {
 		t.Errorf("a transcript tile took %v, over the budget of %v", slowest, tileBudget)
+	}
+
+	// The cells typed, in another: the instrument's segmentation (its files made on first use, the
+	// mask read a row of chunks at a time) clustered (its neighbors by NN-Descent above 50,000 cells,
+	// their recall measured), mapped (the epochs in batches over every core) and labeled from the
+	// simulated types' markers.
+	p = startSituCraft(t, bin, library, cache, bundle)
+	start = time.Now()
+	json.Unmarshal(p.get("/api/artifacts"), &list)
+	seg := ""
+	for _, a := range list.Artifacts {
+		if a.Kind == "segmentation" && !slices.ContainsFunc(a.Lineage.Parents, func(p struct{ Kind string }) bool { return p.Kind == "import" }) {
+			seg = a.ID
+		}
+	}
+	var made struct{ ID string }
+	answer := p.post("/api/local/0/cluster", fmt.Sprintf(`{"segmentation":%q}`, seg))
+	json.Unmarshal(answer, &made)
+	p.job(answer)
+	clustering := made.ID
+	answer = p.post("/api/local/0/embed", fmt.Sprintf(`{"clustering":%q}`, clustering))
+	json.Unmarshal(answer, &made)
+	p.job(answer)
+	embedding := made.ID
+	var offer struct {
+		Starters []struct {
+			ID  string
+			Set json.RawMessage
+		}
+	}
+	json.Unmarshal(p.get("/api/local/0/clusterings/"+clustering+"/markers"), &offer)
+	var markers json.RawMessage
+	for _, st := range offer.Starters {
+		if st.ID == "simulated" {
+			markers = st.Set
+		}
+	}
+	if markers == nil {
+		t.Fatal("no marker set offered for the simulated tissue")
+	}
+	answer = p.post("/api/local/0/label", fmt.Sprintf(`{"clustering":%q,"markers":%s}`, clustering, markers))
+	json.Unmarshal(answer, &made)
+	p.job(answer)
+	labels := made.ID
+	var cd struct {
+		Cells struct{ Analyzed int }
+		Graph struct {
+			Search *struct {
+				Recall float64
+				Rounds int
+			}
+		}
+		Clusters struct{ Count int }
+		Seconds  map[string]float64
+	}
+	json.Unmarshal(p.get("/api/artifacts/"+clustering+"/files/clustering.json"), &cd)
+	var ed struct {
+		Fitted  struct{ Optimizer string }
+		Quality struct {
+			Trustworthiness float64
+			Search          *struct{ Recall float64 }
+		}
+		Seconds map[string]float64
+	}
+	json.Unmarshal(p.get("/api/artifacts/"+embedding+"/files/embedding.json"), &ed)
+	var ld struct {
+		Description struct {
+			Sets []struct {
+				Name  string
+				Cells int
+			}
+			Cells struct {
+				Analyzed int
+				Labeled  []int
+			}
+		}
+	}
+	json.Unmarshal(p.get("/api/labels/"+labels), &ld)
+	typing := p.stop("Typing the cells", start)
+	within(typing, typingBudget)
+	t.Logf("typed: %d cells, %d clusters (%v); neighbors' recall %+v; map %v, trustworthiness %.3f, its neighborhoods' recall %+v; %v of %d labeled",
+		cd.Cells.Analyzed, cd.Clusters.Count, cd.Seconds, cd.Graph.Search, ed.Seconds, ed.Quality.Trustworthiness, ed.Quality.Search, ld.Description.Cells.Labeled, ld.Description.Cells.Analyzed)
+	if time.Duration(typing.Seconds*float64(time.Second)) > typingTime {
+		t.Errorf("typing took %.0f s, over its budget of %v", typing.Seconds, typingTime)
+	}
+	if cd.Cells.Analyzed < cells*3/4 || cd.Graph.Search == nil || cd.Graph.Search.Recall < 0.9 || ed.Fitted.Optimizer == "" || ed.Quality.Search == nil || ed.Quality.Trustworthiness < 0.75 {
+		t.Errorf("the clustering or the map: %d cells analyzed of %d; neighbors %+v; map optimizer %q, trustworthiness %.3f, %+v", cd.Cells.Analyzed, cells, cd.Graph.Search, ed.Fitted.Optimizer, ed.Quality.Trustworthiness, ed.Quality.Search)
+	}
+	// Each type's share of the labeled cells against its share of the true cells.
+	var sim struct {
+		Made struct {
+			CellsByType map[string]int `json:"cells_by_type"`
+		}
+	}
+	raw, err := os.ReadFile(filepath.Join(bundle, "situcraft-simulation.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	json.Unmarshal(raw, &sim)
+	trueTotal, labeledTotal := 0, 0
+	for _, n := range sim.Made.CellsByType {
+		trueTotal += n
+	}
+	for _, s := range ld.Description.Sets {
+		labeledTotal += s.Cells
+	}
+	// Half the sum over every type, labeled or true, of the difference of its shares.
+	share := map[string]float64{}
+	for _, s := range ld.Description.Sets {
+		share[s.Name] += float64(s.Cells) / float64(labeledTotal)
+	}
+	for name, n := range sim.Made.CellsByType {
+		share[name] -= float64(n) / float64(trueTotal)
+	}
+	distance := 0.0
+	for _, d := range share {
+		distance += math.Abs(d) / 2
+	}
+	t.Logf("the types' shares against the truth's: total variation distance %.4f", distance)
+	if labeledTotal < cd.Cells.Analyzed*9/10 || distance > 0.05 {
+		t.Errorf("%d of %d cells labeled; the types' shares %.4f from the truth's", labeledTotal, cd.Cells.Analyzed, distance)
+	}
+
+	// The map drawn in headless Chrome, by a SituCraft serving the page.
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Log("Node is not installed: the map is not drawn")
+		return
+	}
+	p = startSituCraft(t, bin, library, cache, bundle)
+	start = time.Now()
+	var conn struct{ Token string }
+	raw, _ = os.ReadFile(filepath.Join(library, "remote.json"))
+	json.Unmarshal(raw, &conn)
+	// go test runs in the package's folder, validation/.
+	printed, err := exec.Command("node", "scale-map.mjs", p.url, conn.Token, bundle).CombinedOutput()
+	if err != nil {
+		p.stop("The map drawn", start)
+		t.Fatalf("the map in Chrome: %v\n%s", err, printed)
+	}
+	var drawn struct {
+		Cells     int
+		Seconds   float64
+		RecolorMs float64
+	}
+	json.Unmarshal(printed[bytes.LastIndexByte(bytes.TrimSpace(printed), '\n')+1:], &drawn)
+	within(p.stop("The map drawn", start), mapBudget)
+	t.Logf("the map: %d cells shown in %.1f s, colored again in %.0f ms", drawn.Cells, drawn.Seconds, drawn.RecolorMs)
+	if drawn.Cells != cd.Cells.Analyzed || time.Duration(drawn.Seconds*float64(time.Second)) > mapTime {
+		t.Errorf("the map drew %d of %d cells in %.1f s (budget %v)", drawn.Cells, cd.Cells.Analyzed, drawn.Seconds, mapTime)
 	}
 }
 

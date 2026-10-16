@@ -200,6 +200,96 @@
   "violations": []
  },
  {
+  "scene": "celltypes",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "celltypes",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "cellmap",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "cellmap",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "labels",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "labels",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "imported",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "imported",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "review",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "review",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "reference",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "reference",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "impact",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "impact",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "worked-labels",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "worked-labels",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "clusters",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "clusters",
+  "theme": "light",
+  "violations": []
+ },
+ {
   "scene": "export",
   "theme": "dark",
   "violations": []

@@ -18,6 +18,9 @@ import { mountViewerPanel, defaultLayers, cellFillColors } from './viewer-panel.
 import { defaultChoice, readSegCells, segmentationChoices } from '../lib/segview.js';
 import { hexColor } from '../render/gl.js';
 import { categoricalColor } from '../lib/colormaps.js';
+import { clusterColors, clusterFills, clusterNames, mergedOf, nameOf } from '../lib/clusterings.js';
+import { labelColor, labelColors, labelFills, parseLabelFill } from '../lib/labels.js';
+import { labelSource, labelVersions, perCell, refOf } from './label-sources.js';
 
 // Per dataset id: { camera, layers, selected } for the session.
 const sessions = new Map();
@@ -175,11 +178,16 @@ export function mountViewer(app, container) {
     // own cells are).
     const choices = () => segmentationChoices(app.store.project, t.dataset.id);
     const drawnChoice = () => state.seg?.choice ?? choices().find((c) => c.instrument) ?? null;
+    // What the panel lists: the segmentations, and the drawn one's clusterings.
+    // Curated and consensus label sets, drawn as labels at one level.
+    const versionFills = () => labelVersions(app.store.project, t.dataset.id, drawnChoice()?.id).filter((v) => v.kind === 'curated' || v.kind === 'consensus').map((v) => ({ id: `labels:${v.id}:0`, labels: v.id, level: 0, label: `${v.kind === 'curated' ? 'Curated' : 'Consensus'} labels: ${v.name}` }));
+    const analysisFills = () => [...clusterFills(app.store.project, t.dataset.id, drawnChoice()?.id), ...labelFills(app.store.project, t.dataset.id, drawnChoice()?.id), ...versionFills()];
+    const choiceKey = () => `${choices().map((c) => `${c.id}${c.isDefault ? '*' : ''}`).join()}|${analysisFills().map((f) => f.id).join()}`;
 
     function mountPanel(start) {
       clear(panelHost);
-      state.choiceKey = choices().map((c) => `${c.id}${c.isDefault ? '*' : ''}`).join();
-      panel = mountViewerPanel(panelHost, { desc, layers: start, cells: renderer.cells, app, segmentations: choices(), drawn: drawnChoice(), onChange: (next, what) => {
+      state.choiceKey = choiceKey();
+      panel = mountViewerPanel(panelHost, { desc, layers: start, cells: renderer.cells, app, segmentations: choices(), drawn: drawnChoice(), clusterings: analysisFills(), onChange: (next, what) => {
         state.layers = next;
         renderer.setLayers(next);
         if (what === 'segmentation') {
@@ -194,8 +202,87 @@ export function mountViewer(app, container) {
     }
     mountPanel(layers);
 
+    // The fill's colors per cell; a clustering's are read first (each cell's cluster, from the
+    // program), and must be of the cells drawn.
     function applyFill() {
-      renderer.setCellColors(cellFillColors(state.layers.cells.fill, renderer.cells, desc));
+      const fill = state.layers.cells.fill;
+      state.clusterFill = null;
+      // Every change of fill: a clustering's or labels' colors read for an earlier one are dropped.
+      const mine = (state.fillGeneration = (state.fillGeneration ?? 0) + 1);
+      const asLabels = parseLabelFill(fill);
+      if (asLabels) {
+        renderer.setCellColors(null);
+        labelSource(app, refOf(asLabels.id, asLabels.level)).then((src) => {
+          if (mine !== state.fillGeneration || current !== state) return;
+          if (src.segCells !== renderer.cells?.n) {
+            toast(`The labels are of another segmentation's ${formatCount(src.segCells)} cells; ${formatCount(renderer.cells?.n ?? 0)} are drawn.`, { kind: 'error' });
+            return;
+          }
+          const sets = src.names.map((name, k) => ({ name, color: src.colors[k] }));
+          const per = perCell(src, sets.length);
+          const counts = new Map();
+          let analyzed = 0;
+          for (const k of per) {
+            if (k >= 0) {
+              counts.set(k, (counts.get(k) ?? 0) + 1);
+              analyzed += 1;
+            }
+          }
+          state.clusterFill = { labels: true, unlabeled: sets.length, sets, counts, analyzed, cells: per.length, name: [...labelFills(app.store.project, t.dataset.id, drawnChoice()?.id), ...versionFills()].find((f) => f.id === fill)?.label ?? src.name, rgba: labelColors(per, sets.length, sets) };
+          renderer.setCellColors(state.clusterFill.rgba);
+          updateLegend();
+        }).catch((error) => toast(`The labels could not be drawn: ${error.message}`, { kind: 'error' }));
+        return;
+      }
+      if (!fill?.startsWith('clusters:')) {
+        renderer.setCellColors(cellFillColors(fill, renderer.cells, desc));
+        return;
+      }
+      const id = fill.slice('clusters:'.length);
+      renderer.setCellColors(null);
+      app.bundles.clusteringData(id).then((data) => {
+        if (mine !== state.fillGeneration || current !== state) return;
+        if (data.cluster.length !== renderer.cells?.n) {
+          toast(`The clustering is of another segmentation's ${formatCount(data.cluster.length)} cells; ${formatCount(renderer.cells?.n ?? 0)} are drawn.`, { kind: 'error' });
+          return;
+        }
+        state.clusterFill = { id, sizes: data.sizes, analyzed: data.description.cells.analyzed, cells: data.cluster.length, name: clusterFills(app.store.project, t.dataset.id, drawnChoice()?.id).find((f) => f.clustering === id)?.label ?? 'Clusters' };
+        const names = clusterNames(app.store.project, id);
+        state.clusterFill.names = names;
+        state.clusterFill.merged = mergedOf(names, data.sizes.length);
+        state.clusterFill.rgba = clusterColors(data.cluster, (k) => state.clusterFill.merged[k]);
+        renderer.setCellColors(state.clusterFill.rgba);
+        updateLegend();
+      }).catch((error) => toast(`The clusters could not be drawn: ${error.message}`, { kind: 'error' }));
+    }
+
+    // A clustering's legend: each cluster's color and cells (the first 24), and the cells not
+    // analyzed, which are not filled.
+    function clusterLegend() {
+      const f = state.clusterFill;
+      if (!f) return null;
+      if (f.labels) {
+        const entries = [...f.counts.entries()].sort((a, b) => (a[0] === f.unlabeled) - (b[0] === f.unlabeled) || b[1] - a[1]);
+        const shown = entries.slice(0, 24);
+        return h('div', h('b', f.name),
+          ...shown.map(([k, size]) => h('div.viewer-legend-item', h('span.dot', { style: { background: labelColor(k, f.unlabeled, f.sets) } }), k === f.unlabeled ? 'No label' : f.sets[k].name, h('span.muted', formatCount(size)))),
+          entries.length > shown.length ? h('div.muted', `and ${entries.length - shown.length} more labels`) : null,
+          f.analyzed < f.cells ? h('div.muted', `${formatCount(f.cells - f.analyzed)} cells not analyzed are not filled.`) : null);
+      }
+      // Clusters sharing a name are one entry, in the first one's color.
+      const groups = new Map();
+      f.sizes.forEach((size, k) => {
+        const rep = f.merged?.[k] ?? k;
+        const g = groups.get(rep) ?? { name: nameOf(f.names, rep), size: 0 };
+        g.size += size;
+        groups.set(rep, g);
+      });
+      const entries = [...groups.entries()];
+      const shown = entries.slice(0, 24);
+      return h('div', h('b', f.name),
+        ...shown.map(([rep, g]) => h('div.viewer-legend-item', h('span.dot', { style: { background: categoricalColor(rep) } }), g.name, h('span.muted', formatCount(g.size)))),
+        entries.length > shown.length ? h('div.muted', `and ${entries.length - shown.length} smaller clusters`) : null,
+        f.analyzed < f.cells ? h('div.muted', `${formatCount(f.cells - f.analyzed)} cells not analyzed are not filled.`) : null);
     }
 
     // The legend: which segmentation is drawn and how it was made, the fill's scale, and the
@@ -206,7 +293,7 @@ export function mountViewer(app, container) {
       const cellsShown = state.layers.cells.outlines || state.layers.cells.fill;
       if (state.loadingSeg) legend.append(h('div.viewer-legend-seg', h('b', state.loadingSeg.name), h('div.muted', 'Reading its cells…')));
       else if (c && cellsShown && choices().length > 1) legend.append(h('div.viewer-legend-seg', h('b', c.name), h('div.muted', `${c.about[0].toUpperCase()}${c.about.slice(1)}`)));
-      const part = state.layers.cells.fill ? panel.legend?.() : null;
+      const part = state.layers.cells.fill ? (state.layers.cells.fill.startsWith('clusters:') || parseLabelFill(state.layers.cells.fill) ? clusterLegend() : panel.legend?.()) : null;
       if (part) legend.append(part);
       const probability = panel.probabilityLegend?.();
       if (probability) legend.append(probability);
@@ -533,8 +620,19 @@ export function mountViewer(app, container) {
     const asked = app.pendingSegmentation?.dataset === t.dataset.id ? app.pendingSegmentation : null;
     if (asked) app.pendingSegmentation = null;
     drawSegmentation(asked ? asked.segmentation : layers.cells.segmentation).then(() => {
+      if (asked?.fill !== undefined) setFill(asked.fill);
       if (!asked && session?.selected >= 0) selectRow(session.selected);
     });
+
+    // Fills the cells by a fill asked for (a clustering's, from Show on the tissue), outlines on.
+    function setFill(fill) {
+      if (current !== state) return;
+      state.layers = { ...state.layers, cells: { ...state.layers.cells, fill, outlines: true } };
+      renderer.setLayers(state.layers);
+      mountPanel(state.layers);
+      applyFill();
+      updateLegend();
+    }
 
     // --- Saved views ---
     function captureNow(name = '') {
@@ -569,7 +667,7 @@ export function mountViewer(app, container) {
 
     // The segmentations listed again when the project's change (one made, promoted or removed).
     state.refreshChoices = () => {
-      const key = choices().map((c) => `${c.id}${c.isDefault ? '*' : ''}`).join();
+      const key = choiceKey();
       if (key === state.choiceKey) return;
       if (state.seg && !choices().some((c) => c.id === state.seg.id)) drawSegmentation(null);
       else {
@@ -583,7 +681,9 @@ export function mountViewer(app, container) {
       const asked = app.pendingSegmentation;
       if (asked?.dataset === t.dataset.id) {
         app.pendingSegmentation = null;
-        drawSegmentation(asked.segmentation);
+        drawSegmentation(asked.segmentation).then(() => {
+          if (asked.fill !== undefined) setFill(asked.fill);
+        });
       }
       const view = app.pendingView;
       if (view?.mode !== 'viewer' || view.dataset !== t.dataset.id) return;
@@ -614,7 +714,8 @@ export function mountViewer(app, container) {
       segmentationReady: () => state.segReady,
       cellsDrawn: () => renderer.cells,
       choices: () => choices(),
-      fillColors: () => cellFillColors(state.layers.cells.fill, renderer.cells, desc),
+      fillColors: () => (state.layers.cells.fill?.startsWith('clusters:') || parseLabelFill(state.layers.cells.fill) ? state.clusterFill?.rgba ?? null : cellFillColors(state.layers.cells.fill, renderer.cells, desc)),
+      clusterFill: () => state.clusterFill,
       setCells: (patch) => {
         state.layers = { ...state.layers, cells: { ...state.layers.cells, ...patch } };
         renderer.setLayers(state.layers);

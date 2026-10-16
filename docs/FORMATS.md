@@ -71,12 +71,61 @@ checked against the dataset (the transcripts it names, by id and, where it gives
 where its cells lie; its ids), and becomes a segmentation of SituCraft's own files (below), with
 the SHA-256 of every file it read.
 
+## Labels SituCraft imports
+
+The Cell types view's **Labels made elsewhere** (and the `import_labels` remote action) reads cells'
+labels made by another tool or an earlier analysis, for a segmentation's cells:
+
+| Format | Files | What is read |
+| --- | --- | --- |
+| CSV or TSV | `.csv`, `.tsv`, `.txt`, gzipped or not; a header row, comma or tab separated | every column; a column of numbers wherever every value is one (or missing) |
+| Parquet | `.parquet` (text, numbers and booleans; dictionary-encoded columns) | every column |
+| AnnData Zarr | an AnnData object's store (`.zarr` folder or its zip, format 2 or 3), or a SpatialData store with a table | its `obs`: the index and every column (text, categorical, nullable, numbers) |
+| Xenium Explorer cell groups | a CSV of `cell_id`, `group` and, optionally, `color` (`#rrggbb`, a group's given once) | the groups and their colors |
+| The instrument's clusters | the bundle's `analysis.tar.gz` (or `analysis/`) | a clustering's barcodes and clusters, labeled `Instrument cluster N` by the instrument's numbers |
+
+Four columns are chosen: the cells' **ids** (by default `cell_id`, `Cell ID`, `cell`, `barcode`,
+`id`, an AnnData index, else the first column of distinct text), their **labels** (`group`,
+`cell_type`, `celltype`, `label`, `annotation`, `cluster`, `leiden` …, else the first column of 2 to
+1,000 repeated values), and optionally a **confidence** (numbers) and **colors**. Each row's id is
+matched exactly to a cell's id in the segmentation (the bundle's own for the instrument's
+segmentation; SituCraft's for its own, as its exports write them). A table naming cells the
+segmentation does not have is refused, with how many and the first few; so is one naming a cell
+twice, or holding more than 1,000 labels. Cells the table does not name, and rows whose label is
+`""`, `NA`, `nan`, `None` or `null`, have no label. The import records the SHA-256 of the file
+read (of an AnnData store, its `obs`'s files).
+
+## References SituCraft reads
+
+The Cell types view's **Labels from a reference** (and the `reference_labels` remote action) reads a
+labeled single-cell reference, restricted to the clustering's panel:
+
+| Format | Files | What is read |
+| --- | --- | --- |
+| AnnData Zarr | an AnnData object's store (`.zarr` folder or its zip, format 2 or 3) | the cells' labels from an `obs` column (2 to 500 labels); the genes' names from `var` (its index or a column); their expression from `layers/counts`, `raw/X` (named by `raw/var`) or `X` (sparse or dense): counts (whole numbers) or log-normalized values; scaled values (below 0) are refused |
+| A table of profiles | `.csv`, `.tsv`, `.txt` (gzipped or not) or `.parquet` | a row per label (a column of labels, each gene a numeric column named for it) or a row per gene (a column of genes, each label a numeric column named for it): each label's mean expression, as given |
+
+The usual names of label columns are suggested (`cell_type`, `celltype`, `cell_type_fine`,
+`cell_ontology_class`, `ann_finest_level`, `label.main` …), and the gene column naming most of the
+panel's genes. Genes are matched to the panel's by name, exactly, else ignoring case where that
+names one panel gene. Counts are scaled to the reference's median total and log-transformed (log1p)
+before each label's cells are averaged. The SHA-256 of the file read (of a store, of its files) is
+recorded. An `.h5ad` file is read once anndata has written it as Zarr:
+
+```python
+import anndata
+anndata.read_h5ad("reference.h5ad").write_zarr("reference.zarr")
+```
+
+`situcraft simulate --reference N <folder>` writes a reference of the simulated tissue's types,
+N cells of each, as `<folder>-reference.zarr` (its types in `obs`'s `cell_type`, counts in `X`).
+
 ## Other files
 
 SituCraft recognizes OME-TIFF images, Parquet and CSV tables, GeoJSON polygons and Zarr stores
 (on the command line or by **Open a bundle**) and lists them under **On this computer**. Reading
-them for analysis arrives with later releases: registered H&E and IF images, labels and
-annotations (see the [roadmap](../situcraft-spec/roadmap.md)).
+them for analysis arrives with later releases: registered H&E and IF images and annotations (see
+the [roadmap](../situcraft-spec/roadmap.md)).
 
 ## What SituCraft writes
 
@@ -89,7 +138,7 @@ A project is one JSON document, saved automatically in the library (`<data dir>/
 | `format`, `version` | `"situcraft-project"`, `1` |
 | `id`, `name`, `created`, `modified` | Its identity |
 | `datasets` | Each bundle: its place, run and analysis identifiers, panel, tissue, counts, pixel size, channels, a fingerprint of its files (each file's size; the SHA-256 of its manifest, metrics and panel), and its validation summary and findings |
-| `artifacts` | Results: filters (a name, a version, its parent version, its conditions, and its result: the number of cells, how many it keeps, and a checksum of which), and from 0.2.0 segmentations and comparisons (below) |
+| `artifacts` | Results: filters (a name, a version, its parent version, its conditions, and its result: the number of cells, how many it keeps, and a checksum of which), from 0.2.0 segmentations and comparisons, and from 0.4.0 clusterings, their names and maps, marker sets, label sets, and curated and consensus labels (below) |
 | `decisions` | Recorded choices, with their reasons (from 0.2.0) |
 | `views` | Saved views (below) |
 | `exports` | The exports written from its segmentations (from 0.2.0; absent until the first) |
@@ -110,9 +159,10 @@ view valid when the derived data are rebuilt. A link to a view is the page's add
 the project.
 
 SituCraft reads projects saved by any earlier version; a project saved by a newer version is
-refused with a message to update. A project saved by each release (0.1.0, 0.2.0) is kept in
-`validation/projects/`, and every later release is checked to reopen it exactly and, for 0.2.0's,
-to make its artifacts again with the same checksums.
+refused with a message to update. A project saved by each release (0.1.0, 0.2.0, 0.3.0, 0.4.0) is
+kept in `validation/projects/`, and every later release is checked to reopen it exactly and, from
+0.2.0's, to make its artifacts again with the same checksums (a clustering, a map and a label set
+from markers, from 0.4.0's, with the same summary).
 
 A segmentation is recorded in `artifacts` (kind `segmentation`) as the artifact the program keeps:
 its id, name, dataset, state, method (name, version, citation, and the cells each of the
@@ -215,6 +265,120 @@ A comparison of two segmentations is an artifact of two files:
 | --- | --- | --- |
 | `comparison.json` | | `format` (`"situcraft-comparison"`), `version`, `method`; the two segmentations (`a`, `b`: artifact id and name); `params` (the correspondence's and co-expression's thresholds, the regions' size, the seed); each segmentation's measures (`metricsA`, `metricsB`); the differences by class (`classes`, and each side's cells in each: `cellsA`, `cellsB`); the transcripts that changed cell (`changes`, `changesQ20`: gained, lost, moved; `changesQ20OfAssignedA`, of those A assigns to a cell: with the truth as A, the rest are in their true cell); `iou` and `displacement` of the cells the same in both; `pixelAgreement`; the co-expression reference (`coexpression`) and the MECR's gene pairs (`mecrPairs`); and the same counts by region (`regions`: squares of `sizeUm`, row-major). A measure not taken is `null` |
 | `groups.bin` | `SCCG` | Each difference: its class (by its index in one-to-one, expanded, contracted, split, merged, rearranged, only in A, only in B, assignment-only), its cells in A and in B (indices into each segmentation's cells), the IoU, the transcripts' Jaccard and the boundary displacement (µm) of one cell in each, the gene transcripts whose cell changed, where it lies (µm), its cells' gene transcripts in A and in B, and the most pairs of mutually exclusive lineage markers one of its cells expresses together in A and in B (method version 2) |
+
+A comparison can be removed from its project; its folder then moves to the library's
+`trash/artifacts/<id>-<time>/` once no saved project names it.
+
+### Clusterings
+
+A clustering of a segmentation's cells (from 0.4.0) is an artifact of five files. The binary ones
+have the envelope above (`segmentation`'s: magic, version, length, zlib); arrays are
+little-endian, a string is its length (unsigned varint) then its UTF-8 bytes.
+
+| File | Magic | Holds |
+| --- | --- | --- |
+| `clustering.json` | | `format` (`"situcraft-clustering"`), `version`, `method`; the `segmentation` (artifact id and name); `parameters` (`minTranscripts`, `components`, `neighbors`, `resolution`, `seed`); `fixed` (the normalization and its `targetSum`, the median total; `clip`; the metric, graph, quality and Leiden's `randomness`; the markers' test); `cells` (the segmentation's, those `analyzed`, `excluded` by the rule or the `filter` with its id, name and checksum, `withoutTranscripts`); `genes` (`count`, `notDetected`, `medianCellsExpressing`); `pca` (`components`, each one's `variance` and `varianceRatio`, `totalVariance`; for panels of more than 1,000 genes, the `solver`, the Lanczos method); `graph` (`neighbors`, `edges`; for more than 50,000 cells, the `search`: its `method`, NN-Descent, the `width` searched, its sample rate `rho`, stop `delta` and `rounds`, and its `recall` against exact search over `queries` cells); `clusters` (`count`, `sizes` from the largest, `modularity`, `iterations`); `top`, each cluster's first ten markers (`gene`, `score`, `logfc`, `padj`, `pctIn`, `pctOut`); `seconds`, the run's timings |
+| `cells.bin` | `SCKC` | The cells analyzed (u32 count; u32 indices into the segmentation's cells, increasing) and each one's cluster (u32, 0 the largest) |
+| `pca.bin` | `SCPC` | The genes (u32 count; strings), the components k (u32), each gene's mean and standard deviation of the log-normalized values (f64), the loadings (f64, genes × k, row-major), and each analyzed cell's scores (u32 count; f32, cells × k) |
+| `neighbors.bin` | `SCKN` | The cells n and the neighbors k of each (u32, u32: the parameter less one, the cell itself not listed), each one's neighbors nearest first (u32 indices among the cells analyzed, n × k) and their Euclidean distances in the components (f64) |
+| `markers.bin` | `SCMR` | The clusters c and genes g (u32, u32), then six arrays of f64, each c × g, cluster-major: the rank-sum test's z-score, the log₂ fold change, the p-value, the Benjamini–Hochberg adjusted p-value, and the shares of cells expressing the gene in the cluster and out of it |
+
+A clustering of the instrument's (registered from the bundle's `analysis.tar.gz`) has a `source`
+in `clustering.json` (`tool`, `version`, `file`, `name`, `title`), keeps the instrument's cluster
+numbers (from 0 here: the instrument's Cluster 1 is 0), has no `neighbors.bin`, and its `pca.bin`
+holds the genes and their scaling with no components (k 0, the cells' count, no scores).
+
+The project records each clustering it uses (an `artifacts` entry of kind `clustering`, with its
+dataset, segmentation, parameters and summary), and each version of a clustering's names (kind
+`cluster-names`: `clustering`, `version`, `parent`, `names`, a name or `null` per cluster, `by`,
+`created`). The Viewer's fill `clusters:<artifact id>` colors cells by a clustering of the
+segmentation drawn; saved views keep it.
+
+### Maps
+
+A map of a clustering's cells (from 0.4.0) is an artifact of two files:
+
+| File | Magic | Holds |
+| --- | --- | --- |
+| `embedding.json` | | `format` (`"situcraft-embedding"`), `version`, `method`; the `segmentation` and the `clustering` (artifact id and name); `parameters` (`minDist`, `spread`, `epochs`, 0 for the default, `negativeRate`, `seed`); `fitted` (the curve's `a` and `b`, the `epochs` run, the `edges` optimized, the `init`ial layout; for more than 50,000 cells, the `optimizer`, in batches over every core); `cells`; `quality` (`k`, `kWide`, `trustworthiness` over `queries` cells, the mean `precision` and `recall`; for more than 50,000 cells, the `search` the wider neighborhoods were found by, as `graph.search` above); `seconds`. A map of the instrument's has a `source` (`tool`, `version`, `file`, the `space` its quality is judged in) instead of `parameters` and `fitted` |
+| `embedding.bin` | `SCEB` | The cells (u32 count; u32 indices into the segmentation's cells, increasing), each one's place (f32 × 2, interleaved) and its reliability score (f32, 0 to 1: its neighborhood precision and recall, averaged over it and its 15 nearest on the map) |
+
+The project records each map it uses (kind `embedding`, with its segmentation and clustering).
+
+### Marker sets
+
+A marker set (from 0.4.0) is a JSON file SituCraft reads, writes and ships (one for each
+development bundle's panel); the project keeps each version of one, and each label set keeps the
+one it was made from.
+
+| Field | Holds |
+| --- | --- |
+| `format`, `version` | `"situcraft-markers"`, 1 |
+| `name`, `about`, `panel` | Its name; what it is for; the panel it was made for (a design id, informative) |
+| `levels` | The levels' names, the top first (1 to 6): `["Class", "Lineage", "Subtype"]` |
+| `labels` | Each label (1 to 500): `name`; `parent`, a label listed before it, at the level above (none at the top); `positive` markers (1 to 200 genes) and `negative` (up to 200); `references`, DOIs among the set's |
+| `states` | Each state (up to 50), carried besides a label (proliferating, say): `name`, `positive`, `negative`, `references`, and `parent`, the label whose cells alone can carry it |
+| `references` | The published sources of its markers: `doi`, `citation` |
+
+Names are unique regardless of case; a gene is listed once in a label, not both positive and
+negative. Genes are matched to the panel by name (regardless of case where one gene matches); a set
+naming genes the panel lacks is refused, with them listed. Its checksum is the SHA-256 of its
+canonical form: the JSON as SituCraft writes it compactly, its fields in the order above.
+
+The project records each version of a marker set as kind `marker-set`: `family` (the first
+version's id), `version`, `parent`, `name`, `set` (the file), `checksum`, `source` (`{starter}`,
+`{file}` or `{edited: true}`), `by`, `created`.
+
+### Labels
+
+A label set (from 0.4.0) is an artifact of three files:
+
+| File | Magic | Holds |
+| --- | --- | --- |
+| `labels.json` | | `format` (`"situcraft-labels"`), `version`, `method`; the `segmentation` and the `clustering` (artifact id and name); `markers` (the set's `name` and `checksum`); `parameters` (`margin`, `minimum`, `state`, `bins`, `controls`, `lineage`, `seed`); `fixed` (the expression, its `targetSum`, the score, the negative markers' part, the assignment); `levels`; `sets`, each label then each state: `name`, `level` (−1 for a state), `parent` (an index, −1 for none), `state`, `positive` and `negative` markers and their control genes (`positiveControls`, `negativeControls`), and `cells` carrying it; `cells` (`analyzed`, those `labeled` at each level, `unlabeled`); `clusters`; `composition`, for each level and cluster the cells by the label they carry at the level (indices among the sets; the last count, cells without a label); `states`, for each state and cluster the cells carrying it; `seconds` |
+| `markers.json` | | The marker set, as above |
+| `labels.bin` | `SCLB` | The cells n (u32) and their indices into the segmentation's cells (u32 × n, increasing) and clusters (u32 × n); the sets S, levels L and states (u32 each); each set's score for each cell (f32, S × n, set-major) and its positive markers' part (f32, S × n); for each set with negative markers, their part (f32 × n); at each level each cell's label (u32 × n, an index among the sets, 0xFFFFFFFF where it took none), and its lead over the next label (f32 × n, NaN where the level was not reached); each cell's confidence (f32 × n); and for each state whether each cell carries it (u8 × n) |
+
+Labels imported from a table (above) are an artifact of two files: `labels.json` has a `source`
+(`format`, `file`, `sha256`, `path` in a store, `idColumn`, `column`, `confidenceColumn`,
+`colorColumn`, `rows`; for the instrument's clusters `tool`, `version` and `title`) in place of
+`markers`, `parameters` and `clustering`, one level named by the column, each label's `color` where
+the table gave one, and no composition; `labels.bin` holds every cell of the segmentation in order,
+in no cluster (0xFFFFFFFF), with no scores: after the sets, levels (1) and states (0), each cell's
+label, its lead (NaN) and its confidence (NaN where none was given). There is no `markers.json`.
+
+Labels from a reference (above) are an artifact of three files: `labels.json` has a `reference`
+(`format`, `file`, `sha256`, `path`, `matrix`, `labelColumn`, `geneColumn`, `values`, `refCells`,
+`refGenes`, the `labels` and each one's reference `cells`, the panel's genes it lacks (`missing`),
+the `parameters` (`tune`, `margin`, `markers`), the genes per pair (`perPair`), the genes `shared`
+and those `compared` in the first round, and the cells `fineTuned` and `changed` by fine-tuning) in
+place of `markers` and `parameters`, one level named by the label column, and the composition;
+`reference.json` (`format` `"situcraft-reference-profiles"`, `version`, `labels`, `cells`, `genes`
+(the shared genes), `profiles`: each label's mean log-normalized expression over them) in place of
+`markers.json`; `labels.bin` is as above with each label's first-round correlation as its score and
+its last round's correlation as its positive part (NaN for labels not in that round, and for every
+label when there was one round), no negative parts, one level, the lead over the next label in the
+deciding round, the same lead as the confidence, and no states.
+
+The project records each label set it uses (kind `labels`, with its dataset, segmentation,
+clustering, `markerSet`, the version's record id, `markers` and summary; an imported one, its
+`source`; one from a reference, its `reference` and `parameters`).
+
+Label versions are the project's own records, made in the page:
+- **Curated labels** (kind `curated-labels`): `dataset`, `segmentation`, `base` (`labels`, a label
+  set's id, a curated or consensus set's; `level`; `name`), `name`, `by`, `created`, and `edits`,
+  appended, never changed: each `{kind, cells | clustering and clusters, label, reason, by, time}`,
+  `kind` being `cells` (cells relabeled; their indices among the segmentation's cells), `cluster` (a
+  clustering's clusters relabeled, from 0) or `accept` (cells' labels confirmed). Its labels are
+  the base's with the edits applied in order; a new label's name is added after the base's.
+- **Consensus labels** (kind `consensus-labels`): `dataset`, `segmentation`, `name`, `members` (each
+  `{ref: {kind, id, level}, name}`), `mapping` (for each member, `{its label: a common name}`),
+  `rule` (`{kind: "unanimous"}`, `{kind: "majority", min}` or `{kind: "priority"}`), `by`,
+  `created`.
+
+The Viewer's fill `labels:<id>:0` colors cells by a curated or consensus set too. The Viewer's fill
+`labels:<artifact id>:<level>` colors cells by the label they carry at a level, from 0; saved views
+keep it.
 
 ### Jobs
 
@@ -339,6 +503,7 @@ are in [research.md](../situcraft-spec/research.md) §3.4.
 | `--width`, `--height` | the preset's | The field's size in µm: at least 20, and at most 50 million pixels in all (about 1.5 × 1.5 mm at 0.2125 µm, which needs about 4 GB of memory; 1 × 1 mm takes about 13 s and 1.7 GB). A larger tissue is a mosaic of fields (below) |
 | `--params` | | A JSON file of parameters, each overriding the preset's; `--print-params` prints them all, with their names |
 | `--quiet` | | Print only the summary |
+| `--reference` | 0 | Also write a single-cell reference of the tissue's types, this many cells of each, as `<folder>-reference.zarr` (below) |
 
 The folder must not exist: it is written under a temporary name beside it and renamed into place
 when complete, so an interrupted run (Ctrl+C) leaves nothing behind.
@@ -365,6 +530,13 @@ are numbered across the mosaic, and coordinates placed in it.
 
 To score a segmentation against the truth, import `truth/` into the simulated dataset as a
 Xenium Ranger bundle (Segmentation view, **Import a segmentation**) and compare the two.
+
+**A reference of its types** (`--reference N`) is an AnnData object in Zarr (format 2) beside the
+bundle: N cells of each type (`obs`'s `cell_type`; the index `ref-000001`…), each drawn from its
+type's expression over the panel's genes (`var`, `SIM001`…) as the tissue's cells are, but clean of
+background and displaced molecules, at 1,000 expected transcripts (spread log-normally, σ 0.4), the
+counts in `X` (CSR, float32); its seed is the tissue's. Label the tissue's cells from it in the Cell
+types view (**Labels from a reference**) and compare them with the truth's types.
 
 Other tools read a simulated bundle as they read Xenium's: spatialdata-io's Xenium reader reads
 its table, transcripts, labels, boundaries and image with no warning, and tifffile and pyarrow

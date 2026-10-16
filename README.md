@@ -20,7 +20,7 @@ tissue-level spatial analysis one reproducible workflow:
 SituCraft runs as one self-contained program on macOS, Linux and Windows. It opens as a desktop
 window, needs no other software, and keeps your data on your computer.
 
-**Status:** 0.3.0. SituCraft opens a Xenium output bundle (folder or zip), reads every byte of it
+**Status:** 0.4.0. SituCraft opens a Xenium output bundle (folder or zip), reads every byte of it
 with its own readers, validates it (fatal problems, warnings and notes, and 22 of the run's
 recorded values recomputed from its data) and records it in a project. Its tissue viewer shows the
 morphology stains, the transcripts of chosen genes and the cells at any zoom, every image sample
@@ -44,6 +44,25 @@ transcripts in their true cell, against 82.2% for the instrument's nucleus expan
 the reference. Three example datasets (two public Xenium bundles, downloaded in a click, and a
 simulated tissue with its truth) come with guided tours and worked examples. See the
 [roadmap](situcraft-spec/roadmap.md) and the [changelog](CHANGELOG.md).
+
+Since 0.4.0, SituCraft gives cells identities with their evidence, in the Cell types view. A
+segmentation's cells are clustered by their expression, each cluster with its markers, and laid
+out on a map (UMAP) linked to the tissue: cells selected on either are selected on both. They are
+labeled from marker genes (a hierarchy of cell types, each with positive and negative markers;
+starter sets for the example panels from published cell atlases, edited as versions), from a
+labeled single-cell reference (each cell correlated with each label's profile, then fine-tuned on
+the leading labels' genes), or imported from CSV, Parquet, AnnData or Xenium Explorer's cell
+groups. Each label has its confidence and its evidence; curated and consensus versions sit side by
+side, and a review queue lists the cells most likely mislabeled. A clustering and its labels are
+made again on another segmentation in one step and read through the two segmentations'
+comparison: what the choice of segmentation changes in the cells' identities. Whole sections of
+hundreds of thousands of cells, and Xenium Prime's 5,000-gene panel, are clustered and mapped in
+minutes, the same for a seed on any computer. The steps and defaults are scanpy's and SingleR's,
+and the results are validated against scanpy, leidenalg, umap-learn, scikit-learn and SingleR, and
+against the simulated tissue's true types: labeled from its types' markers, 98.3% of the
+instrument's cells take their true type, and 99.9% of SituCraft's refined cells. Worked examples
+cluster and label the Lung cells, read the simulated tissue's labels against its truth, and the
+Breast cells' labels under two segmentations.
 
 ## A look around
 
@@ -70,6 +89,13 @@ The Breast example's cells, colored by how the instrument found each one.
 The comparison workspace: two segmentations on the tissue with one camera, their differences
 ranked for review, and the decision recorded with its reason.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/cellmap-dark.webp">
+  <img alt="The Cell types view of the Breast example: the map of the cells (UMAP) beside the tissue, colored by cluster, the T cells selected on the map and lit on the tissue, and a note saying how faithful the map is" src="docs/images/cellmap-light.webp">
+</picture>
+
+The Cell types view: the cells' map beside the tissue, linked, colored by cluster, gene or label.
+
 More: [checking a bundle](docs/images/data-light.webp), [the tissue's stains](docs/images/viewer-light.webp),
 [transcripts outside cells](docs/images/qc-outside-light.webp), [filters as versions](docs/images/qc-filter-light.webp),
 [saved views](docs/images/saved-views-light.webp), [the methods paragraph](docs/images/methods-light.webp),
@@ -82,6 +108,14 @@ More: [checking a bundle](docs/images/data-light.webp), [the tissue's stains](do
 [the segmentation studio](docs/images/studio-light.webp),
 [a refinement on the tissue, by its certainty](docs/images/refined-light.webp),
 [exporting a segmentation](docs/images/export-light.webp),
+[cells clustered by their expression](docs/images/celltypes-light.webp),
+[the clusters on the tissue](docs/images/clusters-light.webp),
+[cells labeled from marker genes](docs/images/labels-light.webp),
+[cells labeled from a single-cell reference](docs/images/reference-light.webp),
+[the labels under two segmentations](docs/images/impact-light.webp),
+[the instrument's clusters imported as labels](docs/images/imported-light.webp),
+[the review queue and a cell's evidence](docs/images/review-light.webp),
+[a worked example reading labels against the simulated truth](docs/images/worked-labels-light.webp),
 [the Jobs view](docs/images/jobs-light.webp).
 
 ## Install
@@ -140,7 +174,9 @@ known. It writes the tissue as a Xenium output bundle labelled simulated, with t
 `truth/` folder, so that any segmentation can be scored against it. SituCraft and other tools
 (spatialdata-io among them) read the bundle as they read Xenium's. The same seed gives the same
 bundle on any computer. `--preset large` makes a tissue of 6 × 5 mm and 55 million transcripts,
-a field at a time, for measuring at scale. `situcraft simulate -h` lists the settings, and
+a field at a time, for measuring at scale. `--reference N` also writes a single-cell reference of
+the tissue's types (N cells of each, as AnnData Zarr) to label its cells from. `situcraft simulate
+-h` lists the settings, and
 [Formats](docs/FORMATS.md#simulated-tissues-situcraft-simulate) describes the files.
 
 ## Refinements in the terminal

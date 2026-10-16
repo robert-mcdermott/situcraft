@@ -587,9 +587,27 @@ type Buffer struct{ b buffer }
 
 func (b *Buffer) U32(v uint32)    { b.b.u32(v) }
 func (b *Buffer) F32(v float32)   { b.b.f32(v) }
+func (b *Buffer) F64(v float64)   { b.b.f64(v) }
 func (b *Buffer) U32s(v []uint32) { b.b.u32s(v) }
 func (b *Buffer) Byte(v byte)     { b.b.WriteByte(v) }
+func (b *Buffer) Str(s string)    { b.b.str(s) }
 func (b *Buffer) Bytes() []byte   { return b.b.Bytes() }
+
+// F32s and F64s append arrays in one write.
+func (b *Buffer) F32s(v []float32) {
+	out := make([]byte, 0, 4*len(v))
+	for _, x := range v {
+		out = binary.LittleEndian.AppendUint32(out, math.Float32bits(x))
+	}
+	b.b.Write(out)
+}
+func (b *Buffer) F64s(v []float64) {
+	out := make([]byte, 0, 8*len(v))
+	for _, x := range v {
+		out = binary.LittleEndian.AppendUint64(out, math.Float64bits(x))
+	}
+	b.b.Write(out)
+}
 
 // WriteBinary writes a body in the envelope of SituCraft's binary files (magic, version, length,
 // zlib).
@@ -607,8 +625,22 @@ func ReadBinary(path, magic string) (*Reader, error) {
 	return &Reader{r}, nil
 }
 
-func (r *Reader) U32() uint32  { return r.r.u32() }
-func (r *Reader) F32() float32 { return r.r.f32() }
+func (r *Reader) U32() uint32          { return r.r.u32() }
+func (r *Reader) F32() float32         { return r.r.f32() }
+func (r *Reader) F64() float64         { return r.r.f64() }
+func (r *Reader) Str() string          { return r.r.str() }
+func (r *Reader) F32s(n int) []float32 { return r.r.f32s(n) }
+func (r *Reader) F64s(n int) []float64 {
+	b := r.r.take(8 * n)
+	if b == nil {
+		return nil
+	}
+	out := make([]float64, n)
+	for i := range out {
+		out[i] = math.Float64frombits(binary.LittleEndian.Uint64(b[8*i:]))
+	}
+	return out
+}
 func (r *Reader) Byte() byte {
 	if b := r.r.take(1); b != nil {
 		return b[0]

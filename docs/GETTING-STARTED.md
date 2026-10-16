@@ -52,22 +52,31 @@ tour continues from there.
 Each example is used under its license; its source and license are linked on its card, and the
 methods paragraph (section 7) cites it.
 
-Each example also has a **worked example**: a question answered step by step, saying first what to
+Each example also has **worked examples**: a question answered step by step, saying first what to
 expect. Some steps run a job before going on (the card's button says what it does: expand the
-nuclei, plant errors, refine, import the truth, compare), and others open the comparison in the
-Compare workspace or the Viewer with the view, the ranking and the difference the step talks
-about.
+nuclei, plant errors, refine, import the truth, compare, cluster, label, make the labels again on
+another segmentation), and others open the comparison in the Compare workspace, the clustering in
+the Cell types view, or the Viewer, with the view, the ranking, the colors and the difference the
+step talks about.
 
 | Example | Worked example | The question |
 | --- | --- | --- |
 | Breast | The instrument's cells against a nucleus expansion | Where does growing each nucleus by 5 µm disagree with the cells the instrument drew from its stains, and which does the evidence favour there? |
 | Breast | Redraw the cells from their transcripts | How does SituCraft's transcript-informed segmentation redraw the instrument's cells, and where is it unsure of itself? |
+| Breast | Labels under two segmentations | How much do the cells' labels depend on the segmentation they were counted in, and which cells does the choice change? |
 | Lung | Find the planted errors (simulated) | Can you find a segmentation's errors with the comparison workspace, and which ranking finds which kind? |
+| Lung | Cluster and label the Lung cells | Which cells are in this section, as their expression groups them and as known markers name them, and how far can each label be trusted? |
 | Simulated | Score segmentations against the truth | When every cell is known, how close do the instrument's nucleus expansion and SituCraft's transcript-informed segmentation come to the true cells? |
+| Simulated | Labels against the truth | When every cell's type is known, how many cells do markers label correctly, and how much of the error is the segmentation's? |
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/worked-dark.webp">
   <img alt="The Lung example's worked example in the Compare workspace: the instrument's segmentation and one with planted errors side by side, a planted merge chosen, and the worked example's card beside the queue" src="images/worked-light.webp">
+</picture>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/worked-labels-dark.webp">
+  <img alt="The simulated tissue's worked example on labels in the Compare workspace: its true cells and the instrument's side by side, each colored by type (the true types and the labels from the types' markers), the Labels tab reading both through the comparison, and the worked example's card beside it" src="images/worked-labels-light.webp">
 </picture>
 
 ## 3. Open your own bundle
@@ -277,7 +286,11 @@ cell: the spurious co-expression of gene pairs relative to nuclei alone (Jones e
 as in nuclei), and how often markers of different lineages are found in the same cell (the
 mutually exclusive co-expression rate of Hartman and Satija). Between the two, the pixels that
 agree, the transcripts that changed cell, and how far the boundaries moved. The comparison runs
-as a job and is kept with the project.
+as a job and is kept with the project. One you no longer need can be removed from the project
+(**Remove** in the inspector): the two segmentations stay, and it can be made again at any time.
+A comparison a decision rests on stays, since the methods paragraph tells how the default was
+chosen from it. A comparison made by an earlier SituCraft whose list of differences this version
+does not read says so, and offers to compare the two segmentations again.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/workspace-dark.webp">
@@ -295,6 +308,8 @@ as a job and is kept with the project.
   among the classes you keep and with at least the reassigned transcripts you set. **Next** and
   **Previous** (or `]` and `[`) go through it; each difference opens where it lies, its cells lit
   in both, and is described in the inspector. **Cell matching** lists every difference, sortable.
+- **Labels** reads a label set of each segmentation through the comparison: what the choice
+  changes in the cells' labels (below, Labels under two segmentations).
 - **Decide** promotes one segmentation as the dataset's default, keeps one for exploration, or
   rejects one, with a reason. Decisions are appended to the project with the comparison they rest
   on and never removed; the default cannot be rejected until another is promoted, and no
@@ -361,11 +376,248 @@ clipboard to run where Xenium Ranger is installed.
 </picture>
 
 Long work runs as a job: building derived data, downloading an example, registering a
-segmentation, expanding nuclei, importing, comparing or exporting segmentations, planting errors.
+segmentation, expanding nuclei, importing, comparing or exporting segmentations, planting errors,
+clustering cells, mapping them, adding the instrument's clusters.
 The **Jobs** view shows what runs and waits, what finished, and each job's log and spec. Jobs keep
 running when the window reloads, and closing the window while one runs asks first. If SituCraft
 stops (or the computer does) in the middle of a job, the job is shown as interrupted
 when SituCraft starts again: **Resume** continues it where it stopped, **Discard** forgets it.
+
+## Cell types: clusters
+
+The **Cell types** view groups a segmentation's cells by their gene expression, the first step
+toward naming them. Choose the segmentation (the default to start) and the cells to analyze: those
+with at least 10 gene transcripts, or, for the instrument's segmentation, the cells one of your QC
+filters keeps. **Cluster the cells** runs the common single-cell workflow as a job (about a second
+for the examples):
+
+1. each cell's counts scaled to the median total and log-transformed;
+2. each gene scaled, so that every gene counts alike;
+3. principal components (50), computed exactly;
+4. each cell's 15 nearest neighbors in them, as a graph;
+5. Leiden communities of the graph: the clusters, numbered from the largest.
+
+The same steps serve a whole section: above 50,000 cells the nearest neighbors are found by
+NN-Descent rather than by comparing every pair (the clustering says how many of the exact
+neighbors it found, measured on 1,000 of its cells: 99.9% on the examples), the map is laid out
+over every core, and for panels of more than 1,000 genes (Xenium Prime) the components are found by
+the Lanczos method, the full decomposition's to rounding.
+
+**Parameters** shows each setting with what it does. They are scanpy's defaults, so the numbers
+match what the scanpy tutorials give. **Resolution** is the one you will change most: higher gives
+more and smaller clusters. There is no right value; make a few and compare their markers. Each
+clustering is kept as an artifact of its segmentation with every parameter and its seed, and the
+same seed gives the same clusters on any computer. Asking for one already made answers it at once.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/celltypes-dark.webp">
+  <img alt="The Cell types view of the Breast example: 15 clusters of 7,163 cells, each with its size and leading markers (TOP2A and MKI67 for dividing cells, CD68 for macrophages, LUM for fibroblasts, CD3E for T cells), the components' share of the variance, and the first cluster's markers against the other cells" src="images/celltypes-light.webp">
+</picture>
+
+Under each clustering are its numbers (the cells analyzed and left out, the components' share of
+the variance, the graph and the modularity Leiden reached) and its clusters, each with its size
+and leading markers. Choose a cluster to see its markers against all the other cells: how much
+higher its expression is (log₂ fold change), the share of cells expressing the gene in and out of
+it, and the rank-sum test's score and adjusted p-value. These are exploratory: the cells of one
+tissue are not independent replicates, so the p-values rank genes rather than test them.
+
+**Show in the Viewer** opens the Viewer with the cells filled by cluster and a legend. The Viewer's
+**Fill by** lists every clustering of the segmentation drawn, and a saved view keeps the one shown.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/clusters-dark.webp">
+  <img alt="The Breast example in the Viewer, its cells filled by their cluster: tumour nests and stroma in different clusters, with the clusters' legend" src="images/clusters-light.webp">
+</picture>
+
+### The map and the tissue
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/cellmap-dark.webp">
+  <img alt="The Cell types view of the Breast example: the map of the cells (UMAP) beside the tissue, colored by cluster with some clusters named, the T cells selected on both, the selection's composition below" src="images/cellmap-light.webp">
+</picture>
+
+Each clustering comes with a **map** (UMAP, made at once, a few seconds for the examples): cells
+with similar expression lie near each other. It sits beside the tissue, and the two are linked:
+- **Color by** a clustering's clusters (any clustering of the segmentation), a gene (type its
+  name), the cells' gene transcripts or area, or how faithfully the map keeps each region's
+  neighbors.
+- **Select cells** on either side with the **Lasso** (shift adds to the selection), or by clicking
+  a cluster in the legend or the table: the cells are selected on both, the others faint. Click a
+  cell on the map to find it on the tissue, or on the tissue to mark it on the map.
+- **Markers of the selection** compares the selected cells with the clustering's other cells, as the
+  clusters' markers are computed: what distinguishes a region you drew.
+
+A map shows which cells are alike, not how alike: distances between groups, and their sizes, mean
+little. Under the map, SituCraft says how far this one can be trusted, from its trustworthiness and
+how many of each cell's nearest neighbors in expression stay near it on the map.
+
+**Name** clusters in the table (a T-cell cluster, a tumour cluster): names show on the map, the
+tissue and the legends, and giving several clusters the same name merges them. Each change is a
+new version of the names, kept in the project's history; the clusters keep their numbers. The
+**dot plot** shows each cluster's two leading markers across all clusters: dot size, the share of
+cells expressing the gene; color, its mean expression.
+
+**The instrument's clusters:** the bundle holds the instrument's own analysis (graph-based clusters,
+and k-means for 2 to 10 clusters, with its own map). **Add** one to explore it here like any
+clustering (SituCraft computes its markers), and the instrument's map comes with the first.
+**Two clusterings compared** cross-tabulates any two clusterings of the same cells, with the
+adjusted Rand index (1: the same partition; about 0: as alike as chance).
+
+## Cell types: labels from markers
+
+Under a clustering, **Labels from markers** labels each cell from the genes known to mark cell
+types. A **marker set** is a hierarchy of labels (a class such as Immune, a lineage such as T cell,
+a subtype such as CD8 T cell) and states (Proliferating), each with **positive** markers, the genes
+its cells express, and **negative** ones, genes they do not. SituCraft offers a starter set for
+each example's panel, from published breast and lung cell atlases (the **Sources**), every marker
+in the panel.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/labels-dark.webp">
+  <img alt="The Cell types view of the Breast example labeled from the breast starter set: each cluster's labels at the lineage level as colored bars (the tumor clusters Epithelial and Luminal, with some cells left without a label; the macrophages Myeloid, the fibroblasts Fibroblast, the T cells T cell, the vessels Endothelial), names for the clusters from them, and the labels with their markers" src="images/labels-light.webp">
+</picture>
+
+**Label the cells** scores each cell for each label: its markers' expression less that of control
+genes of similar average expression (as scanpy's `score_genes` scores a gene list), its negative
+markers counting against it where the cell expresses them. Labels are then taken from the top
+down: a cell takes the best class when it leads the next by the **margin**, then the best of that
+class's lineages, and so on; where no label leads, the cell stays at the level above, so a T cell
+whose CD4 and CD8 markers are both faint stays a T cell. Each cell's **confidence** is how far its
+label led. A label set is kept as an artifact with the marker set it came from and every
+parameter; asking again answers it.
+
+Under the labels:
+- **Each cluster's labels** at the level chosen (Class, Lineage, Subtype), as bars. A cluster split
+  between labels may hold two kinds of cells, or cells whose outlines hold parts of two.
+- **Name the clusters** by the most specific label at least half (or a share you choose) of each
+  cluster's cells carry: a new version of the names, which you can edit. Clusters given the same
+  name merge on the map and the tissue.
+- **Color the map and the tissue** by the labels, their confidence, or one label's score (choose it
+  in the labels' table, which lists each label's markers and control genes). The Viewer's **Fill
+  by** lists each label set's levels.
+
+**Edit** the marker set to add labels, levels or states, or change markers (the panel's genes are
+offered as you type, and those it lacks are marked). Saving makes a new version, kept with the
+earlier ones and the labels made from them. **Save as a file** writes the set as JSON, and **Read
+a file…** reads one (`docs/FORMATS.md`); a set naming genes the panel lacks offers to remove them.
+
+Starter sets are a starting point. Markers that hold in an atlas may not in your tissue (in the
+Breast example the tumor cells express LPL, an adipocyte marker), and in a tissue one type
+dominates, its own markers score low against control genes that are mostly its other genes, so
+many of its cells may stay without a label. Check each cluster's labels against its markers before
+naming it.
+
+### Labels from a reference
+
+When a labeled single-cell dataset of the same tissue exists (an atlas, or your own single-cell
+experiment), **Labels from a reference** labels each cell by the reference label it most resembles.
+Name the reference (its path on this computer) and **Read** it: an AnnData object saved with
+`write_zarr` (a `.zarr` folder, or a zip of one), whose cells carry their labels in an `obs` column,
+or a table of each label's mean expression (CSV, TSV or Parquet, a row per label or per gene). An
+`.h5ad` file is written as Zarr in one line of Python:
+`anndata.read_h5ad("reference.h5ad").write_zarr("reference.zarr")`.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/reference-dark.webp">
+  <img alt="The simulated example's reference read against its panel: an AnnData object of 1,200 cells, its counts in X, its labels in obs cell_type (four types of 300 cells each), all 120 of the panel's genes in the reference and compared; the button to label the cells from it" src="images/reference-light.webp">
+</picture>
+
+SituCraft suggests the reference's expression (counts preferred), its column of labels and its
+column of gene names, and says what it found: its labels and their cells, how many of the panel's
+genes it has (and which it lacks: if it has few, check that its genes are named by symbol, and the
+species), and how many will be compared. **Label the cells from the reference** then correlates
+each cell with each label's profile (its reference cells' mean expression) over the genes that set
+the labels apart, and scores the leading labels again on their own genes until one is left (as
+SingleR does, Aran et al. 2019). Each cell's **confidence** is how far its label led the next, in
+correlation. The label set is kept with the reference as it was compared and its SHA-256.
+
+The labels follow the reference: a reference of other cells (an atlas of healthy tissue for a
+tumor, say) gives each cell the nearest label it has, which may be wrong. The evidence card (below)
+shows, for each cell, how close the leading labels were and which genes set its label apart from
+the next. To try it, `situcraft simulate --reference 300 <folder>` writes a simulated tissue and a
+reference of its types beside it.
+
+### Labels made elsewhere
+
+Labels from another tool or an earlier analysis (a colleague's annotation, a reference mapping,
+the instrument's clusters) are imported under **Labels made elsewhere**, for the segmentation's
+cells. Name the table (its path on this computer) and **Read** it: a CSV or TSV file, a Parquet
+file, an AnnData object saved with `write_zarr` (or a SpatialData store), or Xenium Explorer's cell
+groups. SituCraft lists the columns and suggests which holds the cells' ids, which their labels,
+and, optionally, a confidence and colors; change them if they are wrong. Before you import, it
+says how the ids match: a table naming cells this segmentation does not have is refused (its labels
+were made for another segmentation, or another sample), and the cells it does not name will have
+no label. **Or the instrument's clusters** imports one of the instrument's clusterings as labels.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/imported-dark.webp">
+  <img alt="The Lung example's graph-based clusters from the instrument imported as labels: each of SituCraft's clusters by the instrument's clusters, the tumor clusters spread across many of them, the vessel and stroma clusters mostly one (80% to 85%)" src="images/imported-light.webp">
+</picture>
+
+An imported label set is shown like one from markers: each cluster's labels (here, how SituCraft's
+clusters of the Lung example split among the instrument's), names for the clusters from them, the
+map, the tissue and the Viewer colored by them, and a label's cells selected when you choose it.
+Its file is recorded by its SHA-256, so the project says exactly what was imported.
+
+### Reviewing labels
+
+Labels are predictions. Under **Label versions** each label set of the segmentation is listed:
+from markers or a reference, imported, curated and consensus. **Curate** begins a curated set from a predicted one:
+its labels, with your changes appended, each with its reason, who made it and when (the predicted
+set stays as the method made it). **Make a consensus…** combines sets by a rule: unanimous (every
+set gives the label), majority (at least so many sets, more than any other label) or in order (the
+first set's label, else the next's); labels the sets name differently can be mapped to a common
+name. Any two versions are compared **side by side** in a table of their labels.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/review-dark.webp">
+  <img alt="The review of the Breast example's labels: a cell in a tumor cluster labeled Stromal though all ten of its nearest cells are Epithelial, with its evidence: Stromal led Immune by 0.12, its markers in the cell (PDGFRB 2, SFRP4 2, and EPCAM 9 counted against it), why not Epithelial (its markers 0.50 against their controls' 0.75), its neighbors' labels, and the buttons to accept or relabel it" src="images/review-light.webp">
+</picture>
+
+**Review** ranks the cells to look at first: those whose label few of their nearest cells in the
+tissue share while most share another (a lone label among others is often a mislabel, two cells in
+one outline, or a cell at a boundary), those whose label changes under another segmentation (choose
+the label set of it in **Label changes against**; below), and those of low confidence. Choose a
+cell, in the list or on the map or the tissue, to see its **evidence**: its label in every version;
+for labels from markers, why it took its label and not the next, gene by gene in the cell (green, a
+marker it expresses; red, a negative marker it expresses), and why not the label its neighbors
+carry; for labels from a reference, each round's correlations and the genes higher in its label's
+profile and in the next's that the cell expresses; what its counterparts carry under the other
+segmentation; its neighbors' labels in the tissue and in expression; its transcripts and its
+segmentation's flags. **Accept** its label or **Relabel** it, saying why; the decision is added to
+a curated set and the next cell is shown.
+
+### Labels under two segmentations
+
+Cell types are read from cells, so the segmentation chosen can change them: a cell drawn too wide
+takes its neighbor's transcripts and may take its neighbor's label; a cell split in two may become
+two kinds. To see how much, compare two segmentations (Segmentation view), then, under a
+clustering's label sets, **Make this clustering and its label sets again on** the other
+segmentation: the clustering with the same parameters, its map, and each label set from markers or
+a reference, in one step (imported labels belong to their segmentation's cells and are not made
+again; a QC filter's cells are the instrument segmentation's, so the cells are then those with
+enough transcripts).
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/impact-dark.webp">
+  <img alt="The Compare workspace's Labels tab for the Breast example: the instrument's segmentation and a 5 µm nucleus expansion side by side, each cell colored by its label (Epithelial, Immune, Endothelial, Stromal, Adipocyte); of the 6,512 cells matched one to one, 96.9% labeled alike; what split and merged cells carry; marker mixing slightly higher under the expansion" src="images/impact-light.webp">
+</picture>
+
+The comparison's **Labels** tab (Compare workspace) reads a label set of each segmentation through
+the comparison (by default two made the same way, at their first level):
+- **How many cells keep their label:** of the cells matched one to one, the share labeled alike,
+  and every change (T cell → Macrophage, and so on); what split cells' pieces carry (the cell's
+  label, some of them, or none) and what merged cells carried.
+- **Each label's cells** under each segmentation, and the change in its share.
+- **Marker mixing by label:** of each label's cells, the share expressing two mutually exclusive
+  markers together, and the mutually exclusive co-expression rate among them. Under a segmentation
+  that gives cells their neighbors' transcripts, it rises.
+- **The differences whose labels change,** the most transcripts reassigned first; each opens where
+  it lies. **Color the cells by their labels** fills each side's cells with its labels' colors.
+
+The cells whose label changes are segmentation-sensitive: the review queue lists them when you
+choose the other segmentation's label set in **Label changes against**, with what their
+counterparts carry.
 
 ## Keyboard
 

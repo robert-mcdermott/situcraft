@@ -46,7 +46,12 @@ see `conventions.md`. For the methods, formats and datasets behind these choices
 │   api_*.go           viewport queries: tiles, points, polygons, cells (binary, columnar responses)     │
 │ compute (new, goroutines)                                                                             │
 │   internal/segment   nucleus expansion; transcript-informed segmentation (sampler, outputs)           │
-│   internal/compare   cell matching, difference classes, comparison metrics                            │
+│   internal/compare   cell matching, difference classes, comparison metrics, impact on labels          │
+│   internal/cluster   normalization, principal components, Leiden clusters, markers (wave 4)           │
+│   internal/graph     nearest neighbors (exact, NN-Descent; a grid in 2-D), UMAP's graph, Leiden        │
+│   internal/embed     UMAP maps and their quality                                                       │
+│   internal/label     marker sets and scores, hierarchical labels, references, imports, review         │
+│   internal/linalg    symmetric eigendecomposition (whole, or Lanczos), the same on every processor     │
 │   internal/register  image registration (later)                                                       │
 │   internal/spatial   graphs and spatial statistics on large tables (later)                            │
 │   internal/jobs      durable background jobs: spec, state, progress, cancellation, logs               │
@@ -71,8 +76,13 @@ and a segmentation run touches every transcript many times. So:
 - **Go owns** file I/O, decoding, indexing, viewport queries, segmentation, comparison over
   transcripts, and any statistic over transcript-scale tables. Go gives us goroutines across all
   cores, compact columnar caches, and a single cross-compiled binary.
-- **The browser owns** rendering, interaction, and cell-level analytics. Cell tables (10⁴–10⁶
-  rows) fit typed arrays and workers, as in the siblings.
+- **Go also owns the analyses that make a result** (wave 4): clusters, embeddings, scores and
+  labels run as jobs and become artifacts, as segmentations do. A cell table of a million cells
+  with a 5,000-gene panel does not fit a page's memory; the same jobs run headless with nothing
+  but the binary (wave 9); and a result kept as an artifact can be made again on another
+  segmentation and compared.
+- **The browser owns** rendering, interaction, and exploring results: coloring, selecting and
+  summarizing cells over typed arrays and workers, as in the siblings.
 - Unlike the siblings, the web app **needs its host**. There is no static-hosting mode, except the
   redacted static result package (wave 8), which ships precomputed tiles.
 
@@ -185,9 +195,14 @@ transcripts are highest together).
 
 A worked example is a tour that answers a question, saying first what to expect: its steps may run
 a job before going on (expanding the nuclei, planting errors, refining, importing the simulated
-tissue's truth, comparing), each named by the segmentations it needs ('instrument',
-'expansion-5', 'planted', 'refined', 'truth') so that a step already done is not done again, and may show a comparison in the workspace as the step describes it (the view, the
-ranking, the classes kept, the difference shown, the side panel). The Lung example's practises on
+tissue's truth, comparing; clustering, labeling from a starter set, importing the truth's types,
+making a clustering and its labels again on another segmentation), each named by the
+segmentations it needs ('instrument', 'expansion-5', 'planted', 'refined', 'truth'; a
+segmentation's clustering its latest of SituCraft's, its labels that clustering's latest from
+markers) so that a step already done is not done again. A step may show a comparison in the
+workspace as it describes it (the view, the ranking, the classes kept, the difference shown, the
+side panel, the Labels tab), or a clustering in the Cell types view (the map's colors, clusters
+selected, a section in view, the review queue made). The Lung example's practises on
 errors planted in its instrument segmentation (`internal/segment/plant`): neighbouring cells whose
 merged cell would mix markers of two lineages, large cells split across their long axis, cells
 dropped, and cells grown into their neighbours; each error kept apart from the others by its
@@ -256,7 +271,9 @@ Segmentation is SituCraft's own code (`internal/segment`), not an external progr
   Baysor-style CSV plus GeoJSON, Xenium Ranger outputs, or GeoJSON polygons plus an assignment
   table; SituCraft's own files (`situcraft refine`'s) are checked against the dataset and copied. This is how results from external tools are compared, without SituCraft running those
   tools. Each becomes SituCraft's own segmentation files: a label image resampled or polygons
-  drawn at the morphology image's resolution, the tool's assignment matched to the dataset's
+  drawn at the morphology image's resolution (a band of rows at a time, each row encoded as it is
+  made, and a Xenium bundle's mask read a row of its chunks at a time, so that a whole slide's
+  raster is never held whole), the tool's assignment matched to the dataset's
   transcripts (by id and position, or by position and gene), counts made as for every
   segmentation. It is checked against the dataset: coordinates in units the import declares
   (never guessed from the values), the transcripts it names, an output bundle's run, its ids.
@@ -329,6 +346,83 @@ filled by their difference's class through the renderer's per-cell colours; the 
 give the disagreement map, drawn on a 2-D canvas over the tissue. The differences come to the page
 column by column; ranking and the reviewer's rules are pure functions, tested in Node. Decisions
 (promote, keep, reject) are appended to the project with their reason and comparison.
+
+### Cell identities
+
+Wave 4 types cells from their expression (`research.md` §5). Every analysis is an artifact of a
+segmentation, made by a job, named by its inputs and parameters, and checked before it is recorded.
+
+- **Clusters** (`internal/cluster`, `api_clustering.go`, slice 1): the cells analyzed (a rule, or a
+  QC filter's cells checked by its checksum), normalized and scaled; exact principal components of
+  the sparse counts (`internal/linalg`); each cell's nearest neighbors, exactly, weighted as UMAP's
+  graph, and Leiden (`internal/graph`, carried to Go from CytoWeave's analyses); each cluster's
+  markers. scanpy's defaults, so that its users find the same numbers; the same files on every
+  processor. The artifact (`docs/FORMATS.md`) keeps the cells and their clusters, the components
+  and scores, the neighbors and the markers; its check makes the graph again and requires the
+  recorded modularity.
+- **Scale** (slice 8): above 50,000 cells the neighbors are found by NN-Descent
+  (`internal/graph`'s `descent.go`), its rounds arranged so the table is the same for any number of
+  workers, its recall measured and recorded; above 1,000 genes the components by the Lanczos method
+  (`internal/linalg`'s `lanczos.go`); above 50,000 cells the map's epochs in batches over every core
+  (`internal/embed`'s `optimizeBatched`), its negative samples from a hash. Below, the methods are as
+  they were and their files unchanged.
+- **Maps** (`internal/embed`, `api_maps.go`, slice 2): UMAP of a clustering's graph, made by a job
+  as soon as the clustering is, one thread and one seeded stream so a seed gives the same map
+  anywhere (above 50,000 cells, in batches over every core, the same for any number of workers); each map judged (trustworthiness, each cell's neighborhood precision and recall) and
+  kept as an artifact of kind `embedding`. The instrument's own analysis (`internal/xenium`'s
+  `ReadAnalysis`) registers as a clustering of the instrument's segmentation (its markers by
+  SituCraft) and a map.
+- **Labels from markers** (`internal/label`, `api_labels.go`, slice 3): a marker set (a hierarchy
+  of labels and states with positive and negative markers, `docs/FORMATS.md`) checked against the
+  clustering's panel; each cell scored for each label as scanpy's `score_genes` scores a gene list
+  against control genes binned by expression, then labeled from the top of the hierarchy down by a
+  margin; kept as an artifact of kind `labels` with the marker set by its checksum. SituCraft ships
+  a starter set for each development bundle's panel (`internal/label/starters/`, embedded); the
+  project keeps each marker set's versions (records of kind `marker-set`, `lib/labels.js`), and
+  each label set the version it used. The labels' card (`ui/labels-card.js`) chooses, edits, reads
+  and saves marker sets, labels the shown clustering, and shows each cluster's labels, names from
+  them, and each label's markers and controls; the map, the tissue and the Viewer color the cells
+  by label (`labels:<id>:<level>` among the Viewer's fills), confidence or a label's score.
+- **Imported labels** (`internal/label`'s `table.go` and `imported.go`, slice 4): a CSV, TSV,
+  Parquet or AnnData Zarr table (or Xenium Explorer's cell groups, or the instrument's clusters)
+  read whole, its columns described and their roles suggested, its ids matched to a
+  segmentation's cells; a table naming cells the segmentation lacks refused. Kept as a label set
+  of kind `labels` with its source in place of a marker set (one level, no scores, every cell of
+  the segmentation), so that the map, the tissue, the Viewer and each cluster's labels treat it as
+  any label set; its composition is counted in the page for the clustering shown.
+- **Labels from a reference** (`internal/label`'s `reference.go` and `reference_files.go`,
+  `api_references.go`, slice 6): an AnnData Zarr reference or a table of profiles read through the
+  same readers (`internal/anndata`, `table.go`), described from its matrices' first chunks, read a
+  chunk at a time (`anndata.EachRow`) and restricted to the panel's genes; one profile per label; a `Mapper` holding each pair of labels'
+  genes and, made once for each set of labels fine-tuning reaches, their ranks, correlating cells
+  in parallel over their expressed genes. Kept as a label set of kind `labels` with the reference as
+  compared (`reference.json`), from which a cell's evidence is mapped again. The page's card is
+  `ui/labels-card.js`'s; versions and review treat the set as any other.
+- **Labels across segmentations** (slice 7): `internal/compare`'s `impact.go` reads two label sets
+  (each cell's label by name and whether its set covers it, sent by the page for any version) through
+  a comparison's differences, with each segmentation's counts for marker mixing
+  (`api_impact.go`); the comparison workspace's Labels tab (`ui/impact-panel.js`) shows it and
+  colors each side's cells by its labels; `ui/remake.js` makes a clustering and its label sets again
+  on another segmentation, the jobs one after another in the page (`lib/impact.js`'s plan); the
+  review queue takes the segmentation-sensitive cells the impact flags.
+- **Label versions and review** (slice 5): curated sets (a base and a reviewer's edits, appended
+  with reasons) and consensus sets (a rule over chosen sets) are the project's records
+  (`lib/curation.js`), resolved with the predicted sets to each cell's label in the page
+  (`ui/label-sources.js`) for the map, the tissue, the Viewer and side-by-side tables. The program
+  ranks the review queue for any labels the page sends (`internal/label/review.go`: each cell's
+  agreement with its nearest labeled cells, `internal/graph`'s exact two-dimensional neighbors) and
+  answers a cell's evidence from markers (`evidence.go`); the evidence card and the decisions are
+  the page's (`ui/review-card.js`).
+- **The Cell types view** (`ui/mode-celltypes.js`, `lib/clusterings.js`) runs a clustering and
+  shows its clusters, names, markers (a table and a dot plot) and the components' variances, and
+  compares two clusterings. **The map and the tissue** (`ui/cell-map.js`, `lib/scatter.js`): the map
+  rasterized onto a 2-D canvas (a million points redraw in tens of milliseconds, and the same pure
+  functions run in Node's tests) beside a tissue renderer of the segmentation's outlines, one
+  coloring (a clustering, a gene, an attribute, the map's reliability) and one selection on both:
+  lassoed on either (on the tissue, by the cells' centroids), or chosen by cluster. A gene's values,
+  the dot plot and a selection's markers come from the program, which keeps the last few
+  clusterings' normalized expression in memory. Names are versions in the project. The Viewer fills
+  the cells by cluster (`clusters:<id>` among its fills), with a legend, merged names one color.
 
 ### Exports
 

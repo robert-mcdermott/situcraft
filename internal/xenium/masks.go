@@ -103,6 +103,20 @@ func (m *Mask) Rows(y0, y1 int, dst []uint32) error {
 	return nil
 }
 
+// Row answers row y of the mask: the reader's own copy, decoded with its chunks' row, which a
+// later read replaces.
+func (m *Mask) Row(y int) ([]uint32, error) {
+	if y < 0 || y >= m.height {
+		return nil, fmt.Errorf("row %d of a mask of %d", y, m.height)
+	}
+	ch := m.a.Chunks[0]
+	if err := m.load(y / ch); err != nil {
+		return nil, err
+	}
+	o := (y - y/ch*ch) * m.width
+	return m.rows[o : o+m.width], nil
+}
+
 // load decodes chunk row r into m.rows.
 func (m *Mask) load(r int) error {
 	if m.cached == r {

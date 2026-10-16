@@ -8,6 +8,8 @@ import { promptDialog, toast } from './overlays.js';
 import { removeView, renameView, viewLink } from '../lib/views.js';
 import { promotedSegmentation } from '../lib/segmentations.js';
 import { KIND_ICONS, KIND_LABELS } from './sidebar.js';
+import { askRemoveComparison } from './comparisons.js';
+import { describeLabels, markerSetFile, markerSetVersions } from '../lib/labels.js';
 
 export function mountInspector(app) {
   const root = document.getElementById('inspector');
@@ -168,8 +170,128 @@ export function mountInspector(app) {
       h('div.btn-row', { style: { marginTop: '8px' } }, h('button.btn.small.primary', { type: 'button', onclick: () => {
         app.compareFocus = c.id;
         app.setMode('compare');
-      } }, icon('eye'), 'Open in the workspace')),
+      } }, icon('eye'), 'Open in the workspace'),
+      h('button.btn.small.ghost.danger', { type: 'button', title: 'Remove it from this project (the segmentations stay)', onclick: () => askRemoveComparison(app, c) }, icon('trash'), 'Remove')),
       c.method?.citation ? h('p.muted', { style: { margin: '8px 0 0', fontSize: '11.5px' } }, c.method.citation) : null);
+  }
+
+  // A clustering: its segmentation, its numbers, how it was made, and the tissue.
+  function clusteringSection(c) {
+    const { project } = app.store;
+    const seg = project.artifacts.find((a) => a.kind === 'segmentation' && a.id === c.segmentation);
+    const s = c.summary ?? {};
+    const p = c.parameters ?? {};
+    return h('section.inspector-section',
+      h('h3', icon('dots'), 'Clustering'),
+      h('dl.kv',
+        h('dt', 'Segmentation'), h('dd', seg?.name ?? c.segmentation),
+        h('dt', 'Cells'), h('dd', (s.cells ?? 0).toLocaleString('en-US')),
+        h('dt', 'Analyzed'), h('dd', s.filter ? `filter ${s.filter.name}` : `≥ ${p.minTranscripts} gene transcripts`),
+        h('dt', 'Clusters'), h('dd', String(s.clusters ?? '—')),
+        h('dt', 'Resolution'), h('dd', String(p.resolution ?? '—')),
+        h('dt', 'Neighbors'), h('dd', `${p.neighbors} in ${s.components ?? p.components} components`),
+        h('dt', 'Modularity'), h('dd', Number.isFinite(s.modularity) ? s.modularity.toFixed(4) : '—'),
+        h('dt', 'Seed'), h('dd', String(p.seed ?? '—')),
+        h('dt', 'Method'), h('dd', `${c.method?.name ?? ''} ${c.method?.version ?? ''}`.trim()),
+        h('dt', 'Artifact'), h('dd.mono', c.id)),
+      c.state === 'complete' ? h('div.btn-row', { style: { marginTop: '8px' } },
+        h('button.btn.small.primary', { type: 'button', onclick: () => app.showClusters(c) }, icon('tissue'), 'Show on the tissue'),
+        h('button.btn.small', { type: 'button', onclick: () => {
+          app.focusItem({ kind: 'clustering', id: c.id });
+          app.setMode('celltypes');
+        } }, icon('dots'), 'Its clusters')) : null,
+      c.method?.citation ? h('p.muted', { style: { margin: '8px 0 0', fontSize: '11.5px' } }, c.method.citation) : null);
+  }
+
+  // A label set: its clustering, marker set, cells labeled at each level, and parameters.
+  function labelsSection(r) {
+    const { project } = app.store;
+    const c = project.artifacts.find((a) => a.kind === 'clustering' && a.id === r.clustering);
+    const ms = project.artifacts.find((a) => a.kind === 'marker-set' && a.id === r.markerSet);
+    const s = r.summary ?? {};
+    const p = r.parameters ?? {};
+    const pct = (v) => (s.cells ? `${Math.round((100 * v) / s.cells)}%` : '—');
+    const seg = project.artifacts.find((a) => a.kind === 'segmentation' && a.id === r.segmentation);
+    const src = r.source;
+    return h('section.inspector-section',
+      h('h3', icon('tag'), 'Label set'),
+      h('dl.kv',
+        ...(src ? [
+          h('dt', 'Segmentation'), h('dd', seg?.name ?? r.segmentation),
+          h('dt', 'Imported from'), h('dd', src.format === 'instrument' ? `${src.tool} ${src.version}` : src.file),
+          h('dt', 'Column'), h('dd', src.format === 'instrument' ? src.title : src.column),
+          h('dt', 'Matched by'), h('dd', src.idColumn),
+          h('dt', 'SHA-256'), h('dd.mono', String(src.sha256 ?? '').slice(0, 16)),
+        ] : r.reference ? [
+          h('dt', 'Clustering'), h('dd', c?.name ?? r.clustering),
+          h('dt', 'Reference'), h('dd', `${r.reference.file}${r.reference.labelColumn ? ` (${r.reference.labelColumn})` : ''}`),
+          h('dt', 'Genes shared'), h('dd', `${s.reference?.shared ?? '?'} (${s.reference?.missing ?? '?'} of the panel's not in it)`),
+          h('dt', 'SHA-256'), h('dd.mono', String(r.reference.sha256 ?? '').slice(0, 16)),
+        ] : [
+          h('dt', 'Clustering'), h('dd', c?.name ?? r.clustering),
+          h('dt', 'Marker set'), h('dd', `${r.markers?.name ?? '?'}${ms ? ` (version ${ms.version})` : ''}`),
+          h('dt', 'Checksum'), h('dd.mono', (r.markers?.checksum ?? '').slice(0, 16)),
+        ]),
+        h('dt', 'Cells'), h('dd', (s.cells ?? 0).toLocaleString('en-US')),
+        ...(s.levels ?? []).flatMap((level, l) => [h('dt', level), h('dd', `${(s.labeled?.[l] ?? 0).toLocaleString('en-US')} (${pct(s.labeled?.[l] ?? 0)})`)]),
+        src ? null : h('dt', 'Margin'), src ? null : h('dd', r.reference ? `${p.margin ?? '—'} (fine-tuning ${p.tune ?? '—'})` : `${p.margin ?? '—'} (minimum ${p.minimum ?? '—'})`),
+        h('dt', 'Method'), h('dd', `${r.method?.name ?? ''} ${r.method?.version ?? ''}`.trim()),
+        h('dt', 'Artifact'), h('dd.mono', r.id)),
+      r.state === 'complete' ? h('div.btn-row', { style: { marginTop: '8px' } },
+        h('button.btn.small.primary', { type: 'button', onclick: () => app.showLabels(r, 0) }, icon('tissue'), 'Show on the tissue'),
+        h('button.btn.small', { type: 'button', onclick: () => {
+          app.focusItem({ kind: 'labels', id: r.id });
+          app.setMode('celltypes');
+        } }, icon('tag'), 'Its labels')) : null,
+      h('p.muted', { style: { margin: '8px 0 0', fontSize: '11.5px' } }, describeLabels(r)),
+      r.method?.citation ? h('p.muted', { style: { margin: '8px 0 0', fontSize: '11.5px' } }, r.method.citation) : null);
+  }
+
+  // A curated or consensus label set: what it is made of, and its edits or rule.
+  function versionSection(r) {
+    const seg = app.store.project.artifacts.find((a) => a.kind === 'segmentation' && a.id === r.segmentation);
+    const curated = r.kind === 'curated-labels';
+    return h('section.inspector-section',
+      h('h3', icon(curated ? 'edit' : 'layers'), curated ? 'Curated labels' : 'Consensus labels'),
+      h('dl.kv',
+        h('dt', 'Name'), h('dd', r.name),
+        h('dt', 'Segmentation'), h('dd', seg?.name ?? r.segmentation),
+        ...(curated ? [h('dt', 'From'), h('dd', r.base.name), h('dt', 'Edits'), h('dd', String(r.edits.length))]
+          : [h('dt', 'Of'), h('dd', r.members.map((m) => m.name).join('; ')), h('dt', 'Rule'), h('dd', r.rule.kind === 'majority' ? `majority of ${r.rule.min}` : r.rule.kind)]),
+        h('dt', 'Made'), h('dd', `${relativeTime(r.created)} by ${r.by}`)),
+      curated && r.edits.length ? h('ul.inspector-list', ...r.edits.slice(-8).reverse().map((e) => h('li', `${e.kind === 'accept' ? 'accepted' : 'relabeled'} "${e.label}" (${e.kind === 'cluster' ? `clusters ${e.clusters.map((k) => k + 1).join(', ')}` : `${e.cells.length} cell${e.cells.length === 1 ? '' : 's'}`}): ${e.reason}, ${e.by}, ${relativeTime(e.time)}`))) : null,
+      h('div.btn-row', { style: { marginTop: '8px' } },
+        h('button.btn.small.primary', { type: 'button', onclick: () => app.showOnTissue(r.dataset, r.segmentation, `labels:${r.id}:0`) }, icon('tissue'), 'Show on the tissue'),
+        h('button.btn.small', { type: 'button', onclick: () => {
+          app.focusItem({ kind: 'labels', id: r.id });
+          app.setMode('celltypes');
+        } }, icon('tag'), 'Review')));
+  }
+
+  // A marker set: its versions, where it came from, and its file.
+  function markerSetSection(m) {
+    const versions = markerSetVersions(app.store.project, m.family);
+    const from = (v) => (v.source?.starter ? `SituCraft's starter set (${v.source.starter})` : v.source?.file ? `the file ${v.source.file}` : 'edited');
+    return h('section.inspector-section',
+      h('h3', icon('dna'), 'Marker set'),
+      h('dl.kv',
+        h('dt', 'Name'), h('dd', m.name),
+        h('dt', 'Levels'), h('dd', m.set.levels.join(', ')),
+        h('dt', 'Labels'), h('dd', String(m.set.labels.length)),
+        h('dt', 'States'), h('dd', String(m.set.states?.length ?? 0)),
+        h('dt', 'References'), h('dd', String(m.set.references?.length ?? 0)),
+        h('dt', 'Checksum'), h('dd.mono', m.checksum.slice(0, 16))),
+      h('div.section-title', { style: { marginTop: '8px' } }, 'Versions'),
+      h('ul.inspector-list', ...versions.map((v) => h('li', `Version ${v.version}: ${from(v)}, ${relativeTime(v.created)}`))),
+      h('div.btn-row', { style: { marginTop: '8px' } },
+        h('button.btn.small', { type: 'button', onclick: () => {
+          const blob = new Blob([markerSetFile(m.set)], { type: 'application/json' });
+          const a = h('a', { href: URL.createObjectURL(blob), download: `${m.name.replace(/[^\w.-]+/g, '_')}.markers.json` });
+          document.body.append(a);
+          a.click();
+          a.remove();
+          setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+        } }, icon('download'), 'Save as a file')));
   }
 
   function focusSection() {
@@ -185,6 +307,19 @@ export function mountInspector(app) {
     if (focus?.kind === 'comparison') {
       const c = app.store.project.artifacts.find((a) => a.kind === 'comparison' && a.id === focus.id);
       if (c) return comparisonSection(c);
+    }
+    if (focus?.kind === 'clustering') {
+      const c = app.store.project.artifacts.find((a) => a.kind === 'clustering' && a.id === focus.id);
+      if (c) return clusteringSection(c);
+    }
+    if (focus?.kind === 'labels') {
+      const r = app.store.project.artifacts.find((a) => a.id === focus.id && ['labels', 'curated-labels', 'consensus-labels'].includes(a.kind));
+      if (r?.kind === 'labels') return labelsSection(r);
+      if (r) return versionSection(r);
+    }
+    if (focus?.kind === 'marker-set') {
+      const m = app.store.project.artifacts.find((a) => a.kind === 'marker-set' && a.id === focus.id);
+      if (m) return markerSetSection(m);
     }
     if (focus?.kind === 'filter') {
       const filter = app.store.project.artifacts.find((a) => a.id === focus.id);

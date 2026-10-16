@@ -144,6 +144,32 @@ export function addComparison(project, record, now = new Date().toISOString()) {
   };
 }
 
+// The decisions resting on a comparison (a promotion made from it, say).
+export function decisionsCiting(project, comparisonId) {
+  return project.decisions.filter((d) => d.comparison === comparisonId);
+}
+
+// The project without a comparison, the removal recorded in its history. A comparison a decision
+// cites stays: the methods paragraph tells how the default was chosen from it. Its files are left
+// to the program (api_compare.go), which moves them to the trash once no project names it.
+export function removeComparison(project, id, now = new Date().toISOString()) {
+  const record = project.artifacts.find((a) => a.kind === 'comparison' && a.id === id);
+  if (!record) throw new Error('The project has no such comparison.');
+  const names = (sid) => project.artifacts.find((a) => a.kind === 'segmentation' && a.id === sid)?.name ?? sid;
+  const citing = decisionsCiting(project, id);
+  if (citing.length) {
+    const d = citing.at(-1);
+    const done = Object.values(DECISIONS).find((x) => x.kind === d.kind)?.done.toLowerCase() ?? 'decided';
+    throw new Error(`The comparison of ${names(record.a)} with ${names(record.b)} cannot be removed: ${names(d.artifact).toLowerCase()} was ${done} from it, and the methods paragraph says so.`);
+  }
+  return {
+    ...project,
+    modified: now,
+    artifacts: project.artifacts.filter((a) => a !== record),
+    history: [...project.history, { time: now, action: 'comparison', detail: `Removed the comparison of ${names(record.a)} (A) with ${names(record.b)} (B) (artifact ${id})` }],
+  };
+}
+
 // --- Decisions about segmentations ---------------------------------------------------------------
 
 // What can be decided of a segmentation: promote it (the dataset's default), keep it for

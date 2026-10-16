@@ -10,10 +10,13 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"sync"
 
+	"situcraft/internal/artifacts"
 	"situcraft/internal/cache"
 	"situcraft/internal/compare"
 	"situcraft/internal/segment"
@@ -172,28 +175,70 @@ func (a *app) outlineTile(w http.ResponseWriter, r *http.Request) {
 	writeBinary(w, block, true)
 }
 
+// earlierMethod says why a comparison made by another version of the method is not shown. Its
+// headline numbers still read; its differences are laid out as that version wrote them.
+func earlierMethod(v string) string {
+	if n, err := strconv.Atoi(v); err == nil {
+		if m, _ := strconv.Atoi(compare.MethodVersion); n > m {
+			return fmt.Sprintf("This comparison was made by a newer SituCraft (comparison method %s; this one reads method %s). Open it with that version, or compare the two segmentations again here.", v, compare.MethodVersion)
+		}
+	}
+	return fmt.Sprintf("This comparison was made by an earlier SituCraft (comparison method %s), whose list of differences this version (method %s) does not read. Compare the two segmentations again to see them; the comparison made then replaces this one in the workspace.", v, compare.MethodVersion)
+}
+
 // comparisonGroups answers a comparison's differences, column by column, with the ids of the two
 // segmentations' cells: {classes, class, a, b, iou, jaccard, displacement, changed, x, y,
 // transcriptsA, transcriptsB, mixedA, mixedB, idsA, idsB}.
+// comparisonOf finds a comparison of the bundle's dataset and its groups, answering its manifest,
+// the two segmentations it compares (A, B) and its differences; ok is false when it wrote why not.
+func (a *app) comparisonOf(w http.ResponseWriter, id string) (artifacts.Manifest, [2]string, []compare.Group, string, bool) {
+	var sides [2]string
+	m, err := a.artifacts.Get(id)
+	if errors.Is(err, artifacts.ErrNotFound) {
+		writeErrorCode(w, http.StatusNotFound, "comparison.missing", "The comparison's files are not among SituCraft's artifacts (it was removed, or made on another computer). Compare the two segmentations again to make it here.")
+		return m, sides, nil, "", false
+	}
+	if err != nil || m.Kind != "comparison" {
+		writeError(w, http.StatusNotFound, "No such comparison.")
+		return m, sides, nil, "", false
+	}
+	if v := m.Lineage.Method.Version; v != compare.MethodVersion {
+		writeErrorCode(w, http.StatusUnprocessableEntity, "comparison.earlier-method", earlierMethod(v))
+		return m, sides, nil, "", false
+	}
+	p, err := a.artifacts.Path(m.ID, compare.FileGroups)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return m, sides, nil, "", false
+	}
+	dir := p[:len(p)-len(compare.FileGroups)]
+	groups, err := compare.ReadGroups(dir)
+	if err != nil {
+		writeError(w, http.StatusUnprocessableEntity, err.Error())
+		return m, sides, nil, "", false
+	}
+	n := 0
+	for _, parent := range m.Lineage.Parents {
+		if parent.Kind == "segmentation" && n < 2 {
+			sides[n] = parent.ID
+			n++
+		}
+	}
+	if n != 2 {
+		writeError(w, http.StatusUnprocessableEntity, "The comparison does not name its two segmentations.")
+		return m, sides, nil, "", false
+	}
+	return m, sides, groups, dir, true
+}
+
 func (a *app) comparisonGroups(w http.ResponseWriter, r *http.Request) {
 	b, ok := a.openBundle(w, r)
 	if !ok {
 		return
 	}
 	defer b.Close()
-	m, err := a.artifacts.Get(r.PathValue("id"))
-	if err != nil || m.Kind != "comparison" {
-		writeError(w, http.StatusNotFound, "No such comparison.")
-		return
-	}
-	p, err := a.artifacts.Path(m.ID, compare.FileGroups)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	groups, err := compare.ReadGroups(p[:len(p)-len(compare.FileGroups)])
-	if err != nil {
-		writeError(w, http.StatusUnprocessableEntity, err.Error())
+	_, sides, groups, _, ok := a.comparisonOf(w, r.PathValue("id"))
+	if !ok {
 		return
 	}
 	ids := func(id string) ([]string, error) {
@@ -214,16 +259,6 @@ func (a *app) comparisonGroups(w http.ResponseWriter, r *http.Request) {
 			out[i] = c.ID
 		}
 		return out, nil
-	}
-	var sides []string
-	for _, parent := range m.Lineage.Parents {
-		if parent.Kind == "segmentation" {
-			sides = append(sides, parent.ID)
-		}
-	}
-	if len(sides) != 2 {
-		writeError(w, http.StatusUnprocessableEntity, "The comparison does not name its two segmentations.")
-		return
 	}
 	idsA, err := ids(sides[0])
 	if err != nil {

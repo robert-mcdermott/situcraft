@@ -72,7 +72,7 @@ const (
 func makePanel(p Params, s *random.Stream, typeShare []float64) *panel {
 	pn := &panel{genes: p.Genes}
 	for g := 0; g < p.Genes; g++ {
-		pn.names = append(pn.names, fmt.Sprintf("SIM%03d", g+1))
+		pn.names = append(pn.names, GeneName(g))
 		pn.ids = append(pn.ids, fmt.Sprintf("SIMG%07d", g+1))
 		pn.kinds = append(pn.kinds, "Gene Expression")
 	}
@@ -88,17 +88,7 @@ func makePanel(p Params, s *random.Stream, typeShare []float64) *panel {
 	for g := range base {
 		base[g] = s.Gamma(0.6, 1) + 1e-3
 	}
-	markerOf := make([]int, p.Genes)
-	for g := range markerOf {
-		markerOf[g] = -1
-	}
-	next := 0
-	for k, ty := range p.Types {
-		for m := 0; m < ty.Markers; m++ {
-			markerOf[next] = k
-			next++
-		}
-	}
+	markerOf := markerTypes(p)
 	pn.tissueMean = make([]float64, p.Genes)
 	for k, ty := range p.Types {
 		prof := make([]float64, p.Genes)
@@ -241,4 +231,35 @@ func (t *tissue) background(tile int, pn *panel, out []molecule) []molecule {
 // tiles is the number of background tiles.
 func (t *tissue) tiles() int {
 	return int(math.Ceil(t.p.WidthUm/backgroundTile)) * int(math.Ceil(t.p.HeightUm/backgroundTile))
+}
+
+// markerTypes is the type each gene marks (−1 for none): the types' markers in order, from the
+// panel's first gene.
+func markerTypes(p Params) []int {
+	markerOf := make([]int, p.Genes)
+	for g := range markerOf {
+		markerOf[g] = -1
+	}
+	next := 0
+	for k, ty := range p.Types {
+		for m := 0; m < ty.Markers && next < p.Genes; m++ {
+			markerOf[next] = k
+			next++
+		}
+	}
+	return markerOf
+}
+
+// GeneName is the name of the panel's g-th gene (from 0).
+func GeneName(g int) string { return fmt.Sprintf("SIM%03d", g+1) }
+
+// MarkerNames are each type's marker genes, by name.
+func MarkerNames(p Params) [][]string {
+	out := make([][]string, len(p.Types))
+	for g, k := range markerTypes(p) {
+		if k >= 0 {
+			out[k] = append(out[k], GeneName(g))
+		}
+	}
+	return out
 }

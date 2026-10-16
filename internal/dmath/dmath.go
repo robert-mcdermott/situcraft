@@ -173,3 +173,91 @@ func Pow(x, y float64) float64 {
 	}
 	return Exp(mul(y, Log(x)))
 }
+
+// Erfc is the complementary error function (fdlibm s_erf.c's erfc, the same notice), whose upper
+// tail gives the normal distribution's: P(Z > z) = Erfc(z/√2)/2.
+func Erfc(x float64) float64 {
+	switch {
+	case math.IsNaN(x):
+		return math.NaN()
+	case math.IsInf(x, 1):
+		return 0
+	case math.IsInf(x, -1):
+		return 2
+	}
+	sign := x < 0
+	if sign {
+		x = -x
+	}
+	if x < 0.84375 {
+		var t float64
+		if x < 0x1p-56 {
+			t = x
+		} else {
+			z := mul(x, x)
+			y := horner(z, efPP[:]) / (1 + mul(z, horner(z, efQQ[:])))
+			if x < 0.25 {
+				t = x + mul(x, y)
+			} else {
+				t = 0.5 + (mul(x, y) + (x - 0.5))
+			}
+		}
+		if sign {
+			return 1 + t
+		}
+		return 1 - t
+	}
+	if x < 1.25 {
+		s := x - 1
+		pq := horner(s, efPA[:]) / (1 + mul(s, horner(s, efQA[:])))
+		if sign {
+			return 1 + efErx + pq
+		}
+		return 1 - efErx - pq
+	}
+	if x >= 28 {
+		if sign {
+			return 2
+		}
+		return 0
+	}
+	s := 1 / mul(x, x)
+	var r, q float64
+	if x < 1/0.35 {
+		r, q = horner(s, efRA[:]), 1+mul(s, horner(s, efSA[:]))
+	} else {
+		if sign && x > 6 {
+			return 2
+		}
+		r, q = horner(s, efRB[:]), 1+mul(s, horner(s, efSB[:]))
+	}
+	z := math.Float64frombits(math.Float64bits(x) & 0xffffffff00000000)
+	e := mul(Exp(-mul(z, z)-0.5625), Exp(mul(z-x, z+x)+r/q))
+	if sign {
+		return 2 - e/x
+	}
+	return e / x
+}
+
+// horner is c[0] + z(c[1] + z(c[2] + …)), each product rounded on its own.
+func horner(z float64, c []float64) float64 {
+	h := c[len(c)-1]
+	for i := len(c) - 2; i >= 0; i-- {
+		h = c[i] + mul(z, h)
+	}
+	return h
+}
+
+// fdlibm s_erf.c's coefficients.
+const efErx = 8.45062911510467529297e-01
+
+var (
+	efPP = [...]float64{1.28379167095512558561e-01, -3.25042107247001499370e-01, -2.84817495755985104766e-02, -5.77027029648944159157e-03, -2.37630166566501626084e-05}
+	efQQ = [...]float64{3.97917223959155352819e-01, 6.50222499887672944485e-02, 5.08130628187576562776e-03, 1.32494738004321644526e-04, -3.96022827877536812320e-06}
+	efPA = [...]float64{-2.36211856075265944077e-03, 4.14856118683748331666e-01, -3.72207876035701323847e-01, 3.18346619901161753674e-01, -1.10894694282396677476e-01, 3.54783043256182359371e-02, -2.16637559486879084300e-03}
+	efQA = [...]float64{1.06420880400844228286e-01, 5.40397917702171048937e-01, 7.18286544141962662868e-02, 1.26171219808761642112e-01, 1.36370839120290507362e-02, 1.19844998467991074170e-02}
+	efRA = [...]float64{-9.86494403484714822705e-03, -6.93858572707181764372e-01, -1.05586262253232909814e+01, -6.23753324503260060396e+01, -1.62396669462573470355e+02, -1.84605092906711035994e+02, -8.12874355063065934246e+01, -9.81432934416914548592e+00}
+	efSA = [...]float64{1.96512716674392571292e+01, 1.37657754143519042600e+02, 4.34565877475229228821e+02, 6.45387271733267880336e+02, 4.29008140027567833386e+02, 1.08635005541779435134e+02, 6.57024977031928170135e+00, -6.04244152148580987438e-02}
+	efRB = [...]float64{-9.86494292470009928597e-03, -7.99283237680523006574e-01, -1.77579549177547519889e+01, -1.60636384855821916062e+02, -6.37566443368389627722e+02, -1.02509513161107724954e+03, -4.83519191608651397019e+02}
+	efSB = [...]float64{3.03380607434824582924e+01, 3.25792512996573918826e+02, 1.53672958608443695994e+03, 3.19985821950859553908e+03, 2.55305040643316442583e+03, 4.74528541206955367215e+02, -2.24409524465858183362e+01}
+)

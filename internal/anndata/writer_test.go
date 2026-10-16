@@ -93,3 +93,47 @@ func TestWriteRefusals(t *testing.T) {
 		t.Fatal("an unwritable uns value was written")
 	}
 }
+
+// A matrix in sparse rows of small chunks is walked row by row as ReadMatrix reads it whole.
+func TestEachRowReadsChunkByChunk(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "m.zarr")
+	w, err := zarr.NewWriter(root, 2, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Four rows over five columns: 0 2 | (empty) | 1 3 4 | 0 1 2 3 4; chunks of three elements.
+	indptr := []int64{0, 2, 2, 5, 10}
+	indices := []int32{0, 2, 1, 3, 4, 0, 1, 2, 3, 4}
+	data := []float32{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
+	x := enc("csr_matrix", "0.1.0")
+	x["shape"] = []int{4, 5}
+	if err := w.Group("X", x); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.WriteArray("X/indptr", "<i8", []int{len(indptr)}, int64s(indptr), 2, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.WriteArray("X/indices", "<i4", []int{len(indices)}, int32s(indices), 3, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.WriteArray("X/data", "<f4", []int{len(data)}, float32s(data), 3, nil); err != nil {
+		t.Fatal(err)
+	}
+	s := zarr.OpenDir(root)
+	m, err := ReadMatrix(s, "X")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	rows, cols, err := EachRow(s, "X", func(row int, c []int64, v []float64) error {
+		lo, hi := m.Indptr[row], m.Indptr[row+1]
+		if fmt.Sprint(c) != fmt.Sprint(m.Indices[lo:hi]) || fmt.Sprint(v) != fmt.Sprint(m.Data[lo:hi]) {
+			t.Errorf("row %d: %v %v; whole %v %v", row, c, v, m.Indices[lo:hi], m.Data[lo:hi])
+		}
+		got = append(got, fmt.Sprint(c, v))
+		return nil
+	})
+	if err != nil || rows != 4 || cols != 5 || len(got) != 4 || got[1] != "[] []" || got[3] != "[0 1 2 3 4] [6 7 8 9 10]" {
+		t.Errorf("%d × %d: %v (%v)", rows, cols, got, err)
+	}
+}

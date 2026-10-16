@@ -39,7 +39,11 @@
 // - the examples and the release (wave 3, slice 9): the simulated example made here; the worked
 //   examples refining the Breast data and scoring segmentations against the simulated truth, as
 //   their cards expect; the projects saved by 0.2.0 and 0.3.0 reopened, every artifact they record
-//   made again with the same checksums.
+//   made again with the same checksums;
+// - the examples and the release (wave 4, slice 9): the worked examples clustering and labeling the
+//   Lung cells, reading the Breast labels under two segmentations, and the simulated tissue's labels
+//   against its truth, as their cards expect; the project saved by 0.4.0 reopened, each clustering,
+//   map and label set from markers it records made again with the same summary.
 //
 // It builds the program, starts it on the bundles with an empty cache and library, builds their
 // derived data, and drives the page through window.situcraft (the app, app.js) and window.situcraftViewer
@@ -505,6 +509,205 @@ export async function viewerSuite({ check, MissingData, verbose }) {
         const exported = await act('export', { what: 'project', path: target });
         const written = existsSync(target) ? JSON.parse(readFileSync(target, 'utf8')) : null;
         check('viewer', 'remote control: export writes the project only with the token', `${refused.status} without, ${exported.ok ? 'written' : exported.message} with`, refused.status === 401 && exported.ok && written?.views?.length === 4 && written.artifacts.filter((a) => a.kind === 'filter').length === 3 && written.artifacts.filter((a) => a.kind === 'segmentation').length === 1, '401, then the project written');
+        // Clusters (wave 4, slice 1): the instrument's segmentation clustered by a program, and its
+        // clusters drawn on the tissue: each cell in its cluster's color, cells not analyzed clear.
+        const clustered = await act('cluster_cells', { dataset: 'xenium-lung-2fov' });
+        const shownClusters = await act('show_tissue', { fill: 'clusters', whole: true });
+        const clusterFill = await chrome.eval(`(async () => {
+          const v = window.situcraftViewer;
+          for (let k = 0; k < 300 && !v.clusterFill(); k += 1) await new Promise((r) => setTimeout(r, 100));
+          const f = v.clusterFill();
+          if (!f) return null;
+          const cells = await fetch('/api/clusterings/' + f.id + '/cells').then((r) => r.json());
+          const { categoricalColor } = await import('/lib/colormaps.js');
+          const rgba = v.fillColors();
+          let wrong = 0;
+          let clear = 0;
+          for (let i = 0; i < cells.cluster.length; i += 1) {
+            const c = cells.cluster[i];
+            if (c < 0) {
+              if (rgba[4 * i + 3] === 0) clear += 1;
+              else wrong += 1;
+              continue;
+            }
+            const hex = '#' + [0, 1, 2].map((j) => rgba[4 * i + j].toString(16).padStart(2, '0')).join('');
+            if (hex !== categoricalColor(c).toLowerCase() || rgba[4 * i + 3] !== 255) wrong += 1;
+          }
+          return { cells: cells.cluster.length, drawn: v.cellsDrawn().n, wrong, clear, clusters: cells.clusters, legend: document.querySelectorAll('.viewer-legend-item').length };
+        })()`);
+        check('viewer', 'remote control: cluster_cells clusters the Lung cells, and the tissue shows each cell in its cluster\'s color', clustered.ok && shownClusters.ok ? `${clustered.message} ${JSON.stringify(clusterFill)}` : clustered.message ?? shownClusters.message, clustered.ok && clustered.data.cells.analyzed === 11820 && clusterFill?.cells === 11898 && clusterFill.drawn === 11898 && clusterFill.wrong === 0 && clusterFill.clear === 78 && clusterFill.legend >= Math.min(24, clusterFill.clusters), 'every cell in its cluster\'s color, the 78 not analyzed clear, a legend');
+        // The map (wave 4, slice 2): the clustering's map beside the tissue; a cluster selected is
+        // exactly its cells on both, and a polygon drawn on the map selects exactly the cells whose
+        // places lie inside it, highlighted on the tissue.
+        const mapShown = await act('show_map', { dataset: 'xenium-lung-2fov', select: { clusters: [2] } });
+        const linked = await chrome.eval(`(async () => {
+          const v = window.situcraft.cellTypesView;
+          const map = v.map();
+          const st = map.state;
+          const cells = await fetch('/api/clusterings/' + st.color.clustering + '/cells').then((r) => r.json());
+          let wrong = 0;
+          let size = 0;
+          for (let i = 0; i < cells.cluster.length; i += 1) {
+            const want = cells.cluster[i] === 1 ? 1 : 0;
+            size += want;
+            if (st.selected[i] !== want) wrong += 1;
+          }
+          const highlight = Boolean(st.renderer.highlight);
+          // A polygon around the middle of the map's places.
+          const data = st.map;
+          let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+          for (let i = 0; i < data.n; i += 1) { x0 = Math.min(x0, data.xy[2 * i]); x1 = Math.max(x1, data.xy[2 * i]); y0 = Math.min(y0, data.xy[2 * i + 1]); y1 = Math.max(y1, data.xy[2 * i + 1]); }
+          const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, rx = (x1 - x0) / 4, ry = (y1 - y0) / 4;
+          const polygon = [[cx - rx, cy - ry], [cx + rx, cy - ry], [cx + rx, cy + ry], [cx - rx, cy]];
+          // Drawn pixels on the map.
+          const canvas = document.querySelector('.cm-map');
+          const px = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+          let drawn = 0;
+          for (let i = 3; i < px.length; i += 4) if (px[i] > 0) drawn += 1;
+          return { wrong, size, count: st.count, highlight, polygon, segCells: data.segCells, drawn };
+        })()`);
+        const lassoed = await act('show_map', { dataset: 'xenium-lung-2fov', select: { polygon: linked.polygon, on: 'map' } });
+        const inside = await chrome.eval(`(async () => {
+          const st = window.situcraft.cellTypesView.map().state;
+          const data = st.map;
+          const poly = ${JSON.stringify(linked.polygon)};
+          const inPoly = (x, y) => { let c = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const [xi, yi] = poly[i]; const [xj, yj] = poly[j]; if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c; } return c; };
+          let want = 0, wrong = 0;
+          const mask = new Uint8Array(st.selected.length);
+          for (let i = 0; i < data.n; i += 1) if (inPoly(data.xy[2 * i], data.xy[2 * i + 1])) mask[data.cells[i]] = 1;
+          for (let i = 0; i < mask.length; i += 1) { want += mask[i]; if (mask[i] !== st.selected[i]) wrong += 1; }
+          return { want, wrong, count: st.count };
+        })()`);
+        check('viewer', 'remote control: show_map selects a cluster\'s cells on the map and the tissue, and the cells a polygon on the map holds', mapShown.ok && lassoed.ok ? `cluster 2: ${linked.count} of ${linked.size} cells, ${linked.wrong} wrong; polygon: ${inside.count} of ${inside.want}, ${inside.wrong} wrong; ${linked.drawn} map pixels drawn` : mapShown.message ?? lassoed.message, mapShown.ok && linked.wrong === 0 && linked.size > 0 && linked.highlight && linked.segCells === 11898 && linked.drawn > 1000 && inside.wrong === 0 && inside.want > 100 && lassoed.data.selected === inside.want, 'exactly the cluster\'s cells, then exactly the cells inside, highlighted');
+        // Labels from markers (wave 4, slice 3): the Lung cells labeled by a program from the panel's
+        // starter set; the tissue filled by their labels at the lineage level, each cell in its
+        // label's color (the one it carries there), unlabeled cells grey, cells not analyzed
+        // clear; and, colored by labels, a cluster selected is still exactly its cells.
+        const labeled = await act('label_cells', { dataset: 'xenium-lung-2fov', markers: 'lung' });
+        const shownLabels = await act('show_tissue', { fill: 'labels:lineage', whole: true });
+        const labelFill = await chrome.eval(`(async () => {
+          const v = window.situcraftViewer;
+          for (let k = 0; k < 300 && !v.clusterFill()?.labels; k += 1) await new Promise((r) => setTimeout(r, 100));
+          const f = v.clusterFill();
+          if (!f?.labels) return null;
+          const id = window.situcraft.store.project.artifacts.filter((a) => a.kind === 'labels').at(-1).id;
+          const buffer = await fetch('/api/labels/' + id + '/cells').then((r) => r.arrayBuffer());
+          const [segCells, n, levels] = new Uint32Array(buffer, 0, 3);
+          const cells = new Uint32Array(buffer, 16, n);
+          const lineage = new Int32Array(buffer, 16 + 8 * n + 4 * n, n);
+          const { categoricalColor } = await import('/lib/colormaps.js');
+          const rgba = v.fillColors();
+          const want = new Int32Array(segCells).fill(-2);
+          for (let i = 0; i < n; i += 1) want[cells[i]] = lineage[i];
+          let wrong = 0, clear = 0, grey = 0;
+          for (let i = 0; i < segCells; i += 1) {
+            const hex = '#' + [0, 1, 2].map((j) => rgba[4 * i + j].toString(16).padStart(2, '0')).join('');
+            if (want[i] === -2) { if (rgba[4 * i + 3] === 0) clear += 1; else wrong += 1; continue; }
+            if (want[i] === -1) { if (hex === '#9a9a9a' && rgba[4 * i + 3] === 150) grey += 1; else wrong += 1; continue; }
+            if (hex !== categoricalColor(want[i]).toLowerCase() || rgba[4 * i + 3] !== 255) wrong += 1;
+          }
+          return { segCells, n, levels, wrong, clear, grey, legend: document.querySelectorAll('.viewer-legend-item').length };
+        })()`);
+        const byLabels = await act('show_map', { dataset: 'xenium-lung-2fov', color_by: 'labels', select: { clusters: [2] } });
+        const stillClusters = await chrome.eval(`(async () => {
+          const st = window.situcraft.cellTypesView.map().state;
+          const cells = await fetch('/api/clusterings/' + st.clustersOf + '/cells').then((r) => r.json());
+          let wrong = 0, size = 0;
+          for (let i = 0; i < cells.cluster.length; i += 1) { const w = cells.cluster[i] === 1 ? 1 : 0; size += w; if (st.selected[i] !== w) wrong += 1; }
+          return { wrong, size, kind: st.color.kind, legend: document.querySelectorAll('.cm-legend-item').length };
+        })()`);
+        check('viewer', 'remote control: label_cells labels the Lung cells from the panel\'s starter set; the tissue shows each cell in its label\'s color, and a cluster selected on the labels\' colors is its cells', labeled.ok && shownLabels.ok && byLabels.ok ? `${labeled.message} ${JSON.stringify(labelFill)} ${JSON.stringify(stillClusters)}` : labeled.message ?? shownLabels.message ?? byLabels.message, labeled.ok && labeled.data.cells.analyzed === 11820 && labelFill?.segCells === 11898 && labelFill.wrong === 0 && labelFill.clear === 78 && labelFill.grey > 0 && labelFill.legend > 2 && stillClusters.kind === 'labels' && stillClusters.wrong === 0 && stillClusters.size > 0 && stillClusters.legend > 2, 'every cell in its label\'s color, the unlabeled grey, the 78 not analyzed clear; the cluster\'s cells exactly');
+        // Imported labels (wave 4, slice 4): a table of three of the Lung cells' labels (their ids
+        // as select_cell answers them), each cell taking its row's label and the others none; a
+        // table naming a cell the segmentation does not have refused, with how many; the
+        // instrument's graph-based clusters imported for every cell it clusters.
+        const picked = [];
+        for (const row of [10, 500, 4000]) {
+          const a = await act('select_cell', { dataset: 'xenium-lung-2fov', cell: `#${row}` });
+          picked.push({ row, id: a.data?.id, label: row === 4000 ? 'Macrophage' : 'Tumour' });
+        }
+        const table = join(work, 'labels.csv');
+        writeFileSync(table, `cell_id,cell_type,score\n${picked.map((p, k) => `${p.id},${p.label},${(k + 1) / 4}`).join('\n')}\n`);
+        const foreign = join(work, 'foreign.csv');
+        writeFileSync(foreign, `cell_id,cell_type\n${picked[0].id},Tumour\nzzzzzzzz-1,T cell\n`);
+        const imported = await act('import_labels', { dataset: 'xenium-lung-2fov', segmentation: 'instrument', path: table });
+        const refusedTable = await act('import_labels', { dataset: 'xenium-lung-2fov', segmentation: 'instrument', path: foreign });
+        const instrumentLabels = await act('import_labels', { dataset: 'xenium-lung-2fov', segmentation: 'instrument', instrument: 'graph-based' });
+        const importedCells = imported.ok ? await chrome.eval(`(async () => {
+          const buffer = await fetch('/api/labels/${imported.data.id}/cells').then((r) => r.arrayBuffer());
+          const [segCells, n] = new Uint32Array(buffer, 0, 2);
+          const label = new Int32Array(buffer, 16 + 8 * n, n);
+          const set = await fetch('/api/labels/${imported.data.id}').then((r) => r.json());
+          const rows = ${JSON.stringify(picked.map((p) => p.row))};
+          let others = 0;
+          for (let i = 0; i < n; i += 1) if (!rows.includes(i) && label[i] >= 0) others += 1;
+          return { segCells, n, labels: rows.map((r) => set.description.sets[label[r]]?.name ?? null), confidence: set.description.source.confidenceColumn, others };
+        })()`) : null;
+        check('viewer', 'remote control: import_labels takes a table\'s labels for the cells it names, refuses one naming a cell the segmentation does not have, and takes the instrument\'s clusters', imported.ok && instrumentLabels.ok ? `${imported.message} ${JSON.stringify(importedCells)}; refused: ${refusedTable.message}; ${instrumentLabels.message}` : imported.message ?? instrumentLabels.message, imported.ok && importedCells?.n === 11898 && importedCells.others === 0 && importedCells.labels.join() === picked.map((p) => p.label).join() && importedCells.confidence === 'score' && !refusedTable.ok && /1 of foreign\.csv's 2 rows name cells this segmentation does not have \(zzzzzzzz-1\)/.test(refusedTable.message) && instrumentLabels.ok && instrumentLabels.data.cells.labeled[0] === 11897 && instrumentLabels.data.labels.length === 17, 'the three cells their rows\' labels and no other; refused with the count; 11,897 cells in 17 clusters');
+        // Label versions and review (wave 4, slice 5): the Lung labels from markers' review queue
+        // (each flagged cell's agreement at most the threshold, the most doubtful first); a cell
+        // relabeled with a reason in a curated set, drawn in its new label's color and every other
+        // cell as in its base set; a consensus of the two.
+        const markerSet = labeled.ok ? labeled.data.id : null;
+        const queued = markerSet ? await act('review_labels', { dataset: 'xenium-lung-2fov', segmentation: 'instrument', labels: markerSet, limit: 50 }) : { message: 'no label set' };
+        const shares = queued.ok ? queued.data.queue.filter((q) => q.reasons.includes('implausible')).map((q) => q.share) : [];
+        const relabelCell = queued.ok && queued.data.queue.length ? queued.data.queue[0].cell : 10;
+        const curated = markerSet ? await act('curate_labels', { dataset: 'xenium-lung-2fov', segmentation: 'instrument', labels: markerSet, cells: [`#${relabelCell}`], label: 'Reviewed: doublet', reason: 'two nuclei in one outline', by: 'validation' }) : { message: 'no label set' };
+        const curatedFill = curated.ok ? await act('show_tissue', { fill: `labels:${curated.data.id}`, whole: true }) : curated;
+        const curatedColors = curated.ok ? await chrome.eval(`(async () => {
+          const v = window.situcraftViewer;
+          for (let k = 0; k < 300 && !(v.clusterFill()?.labels && v.clusterFill().sets.some((x) => x.name === 'Reviewed: doublet')); k += 1) await new Promise((r) => setTimeout(r, 100));
+          const f = v.clusterFill();
+          const rgba = v.fillColors();
+          const { labelSource, refOf } = await import('/ui/label-sources.js');
+          const base = await labelSource(window.situcraft, refOf('${markerSet}', 0));
+          const hex = (i) => '#' + [0, 1, 2].map((j) => rgba[4 * i + j].toString(16).padStart(2, '0')).join('');
+          const k = f.sets.findIndex((x) => x.name === 'Reviewed: doublet');
+          let others = 0;
+          for (let i = 0; i < base.segCells; i += 1) {
+            if (i === ${relabelCell} || base.label[i] < 0) continue;
+            if (hex(i) !== base.colors[base.label[i]].toLowerCase()) others += 1;
+          }
+          return { relabeled: hex(${relabelCell}) === f.sets[k].color.toLowerCase(), newIndex: k, baseLabels: base.names.length, others };
+        })()`) : null;
+        const consensus = curated.ok ? await act('consensus_labels', { dataset: 'xenium-lung-2fov', segmentation: 'instrument', members: [markerSet, curated.data.id], rule: 'majority', min: 2, name: 'Agreed' }) : curated;
+        check('viewer', 'remote control: review_labels ranks the cells to review; curate_labels relabels one with its reason, drawn in its new label\'s color, the others as before; consensus_labels agrees', queued.ok && curated.ok && consensus.ok ? `${queued.message} ${curated.message} ${JSON.stringify(curatedColors)} ${consensus.message}` : queued.message ?? curated.message ?? consensus.message, queued.ok && queued.data.queue.length > 0 && shares.every((v, i) => v <= 0.2 && (i === 0 || v >= shares[i - 1])) && curated.ok && curated.data.edits === 1 && curated.data.last.reason === 'two nuclei in one outline' && curatedFill.ok && curatedColors?.relabeled && curatedColors.newIndex === curatedColors.baseLabels && curatedColors.others === 0 && consensus.ok && consensus.data.labeled === consensus.data.covered - 1, 'the implausible by agreement, rising, at most 0.2; the cell its new color, no other changed; the two agree but on the cell relabeled');
+        // Labels from a reference (wave 4, slice 6): a table of four classes' profiles over their
+        // markers (a row per gene; one gene the panel lacks), the Lung cells mapped to it; each
+        // cell drawn in its label's color; a cell's evidence its recorded first-round scores; a
+        // reference of none of the panel's genes refused.
+        const classes = { Epithelial: ['EPCAM', 'CDH1', 'ELF3'], Immune: ['CD3E', 'CD2', 'MS4A1', 'CD68', 'AIF1'], Endothelial: ['CLDN5', 'VWF', 'RAMP2'], Stromal: ['PDGFRA', 'PDGFRB', 'FBN1', 'DES'] };
+        const genes = [...Object.values(classes).flat(), 'NOT_A_GENE'];
+        const profilesTable = join(work, 'profiles.csv');
+        writeFileSync(profilesTable, `gene,${Object.keys(classes).join(',')}\n${genes.map((g) => `${g},${Object.values(classes).map((list) => (list.includes(g) ? 2.5 : 0.1)).join(',')}`).join('\n')}\n`);
+        const elsewhere = join(work, 'elsewhere.csv');
+        writeFileSync(elsewhere, 'gene,A,B\nNOT_A,1,0\nNOT_B,0,1\n');
+        const mapped = await act('reference_labels', { dataset: 'xenium-lung-2fov', path: profilesTable });
+        const refusedReference = await act('reference_labels', { dataset: 'xenium-lung-2fov', path: elsewhere });
+        const referenceFill = mapped.ok ? await act('show_tissue', { fill: `labels:${mapped.data.id}`, whole: true }) : mapped;
+        const referenceCells = mapped.ok ? await chrome.eval(`(async () => {
+          const v = window.situcraftViewer;
+          for (let k = 0; k < 300 && !(v.clusterFill()?.labels === '${mapped.data.id}'); k += 1) await new Promise((r) => setTimeout(r, 100));
+          const buffer = await fetch('/api/labels/${mapped.data.id}/cells').then((r) => r.arrayBuffer());
+          const [segCells, n] = new Uint32Array(buffer, 0, 2);
+          const cells = new Uint32Array(buffer, 16, n);
+          const label = new Int32Array(buffer, 16 + 8 * n, n);
+          const { categoricalColor } = await import('/lib/colormaps.js');
+          const rgba = v.fillColors();
+          let wrong = 0;
+          for (let i = 0; i < n; i += 1) {
+            if (label[i] < 0) continue;
+            const hex = '#' + [0, 1, 2].map((j) => rgba[4 * cells[i] + j].toString(16).padStart(2, '0')).join('');
+            if (hex !== categoricalColor(label[i]).toLowerCase()) wrong += 1;
+          }
+          const scores = new Float32Array(await fetch('/api/labels/${mapped.data.id}/scores?set=0').then((r) => r.arrayBuffer()));
+          const app = window.situcraft;
+          const item = app.bundles.link(app.store.project.datasets.find((d) => d.name === 'xenium-lung-2fov').id).item;
+          const ev = await fetch(item.url + '/clusterings/${mapped.data.clustering}/cells/' + cells[7] + '/evidence?labels=${mapped.data.id}').then((r) => r.json());
+          const first = ev.reference?.rounds?.[0]?.scores.find((x) => x.label === 0)?.score;
+          return { segCells, n, wrong, evidence: Boolean(ev.reference), label: ev.reference?.label, recordedLabel: label[7], same: Math.fround(first) === scores[cells[7]] };
+        })()`) : null;
+        check('viewer', 'remote control: reference_labels labels the Lung cells from a table of profiles, each drawn in its label\'s color, a cell\'s evidence its recorded scores; a reference sharing no gene with the panel refused', mapped.ok ? `${mapped.message} ${JSON.stringify(referenceCells)}; refused: ${refusedReference.message}` : mapped.message, mapped.ok && mapped.data.reference.shared === 15 && mapped.data.reference.missing.length > 0 && mapped.data.labels.length === 4 && mapped.data.cells.analyzed === 11820 && referenceFill.ok && referenceCells?.wrong === 0 && referenceCells.evidence && referenceCells.label === referenceCells.recordedLabel && referenceCells.same && !refusedReference.ok && /shares 0 of the panel's genes/.test(refusedReference.message), 'four labels over the 15 genes the panel has; every labeled cell in its color; the evidence as recorded; refused');
         // Nucleus expansion (wave 2, slice 3), run by a program in the Segmentation view.
         const expanded = await act('expand_nuclei', { dataset: 'xenium-lung-2fov', distance_um: 5 });
         const g = expanded.ok ? expanded.data.summary.agreement : null;
@@ -561,6 +764,21 @@ export async function viewerSuite({ check, MissingData, verbose }) {
         const noReason = await act('decide_segmentation', { dataset: 'xenium-lung-2fov', segmentation: 'Nucleus expansion, 5 µm', decision: 'promote', rationale: '  ' });
         const decided = await chrome.eval(`(() => { const p = window.situcraft.store.project; return p.decisions.filter((d) => d.kind === 'keep-segmentation').map((d) => ({ by: d.by, comparison: d.comparison ?? null })); })()`);
         check('viewer', 'remote control: decisions need a reason, never reject the default, and are appended with their comparison', `${refusedReject.message}; ${kept.message}; ${noReason.message}`, !refusedReject.ok && /the default/.test(refusedReject.message) && kept.ok && !noReason.ok && decided.length === 1 && decided[0].comparison === cd?.id && kept.data.default !== null, 'the default kept; the decision recorded with its comparison');
+        // Labels across segmentations (wave 4, slice 7): the Lung clustering and its labels (from
+        // the starter set and the table of profiles) made again on the expansion in one step; the
+        // two segmentations' labels read through the comparison, every cell one to one, the tissue
+        // colored by them; the review queue's segmentation-sensitive cells those the impact counts.
+        const repeated = await act('repeat_on_segmentation', { dataset: 'xenium-lung-2fov', segmentation: 'Nucleus expansion, 5 µm' });
+        const impact = repeated.ok ? await act('label_impact', { dataset: 'xenium-lung-2fov', comparison: 'Instrument segmentation and Nucleus expansion, 5 µm', color: true }) : repeated;
+        const colored = impact.ok ? await chrome.eval(`(() => {
+          const w = window.situcraft.compareView.current();
+          return { tab: w.session.tab, fill: w.session.impact.fill, legend: document.querySelectorAll('.cmp-legend-item').length, rows: document.querySelectorAll('.cmp-impact-table tbody tr').length };
+        })()`) : null;
+        const sensitiveQueue = impact.ok ? await act('review_labels', { dataset: 'xenium-lung-2fov', segmentation: 'Instrument segmentation', labels: impact.data.a.labels, against: impact.data.b.labels, limit: 500 }) : impact;
+        const im = impact.data;
+        check('viewer', 'remote control: repeat_on_segmentation makes the Lung labels again on the expansion; label_impact reads both through the comparison and colors the tissue by them; review_labels flags the cells whose label changes', impact.ok && sensitiveQueue.ok ? `${repeated.message} ${impact.message} ${JSON.stringify(colored)}; ${sensitiveQueue.message}` : impact.message ?? sensitiveQueue.message,
+          repeated.ok && repeated.data.labels.length === 2 && !repeated.data.failed.length && impact.ok && im.matched.cells > 11000 && im.matched.agreement >= 0.95 && im.split.groups === 0 && im.merged.groups === 0 && im.composition.length >= 4 && colored?.tab === 'labels' && colored.fill && colored.legend >= 4 && colored.rows === im.composition.length && sensitiveQueue.ok && sensitiveQueue.data.counts.sensitive === im.sensitive.a && sensitiveQueue.data.queue.some((q) => q.reasons.includes('segmentation-sensitive')),
+          'two label sets made again; every matched cell one to one, at least 95% labeled alike; the tissue in the labels\' colors; the queue\'s sensitive cells the impact\'s');
         if (present.includes('xenium-breast-2fov')) {
           const otherRun = await act('import_segmentation', { dataset: 'xenium-lung-2fov', format: 'xenium', paths: [join(dataRoot, 'xenium-breast-2fov')] });
           check('viewer', 'an output bundle of another run is refused, saying why', otherRun.message ?? otherRun.error, !otherRun.ok && /another run|of run/.test(otherRun.message ?? otherRun.error ?? ''), 'refused: another run');
@@ -601,6 +819,36 @@ export async function viewerSuite({ check, MissingData, verbose }) {
         const promotePlanted = await act('decide_segmentation', { dataset: 'xenium-lung-2fov', segmentation: 'Planted errors (simulated)', decision: 'promote', rationale: 'Testing' });
         const rejectPlanted = await act('decide_segmentation', { dataset: 'xenium-lung-2fov', segmentation: 'Planted errors (simulated)', decision: 'reject', rationale: 'Its planted errors were found' });
         check('viewer', 'a planted segmentation is never promoted, and is rejected with its reason', `${promotePlanted.message}; ${rejectPlanted.message ?? rejectPlanted.error}`, !promotePlanted.ok && /simulated/.test(promotePlanted.message) && rejectPlanted.ok, 'refused; rejected');
+        await act('tour', { end: true });
+
+        // The worked example clustering and labeling the Lung cells (wave 4, slice 9), as its card
+        // expects: here its clustering and labels are made already, with the same defaults and set.
+        // Started in the page: here the bundles are the project's datasets, not examples.
+        await chrome.eval(`(async () => {
+          const app = window.situcraft;
+          const { guideFor } = await import('/lib/tours.js');
+          const { startTour } = await import('/ui/tour.js');
+          const dataset = app.store.project.datasets.find((d) => d.name === 'xenium-lung-2fov');
+          startTour(app, { tour: guideFor('xenium-lung-2fov', 'cluster-label'), dataset: dataset.id });
+          return true;
+        })()`);
+        const lsteps = [];
+        for (let k = 0; k < 8; k += 1) lsteps.push(await act('tour', { run: true }));
+        const lungAt = (n) => lsteps.find((x) => x.ok && x.data.step === n)?.data;
+        const lungTour = await chrome.eval(`(async () => {
+          const labels = ${JSON.stringify(lungAt(6)?.celltypes?.color?.labels ?? '')};
+          const clustering = ${JSON.stringify(lungAt(3)?.celltypes?.clustering ?? '')};
+          const set = labels ? await fetch('/api/labels/' + labels).then((r) => r.json()) : null;
+          const c = clustering ? await fetch('/api/artifacts/' + clustering).then((r) => r.json()) : null;
+          const d = set?.description;
+          // The last step's Viewer, its cells filled by the labels.
+          for (let k = 0; k < 300 && !window.situcraftViewer?.clusterFill?.()?.labels; k += 1) await new Promise((r) => setTimeout(r, 100));
+          return { clusters: c?.summary?.clusters, shares: d ? d.cells.labeled.map((n) => Math.round((100 * n) / d.cells.analyzed)) : null, fill: window.situcraftViewer?.clusterFill?.()?.labels ? 'labels' : null };
+        })()`);
+        const lr = lungAt(8)?.celltypes?.review;
+        check('viewer', 'the Lung cell-types worked example clusters, maps, labels and reviews as its card expects', `${lsteps.map((x) => x.ok ? `step ${x.data.step}` : x.message).join('; ')}; ${JSON.stringify(lungTour)}; cluster 13 ${lungAt(4)?.celltypes?.selected} cells; review ${JSON.stringify(lr)}`,
+          lsteps.every((x) => x.ok) && lsteps.at(-1).data.step === 9 && lungAt(3)?.celltypes?.cells === 11820 && lungTour.clusters === 29 && lungAt(4)?.celltypes?.selected === 364 && lungAt(6)?.celltypes?.color?.kind === 'labels' && JSON.stringify(lungTour.shares) === '[47,12,1]' && lr?.labeled === 5555 && Math.abs(lr.implausible - 821) <= 5 && Math.abs(lr.lowConfidence - 1533) <= 5 && lr.flagged >= 1950 && lr.flagged <= 2150 && lungTour.fill === 'labels',
+          '29 clusters of 11,820 cells; cluster 13 of 364; 47%, 12% and 1% labeled; about 2,000 of 5,555 to review (821 implausible, 1,533 of low confidence; here also those whose label changes under the expansion); the Viewer filled by labels');
         await act('tour', { end: true });
 
         // Exports (wave 2, slice 7): only with the token; the manifest's totals; recorded in the
@@ -759,30 +1007,35 @@ export async function viewerSuite({ check, MissingData, verbose }) {
         check('viewer', 'a region holding no nucleus fails, classified, with what to do, in the answer and the studio', `${failed.message ?? failed.error}; the studio: ${failure.replace(/\s+/g, ' ')}`,
           !failed.ok && /holds no cell's nucleus/.test(failed.message ?? failed.error ?? '') && /What to do/.test(failed.message ?? failed.error ?? '') && /What to do/.test(failure), 'refused by the job, with the region\'s remedy');
 
-        // The projects as 0.2.0 and 0.3.0 saved them (validation/projects/<version>-lung.situcraft.json):
-        // this release's written when asked (SITUCRAFT_WRITE_FIXTURE=1), the places of this run's
-        // folders made neutral and given its own id; then each reopened, and every artifact
-        // SituCraft made that it records made again by this build with the same files' checksums
-        // (a comparison by its differences: its comparison.json records the jobs' times).
+        // The projects as 0.2.0, 0.3.0 and 0.4.0 saved them
+        // (validation/projects/<version>-lung.situcraft.json): this release's written when asked
+        // (SITUCRAFT_WRITE_FIXTURE=1), the places of this run's folders made neutral and given its
+        // own id; then each reopened, and every artifact SituCraft made that it records made again by
+        // this build with the same files' checksums (a comparison by its differences: its
+        // comparison.json records the jobs' times; a clustering, a map and a label set from markers,
+        // whose records keep no checksums, by their summaries, which hold their numbers exactly).
         const fixtureOf = (v) => join(root, 'validation', 'projects', `${v}-lung.situcraft.json`);
         if (process.env.SITUCRAFT_WRITE_FIXTURE) {
           const doc = await chrome.eval(`(async () => {
             const app = window.situcraft;
             const { rename, serializeProject } = await import('/lib/project.js');
-            app.store.commit(rename(app.store.project, 'Lung example, as SituCraft 0.3.0 saved it'), 'Rename');
+            app.store.commit(rename(app.store.project, 'Lung example, as SituCraft 0.4.0 saved it'), 'Rename');
             return serializeProject(app.store.project);
           })()`);
           // Its own id: it grew from the 0.1.0 project in this run.
           const neutral = JSON.parse(doc.split(join(dataRoot, 'xenium-lung-2fov')).join('/data/examples/xenium-lung-2fov').split(work).join('/data/work'));
-          writeFileSync(fixtureOf('0.3.0'), `${JSON.stringify({ ...neutral, id: 'p-situcraft-0-3-0-lung' }, null, 1)}\n`);
+          writeFileSync(fixtureOf('0.4.0'), `${JSON.stringify({ ...neutral, id: 'p-situcraft-0-4-0-lung' }, null, 1)}\n`);
         }
-        for (const v of ['0.2.0', '0.3.0']) {
+        for (const v of ['0.2.0', '0.3.0', '0.4.0']) {
           if (!existsSync(fixtureOf(v))) continue;
           const text = readFileSync(fixtureOf(v), 'utf8');
           const fixture = JSON.parse(text);
           // An import of SituCraft's own export is not made again by another version: the export's
           // files name the SituCraft that wrote them, so their checksums, and the import's id, differ.
-          const made = fixture.artifacts.filter((a) => (a.kind === 'segmentation' && a.source !== 'instrument' && a.method?.name !== 'SituCraft export') || a.kind === 'comparison');
+          // Labels imported or from a reference read a file this run wrote, and the instrument's
+          // clusters and map are the bundle's.
+          const cellTypes = (a) => (a.kind === 'clustering' && !a.summary?.source) || (a.kind === 'embedding' && !a.summary?.source) || (a.kind === 'labels' && !a.source && !a.reference);
+          const made = fixture.artifacts.filter((a) => (a.kind === 'segmentation' && a.source !== 'instrument' && a.method?.name !== 'SituCraft export') || a.kind === 'comparison' || cellTypes(a));
           const differing = [];
           for (const a of made) {
             const m = await fetch(`${url}/api/artifacts/${encodeURIComponent(a.id)}`).then((r) => (r.ok ? r.json() : null));
@@ -794,10 +1047,15 @@ export async function viewerSuite({ check, MissingData, verbose }) {
               if (JSON.stringify(m.summary?.classes) !== JSON.stringify(a.summary?.classes) || m.summary?.pixelAgreement !== a.summary?.pixelAgreement) differing.push(`${a.name}: other differences`);
               continue;
             }
+            if (cellTypes(a)) {
+              if (JSON.stringify(m.summary) !== JSON.stringify(a.summary)) differing.push(`${a.name}: another summary`);
+              continue;
+            }
             const sums = new Map((m.files ?? []).map((f) => [f.path, f.sha256]));
             for (const f of a.files) if (sums.get(f.path) !== f.sha256) differing.push(`${a.name}: ${f.path}`);
           }
-          check('viewer', `${v} Lung project: every artifact SituCraft made is made again with the same checksums`, `${made.length} artifacts${differing.length ? `; ${differing.slice(0, 4).join('; ')}` : ', all the same'}`, made.length >= 5 && differing.length === 0, 'all the same');
+          const kinds = [...new Set(made.map((a) => a.kind))].join(', ');
+          check('viewer', `${v} Lung project: every artifact SituCraft made is made again with the same checksums`, `${made.length} artifacts (${kinds})${differing.length ? `; ${differing.slice(0, 4).join('; ')}` : ', all the same'}`, made.length >= 5 && differing.length === 0 && (v < '0.4.0' || made.filter(cellTypes).length >= 5), 'all the same');
           const reopened = await chrome.eval(`(async () => {
             const app = window.situcraft;
             const { promotedSegmentation, exportsOf } = await import('/lib/segmentations.js');
@@ -865,6 +1123,27 @@ export async function viewerSuite({ check, MissingData, verbose }) {
             rsteps.every((x) => x.ok) && rsteps.at(-1).data.step === 5 && rn.cells === 7275 && near(rc?.classes?.['one-to-one'], 4700, 250) && near(rc?.classes?.expanded, 1700, 150) && near(rc?.classes?.contracted, 760, 80) && near(rn.changed, 0.23, 0.02) && near(rn.coA, 1.77, 0.03) && near(rn.coB, 1.83, 0.03),
             '7,275 cells; about 4,700 the same, 1,700 grown, 760 shrunk; 23% of transcripts moved; co-expression 1.77 and 1.83');
           await act('tour', { end: true });
+
+          // The worked example reading the Breast labels under two segmentations (wave 4, slice 9):
+          // the instrument's cells clustered and labeled, the labels made again on the expansion
+          // (made above), both read through the comparison, and the cells whose label changes
+          // reviewed, as its card expects.
+          await chrome.eval(`(async () => {
+            const app = window.situcraft;
+            const { guideFor } = await import('/lib/tours.js');
+            const { startTour } = await import('/ui/tour.js');
+            const dataset = app.store.project.datasets.find((d) => d.name === 'xenium-breast-2fov');
+            startTour(app, { tour: guideFor('xenium-breast-2fov', 'labels-two-segmentations'), dataset: dataset.id });
+            return true;
+          })()`);
+          const bsteps = [];
+          for (let k = 0; k < 9; k += 1) bsteps.push(await act('tour', { run: true }));
+          const bl = bsteps.find((x) => x.ok && x.data.step === 8)?.data?.comparison?.labels;
+          const bct = bsteps.at(-1)?.data?.celltypes;
+          check('viewer', 'the Breast labels worked example reads both segmentations\' labels through the comparison and reviews the cells whose label changes, as its card expects', `${bsteps.map((x) => x.ok ? `step ${x.data.step}` : x.message).join('; ')}; ${JSON.stringify(bl)}; review ${JSON.stringify(bct?.review)} against ${bct?.against}`,
+            bsteps.every((x) => x.ok) && bsteps.at(-1).data.step === 10 && bl?.matched.cells === 6512 && near(bl.matched.agreement, 0.969, 0.002) && bl.split.groups === 223 && bl.merged.groups === 106 && near(bl.mecr?.a, 0.0466, 0.001) && near(bl.mecr?.b, 0.0513, 0.001) && bl.fill && bct?.review?.sensitive === bl.sensitive.a && near(bl.sensitive.a, 688, 10) && /expansion/i.test(bct.against ?? ''),
+            '6,512 matched, 96.9% of those labeled under both alike; 223 split, 106 merged; mixing 0.047 and 0.051; about 688 cells flagged against the expansion');
+          await act('tour', { end: true });
         }
 
         // The simulated example, made on this computer, and its worked example scoring the
@@ -890,6 +1169,20 @@ export async function viewerSuite({ check, MissingData, verbose }) {
         check('viewer', 'the simulated example is made here; its worked example imports the truth, refines, and scores both against it as its card expects', `${simulatedMade.message ?? simulatedMade.error}; ${tsteps.map((x) => x.ok ? `step ${x.data.step}` : x.message).join('; ')}; ${JSON.stringify(scores)}`,
           simulatedMade.ok && tsteps.every((x) => x.ok) && tsteps.at(-1).data.step === 6 && tc?.mode === 'overlay' && scores.truth && near(scores.instrument?.iou, 0.62, 0.02) && near(scores.instrument?.changed, 0.20, 0.02) && near(scores.refined?.iou, 0.72, 0.02) && near(scores.refined?.changed, 0.17, 0.02),
           'the instrument\'s: median IoU 0.62, 20% changed; the refinement\'s: 0.72, 17%');
+        await act('tour', { end: true });
+
+        // The worked example reading the simulated tissue's labels against its truth (wave 4,
+        // slice 9): the true types imported, the instrument's cells labeled from the types' markers
+        // and read against them, then the refinement's (made above), as its card expects.
+        await act('tour', { example: 'simulated-standard', name: 'labels-against-truth' });
+        const lsim = [];
+        for (let k = 0; k < 10; k += 1) lsim.push(await act('tour', { run: true }));
+        const simAt = (n) => lsim.find((x) => x.ok && x.data.step === n)?.data?.comparison?.labels;
+        const simInst = simAt(7);
+        const simRef = simAt(11);
+        check('viewer', 'the simulated labels worked example reads the instrument\'s and the refinement\'s labels against the true types, as its card expects', `${lsim.map((x) => x.ok ? `step ${x.data.step}` : x.message).join('; ')}; instrument ${JSON.stringify(simInst && { ...simInst.matched, mecr: simInst.mecr })}; refinement ${JSON.stringify(simRef && { ...simRef.matched, mecr: simRef.mecr })}`,
+          lsim.every((x) => x.ok) && lsim.at(-1).data.step === 11 && simInst?.matched.cells === 2916 && near(simInst.matched.agreement, 0.983, 0.003) && near(simInst.mecr?.a, 0.063, 0.002) && near(simInst.mecr?.b, 0.221, 0.005) && near(simRef?.matched.agreement, 0.9986, 0.002) && near(simRef?.mecr?.b, 0.090, 0.003),
+          'the instrument\'s: 98.3% their true type, mixing 0.22 against the truth\'s 0.06; the refinement\'s: 99.9%, mixing 0.09');
         await act('tour', { end: true });
       }
     }

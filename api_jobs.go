@@ -16,6 +16,7 @@ import (
 
 	"situcraft/internal/compare"
 	"situcraft/internal/jobs"
+	"situcraft/internal/label"
 	"situcraft/internal/xenium"
 )
 
@@ -225,6 +226,97 @@ func (a *app) handleJobs() {
 			a.artifacts.Discard(comparisonID(p.A, p.B, compare.DefaultParams()))
 		}
 	})
+	a.jobs.Handle("clustering", func(spec json.RawMessage) (jobs.Func, error) {
+		if a.cache == nil {
+			return nil, errors.New("SituCraft has no cache folder")
+		}
+		var p clusterSpec
+		if json.Unmarshal(spec, &p) != nil || p.Bundle == "" || p.Segmentation == "" || p.Parameters.Check() != nil {
+			return nil, errors.New("its spec names no bundle, segmentation and parameters")
+		}
+		return a.clusteringJob(p, clusteringID(p.Segmentation, p.Filter, p.Parameters)), nil
+	}, func(id string, spec json.RawMessage) {
+		var p clusterSpec
+		if json.Unmarshal(spec, &p) == nil && p.Segmentation != "" {
+			a.artifacts.Discard(clusteringID(p.Segmentation, p.Filter, p.Parameters))
+		}
+	})
+	a.jobs.Handle("embedding", func(spec json.RawMessage) (jobs.Func, error) {
+		var p embedSpec
+		if json.Unmarshal(spec, &p) != nil || p.Clustering == "" || p.Parameters.Check() != nil {
+			return nil, errors.New("its spec names no clustering and parameters")
+		}
+		return a.embeddingJob(p, embeddingID(p.Clustering, p.Parameters)), nil
+	}, func(id string, spec json.RawMessage) {
+		var p embedSpec
+		if json.Unmarshal(spec, &p) == nil && p.Clustering != "" {
+			a.artifacts.Discard(embeddingID(p.Clustering, p.Parameters))
+		}
+	})
+	labelsOf := func(spec json.RawMessage) (labelSpec, string, error) {
+		var p labelSpec
+		if json.Unmarshal(spec, &p) != nil || p.Clustering == "" || p.Parameters.Check() != nil {
+			return p, "", errors.New("its spec names no clustering, marker set and parameters")
+		}
+		set, err := label.Parse(p.Markers)
+		if err != nil {
+			return p, "", err
+		}
+		return p, labelsID(p.Clustering, set.Checksum(), p.Parameters), nil
+	}
+	a.jobs.Handle("labels", func(spec json.RawMessage) (jobs.Func, error) {
+		if a.cache == nil {
+			return nil, errors.New("SituCraft has no cache folder")
+		}
+		p, id, err := labelsOf(spec)
+		if err != nil {
+			return nil, err
+		}
+		return a.labelsJob(p, id), nil
+	}, func(id string, spec json.RawMessage) {
+		if _, lid, err := labelsOf(spec); err == nil {
+			a.artifacts.Discard(lid)
+		}
+	})
+	a.jobs.Handle("label-import", func(spec json.RawMessage) (jobs.Func, error) {
+		if a.cache == nil {
+			return nil, errors.New("SituCraft has no cache folder")
+		}
+		var p importLabelsSpec
+		if json.Unmarshal(spec, &p) != nil || p.Bundle == "" || p.Ask.Segmentation == "" || p.SHA256 == "" {
+			return nil, errors.New("its spec names no bundle, segmentation and table")
+		}
+		return a.labelImportJob(p, importedLabelsID(p.Ask.Segmentation, p.SHA256, p.Ask.Columns)), nil
+	}, func(id string, spec json.RawMessage) {
+		var p importLabelsSpec
+		if json.Unmarshal(spec, &p) == nil && p.SHA256 != "" {
+			a.artifacts.Discard(importedLabelsID(p.Ask.Segmentation, p.SHA256, p.Ask.Columns))
+		}
+	})
+	a.jobs.Handle("label-reference", func(spec json.RawMessage) (jobs.Func, error) {
+		if a.cache == nil {
+			return nil, errors.New("SituCraft has no cache folder")
+		}
+		p, id, err := a.referenceJobOf(spec)
+		if err != nil {
+			return nil, err
+		}
+		return a.referenceJob(p, id), nil
+	}, func(id string, spec json.RawMessage) {
+		if _, lid, err := a.referenceJobOf(spec); err == nil {
+			a.artifacts.Discard(lid)
+		}
+	})
+	a.jobs.Handle("analysis", func(spec json.RawMessage) (jobs.Func, error) {
+		if a.cache == nil {
+			return nil, errors.New("SituCraft has no cache folder")
+		}
+		var p analysisSpec
+		if json.Unmarshal(spec, &p) != nil || p.Bundle == "" || p.Clustering == "" {
+			return nil, errors.New("its spec names no bundle and clustering")
+		}
+		return a.analysisJob(p), nil
+	}, func(string, json.RawMessage) {})
 	a.jobs.Handle("plant", func(spec json.RawMessage) (jobs.Func, error) {
 		if a.cache == nil {
 			return nil, errors.New("SituCraft has no cache folder")

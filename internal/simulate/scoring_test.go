@@ -46,9 +46,13 @@ func TestScoringAgainstTheTruth(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		_, findings, _, err := imports.Run(ctx, ds, imports.Options{Format: imports.Xenium, Paths: []string{filepath.Join(folder, "truth")}}, dir, workers, nil)
+		d, findings, _, err := imports.Run(ctx, ds, imports.Options{Format: imports.Xenium, Paths: []string{filepath.Join(folder, "truth")}}, dir, workers, nil)
 		for _, f := range findings {
 			t.Logf("truth import: %s %s: %s", f.Severity, f.Code, f.Message)
+		}
+		// Named as what it is, not as the instrument's software.
+		if err == nil && !strings.Contains(string(d.Parameters), `"tool":"Simulated truth"`) {
+			t.Errorf("the truth imported as %s", d.Parameters)
 		}
 		return err
 	})

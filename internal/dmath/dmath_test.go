@@ -83,3 +83,32 @@ func TestSpecialValues(t *testing.T) {
 		t.Fatal("special values")
 	}
 }
+
+// Erfc agrees with the standard library's to within a few units in the last place, and with
+// known values.
+func TestErfc(t *testing.T) {
+	for _, c := range []struct{ x, want float64 }{
+		{0, 1}, {math.Inf(1), 0}, {math.Inf(-1), 2}, {30, 0}, {-30, 2},
+		{1, 0.15729920705028513066}, {-1, 1.8427007929497148693}, {3, 2.2090496998585441373e-05},
+		{0.5, 0.47950012218695346232}, {10, 2.0884875837625447570e-45},
+	} {
+		if got := Erfc(c.x); math.Abs(got-c.want) > 4e-16*math.Max(c.want, 1e-300)+1e-300 {
+			t.Errorf("Erfc(%g) = %.17g, want %.17g", c.x, got, c.want)
+		}
+	}
+	for i := -4000; i <= 4000; i++ {
+		x := float64(i) * 0.0071
+		got, want := Erfc(x), math.Erfc(x)
+		if math.Abs(got-want) > 4*ulp(want) {
+			t.Errorf("Erfc(%g) = %.17g, the standard library %.17g", x, got, want)
+		}
+	}
+	if !math.IsNaN(Erfc(math.NaN())) {
+		t.Error("Erfc(NaN) is not NaN")
+	}
+}
+
+func ulp(x float64) float64 {
+	x = math.Abs(x)
+	return math.Nextafter(x, math.Inf(1)) - x
+}

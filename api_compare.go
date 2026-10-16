@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"runtime"
+	"time"
 
 	"situcraft/internal/artifacts"
 	"situcraft/internal/compare"
@@ -44,6 +45,45 @@ func comparisonID(a, b string, p compare.Params) string {
 
 func (a *app) registerComparisons(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/local/{index}/compare", a.startComparison)
+	mux.HandleFunc("POST /api/artifacts/{id}/trash", a.trashComparison)
+}
+
+// trashComparison moves a comparison's files into the library's trash (trash/artifacts) once no
+// saved project names it: the page asks after removing it from its project and saving. While a
+// project records it, or a decision cites it, it stays. A comparison can always be made again.
+func (a *app) trashComparison(w http.ResponseWriter, r *http.Request) {
+	if !isLoopbackRequest(r) {
+		writeError(w, http.StatusForbidden, "Only this computer may remove files.")
+		return
+	}
+	m, err := a.artifacts.Get(r.PathValue("id"))
+	if errors.Is(err, artifacts.ErrNotFound) {
+		writeJSON(w, map[string]any{"trashed": false, "missing": true})
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if m.Kind != "comparison" {
+		writeError(w, http.StatusBadRequest, "Only a comparison's files are moved to the trash this way.")
+		return
+	}
+	users, err := a.store.projectsNaming(m.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if len(users) > 0 {
+		writeJSON(w, map[string]any{"trashed": false, "usedBy": users})
+		return
+	}
+	to, err := a.artifacts.Trash(m.ID, filepath.Join(a.store.dir, "trash", "artifacts"), time.Now())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, map[string]any{"trashed": true, "trash": to})
 }
 
 // startComparison starts the job comparing segmentations {a, b} (artifact ids) of a bundle's

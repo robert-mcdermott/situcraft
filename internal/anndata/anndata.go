@@ -208,6 +208,54 @@ func Numbers(a *zarr.Array) ([]float64, error) {
 	if err != nil {
 		return nil, err
 	}
+	return decode(a, raw)
+}
+
+// MatrixInfo reads a matrix's shape (rows, columns) and its first chunk of stored values (a
+// sparse matrix's nonzero values, a dense one's leading block), without reading it whole.
+func MatrixInfo(s zarr.Store, path string) (rows, cols int, sample []float64, err error) {
+	attrs, err := zarr.Attributes(s, path)
+	if err != nil {
+		return 0, 0, nil, err
+	}
+	var a *zarr.Array
+	switch e := encoding(attrs); e {
+	case "csr_matrix", "csc_matrix":
+		shape, _ := attrs["shape"].([]any)
+		if len(shape) != 2 {
+			return 0, 0, nil, fmt.Errorf("anndata: %s has no shape", path)
+		}
+		r, _ := shape[0].(float64)
+		c, _ := shape[1].(float64)
+		rows, cols = int(r), int(c)
+		if a, err = zarr.OpenArray(s, path+"/data"); err != nil {
+			return 0, 0, nil, err
+		}
+	case "array", "":
+		if a, err = zarr.OpenArray(s, path); err != nil {
+			return 0, 0, nil, err
+		}
+		if len(a.Shape) != 2 {
+			return 0, 0, nil, fmt.Errorf("anndata: %s has %d dimensions", path, len(a.Shape))
+		}
+		rows, cols = a.Shape[0], a.Shape[1]
+	default:
+		return 0, 0, nil, fmt.Errorf("anndata: %s is %q, which is not read", path, e)
+	}
+	for _, n := range a.Shape {
+		if n == 0 {
+			return rows, cols, nil, nil
+		}
+	}
+	raw, err := a.ReadChunk(make([]int, len(a.Shape)))
+	if err != nil {
+		return 0, 0, nil, err
+	}
+	sample, err = decode(a, raw)
+	return rows, cols, sample, err
+}
+
+func decode(a *zarr.Array, raw []byte) ([]float64, error) {
 	size := a.DType.Size
 	n := len(raw) / max(size, 1)
 	out := make([]float64, n)

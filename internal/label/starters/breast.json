@@ -1,0 +1,403 @@
+{
+ "format": "situcraft-markers",
+ "version": 1,
+ "name": "Human breast (Xenium Human Breast panel)",
+ "about": "The breast's main cell types from well-established markers, every one in the Xenium Human Breast Gene Expression panel (hBreast_v1), the class-level markers chosen to be specific in this panel's development data set (where tumor cells express LPL and PDGFRA, and abundant stromal transcripts reach neighboring cells). A starting point, to be checked against each cluster's markers and edited: tumor cells are labeled by the lineage they resemble.",
+ "panel": "hBreast_v1",
+ "levels": [
+  "Class",
+  "Lineage",
+  "Subtype"
+ ],
+ "labels": [
+  {
+   "name": "Epithelial",
+   "positive": [
+    "EPCAM",
+    "CDH1",
+    "KRT7",
+    "KRT8",
+    "TACSTD2"
+   ],
+   "negative": [
+    "PTPRC",
+    "PECAM1"
+   ],
+   "references": [
+    "10.1038/s41588-021-00911-1",
+    "10.1038/s41586-023-06252-9"
+   ]
+  },
+  {
+   "name": "Luminal",
+   "parent": "Epithelial",
+   "positive": [
+    "KRT8",
+    "FOXA1",
+    "GATA3",
+    "MLPH",
+    "ANKRD30A"
+   ],
+   "negative": [
+    "KRT14",
+    "KRT5"
+   ],
+   "references": [
+    "10.1038/s41586-023-06252-9",
+    "10.1038/s41467-023-43458-x"
+   ]
+  },
+  {
+   "name": "Basal (myoepithelial)",
+   "parent": "Epithelial",
+   "positive": [
+    "KRT14",
+    "KRT5",
+    "ACTA2",
+    "MYH11",
+    "OXTR"
+   ],
+   "negative": [
+    "FOXA1",
+    "GATA3"
+   ],
+   "references": [
+    "10.1038/s41586-023-06252-9",
+    "10.1038/s41467-023-43458-x"
+   ]
+  },
+  {
+   "name": "Immune",
+   "positive": [
+    "PTPRC",
+    "FCER1G",
+    "CYTIP",
+    "LPXN"
+   ],
+   "negative": [
+    "EPCAM"
+   ],
+   "references": [
+    "10.1038/s41588-021-00911-1"
+   ]
+  },
+  {
+   "name": "T cell",
+   "parent": "Immune",
+   "positive": [
+    "CD3E",
+    "CD3G",
+    "TRAC",
+    "CD247"
+   ],
+   "negative": [
+    "MS4A1"
+   ],
+   "references": [
+    "10.1038/s41588-021-00911-1"
+   ]
+  },
+  {
+   "name": "CD4 T cell",
+   "parent": "T cell",
+   "positive": [
+    "CD4",
+    "IL7R"
+   ],
+   "negative": [
+    "CD8A"
+   ],
+   "references": [
+    "10.1038/s41588-021-00911-1"
+   ]
+  },
+  {
+   "name": "CD8 T cell",
+   "parent": "T cell",
+   "positive": [
+    "CD8A",
+    "GZMK",
+    "GZMA",
+    "CCL5"
+   ],
+   "negative": [
+    "CD4"
+   ],
+   "references": [
+    "10.1038/s41588-021-00911-1"
+   ]
+  },
+  {
+   "name": "Regulatory T cell",
+   "parent": "T cell",
+   "positive": [
+    "FOXP3",
+    "IL2RA",
+    "CTLA4",
+    "TIGIT"
+   ],
+   "negative": [
+    "CD8A"
+   ],
+   "references": [
+    "10.1038/s41588-021-00911-1"
+   ]
+  },
+  {
+   "name": "NK cell",
+   "parent": "Immune",
+   "positive": [
+    "KLRF1",
+    "KLRD1",
+    "GNLY",
+    "PRF1",
+    "NCAM1"
+   ],
+   "negative": [
+    "CD3E",
+    "CD3G",
+    "TRAC"
+   ],
+   "references": [
+    "10.1038/s41588-021-00911-1"
+   ]
+  },
+  {
+   "name": "B cell",
+   "parent": "Immune",
+   "positive": [
+    "MS4A1",
+    "CD79A",
+    "CD79B",
+    "CD19",
+    "BANK1"
+   ],
+   "negative": [
+    "CD3E"
+   ],
+   "references": [
+    "10.1038/s41588-021-00911-1",
+    "10.1038/s41467-023-43458-x"
+   ]
+  },
+  {
+   "name": "Plasma cell",
+   "parent": "Immune",
+   "positive": [
+    "MZB1",
+    "TNFRSF17",
+    "PRDM1",
+    "SLAMF7"
+   ],
+   "negative": [
+    "MS4A1"
+   ],
+   "references": [
+    "10.1038/s41588-021-00911-1"
+   ]
+  },
+  {
+   "name": "Myeloid",
+   "parent": "Immune",
+   "positive": [
+    "CD68",
+    "AIF1",
+    "LYZ",
+    "CD14",
+    "FCER1G"
+   ],
+   "negative": [
+    "CD3E"
+   ],
+   "references": [
+    "10.1038/s41588-021-00911-1",
+    "10.1038/s41467-023-43458-x"
+   ]
+  },
+  {
+   "name": "Macrophage",
+   "parent": "Myeloid",
+   "positive": [
+    "CD68",
+    "CD163",
+    "MRC1",
+    "C1QA",
+    "C1QC"
+   ],
+   "references": [
+    "10.1038/s41588-021-00911-1",
+    "10.1038/s41467-023-43458-x"
+   ]
+  },
+  {
+   "name": "Monocyte",
+   "parent": "Myeloid",
+   "positive": [
+    "CD14",
+    "S100A8",
+    "MNDA",
+    "LYZ"
+   ],
+   "negative": [
+    "C1QA",
+    "C1QC"
+   ],
+   "references": [
+    "10.1038/s41588-021-00911-1"
+   ]
+  },
+  {
+   "name": "Dendritic cell",
+   "parent": "Myeloid",
+   "positive": [
+    "CLEC9A",
+    "FCER1A",
+    "CD83",
+    "CCR7"
+   ],
+   "references": [
+    "10.1038/s41588-021-00911-1"
+   ]
+  },
+  {
+   "name": "Mast cell",
+   "parent": "Immune",
+   "positive": [
+    "CPA3",
+    "TPSAB1",
+    "KIT"
+   ],
+   "references": [
+    "10.1038/s41588-021-00911-1",
+    "10.1038/s41467-023-43458-x"
+   ]
+  },
+  {
+   "name": "Plasmacytoid dendritic cell",
+   "parent": "Immune",
+   "positive": [
+    "LILRA4",
+    "IL3RA",
+    "PLD4"
+   ],
+   "references": [
+    "10.1038/s41588-021-00911-1"
+   ]
+  },
+  {
+   "name": "Endothelial",
+   "positive": [
+    "PECAM1",
+    "VWF",
+    "CLEC14A",
+    "EGFL7",
+    "CD93",
+    "RAMP2"
+   ],
+   "negative": [
+    "PTPRC",
+    "EPCAM"
+   ],
+   "references": [
+    "10.1038/s41588-021-00911-1",
+    "10.1038/s41586-023-06252-9"
+   ]
+  },
+  {
+   "name": "Stromal",
+   "positive": [
+    "LUM",
+    "DPT",
+    "PDGFRB",
+    "CCDC80",
+    "SFRP4"
+   ],
+   "negative": [
+    "EPCAM",
+    "PTPRC",
+    "FCER1G",
+    "CD3E"
+   ],
+   "references": [
+    "10.1038/s41588-021-00911-1",
+    "10.1038/s41586-023-06252-9"
+   ]
+  },
+  {
+   "name": "Fibroblast",
+   "parent": "Stromal",
+   "positive": [
+    "LUM",
+    "DPT",
+    "PDGFRA",
+    "FBLN1",
+    "CCDC80",
+    "SFRP4"
+   ],
+   "references": [
+    "10.1038/s41588-021-00911-1",
+    "10.1038/s41586-023-06252-9"
+   ]
+  },
+  {
+   "name": "Perivascular",
+   "parent": "Stromal",
+   "positive": [
+    "ACTA2",
+    "MYH11",
+    "MYLK",
+    "ACTG2",
+    "PDGFRB"
+   ],
+   "negative": [
+    "KRT14",
+    "KRT5"
+   ],
+   "references": [
+    "10.1038/s41588-021-00911-1",
+    "10.1038/s41586-023-06252-9"
+   ]
+  },
+  {
+   "name": "Adipocyte",
+   "positive": [
+    "ADIPOQ"
+   ],
+   "negative": [
+    "EPCAM",
+    "PTPRC"
+   ],
+   "references": [
+    "10.1038/s41586-023-06252-9"
+   ]
+  }
+ ],
+ "states": [
+  {
+   "name": "Proliferating",
+   "positive": [
+    "MKI67",
+    "TOP2A",
+    "CENPF",
+    "PCLAF"
+   ],
+   "references": [
+    "10.1038/s41588-021-00911-1"
+   ]
+  }
+ ],
+ "references": [
+  {
+   "doi": "10.1038/s41588-021-00911-1",
+   "citation": "Wu SZ, et al. A single-cell and spatially resolved atlas of human breast cancers. Nat Genet 2021;53:1334–1347."
+  },
+  {
+   "doi": "10.1038/s41586-023-06252-9",
+   "citation": "Kumar T, et al. A spatially resolved single-cell genomic atlas of the adult human breast. Nature 2023;620:181–191."
+  },
+  {
+   "doi": "10.1038/s41467-023-43458-x",
+   "citation": "Janesick A, et al. High resolution mapping of the tumor microenvironment using integrated single-cell, spatial and in situ analysis. Nat Commun 2023;14:8353."
+  }
+ ]
+}

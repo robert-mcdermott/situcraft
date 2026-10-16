@@ -36,7 +36,7 @@ import (
 //go:embed web/index.html web/styles.css web/app.js web/favicon.svg web/lib/*.js web/ui/*.js web/render/*.js
 var content embed.FS
 
-var version = "0.3.0"
+var version = "0.4.0"
 
 // commit is the source revision the program was built from. Release builds set it with
 // -ldflags "-X main.commit=..."; otherwise it comes from the version-control stamp Go records
@@ -88,6 +88,8 @@ type app struct {
 	// Viewer; segViews what the Viewer draws of the segmentations it shows (api_segview.go).
 	outlines outlineEntries
 	segViews segViews
+	// exprs are clusterings' cells' expression, for the Cell types view (api_maps.go).
+	exprs expressions
 	// examples are the example datasets, downloaded on request.
 	examples *examples.Library
 	// control is the remote-control hub (remote.go), with --remote-control.
@@ -544,6 +546,9 @@ func (a *app) registerAPI(mux *http.ServeMux) {
 	a.registerRefine(mux)
 	a.registerImports(mux)
 	a.registerComparisons(mux)
+	a.registerClusterings(mux)
+	a.registerMaps(mux)
+	a.registerLabels(mux)
 	a.registerWorkspace(mux)
 	a.registerSegView(mux)
 	a.registerPlant(mux)
@@ -681,8 +686,17 @@ func writeJSON(w http.ResponseWriter, value any) {
 }
 
 func writeError(w http.ResponseWriter, status int, message string) {
+	writeErrorCode(w, status, "", message)
+}
+
+// writeErrorCode answers an error with a code the page acts on (offering to compare again, say).
+func writeErrorCode(w http.ResponseWriter, status int, code, message string) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(map[string]string{"error": message})
+	body := map[string]string{"error": message}
+	if code != "" {
+		body["code"] = code
+	}
+	json.NewEncoder(w).Encode(body)
 }

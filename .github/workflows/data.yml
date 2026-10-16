@@ -4,7 +4,8 @@ name: Real data
 # 368 MB too, which each commit's CI leaves out), against independent readers. Each commit is
 # checked on the smaller Lung bundle by ci.yml; this run catches what only the larger bundle has
 # (four channels, multimodal segmentation) without making every commit download it. And the scale
-# test: a simulated tissue of 55 million transcripts made, refined and drawn, then deleted.
+# test: a simulated tissue of 55 million transcripts made, refined and drawn, its cells typed, then
+# deleted.
 on:
   schedule:
     - cron: '17 6 * * 1'
@@ -37,14 +38,14 @@ jobs:
       - uses: astral-sh/setup-uv@v6
       - name: The Lung bundle as SpatialData, written by spatialdata-io (for the import test)
         run: uv run --with 'spatialdata-io==0.7.1' --with 'spatialdata==0.8.0' python -I validation/spatialdata.py
-      - name: Readers against independent readers, bundle validation (real, zipped and broken bundles), the derived-data cache, segmentations made and imported, the refinement's estimates against measured runs, the refinement against its reference numbers (validation/reference/segmentation/), and exports (kept for the next step)
+      - name: Readers against independent readers, bundle validation (real, zipped and broken bundles), the derived-data cache, segmentations made and imported, the refinement's estimates against measured runs, the refinement against its reference numbers (validation/reference/segmentation/), the clustering against its own (validation/reference/clustering/), the labels from markers against theirs (validation/reference/labels/), and exports (kept for the next step)
         env:
           SITUCRAFT_REQUIRE_DATA: '1'
           SITUCRAFT_REQUIRE_SPATIALDATA: '1'
           # Outside the cached folder: the exports are rewritten each run.
           SITUCRAFT_EXPORT_DIR: ${{ runner.temp }}/exports
           JP2K_ZSTACK_ALL: '1'
-        run: go test -v -timeout 2h -run 'Real|Readers|Bundle|Estimates|ReferenceSegmentation' . ./validation/ ./internal/jp2k/ ./internal/xenium/ ./internal/cache/ ./internal/view/ ./internal/segment/... ./internal/compare/ ./internal/export/
+        run: go test -v -timeout 2h -run 'Real|Readers|Bundle|Estimates|ReferenceSegmentation|ReferenceClustering|ReferenceLabels|StarterSets|ImportedLabels|ReviewQueue|ReferenceMapping|LabelsAcrossSegmentations|LargePanels|ApproximateNeighbors' . ./validation/ ./internal/jp2k/ ./internal/xenium/ ./internal/cache/ ./internal/view/ ./internal/segment/... ./internal/compare/ ./internal/export/
       - name: The exports read by spatialdata, anndata, pandas, scipy, geopandas and numpy, as the committed check recorded
         env:
           SITUCRAFT_EXPORT_DIR: ${{ runner.temp }}/exports
@@ -72,11 +73,17 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      # The map of its cells is drawn in the runner's Chrome by validation/scale-map.mjs.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
       - name: Room for it (about 8 GB), on the runner's second disk when it has one
         run: |
           dir=/mnt/situcraft-scale
           if ! { sudo mkdir -p "$dir" && sudo chown "$USER" "$dir"; }; then dir="$RUNNER_TEMP/situcraft-scale"; mkdir -p "$dir"; fi
           df -h "$dir"
           echo "SITUCRAFT_SCALE=$dir" >> "$GITHUB_ENV"
-      - name: Made, refined in patches, opened and drawn, each step's time and peak memory within its budget, then deleted (validation/scale_test.go)
-        run: go test -v -timeout 4h -run Scale ./validation/
+      - name: Made, refined in patches, opened and drawn, its cells typed and their map drawn, each step's time and peak memory within its budget, then deleted (validation/scale_test.go)
+        env:
+          SITUCRAFT_CHROME_ARGS: --use-angle=swiftshader --enable-unsafe-swiftshader --no-sandbox
+        run: go test -v -timeout 4h -run 'TestScale$' ./validation/

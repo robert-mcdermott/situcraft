@@ -1,0 +1,105 @@
+{
+ "dataSet": "simulated-standard",
+ "tools": {
+  "R": "4.6.1",
+  "SingleR": "2.14.2",
+  "Matrix": "1.7.5",
+  "numpy": "2.5.4",
+  "pandas": "3.0.6",
+  "pyarrow": "26.0.0"
+ },
+ "situcraft": {
+  "version": "SituCraft labels from a reference 1",
+  "digest": "808f760cbf48b1f067e0ce91ca475457f37226503a51f4b215ef1d553c46f1a6",
+  "reference": "simulated-standard-reference.zarr",
+  "sha256": "32a30598e1a05cd964286073aaec832185ebf7748058c0beafe0b9b19b5ae965",
+  "cells": 2925,
+  "labeled": 2925,
+  "shared": 120,
+  "compared": 120,
+  "fineTuned": 96,
+  "changed": 0,
+  "parameters": {
+   "tune": 0.05,
+   "margin": 0,
+   "markers": 0
+  }
+ },
+ "singler": {
+  "aggregated": {
+   "scoreMaxAbsDiff": 2.9797741829540314e-08,
+   "scoresWithout": 0,
+   "agreement": 1.0,
+   "firstAgreement": 1.0,
+   "disagreements": []
+  },
+  "default": {
+   "agreement": 0.9931623931623932,
+   "pruned": 46,
+   "disagreements": [
+    {
+     "situcraft": "immune-like",
+     "singler": "endothelial-like",
+     "cells": 6
+    },
+    {
+     "situcraft": "fibroblast-like",
+     "singler": "endothelial-like",
+     "cells": 5
+    },
+    {
+     "situcraft": "epithelial-like",
+     "singler": "endothelial-like",
+     "cells": 4
+    },
+    {
+     "situcraft": "fibroblast-like",
+     "singler": "epithelial-like",
+     "cells": 2
+    },
+    {
+     "situcraft": "immune-like",
+     "singler": "epithelial-like",
+     "cells": 2
+    },
+    {
+     "situcraft": "epithelial-like",
+     "singler": "immune-like",
+     "cells": 1
+    }
+   ]
+  }
+ },
+ "labels": [
+  {
+   "label": "endothelial-like",
+   "situcraft": 589,
+   "singlerAggregated": 589,
+   "singlerDefault": 604
+  },
+  {
+   "label": "epithelial-like",
+   "situcraft": 621,
+   "singlerAggregated": 621,
+   "singlerDefault": 620
+  },
+  {
+   "label": "fibroblast-like",
+   "situcraft": 642,
+   "singlerAggregated": 642,
+   "singlerDefault": 635
+  },
+  {
+   "label": "immune-like",
+   "situcraft": 1073,
+   "singlerAggregated": 1073,
+   "singlerDefault": 1066
+  }
+ ],
+ "truth": {
+  "cells": 2925,
+  "situcraft": 0.9811965811965812,
+  "singlerAggregated": 0.9811965811965812,
+  "singlerDefault": 0.9859829059829059
+ }
+}

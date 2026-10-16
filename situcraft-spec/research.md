@@ -1490,19 +1490,696 @@ at their pixel (§3.1: the 8 it records off its mask).
 ## 5. Cell typing (wave 4)
 
 - **Normalization:** library-size normalization and log1p.
-- **Embedding and graph:** principal components (exact, by a Lanczos or randomized SVD; Halko,
-  Martinsson & Tropp 2011, *SIAM Rev* 53:217–288); a kNN graph.
+- **Embedding and graph:** principal components; a kNN graph.
 - **Clustering:** Leiden (Traag, Waltman & van Eck 2019, *Sci Rep* 9:5233,
   doi:10.1038/s41598-019-41695-z).
 - **Display:** UMAP (McInnes, Healy & Melville 2018, arXiv:1802.03426).
 - **Marker scores:** gene-set scores against control gene sets binned by expression (Tirosh et al.
-  2016, *Science* 352:189–196, doi:10.1126/science.aad0501).
+  2016, *Science* 352:189–196, doi:10.1126/science.aad0501); §5.3.
 - **Reference mapping:** correlation-based mapping to a labeled single-cell reference with
   iterative fine-tuning (Aran et al. 2019, *Nat Immunol* 20:163–172,
   doi:10.1038/s41590-018-0276-y).
 - Benchmarks on Xenium show performance depends on the dataset (Cheng et al. 2025), so no method
   is the only default.
 - **Cluster markers:** Wilcoxon rank-sum, labeled exploratory (cells are not replicates).
+
+### 5.1 Clusters (verified, wave 4, slice 1)
+
+`internal/cluster` takes the steps of the common single-cell workflow (Wolf, Angerer & Theis 2018,
+SCANPY, *Genome Biol* 19:15, doi:10.1186/s13059-017-1382-0), with scanpy's defaults, so that a
+user who knows that workflow finds the same numbers:
+
+1. **The cells:** a segmentation's counts (gene transcripts of quality 20 or more), the cells with
+   at least 10 of them, or those a saved QC filter keeps (sent with the filter's checksum, which
+   the program checks). Cells without a gene transcript are left out and counted.
+2. **Normalization:** each cell's count of gene g, c, becomes log(1 + c/(t/T)), t its total and T
+   the median total of the cells analyzed (scanpy's `normalize_total` with `target_sum=None`, then
+   `log1p`).
+3. **Scaling:** each gene centered and divided by its standard deviation (n − 1 in the
+   denominator; 1 for a gene without variance), clipped at ±10 (scanpy's `scale(max_value=10)`).
+4. **Principal components, exact:** the eigenvectors of the genes' covariance, by Householder
+   reduction and the QL method with implicit shifts (Wilkinson & Reinsch 1971, procedures tred2
+   and tql2; Golub & Van Loan 2013, §8.3). SituCraft's choice: the covariance is computed from the
+   sparse counts without forming the dense matrix. A cell's scaled values are each gene's value at
+   zero, z₀ = clip(−μ/σ), plus a sparse difference d over the genes it expresses; with a = z₀ minus
+   the scaled values' mean, the covariance is (Σᵢ dᵢdᵢᵀ − n·aaᵀ)/(n − 1), exact for any clipping.
+   Its cost grows with the square of the genes each cell expresses, not of the panel. Each
+   component is signed so that its largest loading in magnitude is positive (scikit-learn's
+   convention, which scanpy follows). 50 components, or one fewer than the genes or cells.
+5. **Neighbors:** each cell's 14 nearest other cells in the components (15 neighbors counting the
+   cell, as scanpy and umap-learn count them), by Euclidean distance, exactly. Equal distances are
+   ordered by the cells' order, so the table does not depend on the number of threads.
+6. **The graph:** UMAP's fuzzy simplicial set of the neighbors (McInnes et al. 2018; umap-learn's
+   `fuzzy_simplicial_set` with its defaults, the graph scanpy clusters on): for cell i, ρᵢ is the
+   distance to its nearest neighbor and σᵢ is found by bisection so that
+   Σⱼ exp(−max(0, dᵢⱼ − ρᵢ)/σᵢ) = log₂ 15; the weight of i → j is exp(−(dᵢⱼ − ρᵢ)/σᵢ); the
+   undirected weight a + b − ab of the two directions'.
+7. **Leiden** (Traag et al. 2019) on the graph, optimizing modularity at a resolution γ (1 by
+   default; Reichardt & Bornholdt 2006): fast local moving, the refinement that merges only
+   well-connected subsets (randomness θ = 0.01, leidenalg's default), aggregation on the refined
+   partition; iterations repeat until one moves no cell (at most 50). Clusters are numbered by
+   decreasing size. Carried to Go from CytoWeave's `graph-cluster.js`, which follows the
+   arrangement of the authors' networkanalysis package.
+8. **Markers,** exploratory: each cluster against the other cells analyzed, gene by gene, by the
+   Wilcoxon rank-sum test (Mann & Whitney 1947) with ties corrected: z = (R − n₁(n + 1)/2)/σ,
+   σ² = n₁n₂(n + 1)/12 · (1 − Σ(t³ − t)/(n³ − n)); two-sided p-values from the normal
+   approximation, adjusted over the genes by Benjamini and Hochberg's procedure; the log₂ fold
+   change log₂((expm1(m₁) + 10⁻⁹)/(expm1(m₂) + 10⁻⁹)) of the clusters' mean log-normalized values
+   m₁ and m₂, and the shares of cells expressing the gene in and out, as scanpy's
+   `rank_genes_groups` (method `wilcoxon`, `tie_correct`) computes them. SituCraft's choice: cells
+   are ranked by their count over their total, compared exactly in integers, so that cells
+   expressing a gene equally tie. Ranking the rounded log-normalized values, as scanpy does, can
+   part two of them by a rounding (log(1 + x) and log1p(x) part different pairs), which moves a
+   score by up to a few hundredths.
+
+Every product is rounded on its own, sums are taken in a fixed order, logarithms, exponentials and
+the error function come from `internal/dmath` (fdlibm's), and Leiden draws from one seeded stream:
+the files are the same on any number of threads, on arm64 and amd64 (pinned digests).
+
+**A clustering is an artifact** of kind `clustering` (`docs/FORMATS.md`), named by the
+segmentation, the cells analyzed, the method's version and the parameters. Its check reads every
+file, requires every analyzed cell to be in a cluster numbered by size, makes the graph again from
+the neighbors and requires the recorded modularity, and requires every number finite and every
+p-value a probability.
+
+**Against scanpy 1.12.4, leidenalg 0.12.0, umap-learn 0.5.12 and scikit-learn 1.9.1**
+(`validation/reference/clustering/`, maintainer-run; the bundles read by scanpy from their own
+`cell_feature_matrix.h5`, in float64; checked weekly against SituCraft's clustering made again, byte
+for byte):
+
+| | Lung 2-FOV | Breast 2-FOV | Simulated (standard) |
+| --- | --- | --- | --- |
+| Cells analyzed (the same as scanpy's ≥ 10 counts) | 11,820 | 7,163 | 2,925 |
+| Components' variances, largest relative difference | 6.8 × 10⁻¹⁴ | 2.7 × 10⁻¹⁴ | 1.7 × 10⁻¹⁴ |
+| Components' directions (\|cos\|, all 50) | 1.000 | 1.000 | 1.000 |
+| Cells with the same neighbors as exact search | 100% | 100% | 100% |
+| Modularity on umap-learn's graph of the same neighbors, difference | 3 × 10⁻⁸ | 1 × 10⁻⁸ | 2 × 10⁻⁸ |
+| SituCraft's clusters, modularity | 29, 0.6177 | 15, 0.5982 | 5, 0.7166 |
+| leidenalg, ten seeds: clusters, modularity | 26–29, 0.6138–0.6173 | 12–16, 0.5927–0.6001 | 4–6, 0.7161–0.7167 |
+| Agreement (ARI) with leidenalg, median; leidenalg with itself | 0.711; 0.703 | 0.620; 0.662 | 0.983; 0.978 |
+| Markers: scores against the rank-sum test with exact ties (scipy) | identical | identical | identical |
+| Markers against scanpy: log₂ fold change; scores | 1 × 10⁻⁶; 0.017 | 1 × 10⁻⁶; 0.002 | 7 × 10⁻⁷; 0.002 |
+| Each cluster's first ten markers, the same as scanpy's | 100% | 100% | 100% |
+| scanpy's own pipeline (its neighbors and Leiden): clusters, ARI | 28, 0.736 | 13, 0.579 | 4, 0.983 |
+| The instrument's graph-based clusters: clusters, ARI | 17, 0.044 | 9, 0.431 | — |
+| Against the true cell types (4): ARI, SituCraft; scanpy | — | — | 0.955; 0.971 |
+
+The tolerances (`validation/clustering_test.go`), set before the comparison: variances within
+10⁻⁶, the first ten components within |cos| 0.9999 and the fifty's subspace within 0.999; 99.9% of
+cells with the same neighbors; modularity on umap-learn's graph within 10⁻⁵; Leiden's modularity
+no lower than leidenalg's lowest over ten seeds less 0.003, and its agreement with leidenalg no
+lower than leidenalg's with itself less 0.10; markers within 10⁻⁹ of the exact rank-sum test, 10⁻⁴
+of scanpy's fold changes, 0.05 of scanpy's scores, and the same first ten genes; on the simulated
+tissue, agreement with the truth no lower than scanpy's less 0.02 (and at least 0.85). All are met.
+
+What the numbers say: everything up to the graph is the same computation as scanpy's, to rounding.
+Leiden is random, and two of its runs with different seeds agree about as much as SituCraft's agrees
+with leidenalg's (on Lung, about 0.7: its clusters at resolution 1 are many and small); SituCraft's
+modularity is within leidenalg's range, above it on Lung. scanpy's own pipeline differs further on
+the real bundles because, above 4,096 cells, its neighbors are approximate (pynndescent). The
+instrument's graph-based clustering is not scanpy's: on Lung neither SituCraft's clusters nor
+scanpy's agree with it (ARI 0.044 and 0.048), though the instrument's largest cluster leads with
+the genes SituCraft's largest does (CD24, CXCL13, TM4SF4). On the simulated tissue, a type is split
+in two at resolution 1 (5 clusters for 4 types), as it is in two of leidenalg's ten runs.
+
+### 5.2 The map, exploring clusters, and the instrument's analysis (verified, wave 4, slice 2)
+
+**The map** (`internal/embed`) lays a clustering's cells out by UMAP (McInnes, Healy & Melville
+2018) on the clustering's own graph (§5.1, step 6), as umap-learn's `simplicial_set_embedding` lays
+out a fuzzy graph and scanpy's `tl.umap` calls it, with scanpy's defaults (minimum distance 0.5,
+spread 1, 500 epochs up to 10,000 cells and 200 above, 5 negative samples per pull):
+
+1. the curve 1/(1 + a·d^{2b}) fitted to the membership it stands for on 300 points of [0, 3] by
+   least squares (umap-learn's `find_ab_params`; here Levenberg–Marquardt with the analytic
+   Jacobian): a = 0.58303, b = 1.33417 for the defaults, umap-learn's to 4 × 10⁻⁷;
+2. edges below the heaviest's 1/epochs pruned (never sampled);
+3. the start: the graph's normalized Laplacian's two eigenvectors with the smallest nonzero
+   eigenvalues (Belkin & Niyogi 2003), as umap-learn's `spectral_layout`, by Chebyshev-filtered
+   subspace iteration (Zhou & Saad 2007) with Rayleigh–Ritz steps, scaled to a largest coordinate
+   of 10 with noise of standard deviation 10⁻⁴, then each axis to [0, 10]. SituCraft's choice: a
+   graph in pieces starts from the first two principal components (umap-learn lays the pieces out
+   apart);
+4. umap-learn's `optimize_layout_euclidean`: each epoch, every edge due (every w_max/w epochs)
+   pulls its two cells together by the gradient of log(1/(1 + a·d^{2b})) and pushes the first away
+   from random cells, gradients clipped at ±4, the learning rate falling linearly to 0. SituCraft's
+   choice: one thread and one seeded stream, in float64, so that a seed gives the same map on any
+   processor (umap-learn computes in float32 and, in parallel, not reproducibly).
+
+**Its quality,** measured on every map: trustworthiness T(15) (Venna & Kaski 2001), exact over
+2,000 query cells evenly spaced through the cells (every n/2,000-th) against all cells, in the
+clustering's principal components, ranks by distance then by the cells' order (over every cell it
+is `sklearn.manifold.trustworthiness`); and each cell's neighborhood precision and recall
+(Venna et al. 2010): the share of its 15 nearest on the map among its 75 nearest in the components,
+and of its 15 nearest in the components among its 75 nearest on the map. A cell's score, the mean
+of the two averaged over it and its 15 map neighbors, colors the map. The page says how far the map
+can be trusted in plain words: maps of 50 components of 300-gene panels keep neighborhoods only in
+part (trustworthiness 0.74 to 0.84 below), so a fixed threshold of "unreliable" cells (CytoWeave's
+0.4, made for cytometry) would mark most cells; the trustworthiness and recall are said instead,
+with what the map can and cannot show.
+
+**Against umap-learn 0.5.12** on the same graph (`validation/reference/clustering/`; five seeds of
+umap-learn's, the same measures computed in Python from each map's places):
+
+| | Lung 2-FOV | Breast 2-FOV | Simulated (standard) |
+| --- | --- | --- | --- |
+| SituCraft's map: trustworthiness (recomputed: identical) | 0.737 | 0.779 | 0.840 |
+| umap-learn's, five seeds | 0.738–0.747 | 0.778–0.782 | 0.838–0.841 |
+| Recall: SituCraft; umap-learn | 0.220; 0.217–0.223 | 0.235; 0.234–0.238 | 0.281; 0.281–0.286 |
+| Time (layout; quality) | 5.4 s; 1.0 s | 9.3 s; 0.6 s | 3.8 s; 0.1 s |
+
+The tolerances: the curve within 10⁻⁵ of umap-learn's; the trustworthiness recomputed from the
+places within 10⁻⁴ of the recorded; no less than umap-learn's lowest of five seeds less 0.01. All
+are met. On Lung SituCraft's default seed happens to give the lowest of its own five seeds
+(0.737–0.746, mean 0.742, against umap-learn's mean 0.743): the two spread alike.
+
+**Exploring clusters:**
+- **Expression** for colors, the dot plot and a selection's markers: each analyzed cell's
+  log-normalized value of a gene, as the clustering normalized it (its target total); the dot plot,
+  each cluster's mean of it and share of cells expressing it, for each cluster's two leading
+  markers.
+- **A selection's markers:** the cells selected (lassoed on the map or the tissue, or chosen by
+  cluster) against the clustering's other cells, by the rank-sum test of §5.1 with two groups;
+  exploratory. A cluster's markers are exactly its cells' contrast with the rest (tested).
+- **Names:** each change of a clustering's names is a new version, appended (the project's
+  `cluster-names` records); the clusters keep their numbers. Clusters given the same name are one on
+  the map, the tissue and the legends, in the first one's color.
+- **Two clusterings compared:** their contingency over the cells both cluster and the adjusted Rand
+  index (Hubert & Arabie 1985).
+
+**The instrument's analysis** (`internal/xenium/analysis.go`): Xenium Onboard Analysis writes its
+graph-based and k-means (2 to 10) clusters, a 10-component PCA and a UMAP as CSV in
+`analysis.tar.gz` (or `analysis/`). A clustering of the instrument's is registered as a clustering
+of the instrument's segmentation (`source` naming the tool, version, file and clustering), its
+cells matched by id, its numbers kept, its markers computed by SituCraft (§5.1, step 8) from the
+cells' counts normalized to their median total. The instrument's map is registered with the first,
+its quality judged against the instrument's own 10 components (Breast 0.903: a 10-component space
+is smoother than 50, so the two maps' numbers do not compare). Read against the bundle's other copy
+of the graph-based clusters (`analysis.zarr.zip`'s `cell_groups`): every cell the same. That copy
+pads its index list to every cell's count: a cell without transcripts, in no cluster, leaves a
+trailing 0 in the last group, so cell 0 is listed twice.
+
+### 5.3 Labels from markers (verified, wave 4, slice 3)
+
+**A marker set** (`internal/label`, `docs/FORMATS.md`) is a hierarchy of labels (a class, a
+lineage, a subtype; up to six levels) and states (proliferating, say), each with positive and
+negative marker genes and the published sources they come from. SituCraft ships one for each
+development bundle's panel, every marker in the panel; the editor makes versions, kept in the
+project, and a set is saved and read as a file.
+
+**Each cell's score** for each label is computed as scanpy's `score_genes` computes it (Tirosh
+et al. 2016, *Science* 352:189–196, doi:10.1126/science.aad0501; Wolf et al. 2018), on the
+expression as the clustering normalized it (§5.1, step 2):
+
+1. each gene's mean over the cells; ranks by mean, equal means given the lowest rank (pandas'
+   `rank(method="min")`); the genes cut into 25 bins of round(G/24) ranks (numpy's rounding, half to
+   even);
+2. a list's control genes: the genes of each bin holding one of its markers, or 50 of them drawn at
+   random from a bin holding more, less the markers themselves. On panels of up to 1,200 genes no
+   bin holds more than 50 and nothing is drawn; above, SituCraft draws from its own seeded stream,
+   not numpy's;
+3. the score: the markers' mean value less the controls' mean value, in each cell.
+
+SituCraft's choices:
+- **Negative markers:** a label's score is its positive markers' score less its negative markers'
+  (scored alike) where that is above 0: a negative marker counts against a label where the cell
+  expresses it above its controls, and its absence earns nothing.
+- **The lineage left out of the controls** (scanpy's `gene_pool`; on by default): a label's control
+  genes leave out its ancestors' and descendants' positive markers. On a targeted panel, genes of
+  matched expression are often other labels' markers, and a type's class's markers its own cells
+  express: as controls they cancel its score. On the planted tissue of `internal/label`'s tests (two
+  classes of two types, 200 genes) the types are labeled 91.2% right with them left out and 89.0%
+  with every gene as controls; on Breast the lineage level's leads (10th and 25th percentiles) rise
+  from 0.002 and 0.021 to 0.022 and 0.061.
+
+**Labels from the top down.** At each level a cell's candidates are the children of the label it
+took above (the top level's labels at first). The best is taken when it leads the next by the
+margin (0.1) and scores at least the minimum (0); a label without siblings must lead the minimum.
+Otherwise the cell stays at the level above: it is not forced into a subtype its markers do not
+distinguish. Equal scores lead by 0 and are not taken. A cell's confidence is the lead of the label
+it carries (for a cell without a label, the top level's). A state is carried where its score
+reaches the state threshold (0.25), by cells of its label (or below it) when it names one. Scores
+are in log-normalized expression: in a cell of the median total, one transcript of a marker adds
+log 2 ≈ 0.69 over the markers' number, so a margin of 0.1 is about one transcript more of a 6-gene
+label's markers than of the next label's, and a threshold of 0.25 about two transcripts of a 5-gene
+state's.
+
+**Each cluster's labels:** for each level, a cluster's cells by the label they carry there (a cell
+that stopped above counted under the label it stopped at). Names for the clusters come from them on
+request: each cluster the most specific label at least a share (one half by default) of its cells
+carry, a new version of the clustering's names.
+
+**The artifact** (kind `labels`) keeps each cell's score for every label and state with its
+positive and negative parts, its label and lead at each level, its confidence and states, each
+label's markers and control genes, each cluster's composition, and the marker set (`markers.json`)
+by its checksum. Its check requires every cell's label to be the best of its candidates by the
+recorded scores, taken only by the margin and left only below it; the leads, confidences, states
+and composition to follow from them.
+
+**Against scanpy 1.12.4** (`validation/reference/labels/`): each data set's cells, read and
+normalized by scanpy from the bundle's own matrix, scored by `score_genes` with SituCraft's gene
+pool for every label's positive and negative markers:
+
+| | Lung 2-FOV | Breast 2-FOV | Simulated (standard) |
+| --- | --- | --- | --- |
+| Lists scored (positive and negative) | 43 | 40 | 4 |
+| Control genes the same as scanpy's | 43 | 40 | 4 |
+| Largest difference of a cell's score | 2.7 × 10⁻⁷ | 2.8 × 10⁻⁷ | 1.7 × 10⁻⁷ |
+| Cells labeled: top level; second; third | 47%; 12%; 1% | 81%; 49%; 6% | 98.7% |
+
+The tolerances: every list's controls scanpy's; each score within 10⁻⁵ (scanpy scores the float32
+matrix it reads, SituCraft in float64); a label's score from its parts within 10⁻⁶. All are met.
+The same files on arm64 and amd64.
+
+**Known truth:** on the standard simulated tissue, labeled from each type's own markers as the
+simulation made them, 97.2% of the cells take their true type (that of the true cell holding most
+of their transcripts), 1.5% another, 1.3% none (tolerances: at least 96%, at most 2%).
+
+**The development bundles.** Both 2-FOV regions are dominated by tumor, and their cells are sparse
+(median totals 111 transcripts on Breast, 57 on Lung). On Breast the tumor clusters are
+Epithelial (with Luminal or Basal where their markers lead), the macrophages Macrophage or
+Monocyte, the fibroblasts Fibroblast (71%), the vessels Endothelial (72%), the T cells CD8 and CD4
+T cells. On Lung about half the tumor cells take no label: see the second finding below.
+
+Found by slice 3:
+- **Markers that are textbook elsewhere are not in a tumor's tissue.** In the Breast region the
+  tumor cells express LPL (69% of a tumor cluster's cells) and PDGFRA (52%), and FOXA1, GATA3 and
+  ESR1 are nearly absent; in the Lung region the tumor expresses COL5A2 and PROX1. The starter sets
+  leave these out of the labels they would mislead (Adipocyte, Stromal, Lymphatic endothelial), and
+  say so. Abundant transcripts reach neighboring cells: in Breast's T cells LUM is at 1.67
+  (log-normalized; 2.54 in the fibroblasts), so Stromal counts immune markers (PTPRC, FCER1G, CD3E)
+  against it. Cells of the T cluster that carry fibroblasts' LUM and SFRP4 at fibroblasts' levels
+  (100% and 92% expressing) are labeled Fibroblast: outlines holding parts of two cells, which the
+  per-cluster shares show.
+- **Control genes binned by expression cancel a dominant type's markers on a targeted panel.** A
+  bin's genes are, on a panel built of cell-type markers, other types' markers; in a tissue a type
+  dominates, the top bins are its own genes (on Lung CXCL13, CD24, TM4SF4, ATP1B1, SEC11C, AGR3,
+  EHF …), so EPCAM's and CDH1's controls rise and fall with them and the epithelial score of the
+  tumor's cells is near 0 — as scanpy's is. On Lung about half of them take no label; on Breast,
+  17% to 28% of each tumor cluster. The scores are scanpy's by design; the label set says which
+  cells stayed without a label, and the clusters' markers name them.
+- **The margin is over the next label, not over 0.** Measuring a label's lead over the larger of
+  the next and the minimum left a dominant type's cells unlabeled whenever its depressed score was
+  near 0 even with every other label far below it (Breast's tumor clusters: 24% to 35% without a
+  label); the minimum is a separate gate.
+- **A state needs its own threshold.** At the margin, one transcript of a 4-gene proliferation set
+  passes in a cell of the median total: 36% of Breast's cells were proliferating. The threshold of
+  0.25 (about two transcripts) keeps 1,886 (26%), most in the cluster led by TOP2A and MKI67.
+- **Averaging each cell's scores over its 15 nearest cells in expression** (the clustering's
+  neighbors) labels more of Breast (81% to 97% at the top level) but loses every rare type (mast
+  cells 28 to 0, plasma cells 11 to 0, B, NK and dendritic cells), and labels fewer of Lung (47% to
+  28%): not taken.
+
+### 5.4 Imported labels (verified, wave 4, slice 4)
+
+Labels made elsewhere — another tool's predictions, an earlier analysis, a colleague's
+annotation, the instrument's own clusters — are imported for a segmentation's cells, matched by
+the cells' ids, and kept as an artifact of kind `labels` with their source (`internal/label`'s
+`table.go` and `imported.go`; `docs/FORMATS.md`, Labels SituCraft imports).
+
+**What is read.** A CSV or TSV table (gzipped or not; a column of numbers wherever every value is
+one); a Parquet file (text, numbers, booleans, dictionary-encoded columns); an AnnData object's
+`obs` in Zarr (format 2 or 3, a folder or a zip; its index and every column, with anndata's
+categorical and nullable encodings), or a SpatialData store's table; Xenium Explorer's cell groups
+(a CSV of `cell_id`, `group` and optionally `color`, a group's HEX color given once, as Xenium
+Explorer documents its import, 10x Genomics, *Xenium Explorer: Cells*); and the instrument's
+graph-based and k-means clusters from `analysis.tar.gz` (§5.2). h5ad files are not read: anndata
+writes Zarr with `write_zarr`, and whether to read HDF5 AnnData is decided with references (slice
+6).
+
+**Matching.** The cells' ids are matched exactly to the segmentation's (the bundle's own for the
+instrument's segmentation, SituCraft's for its own, as its exports write them). SituCraft's
+choices:
+- **A table naming a cell the segmentation does not have is refused**, with how many and the first
+  few: labels made for another segmentation, or another sample, would otherwise be attached to the
+  cells they happen to share ids with. The page names the dataset's other segmentations whose
+  cells the ids are, when one is.
+- **A cell named twice is refused**; so is a label column of more than 1,000 values (an id or a
+  measurement, not labels).
+- **Cells the table does not name have no label** and are counted; so are rows whose label is
+  empty or `NA`, `nan`, `None`, `null`.
+- **The columns are suggested by their usual names** (the ids `cell_id`, `Cell ID`, `cell`,
+  `barcode`, an AnnData index; the labels `group`, `cell_type`, `label`, `annotation`, `cluster`,
+  `leiden` …; a confidence column of numbers named for a score or probability; colors), and chosen
+  by the user.
+
+**The artifact** keeps each of the segmentation's cells' label and confidence (NaN where none was
+given), the labels by decreasing cells with their colors where the table gave them, and the
+source: its format, file and SHA-256 (of an AnnData store, of its `obs`'s files), the columns and
+rows. Each cluster's labels are counted in the page for the clustering shown, so one imported
+label set serves every clustering of its segmentation. The check requires every cell, in order,
+one level, each label an index among the labels and counted as described.
+
+**Validation:**
+- **Files written by pandas 3.0.6, pyarrow 26.0.0 and anndata 0.13.4** (`internal/label/testdata`:
+  CSV and gzipped TSV; Parquet with a dictionary-encoded column and float32 nulls; AnnData in Zarr
+  formats 3 and 2 with a categorical column and a missing value, the ids as the index; a
+  SpatialData-like store's table; Xenium Explorer's groups): every cell's label and confidence as
+  written, the columns' roles found.
+- **Refused:** a table naming a cell the segmentation does not have (with the count), one naming a
+  cell twice, a confidence column of text, a missing column.
+- **The development bundles:** each bundle's graph-based clusters written as a table and imported
+  for the instrument's segmentation, every cell its cluster (Lung 11,897 of 11,898 cells, Breast
+  7,273 of 7,275; the others not clustered by the instrument, without a label); the Lung table
+  refused for the Breast cells, all 11,897 rows counted.
+- **In the app:** a table of three Lung cells (their ids as `select_cell` answers them) imported by
+  remote control, those cells and no other labeled; a table naming another dataset's cell refused;
+  the instrument's graph-based clusters imported, 11,897 cells in 17 clusters (viewer suite).
+
+### 5.5 Label versions, evidence and review (verified, wave 4, slice 5)
+
+**Versions.** A segmentation's cells carry predicted labels (from markers, §5.3; imported, §5.4),
+curated labels and consensus labels, each a label set the map, the tissue, the Viewer and the
+review treat alike (`ui/label-sources.js` resolves any of them to each cell's label):
+- **Curated:** a base set (any version, at a level) and a reviewer's edits appended to it — cells
+  relabeled, a clustering's clusters relabeled, or cells' labels accepted — each with its reason,
+  who and when (`lib/curation.js`). Edits are never changed or removed: undoing one is another edit.
+  SituCraft's choice: a decision is an edit of a curated set begun from the set reviewed, so the
+  predicted set stays as the method made it and the curated one says what changed and why.
+- **Consensus:** chosen sets, each one's labels mapped to common names where they name them
+  differently, and a rule: **unanimous** (every set labels the cell, all alike), **majority** (at
+  least a number of sets give the label, more than give any other; equal votes give none), or **in
+  order** (the first set's label, else the next's). A consensus's confidence is the share of its sets
+  agreeing.
+- **Side by side:** two versions' cross-table over the cells both label, with the share whose labels
+  have the same name.
+
+**The evidence of a cell's label** (`internal/label/evidence.go`, the page's evidence card): its
+label in every version; for labels from markers, at each level the label it took (or the best,
+where it stopped above) and the next, with each one's score and markers in the cell — each gene's
+transcripts and log-normalized value against its mean, and the controls' mean in the cell (as the
+recorded scores, to 10⁻⁶) — and, when most of its nearest cells carry another label, that label's
+evidence ("why not"); its neighbors' labels in the tissue (its 10 nearest labeled cells by
+centroid) and in expression (the clustering's 14 neighbors); its transcripts, genes, area and its
+segmentation's flags (few transcripts, uncertain boundary, no nucleus; boundary certainty); and its
+reviews.
+
+**The review queue** (`internal/label/review.go`): each labeled cell's agreement — the share of its
+k nearest labeled cells (by centroid, exactly, `internal/graph` KNN2D; 10 by default) carrying its
+label — and the label most of them carry. A cell is **spatially implausible** when at most a share
+(0.2) of them carry its label and most carry another; of **low confidence** when its confidence is
+below a threshold (labels from markers: the lead, by default under twice the margin; imported: the
+table's). The queue ranks cells flagged by both first, then the implausible by agreement, then the
+least confident; cells reviewed already are left out. Segmentation-sensitive cells join it with slice
+7. SituCraft's choice: the share agreeing, not a likelihood of the cell's label given its
+neighbors' labels against each label's usual neighborhood: on the Breast tissue's nests and stroma
+the share finds planted mislabels earlier (1% or 3% planted, 10 or 15 neighbors: 53% to 85% of them
+in the first twice as many cells as were planted, against 38% to 60%; 85% to 96% in the first five
+times as many, against 75% to 92%; on the simulated tissue the two alike), and it is said in plain
+words ("2 of 10 nearest share it; most are Epithelial").
+
+**Validation:**
+- **Consensus rules on built sets** (`lib/curation.test.mjs`): three sets naming labels differently,
+  mapped; unanimous, majority (with equal votes) and in order cell by cell; edits appended and applied
+  in order (a cluster edit over a cell edit, an acceptance); the cross-table and agreement by hand.
+- **The queue by hand** (`internal/label`): agreement on a grid (equal distances by index), the
+  queue's order and counts, the reviewed left out; a cell's evidence equal to its recorded scores.
+- **Planted mislabels** (`validation/labels_test.go`): 3% of a tissue's labeled cells given another
+  class at random (seeded), the queue at the defaults:
+
+| | Simulated (standard) | Breast 2-FOV |
+| --- | --- | --- |
+| Cells labeled; planted | 2,887; 97 | 5,821; 170 |
+| The queue (cells flagged) | 711 (24.6%) | 616 (10.6%) |
+| Planted found: in the queue; in its first five times as many | 75.3%; 70.1% | 94.7%; 94.7% |
+
+  The simulated tissue's domains mix their types, so a mislabel its neighbors share cannot be found
+  by place: the queue flags a quarter of its cells, and the evidence card is the review's.
+- **In the app:** the Lung labels' queue by remote control (the implausible in rising agreement, at
+  most 0.2); a cell relabeled with its reason, drawn in its new label's color and no other cell
+  changed; a consensus of the set and its curated version agreeing everywhere but on that cell
+  (viewer suite).
+
+### 5.6 Labels from a reference (verified, wave 4, slice 6)
+
+A clustering's cells are labeled from a labeled single-cell reference by correlating each cell with
+each label's expression profile, then again on the leading labels' own genes (Aran et al. 2019,
+*Nat Immunol* 20:163–172, doi:10.1038/s41590-018-0276-y), and kept as an artifact of kind `labels`
+with the reference in place of a marker set (`internal/label`'s `reference.go` and
+`reference_files.go`; `docs/FORMATS.md`, Labels from a reference).
+
+**What is read.** An AnnData object in Zarr (format 2 or 3, a folder or a zip): its cells' labels
+in an `obs` column, its genes' names in `var` (the index or a column), and its expression in
+`layers/counts`, `raw/X` or `X` (counts preferred; the first of these holding counts or
+log-normalized values is suggested, and each is described from its first chunk without reading it
+whole). Or a table of profiles (CSV, TSV or Parquet): a row per label (a column of labels, the
+genes the numeric columns) or a row per gene (a column of genes, the labels the numeric columns).
+The usual names of label columns (`cell_type`, `celltype`, `cell_ontology_class`, `ann_finest_level`,
+`label.main` …) are suggested. A matrix in sparse rows is read a chunk at a time, twice (each
+cell's total first, then each label's sums), so an atlas of hundreds of thousands of cells needs no
+more memory than a chunk (a simulated reference of 200,000 cells is read in 0.9 s). **h5ad files
+are not read:** SituCraft's own HDF5 reader would serve
+one format, and anndata writes the same object as Zarr in one line (`adata.write_zarr`); whether to
+read HDF5 is left until users ask for it (roadmap, the parking lot).
+
+**The reference restricted to the panel.** Gene names are matched exactly, else ignoring case where
+that names one panel gene; the genes shared are reported, and the panel's genes the reference lacks
+listed (the page warns below half: symbols against ids, or another species). SituCraft's choices:
+- **One profile per label:** its reference cells' mean log-normalized expression — counts scaled to
+  the reference's median total, then log1p, as SituCraft's clustering normalizes cells;
+  log-normalized values averaged as given; scaled values (below 0) refused, since their ranks are
+  not expression's. A table's profiles are taken as given. SingleR by default correlates a cell
+  with every reference cell or sample and takes a quantile of each label's; one profile per label
+  is what the evidence card can show, costs the same for any size of reference, and is measured
+  against the per-sample default below.
+- **At most 500 labels**, each pair of which is compared.
+
+**The genes compared.** For each ordered pair of labels (a, b), the shared genes most higher in a's
+profile than b's — at most 500 × (2/3)^log₂(labels), the published number (60 for 36 labels), only
+those higher at all, ties in the panel's order; for a set of labels, the union over its pairs. The
+number per pair is a parameter (**Genes per pair**; 0 for the published one).
+
+**The score** of a cell for a label is the Spearman correlation of its log-normalized values and the
+label's profile over the genes compared (equal values their mean rank). A cell's genes without
+transcripts tie at the lowest ranks, so the sums run over the genes it expresses; a cell expressing
+too few of them to rank (all equal) takes no label.
+
+**Fine-tuning.** The labels within **Fine-tuning** (0.05, the published threshold) of the best
+correlation are scored again over their own pairs' genes, until one is left or none drops; the cell
+takes the last round's best when it leads the next by the **margin** (SituCraft's; 0 by default:
+the best unless two tie). A cell's confidence is that lead, in correlation.
+
+**The artifact** keeps the reference as compared in `reference.json` (each label's reference cells
+and profile over the shared genes), every cell's first-round correlation with every label as its
+score, its last round's correlations (none where there was one round), its label and lead. The
+check requires `reference.json` to give the description's labels and shared genes, its pairs' genes
+the first round's genes, each cell's label the best of its deciding round by the margin and within
+the fine-tuning threshold of its first round's best, its lead its confidence, and the counts.
+
+**The evidence card** of a cell labeled from a reference maps it again from `reference.json`: each
+round's labels and correlations; the deciding round's best label and the next, with the genes most
+higher in each one's profile than the other's and the cell's transcripts of them (green: expressed
+for its label; red: expressed for the next; dashed: not expressed); and, when most of its nearest
+cells carry another label, where that label stood in the first round. The review queue's low
+confidence for these labels is, by default, a lead below the fine-tuning threshold or twice the
+margin, whichever is more.
+
+**A reference for the simulated tissue.** `situcraft simulate --reference N` writes, beside the
+bundle, N cells of each of its types drawn from the simulation's own expression profiles (clean of
+the tissue's background and displaced transcripts, 1,000 expected transcripts over the panel, spread
+log-normally), as an AnnData object in Zarr (`internal/simulate`'s `reference.go`).
+
+**Validation:**
+- **Exact cases** (`internal/label`): ranks with ties; a Spearman correlation by hand (√0.9); the
+  pairs' genes by hand; a cell's rounds by hand (0.4, 0.8 and −1.5/√22.5; within 0.5, a second round
+  over the two labels' genes, −1 and 1); the mapping against a plain one sorting every pair afresh
+  and ranking every value (20 random references with tied values, 1,000 cells, each round's labels,
+  genes and correlations within 10⁻¹²; 163 cells changing label in fine-tuning); a reference's
+  profiles by hand from AnnData counts (median scaling, a label missing); tables in both
+  orientations; scaled values and a label given twice refused; a tissue mapped to another draw of
+  its types (86% right; the same labels for any number of workers; the files checked and pinned on
+  arm64 and amd64); a cell's evidence equal to its recorded scores.
+- **Against SingleR 2.14.2** (R 4.6.1; `validation/reference/references/`), run as a separate program
+  on the same cells: the bundles mapped to the Human Primary Cell Atlas's 36 main labels (Mabbott et
+  al. 2013, *BMC Genomics* 14:632, doi:10.1186/1471-2164-14-632; celldex 1.22.0's log-expression,
+  each label's mean as its profile), the simulated tissue to its reference of 300 cells per type:
+
+| | Lung 2-FOV | Breast 2-FOV | Simulated (standard) |
+| --- | --- | --- | --- |
+| Genes shared; compared in the first round | 280; 280 | 270; 270 | 120; 120 |
+| Cells; fine-tuned; changed by fine-tuning | 11,820; 10,139; 1,472 | 7,163; 7,116; 696 | 2,925; 96; 0 |
+| SingleR given the same profiles: first-round correlations, max \|difference\| | 1.5 × 10⁻⁸ | 3.0 × 10⁻⁸ | 3.0 × 10⁻⁸ |
+| … cells labeled alike | 100% | 99.97% | 100% |
+| SingleR at its defaults (every sample or cell, 0.8 quantile): cells labeled alike | 72.0% | 62.5% | 99.3% |
+| Cells taking their true type: SituCraft; SingleR, same profiles; SingleR, defaults | | | 98.1%; 98.1%; 98.6% |
+
+  The two Breast cells labeled otherwise are ties SituCraft leaves without a label at a margin of
+  0. Checked weekly against SituCraft's labels made again, byte for byte (the atlas's sets where its
+  profiles are present).
+- **In the app:** the Lung cells mapped by remote control to a table of four classes' profiles over
+  15 of the panel's genes, each labeled cell drawn in its label's color and a cell's evidence its
+  recorded correlations; a reference sharing no gene with the panel refused (viewer suite); capture
+  scene `reference`, with no accessibility violation.
+
+**Found by slice 6:**
+- **On a targeted panel the published number of genes per pair covers the panel:** 60 genes for
+  each of 36 labels' pairs make every one of 270 to 280 genes compared, and fine-tuning compares
+  nearly the same genes again. On the simulated tissue fewer genes per pair label a few more cells
+  right (with fine-tuning: 20 per pair 98.9%, 5 per pair 98.9%, 2 per pair 94.9%; the published
+  98.1%). The published number is kept, comparable with SingleR's results, and is a parameter.
+- **A reference must be of the tissue:** the atlas of primary cells labels the Breast tumor's cells
+  embryonic stem cells, neuroepithelial cells and iPS cells, and the Lung tumor's hepatocytes and
+  epithelial cells — the nearest profiles it has. The correlations among those labels lie within a
+  few hundredths, so the evidence card and the review queue show the doubt; the labels follow the
+  reference chosen.
+- **One profile per label against every sample:** SingleR's per-sample default parts mostly where
+  the reference itself hardly tells labels apart (on Breast, embryonic stem cells, iPS cells,
+  neuroepithelial cells and neurons); on the simulated tissue, whose reference cells are of one type
+  each, the two agree on 99.3% of the cells and take the true type as often.
+
+### 5.7 Labels across segmentations (verified, wave 4, slice 7)
+
+Cell types are read from cells, so a segmentation's errors can reach them: a cell drawn too wide
+takes its neighbor's transcripts, two cells merged become one of two kinds. SituCraft says how much
+by reading two label sets, one of each segmentation, through the two segmentations' comparison
+(§4; `internal/compare`'s `impact.go`, `api_impact.go`).
+
+**Made again in one step.** A clustering of SituCraft's and its label sets from markers or a
+reference are made again on another segmentation with the same parameters (`lib/impact.js`'s
+`remakePlan`, `ui/remake.js`): the clustering (its cells by the rule of gene transcripts: a QC
+filter's cells are the instrument segmentation's), its map, and each label set (the same marker set
+version and parameters, or the same reference file, columns and parameters; a reference that
+changed since is said to have). Imported label sets belong to their segmentation's cells and are
+not made again. Two label sets made the same way are paired by default, at their first level.
+
+**Read through the comparison.** Labels are compared by name; a cell a label set does not cover
+(not analyzed) is left out. SituCraft's choices:
+- **Composition:** each label's cells under each segmentation, and its share of the cells covered.
+- **Matched cells:** those the comparison pairs one to one (one-to-one, expanded, contracted,
+  assignment-only), covered by both: the share labeled alike of those labeled under both, the cells
+  labeled under one only, by class, and every pair of labels.
+- **Split and merged cells:** for a labeled cell split, whether every piece covered carries its
+  label, some do, or none, and whether the pieces carry two labels or more; for a labeled cell into
+  which cells were merged, the same of the cells merged; rearrangements by whether the two sides'
+  labels are alike, overlap or are apart.
+- **Marker mixing by label:** of each label's cells, the share expressing a pair of mutually
+  exclusive markers together, and the mutually exclusive co-expression rate among them (Hartman and
+  Satija 2024, §4), over the comparison's lineage-marker pairs (on a simulated tissue, each pair of
+  two types' markers).
+- **Segmentation-sensitive cells:** a covered cell whose covered counterparts carry another label
+  (no label counting as one), with what they carry ("Macrophage"; "split into 2 cells: T cell,
+  Tumour"; "one of 3 cells merged into a cell labeled Fibroblast"). The review queue (§5.5) takes
+  them as a third reason, after the spatially implausible and before the least confident, flagged
+  against a label set of another segmentation the dataset's comparisons pair with the reviewed one.
+- **The differences whose labels change,** the most transcripts reassigned first, in the comparison
+  workspace's Labels tab, which can color each side's cells by its labels.
+
+**Validation:**
+- **A built fixture by hand** (`internal/compare/impact_test.go`): ten cells of each, labels named in
+  different orders, through each class of difference (cells not covered, a split into two labels,
+  a merge of one kind, cells only in either): the composition, the agreement, the transitions, the
+  fates, the cells without a counterpart, the differences whose labels change in order, every
+  segmentation-sensitive cell's line, and marker mixing by label (each MECR by hand); the queue's
+  third reason by hand (`internal/label`).
+- **Known truth** (`validation/impact_test.go`, weekly): the standard simulated tissue under its
+  truth, the instrument's nucleus expansion and SituCraft's refinement (Balanced), each clustered and
+  labeled from its types' markers, read through its comparison with the truth against the truth's
+  cells' true types:
+
+| | Truth | Refinement | Instrument |
+| --- | --- | --- | --- |
+| Cells matched to their true cell (labeled under both) | 3,030 | 2,859 | 2,879 |
+| … labeled with its true type | 100% | 99.86% | 98.33% |
+| The types' shares against the truth's (total variation distance) | 0 | 0.5% | 2.2% |
+| True cells merged into one (of them, joining two types) | | 62 (21) | 8 (2) |
+| Marker mixing, MECR of the labeled cells | 0.063 | 0.090 | 0.221 |
+
+  The instrument's and the refinement's labels read against each other: 98.0% of 2,883 matched
+  cells alike; 57 and 95 labeled cells change label with the segmentation.
+- **In the app** (viewer suite): the Lung clustering and its two label sets made again on the 5 µm
+  expansion by remote control; the labels from a table of profiles read through the comparison,
+  every matched cell one to one, 99.9% of 10,814 labeled alike, marker mixing unchanged (MECR
+  0.0090); the tissue colored by them; the review queue's 40 segmentation-sensitive cells those the
+  impact counts. Capture scene `impact`, with no accessibility violation.
+
+**Found by slice 7:**
+- **A segmentation's errors reach the labels mostly through cells of two kinds:** on the simulated
+  tissue the refinement's labels are truer than the instrument's and its marker mixing lower, near
+  the truth's; its remaining errors are true cells merged (62), a third of them of two types.
+- **Finer labels are more sensitive:** on the Breast tissue, the instrument's segmentation and a 5
+  µm expansion label 96.9% of 4,873 matched cells alike at the class level, 79.7% at the subtype;
+  223 cells split by the expansion keep their class in every piece in 66%, and 106 cells into which
+  others were merged had carried its class in 63%; marker mixing rises from 0.0466 to 0.0513, most
+  among adipocytes (0.0511 to 0.0828). The labels tab opens at the first level.
+- **The share of cells co-expressing any exclusive pair saturates** where markers are not absolutely
+  exclusive: the simulator expresses each type's markers at a fifth of their base in the other
+  types, so 98.9% of the instrument's cells co-express one of 336 pairs. The MECR, a mean over
+  pairs, separates the segmentations; the summary leads with it.
+
+### 5.8 Scale (verified, wave 4, slice 8)
+
+A whole Xenium section holds hundreds of thousands of cells, and Xenium Prime's panel 5,000 genes.
+Three steps of the clustering and the map cost too much there: exact nearest neighbors cost the
+square of the cells (6 s for 50,000 on ten cores, about 6.5 minutes for 400,000), the full
+eigendecomposition the cube of the genes (15 s for 2,000, about 4 minutes for 5,000), and the map's
+optimization ran on one thread. Below the limits below the methods and their results are as before,
+byte for byte (pinned digests; the comparisons with scanpy, leidenalg and umap-learn of §5.1–5.2
+hold); above them:
+
+**Nearest neighbors above 50,000 cells: NN-Descent** (Dong W, Moses C, Li K. Efficient k-nearest
+neighbor graph construction for generic similarity measures. WWW 2011:577–586,
+doi:10.1145/1963405.1963487; `internal/graph`'s `descent.go`): from random neighbors, each round
+compares each cell's sampled new and old neighbors and reverse neighbors with one another, and keeps
+for every cell the nearest it has met, until a round changes fewer than 0.1% of the table (ρ 1,
+δ 0.001, the paper's; at most 30 rounds). SituCraft's choices:
+- **The same table for any number of workers and processors:** each round's samples drawn from each
+  cell's own stream; the comparisons made a block of 2,048 cells at a time against the table as it
+  stands, their improvements then applied by target cell in the order found (a cell keeps the k
+  nearest by distance, then index, of all it has met, whatever the order); distances summed in
+  order, every product rounded (pinned digest on arm64 and amd64).
+- **A wider search:** 3k neighbors (at most 45) searched for k, the k nearest kept. On the
+  development bundles' 50 components, searching 14 finds 91.3% (Lung), 92.8% (Breast) and 96.1%
+  (simulated) of the exact 14; 28, 99.2%, 99.5% and 99.9%; 42, 99.91%, 99.95% and 99.99%.
+- **Its recall measured each time,** against exact search over 1,000 evenly spaced cells,
+  recorded in the clustering (`graph.search`) and said in the page; on the bundles it is within
+  0.0004 of the recall over every cell.
+- **The map's wider neighborhoods** (its precision and recall, 75 nearest) by NN-Descent at a sample
+  rate of 0.5, started from the clustering's neighbors: 99.90% (Lung), 99.95% (Breast) and 99.99%
+  (simulated) of the exact 75. The trustworthiness stays exact over its 2,000 query cells.
+
+**The map's optimization over every core above 50,000 cells** (`internal/embed`'s
+`optimizeBatched`): each epoch's edges due, in order, in batches of 16,384; a batch's pulls and
+pushes computed in parallel from the cells' places before it, then applied in the edges' order; the
+negative samples drawn from a hash of the seed, the epoch, the edge and the sample (SplitMix64's
+finalizer), so that no stream is shared. The same map for any number of workers and processors
+(pinned digest). On a graph of 3,000 cells in four groups, its trustworthiness 0.7916 against
+0.7937 on one thread (recall 0.346 and 0.349).
+
+**Principal components above 1,000 genes: the Lanczos method** (Lanczos 1950) with full
+reorthogonalization (Paige 1972; Golub & Van Loan 2013, §10.1; `internal/linalg`'s `lanczos.go`): the
+Krylov space of a seeded start grows, each vector made orthogonal to all before it twice over,
+until the 50 largest Ritz pairs' residuals are below 10⁻¹¹ of the largest; the covariance's product
+dealt by rows to the workers, each summed in order; the covariance formed in place of its sums (one
+matrix of the genes' size, not two). On the standard simulated tissue made with 2,000 genes,
+against the full decomposition of the covariance computed independently from the dense scaled
+values: the variances within 7.2 × 10⁻¹⁴ of the largest, every direction whose variance stands
+apart (15) parallel to twelve digits, the 50 components' subspace the same (overlap 1.000000000);
+0.7 s against 15.1 s. With 5,000 genes, as Xenium Prime's: 3.6 s.
+
+**Validation:**
+- **Exact cases** (`internal/graph`, `internal/linalg`, `internal/cluster`, `internal/embed`):
+  NN-Descent against exact search (recall at least 0.99, every distance true, rows in order), the
+  same for one worker and four, started from the exact table and kept; the sampled recall by hand;
+  the Lanczos method against the full decomposition on covariances of falling spectra and on a
+  matrix of rank 2 (its Krylov space closing and going on); a panel of 1,100 genes' components
+  against the full decomposition's, the same for any number of workers; the batched map the same for
+  any number of workers and as faithful as one thread's.
+- **The development bundles' neighbors searched approximately** (`validation/neighbors_test.go`,
+  weekly): NN-Descent finds 99.91% (Lung) and 99.95% (Breast) of the exact neighbors, the recall
+  recorded within 0.0004 of it; over five seeds, the clusters Leiden finds on its graph agree with
+  the exact graph's (median ARI 0.857 and 0.704) more than Leiden's runs on the exact graph agree
+  with one another (0.791 and 0.653), at the same modularity (within 0.002).
+- **Large panels** (`validation/panels_test.go`, weekly): the numbers above.
+- **The large simulated tissue typed** (`validation/scale_test.go`, weekly): 383,158 of the large
+  tissue's cells (`situcraft simulate --preset large`) clustered, mapped and labeled in 186 s on ten
+  cores at a peak of 3.9 GB, the instrument's segmentation's files made on first use within it (the
+  raster a band of rows at a time, the mask a row of its chunks at a time). The neighbors by
+  NN-Descent in 34 s, 95.6% of the exact over 1,000 cells in nine rounds: lower than on the bundles'
+  components (99.9%), the simulated types' cells being alike within a type, as noise is, where which
+  cells are nearest is least determined; 9 clusters. The map laid out in 33 s, its trustworthiness
+  0.861 and its wider neighborhoods 97.1% of the exact. Labeled from the simulated types' markers:
+  378,743 cells, the types' shares within a total variation distance of 0.015 of the true cells'.
+  The map of every cell shown in headless Chrome in 20 s and colored again in 40 ms, SituCraft
+  serving it in 1.9 GB.
 
 ## 6. Spatial analysis (wave 6) and cohorts (wave 7)
 
@@ -1638,7 +2315,24 @@ Notes:
   `cell_feature_matrix.h5`). Jenkins B. lookup3.c, 2006, public domain (HDF5's metadata
   checksums).
 - Sun Microsystems. fdlibm 5.3, 1993: the logarithm and exponential `internal/dmath` and
-  `web/lib/dmath.js` compute, the same in Go and JavaScript on every processor.
+  `web/lib/dmath.js` compute, the same in Go and JavaScript on every processor, and the
+  complementary error function `internal/dmath` computes (the markers' p-values).
+- Wilkinson JH, Reinsch C. *Handbook for Automatic Computation*, vol. II: *Linear Algebra*.
+  Springer, 1971 (procedures tred2 and tql2). Golub GH, Van Loan CF. *Matrix Computations*, 4th
+  ed. Johns Hopkins University Press, 2013, §8.3 (the principal components' eigenvectors,
+  `internal/linalg`).
+- Reichardt J, Bornholdt S. Statistical mechanics of community detection. *Phys Rev E*
+  2006;74:016110 (modularity with a resolution).
+- Mann HB, Whitney DR. On a test of whether one of two random variables is stochastically larger
+  than the other. *Ann Math Stat* 1947;18:50–60 (the clusters' markers).
+- Hubert L, Arabie P. Comparing partitions. *J Classif* 1985;2:193–218 (the adjusted Rand index).
+- Belkin M, Niyogi P. Laplacian eigenmaps for dimensionality reduction and data representation.
+  *Neural Comput* 2003;15:1373–1396. Zhou Y, Saad Y. A Chebyshev–Davidson algorithm for large
+  symmetric eigenproblems. *SIAM J Matrix Anal Appl* 2007;29:954–971 (the map's spectral start).
+- Venna J, Kaski S. Neighborhood preservation in nonlinear projection methods: an experimental
+  study. *ICANN* 2001:485–491. Venna J, Peltonen J, Nybo K, Aidos H, Kaski S. Information retrieval
+  perspective to nonlinear dimensionality reduction for data visualization. *J Mach Learn Res*
+  2010;11:451–490 (the map's quality).
 - Abramowitz M, Stegun IA. *Handbook of Mathematical Functions*. National Bureau of Standards,
   1964, 6.5.29 and 6.5.31 (the incomplete gamma function), 26.5.8 (the incomplete beta function). Stephens MA. Use of the
   Kolmogorov–Smirnov, Cramér–von Mises and related statistics without extensive tables. *J R

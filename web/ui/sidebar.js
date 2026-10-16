@@ -1,10 +1,12 @@
-// The project tree: what the project holds, by kind (datasets, segmentations, label sets, saved
-// views), and what was handed to SituCraft on this computer but is not in the project yet.
+// The project tree: what the project holds, by kind (datasets, segmentations, comparisons,
+// clusterings, label sets, marker sets, filters, saved views), and what was handed to SituCraft on
+// this computer but is not in the project yet.
 // Selecting an item focuses it (store.ui.focus): the inspector describes it, and the views that
 // use it open on it. Adapted from MaveScape 0.8.0 web/ui/sidebar.js.
 
 import { h, icon, clear, formatBytes, formatCount } from './dom.js';
 import { promotedSegmentation } from '../lib/segmentations.js';
+import { labelSetName, markerSetsOf } from '../lib/labels.js';
 
 // The icon of an item handed to the program, by its kind (local.go, fileKind and dirKind).
 export const KIND_ICONS = {
@@ -70,11 +72,35 @@ const SECTIONS = [
     empty: 'Two segmentations compared: which cells correspond, how each differs, and what changed.',
   },
   {
+    kind: 'clustering', title: 'Clusterings', icon: 'dots',
+    items: (project) => project.artifacts.filter((a) => a.kind === 'clustering'),
+    label: (a, app) => {
+      const seg = app.store.project.artifacts.find((x) => x.kind === 'segmentation' && x.id === a.segmentation);
+      return `${seg?.name ?? 'Cells'} · resolution ${a.parameters?.resolution ?? '?'}`;
+    },
+    itemIcon: (a) => (a.state === 'complete' ? 'dots' : 'warning'),
+    meta: (a) => (a.state === 'complete' ? `${a.summary?.clusters ?? '?'} clusters` : a.state),
+    empty: 'Cells grouped by their expression, each clustering kept with every parameter.',
+  },
+  {
     kind: 'labels', title: 'Label sets', icon: 'tag',
-    items: (project) => project.artifacts.filter((a) => a.kind === 'labels'),
-    label: (a) => a.name ?? 'Label set',
-    meta: (a) => a.method ?? '',
-    empty: 'Cell identities: predicted, curated and consensus, side by side.',
+    items: (project) => project.artifacts.filter((a) => a.kind === 'labels' || a.kind === 'curated-labels' || a.kind === 'consensus-labels'),
+    label: (a, app) => {
+      if (a.kind !== 'labels') return a.name;
+      if (a.source || a.reference) return labelSetName(a);
+      const c = app.store.project.artifacts.find((x) => x.kind === 'clustering' && x.id === a.clustering);
+      return `${a.markers?.name ?? 'Labels'} · ${c?.summary?.source ? 'instrument' : `resolution ${c?.parameters?.resolution ?? '?'}`}`;
+    },
+    itemIcon: (a) => (a.kind === 'curated-labels' ? 'edit' : a.kind === 'consensus-labels' ? 'layers' : a.state === 'complete' ? 'tag' : 'warning'),
+    meta: (a) => (a.kind === 'curated-labels' ? `${a.edits.length} edit${a.edits.length === 1 ? '' : 's'}` : a.kind === 'consensus-labels' ? a.rule.kind : a.state === 'complete' && a.summary?.cells ? `${Math.round((100 * (a.summary.labeled?.[0] ?? 0)) / a.summary.cells)}% labeled` : a.state),
+    empty: 'Cells labeled from marker genes or a reference, or imported from a table, each label set kept with what it came from.',
+  },
+  {
+    kind: 'marker-set', title: 'Marker sets', icon: 'dna',
+    items: (project) => markerSetsOf(project),
+    label: (a) => `${a.name} · v${a.version}`,
+    meta: (a) => `${a.set.labels.length} labels`,
+    empty: 'Labels with their positive and negative markers, each version kept.',
   },
   {
     kind: 'filter', title: 'Filters', icon: 'filter',
@@ -118,6 +144,7 @@ export function mountSidebar(app) {
             if (bundle && app.store.ui.mode === 'welcome') app.setMode('data');
             // A filter is edited and compared in the QC view; a saved view opens.
             if (section.kind === 'filter') app.setMode('qc');
+            if (section.kind === 'clustering') app.setMode('celltypes');
             if (section.kind === 'view') app.applyView(item);
           },
         }, icon(section.itemIcon?.(item) ?? section.icon), h('span.label', section.label(item, app)), h('span.meta', section.meta(item, app)))));
