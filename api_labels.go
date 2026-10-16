@@ -75,6 +75,7 @@ func (a *app) registerLabels(mux *http.ServeMux) {
 	a.registerLabelImports(mux)
 	a.registerLabelReview(mux)
 	a.registerReferences(mux)
+	a.registerImpact(mux)
 }
 
 // markerStarter is a marker set offered for a clustering: SituCraft's, or the simulated tissue's,
@@ -816,6 +817,8 @@ func (a *app) registerLabelReview(mux *http.ServeMux) {
 type reviewRequest struct {
 	Labels        string   `json:"labels"`
 	Confidence    string   `json:"confidence,omitempty"`
+	Other         string   `json:"other,omitempty"` // int32 per cell, base64: what its counterparts carry (an index into others), or −1
+	Others        []string `json:"others,omitempty"`
 	Neighbors     int      `json:"neighbors"`
 	Implausible   float64  `json:"implausible"`
 	LowConfidence *float64 `json:"lowConfidence"`
@@ -850,7 +853,7 @@ func decodeLE[T int32 | float32](b64 string, n int) ([]T, error) {
 func (a *app) reviewQueue(w http.ResponseWriter, r *http.Request) {
 	var body reviewRequest
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 256<<20)).Decode(&body); err != nil || body.Labels == "" {
-		writeError(w, http.StatusBadRequest, "Send {\"labels\": int32 per cell in base64, \"confidence\": optional, \"neighbors\", \"implausible\", \"lowConfidence\", \"limit\", \"reviewed\"}.")
+		writeError(w, http.StatusBadRequest, "Send {\"labels\": int32 per cell in base64, \"confidence\": optional, \"other\" and \"others\": optional, \"neighbors\", \"implausible\", \"lowConfidence\", \"limit\", \"reviewed\"}.")
 		return
 	}
 	if body.Neighbors < 1 || body.Neighbors > 100 || !(body.Implausible >= 0 && body.Implausible <= 1) || body.Limit < 0 || body.Limit > 100000 {
@@ -902,6 +905,13 @@ func (a *app) reviewQueue(w http.ResponseWriter, r *http.Request) {
 	o := label.QueueOptions{Implausible: body.Implausible, LowConfidence: math.NaN(), Limit: body.Limit, Reviewed: map[int]bool{}}
 	if body.LowConfidence != nil {
 		o.LowConfidence = *body.LowConfidence
+	}
+	if body.Other != "" {
+		if o.Other, err = decodeLE[int32](body.Other, n); err != nil {
+			writeError(w, http.StatusBadRequest, "The segmentation-sensitive cells: "+err.Error()+".")
+			return
+		}
+		o.Others = body.Others
 	}
 	for _, c := range body.Reviewed {
 		o.Reviewed[c] = true

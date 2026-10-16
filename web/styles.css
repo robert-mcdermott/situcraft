@@ -1006,6 +1006,7 @@ td div.studio-problem { padding: 2px 6px; margin-top: 4px; font-size: 11.5px; }
 .cmp-tab { flex: 1; padding: 8px 6px; border: 0; background: none; font: inherit; font-size: 12.5px; color: var(--text-2); cursor: pointer; border-bottom: 2px solid transparent; }
 .cmp-tab.active { color: var(--text); font-weight: 650; border-bottom-color: var(--accent); }
 .cmp-pane { flex: 1; min-height: 0; overflow: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px; font-size: 12.5px; }
+.cmp-pane > * { flex-shrink: 0; }
 .cmp-rules { display: flex; flex-direction: column; gap: 6px; }
 .cmp-chips { display: flex; flex-wrap: wrap; gap: 4px; }
 .cmp-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border: 1px solid var(--line); border-radius: 12px; background: none; font: inherit; font-size: 11.5px; color: var(--text-2); cursor: pointer; }
@@ -1022,6 +1023,16 @@ td div.studio-problem { padding: 2px 6px; margin-top: 4px; font-size: 11.5px; }
 .cmp-rank-no { color: var(--text-3); font-size: 11px; }
 .cmp-item-nums { font-size: 11.5px; }
 .cmp-table td, .cmp-table th { white-space: nowrap; }
+.cmp-impact-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.cmp-impact-pick .field { margin: 0; min-width: 0; }
+.cmp-impact-pick select { width: 100%; }
+.cmp-impact-lines p { margin: 0 0 4px; line-height: 1.45; }
+.cmp-bars { display: flex; flex-direction: column; gap: 2px; min-width: 80px; }
+.cmp-bar { display: block; height: 5px; background: var(--hover); border-radius: 2px; overflow: hidden; }
+.cmp-bar > span { display: block; height: 100%; }
+.cmp-bars .cmp-bar:last-child > span { opacity: 0.6; }
+.cmp-remake { display: flex; flex-direction: column; gap: 8px; }
+.lb-remake { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
 .cmp-pages { align-items: center; justify-content: space-between; }
 .cmp-decide { display: flex; flex-direction: column; gap: 8px; }
 .cmp-fieldset { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 6px 10px 8px; margin: 0; display: flex; flex-direction: column; gap: 4px; }

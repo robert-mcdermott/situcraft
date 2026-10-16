@@ -27,7 +27,7 @@ internal/jp2k/       JPEG 2000 Part 1 decoder
 internal/xenium/     bundle scanning, version detection, validation, typed access
 internal/cache/      derived data: tile pyramids, transcript index, geometry tiles
 internal/segment/    nucleus expansion, transcript-informed segmentation
-internal/compare/    cell matching, difference classes, metrics
+internal/compare/    cell matching, difference classes, metrics; labels read through a comparison
 internal/cluster/    normalization, principal components, Leiden clusters, markers
 internal/graph/      nearest neighbors, UMAP's fuzzy graph, Leiden
 internal/embed/      UMAP maps and their quality

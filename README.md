@@ -53,7 +53,8 @@ panels from published cell atlases, edited as versions), labels from a labeled s
 reference (each cell correlated with each label's profile, then fine-tuned on the leading labels'
 genes), labels imported from CSV, Parquet, AnnData or Xenium Explorer's cell groups, and their
 review: curated and consensus versions side by side, each cell's evidence, and a queue of the cells
-most likely mislabeled. The steps and defaults are scanpy's and SingleR's, and the results are
+most likely mislabeled; and what the choice of segmentation changes in the labels, a clustering and
+its labels made again on another segmentation in one step and read through the comparison. The steps and defaults are scanpy's and SingleR's, and the results are
 validated against scanpy, leidenalg, umap-learn, scikit-learn and SingleR.
 
 ## A look around
@@ -98,6 +99,7 @@ More: [checking a bundle](docs/images/data-light.webp), [the tissue's stains](do
 [the map of the cells beside the tissue](docs/images/cellmap-light.webp),
 [cells labeled from marker genes](docs/images/labels-light.webp),
 [cells labeled from a single-cell reference](docs/images/reference-light.webp),
+[the labels under two segmentations](docs/images/impact-light.webp),
 [the instrument's clusters imported as labels](docs/images/imported-light.webp),
 [the Jobs view](docs/images/jobs-light.webp).
 

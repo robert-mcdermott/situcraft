@@ -11,6 +11,8 @@ import { toast } from './overlays.js';
 import { RULES, appendEdit, checkRule, createCurated, crossTable, curatedSetsOf, nearestCells, saveConsensus, tally } from '../lib/curation.js';
 import { labelSource, labelVersions, refOf } from './label-sources.js';
 import { lowConfidenceDefault } from '../lib/labels.js';
+import { originOf, sideOf } from '../lib/impact.js';
+import { comparisonsOf } from '../lib/segmentations.js';
 
 const percent = (v, digits = 0) => (Number.isFinite(v) ? `${(100 * v).toFixed(digits)}%` : '—');
 const fixed = (v, digits = 2) => (Number.isFinite(v) ? v.toFixed(digits) : '—');
@@ -44,7 +46,7 @@ export function reviewSections(app, ctx) {
   if (!seg || !clustering) return [];
   const st = session.labels;
   st.versions ??= { a: '', b: '', building: null };
-  st.review ??= { set: '', neighbors: 10, implausible: 0.2, low: null, queue: null, page: 0, cell: null, busy: false };
+  st.review ??= { set: '', neighbors: 10, implausible: 0.2, low: null, against: null, queue: null, page: 0, cell: null, busy: false };
   const project = app.store.project;
   const versions = labelVersions(project, t.dataset.id, seg.id);
   if (!versions.length) return [];
@@ -55,11 +57,23 @@ export function reviewSections(app, ctx) {
   }
   // Low confidence, by default: from markers or a reference, a lead under the set's threshold.
   const reviewed = versions.find((v) => versionKey(v) === rv.set);
+  // Segmentation-sensitive: against a label set of another segmentation the dataset's comparisons
+  // pair with this one ({ comparison, other, version, name }); by default one made the same way.
+  const against = [];
+  for (const c of comparisonsOf(project, t.dataset.id).filter((x) => x.state === 'complete' && (x.a === seg.id || x.b === seg.id))) {
+    const other = c.a === seg.id ? c.b : c.a;
+    const otherSeg = project.artifacts.find((a) => a.id === other);
+    for (const ov of labelVersions(project, t.dataset.id, other)) against.push({ key: `${c.id}|${versionKey(ov)}`, comparison: c, version: ov, name: `${ov.name} (${otherSeg?.name ?? 'another segmentation'})`, segName: otherSeg?.name ?? 'another segmentation' });
+  }
   if (rv.lowFor !== rv.set) {
     rv.lowFor = rv.set;
     const rec = reviewed?.kind === 'markers' || reviewed?.kind === 'reference' ? project.artifacts.find((a) => a.id === reviewed.id) : null;
     rv.low = lowConfidenceDefault(rec);
+    const origin = (v) => originOf(project.artifacts.find((a) => a.id === v.id), v.level);
+    const mine = reviewed ? origin(reviewed) : null;
+    rv.against = (mine && against.findLast((x) => origin(x.version) === mine)?.key) || null;
   }
+  if (rv.against && !against.some((x) => x.key === rv.against)) rv.against = null;
   const evidenceHost = (st.evidenceHost ??= h('div.rv-evidence'));
   // A cell chosen on the map or the tissue shows its evidence.
   app.labelReview = { focusCell: (cell) => showEvidence(cell) };
@@ -231,15 +245,27 @@ export function reviewSections(app, ctx) {
     return h('section.seg-section.rv-section',
       h('div.section-title', 'Review'),
       h('div.seg-card',
-        h('p', 'Which cells to look at first: those whose label their nearest labeled cells in the tissue rarely share (most share another: a lone label among others is often a mislabel, a doublet, or an outline holding parts of two cells), and those of low confidence. Choose a cell, here or on the map and the tissue, to see its evidence; accept its label or relabel it, saying why. Decisions are appended to a curated set.'),
+        h('p', 'Which cells to look at first: those whose label their nearest labeled cells in the tissue rarely share (most share another: a lone label among others is often a mislabel, a doublet, or an outline holding parts of two cells), those whose label changes under another segmentation, and those of low confidence. Choose a cell, here or on the map and the tissue, to see its evidence; accept its label or relabel it, saying why. Decisions are appended to a curated set.'),
         h('div.seg-import-grid',
           h('label.field', { for: 'rv-set' }, h('span', 'Labels'), pick),
           num('rv-neighbors', 'Nearest cells', 'neighbors', 1, 'The labeled cells nearest each cell (by centroid) whose labels are counted.'),
           num('rv-implausible', 'Implausible at most', 'implausible', 0.05, 'A cell is flagged when at most this share of its nearest cells carry its label, and most carry another.'),
-          num('rv-low', 'Confidence below', 'low', 0.05, 'A cell is flagged when its confidence is below this (empty: not by confidence). From markers, the confidence is how far the label led the next; from a reference, how far it led the next in correlation; imported, the table\'s.')),
+          num('rv-low', 'Confidence below', 'low', 0.05, 'A cell is flagged when its confidence is below this (empty: not by confidence). From markers, the confidence is how far the label led the next; from a reference, how far it led the next in correlation; imported, the table\'s.'),
+          againstPick()),
         h('div.btn-row', h('button.btn.primary', { type: 'button', disabled: rv.busy, 'data-action': 'review-queue', onclick: () => makeQueue(v) }, icon('stethoscope'), rv.busy ? 'Ranking…' : 'Make the queue')),
         queueHost,
         evidenceHost));
+  }
+
+  // The label set of another segmentation whose labels the cells' counterparts carry.
+  function againstPick() {
+    const el = h('select.input', { id: 'rv-against' }, h('option', { value: '' }, against.length ? 'none' : 'no other segmentation compared'), ...against.map((x) => h('option', { value: x.key }, x.name)));
+    el.value = rv.against ?? '';
+    el.disabled = !against.length;
+    el.addEventListener('change', () => {
+      rv.against = el.value || null;
+    });
+    return h('label.field', { for: 'rv-against', title: 'A cell is flagged when its counterparts under another segmentation (as a comparison of the two matches cells) carry another label in this set. Compare two segmentations in the Segmentation view, and make the labels again on the other (the label sets\' Make again).' }, h('span', 'Label changes against'), el);
   }
 
   async function makeQueue(v) {
@@ -257,8 +283,18 @@ export function reviewSections(app, ctx) {
       }
       const body = { labels: b64(src.label), neighbors: rv.neighbors, implausible: rv.implausible, lowConfidence: rv.low, limit: 500, reviewed };
       if (src.confidence) body.confidence = b64(src.confidence);
+      const x = against.find((y) => y.key === rv.against);
+      let againstName = null;
+      if (x) {
+        const other = await labelSource(app, refOf(x.version.id, x.version.level));
+        const mineIsA = x.comparison.a === seg.id;
+        const impact = await app.bundles.comparisonImpact(t.item, x.comparison.id, mineIsA ? { a: sideOf(src), b: sideOf(other) } : { a: sideOf(other), b: sideOf(src) });
+        body.other = mineIsA ? impact.sensitiveA : impact.sensitiveB;
+        body.others = impact.impact.others;
+        againstName = x.segName;
+      }
       const answer = await postJSON(`${t.item.url}/segmentations/${encodeURIComponent(seg.id)}/review`, body);
-      rv.queue = { ...answer, names: src.names, labels: src.label, set: versionKey(v) };
+      rv.queue = { ...answer, names: src.names, labels: src.label, set: versionKey(v), against: againstName };
       rv.page = 0;
     } catch (error) {
       toast(`The review queue: ${error.message}`, { kind: 'error', timeout: 10000 });
@@ -285,10 +321,11 @@ export function reviewSections(app, ctx) {
     const items = q.queue.slice(rv.page * per, (rv.page + 1) * per);
     const reason = (it) => [
       it.reasons.includes('implausible') ? `${Math.round(it.share * q.neighbors)} of ${q.neighbors} nearest share it; most are ${q.names[it.dominant] ?? '?'}` : null,
+      it.reasons.includes('segmentation-sensitive') ? `under ${q.against}: ${it.other}` : null,
       it.reasons.includes('low-confidence') ? `confidence ${fixed(it.confidence, v?.kind === 'reference' ? 3 : 2)}` : null,
     ].filter(Boolean).join('; ');
     clear(host).append(
-      h('p', h('b', `${formatCount(c.implausible + c.lowConfidence - c.both)} cells to review`), h('span.muted', ` of ${formatCount(c.labeled)} labeled: ${formatCount(c.implausible)} implausible, ${formatCount(c.lowConfidence)} of low confidence, ${formatCount(c.both)} both; ${formatCount(c.reviewed)} reviewed already. The first ${formatCount(q.queue.length)}, most doubtful first:`)),
+      h('p', h('b', `${formatCount(c.flagged)} cells to review`), h('span.muted', ` of ${formatCount(c.labeled)} labeled: ${formatCount(c.implausible)} implausible, ${q.against ? `${formatCount(c.sensitive)} whose label changes under ${q.against}, ` : ''}${formatCount(c.lowConfidence)} of low confidence, ${formatCount(c.both)} for two reasons or more; ${formatCount(c.reviewed)} reviewed already. The first ${formatCount(q.queue.length)}, most doubtful first:`)),
       h('div.table-wrap', h('table.data-table.seg-table.rv-table',
         h('thead', h('tr', h('th.r', 'Rank'), h('th', 'Cell'), h('th', 'Label'), h('th', 'Why'))),
         h('tbody', ...items.map((it, r) => h(`tr${rv.cell === it.cell ? '.selected' : ''}`, { tabIndex: 0, style: { cursor: 'pointer' }, 'data-cell': it.cell, onclick: () => showEvidence(it.cell, true), onkeydown: (event) => {
@@ -396,6 +433,9 @@ export function reviewSections(app, ctx) {
         parts.push(h('p.muted.seg-note', `Green: a gene higher in ${best.name}'s profile that the cell expresses; red: one higher in ${next.name}'s that it expresses; dashed: one it does not express. Each with its transcripts in the cell; hover for its value and the profiles'.`));
       }
     }
+    // Under another segmentation.
+    const sensitive = rv.queue?.against ? rv.queue.queue.find((it) => it.cell === cell && it.other) : null;
+    if (sensitive) parts.push(h('div.section-title', 'Under another segmentation'), h('p.muted.seg-note', `Under ${rv.queue.against}, its counterparts carry another label: ${sensitive.other}. The Compare view's Labels tab shows the difference on the tissue.`));
     // Its neighbors' labels.
     const near = [];
     if (cells) {

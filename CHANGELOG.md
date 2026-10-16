@@ -119,6 +119,21 @@ Wave 4 of the [roadmap](situcraft-spec/roadmap.md): cell identities with their e
     3 × 10⁻⁸ and the same label on 99.97% to 100% of the cells. On the simulated tissue 98.1% of the
     cells take their true type.
 
+- **Labels across segmentations (wave 4, slice 7).** What the choice of segmentation changes in
+  the cells' labels.
+  - **Made again in one step:** a clustering and its label sets from markers or a reference made
+    again on another segmentation with the same parameters, from the label sets' card.
+  - **The comparison workspace's Labels tab:** a label set of each segmentation read through the
+    comparison: how many matched cells keep their label and which change, what split and merged
+    cells carry, each label's cells under each, marker mixing by label, and the differences whose
+    labels change; the tissue colored by each side's labels.
+  - **Segmentation-sensitive cells** join the review queue, with what their counterparts carry
+    under the other segmentation.
+  - **Remote control:** `repeat_on_segmentation`, `label_impact`; `review_labels` takes `against`.
+  - **Validated** on a built fixture by hand and on the simulated tissue's truth: labeled from its
+    types' markers, 99.86% of the cells SituCraft's refinement matches to their true cell take its
+    type, 98.33% under the instrument's segmentation, with marker mixing nearer the truth's.
+
 ### Changed
 
 - **A comparison can be removed from its project** (the inspector's **Remove**). The project's

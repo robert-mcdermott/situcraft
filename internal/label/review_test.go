@@ -55,7 +55,7 @@ func TestQueueOrder(t *testing.T) {
 	if !slices.Equal(cells, []int{0, 2, 4, 1}) {
 		t.Errorf("queue %v", cells)
 	}
-	if counts != (QueueCounts{Labeled: 6, Implausible: 3, LowConfidence: 2, Both: 1, Reviewed: 1}) {
+	if counts != (QueueCounts{Labeled: 6, Flagged: 4, Implausible: 3, LowConfidence: 2, Both: 1, Reviewed: 1}) {
 		t.Errorf("counts %+v", counts)
 	}
 	if items[0].Reasons[0] != ReasonImplausible || items[0].Reasons[1] != ReasonLowConfidence || *items[0].Confidence != 0.05 {
@@ -63,6 +63,20 @@ func TestQueueOrder(t *testing.T) {
 	}
 	if limited, _ := Queue(label, share, dominant, conf, QueueOptions{Implausible: 0.2, LowConfidence: math.NaN(), Limit: 1}); len(limited) != 1 || limited[0].Cell != 2 {
 		t.Errorf("without a confidence threshold, limited to one: %+v", limited)
+	}
+	// Segmentation-sensitive cells: 1 (whose counterpart is a Macrophage) and 6 (split). Two reasons
+	// first, the implausible before the rest; then one: the implausible by agreement, the
+	// sensitive, the least confident.
+	other := []int32{-1, 0, -1, -1, -1, -1, 1}
+	items, counts = Queue(label, share, dominant, conf, QueueOptions{Implausible: 0.2, LowConfidence: 0.1, Other: other, Others: []string{"Macrophage", "split into 2 cells: T, Tumor"}})
+	cells = cells[:0]
+	for _, it := range items {
+		cells = append(cells, it.Cell)
+	}
+	// 0: implausible and low confidence; 1: sensitive and low confidence; 2, 4: implausible; 6:
+	// sensitive; 3 has no reason left but low confidence 0.01 (and is not reviewed here).
+	if !slices.Equal(cells, []int{0, 1, 2, 4, 6, 3}) || counts.Sensitive != 2 || counts.Both != 2 || counts.Flagged != 6 || items[1].Other != "Macrophage" || items[1].Reasons[0] != ReasonSensitive {
+		t.Errorf("with sensitive cells: %v, %+v, %+v", cells, counts, items[1])
 	}
 }
 

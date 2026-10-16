@@ -299,6 +299,8 @@ does not read says so, and offers to compare the two segmentations again.
   among the classes you keep and with at least the reassigned transcripts you set. **Next** and
   **Previous** (or `]` and `[`) go through it; each difference opens where it lies, its cells lit
   in both, and is described in the inspector. **Cell matching** lists every difference, sortable.
+- **Labels** reads a label set of each segmentation through the comparison: what the choice
+  changes in the cells' labels (below, Labels under two segmentations).
 - **Decide** promotes one segmentation as the dataset's default, keeps one for exploration, or
   rejects one, with a reason. Decisions are appended to the project with the comparison they rest
   on and never removed; the default cannot be rejected until another is promoted, and no
@@ -559,15 +561,48 @@ name. Any two versions are compared **side by side** in a table of their labels.
 
 **Review** ranks the cells to look at first: those whose label few of their nearest cells in the
 tissue share while most share another (a lone label among others is often a mislabel, two cells in
-one outline, or a cell at a boundary), and those of low confidence. Choose a cell, in the list or
-on the map or the tissue, to see its **evidence**: its label in every version; for labels from
-markers, why it took its label and not the next, gene by gene in the cell (green, a marker it
-expresses; red, a negative marker it expresses), and why not the label its neighbors carry; for
-labels from a reference, each round's correlations and the genes higher in its label's profile and
-in the next's that the cell expresses; its
-neighbors' labels in the tissue and in expression; its transcripts and its segmentation's flags.
-**Accept** its label or **Relabel** it, saying why; the decision is added to a curated set and the
-next cell is shown.
+one outline, or a cell at a boundary), those whose label changes under another segmentation (choose
+the label set of it in **Label changes against**; below), and those of low confidence. Choose a
+cell, in the list or on the map or the tissue, to see its **evidence**: its label in every version;
+for labels from markers, why it took its label and not the next, gene by gene in the cell (green, a
+marker it expresses; red, a negative marker it expresses), and why not the label its neighbors
+carry; for labels from a reference, each round's correlations and the genes higher in its label's
+profile and in the next's that the cell expresses; what its counterparts carry under the other
+segmentation; its neighbors' labels in the tissue and in expression; its transcripts and its
+segmentation's flags. **Accept** its label or **Relabel** it, saying why; the decision is added to
+a curated set and the next cell is shown.
+
+### Labels under two segmentations
+
+Cell types are read from cells, so the segmentation chosen can change them: a cell drawn too wide
+takes its neighbor's transcripts and may take its neighbor's label; a cell split in two may become
+two kinds. To see how much, compare two segmentations (Segmentation view), then, under a
+clustering's label sets, **Make this clustering and its label sets again on** the other
+segmentation: the clustering with the same parameters, its map, and each label set from markers or
+a reference, in one step (imported labels belong to their segmentation's cells and are not made
+again; a QC filter's cells are the instrument segmentation's, so the cells are then those with
+enough transcripts).
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/impact-dark.webp">
+  <img alt="The Compare workspace's Labels tab for the Breast example: the instrument's segmentation and a 5 µm nucleus expansion side by side, each cell colored by its label (Epithelial, Immune, Endothelial, Stromal, Adipocyte); of the 6,512 cells matched one to one, 96.9% labeled alike; what split and merged cells carry; marker mixing slightly higher under the expansion" src="images/impact-light.webp">
+</picture>
+
+The comparison's **Labels** tab (Compare workspace) reads a label set of each segmentation through
+the comparison (by default two made the same way, at their first level):
+- **How many cells keep their label:** of the cells matched one to one, the share labeled alike,
+  and every change (T cell → Macrophage, and so on); what split cells' pieces carry (the cell's
+  label, some of them, or none) and what merged cells carried.
+- **Each label's cells** under each segmentation, and the change in its share.
+- **Marker mixing by label:** of each label's cells, the share expressing two mutually exclusive
+  markers together, and the mutually exclusive co-expression rate among them. Under a segmentation
+  that gives cells their neighbors' transcripts, it rises.
+- **The differences whose labels change,** the most transcripts reassigned first; each opens where
+  it lies. **Color the cells by their labels** fills each side's cells with its labels' colors.
+
+The cells whose label changes are segmentation-sensitive: the review queue lists them when you
+choose the other segmentation's label set in **Label changes against**, with what their
+counterparts carry.
 
 ## Keyboard
 

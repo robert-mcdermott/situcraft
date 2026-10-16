@@ -9,6 +9,8 @@
 // - The review queue: the differences ranked (by reassigned transcripts, contamination,
 //   disagreement or low counts) among those the reviewer's rules keep; a difference opens where it
 //   lies. The cell-matching table: every difference, sortable.
+// - The labels (ui/impact-panel.js): what the choice changes in the cells' labels, a label set of
+//   each read through the comparison; the tissue colored by each side's labels.
 // - The decision: promote one segmentation as the dataset's default, keep one for exploration, or
 //   reject one, with a reason, appended to the project's decisions (lib/segmentations.js).
 
@@ -23,6 +25,7 @@ import { comparisonsOf, decideSegmentation, DECISIONS, promotedSegmentation, seg
 import { CLASS_INFO, DIFFERING, RANKS, cellNames, prepare, rank, warnings } from '../lib/review.js';
 import { cellFlags, flagsOf } from '../lib/refine.js';
 import { askRemoveComparison } from './comparisons.js';
+import { impactPanel, labelFill } from './impact-panel.js';
 
 const CLASSES = Object.keys(CLASS_INFO);
 // A's and B's colours in the overlay (Okabe and Ito's palette, told apart with any colour vision).
@@ -312,8 +315,10 @@ export function mountCompare(app, container) {
       scale.querySelector('span').textContent = s.label;
     }
 
-    // Cells filled by their difference's class (the classes chosen); the chosen difference lit.
+    // Cells filled by their difference's class (the classes chosen), or by each side's labels; the
+    // chosen difference lit.
     function colorCells() {
+      const labels = labelFill(session);
       const fill = (n, of) => {
         const rgba = new Uint8Array(4 * n);
         for (let c = 0; c < n; c += 1) {
@@ -327,13 +332,17 @@ export function mountCompare(app, container) {
       for (const r of state.renderers) {
         const n = r.which === 'a' ? outA.cells : outB.cells;
         const of = r.which === 'a' ? ofA : ofB;
-        if (r.renderer.layers.cells.fill) r.renderer.setCellColors(fill(n, of));
+        if (r.renderer.layers.cells.fill) r.renderer.setCellColors(labels ? labels[r.which] : fill(n, of));
         const g = session.selected === null ? null : groups[session.selected];
         if (g) {
           const mask = new Uint8Array(n);
           for (const c of r.which === 'a' ? g.a : g.b) mask[c] = 1;
           r.renderer.setHighlight(mask, '#ffffff', 0.45);
         } else r.renderer.setHighlight(null);
+      }
+      if (labels) {
+        clear(legend).append(...labels.legend.slice(0, 14).map(([name, color]) => h('span.cmp-legend-item', h('span.dot', { style: { background: color } }), name || 'No label')), labels.legend.length > 14 ? h('span.cmp-legend-item', '…') : null);
+        return;
       }
       clear(legend).append(...CLASSES.filter((c) => session.classes.has(c) && (d.classes?.[c] ?? 0) > 0).map((c) => h('span.cmp-legend-item', h('span.dot', { style: { background: classColor(c) } }), CLASS_INFO[c].label)),
         session.map ? h('span.cmp-legend-item', { title: 'Each 50 µm region\'s share of pixels the two give to different cells' }, h('span.cmp-map-key'), 'Disagreeing pixels, 0–100%') : null);
@@ -418,7 +427,7 @@ export function mountCompare(app, container) {
     // --- The side panel ---
     function renderSide() {
       clear(tabs);
-      for (const [id, label] of [['queue', 'Review queue'], ['table', 'Cell matching'], ['decide', 'Decide']]) {
+      for (const [id, label] of [['queue', 'Review queue'], ['table', 'Cell matching'], ['labels', 'Labels'], ['decide', 'Decide']]) {
         tabs.append(h(`button.cmp-tab${session.tab === id ? '.active' : ''}`, { type: 'button', role: 'tab', 'aria-selected': String(session.tab === id), onclick: () => {
           session.tab = id;
           renderSide();
@@ -427,6 +436,10 @@ export function mountCompare(app, container) {
       clear(pane);
       if (session.tab === 'decide') {
         pane.append(...decidePanel());
+        return;
+      }
+      if (session.tab === 'labels') {
+        pane.append(...impactPanel({ app, t, cmp, nameA, nameB, groups, session, select, renderSide, recolor: colorCells }));
         return;
       }
       pane.append(rules());
@@ -598,6 +611,22 @@ export function mountCompare(app, container) {
         session.tab = id;
         renderSide();
       },
+      // The Labels tab with these label sets (keys 'id:level'; null: as chosen), colored by them or
+      // not; answers when both are read through the comparison: { impact, srcA, srcB, ... }.
+      async showLabels({ a = null, b = null, fill } = {}) {
+        session.tab = 'labels';
+        session.impact ??= { a: '', b: '', data: null, loading: '', error: null, fill: false, transition: null };
+        if (a) session.impact.a = a;
+        if (b) session.impact.b = b;
+        if (fill !== undefined) session.impact.fill = fill;
+        session.impact.error = null;
+        renderSide();
+        const want = () => `${session.impact.a}|${session.impact.b}`;
+        for (let k = 0; k < 1200 && session.impact.data?.key !== want() && !session.impact.error; k += 1) await new Promise((r) => setTimeout(r, 50));
+        if (session.impact.error) throw new Error(session.impact.error);
+        colorCells();
+        return session.impact.data;
+      },
       setRules(rules) {
         if (rules.classes) session.classes = new Set(rules.classes);
         if (rules.by) session.by = rules.by;
@@ -640,7 +669,7 @@ export function mountCompare(app, container) {
   return {
     update(topics) {
       if (topics.has('project-loaded') || topics.has('focus') || topics.has('bundles') || (topics.has('project') && !current)) show();
-      else if (topics.has('project') && current?.session.tab === 'decide') current.select(current.session.selected, false);
+      else if (topics.has('project') && (current?.session.tab === 'decide' || current?.session.tab === 'labels')) current.select(current.session.selected, false);
     },
     destroy() {
       teardown();

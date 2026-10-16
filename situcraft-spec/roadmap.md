@@ -1838,13 +1838,41 @@ same on every processor.
      - **A reference must be of the tissue:** an atlas of primary cells labels tumor cells with the
        nearest profiles it has (Breast's embryonic stem and neuroepithelial cells, Lung's
        hepatocytes), close in correlation, which the evidence and the review show.
-7. **Labels across segmentations (C6, T8).**
-   - A clustering or label set made again on another segmentation in one step; composition by label
-     under each; labels of the cells a comparison matches (agreement among one-to-one cells, the
-     labels of split and merged cells); marker mixing by label; the comparison workspace's
-     downstream-impact tab. Cells whose label changes with the segmentation join the review queue.
-   - Validation: built fixtures; on simulated tissues, labels under the truth, the instrument's
-     segmentation and the refinement.
+7. **Labels across segmentations (C6, T8): done.**
+   - **Made again in one step** (`lib/impact.js`, `ui/remake.js`; research.md §5.7): a clustering of
+     SituCraft's, its map and its label sets from markers or a reference made again on another
+     segmentation with the same parameters (a QC filter's cells by the rule; imported sets not made
+     again), from the label sets' card or the comparison's Labels tab.
+   - **Read through a comparison** (`internal/compare`'s `impact.go`, `api_impact.go`): each
+     label's cells under each segmentation; the matched cells labeled alike and every pair of
+     labels; what split cells' pieces and merged cells carry; cells without a counterpart by label;
+     marker mixing by label (the share of each label's cells co-expressing exclusive markers, and
+     the MECR among them); the differences whose labels change.
+   - **The comparison workspace's Labels tab:** a label set of each side (two made the same way by
+     default, at their first level), the impact in words and tables, each difference whose labels
+     change opening where it lies, and the tissue colored by each side's labels.
+   - **Segmentation-sensitive cells** join the review queue: those whose counterparts under another
+     segmentation carry another label, with what they carry, against a label set chosen.
+   - Remote control: `repeat_on_segmentation`, `label_impact`; `review_labels` takes `against`.
+   - Validation:
+     - **A built fixture by hand:** every class of difference, labels named in different orders,
+       cells not covered; each measure, line and MECR by hand; the queue's third reason.
+     - **Known truth** (weekly): on the standard simulated tissue labeled from its types' markers,
+       the matched cells take their true type in 100% (the truth), 99.86% (the refinement) and
+       98.33% (the instrument's segmentation); the types' shares within 0.5% and 2.2% of the truth's;
+       marker mixing (MECR) 0.063, 0.090 and 0.221.
+     - **In the app:** the Lung labels made again on the 5 µm expansion by remote control, 99.9% of
+       matched cells alike, the tissue colored by them, the queue's sensitive cells the impact's
+       (viewer suite); capture scene `impact`, with no accessibility violation.
+   - Found by slice 7:
+     - **A segmentation's errors reach the labels mostly through cells of two kinds:** the
+       refinement's remaining errors on the simulated tissue are true cells merged, a third of them
+       of two types.
+     - **Finer labels are more sensitive:** on Breast, the instrument's segmentation and a 5 µm
+       expansion agree on 96.9% of matched cells' classes and 79.7% of their subtypes; the tab opens
+       at the first level.
+     - **Marker mixing is read in its rate, not in cells co-expressing any pair,** which saturates
+       where markers are not absolutely exclusive (98.9% of the simulated instrument's cells).
 8. **Scale.**
    - Nearest neighbors by NN-Descent (Dong, Moses & Li 2011) above a size where exact search is
      slow, deterministic for a seed, its recall against exact search measured; the map's

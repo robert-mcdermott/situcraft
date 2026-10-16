@@ -19,6 +19,8 @@ import { clusterName, clusterNames, clusteringsOf, mapsOf, nameClusters } from '
 import { composition as labelComposition, labelSetName, labelSetsFor, lowConfidenceDefault, namesFromLabels } from '../lib/labels.js';
 import { RULES, appendEdit, createCurated, crossTable, curatedSetsOf, saveConsensus } from '../lib/curation.js';
 import { labelSource, labelVersions, refOf } from './label-sources.js';
+import { defaultPair, impactLines, sideOf } from '../lib/impact.js';
+import { remakeOnSegmentation } from './remake.js';
 
 export class ActionError extends Error {}
 
@@ -1075,13 +1077,101 @@ export function installRemote(app) {
       };
       const body = { labels: enc(src.label), neighbors, implausible, lowConfidence: low, limit: args.limit === undefined ? 20 : finite(args.limit, 'limit'), reviewed };
       if (src.confidence) body.confidence = enc(src.confidence);
+      let against = null;
+      if (args.against !== undefined) {
+        against = againstArg(dataset, seg, args.against);
+        const other = await labelSource(app, refOf(against.version.id, against.version.level));
+        const mineIsA = against.comparison.a === seg.id;
+        const impact = await app.bundles.comparisonImpact(item, against.comparison.id, mineIsA ? { a: sideOf(src), b: sideOf(other) } : { a: sideOf(other), b: sideOf(src) });
+        body.other = mineIsA ? impact.sensitiveA : impact.sensitiveB;
+        body.others = impact.impact.others;
+      }
       const response = await fetch(`${item.url}/segmentations/${encodeURIComponent(seg.id)}/review`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const answer = await response.json();
       if (!response.ok) throw new ActionError(answer.error ?? `HTTP ${response.status}`);
       const c = answer.counts;
       return {
-        message: `${version.name}: ${plural(c.implausible + c.lowConfidence - c.both, 'cell')} to review of ${c.labeled.toLocaleString('en-US')} labeled (${c.implausible} implausible, ${c.lowConfidence} of low confidence, ${c.both} both; ${c.reviewed} reviewed already).`,
-        data: { labels: version.id, level: version.level, counts: c, neighbors, implausible, lowConfidence: low, queue: answer.queue.map((it) => ({ cell: it.cell, label: src.names[src.label[it.cell]], reasons: it.reasons, share: it.share, neighborsLabel: src.names[it.dominant] ?? null, confidence: it.confidence })) },
+        message: `${version.name}: ${plural(c.flagged, 'cell')} to review of ${c.labeled.toLocaleString('en-US')} labeled (${c.implausible} implausible, ${against ? `${c.sensitive} whose label changes under ${against.segName}, ` : ''}${c.lowConfidence} of low confidence, ${c.both} for two reasons or more; ${c.reviewed} reviewed already).`,
+        data: { labels: version.id, level: version.level, counts: c, neighbors, implausible, lowConfidence: low, against: against ? { labels: against.version.id, level: against.version.level, segmentation: against.segName, comparison: against.comparison.id } : null, queue: answer.queue.map((it) => ({ cell: it.cell, label: src.names[src.label[it.cell]], reasons: it.reasons, share: it.share, neighborsLabel: src.names[it.dominant] ?? null, ...(it.other ? { other: it.other } : {}), confidence: it.confidence })) },
+      };
+    },
+
+    async repeat_on_segmentation(args) {
+      const dataset = resolveDataset(args.dataset);
+      const link = app.bundles.link(dataset.id);
+      const item = link?.item ?? app.bundles.itemByPath(dataset.path);
+      if (!item) throw new ActionError(`${dataset.name}'s bundle was not found where the project records it.`);
+      const list = clusteringsOf(project(), dataset.id).filter((c) => c.state === 'complete' && !c.summary?.source);
+      if (!list.length) throw new ActionError(`${dataset.name} has no clustering of SituCraft's: cluster_cells makes one.`);
+      const c = clusteringRef(list, args.clustering);
+      if (args.segmentation === undefined) throw new ActionError('Name the segmentation to make the clustering and its labels again on (segmentation).');
+      const target = segmentationArg(dataset, args.segmentation);
+      let out;
+      try {
+        out = await remakeOnSegmentation(app, { item, dataset }, c.id, target.id);
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      const labels = [];
+      for (const m of out.labels) {
+        const d = (await app.bundles.labelData(m.id)).description;
+        const record = project().artifacts.find((a) => a.id === m.id);
+        labels.push({ id: m.id, name: record ? labelSetName(record) : m.name, levels: d.levels, cells: d.cells });
+      }
+      const s = out.clustering.summary ?? {};
+      return {
+        message: `${c.name} made again on ${target.name}: ${s.clusters ?? '?'} clusters of ${(s.cells ?? 0).toLocaleString('en-US')} cells, ${plural(labels.length, 'label set')}${labels.length ? ` (${labels.map((l) => `${l.name}: ${Math.round((100 * l.cells.labeled[0]) / Math.max(1, l.cells.analyzed))}% labeled`).join('; ')})` : ''}.${out.failed.length ? ` Not made: ${out.failed.map((f) => f.error).join('; ')}.` : ''}${out.skipped.length ? ` ${plural(out.skipped.length, 'set')} not made again (imported for the other segmentation's cells).` : ''}`,
+        data: { clustering: { id: out.clustering.id, segmentation: target.id, clusters: s.clusters, cells: s.cells }, labels, failed: out.failed, skipped: out.skipped, notes: out.notes },
+      };
+    },
+
+    async label_impact(args) {
+      const dataset = resolveDataset(args.dataset);
+      const p = project();
+      const list = p.artifacts.filter((a) => a.kind === 'comparison' && a.dataset === dataset.id && a.state === 'complete');
+      if (!list.length) throw new ActionError(`${dataset.name} has no comparison: compare_segmentations makes one.`);
+      const segName = (id) => p.artifacts.find((a) => a.kind === 'segmentation' && a.id === id)?.name ?? id;
+      const named = list.map((c) => ({ c, name: `${segName(c.a)} and ${segName(c.b)}` }));
+      let cmp = list.at(-1);
+      if (args.comparison !== undefined) {
+        const ref = String(args.comparison);
+        cmp = list.find((c) => c.id === ref) ?? named.find((x) => x.name === choose(ref, named.map((y) => y.name), 'comparison')).c;
+      }
+      const va = labelVersions(p, dataset.id, cmp.a);
+      const vb = labelVersions(p, dataset.id, cmp.b);
+      for (const [vs, id] of [[va, cmp.a], [vb, cmp.b]]) {
+        if (!vs.length) throw new ActionError(`${segName(id)} has no labels: repeat_on_segmentation makes a clustering and its labels again on it.`);
+      }
+      const pickOf = (vs, ref, side) => {
+        if (ref === undefined) return null;
+        const text = String(ref);
+        const [id, lvl] = /:\d+$/.test(text) ? [text.slice(0, text.lastIndexOf(':')), Number(text.slice(text.lastIndexOf(':') + 1)) - 1] : [text, 0];
+        const v = vs.filter((x) => x.id === id || x.name === text)[lvl] ?? null;
+        if (!v) throw new ActionError(`No label set ${text} of ${side}; its sets are ${[...new Set(vs.map((x) => `${x.id} (${x.name})`))].join(', ')}.`);
+        return v;
+      };
+      const [da, db] = defaultPair(p, va, vb);
+      const a = pickOf(va, args.labels_a, segName(cmp.a)) ?? da;
+      const b = pickOf(vb, args.labels_b, segName(cmp.b)) ?? db;
+      await settleMode('compare');
+      const w = await app.compareView.open(cmp.id);
+      if (!w) throw new ActionError('The comparison could not be opened.');
+      let data;
+      try {
+        data = await w.showLabels({ a: `${a.id}:${a.level}`, b: `${b.id}:${b.level}`, fill: args.color === undefined ? undefined : Boolean(args.color) });
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      await frames();
+      const im = data.impact;
+      return {
+        message: `${a.name} (${segName(cmp.a)}) against ${b.name} (${segName(cmp.b)}): ${impactLines(im, segName(cmp.a), segName(cmp.b)).join(' ')}`,
+        data: {
+          comparison: cmp.id, a: { labels: a.id, level: a.level, name: a.name }, b: { labels: b.id, level: b.level, name: b.name },
+          cellsA: im.cellsA, cellsB: im.cellsB, composition: im.composition, matched: { ...im.matched, transitions: im.matched.transitions.slice(0, 20) },
+          split: im.split, merged: im.merged, rearranged: im.rearranged, onlyA: im.onlyA, onlyB: im.onlyB, changed: im.changed.length, sensitive: { a: im.sensitive[0], b: im.sensitive[1] },
+          mixing: im.mixing ? { pairs: im.mixing.pairs, of: data.answer.pairs, allA: im.mixing.allA, allB: im.mixing.allB, a: im.mixing.a, b: im.mixing.b } : null,
+        },
       };
     },
 
@@ -1461,6 +1551,25 @@ export function installRemote(app) {
       if (!version) throw new ActionError(`The set's levels are 1 to ${of.length}.`);
     }
     return { dataset, seg, item, version };
+  }
+
+  // A label version of another of the dataset's segmentations (ref: a set's id, 'id:level', or its
+  // name) and the comparison of the two segmentations: { version, comparison, segName }.
+  function againstArg(dataset, seg, ref) {
+    const text = String(ref);
+    const [id, lvl] = text.includes(':') && /:\d+$/.test(text) ? [text.slice(0, text.lastIndexOf(':')), Number(text.slice(text.lastIndexOf(':') + 1)) - 1] : [text, null];
+    const segs = project().artifacts.filter((a) => a.kind === 'segmentation' && a.dataset === dataset.id && a.id !== seg.id);
+    for (const other of segs) {
+      const vs = labelVersions(project(), dataset.id, other.id);
+      const of = vs.filter((v) => v.id === id || v.name === text);
+      if (!of.length) continue;
+      const version = lvl === null ? of[0] : of[lvl];
+      if (!version) throw new ActionError(`The set's levels are 1 to ${of.length}.`);
+      const comparison = project().artifacts.find((a) => a.kind === 'comparison' && a.state === 'complete' && ((a.a === seg.id && a.b === other.id) || (a.b === seg.id && a.a === other.id)));
+      if (!comparison) throw new ActionError(`${seg.name} and ${other.name} have not been compared: compare_segmentations compares them.`);
+      return { version, comparison, segName: other.name };
+    }
+    throw new ActionError(`No label set ${text} of another segmentation of ${dataset.name}.`);
   }
 
   // A label set of a clustering by id, its latest if not given; and a level by name or number from 1.

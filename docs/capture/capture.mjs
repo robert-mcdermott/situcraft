@@ -370,6 +370,21 @@ const scenes = {
     await scrollTo('section:has(> .lb-reference)', 'start');
     await sleep(300);
   },
+  // The Breast example's labels under two segmentations (wave 4, slice 7): the instrument's and a
+  // 5 µm nucleus expansion compared, the clustering and its labels made again on the expansion,
+  // and the comparison's Labels tab with the tissue colored by each side's labels.
+  async impact() {
+    await act('open_example', { example: 'breast' });
+    await act('cluster_cells', {});
+    await act('label_cells', { markers: 'breast' });
+    await act('expand_nuclei', { distance_um: 5 });
+    await act('compare_segmentations', { a: 'Instrument segmentation', b: 'Nucleus expansion, 5 µm' });
+    await act('repeat_on_segmentation', { segmentation: 'Nucleus expansion, 5 µm' });
+    await act('label_impact', { color: true });
+    await waitFor(`Boolean(document.querySelector('.cmp-impact-table tbody tr'))`);
+    await js(`(async () => { const w = window.situcraft.compareView.current(); for (const r of w.state.renderers) await r.renderer.settled(); })()`);
+    await sleep(400);
+  },
   // The Breast example's clusters on the tissue (wave 4, slice 1): the cells filled by cluster,
   // with the legend.
   async clusters() {

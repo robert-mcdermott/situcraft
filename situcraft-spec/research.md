@@ -2026,6 +2026,85 @@ log-normally), as an AnnData object in Zarr (`internal/simulate`'s `reference.go
   neuroepithelial cells and neurons); on the simulated tissue, whose reference cells are of one type
   each, the two agree on 99.3% of the cells and take the true type as often.
 
+### 5.7 Labels across segmentations (verified, wave 4, slice 7)
+
+Cell types are read from cells, so a segmentation's errors can reach them: a cell drawn too wide
+takes its neighbor's transcripts, two cells merged become one of two kinds. SituCraft says how much
+by reading two label sets, one of each segmentation, through the two segmentations' comparison
+(§4; `internal/compare`'s `impact.go`, `api_impact.go`).
+
+**Made again in one step.** A clustering of SituCraft's and its label sets from markers or a
+reference are made again on another segmentation with the same parameters (`lib/impact.js`'s
+`remakePlan`, `ui/remake.js`): the clustering (its cells by the rule of gene transcripts: a QC
+filter's cells are the instrument segmentation's), its map, and each label set (the same marker set
+version and parameters, or the same reference file, columns and parameters; a reference that
+changed since is said to have). Imported label sets belong to their segmentation's cells and are
+not made again. Two label sets made the same way are paired by default, at their first level.
+
+**Read through the comparison.** Labels are compared by name; a cell a label set does not cover
+(not analyzed) is left out. SituCraft's choices:
+- **Composition:** each label's cells under each segmentation, and its share of the cells covered.
+- **Matched cells:** those the comparison pairs one to one (one-to-one, expanded, contracted,
+  assignment-only), covered by both: the share labeled alike of those labeled under both, the cells
+  labeled under one only, by class, and every pair of labels.
+- **Split and merged cells:** for a labeled cell split, whether every piece covered carries its
+  label, some do, or none, and whether the pieces carry two labels or more; for a labeled cell into
+  which cells were merged, the same of the cells merged; rearrangements by whether the two sides'
+  labels are alike, overlap or are apart.
+- **Marker mixing by label:** of each label's cells, the share expressing a pair of mutually
+  exclusive markers together, and the mutually exclusive co-expression rate among them (Hartman and
+  Satija 2024, §4), over the comparison's lineage-marker pairs (on a simulated tissue, each pair of
+  two types' markers).
+- **Segmentation-sensitive cells:** a covered cell whose covered counterparts carry another label
+  (no label counting as one), with what they carry ("Macrophage"; "split into 2 cells: T cell,
+  Tumour"; "one of 3 cells merged into a cell labeled Fibroblast"). The review queue (§5.5) takes
+  them as a third reason, after the spatially implausible and before the least confident, flagged
+  against a label set of another segmentation the dataset's comparisons pair with the reviewed one.
+- **The differences whose labels change,** the most transcripts reassigned first, in the comparison
+  workspace's Labels tab, which can color each side's cells by its labels.
+
+**Validation:**
+- **A built fixture by hand** (`internal/compare/impact_test.go`): ten cells of each, labels named in
+  different orders, through each class of difference (cells not covered, a split into two labels,
+  a merge of one kind, cells only in either): the composition, the agreement, the transitions, the
+  fates, the cells without a counterpart, the differences whose labels change in order, every
+  segmentation-sensitive cell's line, and marker mixing by label (each MECR by hand); the queue's
+  third reason by hand (`internal/label`).
+- **Known truth** (`validation/impact_test.go`, weekly): the standard simulated tissue under its
+  truth, the instrument's nucleus expansion and SituCraft's refinement (Balanced), each clustered and
+  labeled from its types' markers, read through its comparison with the truth against the truth's
+  cells' true types:
+
+| | Truth | Refinement | Instrument |
+| --- | --- | --- | --- |
+| Cells matched to their true cell (labeled under both) | 3,030 | 2,859 | 2,879 |
+| … labeled with its true type | 100% | 99.86% | 98.33% |
+| The types' shares against the truth's (total variation distance) | 0 | 0.5% | 2.2% |
+| True cells merged into one (of them, joining two types) | | 62 (21) | 8 (2) |
+| Marker mixing, MECR of the labeled cells | 0.063 | 0.090 | 0.221 |
+
+  The instrument's and the refinement's labels read against each other: 98.0% of 2,883 matched
+  cells alike; 57 and 95 labeled cells change label with the segmentation.
+- **In the app** (viewer suite): the Lung clustering and its two label sets made again on the 5 µm
+  expansion by remote control; the labels from a table of profiles read through the comparison,
+  every matched cell one to one, 99.9% of 10,814 labeled alike, marker mixing unchanged (MECR
+  0.0090); the tissue colored by them; the review queue's 40 segmentation-sensitive cells those the
+  impact counts. Capture scene `impact`, with no accessibility violation.
+
+**Found by slice 7:**
+- **A segmentation's errors reach the labels mostly through cells of two kinds:** on the simulated
+  tissue the refinement's labels are truer than the instrument's and its marker mixing lower, near
+  the truth's; its remaining errors are true cells merged (62), a third of them of two types.
+- **Finer labels are more sensitive:** on the Breast tissue, the instrument's segmentation and a 5
+  µm expansion label 96.9% of 4,873 matched cells alike at the class level, 79.7% at the subtype;
+  223 cells split by the expansion keep their class in every piece in 66%, and 106 cells into which
+  others were merged had carried its class in 63%; marker mixing rises from 0.0466 to 0.0513, most
+  among adipocytes (0.0511 to 0.0828). The labels tab opens at the first level.
+- **The share of cells co-expressing any exclusive pair saturates** where markers are not absolutely
+  exclusive: the simulator expresses each type's markers at a fifth of their base in the other
+  types, so 98.9% of the instrument's cells co-express one of 336 pairs. The MECR, a mean over
+  pairs, separates the segmentations; the summary leads with it.
+
 ## 6. Spatial analysis (wave 6) and cohorts (wave 7)
 
 - **Graphs:**

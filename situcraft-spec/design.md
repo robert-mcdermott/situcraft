@@ -46,7 +46,7 @@ see `conventions.md`. For the methods, formats and datasets behind these choices
 │   api_*.go           viewport queries: tiles, points, polygons, cells (binary, columnar responses)     │
 │ compute (new, goroutines)                                                                             │
 │   internal/segment   nucleus expansion; transcript-informed segmentation (sampler, outputs)           │
-│   internal/compare   cell matching, difference classes, comparison metrics                            │
+│   internal/compare   cell matching, difference classes, comparison metrics, impact on labels          │
 │   internal/cluster   normalization, principal components, Leiden clusters, markers (wave 4)           │
 │   internal/graph     nearest neighbors (exact; a grid in two dimensions), UMAP's graph, Leiden         │
 │   internal/embed     UMAP maps and their quality                                                       │
@@ -385,6 +385,13 @@ segmentation, made by a job, named by its inputs and parameters, and checked bef
   in parallel over their expressed genes. Kept as a label set of kind `labels` with the reference as
   compared (`reference.json`), from which a cell's evidence is mapped again. The page's card is
   `ui/labels-card.js`'s; versions and review treat the set as any other.
+- **Labels across segmentations** (slice 7): `internal/compare`'s `impact.go` reads two label sets
+  (each cell's label by name and whether its set covers it, sent by the page for any version) through
+  a comparison's differences, with each segmentation's counts for marker mixing
+  (`api_impact.go`); the comparison workspace's Labels tab (`ui/impact-panel.js`) shows it and
+  colors each side's cells by its labels; `ui/remake.js` makes a clustering and its label sets again
+  on another segmentation, the jobs one after another in the page (`lib/impact.js`'s plan); the
+  review queue takes the segmentation-sensitive cells the impact flags.
 - **Label versions and review** (slice 5): curated sets (a base and a reviewer's edits, appended
   with reasons) and consensus sets (a rule over chosen sets) are the project's records
   (`lib/curation.js`), resolved with the predicted sets to each cell's label in the page

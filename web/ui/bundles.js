@@ -659,6 +659,12 @@ export function createBundles(app) {
     return entry.promise;
   }
 
+  // Two label sets read through a comparison (api_impact.go): { a, b, impact, pairs, sensitiveA,
+  // sensitiveB }; request { a, b }, each lib/impact.js's sideOf a label source.
+  function comparisonImpact(item, comparison, request) {
+    return getJSON(`${item.url}/comparisons/${encodeURIComponent(comparison)}/impact`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) });
+  }
+
   // A label set's description, marker set and cells, kept for the session.
   const labelSets = new Map();
   function labelData(id) {
@@ -854,6 +860,7 @@ export function createBundles(app) {
     importLabels,
     readReference,
     mapReference,
+    comparisonImpact,
     // The mappings to a reference of a dataset under way: [{ clustering, job }].
     referenceMappings: (id) => [...mappingReference.values()].filter((e) => e.dataset === id).map(({ clustering, job }) => ({ clustering, job })),
     // The label imports into a dataset under way: [{ segmentation, job }].

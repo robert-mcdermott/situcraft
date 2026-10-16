@@ -230,7 +230,7 @@ var remoteActions = []remoteAction{
 		"confidence_column": textArg("A column of numbers: each cell's confidence (optional)."),
 		"color_column":      textArg("A column of colors (#rrggbb), each label's (optional)."),
 	}), long: true},
-	{Name: "review_labels", Title: "Make the review queue", Description: "Ranks a label set's cells for review: those whose label at most a share of their nearest labeled cells in the tissue carry (most carrying another: spatially implausible), and those of low confidence (from markers, by default under twice the margin), the reviewed left out. Answers the counts and the queue's first cells, each with why.", InputSchema: schema(map[string]any{
+	{Name: "review_labels", Title: "Make the review queue", Description: "Ranks a label set's cells for review: those whose label at most a share of their nearest labeled cells in the tissue carry (most carrying another: spatially implausible), those whose counterparts under another segmentation carry another label in a set of it (segmentation-sensitive, with against), and those of low confidence (from markers, by default under twice the margin), the reviewed left out. Answers the counts and the queue's first cells, each with why.", InputSchema: schema(map[string]any{
 		"dataset":        datasetArg,
 		"segmentation":   textArg("The segmentation, by name, id or instrument (the default if not given)."),
 		"labels":         textArg("A label set's artifact id, or a curated (cur-…) or consensus (con-…) set's; the latest if not given."),
@@ -238,7 +238,20 @@ var remoteActions = []remoteAction{
 		"neighbors":      numberArg("The nearest labeled cells counted (10)."),
 		"implausible":    numberArg("Flag a cell when at most this share of them carry its label (0.2)."),
 		"low_confidence": numberArg("Flag a cell whose confidence is below this."),
+		"against":        textArg("A label set of another segmentation (its id, id:level, or name) the two segmentations' comparison matches cells with: flag the cells whose counterparts carry another label."),
 		"limit":          numberArg("The cells answered (20)."),
+	}), long: true},
+	{Name: "repeat_on_segmentation", Title: "Make a clustering and its labels again on another segmentation", Description: "Makes a clustering of SituCraft's, its map and its label sets from markers or a reference again on another segmentation of the dataset, with the same parameters, as jobs, in one step: to compare the labels under the two segmentations (label_impact, review_labels with against). A QC filter's cells are the instrument segmentation's, so the cells are then chosen by the rule; imported label sets are not made again. Answers the clustering and each label set made, and any not made with why.", InputSchema: schema(map[string]any{
+		"dataset":      datasetArg,
+		"clustering":   textArg("The clustering, by artifact id or name; SituCraft's latest if not given."),
+		"segmentation": textArg("The segmentation to make it again on, by name, id or instrument."),
+	}), long: true},
+	{Name: "label_impact", Title: "What a segmentation changes in the labels", Description: "Opens a comparison's Labels tab in the Compare view: a label set of each of its two segmentations, read through its differences. Answers each label's cells under each, the cells matched one to one labeled alike and every pair of labels, what split and merged cells carry, the cells without a counterpart by label, the differences whose labels change, the cells whose label changes with the segmentation, and marker mixing by label (the share of each label's cells expressing a pair of mutually exclusive markers together, and the MECR among them).", InputSchema: schema(map[string]any{
+		"dataset":    datasetArg,
+		"comparison": textArg("A comparison, by id or \"A and B\"; the latest if not given."),
+		"labels_a":   textArg("A label set of A's segmentation (its id, id:level, or name); by default one made as B's was, else the latest."),
+		"labels_b":   textArg("A label set of B's segmentation, the same way."),
+		"color":      map[string]any{"type": "boolean", "description": "Color the tissue's cells by each side's labels (true) or by their difference (false)."},
 	}), long: true},
 	{Name: "label_evidence", Title: "A cell's label evidence", Description: "Answers a cell's evidence: its label in each label set of its segmentation; from markers, at each level the label it took and the next, with their markers' transcripts in the cell; its nearest cells in expression; and its reviews (who, when and why).", InputSchema: schema(map[string]any{
 		"dataset":      datasetArg,

@@ -10,6 +10,7 @@
 import { h, icon, clear, formatCount, relativeTime } from './dom.js';
 import { toast } from './overlays.js';
 import { reviewSections } from './review-card.js';
+import { remakeOnSegmentation, remaking } from './remake.js';
 import { clusterNames, nameClusters, nameOf } from '../lib/clusterings.js';
 import { LABEL_PARAMETERS, REFERENCE_PARAMETERS, addLabel, changeLabel, checkLabelParameters, checkReferenceParameters, composition, compositionOf, describeLabels, labelColor, labelSetName, labelSetsFor, labelTree, markerSetFile, markerSetVersions, markerSetsOf, namesFromLabels, oneLevel, parseGenes, removeLabel, saveMarkerSet, withoutMissing } from '../lib/labels.js';
 
@@ -676,7 +677,38 @@ export function labelsSections(app, ctx) {
       h('div.section-title', `Label sets of ${clustering.name.charAt(0).toLowerCase()}${clustering.name.slice(1)}`),
       h('div.table-wrap', h('table.data-table.seg-table',
         h('thead', h('tr', h('th', 'Labels'), h('th.r', 'Margin'), h('th.r', { title: 'The share of the cells labeled at the first level' }, 'Level 1'), h('th.r', 'Level 2'), h('th.r', 'Level 3'), h('th', 'Made'), h('th', ''))),
-        h('tbody', ...rows))));
+        h('tbody', ...rows))),
+      remakeRow());
+  }
+
+  // The clustering and its label sets made again on another of the dataset's segmentations.
+  function remakeRow() {
+    if (clustering.summary?.source) return null;
+    const others = app.store.project.artifacts.filter((a) => a.kind === 'segmentation' && a.dataset === t.dataset.id && a.state === 'complete' && a.id !== clustering.segmentation && a.source !== 'planted');
+    if (!others.length) return null;
+    st.remakeTo = others.some((o) => o.id === st.remakeTo) ? st.remakeTo : others.at(-1).id;
+    const pick = h('select.input', { id: 'lb-remake-seg' }, ...others.map((o) => h('option', { value: o.id }, o.name)));
+    pick.value = st.remakeTo;
+    pick.addEventListener('change', () => {
+      st.remakeTo = pick.value;
+    });
+    const going = remaking(clustering.id);
+    const run = async () => {
+      const target = others.find((o) => o.id === st.remakeTo);
+      try {
+        const out = await remakeOnSegmentation(app, t, clustering.id, st.remakeTo, () => ctx.render(true));
+        const made = `${out.labels.length} label set${out.labels.length === 1 ? '' : 's'}`;
+        const problems = [...out.failed.map((f) => f.error), ...out.skipped.map((x) => `${labelSetName(app.store.project.artifacts.find((a) => a.id === x.id) ?? {})}: not made again (${x.why})`)];
+        toast(`Made again on ${target.name}: ${out.clustering.summary?.clusters ?? '?'} clusters and ${made}.${problems.length ? ` ${problems.join('; ')}.` : ''} Compare the labels in the Compare view.`, { kind: problems.length ? 'info' : 'ok', timeout: 12000 });
+      } catch (error) {
+        toast(`Made again: ${error.message}`, { kind: 'error', timeout: 12000 });
+      }
+      ctx.render(true);
+    };
+    return h('div.lb-remake',
+      h('div.lb-import-row', h('label.field', { for: 'lb-remake-seg', title: 'With the same parameters: the clustering, its map, and each label set from markers or a reference. Then compare the labels under the two segmentations in the Compare view.' }, h('span', 'Make this clustering and its label sets again on'), pick),
+        h('button.btn', { type: 'button', 'data-action': 'remake', disabled: going.length > 0, onclick: run }, icon('copy'), 'Make again')),
+      ...going.map((g) => h('div.seg-running', h('div', h('b', `Making again on ${others.find((o) => o.id === g.segmentation)?.name ?? 'another segmentation'}`), ' ', h('span.muted', g.step)))));
   }
 
   // --- The label set shown ---
