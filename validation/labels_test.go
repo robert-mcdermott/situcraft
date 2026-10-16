@@ -77,11 +77,9 @@ const (
 	tolTruthWrong = 0.02
 )
 
-// clustered clusters a data set's instrument segmentation with the defaults: its cells'
-// expression, its counts, and the clusters' number and target total.
-func clustered(t *testing.T, bundleDir string) (*cluster.Expression, *segment.Counts, int, float64) {
+// instrumentCounts are a data set's instrument segmentation's counts.
+func instrumentCounts(t *testing.T, bundleDir string) *segment.Counts {
 	t.Helper()
-	ctx := context.Background()
 	b, err := xenium.Open(bundleDir, xenium.Options{CacheDir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
@@ -91,13 +89,22 @@ func clustered(t *testing.T, bundleDir string) (*cluster.Expression, *segment.Co
 	if err := os.MkdirAll(seg, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := imports.Instrument(ctx, b, seg, runtime.NumCPU()); err != nil {
+	if _, err := imports.Instrument(context.Background(), b, seg, runtime.NumCPU()); err != nil {
 		t.Fatal(err)
 	}
 	counts, err := segment.ReadCounts(seg)
 	if err != nil {
 		t.Fatal(err)
 	}
+	return counts
+}
+
+// clustered clusters a data set's instrument segmentation with the defaults: its cells'
+// expression, its counts, and the clusters' number and target total.
+func clustered(t *testing.T, bundleDir string) (*cluster.Expression, *segment.Counts, int, float64) {
+	t.Helper()
+	ctx := context.Background()
+	counts := instrumentCounts(t, bundleDir)
 	r, err := cluster.Run(ctx, cluster.Inputs{Counts: counts}, cluster.DefaultParams(), runtime.NumCPU(), nil)
 	if err != nil {
 		t.Fatal(err)

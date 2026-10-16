@@ -135,6 +135,15 @@ type source struct {
 	toolName  string
 	toolVer   string
 	citation  string
+	// closers release what the source still reads from (a label image read by rows), last first.
+	closers []func() error
+}
+
+func (s *source) close() {
+	for i := len(s.closers) - 1; i >= 0; i-- {
+		s.closers[i]()
+	}
+	s.closers = nil
 }
 
 func newSource() *source {
@@ -179,12 +188,23 @@ func (r *records) len() int { return len(r.cell) }
 
 // labelImage is a tool's label image: label values map to cells (value v → cellOf[v], or v−1
 // when cellOf is nil); pixel (i, j) spans [i, i+1) × [j, j+1) in its own coordinates, which the
-// affine transform maps to µm.
+// affine transform maps to µm. Its values are held whole, row-major, or (an image too large to
+// hold, as a whole slide's mask) read a row at a time by rowOf, whose answer a later call may
+// replace.
 type labelImage struct {
 	width, height int
 	values        []uint32
+	rowOf         func(j int) ([]uint32, error)
 	cellOf        map[uint32]int32
 	transform     affine
+}
+
+// row answers row j of the image.
+func (img *labelImage) row(j int) ([]uint32, error) {
+	if img.rowOf != nil {
+		return img.rowOf(j)
+	}
+	return img.values[j*img.width : (j+1)*img.width], nil
 }
 
 // Run reads an import, checks it against the dataset and writes the segmentation's files into dir.
@@ -227,6 +247,7 @@ func Run(ctx context.Context, ds Dataset, opt Options, dir string, workers int, 
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	defer src.close()
 	if len(src.ids) == 0 {
 		return nil, nil, nil, errors.New("it holds no cells")
 	}
@@ -257,33 +278,34 @@ func build(ctx context.Context, ds Dataset, opt Options, src *source, dir string
 	n := len(src.ids)
 	rec := Recorded{Format: opt.Format, Units: opt.Units, Read: src.read, Counts: "gene transcripts of quality 20 or more in each cell, from the assignment", Tool: src.toolName, Version: src.toolVer, Citation: src.citation}
 
-	// The raster.
+	// The raster, made a band of rows at a time (a whole slide's would be gigabytes held whole).
 	progress(0.15, "Drawing the cells")
-	labels := make([]uint32, w*h)
+	raster := &segment.Raster{Width: w, Height: h, PixelSize: ps, Rows: make([][]segment.Run, h)}
 	switch {
 	case src.labels != nil:
-		outside := resample(src.labels, labels, w, h, ps)
+		outside, err := resample(ctx, src.labels, raster)
+		if err != nil {
+			return nil, err
+		}
 		rec.Raster = "the tool's label image, resampled to the morphology image's pixels (nearest)"
 		src.find("info", "labels.outside", "Labelled pixels outside the dataset's image", outside)
 	case src.polygons != nil:
-		overlap := 0
-		for k, polys := range src.polygons {
-			overlap += draw(labels, w, h, ps, polys, uint32(k+1))
+		overlap, err := drawCells(ctx, raster, src.polygons)
+		if err != nil {
+			return nil, err
 		}
 		rec.Raster = "the tool's polygons drawn at the morphology image's resolution: a pixel whose centre lies inside"
 		src.find("info", "polygons.overlap", "Pixels inside two cells' polygons, given to the later", overlap)
 	default:
+		for y := range raster.Rows {
+			raster.Rows[y] = []segment.Run{{Label: 0, Length: uint32(w)}}
+		}
 		rec.Raster = "none: the tool gave no outlines, so its cells have no area"
 		src.find("warning", "cells.no-outlines", "The import has no polygons or labels: its cells have transcripts but no area", n)
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	raster := &segment.Raster{Width: w, Height: h, PixelSize: ps, Rows: make([][]segment.Run, h)}
-	for y := 0; y < h; y++ {
-		raster.Rows[y] = segment.EncodeRow(labels[y*w : (y+1)*w])
-	}
-	labels = nil
 	stats := raster.Stats(n)
 
 	// The extent: the cells lie within the dataset's image.
@@ -310,7 +332,11 @@ func build(ctx context.Context, ds Dataset, opt Options, src *source, dir string
 				other, factor = "µm", 1/ps
 			}
 			hint := ""
-			if fit := src.within(factor, float64(w)*ps, float64(h)*ps); fit*2 > withShape {
+			fit, err := src.within(factor, float64(w)*ps, float64(h)*ps)
+			if err != nil {
+				return nil, err
+			}
+			if fit*2 > withShape {
 				hint = fmt.Sprintf(" Read as %s, %d would.", other, fit)
 			}
 			src.find("fatal", "coordinates.extent", fmt.Sprintf("Only %d of the %d cells with an outline lie within %s's image (%.1f × %.1f µm), their coordinates read as %s: they are in other units, or of another dataset.%s", drawn, withShape, ds.Name(), float64(w)*ps, float64(h)*ps, unitName(opt.Units), hint), 0)
@@ -501,7 +527,7 @@ func build(ctx context.Context, ds Dataset, opt Options, src *source, dir string
 
 // within counts the cells whose outline (its first vertex, or a label image's pixels) would lie
 // within the extent were the coordinates scaled by factor: a fact for the message, never applied.
-func (s *source) within(factor, extentX, extentY float64) int {
+func (s *source) within(factor, extentX, extentY float64) (int, error) {
 	in := func(x, y float64) bool { return x >= 0 && y >= 0 && x < extentX && y < extentY }
 	n := 0
 	if s.labels != nil {
@@ -509,8 +535,12 @@ func (s *source) within(factor, extentX, extentY float64) int {
 		t := img.transform.scaled(factor)
 		seen := map[int32]bool{}
 		for j := 0; j < img.height; j += 4 {
+			row, err := img.row(j)
+			if err != nil {
+				return 0, err
+			}
 			for i := 0; i < img.width; i += 4 {
-				v := img.values[j*img.width+i]
+				v := row[i]
 				if v == 0 {
 					continue
 				}
@@ -524,7 +554,7 @@ func (s *source) within(factor, extentX, extentY float64) int {
 				}
 			}
 		}
-		return n
+		return n, nil
 	}
 	for _, polys := range s.polygons {
 		if len(polys) > 0 && len(polys[0]) > 0 && len(polys[0][0]) > 0 {
@@ -533,7 +563,7 @@ func (s *source) within(factor, extentX, extentY float64) int {
 			}
 		}
 	}
-	return n
+	return n, nil
 }
 
 func unitName(u string) string {
@@ -574,35 +604,68 @@ func outlineOf(polys []polygon, s segment.LabelStats, extentX, extentY float64) 
 	return o, clipped
 }
 
-// resample draws a label image into the dataset's grid: each pixel takes the label at its centre
-// (nearest). It answers how many labelled pixels of the tool's lie outside the dataset's image.
-func resample(img *labelImage, dst []uint32, w, h int, size float64) int {
+// resample draws a label image into the dataset's grid (the raster's rows, each encoded as it is
+// made): each pixel takes the label at its centre (nearest). It answers how many labelled pixels of
+// the tool's lie outside the dataset's image.
+func resample(ctx context.Context, img *labelImage, r *segment.Raster) (int, error) {
+	w, h, size := r.Width, r.Height, r.PixelSize
 	inv, ok := img.transform.invert()
-	if !ok {
-		return 0
-	}
+	row := make([]uint32, w)
 	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
+		if y%256 == 0 && ctx.Err() != nil {
+			return 0, ctx.Err()
+		}
+		clear(row)
+		last := -1
+		var src []uint32
+		for x := 0; ok && x < w; x++ {
 			u, v := inv.apply((float64(x)+0.5)*size, (float64(y)+0.5)*size)
 			i, j := int(math.Floor(u)), int(math.Floor(v))
 			if i < 0 || j < 0 || i >= img.width || j >= img.height {
 				continue
 			}
-			value := img.values[j*img.width+i]
+			if j != last {
+				var err error
+				if src, err = img.row(j); err != nil {
+					return 0, err
+				}
+				last = j
+			}
+			value := src[i]
 			if value == 0 {
 				continue
 			}
 			k, ok := img.cell(value)
 			if ok {
-				dst[y*w+x] = uint32(k + 1)
+				row[x] = uint32(k + 1)
 			}
 		}
+		r.Rows[y] = segment.EncodeRow(row)
 	}
-	// The tool's labelled pixels whose centres fall outside the image.
+	if !ok {
+		return 0, nil
+	}
+	// The tool's labelled pixels whose centres fall outside the image: none when the corners of its
+	// pixels' centres fall inside (the image within is convex), else counted.
+	inside := func(x, y float64) bool {
+		margin := 1e-9 * (float64(w) + float64(h)) * size
+		return x >= margin && y >= margin && x < float64(w)*size-margin && y < float64(h)*size-margin
+	}
+	corners := true
+	for _, c := range [][2]float64{{0.5, 0.5}, {float64(img.width) - 0.5, 0.5}, {0.5, float64(img.height) - 0.5}, {float64(img.width) - 0.5, float64(img.height) - 0.5}} {
+		corners = corners && inside(img.transform.apply(c[0], c[1]))
+	}
+	if corners {
+		return 0, nil
+	}
 	outside := 0
 	for j := 0; j < img.height; j++ {
-		for i := 0; i < img.width; i++ {
-			if img.values[j*img.width+i] == 0 {
+		src, err := img.row(j)
+		if err != nil {
+			return 0, err
+		}
+		for i, v := range src {
+			if v == 0 {
 				continue
 			}
 			x, y := img.transform.apply(float64(i)+0.5, float64(j)+0.5)
@@ -611,7 +674,7 @@ func resample(img *labelImage, dst []uint32, w, h int, size float64) int {
 			}
 		}
 	}
-	return outside
+	return outside, nil
 }
 
 func (img *labelImage) cell(v uint32) (int32, bool) {

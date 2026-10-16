@@ -122,10 +122,16 @@ type Description struct {
 		Variance      []float64 `json:"variance"`
 		VarianceRatio []float64 `json:"varianceRatio"`
 		TotalVariance float64   `json:"totalVariance"`
+		// Solver says how the components were found when not by the full decomposition (panels of
+		// more than DenseGenes genes).
+		Solver string `json:"solver,omitempty"`
 	} `json:"pca"`
 	Graph struct {
 		Neighbors int `json:"neighbors"`
 		Edges     int `json:"edges"`
+		// Search says how the neighbors were found when not exactly (more than graph.ExactLimit
+		// cells): NN-Descent's parameters and its recall against exact search.
+		Search *graph.Approximate `json:"search,omitempty"`
 	} `json:"graph"`
 	Clusters struct {
 		Count      int     `json:"count"`
@@ -182,11 +188,11 @@ func Write(dir string, seg Side, filter *Filter, r *Result) error {
 	}
 	p := r.PCA
 	if p != nil {
-		d.PCA.Components, d.PCA.Variance, d.PCA.TotalVariance = p.components, p.values, p.totalVariance
+		d.PCA.Components, d.PCA.Variance, d.PCA.TotalVariance, d.PCA.Solver = p.components, p.values, p.totalVariance, p.solver
 		for _, v := range p.values {
 			d.PCA.VarianceRatio = append(d.PCA.VarianceRatio, v/p.totalVariance)
 		}
-		d.Graph.Neighbors, d.Graph.Edges = r.Params.Neighbors, r.Edges
+		d.Graph.Neighbors, d.Graph.Edges, d.Graph.Search = r.Params.Neighbors, r.Edges, r.Search
 	}
 	d.Clusters.Count, d.Clusters.Sizes, d.Clusters.Modularity, d.Clusters.Iterations = len(r.Partition.Sizes), r.Partition.Sizes, r.Partition.Modularity, r.Partition.Iterations
 	for c := 0; c < r.Markers.Clusters; c++ {

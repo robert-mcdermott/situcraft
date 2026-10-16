@@ -3,6 +3,7 @@ package cluster
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math"
 	"runtime"
 	"sort"
@@ -139,7 +140,20 @@ type pcaResult struct {
 	totalVariance float64
 	loadings      []float64 // genes × components
 	scores        []float64 // cells × components
+	solver        string    // how the components were found, when not by the full decomposition
 }
+
+// DenseGenes is the most genes whose covariance is decomposed whole; above, its largest
+// eigenpairs are found by the Lanczos method (internal/linalg's SymTop), to LanczosTolerance of the
+// largest from a start of LanczosSeed.
+const (
+	DenseGenes       = 1000
+	LanczosTolerance = 1e-11
+	LanczosSeed      = 20250
+)
+
+// denseLimit is DenseGenes, raised in tests to compare the two.
+var denseLimit = DenseGenes
 
 func (m *matrix) pca(ctx context.Context, mean, sd []float64, clipAt float64, components, workers int, progress func(float64)) (*pcaResult, error) {
 	n, G := len(m.cells), m.genes
@@ -203,7 +217,8 @@ func (m *matrix) pca(ctx context.Context, mean, sd []float64, clipAt float64, co
 	if cancelled != nil {
 		return nil, cancelled
 	}
-	cov := make([]float64, G*G)
+	// The covariance, in place of the sums (each entry read before it is written).
+	cov := s
 	nn := float64(n)
 	total := 0.0
 	for g := 0; g < G; g++ {
@@ -213,31 +228,53 @@ func (m *matrix) pca(ctx context.Context, mean, sd []float64, clipAt float64, co
 		}
 		total += cov[g*G+g]
 	}
-	values, vectors, err := linalg.SymEigen(cov, G)
+	k := min(components, G-1, n-1)
+	if k < 1 {
+		return nil, errors.New("too few cells or genes for principal components")
+	}
+	// Every eigenpair up to DenseGenes; above, the k largest by the Lanczos method, a product with
+	// the covariance (its rows dealt to the workers, each summed in order) per step.
+	var values, vectors []float64
+	var err error
+	stride := G
+	if G <= denseLimit {
+		values, vectors, err = linalg.SymEigen(cov, G)
+	} else {
+		stride = k
+		values, vectors, err = linalg.SymTop(func(x, y []float64) {
+			parallel(G, workers, func(g int) {
+				row := cov[g*G : g*G+G]
+				v := 0.0
+				for h, c := range row {
+					v += mul(c, x[h])
+				}
+				y[g] = v
+			})
+		}, G, k, LanczosSeed, LanczosTolerance)
+	}
 	if err != nil {
 		return nil, err
 	}
 	if progress != nil {
 		progress(0.9)
 	}
-	k := min(components, G-1, n-1)
-	if k < 1 {
-		return nil, errors.New("too few cells or genes for principal components")
-	}
 	r := &pcaResult{components: k, values: values[:k], totalVariance: total, loadings: make([]float64, G*k)}
+	if G > denseLimit {
+		r.solver = fmt.Sprintf("Lanczos with full reorthogonalization, the %d largest eigenpairs of the covariance to %g of the largest", k, LanczosTolerance)
+	}
 	for c := 0; c < k; c++ {
 		at, big := 0, -1.0
 		for g := 0; g < G; g++ {
-			if v := math.Abs(vectors[g*G+c]); v > big {
+			if v := math.Abs(vectors[g*stride+c]); v > big {
 				at, big = g, v
 			}
 		}
 		sign := 1.0
-		if vectors[at*G+c] < 0 {
+		if vectors[at*stride+c] < 0 {
 			sign = -1
 		}
 		for g := 0; g < G; g++ {
-			r.loadings[g*k+c] = sign * vectors[g*G+c]
+			r.loadings[g*k+c] = sign * vectors[g*stride+c]
 		}
 	}
 	// Scores: (a + dᵢ)·V.

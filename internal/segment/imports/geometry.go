@@ -8,6 +8,7 @@ package imports
 // (even–odd, so holes are left out).
 
 import (
+	"context"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -15,6 +16,8 @@ import (
 	"math"
 	"sort"
 	"strconv"
+
+	"situcraft/internal/segment"
 )
 
 type point struct{ X, Y float64 }
@@ -361,19 +364,69 @@ func (r *wkbReader) geometry(depth int) []polygon {
 
 // --- Drawing ------------------------------------------------------------------------------------
 
-// draw draws a cell's polygons (µm) into labels (w × h pixels of size µm) as label: a pixel whose
-// centre lies inside (even–odd). It answers how many of its pixels another label held already.
-func draw(labels []uint32, w, h int, size float64, polys []polygon, label uint32) int {
+// drawBand is how many of the grid's rows the cells are drawn into at a time.
+const drawBand = 256
+
+// drawCells draws each cell's polygons (µm) into the raster's rows as its label (its index + 1), a
+// band of rows at a time, each row encoded as its band is done; in a band, the cells whose polygons
+// reach it in their order, so that a pixel inside two cells' is the later's. It answers how many
+// pixels another cell's label held already.
+func drawCells(ctx context.Context, r *segment.Raster, cells [][]polygon) (int, error) {
+	w, h, size := r.Width, r.Height, r.PixelSize
+	bands := (h + drawBand - 1) / drawBand
+	reach := make([][]int32, bands)
+	for k, polys := range cells {
+		lo, hi := h, -1
+		for _, p := range polys {
+			a, b := rowsOf(p, size, h)
+			lo, hi = min(lo, a), max(hi, b)
+		}
+		for band := max(0, lo/drawBand); hi >= lo && band <= hi/drawBand; band++ {
+			reach[band] = append(reach[band], int32(k))
+		}
+	}
+	labels := make([]uint32, drawBand*w)
+	overwritten := 0
+	for band := 0; band < bands; band++ {
+		if err := ctx.Err(); err != nil {
+			return 0, err
+		}
+		y0, y1 := band*drawBand, min(h, (band+1)*drawBand)
+		clear(labels)
+		for _, k := range reach[band] {
+			overwritten += draw(labels, w, y0, y1, size, cells[k], uint32(k+1))
+		}
+		reach[band] = nil
+		for y := y0; y < y1; y++ {
+			r.Rows[y] = segment.EncodeRow(labels[(y-y0)*w : (y-y0+1)*w])
+		}
+	}
+	return overwritten, nil
+}
+
+// rowsOf is the rows of a grid of h rows (of pixels of size µm) a polygon may reach: first, last.
+func rowsOf(p polygon, size float64, h int) (int, int) {
+	minY, maxY := math.Inf(1), math.Inf(-1)
+	for _, r := range p {
+		for _, v := range r {
+			minY, maxY = math.Min(minY, v.Y/size), math.Max(maxY, v.Y/size)
+		}
+	}
+	if minY > maxY {
+		return h, -1
+	}
+	return max(0, int(math.Floor(minY))), min(h-1, int(math.Ceil(maxY)))
+}
+
+// draw draws a cell's polygons (µm) into labels, the rows y0…y1−1 of a grid w pixels wide (pixels
+// of size µm), as label: a pixel whose centre lies inside (even–odd). It answers how many of its
+// pixels another label held already.
+func draw(labels []uint32, w, y0, y1 int, size float64, polys []polygon, label uint32) int {
 	overwritten := 0
 	var cross []float64
 	for _, p := range polys {
-		minY, maxY := math.Inf(1), math.Inf(-1)
-		for _, r := range p {
-			for _, v := range r {
-				minY, maxY = math.Min(minY, v.Y/size), math.Max(maxY, v.Y/size)
-			}
-		}
-		for py := max(0, int(math.Floor(minY))); py <= min(h-1, int(math.Ceil(maxY))); py++ {
+		first, last := rowsOf(p, size, y1)
+		for py := max(y0, first); py <= last; py++ {
 			cy := float64(py) + 0.5
 			cross = cross[:0]
 			for _, r := range p {
@@ -388,7 +441,7 @@ func draw(labels []uint32, w, h int, size float64, polys []polygon, label uint32
 			sort.Float64s(cross)
 			for c := 0; c+1 < len(cross); c += 2 {
 				for px := max(0, int(math.Ceil(cross[c]-0.5))); px <= min(w-1, int(math.Ceil(cross[c+1]-0.5))-1); px++ {
-					k := py*w + px
+					k := (py-y0)*w + px
 					if labels[k] != 0 && labels[k] != label {
 						overwritten++
 					}

@@ -8,14 +8,19 @@
 // Res 2010;11:451–490). A map is an artifact of kind "embedding" (files.go).
 //
 // Every product is rounded on its own, sums run in a fixed order, logarithms and exponentials come
-// from internal/dmath, and the optimization draws from one seeded stream on one thread: the map is
-// the same on every processor for a seed. Adapted from CytoWeave 0.8.1 web/lib/dimred.js.
+// from internal/dmath, and the optimization draws from one seeded stream on one thread (above
+// graph.ExactLimit cells, in batches over every core, its negative samples from a hash of the seed):
+// the map is the same on every processor, and for any number of workers, for a seed. Adapted from
+// CytoWeave 0.8.1 web/lib/dimred.js.
 package embed
 
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math"
+	"runtime"
+	"sync"
 
 	"situcraft/internal/dmath"
 	"situcraft/internal/graph"
@@ -145,11 +150,15 @@ func FindAB(spread, minDist float64) (a, b float64) {
 
 // Info is how a map was made.
 type Info struct {
-	A, B   float64
-	Epochs int
-	Edges  int // the undirected edges optimized (after pruning)
-	Init   string
+	A, B      float64
+	Epochs    int
+	Edges     int // the undirected edges optimized (after pruning)
+	Init      string
+	Optimizer string // how, when not on one thread
 }
+
+// Batch is the edges the batched optimization moves at once, from the places as they stood.
+const Batch = 16384
 
 // Layout lays a graph out in two dimensions: the edges too weak to be sampled once pruned, the
 // spectral layout of the graph (or init when the graph is in pieces: n × 2, as the caller chooses)
@@ -157,7 +166,8 @@ type Info struct {
 // every edge due pulls its two cells together by the gradient of log(1/(1 + a·d^{2b})) and pushes
 // the first away from NegativeRate random cells, gradients clipped at ±4, the learning rate falling
 // linearly to 0. progress, if not nil, is told the share of epochs done.
-func Layout(ctx context.Context, g *graph.CSR, fallback []float64, p Params, progress func(float64)) ([]float64, Info, error) {
+// Above graph.ExactLimit cells the epochs run in batches over workers (optimizeBatched).
+func Layout(ctx context.Context, g *graph.CSR, fallback []float64, p Params, workers int, progress func(float64)) ([]float64, Info, error) {
 	if err := p.Check(); err != nil {
 		return nil, Info{}, err
 	}
@@ -208,6 +218,13 @@ func Layout(ctx context.Context, g *graph.CSR, fallback []float64, p Params, pro
 		info.Init = "principal components (the graph is in pieces)"
 	}
 	y := scaleStart(start, n, rnd)
+	if n > graph.ExactLimit {
+		info.Optimizer = fmt.Sprintf("each epoch's edges in batches of %d over every core, each batch moving the cells from their places before it; negative samples from a hash of the seed", Batch)
+		if err := optimizeBatched(ctx, pruned, y, info, p, workers, progress); err != nil {
+			return nil, info, err
+		}
+		return y, info, nil
+	}
 	if err := optimize(ctx, pruned, y, info, p, rnd, progress); err != nil {
 		return nil, info, err
 	}
@@ -334,6 +351,133 @@ func optimize(ctx context.Context, g *graph.CSR, y []float64, info Info, p Param
 				}
 			}
 			nextNeg[e] += mul(float64(negatives), epsNeg[e])
+		}
+	}
+	if progress != nil {
+		progress(1)
+	}
+	return nil
+}
+
+// sampleOf is negative sample s of edge e in an epoch: a cell from a hash of the seed and the three
+// (SplitMix64's finalizer; Steele, Lea and Flood 2014), the same whatever the order edges are met.
+func sampleOf(seed uint64, epoch, e, s, n int) int {
+	z := seed ^ uint64(epoch)*0x9e3779b97f4a7c15 ^ uint64(e)*0xbf58476d1ce4e5b9 ^ uint64(s)*0x94d049bb133111eb
+	z = (z ^ z>>30) * 0xbf58476d1ce4e5b9
+	z = (z ^ z>>27) * 0x94d049bb133111eb
+	z ^= z >> 31
+	return int(z % uint64(n))
+}
+
+// move is an edge's moves in a batch: its head's (the pull and the pushes), and its tail's.
+type move struct{ hx, hy, tx, ty float64 }
+
+// optimizeBatched is optimize over every core, the same for any number of workers: each epoch's
+// edges due, in order, in batches of Batch; a batch's moves are computed in parallel from the places
+// as they stood before it, then applied in the edges' order.
+func optimizeBatched(ctx context.Context, g *graph.CSR, y []float64, info Info, p Params, workers int, progress func(float64)) error {
+	if workers < 1 {
+		workers = runtime.NumCPU()
+	}
+	n := g.N
+	edges := len(g.Targets)
+	head := make([]int32, edges)
+	for i := 0; i < n; i++ {
+		for e := g.Offsets[i]; e < g.Offsets[i+1]; e++ {
+			head[e] = int32(i)
+		}
+	}
+	tail := g.Targets
+	wmax := 0.0
+	for _, w := range g.Weights {
+		wmax = math.Max(wmax, w)
+	}
+	epochs := float64(info.Epochs)
+	eps := make([]float64, edges)
+	for e, w := range g.Weights {
+		if s := mul(epochs, w/wmax); s > 0 {
+			eps[e] = epochs / s
+		} else {
+			eps[e] = -1
+		}
+	}
+	epsNeg := make([]float64, edges)
+	for e := range eps {
+		epsNeg[e] = eps[e] / float64(p.NegativeRate)
+	}
+	next := append([]float64(nil), eps...)
+	nextNeg := append([]float64(nil), epsNeg...)
+	a, b := info.A, info.B
+	twoAB := mul(mul(2, a), b)
+	twoGB := mul(mul(2, Repulsion), b)
+	due := make([]int32, 0, edges)
+	moves := make([]move, Batch)
+	for epoch := 0; epoch < info.Epochs; epoch++ {
+		if epoch%10 == 0 {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			if progress != nil {
+				progress(float64(epoch) / epochs)
+			}
+		}
+		alpha := mul(LearningRate, 1-float64(epoch)/epochs)
+		fe := float64(epoch)
+		due = due[:0]
+		for e := 0; e < edges; e++ {
+			if eps[e] > 0 && next[e] <= fe {
+				due = append(due, int32(e))
+			}
+		}
+		for lo := 0; lo < len(due); lo += Batch {
+			batch := due[lo:min(len(due), lo+Batch)]
+			chunk := (len(batch) + workers - 1) / workers
+			var wg sync.WaitGroup
+			for w0 := 0; w0 < len(batch); w0 += chunk {
+				wg.Add(1)
+				go func(a0, a1 int) {
+					defer wg.Done()
+					for q := a0; q < a1; q++ {
+						e := int(batch[q])
+						j, k := int(head[e]), int(tail[e])
+						hx, hy := y[2*j], y[2*j+1]
+						dx, dy := hx-y[2*k], hy-y[2*k+1]
+						d2 := mul(dx, dx) + mul(dy, dy)
+						coeff := 0.0
+						if d2 > 0 {
+							pb := dmath.Exp(mul(b, dmath.Log(d2)))
+							coeff = mul(-twoAB, pb/d2) / (mul(a, pb) + 1)
+						}
+						gx := mul(clip4(mul(coeff, dx)), alpha)
+						gy := mul(clip4(mul(coeff, dy)), alpha)
+						m := move{hx: gx, hy: gy, tx: -gx, ty: -gy}
+						negatives := int((fe - nextNeg[e]) / epsNeg[e])
+						for s := 0; s < negatives; s++ {
+							o := sampleOf(p.Seed, epoch, e, s, n)
+							nx, ny := hx-y[2*o], hy-y[2*o+1]
+							nd2 := mul(nx, nx) + mul(ny, ny)
+							if nd2 > 0 {
+								c := twoGB / mul(0.001+nd2, mul(a, dmath.Exp(mul(b, dmath.Log(nd2))))+1)
+								m.hx += mul(clip4(mul(c, nx)), alpha)
+								m.hy += mul(clip4(mul(c, ny)), alpha)
+							}
+						}
+						moves[q] = m
+					}
+				}(w0, min(len(batch), w0+chunk))
+			}
+			wg.Wait()
+			for q, e := range batch {
+				m := moves[q]
+				j, k := int(head[e]), int(tail[e])
+				y[2*j] += m.hx
+				y[2*j+1] += m.hy
+				y[2*k] += m.tx
+				y[2*k+1] += m.ty
+				negatives := int((fe - nextNeg[e]) / epsNeg[e])
+				next[e] += eps[e]
+				nextNeg[e] += mul(float64(negatives), epsNeg[e])
+			}
 		}
 	}
 	if progress != nil {

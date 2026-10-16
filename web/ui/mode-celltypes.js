@@ -329,8 +329,8 @@ export function mountCellTypes(app, container) {
         h('dt', 'Cells analyzed'), h('dd', `${exact(n)} of ${exact(d.cells.segmentation)}`, d.cells.excluded ? h('span.muted', ` (${exact(d.cells.excluded)} left out${d.cells.filter ? ' by the filter' : ` with fewer than ${d.parameters.minTranscripts} gene transcripts`})`) : null, d.cells.withoutTranscripts ? h('span.muted', `; ${exact(d.cells.withoutTranscripts)} without a gene transcript`) : null),
         h('dt', 'Genes'), h('dd', exact(d.genes.count), d.genes.notDetected ? h('span.muted', ` (${d.genes.notDetected} not detected in these cells)`) : null),
         h('dt', 'Normalization'), h('dd', `to the median total, ${fixed(d.fixed.targetSum, 1)} gene transcripts; log1p; each gene scaled, clipped at ±${d.fixed.clip}`),
-        h('dt', 'Components'), h('dd', `${d.pca.components}, holding ${percent(d.pca.varianceRatio.reduce((a, b) => a + b, 0))} of the variance`),
-        h('dt', 'Graph'), h('dd', `${d.graph.neighbors} neighbors (the cell included), ${exact(d.graph.edges)} edges`),
+        h('dt', 'Components'), h('dd', `${d.pca.components}, holding ${percent(d.pca.varianceRatio.reduce((a, b) => a + b, 0))} of the variance`, d.pca.solver ? h('span.muted', { title: d.pca.solver }, '; by the Lanczos method') : null),
+        h('dt', 'Graph'), h('dd', `${d.graph.neighbors} neighbors (the cell included), ${exact(d.graph.edges)} edges`, d.graph.search ? h('span.muted', { title: `NN-Descent (Dong et al. 2011): ${d.graph.search.width} searched, sample rate ${d.graph.search.rho}, ${d.graph.search.rounds} rounds` }, `; by NN-Descent, ${percent(d.graph.search.recall, 1)} of the exact neighbors on ${exact(d.graph.search.queries)} cells`) : null),
         h('dt', 'Leiden'), h('dd', `resolution ${d.parameters.resolution}, seed ${d.parameters.seed}: modularity ${fixed(d.clusters.modularity, 4)} after ${d.clusters.iterations} iteration${d.clusters.iterations === 1 ? '' : 's'}`),
         h('dt', 'Artifact'), h('dd.mono', c.id));
     const scree = source ? null : screePlot(d.pca.varianceRatio);

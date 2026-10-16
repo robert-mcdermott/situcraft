@@ -51,6 +51,17 @@ type Source struct {
 	Space string `json:"space"`
 }
 
+// Fitted is how a map was laid out: the curve, the epochs, the edges, the start, and the optimizer
+// when not on one thread (more than graph.ExactLimit cells).
+type Fitted struct {
+	A         float64 `json:"a"`
+	B         float64 `json:"b"`
+	Epochs    int     `json:"epochs"`
+	Edges     int     `json:"edges"`
+	Init      string  `json:"init"`
+	Optimizer string  `json:"optimizer,omitempty"`
+}
+
 // Description is embedding.json.
 type Description struct {
 	Format       string       `json:"format"`
@@ -60,21 +71,17 @@ type Description struct {
 	Clustering   cluster.Side `json:"clustering"`
 	Source       *Source      `json:"source,omitempty"`
 	Parameters   *Params      `json:"parameters,omitempty"`
-	Fitted       *struct {
-		A      float64 `json:"a"`
-		B      float64 `json:"b"`
-		Epochs int     `json:"epochs"`
-		Edges  int     `json:"edges"`
-		Init   string  `json:"init"`
-	} `json:"fitted,omitempty"`
-	Cells   int `json:"cells"`
-	Quality struct {
+	Fitted       *Fitted      `json:"fitted,omitempty"`
+	Cells        int          `json:"cells"`
+	Quality      struct {
 		K               int     `json:"k"`
 		KWide           int     `json:"kWide"`
 		Trustworthiness float64 `json:"trustworthiness"`
 		Queries         int     `json:"queries"`
 		Precision       float64 `json:"precision"`
 		Recall          float64 `json:"recall"`
+		// Search says how the space's wider neighborhoods were found when not exactly.
+		Search *graph.Approximate `json:"search,omitempty"`
 	} `json:"quality"`
 	Seconds map[string]float64 `json:"seconds,omitempty"`
 }
@@ -140,13 +147,13 @@ func Run(ctx context.Context, dir string, clu cluster.Side, p Params, workers in
 		clock = time.Now()
 	}
 	say(0.05, "Laying the cells out")
-	xy, info, err := Layout(ctx, g, fallback, p, func(f float64) { say(0.05+0.75*f, "Laying the cells out") })
+	xy, info, err := Layout(ctx, g, fallback, p, workers, func(f float64) { say(0.05+0.75*f, "Laying the cells out") })
 	if err != nil {
 		return nil, err
 	}
 	lap("layout")
 	say(0.8, "Judging the map")
-	q, err := Assess(ctx, high, pc.Components, xy, n, workers)
+	q, err := Assess(ctx, high, pc.Components, xy, n, workers, nb)
 	if err != nil {
 		return nil, err
 	}
@@ -157,13 +164,7 @@ func Run(ctx context.Context, dir string, clu cluster.Side, p Params, workers in
 	d.Segmentation = cd.Segmentation
 	pp := p
 	d.Parameters = &pp
-	d.Fitted = &struct {
-		A      float64 `json:"a"`
-		B      float64 `json:"b"`
-		Epochs int     `json:"epochs"`
-		Edges  int     `json:"edges"`
-		Init   string  `json:"init"`
-	}{info.A, info.B, info.Epochs, info.Edges, info.Init}
+	d.Fitted = &Fitted{info.A, info.B, info.Epochs, info.Edges, info.Init, info.Optimizer}
 	d.Cells = n
 	d.Clustering = clu
 	d.Seconds = seconds
@@ -179,7 +180,7 @@ func Run(ctx context.Context, dir string, clu cluster.Side, p Params, workers in
 func setQuality(d *Description, q *Quality) {
 	d.Quality.K, d.Quality.KWide = q.K, q.KWide
 	d.Quality.Trustworthiness, d.Quality.Queries = q.Trustworthiness, q.Queries
-	d.Quality.Precision, d.Quality.Recall = q.Precision, q.Recall
+	d.Quality.Precision, d.Quality.Recall, d.Quality.Search = q.Precision, q.Recall, q.Search
 }
 
 // FromSource makes a map from places another tool computed (the instrument's), judged against the
@@ -277,6 +278,8 @@ type Summary struct {
 	Precision       float64      `json:"precision"`
 	Recall          float64      `json:"recall"`
 	Source          string       `json:"source,omitempty"`
+	// Search: how the wider neighborhoods were found when not exactly.
+	Search *graph.Approximate `json:"search,omitempty"`
 }
 
 // Check examines a staged map: its files read and agree; its cells are in order, its places and
@@ -320,7 +323,7 @@ func Check(dir string, m *artifacts.Manifest) []artifacts.Finding {
 	if t := d.Quality.Trustworthiness; !(t >= 0 && t <= 1) {
 		fatal("embedding.values", "The trustworthiness %v is not between 0 and 1.", t)
 	}
-	s := Summary{Clustering: d.Clustering, Cells: d.Cells, Trustworthiness: d.Quality.Trustworthiness, Precision: d.Quality.Precision, Recall: d.Quality.Recall}
+	s := Summary{Clustering: d.Clustering, Cells: d.Cells, Trustworthiness: d.Quality.Trustworthiness, Precision: d.Quality.Precision, Recall: d.Quality.Recall, Search: d.Quality.Search}
 	if d.Source != nil {
 		s.Source = d.Source.Tool
 	}

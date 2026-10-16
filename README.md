@@ -54,7 +54,9 @@ reference (each cell correlated with each label's profile, then fine-tuned on th
 genes), labels imported from CSV, Parquet, AnnData or Xenium Explorer's cell groups, and their
 review: curated and consensus versions side by side, each cell's evidence, and a queue of the cells
 most likely mislabeled; and what the choice of segmentation changes in the labels, a clustering and
-its labels made again on another segmentation in one step and read through the comparison. The steps and defaults are scanpy's and SingleR's, and the results are
+its labels made again on another segmentation in one step and read through the comparison. Whole
+sections of hundreds of thousands of cells, and Xenium Prime's 5,000-gene panel, are clustered and
+mapped in minutes, the same for a seed on any computer. The steps and defaults are scanpy's and SingleR's, and the results are
 validated against scanpy, leidenalg, umap-learn, scikit-learn and SingleR.
 
 ## A look around

@@ -388,6 +388,12 @@ for the examples):
 4. each cell's 15 nearest neighbors in them, as a graph;
 5. Leiden communities of the graph: the clusters, numbered from the largest.
 
+The same steps serve a whole section: above 50,000 cells the nearest neighbors are found by
+NN-Descent rather than by comparing every pair (the clustering says how many of the exact
+neighbors it found, measured on 1,000 of its cells: 99.9% on the examples), the map is laid out
+over every core, and for panels of more than 1,000 genes (Xenium Prime) the components are found by
+the Lanczos method, the full decomposition's to rounding.
+
 **Parameters** shows each setting with what it does. They are scanpy's defaults, so the numbers
 match what the scanpy tutorials give. **Resolution** is the one you will change most: higher gives
 more and smaller clusters. There is no right value; make a few and compare their markers. Each

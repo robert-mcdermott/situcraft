@@ -2105,6 +2105,82 @@ not made again. Two label sets made the same way are paired by default, at their
   types, so 98.9% of the instrument's cells co-express one of 336 pairs. The MECR, a mean over
   pairs, separates the segmentations; the summary leads with it.
 
+### 5.8 Scale (verified, wave 4, slice 8)
+
+A whole Xenium section holds hundreds of thousands of cells, and Xenium Prime's panel 5,000 genes.
+Three steps of the clustering and the map cost too much there: exact nearest neighbors cost the
+square of the cells (6 s for 50,000 on ten cores, about 6.5 minutes for 400,000), the full
+eigendecomposition the cube of the genes (15 s for 2,000, about 4 minutes for 5,000), and the map's
+optimization ran on one thread. Below the limits below the methods and their results are as before,
+byte for byte (pinned digests; the comparisons with scanpy, leidenalg and umap-learn of §5.1–5.2
+hold); above them:
+
+**Nearest neighbors above 50,000 cells: NN-Descent** (Dong W, Moses C, Li K. Efficient k-nearest
+neighbor graph construction for generic similarity measures. WWW 2011:577–586,
+doi:10.1145/1963405.1963487; `internal/graph`'s `descent.go`): from random neighbors, each round
+compares each cell's sampled new and old neighbors and reverse neighbors with one another, and keeps
+for every cell the nearest it has met, until a round changes fewer than 0.1% of the table (ρ 1,
+δ 0.001, the paper's; at most 30 rounds). SituCraft's choices:
+- **The same table for any number of workers and processors:** each round's samples drawn from each
+  cell's own stream; the comparisons made a block of 2,048 cells at a time against the table as it
+  stands, their improvements then applied by target cell in the order found (a cell keeps the k
+  nearest by distance, then index, of all it has met, whatever the order); distances summed in
+  order, every product rounded (pinned digest on arm64 and amd64).
+- **A wider search:** 3k neighbors (at most 45) searched for k, the k nearest kept. On the
+  development bundles' 50 components, searching 14 finds 91.3% (Lung), 92.8% (Breast) and 96.1%
+  (simulated) of the exact 14; 28, 99.2%, 99.5% and 99.9%; 42, 99.91%, 99.95% and 99.99%.
+- **Its recall measured each time,** against exact search over 1,000 evenly spaced cells,
+  recorded in the clustering (`graph.search`) and said in the page; on the bundles it is within
+  0.0004 of the recall over every cell.
+- **The map's wider neighborhoods** (its precision and recall, 75 nearest) by NN-Descent at a sample
+  rate of 0.5, started from the clustering's neighbors: 99.90% (Lung), 99.95% (Breast) and 99.99%
+  (simulated) of the exact 75. The trustworthiness stays exact over its 2,000 query cells.
+
+**The map's optimization over every core above 50,000 cells** (`internal/embed`'s
+`optimizeBatched`): each epoch's edges due, in order, in batches of 16,384; a batch's pulls and
+pushes computed in parallel from the cells' places before it, then applied in the edges' order; the
+negative samples drawn from a hash of the seed, the epoch, the edge and the sample (SplitMix64's
+finalizer), so that no stream is shared. The same map for any number of workers and processors
+(pinned digest). On a graph of 3,000 cells in four groups, its trustworthiness 0.7916 against
+0.7937 on one thread (recall 0.346 and 0.349).
+
+**Principal components above 1,000 genes: the Lanczos method** (Lanczos 1950) with full
+reorthogonalization (Paige 1972; Golub & Van Loan 2013, §10.1; `internal/linalg`'s `lanczos.go`): the
+Krylov space of a seeded start grows, each vector made orthogonal to all before it twice over,
+until the 50 largest Ritz pairs' residuals are below 10⁻¹¹ of the largest; the covariance's product
+dealt by rows to the workers, each summed in order; the covariance formed in place of its sums (one
+matrix of the genes' size, not two). On the standard simulated tissue made with 2,000 genes,
+against the full decomposition of the covariance computed independently from the dense scaled
+values: the variances within 7.2 × 10⁻¹⁴ of the largest, every direction whose variance stands
+apart (15) parallel to twelve digits, the 50 components' subspace the same (overlap 1.000000000);
+0.7 s against 15.1 s. With 5,000 genes, as Xenium Prime's: 3.6 s.
+
+**Validation:**
+- **Exact cases** (`internal/graph`, `internal/linalg`, `internal/cluster`, `internal/embed`):
+  NN-Descent against exact search (recall at least 0.99, every distance true, rows in order), the
+  same for one worker and four, started from the exact table and kept; the sampled recall by hand;
+  the Lanczos method against the full decomposition on covariances of falling spectra and on a
+  matrix of rank 2 (its Krylov space closing and going on); a panel of 1,100 genes' components
+  against the full decomposition's, the same for any number of workers; the batched map the same for
+  any number of workers and as faithful as one thread's.
+- **The development bundles' neighbors searched approximately** (`validation/neighbors_test.go`,
+  weekly): NN-Descent finds 99.91% (Lung) and 99.95% (Breast) of the exact neighbors, the recall
+  recorded within 0.0004 of it; over five seeds, the clusters Leiden finds on its graph agree with
+  the exact graph's (median ARI 0.857 and 0.704) more than Leiden's runs on the exact graph agree
+  with one another (0.791 and 0.653), at the same modularity (within 0.002).
+- **Large panels** (`validation/panels_test.go`, weekly): the numbers above.
+- **The large simulated tissue typed** (`validation/scale_test.go`, weekly): 383,158 of the large
+  tissue's cells (`situcraft simulate --preset large`) clustered, mapped and labeled in 186 s on ten
+  cores at a peak of 3.9 GB, the instrument's segmentation's files made on first use within it (the
+  raster a band of rows at a time, the mask a row of its chunks at a time). The neighbors by
+  NN-Descent in 34 s, 95.6% of the exact over 1,000 cells in nine rounds: lower than on the bundles'
+  components (99.9%), the simulated types' cells being alike within a type, as noise is, where which
+  cells are nearest is least determined; 9 clusters. The map laid out in 33 s, its trustworthiness
+  0.861 and its wider neighborhoods 97.1% of the exact. Labeled from the simulated types' markers:
+  378,743 cells, the types' shares within a total variation distance of 0.015 of the true cells'.
+  The map of every cell shown in headless Chrome in 20 s and colored again in 40 ms, SituCraft
+  serving it in 1.9 GB.
+
 ## 6. Spatial analysis (wave 6) and cohorts (wave 7)
 
 - **Graphs:**

@@ -101,6 +101,7 @@ test('a map is recorded with its segmentation and clustering', () => {
   assert.equal(mapWarning(m.summary).level, 'warning');
   assert.match(mapWarning(m.summary).text, /distorts much \(trustworthiness 0.777\): a cell's 15 nearest cells in expression are, on average, 24% among its 75 nearest/);
   assert.equal(mapWarning({ trustworthiness: 0.95 }).level, 'info');
+  assert.match(mapWarning({ trustworthiness: 0.88, recall: 0.3, search: { recall: 0.991, queries: 1000 } }).text, /\(the 75 nearest in expression found by NN-Descent: 99.1% of the exact on 1,000 cells\)\. It shows/);
   assert.equal(mapWarning(null), null);
 });
 

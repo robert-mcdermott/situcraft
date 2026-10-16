@@ -113,7 +113,7 @@ func TestLayoutKeepsGroups(t *testing.T) {
 	for i := 0; i < n; i++ {
 		fallback[2*i], fallback[2*i+1] = x[i*dim], x[i*dim+1]
 	}
-	xy, info, err := Layout(context.Background(), g, fallback, DefaultParams(), nil)
+	xy, info, err := Layout(context.Background(), g, fallback, DefaultParams(), 0, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,7 +146,7 @@ func TestLayoutKeepsGroups(t *testing.T) {
 	}
 	// Groups near enough to share neighbors: one graph, a spectral start.
 	_, near, _ := clustersAt(n, dim, 4, 2)
-	nearXY, nearInfo, err := Layout(context.Background(), near, nil, DefaultParams(), nil)
+	nearXY, nearInfo, err := Layout(context.Background(), near, nil, DefaultParams(), 0, nil)
 	if err != nil || nearInfo.Init != "spectral" {
 		t.Fatalf("a connected graph: %v, init %q", err, nearInfo.Init)
 	}
@@ -160,7 +160,7 @@ func TestLayoutKeepsGroups(t *testing.T) {
 	}
 	p := DefaultParams()
 	p.Seed++
-	other, _, _ := Layout(context.Background(), g, fallback, p, nil)
+	other, _, _ := Layout(context.Background(), g, fallback, p, 0, nil)
 	same := true
 	for i := range xy {
 		same = same && xy[i] == other[i]
@@ -292,3 +292,52 @@ func TestMapFiles(t *testing.T) {
 }
 
 const layoutDigest = "9668221e199e337f"
+
+// batchedDigest is the batched map's, the same on every processor.
+const batchedDigest = "38e9588483590357"
+
+// The batched optimization (more than graph.ExactLimit cells) on a graph of 3,000 cells in four
+// groups that share neighbors: the same map for one worker and four, and as faithful as the
+// optimization on one thread (trustworthiness within 0.02).
+func TestBatchedOptimization(t *testing.T) {
+	n, dim := 3000, 10
+	x, g, _ := clustersAt(n, dim, 8, 2)
+	sequential, info, err := Layout(context.Background(), g, nil, DefaultParams(), 0, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The batched epochs from the layout's spectral start.
+	run := func(workers int) []float64 {
+		p := DefaultParams()
+		rnd := random.New(p.Seed, 0)
+		spectral, _ := Spectral(context.Background(), g, 2, p.Seed)
+		y := scaleStart(spectral, n, rnd)
+		if err := optimizeBatched(context.Background(), g, y, info, p, workers, nil); err != nil {
+			t.Fatal(err)
+		}
+		return y
+	}
+	one, four := run(1), run(4)
+	for i := range one {
+		if one[i] != four[i] {
+			t.Fatal("the batched map differs with the workers")
+		}
+	}
+	h := sha256.New()
+	binary.Write(h, binary.LittleEndian, four)
+	if got := fmt.Sprintf("%x", h.Sum(nil))[:16]; got != batchedDigest {
+		t.Errorf("digest %s, recorded %s", got, batchedDigest)
+	}
+	qs, err := Assess(context.Background(), x, dim, sequential, n, 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	qb, err := Assess(context.Background(), x, dim, four, n, 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("trustworthiness: one thread %.4f, batched %.4f; recall %.4f, %.4f", qs.Trustworthiness, qb.Trustworthiness, qs.Recall, qb.Recall)
+	if qb.Trustworthiness < qs.Trustworthiness-0.02 {
+		t.Errorf("batched trustworthiness %.4f, one thread %.4f", qb.Trustworthiness, qs.Trustworthiness)
+	}
+}

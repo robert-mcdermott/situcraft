@@ -7,9 +7,10 @@
 //     or those a QC filter keeps;
 //  2. each cell's counts scaled to the median total and log-transformed (log1p);
 //  3. each gene centered and scaled to unit variance, clipped at ±10;
-//  4. principal components, exact (matrix.go);
-//  5. each cell's nearest neighbors in the components, exact, as UMAP's fuzzy graph
-//     (internal/graph);
+//  4. principal components, exact (matrix.go; above DenseGenes genes, the largest by the Lanczos
+//     method);
+//  5. each cell's nearest neighbors in the components, exact (above graph.ExactLimit cells, by
+//     NN-Descent, its recall measured), as UMAP's fuzzy graph (internal/graph);
 //  6. Leiden communities of the graph at a resolution (internal/graph), numbered by size;
 //  7. each cluster's markers against the rest (markers.go), exploratory.
 //
@@ -92,7 +93,8 @@ type Result struct {
 	Target       float64
 	Mean, SD     []float64 // each gene's, of the log-normalized values
 	PCA          *pcaResult
-	Neighbors    *graph.Neighbors // Params.Neighbors − 1 others
+	Neighbors    *graph.Neighbors   // Params.Neighbors − 1 others
+	Search       *graph.Approximate // how they were found, when not exactly
 	Edges        int
 	Partition    *graph.Partition
 	Markers      *Markers
@@ -153,11 +155,11 @@ func Run(ctx context.Context, in Inputs, p Params, workers int, progress func(fl
 	r.PCA = pc
 	lap("pca")
 	say(0.35, "Finding each cell's nearest neighbors")
-	nb, err := graph.KNN(ctx, pc.scores, len(m.cells), pc.components, p.Neighbors-1, workers, func(f float64) { say(0.35+0.45*f, "Finding each cell's nearest neighbors") })
+	nb, search, err := graph.Nearest(ctx, pc.scores, len(m.cells), pc.components, p.Neighbors-1, p.Seed, 1, nil, workers, func(f float64) { say(0.35+0.45*f, "Finding each cell's nearest neighbors") })
 	if err != nil {
 		return nil, err
 	}
-	r.Neighbors = nb
+	r.Neighbors, r.Search = nb, search
 	g, err := graph.Fuzzy(nb)
 	if err != nil {
 		return nil, err

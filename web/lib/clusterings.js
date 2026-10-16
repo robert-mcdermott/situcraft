@@ -247,6 +247,7 @@ export function mapWarning(q) {
   const pct = (v) => `${Math.round(100 * v)}%`;
   const keep = Number.isFinite(q.recall) ? `: a cell's 15 nearest cells in expression are, on average, ${pct(q.recall)} among its 75 nearest on the map` : '';
   const space = q.source ? ' against the instrument\'s own components' : '';
-  if (t >= 0.9) return { level: 'info', text: `The map keeps neighborhoods well (trustworthiness ${t.toFixed(3)}${space})${keep}.` };
-  return { level: 'warning', text: `The map distorts${t < 0.8 ? ' much' : ''} (trustworthiness ${t.toFixed(3)}${space})${keep}. It shows which cells are alike, not how alike: distances between groups, and their sizes, mean little. Judge relationships on the clusters and their markers.` };
+  const found = q.search ? ` (the 75 nearest in expression found by NN-Descent: ${(100 * q.search.recall).toFixed(1)}% of the exact on ${q.search.queries.toLocaleString('en-US')} cells)` : '';
+  if (t >= 0.9) return { level: 'info', text: `The map keeps neighborhoods well (trustworthiness ${t.toFixed(3)}${space})${keep}${found}.` };
+  return { level: 'warning', text: `The map distorts${t < 0.8 ? ' much' : ''} (trustworthiness ${t.toFixed(3)}${space})${keep}${found}. It shows which cells are alike, not how alike: distances between groups, and their sizes, mean little. Judge relationships on the clusters and their markers.` };
 }

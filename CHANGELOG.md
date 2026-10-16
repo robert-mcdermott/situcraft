@@ -134,6 +134,22 @@ Wave 4 of the [roadmap](situcraft-spec/roadmap.md): cell identities with their e
     types' markers, 99.86% of the cells SituCraft's refinement matches to their true cell take its
     type, 98.33% under the instrument's segmentation, with marker mixing nearer the truth's.
 
+- **Scale (wave 4, slice 8).** Clusters, maps and labels of whole sections and large panels.
+  - **Above 50,000 cells,** each cell's nearest neighbors are found by NN-Descent, the same for a
+    seed on any computer, its recall against exact search measured and shown (99.9% on the
+    examples' components), and the map is laid out over every core, the same for any number of
+    cores.
+  - **Above 1,000 genes** (Xenium Prime), the principal components are found by the Lanczos method:
+    5,000 genes in seconds, the full decomposition's to rounding.
+  - **Imported segmentations are drawn a band of rows at a time,** and a Xenium bundle's cell mask
+    read a row of its chunks at a time (as when the instrument's segmentation is first clustered):
+    the memory no longer grows with the slide's area, where a whole slide's mask was held twice.
+  - **Validated** on the examples (their neighbors searched approximately: the clusters agree with
+    the exact graph's as much as Leiden's own runs do), on simulated panels of 2,000 and 5,000
+    genes, and weekly on a simulated tissue of about 400,000 cells: 383,158 typed in about three
+    minutes on ten cores at a peak of 3.9 GB, the types' shares within 1.5% of the truth's, and
+    the map of every cell drawn in the page in 20 seconds.
+
 ### Changed
 
 - **A comparison can be removed from its project** (the inspector's **Remove**). The project's

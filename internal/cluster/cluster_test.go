@@ -121,6 +121,63 @@ func TestPCAAgainstTheDenseCovariance(t *testing.T) {
 	}
 }
 
+// A panel of more genes than are decomposed whole: the Lanczos method's components are the full
+// decomposition's (variances within 10⁻¹⁰ of the largest, directions parallel to 10⁻⁸ where their
+// variances stand apart, scores alike), and the same for any number of workers.
+func TestLargePanelsByLanczos(t *testing.T) {
+	counts, _ := tissue(500, DenseGenes+100, 6, 3)
+	m, _, err := selectCells(counts, func(int, uint32) bool { return true })
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.normalize(median(m.total))
+	mean, sd, _ := m.scaling()
+	run := func(workers int) *pcaResult {
+		p, err := m.pca(context.Background(), mean, sd, ClipAt, 20, workers, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	lanczos, other := run(4), run(1)
+	for i := range lanczos.scores {
+		if lanczos.scores[i] != other.scores[i] {
+			t.Fatal("the scores differ with the workers")
+		}
+	}
+	denseLimit = 1 << 30
+	defer func() { denseLimit = DenseGenes }()
+	dense := run(4)
+	k := dense.components
+	for c := 0; c < k; c++ {
+		if math.Abs(dense.values[c]-lanczos.values[c]) > 1e-10*dense.values[0] {
+			t.Errorf("component %d: variance %g, the full decomposition's %g", c, lanczos.values[c], dense.values[c])
+		}
+		gap := math.Inf(1)
+		if c > 0 {
+			gap = dense.values[c-1] - dense.values[c]
+		}
+		if c+1 < k {
+			gap = math.Min(gap, dense.values[c]-dense.values[c+1])
+		}
+		if c+1 == k || gap < 1e-3*dense.values[0] {
+			continue
+		}
+		cos := 0.0
+		for g := 0; g < m.genes; g++ {
+			cos += dense.loadings[g*k+c] * lanczos.loadings[g*k+c]
+		}
+		if math.Abs(cos-1) > 1e-8 {
+			t.Errorf("component %d: cos %.12f with the full decomposition's (signed alike)", c, cos)
+		}
+		for i := 0; i < len(m.cells); i += 41 {
+			if d := math.Abs(dense.scores[i*k+c] - lanczos.scores[i*k+c]); d > 1e-6 {
+				t.Errorf("cell %d, component %d: score %g, the full decomposition's %g", i, c, lanczos.scores[i*k+c], dense.scores[i*k+c])
+			}
+		}
+	}
+}
+
 // Normalization and scaling by hand: two cells, totals 4 and 2, the median 3.
 func TestNormalizationByHand(t *testing.T) {
 	c := &segment.Counts{Genes: []string{"A", "B"}, Offsets: []uint32{0, 2, 3}, Gene: []uint32{1, 0, 0}, Count: []uint32{1, 3, 2}}

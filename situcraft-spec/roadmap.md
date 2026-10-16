@@ -1873,15 +1873,53 @@ same on every processor.
        at the first level.
      - **Marker mixing is read in its rate, not in cells co-expressing any pair,** which saturates
        where markers are not absolutely exclusive (98.9% of the simulated instrument's cells).
-8. **Scale.**
-   - Nearest neighbors by NN-Descent (Dong, Moses & Li 2011) above a size where exact search is
-     slow, deterministic for a seed, its recall against exact search measured; the map's
-     optimization over all cores, the same for any number of workers.
-   - Principal components of panels of thousands of genes (Xenium Prime) by Lanczos iteration or
-     a parallel reduction: slice 1's dense eigendecomposition costs the cube of the panel's
-     genes, seconds at 500 and minutes at 5,000.
-   - The weekly scale test types the large simulated tissue (399,084 cells) within memory and time
-     budgets, and the map draws it.
+8. **Scale: done.**
+   - **Nearest neighbors above 50,000 cells by NN-Descent** (Dong, Moses & Li 2011; research.md
+     §5.8): the same table for a seed on any number of workers and processors (each round's samples
+     from each cell's own stream, its comparisons made a block at a time against the table as it
+     stands and applied in order); 3k searched for k; its recall against exact search measured over
+     1,000 cells, recorded in the clustering and said in the page. The map's wider neighborhoods the
+     same way, started from the clustering's.
+   - **The map's optimization over every core above 50,000 cells:** each epoch's edges in batches,
+     computed in parallel from the places before the batch and applied in order, the negative
+     samples from a hash; the same map for any number of workers.
+   - **Principal components above 1,000 genes by the Lanczos method** with full
+     reorthogonalization, the covariance formed in place.
+   - **Imports a band of rows at a time:** an imported segmentation's raster made and encoded a
+     band of rows at a time, and a Xenium bundle's mask read a row of its chunks at a time (the
+     instrument's segmentation's files are made so on first use).
+   - Below the limits, every method and file is as it was.
+   - Validation:
+     - **Exact cases:** NN-Descent against exact search, the same for any number of workers; the
+       Lanczos method against the full decomposition; the batched map the same for any number of
+       workers and as faithful as one thread's; digests pinned on arm64 and amd64.
+     - **The bundles' neighbors searched approximately** (weekly): 99.91% (Lung) and 99.95% (Breast)
+       of the exact found, the recall recorded within 0.0004; over five seeds, Leiden's clusters on
+       the approximate graph agree with the exact graph's (ARI 0.857, 0.704) more than its runs on
+       the exact graph with one another (0.791, 0.653).
+     - **Large panels** (weekly): 2,000 genes' components against the full decomposition, variances
+       within 7 × 10⁻¹⁴, the subspace the same; 0.7 s against 15 s; 5,000 genes in 3.6 s.
+     - **The large simulated tissue typed** (the weekly scale test): 383,158 of its cells clustered,
+       mapped and labeled in 186 s on ten cores at a peak of 3.9 GB (the instrument's segmentation's
+       files made on first use within it): the neighbors by NN-Descent in 34 s, 95.6% of the exact
+       found (the simulated types' cells are alike within a type, as noise is, where nearest
+       neighbors are least determined; 99.9% on the bundles); 9 clusters; the map laid out in 33 s,
+       its trustworthiness 0.861, its wider neighborhoods 97.1% of the exact; 378,743 cells labeled
+       from the simulated types' markers, the types' shares within a total variation distance of
+       0.015 of the truth's; the map of every cell shown in the page in 20 s and colored again in
+       40 ms, SituCraft serving it in 1.9 GB.
+   - Found by slice 8:
+     - **A wider search, not more rounds, finds the neighbors:** NN-Descent searching k found 91% to
+       96% of the exact neighbors on the bundles, searching 3k 99.9%, at about four times the time
+       (under a second for Lung's 11,820 cells; 27 s for 400,000 points on ten cores).
+     - **The covariance's noise components are not determined singly:** on a simulated panel of
+       2,000 genes most of the 50 components' variances lie within a thousandth of the largest of
+       one another; the Lanczos method and the full decomposition agree on their subspace exactly,
+       and on the directions that stand apart.
+     - **The instrument's segmentation held the slide's mask twice when first made:** the scale
+       test's typing peaked at 6.4 GB, two copies of a 28,672 × 24,576 mask (2.8 GB each) made
+       when the clustering first asked for the instrument's segmentation files. Imports now make
+       the raster a band of rows at a time.
 9. **Examples, documentation, release 0.4.0.**
    - Tours: cluster and label the Lung bundle; the simulated tissue's labels against its truth;
      labels under two segmentations.

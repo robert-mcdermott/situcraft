@@ -31,14 +31,17 @@ func readXenium(ctx context.Context, ds Dataset, opt Options) (*source, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer b.Close()
 	if mine, theirs := runOf(b), ds.Run(); !mine.Same(theirs) {
+		b.Close()
 		return nil, fmt.Errorf("%s is of %s; %s is of %s: an output bundle imports into the run it segments, of another run it does not", b.Name, mine, ds.Name(), theirs)
 	}
 	src, err := readBundle(ctx, b, false)
 	if err != nil {
+		b.Close()
 		return nil, err
 	}
+	// Its mask is read as the segmentation is built: the bundle stays open until then.
+	src.closers = append([]func() error{b.Close}, src.closers...)
 	if opt.Tool != "" {
 		src.toolName, src.toolVer = opt.Tool, opt.ToolVersion
 	}
@@ -58,12 +61,18 @@ func Instrument(ctx context.Context, b *xenium.Bundle, dir string, workers int) 
 	if err != nil {
 		return nil, err
 	}
+	defer src.close()
 	return build(ctx, ds, Options{Format: Xenium, Paths: []string{b.Path}, Units: "um"}, src, dir, workers, func(float64, string) {})
 }
 
 // readBundle reads a bundle's segmentation; own: its transcripts are the dataset's, row by row.
-func readBundle(ctx context.Context, b *xenium.Bundle, own bool) (*source, error) {
+func readBundle(ctx context.Context, b *xenium.Bundle, own bool) (_ *source, err error) {
 	src := newSource()
+	defer func() {
+		if err != nil {
+			src.close()
+		}
+	}()
 	e := b.Experiment
 	software := e.AnalysisSoftware
 	src.toolName = "Xenium Onboard Analysis"
@@ -82,19 +91,15 @@ func readBundle(ctx context.Context, b *xenium.Bundle, own bool) (*source, error
 	for _, id := range cells.IDs {
 		src.cell(id)
 	}
-	// The raster: its cell mask.
+	// The raster: its cell mask, read a row of its chunks at a time as the segmentation is built
+	// (a whole slide's is gigabytes).
 	if b.Has("cells.zarr.zip") {
 		m, err := b.OpenMask(xenium.CellMask)
 		if err == nil {
 			w, h := m.Size()
-			values := make([]uint32, w*h)
-			err = m.Rows(0, h, values)
 			ps := m.PixelSize
-			m.Close()
-			if err != nil {
-				return nil, err
-			}
-			src.labels = &labelImage{width: w, height: h, values: values, transform: affine{a: ps, e: ps}}
+			src.labels = &labelImage{width: w, height: h, rowOf: m.Row, transform: affine{a: ps, e: ps}}
+			src.closers = append(src.closers, m.Close)
 			src.read["raster"] = "cells.zarr.zip masks/1"
 		}
 	}

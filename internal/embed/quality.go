@@ -9,6 +9,9 @@ import (
 	"situcraft/internal/graph"
 )
 
+// QualitySeed seeds the search for the wider neighborhoods when it is not exact.
+const QualitySeed = 20250
+
 // Quality is how faithfully a map keeps the neighborhoods of the space it came from.
 type Quality struct {
 	// K: the neighborhood judged; KWide: the wider one a neighbor may fall in and still count.
@@ -24,10 +27,15 @@ type Quality struct {
 	// Score: each cell's (precision + recall)/2, averaged over it and its K nearest on the map: how
 	// faithfully the map keeps that region's neighborhoods, to color the map by.
 	Score []float32
+	// Search says how the space's wider neighborhoods were found when not exactly (more than
+	// graph.ExactLimit cells).
+	Search *graph.Approximate
 }
 
 // Assess judges the map low (n × 2) against the space high (n × dimHigh), with K 15 and KWide 75.
-func Assess(ctx context.Context, high []float64, dimHigh int, low []float64, n, workers int) (*Quality, error) {
+// Above graph.ExactLimit cells the space's wider neighborhoods are found by NN-Descent (sample
+// rate 0.5), starting from start (the clustering's neighbors) when given.
+func Assess(ctx context.Context, high []float64, dimHigh int, low []float64, n, workers int, start ...*graph.Neighbors) (*Quality, error) {
 	if workers < 1 {
 		workers = runtime.NumCPU()
 	}
@@ -36,7 +44,11 @@ func Assess(ctx context.Context, high []float64, dimHigh int, low []float64, n, 
 		return nil, errors.New("too few cells to judge a map")
 	}
 	wide := min(5*k, n-1)
-	hi, err := graph.KNN(ctx, high, n, dimHigh, wide, workers, nil)
+	var from *graph.Neighbors
+	if len(start) > 0 {
+		from = start[0]
+	}
+	hi, search, err := graph.Nearest(ctx, high, n, dimHigh, wide, QualitySeed, 0.5, from, workers, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +56,7 @@ func Assess(ctx context.Context, high []float64, dimHigh int, low []float64, n, 
 	if err != nil {
 		return nil, err
 	}
-	q := &Quality{K: k, KWide: wide, Score: make([]float32, n)}
+	q := &Quality{K: k, KWide: wide, Score: make([]float32, n), Search: search}
 	raw := make([]float64, n)
 	markH := make([]int32, n)
 	markL := make([]int32, n)

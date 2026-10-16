@@ -48,10 +48,10 @@ see `conventions.md`. For the methods, formats and datasets behind these choices
 │   internal/segment   nucleus expansion; transcript-informed segmentation (sampler, outputs)           │
 │   internal/compare   cell matching, difference classes, comparison metrics, impact on labels          │
 │   internal/cluster   normalization, principal components, Leiden clusters, markers (wave 4)           │
-│   internal/graph     nearest neighbors (exact; a grid in two dimensions), UMAP's graph, Leiden         │
+│   internal/graph     nearest neighbors (exact, NN-Descent; a grid in 2-D), UMAP's graph, Leiden        │
 │   internal/embed     UMAP maps and their quality                                                       │
 │   internal/label     marker sets and scores, hierarchical labels, references, imports, review         │
-│   internal/linalg    symmetric eigendecomposition, the same on every processor                         │
+│   internal/linalg    symmetric eigendecomposition (whole, or Lanczos), the same on every processor     │
 │   internal/register  image registration (later)                                                       │
 │   internal/spatial   graphs and spatial statistics on large tables (later)                            │
 │   internal/jobs      durable background jobs: spec, state, progress, cancellation, logs               │
@@ -266,7 +266,9 @@ Segmentation is SituCraft's own code (`internal/segment`), not an external progr
   Baysor-style CSV plus GeoJSON, Xenium Ranger outputs, or GeoJSON polygons plus an assignment
   table; SituCraft's own files (`situcraft refine`'s) are checked against the dataset and copied. This is how results from external tools are compared, without SituCraft running those
   tools. Each becomes SituCraft's own segmentation files: a label image resampled or polygons
-  drawn at the morphology image's resolution, the tool's assignment matched to the dataset's
+  drawn at the morphology image's resolution (a band of rows at a time, each row encoded as it is
+  made, and a Xenium bundle's mask read a row of its chunks at a time, so that a whole slide's
+  raster is never held whole), the tool's assignment matched to the dataset's
   transcripts (by id and position, or by position and gene), counts made as for every
   segmentation. It is checked against the dataset: coordinates in units the import declares
   (never guessed from the values), the transcripts it names, an output bundle's run, its ids.
@@ -353,9 +355,15 @@ segmentation, made by a job, named by its inputs and parameters, and checked bef
   processor. The artifact (`docs/FORMATS.md`) keeps the cells and their clusters, the components
   and scores, the neighbors and the markers; its check makes the graph again and requires the
   recorded modularity.
+- **Scale** (slice 8): above 50,000 cells the neighbors are found by NN-Descent
+  (`internal/graph`'s `descent.go`), its rounds arranged so the table is the same for any number of
+  workers, its recall measured and recorded; above 1,000 genes the components by the Lanczos method
+  (`internal/linalg`'s `lanczos.go`); above 50,000 cells the map's epochs in batches over every core
+  (`internal/embed`'s `optimizeBatched`), its negative samples from a hash. Below, the methods are as
+  they were and their files unchanged.
 - **Maps** (`internal/embed`, `api_maps.go`, slice 2): UMAP of a clustering's graph, made by a job
   as soon as the clustering is, one thread and one seeded stream so a seed gives the same map
-  anywhere; each map judged (trustworthiness, each cell's neighborhood precision and recall) and
+  anywhere (above 50,000 cells, in batches over every core, the same for any number of workers); each map judged (trustworthiness, each cell's neighborhood precision and recall) and
   kept as an artifact of kind `embedding`. The instrument's own analysis (`internal/xenium`'s
   `ReadAnalysis`) registers as a clustering of the instrument's segmentation (its markers by
   SituCraft) and a map.
