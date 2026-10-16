@@ -66,6 +66,26 @@ func (e *Expression) Values(gene int) []float32 {
 	return out
 }
 
+// Index answers a segmentation cell's index among the analyzed cells, or −1.
+func (e *Expression) Index(cell uint32) int {
+	i := sort.Search(len(e.Cells), func(k int) bool { return e.Cells[k] >= cell })
+	if i < len(e.Cells) && e.Cells[i] == cell {
+		return i
+	}
+	return -1
+}
+
+// Row answers an analyzed cell's genes (indices, increasing), their counts and log-normalized
+// values.
+func (e *Expression) Row(i int) (genes []int, counts []uint32, values []float64) {
+	for k := e.m.offsets[i]; k < e.m.offsets[i+1]; k++ {
+		genes = append(genes, int(e.m.gene[k]))
+		counts = append(counts, e.m.count[k])
+		values = append(values, e.m.value[k])
+	}
+	return genes, counts, values
+}
+
 // GeneMeans answers each gene's mean log-normalized value over the analyzed cells (zeros
 // included), summed in the cells' order.
 func (e *Expression) GeneMeans() []float64 {

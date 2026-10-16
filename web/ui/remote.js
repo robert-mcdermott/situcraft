@@ -17,6 +17,8 @@ import { removeView, sameView, viewLink } from '../lib/views.js';
 import { SEG_FILLS, defaultChoice, segmentationChoices } from '../lib/segview.js';
 import { clusterName, clusterNames, clusteringsOf, mapsOf, nameClusters } from '../lib/clusterings.js';
 import { composition as labelComposition, labelSetName, labelSetsFor, namesFromLabels } from '../lib/labels.js';
+import { RULES, appendEdit, createCurated, crossTable, curatedSetsOf, saveConsensus } from '../lib/curation.js';
+import { labelSource, labelVersions, refOf } from './label-sources.js';
 
 export class ActionError extends Error {}
 
@@ -1018,6 +1020,131 @@ export function installRemote(app) {
       };
     },
 
+    async review_labels(args) {
+      const { dataset, seg, item, version } = labelVersionArg(args);
+      const src = await labelSource(app, refOf(version.id, version.level));
+      const neighbors = args.neighbors === undefined ? 10 : finite(args.neighbors, 'neighbors');
+      const implausible = args.implausible === undefined ? 0.2 : finite(args.implausible, 'implausible');
+      let low = args.low_confidence === undefined ? null : finite(args.low_confidence, 'low_confidence');
+      if (args.low_confidence === undefined && version.kind === 'markers') low = 2 * (project().artifacts.find((a) => a.id === version.id)?.parameters?.margin ?? 0.1);
+      const curated = version.kind === 'curated' ? project().artifacts.find((a) => a.id === version.id) : curatedSetsOf(project(), dataset.id, seg.id).find((c) => c.base.labels === version.id && c.base.level === version.level);
+      const reviewed = [];
+      if (curated) (await labelSource(app, refOf(curated.id))).edited.forEach((e, i) => e >= 0 && reviewed.push(i));
+      const enc = (typed) => {
+        const bytes = new Uint8Array(typed.buffer, typed.byteOffset, typed.byteLength);
+        let t = '';
+        for (let i = 0; i < bytes.length; i += 0x8000) t += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+        return btoa(t);
+      };
+      const body = { labels: enc(src.label), neighbors, implausible, lowConfidence: low, limit: args.limit === undefined ? 20 : finite(args.limit, 'limit'), reviewed };
+      if (src.confidence) body.confidence = enc(src.confidence);
+      const response = await fetch(`${item.url}/segmentations/${encodeURIComponent(seg.id)}/review`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const answer = await response.json();
+      if (!response.ok) throw new ActionError(answer.error ?? `HTTP ${response.status}`);
+      const c = answer.counts;
+      return {
+        message: `${version.name}: ${plural(c.implausible + c.lowConfidence - c.both, 'cell')} to review of ${c.labeled.toLocaleString('en-US')} labeled (${c.implausible} implausible, ${c.lowConfidence} of low confidence, ${c.both} both; ${c.reviewed} reviewed already).`,
+        data: { labels: version.id, level: version.level, counts: c, neighbors, implausible, lowConfidence: low, queue: answer.queue.map((it) => ({ cell: it.cell, label: src.names[src.label[it.cell]], reasons: it.reasons, share: it.share, neighborsLabel: src.names[it.dominant] ?? null, confidence: it.confidence })) },
+      };
+    },
+
+    async label_evidence(args) {
+      const { seg, item, version } = labelVersionArg(args);
+      const cell = finite(String(args.cell ?? '').replace(/^#/, ''), 'cell');
+      const clusterings = clusteringsOf(project(), seg.dataset).filter((c) => c.state === 'complete' && c.segmentation === seg.id);
+      const c = clusteringRef(clusterings, args.clustering);
+      if (!c) throw new ActionError('The segmentation has no clustering: cluster_cells makes one.');
+      const src = await labelSource(app, refOf(version.id, version.level));
+      const marker = src.kind === 'labels' && src.record && !src.record.source && src.record.clustering === c.id ? src.id : src.kind === 'curated' && src.base?.record && !src.base.record.source && src.base.record.clustering === c.id ? src.base.id : null;
+      const response = await fetch(`${item.url}/clusterings/${encodeURIComponent(c.id)}/cells/${cell}/evidence${marker ? `?labels=${encodeURIComponent(marker)}` : ''}`);
+      const ev = await response.json();
+      if (!response.ok) throw new ActionError(ev.error ?? `HTTP ${response.status}`);
+      const versions = labelVersions(project(), seg.dataset, seg.id);
+      const labels = {};
+      for (const v of versions.slice(0, 12)) {
+        const s = await labelSource(app, refOf(v.id, v.level));
+        labels[v.name] = s.label[cell] >= 0 ? s.names[s.label[cell]] : null;
+      }
+      const curated = curatedSetsOf(project(), seg.dataset, seg.id);
+      const reviews = curated.flatMap((r) => r.edits.filter((e) => e.cells?.includes(cell)).map((e) => ({ set: r.name, kind: e.kind, label: e.label, reason: e.reason, by: e.by, time: e.time })));
+      const levels = (ev.labels?.levels ?? []).map((lv) => ({ level: lv.level, label: lv.label >= 0 ? lv.evidence[0].name : null, lead: lv.lead, best: lv.evidence[0]?.name, next: lv.evidence[1]?.name ?? null, markers: lv.evidence.map((le) => ({ label: le.name, score: le.score, positive: le.positive.genes.map((g) => `${g.gene} ${g.count}`), negative: (le.negative?.genes ?? []).map((g) => `${g.gene} ${g.count}`) })) }));
+      return {
+        message: `Cell #${cell}: ${Object.entries(labels).map(([k, v]) => `${k}: ${v ?? 'no label'}`).join('; ')}${reviews.length ? `; reviewed ${reviews.length} time${reviews.length === 1 ? '' : 's'}` : ''}.`,
+        data: { cell, cluster: ev.cluster >= 0 ? ev.cluster + 1 : null, labels, levels, expressionNeighbors: ev.neighbors, reviews },
+      };
+    },
+
+    async curate_labels(args) {
+      const { dataset, seg, version } = labelVersionArg(args);
+      if (version.kind === 'consensus') throw new ActionError('A consensus is made by its rule: curate one of its sets, or a curated set begun from it.');
+      if (!args.reason || !String(args.reason).trim()) throw new ActionError('Say why (reason): every edit keeps its reason.');
+      let target = version.kind === 'curated' ? project().artifacts.find((a) => a.id === version.id) : curatedSetsOf(project(), dataset.id, seg.id).find((c) => c.base.labels === version.id && c.base.level === version.level);
+      if (!target) {
+        const name = args.name ? String(args.name) : `${version.name}, curated`;
+        store.commit(createCurated(project(), { dataset: dataset.id, segmentation: seg.id, base: { labels: version.id, level: version.level, name: version.name }, name, by: 'remote control' }), `Begin the curated label set ${name}`);
+        target = curatedSetsOf(project(), dataset.id, seg.id).at(-1);
+      }
+      const edit = { reason: String(args.reason), by: args.by ? String(args.by) : 'remote control' };
+      if (Array.isArray(args.clusters)) {
+        const clusterings = clusteringsOf(project(), dataset.id).filter((c) => c.state === 'complete' && c.segmentation === seg.id);
+        const c = clusteringRef(clusterings, args.clustering);
+        if (!c) throw new ActionError('The segmentation has no clustering.');
+        Object.assign(edit, { kind: 'cluster', clustering: c.id, clusters: args.clusters.map((k) => finite(k, 'cluster') - 1), label: String(args.label ?? '') });
+      } else if (Array.isArray(args.cells)) {
+        const cells = args.cells.map((v) => finite(String(v).replace(/^#/, ''), 'cell'));
+        let label = args.label === undefined ? null : String(args.label);
+        if (args.accept) {
+          const src = await labelSource(app, refOf(target.id));
+          const own = [...new Set(cells.map((i) => src.label[i]))];
+          if (own.length !== 1 || own[0] < 0) throw new ActionError('Accept cells of one label at a time (each has a label).');
+          label = src.names[own[0]];
+        }
+        Object.assign(edit, { kind: args.accept ? 'accept' : 'cells', cells, label });
+      } else throw new ActionError('Name cells (their rows, as #123) or clusters (numbers from 1) of a clustering.');
+      let next;
+      try {
+        next = appendEdit(project(), target.id, edit);
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      store.commit(next, `Curate ${target.name}`);
+      const record = project().artifacts.find((a) => a.id === target.id);
+      return { message: `${record.name}: ${record.edits.length} edit${record.edits.length === 1 ? '' : 's'}; the last: ${project().history.at(-1).detail}.`, data: { id: record.id, base: record.base, edits: record.edits.length, last: record.edits.at(-1) } };
+    },
+
+    async consensus_labels(args) {
+      const dataset = resolveDataset(args.dataset);
+      const seg = segmentationArg(dataset, args.segmentation);
+      const versions = labelVersions(project(), dataset.id, seg.id).filter((v) => v.kind !== 'consensus');
+      if (!Array.isArray(args.members) || args.members.length < 2) throw new ActionError(`Name two sets or more (members): ${versions.map((v) => `${v.id}${v.level ? `:${v.level}` : ''} (${v.name})`).join(', ')}.`);
+      const members = args.members.map((m) => {
+        const [id, lv] = String(m).split(':');
+        const v = versions.find((x) => x.id === id && x.level === Number(lv ?? 0)) ?? versions.find((x) => x.name === String(m));
+        if (!v) throw new ActionError(`No label set ${m}; the segmentation's are ${versions.map((x) => `${x.id}${x.level ? `:${x.level}` : ''} (${x.name})`).join(', ')}.`);
+        return v;
+      });
+      const rule = { kind: choose(String(args.rule ?? 'majority'), RULES.map((r) => r.id), 'rule') };
+      if (rule.kind === 'majority') rule.min = args.min === undefined ? Math.floor(members.length / 2) + 1 : finite(args.min, 'min');
+      const mapping = members.map((_, j) => (Array.isArray(args.mapping) ? args.mapping[j] ?? {} : {}));
+      const name = args.name ? String(args.name) : 'Consensus';
+      let next;
+      try {
+        next = saveConsensus(project(), { dataset: dataset.id, segmentation: seg.id, name, members: members.map((v) => ({ ref: refOf(v.id, v.level), name: v.name })), mapping, rule, by: 'remote control' });
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      store.commit(next, `Make the consensus label set ${name}`);
+      const record = project().artifacts.filter((a) => a.kind === 'consensus-labels').at(-1);
+      const src = await labelSource(app, refOf(record.id));
+      let labeled = 0;
+      for (const k of src.label) if (k >= 0) labeled += 1;
+      const covered = src.voters.reduce((t, v) => t + (v > 0), 0);
+      const first = await labelSource(app, refOf(members[0].id, members[0].level));
+      const second = await labelSource(app, refOf(members[1].id, members[1].level));
+      const agreement = crossTable(first, second).agreement;
+      return { message: `${name}: ${labeled.toLocaleString('en-US')} of the ${covered.toLocaleString('en-US')} cells the sets label take a label by ${rule.kind}${rule.min ? ` (${rule.min})` : ''}; the first two sets agree on ${(100 * agreement).toFixed(1)}%.`, data: { id: record.id, rule, members: members.map((v) => v.name), labeled, covered, agreement } };
+    },
+
     async instrument_clusters(args) {
       const dataset = resolveDataset(args.dataset);
       const link = app.bundles.link(dataset.id);
@@ -1260,6 +1387,39 @@ export function installRemote(app) {
     return `clusters:${id}`;
   }
 
+  // A segmentation by name or id (the default if not given).
+  function segmentationArg(dataset, ref) {
+    const segs = project().artifacts.filter((a) => a.kind === 'segmentation' && a.dataset === dataset.id && a.state === 'complete' && a.source !== 'planted');
+    if (!segs.length) throw new ActionError(`${dataset.name} has no complete segmentation yet.`);
+    if (ref === undefined) return segs.find((a) => a.id === promotedSegmentation(project(), dataset.id)?.record.id) ?? segs[0];
+    const text = String(ref);
+    const seg = /^(the )?instrument('s)?$/i.test(text) ? segs.find((a) => a.source === 'instrument') : segs.find((a) => a.id === text) ?? segs.find((a) => a.name === choose(text, segs.map((x) => x.name), 'segmentation'));
+    if (!seg) throw new ActionError(`${dataset.name} has no such segmentation.`);
+    return seg;
+  }
+
+  // A label version of a segmentation (labels: a label set's id, a curated or consensus set's; the
+  // latest if not given; level: a name or number from 1).
+  function labelVersionArg(args) {
+    const dataset = resolveDataset(args.dataset);
+    const seg = segmentationArg(dataset, args.segmentation);
+    const link = app.bundles.link(dataset.id);
+    const item = link?.item ?? app.bundles.itemByPath(dataset.path);
+    if (!item) throw new ActionError(`${dataset.name}'s bundle was not found where the project records it.`);
+    const versions = labelVersions(project(), dataset.id, seg.id);
+    if (!versions.length) throw new ActionError(`${seg.name} has no labels: label_cells or import_labels makes them.`);
+    const ref = args.labels === undefined ? null : String(args.labels);
+    const of = ref ? versions.filter((v) => v.id === ref) : versions.filter((v) => v.id === versions.filter((x) => x.kind !== 'consensus').at(-1)?.id);
+    if (!of.length) throw new ActionError(`No label set ${ref} of ${seg.name}; its sets are ${[...new Set(versions.map((v) => `${v.id} (${v.name})`))].join(', ')}.`);
+    let version = of[0];
+    if (args.level !== undefined && of.length > 1) {
+      const text = String(args.level);
+      version = /^\d+$/.test(text) ? of[Number(text) - 1] : of.find((v) => v.name.toLowerCase().endsWith(`: ${text.toLowerCase()}`));
+      if (!version) throw new ActionError(`The set's levels are 1 to ${of.length}.`);
+    }
+    return { dataset, seg, item, version };
+  }
+
   // A label set of a clustering by id, its latest if not given; and a level by name or number from 1.
   function labelsOf(dataset, clusteringId, ref) {
     const clustering = project().artifacts.find((a) => a.kind === 'clustering' && a.id === clusteringId);
@@ -1285,6 +1445,10 @@ export function installRemote(app) {
   // latest label set, its first level), confidence[:<id>].
   async function labelColor(dataset, c, text) {
     const parts = text.split(':').map((x) => x.trim());
+    if (/^(cur|con)-/.test(parts[1] ?? '')) {
+      if (!project().artifacts.some((a) => a.id === parts[1] && a.segmentation === c.segmentation)) throw new ActionError(`No curated or consensus label set ${parts[1]} of the clustering's segmentation.`);
+      return { kind: /^confidence$/i.test(parts[0]) ? 'confidence' : 'labels', labels: parts[1], level: 0 };
+    }
     const id = parts[1]?.startsWith('lab-') ? parts[1] : null;
     const r = labelsOf(dataset, c.id, id);
     if (/^confidence$/i.test(parts[0])) return { kind: 'confidence', labels: r.id };
@@ -1295,6 +1459,11 @@ export function installRemote(app) {
   // 'labels:<id>[:<level>]'.
   async function labelFill(dataset, segRef, text) {
     const seg = segRef === 'instrument' ? segmentationChoices(project(), dataset.id).find((c) => c.instrument)?.id : segRef;
+    const version = /^labels:((cur|con)-[\w-]+)/i.exec(text)?.[1];
+    if (version) {
+      if (!project().artifacts.some((a) => a.id === version && a.segmentation === seg)) throw new ActionError(`No curated or consensus label set ${version} of the segmentation drawn.`);
+      return `labels:${version}:0`;
+    }
     const sets = project().artifacts.filter((a) => a.kind === 'labels' && a.dataset === dataset.id && a.segmentation === seg && a.state === 'complete');
     if (!sets.length) throw new ActionError('The segmentation drawn has no label set: label_cells makes one.');
     const parts = text.split(':').map((x) => x.trim());

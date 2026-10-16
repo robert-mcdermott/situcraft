@@ -242,6 +242,27 @@ export function mountInspector(app) {
       r.method?.citation ? h('p.muted', { style: { margin: '8px 0 0', fontSize: '11.5px' } }, r.method.citation) : null);
   }
 
+  // A curated or consensus label set: what it is made of, and its edits or rule.
+  function versionSection(r) {
+    const seg = app.store.project.artifacts.find((a) => a.kind === 'segmentation' && a.id === r.segmentation);
+    const curated = r.kind === 'curated-labels';
+    return h('section.inspector-section',
+      h('h3', icon(curated ? 'edit' : 'layers'), curated ? 'Curated labels' : 'Consensus labels'),
+      h('dl.kv',
+        h('dt', 'Name'), h('dd', r.name),
+        h('dt', 'Segmentation'), h('dd', seg?.name ?? r.segmentation),
+        ...(curated ? [h('dt', 'From'), h('dd', r.base.name), h('dt', 'Edits'), h('dd', String(r.edits.length))]
+          : [h('dt', 'Of'), h('dd', r.members.map((m) => m.name).join('; ')), h('dt', 'Rule'), h('dd', r.rule.kind === 'majority' ? `majority of ${r.rule.min}` : r.rule.kind)]),
+        h('dt', 'Made'), h('dd', `${relativeTime(r.created)} by ${r.by}`)),
+      curated && r.edits.length ? h('ul.inspector-list', ...r.edits.slice(-8).reverse().map((e) => h('li', `${e.kind === 'accept' ? 'accepted' : 'relabeled'} "${e.label}" (${e.kind === 'cluster' ? `clusters ${e.clusters.map((k) => k + 1).join(', ')}` : `${e.cells.length} cell${e.cells.length === 1 ? '' : 's'}`}): ${e.reason}, ${e.by}, ${relativeTime(e.time)}`))) : null,
+      h('div.btn-row', { style: { marginTop: '8px' } },
+        h('button.btn.small.primary', { type: 'button', onclick: () => app.showOnTissue(r.dataset, r.segmentation, `labels:${r.id}:0`) }, icon('tissue'), 'Show on the tissue'),
+        h('button.btn.small', { type: 'button', onclick: () => {
+          app.focusItem({ kind: 'labels', id: r.id });
+          app.setMode('celltypes');
+        } }, icon('tag'), 'Review')));
+  }
+
   // A marker set: its versions, where it came from, and its file.
   function markerSetSection(m) {
     const versions = markerSetVersions(app.store.project, m.family);
@@ -287,8 +308,9 @@ export function mountInspector(app) {
       if (c) return clusteringSection(c);
     }
     if (focus?.kind === 'labels') {
-      const r = app.store.project.artifacts.find((a) => a.kind === 'labels' && a.id === focus.id);
-      if (r) return labelsSection(r);
+      const r = app.store.project.artifacts.find((a) => a.id === focus.id && ['labels', 'curated-labels', 'consensus-labels'].includes(a.kind));
+      if (r?.kind === 'labels') return labelsSection(r);
+      if (r) return versionSection(r);
     }
     if (focus?.kind === 'marker-set') {
       const m = app.store.project.artifacts.find((a) => a.kind === 'marker-set' && a.id === focus.id);

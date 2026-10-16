@@ -7,6 +7,7 @@ package main
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
@@ -15,6 +16,7 @@ import (
 	"math"
 	"net/http"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -71,6 +73,7 @@ func (a *app) registerLabels(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/labels/{id}/cells", a.labelCells)
 	mux.HandleFunc("GET /api/labels/{id}/scores", a.labelScores)
 	a.registerLabelImports(mux)
+	a.registerLabelReview(mux)
 }
 
 // markerStarter is a marker set offered for a clustering: SituCraft's, or the simulated tissue's,
@@ -797,4 +800,184 @@ func (a *app) labelImportJob(spec importLabelsSpec, id string) jobs.Func {
 		}
 		return a.promoteChecked(m, label.Check, "imported label set")
 	}
+}
+
+// --- Reviewing labels ---
+
+func (a *app) registerLabelReview(mux *http.ServeMux) {
+	mux.HandleFunc("POST /api/local/{index}/segmentations/{seg}/review", a.reviewQueue)
+	mux.HandleFunc("GET /api/local/{index}/clusterings/{id}/cells/{cell}/evidence", a.cellEvidence)
+}
+
+// reviewRequest is a segmentation's cells' labels (int32 per cell, little-endian, base64; −1 for
+// none), their confidence (float32 per cell, NaN for none; optional), the neighbors counted, the
+// thresholds, the queue's length and the cells reviewed already.
+type reviewRequest struct {
+	Labels        string   `json:"labels"`
+	Confidence    string   `json:"confidence,omitempty"`
+	Neighbors     int      `json:"neighbors"`
+	Implausible   float64  `json:"implausible"`
+	LowConfidence *float64 `json:"lowConfidence"`
+	Limit         int      `json:"limit"`
+	Reviewed      []int    `json:"reviewed"`
+}
+
+func decodeLE[T int32 | float32](b64 string, n int) ([]T, error) {
+	raw, err := base64.StdEncoding.DecodeString(b64)
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) != 4*n {
+		return nil, fmt.Errorf("%d bytes for %d cells", len(raw), n)
+	}
+	out := make([]T, n)
+	for i := range out {
+		v := binary.LittleEndian.Uint32(raw[4*i:])
+		switch p := any(&out[i]).(type) {
+		case *int32:
+			*p = int32(v)
+		case *float32:
+			*p = math.Float32frombits(v)
+		}
+	}
+	return out, nil
+}
+
+// reviewQueue answers the cells to review among a segmentation's labeled cells: {neighbors,
+// counts, queue: [{cell, reasons, share, dominant, confidence}], share (float32 per cell, base64),
+// dominant (int32 per cell, base64)}.
+func (a *app) reviewQueue(w http.ResponseWriter, r *http.Request) {
+	var body reviewRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 256<<20)).Decode(&body); err != nil || body.Labels == "" {
+		writeError(w, http.StatusBadRequest, "Send {\"labels\": int32 per cell in base64, \"confidence\": optional, \"neighbors\", \"implausible\", \"lowConfidence\", \"limit\", \"reviewed\"}.")
+		return
+	}
+	if body.Neighbors < 1 || body.Neighbors > 100 || !(body.Implausible >= 0 && body.Implausible <= 1) || body.Limit < 0 || body.Limit > 100000 {
+		writeError(w, http.StatusBadRequest, "Neighbors is 1 to 100, implausible a share from 0 to 1, limit at most 100,000.")
+		return
+	}
+	b, ok := a.openBundle(w, r)
+	if !ok {
+		return
+	}
+	defer b.Close()
+	sm, err := a.segmentationOf(r.PathValue("seg"), b.Experiment.AnalysisUUID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	dir, err := a.segmentationFolder(r.Context(), b, sm)
+	if err != nil {
+		writeError(w, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+	cells, err := segment.ReadCells(dir)
+	if err != nil {
+		writeError(w, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+	n := len(cells)
+	labels, err := decodeLE[int32](body.Labels, n)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "The labels: "+err.Error()+".")
+		return
+	}
+	var conf []float32
+	if body.Confidence != "" {
+		if conf, err = decodeLE[float32](body.Confidence, n); err != nil {
+			writeError(w, http.StatusBadRequest, "The confidence: "+err.Error()+".")
+			return
+		}
+	}
+	xy := make([]float64, 2*n)
+	for i, c := range cells {
+		xy[2*i], xy[2*i+1] = float64(c.X), float64(c.Y)
+	}
+	share, dominant, err := label.Agreement(r.Context(), xy, labels, body.Neighbors, runtime.NumCPU())
+	if err != nil {
+		writeError(w, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+	o := label.QueueOptions{Implausible: body.Implausible, LowConfidence: math.NaN(), Limit: body.Limit, Reviewed: map[int]bool{}}
+	if body.LowConfidence != nil {
+		o.LowConfidence = *body.LowConfidence
+	}
+	for _, c := range body.Reviewed {
+		o.Reviewed[c] = true
+	}
+	items, counts := label.Queue(labels, share, dominant, conf, o)
+	if items == nil {
+		items = []label.QueueItem{}
+	}
+	sb := make([]byte, 0, 4*n)
+	db := make([]byte, 0, 4*n)
+	for i := range share {
+		sb = binary.LittleEndian.AppendUint32(sb, math.Float32bits(share[i]))
+		db = binary.LittleEndian.AppendUint32(db, uint32(dominant[i]))
+	}
+	writeJSON(w, map[string]any{"neighbors": body.Neighbors, "counts": counts, "queue": items, "share": base64.StdEncoding.EncodeToString(sb), "dominant": base64.StdEncoding.EncodeToString(db)})
+}
+
+// cellEvidence answers a segmentation cell's evidence in a clustering: {cell, index (among the
+// cells analyzed, −1 for none), cluster, neighbors (its nearest cells in expression, as
+// segmentation cells), labels (with ?labels=, a label set from markers made from the clustering:
+// its levels, candidates, markers and controls in the cell; with ?also=, another label's too)}.
+func (a *app) cellEvidence(w http.ResponseWriter, r *http.Request) {
+	e, d, ok := a.expressionOf(w, r)
+	if !ok {
+		return
+	}
+	cell, err := strconv.Atoi(r.PathValue("cell"))
+	if err != nil || cell < 0 || cell >= d.Cells.Segmentation {
+		writeError(w, http.StatusNotFound, "No such cell in the segmentation.")
+		return
+	}
+	i := e.Index(uint32(cell))
+	out := map[string]any{"cell": cell, "index": i, "cluster": -1, "neighbors": []int{}}
+	if i < 0 {
+		writeJSON(w, out)
+		return
+	}
+	out["cluster"] = e.Cluster[i]
+	dir, err := a.artifactFolder(r.PathValue("id"), cluster.FileDescription)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if d.Source == nil {
+		nb, err := cluster.ReadNeighbors(dir)
+		if err != nil {
+			writeError(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
+		var near []int
+		for _, j := range nb.Index[i*nb.K : (i+1)*nb.K] {
+			near = append(near, int(e.Cells[j]))
+		}
+		out["neighbors"] = near
+	}
+	if id := r.URL.Query().Get("labels"); id != "" {
+		ldir, ok := a.labelsOf(w, id)
+		if !ok {
+			return
+		}
+		ld, _, lab, err := label.Read(ldir)
+		if err != nil {
+			writeError(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
+		if ld.Source != nil || ld.Clustering == nil || ld.Clustering.ID != r.PathValue("id") || len(lab.Cells) != len(e.Cells) {
+			writeError(w, http.StatusBadRequest, "The label set is not from markers of this clustering.")
+			return
+		}
+		also := -1
+		if v := r.URL.Query().Get("also"); v != "" {
+			if also, err = strconv.Atoi(v); err != nil {
+				writeError(w, http.StatusBadRequest, "also is a label's index.")
+				return
+			}
+		}
+		out["labels"] = label.CellEvidence(e, ld, lab, i, also)
+	}
+	writeJSON(w, out)
 }

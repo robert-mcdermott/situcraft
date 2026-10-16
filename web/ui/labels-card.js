@@ -8,6 +8,7 @@
 
 import { h, icon, clear, formatCount, relativeTime } from './dom.js';
 import { toast } from './overlays.js';
+import { reviewSections } from './review-card.js';
 import { clusterNames, nameClusters, nameOf } from '../lib/clusterings.js';
 import { LABEL_PARAMETERS, addLabel, changeLabel, checkLabelParameters, composition, compositionOf, describeLabels, labelColor, labelSetName, labelSetsFor, labelTree, markerSetFile, markerSetVersions, markerSetsOf, namesFromLabels, parseGenes, removeLabel, saveMarkerSet, withoutMissing } from '../lib/labels.js';
 
@@ -136,7 +137,7 @@ export function labelsSections(app, ctx) {
   startersFor(app, t.item, clustering.id).then((offer) => {
     if (!host.isConnected && !document.body.contains(host)) return;
     clear(host).append(h('div.section-title', 'Labels from markers'), ...(st.editing ? editor(offer) : chooser(offer)));
-    clear(rest).append(...[importCard(), listCard(), shownCard()].filter(Boolean));
+    clear(rest).append(...[importCard(), listCard(), shownCard(), ...reviewSections(app, ctx)].filter(Boolean));
   }).catch((error) => clear(host).append(h('div.section-title', 'Labels from markers'), h('p.muted.seg-note', `The marker sets could not be read: ${error.message}`)));
 
   // --- Choosing a marker set, and labeling ---

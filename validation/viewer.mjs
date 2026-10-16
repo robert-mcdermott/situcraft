@@ -640,6 +640,34 @@ export async function viewerSuite({ check, MissingData, verbose }) {
           return { segCells, n, labels: rows.map((r) => set.description.sets[label[r]]?.name ?? null), confidence: set.description.source.confidenceColumn, others };
         })()`) : null;
         check('viewer', 'remote control: import_labels takes a table\'s labels for the cells it names, refuses one naming a cell the segmentation does not have, and takes the instrument\'s clusters', imported.ok && instrumentLabels.ok ? `${imported.message} ${JSON.stringify(importedCells)}; refused: ${refusedTable.message}; ${instrumentLabels.message}` : imported.message ?? instrumentLabels.message, imported.ok && importedCells?.n === 11898 && importedCells.others === 0 && importedCells.labels.join() === picked.map((p) => p.label).join() && importedCells.confidence === 'score' && !refusedTable.ok && /1 of foreign\.csv's 2 rows name cells this segmentation does not have \(zzzzzzzz-1\)/.test(refusedTable.message) && instrumentLabels.ok && instrumentLabels.data.cells.labeled[0] === 11897 && instrumentLabels.data.labels.length === 17, 'the three cells their rows\' labels and no other; refused with the count; 11,897 cells in 17 clusters');
+        // Label versions and review (wave 4, slice 5): the Lung labels from markers' review queue
+        // (each flagged cell's agreement at most the threshold, the most doubtful first); a cell
+        // relabeled with a reason in a curated set, drawn in its new label's color and every other
+        // cell as in its base set; a consensus of the two.
+        const markerSet = labeled.ok ? labeled.data.id : null;
+        const queued = markerSet ? await act('review_labels', { dataset: 'xenium-lung-2fov', segmentation: 'instrument', labels: markerSet, limit: 50 }) : { message: 'no label set' };
+        const shares = queued.ok ? queued.data.queue.filter((q) => q.reasons.includes('implausible')).map((q) => q.share) : [];
+        const relabelCell = queued.ok && queued.data.queue.length ? queued.data.queue[0].cell : 10;
+        const curated = markerSet ? await act('curate_labels', { dataset: 'xenium-lung-2fov', segmentation: 'instrument', labels: markerSet, cells: [`#${relabelCell}`], label: 'Reviewed: doublet', reason: 'two nuclei in one outline', by: 'validation' }) : { message: 'no label set' };
+        const curatedFill = curated.ok ? await act('show_tissue', { fill: `labels:${curated.data.id}`, whole: true }) : curated;
+        const curatedColors = curated.ok ? await chrome.eval(`(async () => {
+          const v = window.situcraftViewer;
+          for (let k = 0; k < 300 && !(v.clusterFill()?.labels && v.clusterFill().sets.some((x) => x.name === 'Reviewed: doublet')); k += 1) await new Promise((r) => setTimeout(r, 100));
+          const f = v.clusterFill();
+          const rgba = v.fillColors();
+          const { labelSource, refOf } = await import('/ui/label-sources.js');
+          const base = await labelSource(window.situcraft, refOf('${markerSet}', 0));
+          const hex = (i) => '#' + [0, 1, 2].map((j) => rgba[4 * i + j].toString(16).padStart(2, '0')).join('');
+          const k = f.sets.findIndex((x) => x.name === 'Reviewed: doublet');
+          let others = 0;
+          for (let i = 0; i < base.segCells; i += 1) {
+            if (i === ${relabelCell} || base.label[i] < 0) continue;
+            if (hex(i) !== base.colors[base.label[i]].toLowerCase()) others += 1;
+          }
+          return { relabeled: hex(${relabelCell}) === f.sets[k].color.toLowerCase(), newIndex: k, baseLabels: base.names.length, others };
+        })()`) : null;
+        const consensus = curated.ok ? await act('consensus_labels', { dataset: 'xenium-lung-2fov', segmentation: 'instrument', members: [markerSet, curated.data.id], rule: 'majority', min: 2, name: 'Agreed' }) : curated;
+        check('viewer', 'remote control: review_labels ranks the cells to review; curate_labels relabels one with its reason, drawn in its new label\'s color, the others as before; consensus_labels agrees', queued.ok && curated.ok && consensus.ok ? `${queued.message} ${curated.message} ${JSON.stringify(curatedColors)} ${consensus.message}` : queued.message ?? curated.message ?? consensus.message, queued.ok && queued.data.queue.length > 0 && shares.every((v, i) => v <= 0.2 && (i === 0 || v >= shares[i - 1])) && curated.ok && curated.data.edits === 1 && curated.data.last.reason === 'two nuclei in one outline' && curatedFill.ok && curatedColors?.relabeled && curatedColors.newIndex === curatedColors.baseLabels && curatedColors.others === 0 && consensus.ok && consensus.data.labeled === consensus.data.covered - 1, 'the implausible by agreement, rising, at most 0.2; the cell its new color, no other changed; the two agree but on the cell relabeled');
         // Nucleus expansion (wave 2, slice 3), run by a program in the Segmentation view.
         const expanded = await act('expand_nuclei', { dataset: 'xenium-lung-2fov', distance_um: 5 });
         const g = expanded.ok ? expanded.data.summary.agreement : null;

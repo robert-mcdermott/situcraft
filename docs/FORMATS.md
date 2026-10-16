@@ -113,7 +113,7 @@ A project is one JSON document, saved automatically in the library (`<data dir>/
 | `format`, `version` | `"situcraft-project"`, `1` |
 | `id`, `name`, `created`, `modified` | Its identity |
 | `datasets` | Each bundle: its place, run and analysis identifiers, panel, tissue, counts, pixel size, channels, a fingerprint of its files (each file's size; the SHA-256 of its manifest, metrics and panel), and its validation summary and findings |
-| `artifacts` | Results: filters (a name, a version, its parent version, its conditions, and its result: the number of cells, how many it keeps, and a checksum of which), from 0.2.0 segmentations and comparisons, and from 0.4.0 clusterings, their names and maps, marker sets and label sets (below) |
+| `artifacts` | Results: filters (a name, a version, its parent version, its conditions, and its result: the number of cells, how many it keeps, and a checksum of which), from 0.2.0 segmentations and comparisons, and from 0.4.0 clusterings, their names and maps, marker sets, label sets, and curated and consensus labels (below) |
 | `decisions` | Recorded choices, with their reasons (from 0.2.0) |
 | `views` | Saved views (below) |
 | `exports` | The exports written from its segmentations (from 0.2.0; absent until the first) |
@@ -323,7 +323,21 @@ label, its lead (NaN) and its confidence (NaN where none was given). There is no
 
 The project records each label set it uses (kind `labels`, with its dataset, segmentation,
 clustering, `markerSet`, the version's record id, `markers` and summary; an imported one, its
-`source`). The Viewer's fill
+`source`).
+
+Label versions are the project's own records, made in the page:
+- **Curated labels** (kind `curated-labels`): `dataset`, `segmentation`, `base` (`labels`, a label
+  set's id, a curated or consensus set's; `level`; `name`), `name`, `by`, `created`, and `edits`,
+  appended, never changed: each `{kind, cells | clustering and clusters, label, reason, by, time}`,
+  `kind` being `cells` (cells relabeled; their indices among the segmentation's cells), `cluster` (a
+  clustering's clusters relabeled, from 0) or `accept` (cells' labels confirmed). Its labels are
+  the base's with the edits applied in order; a new label's name is added after the base's.
+- **Consensus labels** (kind `consensus-labels`): `dataset`, `segmentation`, `name`, `members` (each
+  `{ref: {kind, id, level}, name}`), `mapping` (for each member, `{its label: a common name}`),
+  `rule` (`{kind: "unanimous"}`, `{kind: "majority", min}` or `{kind: "priority"}`), `by`,
+  `created`.
+
+The Viewer's fill `labels:<id>:0` colors cells by a curated or consensus set too. The Viewer's fill
 `labels:<artifact id>:<level>` colors cells by the label they carry at a level, from 0; saved views
 keep it.
 

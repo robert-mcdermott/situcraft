@@ -16,7 +16,8 @@ import { readCells } from '../lib/viewer-data.js';
 import { readSegCells } from '../lib/segview.js';
 import { fitView, insidePolygon, nearestPoint, pointGrid, pointsInPolygon, rasterize, toPixel, toPlane, valueColors, zoomAt } from '../lib/scatter.js';
 import { clusterColors, mapWarning, mergedOf, nameOf } from '../lib/clusterings.js';
-import { labelColor, labelColors, labelSetName, labelsPerCell } from '../lib/labels.js';
+import { labelColor, labelColors, labelSetName } from '../lib/labels.js';
+import { labelSource, labelVersions, perCell, refOf } from './label-sources.js';
 
 async function getJSON(url) {
   const response = await fetch(url, { cache: 'no-store' });
@@ -156,6 +157,7 @@ export function mountCellMap(app, host, ctx) {
         ...(r.summary?.levels ?? []).map((level, l) => h('option', { value: `labels:${r.id}:${l}` }, r.source ? `Labels: ${labelSetName(r)}` : `${labelSetName(r)}: ${level.toLowerCase()}`)),
         ...(!r.source || r.source.confidenceColumn ? [h('option', { value: `confidence:${r.id}` }, `${labelSetName(r)}: confidence`)] : []),
       ]),
+      ...labelVersions(app.store.project, state.ctx.dataset.id, state.ctx.segmentation.id).filter((v) => v.kind === 'curated' || v.kind === 'consensus').map((v) => h('option', { value: `labels:${v.id}:0` }, `${v.kind === 'curated' ? 'Curated' : 'Consensus'}: ${v.name}`)),
       ...(c.kind === 'score' ? [h('option', { value: `score:${c.labels}:${c.set}` }, `Score: ${c.name ?? 'a label'}`)] : []),
       h('option', { value: 'gene' }, 'A gene…'),
       ...ATTRIBUTE_COLORS.map((a) => h('option', { value: `attribute:${a.id}` }, a.label)),
@@ -238,13 +240,12 @@ export function mountCellMap(app, host, ctx) {
         }
       }
       if (c.kind === 'labels' || c.kind === 'confidence') {
-        const data = await app.bundles.labelData(c.labels);
-        const cells = data.cells;
-        if (cells.segCells !== n) throw new Error('the labels are of another segmentation');
-        const sets = data.description.sets;
+        const src = await labelSource(app, refOf(c.labels, c.level ?? 0));
+        if (src.segCells !== n) throw new Error('the labels are of another segmentation');
+        const sets = src.names.map((name, k) => ({ name, color: src.colors[k] }));
         if (c.kind === 'labels') {
           const unlabeled = sets.length;
-          const per = labelsPerCell(cells, c.level, unlabeled);
+          const per = perCell(src, unlabeled);
           state.colors = labelColors(per, unlabeled, sets);
           state.groups = per;
           const counts = new Map();
@@ -253,11 +254,10 @@ export function mountCellMap(app, host, ctx) {
             .map(([k, size]) => ({ name: k === unlabeled ? 'No label' : sets[k].name, color: labelColor(k, unlabeled, sets), cells: size, clusters: [k] }));
           state.legend = { kind: 'clusters', entries, labels: c.labels };
         } else {
-          const values = new Float32Array(n).fill(NaN);
-          for (let i = 0; i < cells.n; i += 1) values[cells.cells[i]] = cells.confidence[i];
+          const values = src.confidence ? Float32Array.from(src.confidence) : new Float32Array(n).fill(NaN);
           const [, hi] = percentiles(values);
           state.colors = valueColors(values, colormapLUT('viridis'), 0, hi || 1);
-          state.legend = { kind: 'scale', label: 'Confidence: how far each cell\'s label leads the next', lo: 0, hi: hi || 1, note: 'up to the 99th percentile; cells below 0 at the lowest' };
+          state.legend = { kind: 'scale', label: src.kind === 'consensus' ? 'The share of the sets agreeing on each cell\'s label' : 'Confidence: how far each cell\'s label leads the next', lo: 0, hi: hi || 1, note: 'up to the 99th percentile; cells below 0 at the lowest' };
         }
       } else if (c.kind === 'score') {
         const { name, values } = await app.bundles.labelScores(c.labels, c.set);

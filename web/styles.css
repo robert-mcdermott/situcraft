@@ -1098,6 +1098,20 @@ td div.studio-problem { padding: 2px 6px; margin-top: 4px; font-size: 11.5px; }
 .lb-naming .field { max-width: 360px; }
 .lb-naming .muted { font-size: 12.5px; flex: 1 1 260px; }
 .lb-labels td:first-child, .lb-composition td:first-child { white-space: nowrap; }
+/* Label versions and their review (ui/review-card.js) */
+.rv-evidence { margin-top: 12px; }
+.rv-evidence:empty { display: none; }
+.rv-head { font-size: 14px; margin: 4px 0 8px; }
+.rv-label { margin: 6px 0 10px; }
+.rv-genes { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.rv-gene { font-size: 12px; padding: 1px 7px; border-radius: 10px; border: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+.rv-for { background: color-mix(in srgb, var(--ok, #2e9d5b) 18%, transparent); border-color: color-mix(in srgb, var(--ok, #2e9d5b) 45%, transparent); }
+.rv-against { background: var(--danger-soft); border-color: color-mix(in srgb, var(--danger) 45%, transparent); }
+.rv-missing { color: var(--text-2); border-style: dashed; }
+.rv-decide { margin-top: 8px; }
+.rv-builder { margin: 10px 0; padding: 10px; border: 1px dashed var(--line); border-radius: 6px; }
+.rv-boxes { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.rv-table td.mono { white-space: nowrap; }
 .lb-import-row { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; margin: 8px 0; }
 .lb-import-row .field { flex: 1 1 320px; }
 .lb-edit-table td { vertical-align: top; }

@@ -20,14 +20,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
 	"situcraft/internal/cluster"
 	"situcraft/internal/label"
+	"situcraft/internal/random"
 	"situcraft/internal/segment"
 	"situcraft/internal/segment/imports"
 	"situcraft/internal/simulate"
@@ -358,5 +361,93 @@ func TestImportedLabelsMatchTheBundles(t *testing.T) {
 	}
 	if _, err := label.Import(tab, label.ImportSpec{IDColumn: "Barcode", Column: "Cluster"}, cells["xenium-breast-2fov"]); err == nil || !strings.Contains(err.Error(), fmt.Sprintf("%d of xenium-lung-2fov.csv's %d rows name cells this segmentation does not have", tab.Rows, tab.Rows)) {
 		t.Errorf("the Lung table for the Breast cells: %v", err)
+	}
+}
+
+// The review queue's recall (wave 4, slice 5): 3% of a tissue's labeled cells given another class
+// at random (seeded), each cell's agreement with its 10 nearest labeled cells, and the queue of the
+// implausible (at most 20% of them sharing its label, most sharing another): of the planted
+// mislabels, the share in the queue and in its first five times as many cells as were planted. On
+// the simulated tissue, whose domains mix their types, a mislabel the neighbors share cannot be
+// found by place; the Breast tissue's nests and stroma are more alike within.
+func TestReviewQueueFindsPlantedMislabels(t *testing.T) {
+	cases := []struct {
+		set               string
+		recall, recallTop float64
+	}{
+		{"simulated-standard", 0.72, 0.68},
+		{"xenium-breast-2fov", 0.92, 0.92},
+	}
+	for _, c := range cases {
+		t.Run(c.set, func(t *testing.T) {
+			dir := filepath.Join(dataRoot(), c.set)
+			if c.set == "simulated-standard" {
+				dir = simulatedStandard(t)
+			} else if bundle(t, c.set) == "" {
+				return
+			}
+			res, _ := labelSet(t, c.set, dir, t.TempDir())
+			b, err := xenium.Open(dir, xenium.Options{CacheDir: t.TempDir()})
+			if err != nil {
+				t.Fatal(err)
+			}
+			seg := filepath.Join(t.TempDir(), "instrument")
+			if err := os.MkdirAll(seg, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			_, err = imports.Instrument(context.Background(), b, seg, runtime.NumCPU())
+			b.Close()
+			if err != nil {
+				t.Fatal(err)
+			}
+			cells, err := segment.ReadCells(seg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			xy := make([]float64, 2*len(cells))
+			for i, cell := range cells {
+				xy[2*i], xy[2*i+1] = float64(cell.X), float64(cell.Y)
+			}
+			var classes []int32
+			for k, s := range res.Sets {
+				if s.Level == 0 && !s.State {
+					classes = append(classes, int32(k))
+				}
+			}
+			lab := make([]int32, len(cells))
+			for i := range lab {
+				lab[i] = -1
+			}
+			s := random.New(20251016, 0)
+			planted := map[int]bool{}
+			for j, cell := range res.Cells {
+				l := res.Assignment.At(0, j)
+				if l >= 0 && s.Float64() < 0.03 {
+					others := slices.DeleteFunc(slices.Clone(classes), func(x int32) bool { return x == l })
+					l = others[s.IntN(len(others))]
+					planted[int(cell)] = true
+				}
+				lab[cell] = l
+			}
+			share, dominant, err := label.Agreement(context.Background(), xy, lab, 10, runtime.NumCPU())
+			if err != nil {
+				t.Fatal(err)
+			}
+			items, counts := label.Queue(lab, share, dominant, nil, label.QueueOptions{Implausible: 0.2, LowConfidence: math.NaN()})
+			found, top := 0, 0
+			for r, it := range items {
+				if planted[it.Cell] {
+					found++
+					if r < 5*len(planted) {
+						top++
+					}
+				}
+			}
+			recall, recallTop := float64(found)/float64(len(planted)), float64(top)/float64(len(planted))
+			t.Logf("%s: %d of %d labeled cells planted; the queue %d cells (%.1f%%); recall %.3f, in its first %d %.3f", c.set, len(planted), counts.Labeled, len(items), 100*float64(len(items))/float64(counts.Labeled), recall, 5*len(planted), recallTop)
+			if recall < c.recall || recallTop < c.recallTop {
+				t.Errorf("recall %.3f (at least %.2f), in the queue's first %d %.3f (at least %.2f)", recall, c.recall, 5*len(planted), recallTop, c.recallTop)
+			}
+		})
 	}
 }

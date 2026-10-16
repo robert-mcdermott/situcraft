@@ -1845,6 +1845,70 @@ one level, each label an index among the labels and counted as described.
   remote control, those cells and no other labeled; a table naming another dataset's cell refused;
   the instrument's graph-based clusters imported, 11,897 cells in 17 clusters (viewer suite).
 
+### 5.5 Label versions, evidence and review (verified, wave 4, slice 5)
+
+**Versions.** A segmentation's cells carry predicted labels (from markers, §5.3; imported, §5.4),
+curated labels and consensus labels, each a label set the map, the tissue, the Viewer and the
+review treat alike (`ui/label-sources.js` resolves any of them to each cell's label):
+- **Curated:** a base set (any version, at a level) and a reviewer's edits appended to it — cells
+  relabeled, a clustering's clusters relabeled, or cells' labels accepted — each with its reason,
+  who and when (`lib/curation.js`). Edits are never changed or removed: undoing one is another edit.
+  SituCraft's choice: a decision is an edit of a curated set begun from the set reviewed, so the
+  predicted set stays as the method made it and the curated one says what changed and why.
+- **Consensus:** chosen sets, each one's labels mapped to common names where they name them
+  differently, and a rule: **unanimous** (every set labels the cell, all alike), **majority** (at
+  least a number of sets give the label, more than give any other; equal votes give none), or **in
+  order** (the first set's label, else the next's). A consensus's confidence is the share of its sets
+  agreeing.
+- **Side by side:** two versions' cross-table over the cells both label, with the share whose labels
+  have the same name.
+
+**The evidence of a cell's label** (`internal/label/evidence.go`, the page's evidence card): its
+label in every version; for labels from markers, at each level the label it took (or the best,
+where it stopped above) and the next, with each one's score and markers in the cell — each gene's
+transcripts and log-normalized value against its mean, and the controls' mean in the cell (as the
+recorded scores, to 10⁻⁶) — and, when most of its nearest cells carry another label, that label's
+evidence ("why not"); its neighbors' labels in the tissue (its 10 nearest labeled cells by
+centroid) and in expression (the clustering's 14 neighbors); its transcripts, genes, area and its
+segmentation's flags (few transcripts, uncertain boundary, no nucleus; boundary certainty); and its
+reviews.
+
+**The review queue** (`internal/label/review.go`): each labeled cell's agreement — the share of its
+k nearest labeled cells (by centroid, exactly, `internal/graph` KNN2D; 10 by default) carrying its
+label — and the label most of them carry. A cell is **spatially implausible** when at most a share
+(0.2) of them carry its label and most carry another; of **low confidence** when its confidence is
+below a threshold (labels from markers: the lead, by default under twice the margin; imported: the
+table's). The queue ranks cells flagged by both first, then the implausible by agreement, then the
+least confident; cells reviewed already are left out. Segmentation-sensitive cells join it with slice
+7. SituCraft's choice: the share agreeing, not a likelihood of the cell's label given its
+neighbors' labels against each label's usual neighborhood: on the Breast tissue's nests and stroma
+the share finds planted mislabels earlier (1% or 3% planted, 10 or 15 neighbors: 53% to 85% of them
+in the first twice as many cells as were planted, against 38% to 60%; 85% to 96% in the first five
+times as many, against 75% to 92%; on the simulated tissue the two alike), and it is said in plain
+words ("2 of 10 nearest share it; most are Epithelial").
+
+**Validation:**
+- **Consensus rules on built sets** (`lib/curation.test.mjs`): three sets naming labels differently,
+  mapped; unanimous, majority (with equal votes) and in order cell by cell; edits appended and applied
+  in order (a cluster edit over a cell edit, an acceptance); the cross-table and agreement by hand.
+- **The queue by hand** (`internal/label`): agreement on a grid (equal distances by index), the
+  queue's order and counts, the reviewed left out; a cell's evidence equal to its recorded scores.
+- **Planted mislabels** (`validation/labels_test.go`): 3% of a tissue's labeled cells given another
+  class at random (seeded), the queue at the defaults:
+
+| | Simulated (standard) | Breast 2-FOV |
+| --- | --- | --- |
+| Cells labeled; planted | 2,887; 97 | 5,821; 170 |
+| The queue (cells flagged) | 711 (24.6%) | 616 (10.6%) |
+| Planted found: in the queue; in its first five times as many | 75.3%; 70.1% | 94.7%; 94.7% |
+
+  The simulated tissue's domains mix their types, so a mislabel its neighbors share cannot be found
+  by place: the queue flags a quarter of its cells, and the evidence card is the review's.
+- **In the app:** the Lung labels' queue by remote control (the implausible in rising agreement, at
+  most 0.2); a cell relabeled with its reason, drawn in its new label's color and no other cell
+  changed; a consensus of the set and its curated version agreeing everywhere but on that cell
+  (viewer suite).
+
 ## 6. Spatial analysis (wave 6) and cohorts (wave 7)
 
 - **Graphs:**

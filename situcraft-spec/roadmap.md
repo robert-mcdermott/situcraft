@@ -1762,17 +1762,37 @@ same on every processor.
      - **In the app:** a table of three Lung cells imported by remote control, those cells and no
        other labeled; another dataset's table refused; the instrument's clusters imported (viewer
        suite).
-5. **Label versions, evidence and review (T6, T7, T8).**
-   - Predicted (markers, reference, imported), curated (a reviewer's relabeling of cells or
-     clusters, each with a reason, appended) and consensus (a rule over chosen sets) side by side,
-     in a table and on the tissue.
-   - The evidence card of a cell's label: confidence, supporting and contradicting markers,
-     counts, source, the labels of its neighbors in the tissue and in expression, its review
-     status, and its segmentation's flags.
-   - The review queue: low confidence, spatially implausible (a label its tissue neighbors rarely
-     share), segmentation-sensitive (slice 7). Reviewed cells are kept with who, when and why.
-   - Validation: consensus rules on built fixtures; on simulated tissues with planted mislabels,
-     the queue's recall.
+5. **Label versions, evidence and review (T6, T7, T8): done** (segmentation-sensitive cells with
+   slice 7).
+   - **Versions** (`lib/curation.js`, `ui/label-sources.js`; research.md §5.5): predicted (from
+     markers, imported), curated (a base set and a reviewer's edits — cells or clusters relabeled,
+     labels accepted — appended with reason, who and when) and consensus (chosen sets, their labels
+     mapped to common names, by unanimity, majority or order), each on the map, the tissue and the
+     Viewer; any two side by side in a cross-table with their agreement.
+   - **The evidence card** of a cell: its label in every version; from markers, at each level the
+     label taken and the next with their markers' transcripts in the cell against their means and
+     controls, and why not the label most of its neighbors carry; its neighbors' labels in the
+     tissue and in expression; its transcripts, area and segmentation's flags; its reviews. A cell
+     chosen on the map or the tissue, or in the queue (`internal/label/evidence.go`).
+   - **The review queue** (`internal/label/review.go`): cells whose label at most a share of their
+     nearest labeled cells carry (most carrying another), and of low confidence, ranked, the
+     reviewed left out; accepted or relabeled with a reason, the next shown.
+   - Remote control: `review_labels`, `label_evidence`, `curate_labels`, `consensus_labels`;
+     `show_map` and `show_tissue` color by curated and consensus sets.
+   - Validation:
+     - **Consensus rules on built sets**, edits applied in order, the cross-table by hand
+       (`lib/curation.test.mjs`); the queue and agreement by hand, a cell's evidence equal to its
+       recorded scores (`internal/label`).
+     - **Planted mislabels** (3% of the cells given another class): the queue finds 75% of them on
+       the standard simulated tissue (70% in its first five times as many cells as were planted;
+       its domains mix their types), 95% on the Breast tissue (checked weekly).
+     - **In the app:** the Lung labels' queue by remote control; a cell relabeled with its reason
+       drawn so and no other changed; a consensus (viewer suite).
+   - Found by slice 5:
+     - **On a tissue whose domains mix their types, place finds few mislabels:** the simulated
+       tissue's queue flags a quarter of its cells. Ranking by the share of neighbors agreeing finds
+       planted mislabels earlier on Breast than a likelihood against each label's usual
+       neighborhood, and is said in plain words.
 6. **Mapping to a reference (T5, optional).**
    - A labeled single-cell reference (AnnData Zarr, or label-by-gene profiles as CSV or Parquet)
      restricted to the panel's genes, the shared genes reported; each cell correlated with each

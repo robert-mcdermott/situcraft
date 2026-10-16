@@ -377,6 +377,14 @@ segmentation, made by a job, named by its inputs and parameters, and checked bef
   of kind `labels` with its source in place of a marker set (one level, no scores, every cell of
   the segmentation), so that the map, the tissue, the Viewer and each cluster's labels treat it as
   any label set; its composition is counted in the page for the clustering shown.
+- **Label versions and review** (slice 5): curated sets (a base and a reviewer's edits, appended
+  with reasons) and consensus sets (a rule over chosen sets) are the project's records
+  (`lib/curation.js`), resolved with the predicted sets to each cell's label in the page
+  (`ui/label-sources.js`) for the map, the tissue, the Viewer and side-by-side tables. The program
+  ranks the review queue for any labels the page sends (`internal/label/review.go`: each cell's
+  agreement with its nearest labeled cells, `internal/graph`'s exact two-dimensional neighbors) and
+  answers a cell's evidence from markers (`evidence.go`); the evidence card and the decisions are
+  the page's (`ui/review-card.js`).
 - **The Cell types view** (`ui/mode-celltypes.js`, `lib/clusterings.js`) runs a clustering and
   shows its clusters, names, markers (a table and a dot plot) and the components' variances, and
   compares two clusterings. **The map and the tissue** (`ui/cell-map.js`, `lib/scatter.js`): the map

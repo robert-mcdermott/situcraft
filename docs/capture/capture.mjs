@@ -335,6 +335,20 @@ const scenes = {
     await scrollTo('.lb-shown', 'start');
     await sleep(300);
   },
+  // The Breast example's labels reviewed (wave 4, slice 5): the queue, and the first cell's
+  // evidence — its markers, why not its neighbors' label, its neighbors.
+  async review() {
+    await act('open_example', { example: 'breast' });
+    await act('cluster_cells', {});
+    await act('label_cells', { markers: 'breast' });
+    await waitFor(`Boolean(document.querySelector('[data-action=review-queue]'))`);
+    await js(`document.querySelector('[data-action=review-queue]').click()`);
+    await waitFor(`Boolean(document.querySelector('.rv-table tbody tr'))`);
+    await js(`document.querySelector('.rv-table tbody tr').click()`);
+    await waitFor(`Boolean(document.querySelector('.rv-evidence .rv-decide'))`);
+    await scrollTo('.rv-evidence', 'start');
+    await sleep(300);
+  },
   // The Breast example's clusters on the tissue (wave 4, slice 1): the cells filled by cluster,
   // with the legend.
   async clusters() {

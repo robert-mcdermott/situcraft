@@ -19,7 +19,8 @@ import { defaultChoice, readSegCells, segmentationChoices } from '../lib/segview
 import { hexColor } from '../render/gl.js';
 import { categoricalColor } from '../lib/colormaps.js';
 import { clusterColors, clusterFills, clusterNames, mergedOf, nameOf } from '../lib/clusterings.js';
-import { labelColor, labelColors, labelFills, labelsPerCell, parseLabelFill } from '../lib/labels.js';
+import { labelColor, labelColors, labelFills, parseLabelFill } from '../lib/labels.js';
+import { labelSource, labelVersions, perCell, refOf } from './label-sources.js';
 
 // Per dataset id: { camera, layers, selected } for the session.
 const sessions = new Map();
@@ -178,7 +179,9 @@ export function mountViewer(app, container) {
     const choices = () => segmentationChoices(app.store.project, t.dataset.id);
     const drawnChoice = () => state.seg?.choice ?? choices().find((c) => c.instrument) ?? null;
     // What the panel lists: the segmentations, and the drawn one's clusterings.
-    const analysisFills = () => [...clusterFills(app.store.project, t.dataset.id, drawnChoice()?.id), ...labelFills(app.store.project, t.dataset.id, drawnChoice()?.id)];
+    // Curated and consensus label sets, drawn as labels at one level.
+    const versionFills = () => labelVersions(app.store.project, t.dataset.id, drawnChoice()?.id).filter((v) => v.kind === 'curated' || v.kind === 'consensus').map((v) => ({ id: `labels:${v.id}:0`, labels: v.id, level: 0, label: `${v.kind === 'curated' ? 'Curated' : 'Consensus'} labels: ${v.name}` }));
+    const analysisFills = () => [...clusterFills(app.store.project, t.dataset.id, drawnChoice()?.id), ...labelFills(app.store.project, t.dataset.id, drawnChoice()?.id), ...versionFills()];
     const choiceKey = () => `${choices().map((c) => `${c.id}${c.isDefault ? '*' : ''}`).join()}|${analysisFills().map((f) => f.id).join()}`;
 
     function mountPanel(start) {
@@ -204,21 +207,28 @@ export function mountViewer(app, container) {
     function applyFill() {
       const fill = state.layers.cells.fill;
       state.clusterFill = null;
+      // Every change of fill: a clustering's or labels' colors read for an earlier one are dropped.
+      const mine = (state.fillGeneration = (state.fillGeneration ?? 0) + 1);
       const asLabels = parseLabelFill(fill);
       if (asLabels) {
-        const mine = (state.fillGeneration = (state.fillGeneration ?? 0) + 1);
         renderer.setCellColors(null);
-        app.bundles.labelData(asLabels.id).then((data) => {
+        labelSource(app, refOf(asLabels.id, asLabels.level)).then((src) => {
           if (mine !== state.fillGeneration || current !== state) return;
-          if (data.cells.segCells !== renderer.cells?.n) {
-            toast(`The labels are of another segmentation's ${formatCount(data.cells.segCells)} cells; ${formatCount(renderer.cells?.n ?? 0)} are drawn.`, { kind: 'error' });
+          if (src.segCells !== renderer.cells?.n) {
+            toast(`The labels are of another segmentation's ${formatCount(src.segCells)} cells; ${formatCount(renderer.cells?.n ?? 0)} are drawn.`, { kind: 'error' });
             return;
           }
-          const sets = data.description.sets;
-          const per = labelsPerCell(data.cells, asLabels.level, sets.length);
+          const sets = src.names.map((name, k) => ({ name, color: src.colors[k] }));
+          const per = perCell(src, sets.length);
           const counts = new Map();
-          for (const k of per) if (k >= 0) counts.set(k, (counts.get(k) ?? 0) + 1);
-          state.clusterFill = { labels: true, unlabeled: sets.length, sets, counts, analyzed: data.cells.n, cells: per.length, name: labelFills(app.store.project, t.dataset.id, drawnChoice()?.id).find((f) => f.id === fill)?.label ?? 'Labels', rgba: labelColors(per, sets.length, sets) };
+          let analyzed = 0;
+          for (const k of per) {
+            if (k >= 0) {
+              counts.set(k, (counts.get(k) ?? 0) + 1);
+              analyzed += 1;
+            }
+          }
+          state.clusterFill = { labels: true, unlabeled: sets.length, sets, counts, analyzed, cells: per.length, name: [...labelFills(app.store.project, t.dataset.id, drawnChoice()?.id), ...versionFills()].find((f) => f.id === fill)?.label ?? src.name, rgba: labelColors(per, sets.length, sets) };
           renderer.setCellColors(state.clusterFill.rgba);
           updateLegend();
         }).catch((error) => toast(`The labels could not be drawn: ${error.message}`, { kind: 'error' }));
@@ -229,7 +239,6 @@ export function mountViewer(app, container) {
         return;
       }
       const id = fill.slice('clusters:'.length);
-      const mine = (state.fillGeneration = (state.fillGeneration ?? 0) + 1);
       renderer.setCellColors(null);
       app.bundles.clusteringData(id).then((data) => {
         if (mine !== state.fillGeneration || current !== state) return;

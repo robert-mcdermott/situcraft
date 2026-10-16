@@ -84,14 +84,15 @@ const SECTIONS = [
   },
   {
     kind: 'labels', title: 'Label sets', icon: 'tag',
-    items: (project) => project.artifacts.filter((a) => a.kind === 'labels'),
+    items: (project) => project.artifacts.filter((a) => a.kind === 'labels' || a.kind === 'curated-labels' || a.kind === 'consensus-labels'),
     label: (a, app) => {
+      if (a.kind !== 'labels') return a.name;
       if (a.source) return labelSetName(a);
       const c = app.store.project.artifacts.find((x) => x.kind === 'clustering' && x.id === a.clustering);
       return `${a.markers?.name ?? 'Labels'} · ${c?.summary?.source ? 'instrument' : `resolution ${c?.parameters?.resolution ?? '?'}`}`;
     },
-    itemIcon: (a) => (a.state === 'complete' ? 'tag' : 'warning'),
-    meta: (a) => (a.state === 'complete' && a.summary?.cells ? `${Math.round((100 * (a.summary.labeled?.[0] ?? 0)) / a.summary.cells)}% labeled` : a.state),
+    itemIcon: (a) => (a.kind === 'curated-labels' ? 'edit' : a.kind === 'consensus-labels' ? 'layers' : a.state === 'complete' ? 'tag' : 'warning'),
+    meta: (a) => (a.kind === 'curated-labels' ? `${a.edits.length} edit${a.edits.length === 1 ? '' : 's'}` : a.kind === 'consensus-labels' ? a.rule.kind : a.state === 'complete' && a.summary?.cells ? `${Math.round((100 * (a.summary.labeled?.[0] ?? 0)) / a.summary.cells)}% labeled` : a.state),
     empty: 'Cells labeled from marker genes or imported from a table, each label set kept with what it came from.',
   },
   {

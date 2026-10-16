@@ -512,6 +512,31 @@ clusters of the Lung example split among the instrument's), names for the cluste
 map, the tissue and the Viewer colored by them, and a label's cells selected when you choose it.
 Its file is recorded by its SHA-256, so the project says exactly what was imported.
 
+### Reviewing labels
+
+Labels are predictions. Under **Label versions** each label set of the segmentation is listed:
+from markers, imported, curated and consensus. **Curate** begins a curated set from a predicted one:
+its labels, with your changes appended, each with its reason, who made it and when (the predicted
+set stays as the method made it). **Make a consensus…** combines sets by a rule: unanimous (every
+set gives the label), majority (at least so many sets, more than any other label) or in order (the
+first set's label, else the next's); labels the sets name differently can be mapped to a common
+name. Any two versions are compared **side by side** in a table of their labels.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/review-dark.webp">
+  <img alt="The review of the Breast example's labels: a cell in a tumor cluster labeled Stromal though all ten of its nearest cells are Epithelial, with its evidence: Stromal led Immune by 0.12, its markers in the cell (PDGFRB 2, SFRP4 2, and EPCAM 9 counted against it), why not Epithelial (its markers 0.50 against their controls' 0.75), its neighbors' labels, and the buttons to accept or relabel it" src="images/review-light.webp">
+</picture>
+
+**Review** ranks the cells to look at first: those whose label few of their nearest cells in the
+tissue share while most share another (a lone label among others is often a mislabel, two cells in
+one outline, or a cell at a boundary), and those of low confidence. Choose a cell, in the list or
+on the map or the tissue, to see its **evidence**: its label in every version; for labels from
+markers, why it took its label and not the next, gene by gene in the cell (green, a marker it
+expresses; red, a negative marker it expresses), and why not the label its neighbors carry; its
+neighbors' labels in the tissue and in expression; its transcripts and its segmentation's flags.
+**Accept** its label or **Relabel** it, saying why; the decision is added to a curated set and the
+next cell is shown.
+
 ## Keyboard
 
 | Action | Keys |

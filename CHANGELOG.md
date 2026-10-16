@@ -83,6 +83,20 @@ Wave 4 of the [roadmap](situcraft-spec/roadmap.md): cell identities with their e
   - **Validated** on files written by pandas, pyarrow and anndata, read exactly, and on both
     development bundles: their graph-based clusters, imported as a table, every cell its cluster.
 
+- **Label versions, evidence and review (wave 4, slice 5).**
+  - **Versions side by side:** curated labels (a predicted set and a reviewer's changes, each with
+    its reason, who and when, appended) and consensus labels (a rule — unanimous, majority, in order
+    — over chosen sets, their labels mapped to common names), shown on the map, the tissue and the
+    Viewer like any label set; any two compared in a cross-table.
+  - **A cell's evidence:** its label in every version; from markers, why it took its label and not
+    the next, or not the one its neighbors carry, gene by gene in the cell; its neighbors' labels in
+    the tissue and in expression; its counts and its segmentation's flags; its reviews.
+  - **The review queue:** cells whose label their nearest cells rarely share, and cells of low
+    confidence, the most doubtful first; accept or relabel each, saying why.
+  - **Remote control:** `review_labels`, `label_evidence`, `curate_labels`, `consensus_labels`.
+  - **Validated** on built sets (the consensus rules), and on planted mislabels: the queue finds 95%
+    of them on the Breast tissue and 75% on the simulated one, whose domains mix their types.
+
 ### Changed
 
 - **A comparison can be removed from its project** (the inspector's **Remove**). The project's
