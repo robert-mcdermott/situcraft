@@ -366,7 +366,7 @@ clipboard to run where Xenium Ranger is installed.
 
 Long work runs as a job: building derived data, downloading an example, registering a
 segmentation, expanding nuclei, importing, comparing or exporting segmentations, planting errors,
-clustering cells.
+clustering cells, mapping them, adding the instrument's clusters.
 The **Jobs** view shows what runs and waits, what finished, and each job's log and spec. Jobs keep
 running when the window reloads, and closing the window while one runs asks first. If SituCraft
 stops (or the computer does) in the middle of a job, the job is shown as interrupted
@@ -404,13 +404,47 @@ higher its expression is (log₂ fold change), the share of cells expressing the
 it, and the rank-sum test's score and adjusted p-value. These are exploratory: the cells of one
 tissue are not independent replicates, so the p-values rank genes rather than test them.
 
-**Show on the tissue** opens the Viewer with the cells filled by cluster and a legend. The Viewer's
+**Show in the Viewer** opens the Viewer with the cells filled by cluster and a legend. The Viewer's
 **Fill by** lists every clustering of the segmentation drawn, and a saved view keeps the one shown.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/clusters-dark.webp">
   <img alt="The Breast example in the Viewer, its cells filled by their cluster: tumour nests and stroma in different clusters, with the clusters' legend" src="images/clusters-light.webp">
 </picture>
+
+### The map and the tissue
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/cellmap-dark.webp">
+  <img alt="The Cell types view of the Breast example: the map of the cells (UMAP) beside the tissue, colored by cluster with some clusters named, the T cells selected on both, the selection's composition below" src="images/cellmap-light.webp">
+</picture>
+
+Each clustering comes with a **map** (UMAP, made at once, a few seconds for the examples): cells
+with similar expression lie near each other. It sits beside the tissue, and the two are linked:
+- **Color by** a clustering's clusters (any clustering of the segmentation), a gene (type its
+  name), the cells' gene transcripts or area, or how faithfully the map keeps each region's
+  neighbors.
+- **Select cells** on either side with the **Lasso** (shift adds to the selection), or by clicking
+  a cluster in the legend or the table: the cells are selected on both, the others faint. Click a
+  cell on the map to find it on the tissue, or on the tissue to mark it on the map.
+- **Markers of the selection** compares the selected cells with the clustering's other cells, as the
+  clusters' markers are computed: what distinguishes a region you drew.
+
+A map shows which cells are alike, not how alike: distances between groups, and their sizes, mean
+little. Under the map, SituCraft says how far this one can be trusted, from its trustworthiness and
+how many of each cell's nearest neighbors in expression stay near it on the map.
+
+**Name** clusters in the table (a T-cell cluster, a tumour cluster): names show on the map, the
+tissue and the legends, and giving several clusters the same name merges them. Each change is a
+new version of the names, kept in the project's history; the clusters keep their numbers. The
+**dot plot** shows each cluster's two leading markers across all clusters: dot size, the share of
+cells expressing the gene; color, its mean expression.
+
+**The instrument's clusters:** the bundle holds the instrument's own analysis (graph-based clusters,
+and k-means for 2 to 10 clusters, with its own map). **Add** one to explore it here like any
+clustering (SituCraft computes its markers), and the instrument's map comes with the first.
+**Two clusterings compared** cross-tabulates any two clusterings of the same cells, with the
+adjusted Rand index (1: the same partition; about 0: as alike as chance).
 
 ## Keyboard
 

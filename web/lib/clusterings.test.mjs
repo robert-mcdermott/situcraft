@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createProject } from './project.js';
-import { addClustering, checkParameters, clusterColors, clusterFills, clusterName, clusteringRecord, clusteringsOf, describeClustering, filterRequest } from './clusterings.js';
+import { addClustering, addEmbedding, checkParameters, clusterColors, clusterFills, clusterName, clusterNames, clusteringRecord, clusteringsOf, contingency, describeClustering, embeddingRecord, filterRequest, mapWarning, mapsOf, mergedOf, nameClusters, nameOf } from './clusterings.js';
 import { keepChecksum } from './filters.js';
 import { categoricalColor } from './colormaps.js';
 
@@ -68,4 +68,47 @@ test('parameters are checked as the program checks them', () => {
   assert.match(checkParameters({ ...good, neighbors: 15.5 }), /Neighbors/);
   assert.match(checkParameters({ ...good, resolution: 0 }), /Resolution/);
   assert.match(checkParameters({ ...good, minTranscripts: NaN }), /Gene transcripts at least/);
+});
+
+test('names are versions, appended; the same name merges clusters', () => {
+  let p = addClustering(project(), clusteringRecord({ id: 'd1' }, manifest, NOW), NOW);
+  assert.equal(clusterNames(p, 'clu-1'), null);
+  assert.equal(nameOf(null, 2), 'Cluster 3');
+  p = nameClusters(p, { clustering: 'clu-1', names: ['T cells', '', 'T cells'], now: NOW });
+  const v1 = clusterNames(p, 'clu-1');
+  assert.equal(v1.version, 1);
+  assert.equal(v1.names.length, 29, 'a name or null for every cluster');
+  assert.deepEqual(v1.names.slice(0, 3), ['T cells', null, 'T cells']);
+  assert.match(p.history.at(-1).detail, /version 1\): Cluster 1 "T cells", Cluster 3 "T cells"/);
+  assert.deepEqual(mergedOf(v1, 4), [0, 1, 0, 3]);
+  assert.equal(nameClusters(p, { clustering: 'clu-1', names: v1.names, now: NOW }), p, 'no change, no version');
+  const names = [...v1.names];
+  names[2] = 'Dividing T cells';
+  p = nameClusters(p, { clustering: 'clu-1', names, now: NOW });
+  const v2 = clusterNames(p, 'clu-1');
+  assert.equal(v2.version, 2);
+  assert.equal(v2.parent, v1.id);
+  assert.equal(p.artifacts.filter((a) => a.kind === 'cluster-names').length, 2, 'the first version kept');
+  assert.throws(() => nameClusters(p, { clustering: 'clu-9', names: [] }), /no such clustering/);
+});
+
+test('a map is recorded with its segmentation and clustering', () => {
+  const m = { id: 'emb-1', kind: 'embedding', name: 'Map of Clusters', state: 'complete', created: NOW, lineage: { parents: [{ kind: 'bundle', id: 'b' }, { kind: 'segmentation', id: 'seg-a' }, { kind: 'clustering', id: 'clu-1' }], method: { name: 'SituCraft UMAP', version: '1' } }, summary: { trustworthiness: 0.7769, precision: 0.15, recall: 0.24 } };
+  let p = addEmbedding(project(), embeddingRecord({ id: 'd1' }, m, NOW), NOW);
+  assert.deepEqual(mapsOf(p, 'd1', 'seg-a').map((x) => x.clustering), ['clu-1']);
+  assert.match(p.history.at(-1).detail, /trustworthiness 0.777 \(artifact emb-1\)/);
+  assert.equal(addEmbedding(p, embeddingRecord({ id: 'd1' }, m, NOW), NOW), p);
+  assert.equal(mapWarning(m.summary).level, 'warning');
+  assert.match(mapWarning(m.summary).text, /distorts much \(trustworthiness 0.777\): a cell's 15 nearest cells in expression are, on average, 24% among its 75 nearest/);
+  assert.equal(mapWarning({ trustworthiness: 0.95 }).level, 'info');
+  assert.equal(mapWarning(null), null);
+});
+
+test('two clusterings compared: the contingency and the adjusted Rand index', () => {
+  // scikit-learn's adjusted_rand_score([0,0,1,1],[0,0,1,2]) is 4/7; cells either leaves out are not counted.
+  const ct = contingency(Int32Array.from([0, 0, 1, 1, -1, 0]), Int32Array.from([0, 0, 1, 2, 1, -1]), 2, 3);
+  assert.equal(ct.cells, 4);
+  assert.deepEqual(ct.table, [[2, 0, 0], [0, 1, 1]]);
+  assert.ok(Math.abs(ct.ari - 4 / 7) < 1e-15);
+  assert.equal(contingency(Int32Array.from([0, 1, 1]), Int32Array.from([5 - 5, 1, 1]), 2, 2).ari, 1);
 });

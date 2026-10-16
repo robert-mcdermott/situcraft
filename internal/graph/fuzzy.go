@@ -158,3 +158,33 @@ func Fuzzy(nb *Neighbors) (*CSR, error) {
 	}
 	return g, nil
 }
+
+// Components labels each node with its connected component (numbered in order of their lowest
+// node) and answers the count.
+func Components(g *CSR) ([]int32, int) {
+	label := make([]int32, g.N)
+	for i := range label {
+		label[i] = -1
+	}
+	count := int32(0)
+	stack := []int32{}
+	for s := 0; s < g.N; s++ {
+		if label[s] >= 0 {
+			continue
+		}
+		label[s] = count
+		stack = append(stack[:0], int32(s))
+		for len(stack) > 0 {
+			v := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+			for e := g.Offsets[v]; e < g.Offsets[v+1]; e++ {
+				if u := g.Targets[e]; label[u] < 0 {
+					label[u] = count
+					stack = append(stack, u)
+				}
+			}
+		}
+		count++
+	}
+	return label, int(count)
+}

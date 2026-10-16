@@ -5,7 +5,7 @@
 // project: the project keeps each dataset's summary and findings (lib/datasets.js).
 
 import { openPaths } from './storage.js';
-import { addClustering, clusteringRecord } from '../lib/clusterings.js';
+import { addClustering, addEmbedding, clusteringRecord, embeddingRecord } from '../lib/clusterings.js';
 import { addDataset, compareFingerprint, datasetRecord, findDataset, relocateDataset, removeDataset } from '../lib/datasets.js';
 import { addComparison, addExport, addSegmentation, comparisonRecord, exportRecord, removeComparison as withoutComparison, segmentationRecord, segmentationsOf, withInstrumentSegmentation } from '../lib/segmentations.js';
 
@@ -386,6 +386,131 @@ export function createBundles(app) {
     return entry.promise;
   }
 
+  // Lays out a clustering's cells on a map (api_maps.go), unless it was made already; recorded in
+  // the project. Answers its manifest.
+  const mapping = new Map(); // clustering id → { dataset, clustering, job, promise }
+  function makeMap(item, datasetId, clustering, parameters = null) {
+    if (mapping.has(clustering)) return mapping.get(clustering).promise;
+    const entry = { dataset: datasetId, clustering, job: null, promise: null };
+    entry.promise = (async () => {
+      try {
+        const answer = await getJSON(`${item.url}/embed`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clustering, ...(parameters ? { parameters } : {}) }) });
+        let manifest = answer.artifact;
+        if (!manifest) {
+          entry.job = answer.job?.id ?? null;
+          notify();
+          const job = await app.jobs.finished(entry.job);
+          if (job?.state !== 'complete') throw new Error(`the map ${job?.state ?? 'ended'}${job?.error ? `: ${job.error}` : ''}`);
+          manifest = await getJSON(`/api/artifacts/${encodeURIComponent(answer.id)}`);
+        }
+        const dataset = app.store.project.datasets.find((d) => d.id === datasetId);
+        if (!dataset) throw new Error('the dataset is no longer in the project');
+        const next = addEmbedding(app.store.project, embeddingRecord(dataset, manifest));
+        if (next !== app.store.project) app.store.commit(next, `Map the cells of ${dataset.name}`);
+        return manifest;
+      } finally {
+        mapping.delete(clustering);
+        notify();
+      }
+    })();
+    mapping.set(clustering, entry);
+    notify();
+    return entry.promise;
+  }
+
+  // The instrument's analysis in a bundle: its clusterings, each with its artifact once registered.
+  function instrumentAnalysis(item) {
+    return getJSON(`${item.url}/analysis`);
+  }
+
+  // Registers one of the instrument's clusterings (and its map, the first time), recording both in
+  // the project. Answers the clustering's manifest.
+  const registeringAnalysis = new Map(); // `${dataset}|${name}` → { job, promise }
+  function registerInstrumentClusters(item, datasetId, name) {
+    const key = `${datasetId}|${name}`;
+    if (registeringAnalysis.has(key)) return registeringAnalysis.get(key).promise;
+    const entry = { dataset: datasetId, name, job: null, promise: null };
+    entry.promise = (async () => {
+      try {
+        const answer = await getJSON(`${item.url}/analysis`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clustering: name }) });
+        if (!answer.artifact) {
+          entry.job = answer.job?.id ?? null;
+          notify();
+          const job = await app.jobs.finished(entry.job);
+          if (job?.state !== 'complete') throw new Error(`registering the instrument's clusters ${job?.state ?? 'ended'}${job?.error ? `: ${job.error}` : ''}`);
+        }
+        const manifest = await getJSON(`/api/artifacts/${encodeURIComponent(answer.id)}`);
+        const listed = await instrumentAnalysis(item);
+        const dataset = app.store.project.datasets.find((d) => d.id === datasetId);
+        if (!dataset) throw new Error('the dataset is no longer in the project');
+        let next = addClustering(app.store.project, clusteringRecord(dataset, manifest));
+        if (listed.map?.artifact) {
+          const mapManifest = await getJSON(`/api/artifacts/${encodeURIComponent(listed.map.artifact)}`);
+          next = addEmbedding(next, embeddingRecord(dataset, mapManifest));
+        }
+        if (next !== app.store.project) app.store.commit(next, `Register the instrument's clusters of ${dataset.name}`);
+        return manifest;
+      } finally {
+        registeringAnalysis.delete(key);
+        notify();
+      }
+    })();
+    registeringAnalysis.set(key, entry);
+    notify();
+    return entry.promise;
+  }
+
+  // A map's cells, places and scores, kept for the session.
+  const maps = new Map();
+  function mapData(id) {
+    if (!maps.has(id)) {
+      const p = (async () => {
+        const response = await fetch(`/api/embeddings/${encodeURIComponent(id)}/map`);
+        if (!response.ok) throw new Error(`the map: HTTP ${response.status}`);
+        const buffer = await response.arrayBuffer();
+        const head = new Uint32Array(buffer, 0, 2);
+        const n = head[0];
+        return { n, segCells: head[1], cells: new Uint32Array(buffer, 8, n), xy: new Float32Array(buffer, 8 + 4 * n, 2 * n), score: new Float32Array(buffer, 8 + 12 * n, n) };
+      })();
+      p.catch(() => maps.delete(id));
+      maps.set(id, p);
+    }
+    return maps.get(id);
+  }
+
+  // A gene's log-normalized value in each of a segmentation's cells, by a clustering's normalization
+  // (NaN for cells it did not analyze); the last few kept.
+  const genes = new Map();
+  function expression(item, clustering, gene) {
+    const key = `${clustering}|${gene}`;
+    if (!genes.has(key)) {
+      const p = (async () => {
+        const response = await fetch(`${item.url}/clusterings/${encodeURIComponent(clustering)}/expression?gene=${encodeURIComponent(gene)}`);
+        if (!response.ok) {
+          const body = await response.json().catch(() => ({}));
+          throw new Error(body.error ?? `HTTP ${response.status}`);
+        }
+        return { gene: response.headers.get('X-Gene') ?? gene, values: new Float32Array(await response.arrayBuffer()) };
+      })();
+      p.catch(() => genes.delete(key));
+      genes.set(key, p);
+      while (genes.size > 12) genes.delete(genes.keys().next().value);
+    }
+    return genes.get(key);
+  }
+  function dotPlot(item, clustering, list) {
+    return getJSON(`${item.url}/clusterings/${encodeURIComponent(clustering)}/dotplot?genes=${encodeURIComponent(list.join(','))}`);
+  }
+  // The markers of a selection of cells (a mask over the segmentation's cells) against the rest.
+  function contrast(item, clustering, mask) {
+    const bytes = new Uint8Array(4 + Math.ceil(mask.length / 8));
+    new DataView(bytes.buffer).setUint32(0, mask.length, true);
+    for (let i = 0; i < mask.length; i += 1) if (mask[i]) bytes[4 + (i >> 3)] |= 1 << (i & 7);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    return getJSON(`${item.url}/clusterings/${encodeURIComponent(clustering)}/contrast`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cells: btoa(binary) }) });
+  }
+
   // A clustering's description, each cell's cluster (Int32Array over the segmentation's cells, −1
   // for one not analyzed) and its markers, kept for the session.
   const clusterData = new Map();
@@ -561,6 +686,17 @@ export function createBundles(app) {
     clusterCells,
     clusteringData,
     clusteringMarkers,
+    makeMap,
+    mapData,
+    instrumentAnalysis,
+    registerInstrumentClusters,
+    expression,
+    dotPlot,
+    contrast,
+    // The maps under way of a dataset: [{ clustering, job }].
+    mappings: (id) => [...mapping.values()].filter((e) => e.dataset === id).map(({ clustering, job }) => ({ clustering, job })),
+    // The instrument's clusterings being registered: [{ name, job }].
+    registeringAnalysis: (id) => [...registeringAnalysis.values()].filter((e) => e.dataset === id).map(({ name, job }) => ({ name, job })),
     // The clusterings of a dataset under way: [{ segmentation, job }].
     clusterings: (id) => [...clustering.values()].filter((e) => e.dataset === id).map(({ segmentation, job }) => ({ segmentation, job })),
     plantErrors,

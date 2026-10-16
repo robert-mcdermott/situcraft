@@ -532,6 +532,49 @@ export async function viewerSuite({ check, MissingData, verbose }) {
           return { cells: cells.cluster.length, drawn: v.cellsDrawn().n, wrong, clear, clusters: cells.clusters, legend: document.querySelectorAll('.viewer-legend-item').length };
         })()`);
         check('viewer', 'remote control: cluster_cells clusters the Lung cells, and the tissue shows each cell in its cluster\'s color', clustered.ok && shownClusters.ok ? `${clustered.message} ${JSON.stringify(clusterFill)}` : clustered.message ?? shownClusters.message, clustered.ok && clustered.data.cells.analyzed === 11820 && clusterFill?.cells === 11898 && clusterFill.drawn === 11898 && clusterFill.wrong === 0 && clusterFill.clear === 78 && clusterFill.legend >= Math.min(24, clusterFill.clusters), 'every cell in its cluster\'s color, the 78 not analyzed clear, a legend');
+        // The map (wave 4, slice 2): the clustering's map beside the tissue; a cluster selected is
+        // exactly its cells on both, and a polygon drawn on the map selects exactly the cells whose
+        // places lie inside it, highlighted on the tissue.
+        const mapShown = await act('show_map', { dataset: 'xenium-lung-2fov', select: { clusters: [2] } });
+        const linked = await chrome.eval(`(async () => {
+          const v = window.situcraft.cellTypesView;
+          const map = v.map();
+          const st = map.state;
+          const cells = await fetch('/api/clusterings/' + st.color.clustering + '/cells').then((r) => r.json());
+          let wrong = 0;
+          let size = 0;
+          for (let i = 0; i < cells.cluster.length; i += 1) {
+            const want = cells.cluster[i] === 1 ? 1 : 0;
+            size += want;
+            if (st.selected[i] !== want) wrong += 1;
+          }
+          const highlight = Boolean(st.renderer.highlight);
+          // A polygon around the middle of the map's places.
+          const data = st.map;
+          let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+          for (let i = 0; i < data.n; i += 1) { x0 = Math.min(x0, data.xy[2 * i]); x1 = Math.max(x1, data.xy[2 * i]); y0 = Math.min(y0, data.xy[2 * i + 1]); y1 = Math.max(y1, data.xy[2 * i + 1]); }
+          const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, rx = (x1 - x0) / 4, ry = (y1 - y0) / 4;
+          const polygon = [[cx - rx, cy - ry], [cx + rx, cy - ry], [cx + rx, cy + ry], [cx - rx, cy]];
+          // Drawn pixels on the map.
+          const canvas = document.querySelector('.cm-map');
+          const px = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+          let drawn = 0;
+          for (let i = 3; i < px.length; i += 4) if (px[i] > 0) drawn += 1;
+          return { wrong, size, count: st.count, highlight, polygon, segCells: data.segCells, drawn };
+        })()`);
+        const lassoed = await act('show_map', { dataset: 'xenium-lung-2fov', select: { polygon: linked.polygon, on: 'map' } });
+        const inside = await chrome.eval(`(async () => {
+          const st = window.situcraft.cellTypesView.map().state;
+          const data = st.map;
+          const poly = ${JSON.stringify(linked.polygon)};
+          const inPoly = (x, y) => { let c = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const [xi, yi] = poly[i]; const [xj, yj] = poly[j]; if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c; } return c; };
+          let want = 0, wrong = 0;
+          const mask = new Uint8Array(st.selected.length);
+          for (let i = 0; i < data.n; i += 1) if (inPoly(data.xy[2 * i], data.xy[2 * i + 1])) mask[data.cells[i]] = 1;
+          for (let i = 0; i < mask.length; i += 1) { want += mask[i]; if (mask[i] !== st.selected[i]) wrong += 1; }
+          return { want, wrong, count: st.count };
+        })()`);
+        check('viewer', 'remote control: show_map selects a cluster\'s cells on the map and the tissue, and the cells a polygon on the map holds', mapShown.ok && lassoed.ok ? `cluster 2: ${linked.count} of ${linked.size} cells, ${linked.wrong} wrong; polygon: ${inside.count} of ${inside.want}, ${inside.wrong} wrong; ${linked.drawn} map pixels drawn` : mapShown.message ?? lassoed.message, mapShown.ok && linked.wrong === 0 && linked.size > 0 && linked.highlight && linked.segCells === 11898 && linked.drawn > 1000 && inside.wrong === 0 && inside.want > 100 && lassoed.data.selected === inside.want, 'exactly the cluster\'s cells, then exactly the cells inside, highlighted');
         // Nucleus expansion (wave 2, slice 3), run by a program in the Segmentation view.
         const expanded = await act('expand_nuclei', { dataset: 'xenium-lung-2fov', distance_um: 5 });
         const g = expanded.ok ? expanded.data.summary.agreement : null;

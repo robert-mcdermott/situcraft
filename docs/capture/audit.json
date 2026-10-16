@@ -210,6 +210,16 @@
   "violations": []
  },
  {
+  "scene": "cellmap",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "cellmap",
+  "theme": "light",
+  "violations": []
+ },
+ {
   "scene": "clusters",
   "theme": "dark",
   "violations": []

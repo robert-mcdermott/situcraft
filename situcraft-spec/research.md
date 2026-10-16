@@ -1602,6 +1602,82 @@ scanpy's agree with it (ARI 0.044 and 0.048), though the instrument's largest cl
 the genes SituCraft's largest does (CD24, CXCL13, TM4SF4). On the simulated tissue, a type is split
 in two at resolution 1 (5 clusters for 4 types), as it is in two of leidenalg's ten runs.
 
+### 5.2 The map, exploring clusters, and the instrument's analysis (verified, wave 4, slice 2)
+
+**The map** (`internal/embed`) lays a clustering's cells out by UMAP (McInnes, Healy & Melville
+2018) on the clustering's own graph (§5.1, step 6), as umap-learn's `simplicial_set_embedding` lays
+out a fuzzy graph and scanpy's `tl.umap` calls it, with scanpy's defaults (minimum distance 0.5,
+spread 1, 500 epochs up to 10,000 cells and 200 above, 5 negative samples per pull):
+
+1. the curve 1/(1 + a·d^{2b}) fitted to the membership it stands for on 300 points of [0, 3] by
+   least squares (umap-learn's `find_ab_params`; here Levenberg–Marquardt with the analytic
+   Jacobian): a = 0.58303, b = 1.33417 for the defaults, umap-learn's to 4 × 10⁻⁷;
+2. edges below the heaviest's 1/epochs pruned (never sampled);
+3. the start: the graph's normalized Laplacian's two eigenvectors with the smallest nonzero
+   eigenvalues (Belkin & Niyogi 2003), as umap-learn's `spectral_layout`, by Chebyshev-filtered
+   subspace iteration (Zhou & Saad 2007) with Rayleigh–Ritz steps, scaled to a largest coordinate
+   of 10 with noise of standard deviation 10⁻⁴, then each axis to [0, 10]. SituCraft's choice: a
+   graph in pieces starts from the first two principal components (umap-learn lays the pieces out
+   apart);
+4. umap-learn's `optimize_layout_euclidean`: each epoch, every edge due (every w_max/w epochs)
+   pulls its two cells together by the gradient of log(1/(1 + a·d^{2b})) and pushes the first away
+   from random cells, gradients clipped at ±4, the learning rate falling linearly to 0. SituCraft's
+   choice: one thread and one seeded stream, in float64, so that a seed gives the same map on any
+   processor (umap-learn computes in float32 and, in parallel, not reproducibly).
+
+**Its quality,** measured on every map: trustworthiness T(15) (Venna & Kaski 2001), exact over
+2,000 query cells evenly spaced through the cells (every n/2,000-th) against all cells, in the
+clustering's principal components, ranks by distance then by the cells' order (over every cell it
+is `sklearn.manifold.trustworthiness`); and each cell's neighborhood precision and recall
+(Venna et al. 2010): the share of its 15 nearest on the map among its 75 nearest in the components,
+and of its 15 nearest in the components among its 75 nearest on the map. A cell's score, the mean
+of the two averaged over it and its 15 map neighbors, colors the map. The page says how far the map
+can be trusted in plain words: maps of 50 components of 300-gene panels keep neighborhoods only in
+part (trustworthiness 0.74 to 0.84 below), so a fixed threshold of "unreliable" cells (CytoWeave's
+0.4, made for cytometry) would mark most cells; the trustworthiness and recall are said instead,
+with what the map can and cannot show.
+
+**Against umap-learn 0.5.12** on the same graph (`validation/reference/clustering/`; five seeds of
+umap-learn's, the same measures computed in Python from each map's places):
+
+| | Lung 2-FOV | Breast 2-FOV | Simulated (standard) |
+| --- | --- | --- | --- |
+| SituCraft's map: trustworthiness (recomputed: identical) | 0.737 | 0.779 | 0.840 |
+| umap-learn's, five seeds | 0.738–0.747 | 0.778–0.782 | 0.838–0.841 |
+| Recall: SituCraft; umap-learn | 0.220; 0.217–0.223 | 0.235; 0.234–0.238 | 0.281; 0.281–0.286 |
+| Time (layout; quality) | 5.4 s; 1.0 s | 9.3 s; 0.6 s | 3.8 s; 0.1 s |
+
+The tolerances: the curve within 10⁻⁵ of umap-learn's; the trustworthiness recomputed from the
+places within 10⁻⁴ of the recorded; no less than umap-learn's lowest of five seeds less 0.01. All
+are met. On Lung SituCraft's default seed happens to give the lowest of its own five seeds
+(0.737–0.746, mean 0.742, against umap-learn's mean 0.743): the two spread alike.
+
+**Exploring clusters:**
+- **Expression** for colors, the dot plot and a selection's markers: each analyzed cell's
+  log-normalized value of a gene, as the clustering normalized it (its target total); the dot plot,
+  each cluster's mean of it and share of cells expressing it, for each cluster's two leading
+  markers.
+- **A selection's markers:** the cells selected (lassoed on the map or the tissue, or chosen by
+  cluster) against the clustering's other cells, by the rank-sum test of §5.1 with two groups;
+  exploratory. A cluster's markers are exactly its cells' contrast with the rest (tested).
+- **Names:** each change of a clustering's names is a new version, appended (the project's
+  `cluster-names` records); the clusters keep their numbers. Clusters given the same name are one on
+  the map, the tissue and the legends, in the first one's color.
+- **Two clusterings compared:** their contingency over the cells both cluster and the adjusted Rand
+  index (Hubert & Arabie 1985).
+
+**The instrument's analysis** (`internal/xenium/analysis.go`): Xenium Onboard Analysis writes its
+graph-based and k-means (2 to 10) clusters, a 10-component PCA and a UMAP as CSV in
+`analysis.tar.gz` (or `analysis/`). A clustering of the instrument's is registered as a clustering
+of the instrument's segmentation (`source` naming the tool, version, file and clustering), its
+cells matched by id, its numbers kept, its markers computed by SituCraft (§5.1, step 8) from the
+cells' counts normalized to their median total. The instrument's map is registered with the first,
+its quality judged against the instrument's own 10 components (Breast 0.903: a 10-component space
+is smoother than 50, so the two maps' numbers do not compare). Read against the bundle's other copy
+of the graph-based clusters (`analysis.zarr.zip`'s `cell_groups`): every cell the same. That copy
+pads its index list to every cell's count: a cell without transcripts, in no cluster, leaves a
+trailing 0 in the last group, so cell 0 is listed twice.
+
 ## 6. Spatial analysis (wave 6) and cohorts (wave 7)
 
 - **Graphs:**
@@ -1747,6 +1823,13 @@ Notes:
 - Mann HB, Whitney DR. On a test of whether one of two random variables is stochastically larger
   than the other. *Ann Math Stat* 1947;18:50–60 (the clusters' markers).
 - Hubert L, Arabie P. Comparing partitions. *J Classif* 1985;2:193–218 (the adjusted Rand index).
+- Belkin M, Niyogi P. Laplacian eigenmaps for dimensionality reduction and data representation.
+  *Neural Comput* 2003;15:1373–1396. Zhou Y, Saad Y. A Chebyshev–Davidson algorithm for large
+  symmetric eigenproblems. *SIAM J Matrix Anal Appl* 2007;29:954–971 (the map's spectral start).
+- Venna J, Kaski S. Neighborhood preservation in nonlinear projection methods: an experimental
+  study. *ICANN* 2001:485–491. Venna J, Peltonen J, Nybo K, Aidos H, Kaski S. Information retrieval
+  perspective to nonlinear dimensionality reduction for data visualization. *J Mach Learn Res*
+  2010;11:451–490 (the map's quality).
 - Abramowitz M, Stegun IA. *Handbook of Mathematical Functions*. National Bureau of Standards,
   1964, 6.5.29 and 6.5.31 (the incomplete gamma function), 26.5.8 (the incomplete beta function). Stephens MA. Use of the
   Kolmogorov–Smirnov, Cramér–von Mises and related statistics without extensive tables. *J R

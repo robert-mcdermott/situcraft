@@ -1621,19 +1621,55 @@ same on every processor.
      - **The instrument's graph-based clusters are not scanpy's:** on Lung neither SituCraft's
        clusters nor scanpy's agree with them (adjusted Rand index 0.044 and 0.048), though the
        largest clusters lead with the same genes; on Breast 0.431. Reported, not a tolerance.
-2. **The map (T3) and exploring clusters.**
-   - UMAP (McInnes, Healy & Melville 2018) on a clustering's graph: spectral initialization,
-     stochastic gradient descent with negative sampling, seeded and the same on every processor.
-     Its trustworthiness and neighbor preservation shown (Venna & Kaski 2001), with a plain
-     warning where the map distorts.
-   - The Cell types view's map, drawn by the renderer and linked to the tissue: cells selected on
-     either are selected on both; colored by cluster, a gene's expression or a QC attribute.
-     Markers as a dot plot and a table; clusters named and merged (a new version of the
-     clustering's names, the original kept).
-   - The instrument's own analysis (graph-based and k-means clusters, components and map), read
-     from the bundle and registered as artifacts, compared with SituCraft's clusters.
-   - Validation: trustworthiness against umap-learn's map of the same graph; the instrument's
-     clusters read against its CSV files; the map's selection and linking in the viewer suite.
+2. **The map (T3) and exploring clusters: done.**
+   - **The map** (`internal/embed`; research.md §5.2): UMAP of a clustering's graph as umap-learn
+     lays it out (the curve fitted, edges pruned, a spectral start by Chebyshev-filtered subspace
+     iteration, the stochastic gradient descent with negative sampling), scanpy's defaults, one
+     thread and one seeded stream so a seed gives the same map anywhere; a graph in pieces starts
+     from the principal components. Made as a job as soon as a clustering is; an artifact of kind
+     `embedding`. Exact neighbor search in two dimensions by a grid (`internal/graph`).
+   - **Its quality:** trustworthiness over 2,000 evenly spaced cells and each cell's neighborhood
+     precision and recall, said in plain words under the map; the map colored by them.
+   - **The map and the tissue** (`ui/cell-map.js`, `lib/scatter.js`): side by side, linked; colored
+     by any clustering of the segmentation, a gene, the cells' transcripts or area, or the map's
+     reliability; one selection (the lasso on either side, a cluster from the legend or the table),
+     the others faint on both; a cell clicked on the map found on the tissue and back.
+   - **Exploring:** each cluster's names (versions in the project; the same name merges clusters
+     on the map, the tissue, the legends and the Viewer's fill); a dot plot of each cluster's two
+     leading markers; the markers of any selection against the clustering's other cells; two
+     clusterings compared by their cross-table and adjusted Rand index.
+   - **The instrument's own analysis** (`internal/xenium` `ReadAnalysis`): its graph-based and
+     k-means clusters registered as clusterings of its segmentation (its numbers kept, the markers
+     SituCraft's), and its map with the first, judged against its own components.
+   - Remote control: `show_map`, `name_clusters`, `instrument_clusters`.
+   - Validation:
+     - **Exact cases:** the curve's a and b as umap-learn fits them; a ring's spectral layout a
+       circle in order; four groups kept apart; trustworthiness against its definition over every
+       point, and 1 for a map that is its own space; the grid search against brute force with
+       ties; the map's files checked; a cluster's markers equal to its cells' contrast with the
+       rest; the expression and the dot plot by hand; names' versions and merges; the contingency
+       and adjusted Rand index against scikit-learn's.
+     - **Against umap-learn 0.5.12** on the same graph, five seeds (numbers in research.md §5.2):
+       the curve within 4 × 10⁻⁷; SituCraft's trustworthiness recomputed from its places,
+       identical; within umap-learn's spread (Lung 0.737 against 0.738–0.747, Breast 0.779 against
+       0.778–0.782, the simulated tissue 0.840 against 0.838–0.841). Checked weekly, the map byte
+       for byte.
+     - **The instrument's analysis:** the graph-based clusters as `analysis.zarr.zip` holds them,
+       every cell; registered, listed, and the instrument's map registered (Lung, over HTTP).
+     - **In the app:** a cluster's cells and a polygon's cells selected exactly, on the map and the
+       tissue (viewer suite); capture scene `cellmap`, with no accessibility violation.
+   - Found by slice 2:
+     - **Maps of 50 components of a 300-gene panel distort much** (trustworthiness 0.74 to 0.84,
+       umap-learn's alike): a fixed threshold of unreliable cells (CytoWeave's 0.4, for cytometry)
+       would mark most of them. The page says the trustworthiness and recall instead, with what a
+       map can and cannot show.
+     - **The default seed was Lung's lowest:** SituCraft's five seeds give 0.737 to 0.746, umap-
+       learn's 0.738 to 0.747; the tolerance allows a hundredth below umap-learn's lowest.
+     - **`analysis.zarr.zip` pads its index list** to every cell's count, so a cell is listed twice
+       (the last group ends with a 0 for the cell in no cluster). The clusters are read from the CSV
+       files.
+     - **A selection on the tissue was hard to see** under a white highlight among colored cells:
+       the cells not selected are drawn faint instead, as on the map.
 3. **Labels from markers (T4).**
    - Marker sets: a hierarchy of labels (class, lineage, subtype, state), each with positive and
      negative markers. Starter sets for the development bundles' panels from published marker

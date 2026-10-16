@@ -301,6 +301,18 @@ const scenes = {
     await waitFor(`Boolean(document.querySelector('.ct-markers tbody tr'))`);
     await scrollTo('.ct-detail', 'start');
   },
+  // The Breast example's map beside its tissue (wave 4, slice 2): clusters named (the same name
+  // merging two), the T cells selected on both, the selection's composition.
+  async cellmap() {
+    await act('open_example', { example: 'breast' });
+    await act('cluster_cells', {});
+    await act('name_clusters', { names: { 1: 'Tumour', 5: 'Tumour', 3: 'Dividing tumour', 6: 'Macrophages', 7: 'Fibroblasts', 9: 'T cells', 12: 'Endothelium' } });
+    await act('show_map', { color_by: 'clusters', select: { clusters: [9] } });
+    await waitFor(`Boolean(document.querySelector('.ct-composition'))`);
+    await scrollTo('.cell-map', 'start');
+    await js(`window.situcraft.cellTypesView.map().settled()`);
+    await sleep(400);
+  },
   // The Breast example's clusters on the tissue (wave 4, slice 1): the cells filled by cluster,
   // with the legend.
   async clusters() {

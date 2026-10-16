@@ -97,6 +97,9 @@ type Result struct {
 	Partition    *graph.Partition
 	Markers      *Markers
 	Seconds      map[string]float64
+	// Source: another tool's clustering (FromLabels), whose components and neighbors SituCraft did
+	// not compute.
+	Source *Source
 }
 
 // Run clusters. progress, if not nil, is told the share done and what is under way.
@@ -172,5 +175,53 @@ func Run(ctx context.Context, in Inputs, p Params, workers int, progress func(fl
 	r.Markers = m.markers(part.Community, len(part.Sizes), workers)
 	lap("markers")
 	say(1, fmt.Sprintf("%d clusters of %d cells", len(part.Sizes), len(m.cells)))
+	return r, nil
+}
+
+// FromLabels makes a clustering of another tool's clusters of a segmentation's cells (cells, their
+// indices, and labels, numbered from 0, in the same order), normalized as SituCraft normalizes,
+// with each cluster's markers computed as SituCraft computes them. Cells without a gene transcript
+// are left out and counted; clusters keep the tool's numbers.
+func FromLabels(c *segment.Counts, cells []uint32, labels []int32, src Source, workers int) (*Result, error) {
+	segCells := len(c.Offsets) - 1
+	if len(cells) != len(labels) {
+		return nil, errors.New("the cells and their clusters differ in number")
+	}
+	label := make([]int32, segCells)
+	for i := range label {
+		label[i] = -1
+	}
+	count := 0
+	for i, cell := range cells {
+		if int(cell) >= segCells || labels[i] < 0 {
+			return nil, fmt.Errorf("cell %d (cluster %d) is not one of the segmentation's %d", cell, labels[i], segCells)
+		}
+		if label[cell] >= 0 {
+			return nil, fmt.Errorf("cell %d is listed twice", cell)
+		}
+		label[cell] = labels[i]
+		count = max(count, int(labels[i])+1)
+	}
+	m, empty, err := selectCells(c, func(i int, total uint32) bool { return label[i] >= 0 })
+	if err != nil {
+		return nil, err
+	}
+	if len(m.cells) < 3 {
+		return nil, errors.New("too few of the clustered cells have a gene transcript")
+	}
+	r := &Result{SegCells: segCells, Genes: c.Genes, Source: &src, Seconds: map[string]float64{}}
+	r.Cells, r.NoTranscript = m.cells, empty
+	r.Excluded = segCells - len(m.cells) - empty
+	r.Target = median(m.total)
+	m.normalize(r.Target)
+	r.Mean, r.SD, r.Detected = m.scaling()
+	community := make([]int32, len(m.cells))
+	sizes := make([]int, count)
+	for i, cell := range m.cells {
+		community[i] = label[cell]
+		sizes[label[cell]]++
+	}
+	r.Partition = &graph.Partition{Community: community, Sizes: sizes}
+	r.Markers = m.markers(community, count, workers)
 	return r, nil
 }

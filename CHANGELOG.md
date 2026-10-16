@@ -26,6 +26,28 @@ Wave 4 of the [roadmap](situcraft-spec/roadmap.md): cell identities with their e
     identical to the rank-sum test with exact ties, and the same leading markers as scanpy. On the
     simulated tissue the clusters agree with the true cell types (adjusted Rand index 0.95).
 
+- **The map and exploring clusters (wave 4, slice 2).** Each clustering comes with a map of its
+  cells (UMAP, made at once as a job and kept as an artifact), beside the tissue in the Cell types
+  view.
+  - **Linked:** the map and the tissue colored alike (by any clustering's clusters, a gene, the
+    cells' transcripts or area, or how faithfully the map keeps their neighbors), and one selection
+    on both: cells lassoed on either side, or chosen by cluster. **Markers of the selection**
+    compares any selection with the other cells.
+  - **Honest about distortion:** every map's trustworthiness and each cell's neighborhood
+    precision and recall are measured, and the page says in plain words what the map can show.
+  - **Clusters named and merged:** names are versions in the project (the clusters keep their
+    numbers); the same name merges clusters on the map, the tissue and the legends. A **dot plot**
+    of each cluster's leading markers.
+  - **The instrument's own clusters** (graph-based, and k-means of 2 to 10) and map, read from the
+    bundle's `analysis.tar.gz` and added as a clustering whose markers SituCraft computes;
+    **two clusterings compared** by their cross-table and adjusted Rand index.
+  - **Remote control:** `show_map`, `name_clusters`, `instrument_clusters`.
+  - **Validated:** the same map as umap-learn's of the same graph, by every measure within its
+    spread over five seeds (trustworthiness 0.737, 0.779 and 0.840 on Lung, Breast and the
+    simulated tissue); the trustworthiness recomputed independently from the places; the
+    instrument's clusters as the bundle's other copy of them holds them; the map's selection and
+    linking in the viewer suite.
+
 ### Changed
 
 - **A comparison can be removed from its project** (the inspector's **Remove**). The project's

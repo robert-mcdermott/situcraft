@@ -35,6 +35,7 @@ import (
 	"situcraft/internal/export"
 	"situcraft/internal/jobs"
 	"situcraft/internal/xenium"
+	"situcraft/internal/zarr"
 )
 
 func testApp(t *testing.T, files ...string) (*app, http.Handler) {
@@ -1508,6 +1509,143 @@ func TestRealInstrumentSegmentationAndInterruptedJobs(t *testing.T) {
 		}
 	}
 
+	// The clustering's map: a job, then the same artifact; its places as binary.
+	var mapped comparison
+	json.NewDecoder(request(t, handler, http.MethodPost, "/api/local/0/embed", strings.NewReader(`{"clustering":"`+cl.ID+`"}`), nil).Body).Decode(&mapped)
+	if mapped.Job == nil {
+		t.Fatalf("no map job: %+v", mapped)
+	}
+	if j, _ := a.jobs.Wait(ctx, mapped.Job.ID); j.State != jobs.Complete {
+		t.Fatalf("the map ended %s: %s", j.State, j.Error)
+	}
+	var mappedAgain comparison
+	json.NewDecoder(request(t, handler, http.MethodPost, "/api/local/0/embed", strings.NewReader(`{"clustering":"`+cl.ID+`"}`), nil).Body).Decode(&mappedAgain)
+	if mappedAgain.Job != nil || mappedAgain.Artifact == nil || mappedAgain.Artifact.ID != mapped.ID || mappedAgain.Artifact.Kind != "embedding" {
+		t.Fatalf("the map again: %+v", mappedAgain)
+	}
+	rec = request(t, handler, http.MethodGet, "/api/embeddings/"+mapped.ID+"/map", nil, nil)
+	if raw := rec.Body.Bytes(); rec.Code != http.StatusOK || len(raw) != 8+16*11820 || binary.LittleEndian.Uint32(raw) != 11820 || binary.LittleEndian.Uint32(raw[4:]) != 11898 {
+		t.Errorf("the map's places: %d, %d bytes", rec.Code, len(raw))
+	}
+
+	// The instrument's analysis: its clusterings listed; the graph-based ones registered with the
+	// instrument's map; each cell's cluster as the bundle's other copy of them (analysis.zarr.zip)
+	// holds it.
+	var analysis struct {
+		Source      string
+		Clusterings []struct {
+			Name     string
+			Clusters int
+			Cells    int
+			Artifact string
+		}
+		Map struct{ Cells int }
+	}
+	rec = request(t, handler, http.MethodGet, "/api/local/0/analysis", nil, nil)
+	json.NewDecoder(rec.Body).Decode(&analysis)
+	if rec.Code != http.StatusOK || analysis.Source != "analysis.tar.gz" || len(analysis.Clusterings) != 10 || analysis.Clusterings[0].Name != "gene_expression_graphclust" || analysis.Clusterings[0].Clusters != 17 || analysis.Map.Cells != 11897 {
+		t.Fatalf("the instrument's analysis: %d %+v", rec.Code, analysis)
+	}
+	var registered comparison
+	json.NewDecoder(request(t, handler, http.MethodPost, "/api/local/0/analysis", strings.NewReader(`{"clustering":"gene_expression_graphclust"}`), nil).Body).Decode(&registered)
+	if registered.Job == nil {
+		t.Fatalf("no analysis job: %+v", registered)
+	}
+	if j, _ := a.jobs.Wait(ctx, registered.Job.ID); j.State != jobs.Complete {
+		t.Fatalf("registering the instrument's clusters ended %s: %s", j.State, j.Error)
+	}
+	rec = request(t, handler, http.MethodGet, "/api/clusterings/"+registered.ID+"/cells", nil, nil)
+	json.NewDecoder(rec.Body).Decode(&cells)
+	zr, err := os.Open(filepath.Join(bundle, "analysis.zarr.zip"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	zi, _ := zr.Stat()
+	store, err := zarr.OpenZip(zr, zi.Size())
+	if err != nil {
+		t.Fatal(err)
+	}
+	readU32 := func(path string) []uint32 {
+		arr, err := zarr.OpenArray(store, path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw, err := arr.ReadAll()
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := make([]uint32, len(raw)/4)
+		for i := range out {
+			out[i] = binary.LittleEndian.Uint32(raw[4*i:])
+		}
+		return out
+	}
+	indices, indptr := readU32("cell_groups/0/indices"), readU32("cell_groups/0/indptr")
+	zr.Close()
+	// The store pads its indices to every cell's count (a cell without transcripts is in no group:
+	// a trailing 0 takes its place), so a cell listed twice is not compared.
+	listed := map[uint32]int{}
+	for _, c := range indices {
+		listed[c]++
+	}
+	agree, compared := 0, 0
+	for g := 0; g < len(indptr); g++ {
+		end := uint32(len(indices))
+		if g+1 < len(indptr) {
+			end = indptr[g+1]
+		}
+		for _, c := range indices[indptr[g]:end] {
+			if listed[c] == 1 && int(c) < len(cells.Cluster) && cells.Cluster[c] >= 0 {
+				compared++
+				if int(cells.Cluster[c]) == g {
+					agree++
+				}
+			}
+		}
+	}
+	if cells.Clusters != 17 || compared != 11896 || agree != compared {
+		t.Errorf("the instrument's clusters: %d clusters; %d of %d cells as analysis.zarr.zip holds them", cells.Clusters, agree, compared)
+	}
+	var maps []artifacts.Manifest
+	all, _ := a.artifacts.List()
+	for _, m := range all {
+		if m.Kind == "embedding" && m.Name == "The instrument's map" {
+			maps = append(maps, m)
+		}
+	}
+	if len(maps) != 1 || maps[0].State != artifacts.Complete {
+		t.Errorf("the instrument's map: %+v", maps)
+	}
+
+	// Expression: a gene's values for each cell, the dot plot, the markers of a selection.
+	rec = request(t, handler, http.MethodGet, "/api/local/0/clusterings/"+cl.ID+"/expression?gene=epcam", nil, nil)
+	if raw := rec.Body.Bytes(); rec.Code != http.StatusOK || len(raw) != 4*11898 || rec.Header().Get("X-Gene") != "EPCAM" {
+		t.Errorf("EPCAM's values: %d, %d bytes, %q", rec.Code, len(raw), rec.Header().Get("X-Gene"))
+	}
+	var dot struct {
+		Genes       []string
+		Mean, Share [][]float64
+	}
+	rec = request(t, handler, http.MethodGet, "/api/local/0/clusterings/"+cl.ID+"/dotplot?genes=EPCAM,PTPRC,nope,CD68", nil, nil)
+	json.NewDecoder(rec.Body).Decode(&dot)
+	if rec.Code != http.StatusOK || strings.Join(dot.Genes, ",") != "EPCAM,CD68" || len(dot.Mean) != cells17(cl.ID, t, handler) || len(dot.Mean[0]) != 2 {
+		t.Errorf("the dot plot: %d %+v", rec.Code, dot.Genes)
+	}
+	selection := make([]byte, 4+(11898+7)/8)
+	binary.LittleEndian.PutUint32(selection, 11898)
+	for i := 0; i < 2000; i++ {
+		selection[4+i/8] |= 1 << (i % 8)
+	}
+	var contrast struct {
+		Cells, Selected int
+		Up, Down        []struct{ Gene string }
+	}
+	rec = request(t, handler, http.MethodPost, "/api/local/0/clusterings/"+cl.ID+"/contrast", strings.NewReader(`{"cells":"`+base64.StdEncoding.EncodeToString(selection)+`"}`), nil)
+	json.NewDecoder(rec.Body).Decode(&contrast)
+	if rec.Code != http.StatusOK || contrast.Cells != 11820 || contrast.Selected < 1900 || len(contrast.Up) != 25 || len(contrast.Down) != 25 {
+		t.Errorf("a selection's markers: %d %+v", rec.Code, contrast)
+	}
+
 	// Errors planted for practice: a simulated segmentation with its answer key, asked again the
 	// same artifact.
 	if rec := request(t, handler, http.MethodPost, "/api/local/0/plant", strings.NewReader(`{"merges": -1}`), nil); rec.Code != http.StatusBadRequest {
@@ -1583,4 +1721,12 @@ func TestRealInstrumentSegmentationAndInterruptedJobs(t *testing.T) {
 	if rec := local(http.MethodPost, "/api/local/0/export", plantedExport); rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "simulated") {
 		t.Errorf("exporting the planted errors: %d %s", rec.Code, rec.Body)
 	}
+}
+
+// cells17 is a clustering's number of clusters, as its cells endpoint answers.
+func cells17(id string, t *testing.T, handler http.Handler) int {
+	t.Helper()
+	var c struct{ Clusters int }
+	json.NewDecoder(request(t, handler, http.MethodGet, "/api/clusterings/"+id+"/cells", nil, nil).Body).Decode(&c)
+	return c.Clusters
 }

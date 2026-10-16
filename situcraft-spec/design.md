@@ -48,7 +48,8 @@ see `conventions.md`. For the methods, formats and datasets behind these choices
 │   internal/segment   nucleus expansion; transcript-informed segmentation (sampler, outputs)           │
 │   internal/compare   cell matching, difference classes, comparison metrics                            │
 │   internal/cluster   normalization, principal components, Leiden clusters, markers (wave 4)           │
-│   internal/graph     nearest neighbors, UMAP's fuzzy graph, Leiden                                     │
+│   internal/graph     nearest neighbors (exact; a grid in two dimensions), UMAP's graph, Leiden         │
+│   internal/embed     UMAP maps and their quality                                                       │
 │   internal/linalg    symmetric eigendecomposition, the same on every processor                         │
 │   internal/register  image registration (later)                                                       │
 │   internal/spatial   graphs and spatial statistics on large tables (later)                            │
@@ -351,9 +352,22 @@ segmentation, made by a job, named by its inputs and parameters, and checked bef
   processor. The artifact (`docs/FORMATS.md`) keeps the cells and their clusters, the components
   and scores, the neighbors and the markers; its check makes the graph again and requires the
   recorded modularity.
+- **Maps** (`internal/embed`, `api_maps.go`, slice 2): UMAP of a clustering's graph, made by a job
+  as soon as the clustering is, one thread and one seeded stream so a seed gives the same map
+  anywhere; each map judged (trustworthiness, each cell's neighborhood precision and recall) and
+  kept as an artifact of kind `embedding`. The instrument's own analysis (`internal/xenium`'s
+  `ReadAnalysis`) registers as a clustering of the instrument's segmentation (its markers by
+  SituCraft) and a map.
 - **The Cell types view** (`ui/mode-celltypes.js`, `lib/clusterings.js`) runs a clustering and
-  shows its clusters, their sizes and markers and the components' variances; the Viewer fills the
-  cells by cluster (`clusters:<id>` among its fills), with a legend.
+  shows its clusters, names, markers (a table and a dot plot) and the components' variances, and
+  compares two clusterings. **The map and the tissue** (`ui/cell-map.js`, `lib/scatter.js`): the map
+  rasterized onto a 2-D canvas (a million points redraw in tens of milliseconds, and the same pure
+  functions run in Node's tests) beside a tissue renderer of the segmentation's outlines, one
+  coloring (a clustering, a gene, an attribute, the map's reliability) and one selection on both:
+  lassoed on either (on the tissue, by the cells' centroids), or chosen by cluster. A gene's values,
+  the dot plot and a selection's markers come from the program, which keeps the last few
+  clusterings' normalized expression in memory. Names are versions in the project. The Viewer fills
+  the cells by cluster (`clusters:<id>` among its fills), with a legend, merged names one color.
 
 ### Exports
 

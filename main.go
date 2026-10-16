@@ -88,6 +88,8 @@ type app struct {
 	// Viewer; segViews what the Viewer draws of the segmentations it shows (api_segview.go).
 	outlines outlineEntries
 	segViews segViews
+	// exprs are clusterings' cells' expression, for the Cell types view (api_maps.go).
+	exprs expressions
 	// examples are the example datasets, downloaded on request.
 	examples *examples.Library
 	// control is the remote-control hub (remote.go), with --remote-control.
@@ -545,6 +547,7 @@ func (a *app) registerAPI(mux *http.ServeMux) {
 	a.registerImports(mux)
 	a.registerComparisons(mux)
 	a.registerClusterings(mux)
+	a.registerMaps(mux)
 	a.registerWorkspace(mux)
 	a.registerSegView(mux)
 	a.registerPlant(mux)

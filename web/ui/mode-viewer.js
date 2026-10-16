@@ -18,7 +18,7 @@ import { mountViewerPanel, defaultLayers, cellFillColors } from './viewer-panel.
 import { defaultChoice, readSegCells, segmentationChoices } from '../lib/segview.js';
 import { hexColor } from '../render/gl.js';
 import { categoricalColor } from '../lib/colormaps.js';
-import { clusterColors, clusterFills, clusterName } from '../lib/clusterings.js';
+import { clusterColors, clusterFills, clusterNames, mergedOf, nameOf } from '../lib/clusterings.js';
 
 // Per dataset id: { camera, layers, selected } for the session.
 const sessions = new Map();
@@ -216,7 +216,10 @@ export function mountViewer(app, container) {
           return;
         }
         state.clusterFill = { id, sizes: data.sizes, analyzed: data.description.cells.analyzed, cells: data.cluster.length, name: clusterFills(app.store.project, t.dataset.id, drawnChoice()?.id).find((f) => f.clustering === id)?.label ?? 'Clusters' };
-        state.clusterFill.rgba = clusterColors(data.cluster);
+        const names = clusterNames(app.store.project, id);
+        state.clusterFill.names = names;
+        state.clusterFill.merged = mergedOf(names, data.sizes.length);
+        state.clusterFill.rgba = clusterColors(data.cluster, (k) => state.clusterFill.merged[k]);
         renderer.setCellColors(state.clusterFill.rgba);
         updateLegend();
       }).catch((error) => toast(`The clusters could not be drawn: ${error.message}`, { kind: 'error' }));
@@ -227,10 +230,19 @@ export function mountViewer(app, container) {
     function clusterLegend() {
       const f = state.clusterFill;
       if (!f) return null;
-      const shown = f.sizes.slice(0, 24);
+      // Clusters sharing a name are one entry, in the first one's color.
+      const groups = new Map();
+      f.sizes.forEach((size, k) => {
+        const rep = f.merged?.[k] ?? k;
+        const g = groups.get(rep) ?? { name: nameOf(f.names, rep), size: 0 };
+        g.size += size;
+        groups.set(rep, g);
+      });
+      const entries = [...groups.entries()];
+      const shown = entries.slice(0, 24);
       return h('div', h('b', f.name),
-        ...shown.map((size, k) => h('div.viewer-legend-item', h('span.dot', { style: { background: categoricalColor(k) } }), clusterName(k), h('span.muted', formatCount(size)))),
-        f.sizes.length > shown.length ? h('div.muted', `and ${f.sizes.length - shown.length} smaller clusters`) : null,
+        ...shown.map(([rep, g]) => h('div.viewer-legend-item', h('span.dot', { style: { background: categoricalColor(rep) } }), g.name, h('span.muted', formatCount(g.size)))),
+        entries.length > shown.length ? h('div.muted', `and ${entries.length - shown.length} smaller clusters`) : null,
         f.analyzed < f.cells ? h('div.muted', `${formatCount(f.cells - f.analyzed)} cells not analyzed are not filled.`) : null);
     }
 

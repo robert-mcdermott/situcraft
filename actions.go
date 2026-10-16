@@ -178,6 +178,22 @@ var remoteActions = []remoteAction{
 		"resolution":      numberArg("Leiden's resolution: higher, more clusters (1)."),
 		"seed":            numberArg("Leiden's seed (20250)."),
 	}), long: true},
+	{Name: "show_map", Title: "Show the map", Description: "Shows a clustering in the Cell types view, with its map (UMAP; made first if it has none) beside the tissue, linked: the cells colored by a clustering's clusters, a gene's expression, their gene transcripts, area or how faithfully the map keeps their neighbors, and a selection of cells (by cluster, or inside a polygon on the map or the tissue) drawn on both. Answers the map's trustworthiness, the selection's size and its composition by cluster.", InputSchema: schema(map[string]any{
+		"dataset":    datasetArg,
+		"clustering": textArg("A clustering, by artifact id or name; SituCraft's latest if not given."),
+		"map":        textArg("The map: a map's artifact id, or instrument for the instrument's; the clustering's own if not given."),
+		"color_by":   textArg("clusters (the clustering's), clusters:<clustering>, a gene's name, transcripts, area or reliability."),
+		"select":     map[string]any{"description": "{\"clusters\": [numbers from 1]}, {\"polygon\": [[x, y], …], \"on\": \"map\" or \"tissue\" (µm)}, or \"none\"."},
+	}), long: true},
+	{Name: "name_clusters", Title: "Name clusters", Description: "Names a clustering's clusters (a new version of its names, appended; the clusters keep their numbers). Clusters given the same name are merged on the map and the tissue. An empty name removes one.", InputSchema: schema(map[string]any{
+		"dataset":    datasetArg,
+		"clustering": textArg("A clustering, by artifact id or name; SituCraft's latest if not given."),
+		"names":      map[string]any{"type": "object", "description": "By cluster number from 1: {\"1\": \"T cells\", \"4\": \"Fibroblasts\"}."},
+	}, "names"), long: true},
+	{Name: "instrument_clusters", Title: "Add the instrument's clusters", Description: "Adds one of the instrument's own clusterings (analysis.tar.gz: graph-based, or k-means of 2 to 10 clusters) to the project as a clustering of its segmentation, its markers computed by SituCraft, and the instrument's map with it the first time.", InputSchema: schema(map[string]any{
+		"dataset":    datasetArg,
+		"clustering": textArg("graph-based (the default), k-means N, or its folder's name (gene_expression_kmeans_5_clusters)."),
+	}), long: true},
 	{Name: "show_comparison", Title: "Show a comparison", Description: "Opens a comparison of two segmentations (by id, or 'A and B' by their names; the dataset's latest if not given) in the Compare workspace: A and B side by side, overlaid or flickering, cells filled by the class of their difference, a map of disagreement. Ranks the review queue (reassigned transcripts, contamination, disagreement or low counts) among the classes and reassigned transcripts the rules keep, and shows a difference (by its place in the queue, or by a cell's id). Answers the queue's first ten, the difference shown and the cautions about the comparison's measures.", InputSchema: schema(map[string]any{
 		"dataset":     datasetArg,
 		"comparison":  textArg("A comparison, by artifact id or 'A and B' (the segmentations' names)."),

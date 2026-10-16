@@ -15,7 +15,7 @@ import { workedExamples } from '../lib/tours.js';
 import { parseProject, rename, serializeProject } from '../lib/project.js';
 import { removeView, sameView, viewLink } from '../lib/views.js';
 import { SEG_FILLS, defaultChoice, segmentationChoices } from '../lib/segview.js';
-import { clusteringsOf } from '../lib/clusterings.js';
+import { clusterName, clusterNames, clusteringsOf, mapsOf, nameClusters } from '../lib/clusterings.js';
 
 export class ActionError extends Error {}
 
@@ -836,6 +836,103 @@ export function installRemote(app) {
       };
     },
 
+    async show_map(args) {
+      const dataset = resolveDataset(args.dataset);
+      const list = clusteringsOf(project(), dataset.id).filter((c) => c.state === 'complete');
+      if (!list.length) throw new ActionError(`${dataset.name} has no clustering: cluster_cells makes one.`);
+      const c = clusteringRef(list, args.clustering);
+      await settleMode('celltypes');
+      let map;
+      try {
+        map = await app.cellTypesView.show(dataset, c.id);
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      if (!map) throw new ActionError('The map could not be shown.');
+      const maps = mapsOf(project(), dataset.id, c.segmentation);
+      if (args.map !== undefined) {
+        const ref = String(args.map);
+        const m = /^instrument/i.test(ref) ? maps.find((x) => x.name === 'The instrument\'s map') : maps.find((x) => x.id === ref);
+        if (!m) throw new ActionError(`No map ${ref} of ${dataset.name}'s cells; its maps are ${maps.map((x) => `${x.id} (${x.name})`).join(', ') || 'none'}.`);
+        await map.setMap(m.id);
+      }
+      if (args.color_by !== undefined) {
+        const v = String(args.color_by);
+        if (/^clusters?$/i.test(v)) await map.setColor({ kind: 'clusters', clustering: c.id });
+        else if (/^clusters:/i.test(v)) await map.setColor({ kind: 'clusters', clustering: clusteringRef(list, v.slice(v.indexOf(':') + 1)).id });
+        else if (/^reliability$/i.test(v)) await map.setColor({ kind: 'reliability' });
+        else if (/^(transcripts|area)$/i.test(v)) await map.setColor({ kind: 'attribute', attribute: v.toLowerCase() });
+        else await map.setColor({ kind: 'gene', gene: v });
+      }
+      if (args.select !== undefined) {
+        const sel = args.select;
+        if (sel === null || sel === 'none') map.select(null);
+        else if (Array.isArray(sel.clusters)) map.selectClusters(sel.clusters.map((k) => finite(k, 'cluster') - 1));
+        else if (Array.isArray(sel.polygon) && sel.polygon.length >= 3) {
+          const polygon = sel.polygon.map(([x, y]) => [finite(x, 'x'), finite(y, 'y')]);
+          if (/^tissue$/i.test(String(sel.on ?? 'map'))) map.selectOnTissue(polygon);
+          else map.selectOnMap(polygon);
+        } else throw new ActionError('select is {"clusters": [numbers from 1]}, {"polygon": [[x, y], …], "on": "map" | "tissue"} or "none".');
+      }
+      await frames();
+      const st = map.state;
+      const composition = {};
+      if (st.count && st.clusters) {
+        const names = clusterNames(project(), st.color.clustering ?? c.id);
+        for (let i = 0; i < st.clusters.length; i += 1) {
+          if (st.selected[i] && st.clusters[i] >= 0) {
+            const key = names?.names?.[st.clusters[i]] || clusterName(st.clusters[i]);
+            composition[key] = (composition[key] ?? 0) + 1;
+          }
+        }
+      }
+      const shownMap = maps.find((m) => m.id === st.mapId);
+      return {
+        message: `${c.name} on ${shownMap?.name.toLowerCase() ?? 'no map'} and the tissue${st.count ? `: ${plural(st.count, 'cell')} selected` : ''}.`,
+        data: { clustering: c.id, map: st.mapId, trustworthiness: shownMap?.summary?.trustworthiness ?? null, color: st.color, selected: st.count, composition },
+      };
+    },
+
+    async name_clusters(args) {
+      const dataset = resolveDataset(args.dataset);
+      const list = clusteringsOf(project(), dataset.id).filter((c) => c.state === 'complete');
+      if (!list.length) throw new ActionError(`${dataset.name} has no clustering.`);
+      const c = clusteringRef(list, args.clustering);
+      if (!args.names || typeof args.names !== 'object' || Array.isArray(args.names)) throw new ActionError('names is an object by cluster number (from 1): {"1": "T cells"}; an empty name removes one.');
+      const current = clusterNames(project(), c.id)?.names ?? [];
+      const names = Array.from({ length: c.summary?.clusters ?? 0 }, (_, k) => current[k] ?? null);
+      for (const [key, value] of Object.entries(args.names)) {
+        const k = Number(key) - 1;
+        if (!Number.isInteger(k) || k < 0 || k >= names.length) throw new ActionError(`${c.name} has clusters 1 to ${names.length}; ${key} is not one.`);
+        names[k] = value === null ? null : String(value);
+      }
+      const next = nameClusters(project(), { clustering: c.id, names, by: 'remote control' });
+      if (next === project()) return { message: 'The names are as they were.', data: { version: clusterNames(project(), c.id)?.version ?? 0 } };
+      store.commit(next, `Name the clusters of ${c.name}`);
+      const version = clusterNames(project(), c.id);
+      return { message: `${c.name}: names version ${version.version}.`, data: { version: version.version, names: version.names } };
+    },
+
+    async instrument_clusters(args) {
+      const dataset = resolveDataset(args.dataset);
+      const link = app.bundles.link(dataset.id);
+      const item = link?.item ?? app.bundles.itemByPath(dataset.path);
+      if (!item) throw new ActionError(`${dataset.name}'s bundle was not found where the project records it.`);
+      const listed = await app.bundles.instrumentAnalysis(item);
+      if (!listed.clusterings?.length) throw new ActionError(`${dataset.name} holds no analysis of the instrument's.`);
+      const ref = String(args.clustering ?? 'graph-based');
+      const titles = listed.clusterings.map((c) => c.title);
+      const chosen = listed.clusterings.find((c) => c.name === ref) ?? listed.clusterings.find((c) => c.title === choose(ref.replace(/^k-means (\d+)$/i, 'K-means ($1 clusters)'), titles, 'clustering'));
+      await settleMode('celltypes');
+      let manifest;
+      try {
+        manifest = await app.cellTypesView.registerInstrument(dataset, chosen.name);
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      return { message: `${manifest.name} of ${dataset.name}: ${manifest.summary?.clusters} clusters of ${(manifest.summary?.cells ?? 0).toLocaleString('en-US')} cells.`, data: { id: manifest.id, summary: manifest.summary } };
+    },
+
     async export_segmentation(args) {
       const dataset = resolveDataset(args.dataset);
       const p = project();
@@ -1038,6 +1135,17 @@ export function installRemote(app) {
 
   // A segmentation of a dataset by its name or artifact ID ('instrument', 'default' too), as a view
   // records it: 'instrument' or the artifact's ID.
+  // A clustering by id or name ("resolution 1", "The instrument's graph-based clusters"); the latest
+  // of SituCraft's if not given.
+  function clusteringRef(list, ref) {
+    if (ref === undefined || ref === null || ref === '') return list.filter((c) => !c.summary?.source).at(-1) ?? list.at(-1);
+    const text = String(ref);
+    const byId = list.find((c) => c.id === text);
+    if (byId) return byId;
+    const names = list.map((c) => c.name);
+    return list.find((c) => c.name === choose(text, names, 'clustering'));
+  }
+
   // A fill by a clustering of the segmentation drawn: 'clusters' for its latest, 'clusters:<id>'.
   function clusterFill(dataset, segRef, text) {
     const seg = segRef === 'instrument' ? segmentationChoices(project(), dataset.id).find((c) => c.instrument)?.id : segRef;

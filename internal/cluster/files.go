@@ -45,6 +45,15 @@ var Roles = map[string]string{FileDescription: "description", FileCells: "cluste
 // Files lists them in order.
 var Files = []string{FileDescription, FileCells, FilePCA, FileNeighbors, FileMarkers}
 
+// FilesOf lists a clustering's files: a clustering from another tool has no neighbors of
+// SituCraft's, and its pca.bin holds the genes and their scaling without components.
+func FilesOf(d *Description) []string {
+	if d.Source != nil {
+		return []string{FileDescription, FileCells, FilePCA, FileMarkers}
+	}
+	return Files
+}
+
 // Side names the segmentation clustered.
 type Side struct {
 	ID   string `json:"id"`
@@ -56,6 +65,16 @@ type Filter struct {
 	ID       string `json:"id"`
 	Name     string `json:"name"`
 	Checksum string `json:"checksum"`
+}
+
+// Source says where a clustering came from when SituCraft did not make it (the instrument's
+// analysis): the tool and its version, the file, and the clustering's name and title there.
+type Source struct {
+	Tool    string `json:"tool"`
+	Version string `json:"version"`
+	File    string `json:"file"`
+	Name    string `json:"name"`
+	Title   string `json:"title"`
 }
 
 // Marker is a gene's statistics in a cluster.
@@ -70,11 +89,12 @@ type Marker struct {
 
 // Description is clustering.json.
 type Description struct {
-	Format       string `json:"format"`
-	Version      int    `json:"version"`
-	Method       string `json:"method"`
-	Segmentation Side   `json:"segmentation"`
-	Parameters   Params `json:"parameters"`
+	Format       string  `json:"format"`
+	Version      int     `json:"version"`
+	Method       string  `json:"method"`
+	Segmentation Side    `json:"segmentation"`
+	Source       *Source `json:"source,omitempty"`
+	Parameters   Params  `json:"parameters"`
 	Fixed        struct {
 		Normalization string  `json:"normalization"`
 		TargetSum     float64 `json:"targetSum"`
@@ -136,7 +156,10 @@ func TopMarkers(mk *Markers, genes []string, c, n int) []Marker {
 
 // Write writes a clustering's files into dir.
 func Write(dir string, seg Side, filter *Filter, r *Result) error {
-	d := Description{Format: "situcraft-clustering", Version: 1, Method: "SituCraft clustering " + MethodVersion, Segmentation: seg, Parameters: r.Params, Seconds: r.Seconds}
+	d := Description{Format: "situcraft-clustering", Version: 1, Method: "SituCraft clustering " + MethodVersion, Segmentation: seg, Source: r.Source, Parameters: r.Params, Seconds: r.Seconds}
+	if r.Source != nil {
+		d.Method = r.Source.Tool + " " + r.Source.Title + " clustering"
+	}
 	d.Fixed.Normalization = "each cell's counts scaled to the median total, then log1p"
 	d.Fixed.TargetSum = r.Target
 	d.Fixed.Clip = ClipAt
@@ -158,11 +181,13 @@ func Write(dir string, seg Side, filter *Filter, r *Result) error {
 		d.Genes.MedianCells = expressing[len(expressing)/2]
 	}
 	p := r.PCA
-	d.PCA.Components, d.PCA.Variance, d.PCA.TotalVariance = p.components, p.values, p.totalVariance
-	for _, v := range p.values {
-		d.PCA.VarianceRatio = append(d.PCA.VarianceRatio, v/p.totalVariance)
+	if p != nil {
+		d.PCA.Components, d.PCA.Variance, d.PCA.TotalVariance = p.components, p.values, p.totalVariance
+		for _, v := range p.values {
+			d.PCA.VarianceRatio = append(d.PCA.VarianceRatio, v/p.totalVariance)
+		}
+		d.Graph.Neighbors, d.Graph.Edges = r.Params.Neighbors, r.Edges
 	}
-	d.Graph.Neighbors, d.Graph.Edges = r.Params.Neighbors, r.Edges
 	d.Clusters.Count, d.Clusters.Sizes, d.Clusters.Modularity, d.Clusters.Iterations = len(r.Partition.Sizes), r.Partition.Sizes, r.Partition.Modularity, r.Partition.Iterations
 	for c := 0; c < r.Markers.Clusters; c++ {
 		d.Top = append(d.Top, TopMarkers(r.Markers, r.Genes, c, 10))
@@ -184,23 +209,30 @@ func Write(dir string, seg Side, filter *Filter, r *Result) error {
 	if err := segment.WriteBinary(filepath.Join(dir, FileCells), "SCKC", &b); err != nil {
 		return err
 	}
+	components, loadings, scores := 0, []float64(nil), []float32(nil)
+	if p != nil {
+		components, loadings = p.components, p.loadings
+		scores = make([]float32, len(p.scores))
+		for i, v := range p.scores {
+			scores[i] = float32(v)
+		}
+	}
 	b = segment.Buffer{}
 	b.U32(uint32(len(r.Genes)))
 	for _, g := range r.Genes {
 		b.Str(g)
 	}
-	b.U32(uint32(p.components))
+	b.U32(uint32(components))
 	b.F64s(r.Mean)
 	b.F64s(r.SD)
-	b.F64s(p.loadings)
+	b.F64s(loadings)
 	b.U32(uint32(n))
-	scores := make([]float32, len(p.scores))
-	for i, v := range p.scores {
-		scores[i] = float32(v)
-	}
 	b.F32s(scores)
 	if err := segment.WriteBinary(filepath.Join(dir, FilePCA), "SCPC", &b); err != nil {
 		return err
+	}
+	if p == nil {
+		return writeMarkers(dir, r.Markers)
 	}
 	b = segment.Buffer{}
 	nb := r.Neighbors
@@ -213,8 +245,11 @@ func Write(dir string, seg Side, filter *Filter, r *Result) error {
 	if err := segment.WriteBinary(filepath.Join(dir, FileNeighbors), "SCKN", &b); err != nil {
 		return err
 	}
-	b = segment.Buffer{}
-	mk := r.Markers
+	return writeMarkers(dir, r.Markers)
+}
+
+func writeMarkers(dir string, mk *Markers) error {
+	var b segment.Buffer
 	b.U32(uint32(mk.Clusters))
 	b.U32(uint32(mk.Genes))
 	for _, col := range [][]float64{mk.Score, mk.LogFC, mk.P, mk.PAdj, mk.PctIn, mk.PctOut} {
@@ -275,7 +310,12 @@ func ReadPCA(dir string) (*PCA, error) {
 	if p.Components > 0 && G > 0 {
 		p.Loadings = r.F64s(G * p.Components)
 	}
-	n := r.Count(4 * max(p.Components, 1))
+	if p.Components == 0 {
+		// Another tool's clustering: its genes alone, with the count of its cells.
+		r.U32()
+		return p, r.Done(FilePCA)
+	}
+	n := r.Count(4 * p.Components)
 	p.Scores = r.F32s(n * p.Components)
 	return p, r.Done(FilePCA)
 }
@@ -326,7 +366,7 @@ func Digest(dir string) (string, error) {
 	}
 	h := sha256.New()
 	h.Write(raw)
-	for _, f := range Files[1:] {
+	for _, f := range FilesOf(d)[1:] {
 		b, err := os.ReadFile(filepath.Join(dir, f))
 		if err != nil {
 			return "", err
@@ -347,6 +387,7 @@ type Summary struct {
 	VarianceShare float64 `json:"varianceShare"`
 	Resolution    float64 `json:"resolution"`
 	Filter        *Filter `json:"filter,omitempty"`
+	Source        *Source `json:"source,omitempty"`
 }
 
 // Check examines a staged clustering: its files read and agree in size; the cells analyzed are
@@ -368,24 +409,35 @@ func Check(dir string, m *artifacts.Manifest) []artifacts.Finding {
 		fatal("clustering.unreadable", "%v", err)
 		return out
 	}
-	p, err := ReadPCA(dir)
-	if err != nil {
-		fatal("clustering.unreadable", "%v", err)
-		return out
-	}
-	nb, err := ReadNeighbors(dir)
-	if err != nil {
-		fatal("clustering.unreadable", "%v", err)
-		return out
-	}
 	mk, err := ReadMarkers(dir)
 	if err != nil {
 		fatal("clustering.unreadable", "%v", err)
 		return out
 	}
 	n := len(cells)
-	if n != d.Cells.Analyzed || len(p.Scores) != n*p.Components || nb.N != n || nb.K != d.Parameters.Neighbors-1 || p.Components != d.PCA.Components || len(p.Genes) != d.Genes.Count || mk.Genes != d.Genes.Count || mk.Clusters != d.Clusters.Count {
-		fatal("clustering.sizes", "The files disagree in size: %d cells analyzed (the description %d), %d components, %d × %d neighbors, %d clusters of markers (the description %d).", n, d.Cells.Analyzed, p.Components, nb.N, nb.K, mk.Clusters, d.Clusters.Count)
+	own := d.Source == nil
+	p, err := ReadPCA(dir)
+	if err != nil {
+		fatal("clustering.unreadable", "%v", err)
+		return out
+	}
+	if !own && (p.Components != 0 || len(p.Genes) != d.Genes.Count) {
+		fatal("clustering.sizes", "Another tool's clustering's pca.bin holds %d genes and %d components; it should hold the %d genes alone.", len(p.Genes), p.Components, d.Genes.Count)
+		return out
+	}
+	var nb *graph.Neighbors
+	if own {
+		if nb, err = ReadNeighbors(dir); err != nil {
+			fatal("clustering.unreadable", "%v", err)
+			return out
+		}
+		if len(p.Scores) != n*p.Components || nb.N != n || nb.K != d.Parameters.Neighbors-1 || p.Components != d.PCA.Components || len(p.Genes) != d.Genes.Count {
+			fatal("clustering.sizes", "The files disagree in size: %d cells analyzed, %d components (the description %d), %d × %d neighbors.", n, p.Components, d.PCA.Components, nb.N, nb.K)
+			return out
+		}
+	}
+	if n != d.Cells.Analyzed || mk.Genes != d.Genes.Count || mk.Clusters != d.Clusters.Count || len(cluster) != n {
+		fatal("clustering.sizes", "The files disagree in size: %d cells analyzed (the description %d), %d clusters of markers (the description %d).", n, d.Cells.Analyzed, mk.Clusters, d.Clusters.Count)
 		return out
 	}
 	for i, c := range cells {
@@ -403,21 +455,10 @@ func Check(dir string, m *artifacts.Manifest) []artifacts.Finding {
 		sizes[c]++
 	}
 	for c, s := range sizes {
-		if s != d.Clusters.Sizes[c] || c > 0 && s > sizes[c-1] || s == 0 {
-			fatal("clustering.sizes", "The clusters' sizes %v are not the description's %v, from the largest down.", sizes, d.Clusters.Sizes)
+		// SituCraft numbers its clusters by size; another tool's keep that tool's numbers.
+		if s != d.Clusters.Sizes[c] || own && (c > 0 && s > sizes[c-1] || s == 0) {
+			fatal("clustering.sizes", "The clusters' sizes %v are not the description's %v.", sizes, d.Clusters.Sizes)
 			break
-		}
-	}
-	g, err := graph.Fuzzy(nb)
-	if err != nil {
-		fatal("clustering.graph", "%v", err)
-	} else {
-		community := make([]int32, n)
-		for i, c := range cluster {
-			community[i] = int32(c)
-		}
-		if q := graph.Modularity(g, community, d.Parameters.Resolution); q != d.Clusters.Modularity || g.Edges() != d.Graph.Edges {
-			fatal("clustering.modularity", "The graph made again from the neighbors has %d edges and modularity %v; the description records %d and %v.", g.Edges(), q, d.Graph.Edges, d.Clusters.Modularity)
 		}
 	}
 	finite := func(name string, v []float64) {
@@ -428,16 +469,30 @@ func Check(dir string, m *artifacts.Manifest) []artifacts.Finding {
 			}
 		}
 	}
-	finite("loadings", p.Loadings)
-	finite("variances", d.PCA.Variance)
-	finite("distances", nb.Distances)
-	finite("scores", mk.Score)
-	for _, s := range p.Scores {
-		if math.IsNaN(float64(s)) || math.IsInf(float64(s), 0) {
-			fatal("clustering.values", "A cell's component score is not a finite number.")
-			break
+	if own {
+		g, err := graph.Fuzzy(nb)
+		if err != nil {
+			fatal("clustering.graph", "%v", err)
+		} else {
+			community := make([]int32, n)
+			for i, c := range cluster {
+				community[i] = int32(c)
+			}
+			if q := graph.Modularity(g, community, d.Parameters.Resolution); q != d.Clusters.Modularity || g.Edges() != d.Graph.Edges {
+				fatal("clustering.modularity", "The graph made again from the neighbors has %d edges and modularity %v; the description records %d and %v.", g.Edges(), q, d.Graph.Edges, d.Clusters.Modularity)
+			}
+		}
+		finite("loadings", p.Loadings)
+		finite("variances", d.PCA.Variance)
+		finite("distances", nb.Distances)
+		for _, s := range p.Scores {
+			if math.IsNaN(float64(s)) || math.IsInf(float64(s), 0) {
+				fatal("clustering.values", "A cell's component score is not a finite number.")
+				break
+			}
 		}
 	}
+	finite("scores", mk.Score)
 	for i := range mk.P {
 		// p·m/m may round a unit below p.
 		if !(mk.P[i] >= 0 && mk.P[i] <= 1) || !(mk.PAdj[i] >= mk.P[i]*(1-1e-12) && mk.PAdj[i] <= 1) {
@@ -450,7 +505,7 @@ func Check(dir string, m *artifacts.Manifest) []artifacts.Finding {
 		share += r
 	}
 	s := Summary{Segmentation: d.Segmentation, Cells: n, Clusters: d.Clusters.Count, Sizes: d.Clusters.Sizes, Modularity: d.Clusters.Modularity,
-		Components: d.PCA.Components, VarianceShare: share, Resolution: d.Parameters.Resolution, Filter: d.Cells.Filter}
+		Components: d.PCA.Components, VarianceShare: share, Resolution: d.Parameters.Resolution, Filter: d.Cells.Filter, Source: d.Source}
 	m.Summary, _ = json.Marshal(s)
 	return out
 }

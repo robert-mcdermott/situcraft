@@ -30,6 +30,7 @@ internal/segment/    nucleus expansion, transcript-informed segmentation
 internal/compare/    cell matching, difference classes, metrics
 internal/cluster/    normalization, principal components, Leiden clusters, markers
 internal/graph/      nearest neighbors, UMAP's fuzzy graph, Leiden
+internal/embed/      UMAP maps and their quality
 internal/linalg/     symmetric eigendecomposition
 internal/jobs/       durable background jobs
 internal/simulate/   seeded simulated tissues

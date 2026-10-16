@@ -240,6 +240,28 @@ func (a *app) handleJobs() {
 			a.artifacts.Discard(clusteringID(p.Segmentation, p.Filter, p.Parameters))
 		}
 	})
+	a.jobs.Handle("embedding", func(spec json.RawMessage) (jobs.Func, error) {
+		var p embedSpec
+		if json.Unmarshal(spec, &p) != nil || p.Clustering == "" || p.Parameters.Check() != nil {
+			return nil, errors.New("its spec names no clustering and parameters")
+		}
+		return a.embeddingJob(p, embeddingID(p.Clustering, p.Parameters)), nil
+	}, func(id string, spec json.RawMessage) {
+		var p embedSpec
+		if json.Unmarshal(spec, &p) == nil && p.Clustering != "" {
+			a.artifacts.Discard(embeddingID(p.Clustering, p.Parameters))
+		}
+	})
+	a.jobs.Handle("analysis", func(spec json.RawMessage) (jobs.Func, error) {
+		if a.cache == nil {
+			return nil, errors.New("SituCraft has no cache folder")
+		}
+		var p analysisSpec
+		if json.Unmarshal(spec, &p) != nil || p.Bundle == "" || p.Clustering == "" {
+			return nil, errors.New("its spec names no bundle and clustering")
+		}
+		return a.analysisJob(p), nil
+	}, func(string, json.RawMessage) {})
 	a.jobs.Handle("plant", func(spec json.RawMessage) (jobs.Func, error) {
 		if a.cache == nil {
 			return nil, errors.New("SituCraft has no cache folder")

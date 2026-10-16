@@ -298,3 +298,100 @@ func TestTheCellsAnalyzed(t *testing.T) {
 }
 
 const clusterDigest = "a0fdea1738c0ed18"
+
+// Another tool's clusters: recorded with their source and numbers, markers computed as SituCraft
+// computes them, the files checked; a cluster's markers are those of its cells against the rest
+// (Contrast), and the expression and dot plot agree with the normalization by hand.
+func TestAnotherToolsClustersAndExpression(t *testing.T) {
+	counts, truth := tissue(600, 40, 3, 77)
+	cells := make([]uint32, 0, 600)
+	labels := make([]int32, 0, 600)
+	for i := 0; i < 600; i++ {
+		if i%10 == 9 {
+			continue // a cell the tool did not cluster
+		}
+		cells = append(cells, uint32(i))
+		labels = append(labels, 2-truth[i]) // its own numbers
+	}
+	src := Source{Tool: "Xenium Onboard Analysis", Version: "xenium-2.0.0.10", File: "analysis.tar.gz", Name: "gene_expression_graphclust", Title: "Graph-based"}
+	r, err := FromLabels(counts, cells, labels, src, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Cells) != 540 || r.Excluded != 60 || r.Partition.Sizes[0] != 180 {
+		t.Fatalf("%d cells, %d left out, sizes %v", len(r.Cells), r.Excluded, r.Partition.Sizes)
+	}
+	dir := t.TempDir()
+	if err := Write(dir, Side{ID: "seg-1", Name: "Instrument segmentation"}, nil, r); err != nil {
+		t.Fatal(err)
+	}
+	var m artifacts.Manifest
+	if f := Check(dir, &m); len(f) != 0 {
+		t.Fatalf("check: %+v", f)
+	}
+	d, _ := ReadDescription(dir)
+	if d.Source == nil || d.Source.Name != "gene_expression_graphclust" || len(FilesOf(d)) != 4 || d.Method != "Xenium Onboard Analysis Graph-based clustering" {
+		t.Errorf("description: %+v, method %q", d.Source, d.Method)
+	}
+	if _, err := Digest(dir); err != nil {
+		t.Fatal(err)
+	}
+	clusters := make([]uint32, len(r.Cells))
+	for i, c := range r.Partition.Community {
+		clusters[i] = uint32(c)
+	}
+	e, err := LoadExpression(counts, r.Cells, clusters, r.Target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A cluster's markers against the rest are its cells' contrast with the rest.
+	selected := make([]bool, len(r.Cells))
+	for i, c := range clusters {
+		selected[i] = c == 1
+	}
+	contrast, err := e.Contrast(selected, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	G := r.Markers.Genes
+	for g := 0; g < G; g++ {
+		// The rest's sum is taken in another order: the fold change may differ by a rounding.
+		if contrast.Score[g] != r.Markers.Score[G+g] || math.Abs(contrast.LogFC[g]-r.Markers.LogFC[G+g]) > 1e-12 {
+			t.Fatalf("gene %d: the contrast's score %g, cluster 1's %g", g, contrast.Score[g], r.Markers.Score[G+g])
+		}
+	}
+	// Values and the dot plot by hand.
+	gene := 5
+	values := e.Values(gene)
+	sum, expressing, size := 0.0, 0, 0
+	for i, cell := range r.Cells {
+		total, count := 0, 0
+		for k := counts.Offsets[cell]; k < counts.Offsets[cell+1]; k++ {
+			total += int(counts.Count[k])
+			if int(counts.Gene[k]) == gene {
+				count = int(counts.Count[k])
+			}
+		}
+		want := 0.0
+		if count > 0 {
+			want = math.Log1p(float64(count) / (float64(total) / r.Target))
+		}
+		if math.Abs(float64(values[i])-want) > 1e-6 {
+			t.Fatalf("cell %d: %g, by hand %g", cell, values[i], want)
+		}
+		if clusters[i] == 0 {
+			size++
+			sum += want
+			if count > 0 {
+				expressing++
+			}
+		}
+	}
+	mean, share := e.Dot([]int{gene}, 3)
+	if math.Abs(mean[0][0]-sum/float64(size)) > 1e-9 || share[0][0] != float64(expressing)/float64(size) {
+		t.Errorf("dot plot %g, %g; by hand %g, %g", mean[0][0], share[0][0], sum/float64(size), float64(expressing)/float64(size))
+	}
+	if _, err := e.Contrast(make([]bool, len(r.Cells)), 2); err == nil {
+		t.Error("an empty selection's markers")
+	}
+}

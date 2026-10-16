@@ -114,6 +114,11 @@ func (m *matrix) markers(cluster []int32, count, workers int) *Markers {
 			at := c*G + g
 			n1 := float64(sizes[c])
 			n2 := nf - n1
+			if sizes[c] == 0 || n2 == 0 {
+				// A cluster another tool left without a cell here, or holding every cell.
+				mk.P[at] = 1
+				continue
+			}
 			rs := rankSum[c] + mul(float64(sizes[c]-expressing[c]), zeroRank)
 			sd := math.Sqrt(mul(mul(mul(tie, n1), n2), nf+1) / 12)
 			z := 0.0

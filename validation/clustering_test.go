@@ -26,6 +26,7 @@ import (
 	"testing"
 
 	"situcraft/internal/cluster"
+	"situcraft/internal/embed"
 	"situcraft/internal/segment"
 	"situcraft/internal/segment/imports"
 	"situcraft/internal/xenium"
@@ -38,10 +39,23 @@ type clusteringNumbers struct {
 	SituCraft struct {
 		Version    string  `json:"version"`
 		Digest     string  `json:"digest"`
+		MapDigest  string  `json:"mapDigest"`
 		Cells      int     `json:"cells"`
 		Clusters   int     `json:"clusters"`
 		Modularity float64 `json:"modularity"`
 	} `json:"situcraft"`
+	Map struct {
+		A                   float64   `json:"a"`
+		B                   float64   `json:"b"`
+		UMAPA               float64   `json:"umapA"`
+		UMAPB               float64   `json:"umapB"`
+		Trustworthiness     float64   `json:"trustworthiness"`
+		Recomputed          float64   `json:"trustworthinessRecomputed"`
+		UMAPTrustworthiness []float64 `json:"umapTrustworthiness"`
+		Precision           float64   `json:"precision"`
+		Recall              float64   `json:"recall"`
+		UMAPRecall          []float64 `json:"umapRecall"`
+	} `json:"map"`
 	Tools map[string]string `json:"tools"`
 	Cells struct {
 		Same     bool `json:"same"`
@@ -116,6 +130,12 @@ const (
 	tolLeidenARI     = 0.10
 	tolTruthARI      = 0.02
 	tolTruthARIFloor = 0.85
+	// The map: the curve fitted as umap-learn fits it; its trustworthiness recomputed independently
+	// from its places; no less trustworthy than umap-learn's least of five seeds on the same graph,
+	// less a hundredth (UMAP is random, and maps of different seeds differ by about that).
+	tolCurve      = 1e-5
+	tolRecomputed = 1e-4
+	tolTrustUMAP  = 0.01
 )
 
 // clusterCheck evaluates the tolerances on a data set's numbers.
@@ -146,11 +166,25 @@ func clusterChecks(n *clusteringNumbers) []check {
 	add("markers' log₂ fold changes, largest difference", "at most", n.Markers.LogFCMaxDiff, tolMarkerLogFC, n.Markers.LogFCMaxDiff <= tolMarkerLogFC)
 	add("markers' shares expressing, largest difference", "at most", n.Markers.PctMaxDiff, tolMarkerPct, n.Markers.PctMaxDiff <= tolMarkerPct)
 	add("each cluster's first ten markers, the same genes", "at least", n.Markers.TopAgreement, tolMarkerTop, n.Markers.TopAgreement >= tolMarkerTop)
+	add("the map's curve (a, b) against umap-learn's, largest difference", "at most", math.Max(math.Abs(n.Map.A-n.Map.UMAPA), math.Abs(n.Map.B-n.Map.UMAPB)), tolCurve, math.Max(math.Abs(n.Map.A-n.Map.UMAPA), math.Abs(n.Map.B-n.Map.UMAPB)) <= tolCurve)
+	add("the map's trustworthiness, recomputed from its places", "within", math.Abs(n.Map.Recomputed-n.Map.Trustworthiness), tolRecomputed, math.Abs(n.Map.Recomputed-n.Map.Trustworthiness) <= tolRecomputed)
+	if len(n.Map.UMAPTrustworthiness) > 0 {
+		low := slicesMin(n.Map.UMAPTrustworthiness) - tolTrustUMAP
+		add("the map's trustworthiness against umap-learn's lowest of five seeds on the same graph", "at least", n.Map.Trustworthiness, low, n.Map.Trustworthiness >= low)
+	}
 	if t := n.Truth; t != nil {
 		low := math.Max(tolTruthARIFloor, t.ARIScanpy-tolTruthARI)
 		add("agreement with the true cell types (ARI)", "at least", t.ARISituCraft, low, t.ARISituCraft >= low)
 	}
 	return out
+}
+
+func slicesMin(v []float64) float64 {
+	m := math.Inf(1)
+	for _, x := range v {
+		m = math.Min(m, x)
+	}
+	return m
 }
 
 func b2f(b bool) float64 {
@@ -205,6 +239,22 @@ func clusterSet(t *testing.T, bundleDir, out string) *cluster.Result {
 	return r
 }
 
+// mapSet lays out a clustering's cells (its folder) with the defaults into out.
+func mapSet(t *testing.T, clustering, out string) *embed.Result {
+	t.Helper()
+	m, err := embed.Run(context.Background(), clustering, cluster.Side{ID: "clustering", Name: "Clusters"}, embed.DefaultParams(), runtime.NumCPU(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(out, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := embed.Write(out, m); err != nil {
+		t.Fatal(err)
+	}
+	return m
+}
+
 func TestReferenceClustering(t *testing.T) {
 	if testing.Short() || !writeReference() && os.Getenv("SITUCRAFT_REQUIRE_DATA") == "" {
 		t.Skip("set SITUCRAFT_REQUIRE_DATA=1 (or SITUCRAFT_WRITE_REFERENCE=1) to cluster the reference data sets")
@@ -225,8 +275,15 @@ func TestReferenceClustering(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
+				mapOut := filepath.Join(dataRoot(), "clustering", set, "map")
+				os.RemoveAll(mapOut)
+				mres := mapSet(t, out, mapOut)
+				mapDigest, err := embed.Digest(mapOut)
+				if err != nil {
+					t.Fatal(err)
+				}
 				abs, _ := filepath.Abs(dir)
-				info, _ := json.MarshalIndent(map[string]any{"digest": digest, "cells": len(r.Cells), "clusters": len(r.Partition.Sizes), "modularity": r.Partition.Modularity, "bundle": abs}, "", " ")
+				info, _ := json.MarshalIndent(map[string]any{"digest": digest, "mapDigest": mapDigest, "cells": len(r.Cells), "clusters": len(r.Partition.Sizes), "modularity": r.Partition.Modularity, "bundle": abs, "map": mres.Description}, "", " ")
 				if err := os.WriteFile(filepath.Join(dataRoot(), "clustering", set, "situcraft.json"), append(info, '\n'), 0o644); err != nil {
 					t.Fatal(err)
 				}
@@ -249,6 +306,11 @@ func TestReferenceClustering(t *testing.T) {
 			}
 			if digest != n.SituCraft.Digest {
 				t.Errorf("SituCraft's clustering of %s is not the one its reference numbers were made from (digest %s, recorded %s): make them again", set, digest[:16], n.SituCraft.Digest[:min(16, len(n.SituCraft.Digest))])
+			}
+			mapOut := filepath.Join(t.TempDir(), "map")
+			mapSet(t, out, mapOut)
+			if mapDigest, err := embed.Digest(mapOut); err != nil || mapDigest != n.SituCraft.MapDigest {
+				t.Errorf("SituCraft's map of %s is not the one its reference numbers were made from (digest %.16s, recorded %.16s): make them again", set, mapDigest, n.SituCraft.MapDigest)
 			}
 			for _, c := range clusterChecks(&n) {
 				if c.Pass {

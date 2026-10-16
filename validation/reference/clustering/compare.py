@@ -33,7 +33,7 @@ import leidenalg
 from scipy.stats import norm, rankdata, tiecorrect
 from sklearn.metrics import adjusted_rand_score
 from sklearn.neighbors import NearestNeighbors
-from umap.umap_ import fuzzy_simplicial_set
+from umap.umap_ import find_ab_params, fuzzy_simplicial_set, simplicial_set_embedding
 
 
 # --- SituCraft's files (docs/FORMATS.md): magic, version, length, zlib body ---------------------
@@ -104,6 +104,43 @@ def read_situcraft(folder):
         out["m_" + name] = b.array("<f8", c * g2).reshape(c, g2)
     b.done()
     return out
+
+
+def read_map(folder):
+    d = json.load(open(os.path.join(folder, "embedding.json")))
+    b = Body(os.path.join(folder, "embedding.bin"), "SCEB")
+    n = b.u32()
+    cells = b.array("<u4", n).astype(np.int64)
+    xy = b.array("<f4", 2 * n).reshape(n, 2).astype(np.float64)
+    score = b.array("<f4", n)
+    b.done()
+    return d, cells, xy, score
+
+
+def map_quality(high, low, k=15, wide=75):
+    """SituCraft's measures of a map, by their definitions (internal/embed): trustworthiness T(k)
+    exact over every (n/Q)-th query cell, Q = min(n, 2000), ranks in the space by distance then by
+    index; and the mean precision and recall of each cell's k nearest within the other side's
+    wide nearest."""
+    n = len(high)
+    queries = min(n, 2000)
+    lo = NearestNeighbors(n_neighbors=wide + 1, algorithm="brute").fit(low).kneighbors(return_distance=False)[:, :wide]
+    hi = NearestNeighbors(n_neighbors=wide + 1, algorithm="brute").fit(high).kneighbors(return_distance=False)[:, :wide]
+    total = 0
+    for q in range(queries):
+        i = q * n // queries
+        d = ((high - high[i]) ** 2).sum(axis=1)
+        d[i] = np.inf
+        order = np.lexsort((np.arange(n), d))
+        rank = np.empty(n, dtype=np.int64)
+        rank[order] = np.arange(1, n + 1)
+        for j in lo[i, :k]:
+            if rank[j] > k:
+                total += int(rank[j]) - k
+    t = 1 - 2 / (queries * k * (2 * n - 3 * k - 1)) * total
+    precision = np.mean([len(set(lo[i, :k]) & set(hi[i])) / k for i in range(n)])
+    recall = np.mean([len(set(hi[i, :k]) & set(lo[i])) / k for i in range(n)])
+    return float(t), float(precision), float(recall)
 
 
 # --- Helpers ----------------------------------------------------------------------------------
@@ -254,6 +291,28 @@ def main(data, name, out_path):
         "ariAmongLeidenalg": [float(adjusted_rand_score(a, b)) for a, b in itertools.combinations(theirs, 2)],
     }
 
+    # The map: its curve against umap-learn's; its trustworthiness recomputed from its places; and
+    # umap-learn's layouts of the same graph (five seeds) by the same measures.
+    md, mcells, mxy, _ = read_map(os.path.join(folder, "map"))
+    if not np.array_equal(mcells, s["cells"]):
+        raise SystemExit(f"{name}: the map's cells are not the clustering's")
+    ua, ub = find_ab_params(1.0, md["parameters"]["minDist"])
+    t_ours, p_ours, r_ours = map_quality(s["scores"], mxy)
+    umap_t, umap_r = [], []
+    for seed in range(5):
+        emb, _ = simplicial_set_embedding(s["scores"], sp.coo_matrix(g), 2, 1.0, ua, ub, 1.0, 5, None, "spectral", np.random.RandomState(seed), "euclidean", {}, False, {}, False)
+        t_u, _, r_u = map_quality(s["scores"], np.asarray(emb, dtype=np.float64))
+        umap_t.append(t_u)
+        umap_r.append(r_u)
+    result["map"] = {
+        "a": md["fitted"]["a"], "b": md["fitted"]["b"], "umapA": float(ua), "umapB": float(ub),
+        "trustworthiness": md["quality"]["trustworthiness"], "trustworthinessRecomputed": t_ours,
+        "precision": md["quality"]["precision"], "precisionRecomputed": p_ours,
+        "recall": md["quality"]["recall"], "recallRecomputed": r_ours,
+        "umapTrustworthiness": umap_t, "umapRecall": umap_r,
+    }
+    result["situcraft"]["mapDigest"] = info["mapDigest"]
+
     # rank_genes_groups on SituCraft's clusters, from the log-normalized values.
     raw = adata.raw.to_adata()
     raw.obs["situcraft"] = pd.Categorical([str(c) for c in labels], categories=[str(c) for c in range(labels.max() + 1)])
@@ -321,7 +380,7 @@ def main(data, name, out_path):
     with open(out_path, "w") as f:
         json.dump(result, f, indent=1)
         f.write("\n")
-    print(json.dumps({k: result[k] for k in ["cells", "pca", "neighbors", "graph", "markers", "endToEnd", "instrument", "truth"]}, indent=1)[:4000])
+    print(json.dumps({k: result[k] for k in ["cells", "neighbors", "graph", "map", "markers", "endToEnd", "instrument", "truth"]}, indent=1)[:4000])
 
 
 if __name__ == "__main__":

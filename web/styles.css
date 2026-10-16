@@ -1045,3 +1045,41 @@ td div.studio-problem { padding: 2px 6px; margin-top: 4px; font-size: 11.5px; }
 .ct-scree text { font-size: 10px; fill: var(--text-2); }
 .ct-markers td:first-child, .ct-clusters td:first-child { white-space: nowrap; }
 @media (max-width: 720px) { .ct-summary { grid-template-columns: 1fr; } }
+
+/* --- The map and the tissue, linked (ui/cell-map.js) --- */
+.cell-map { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+.cm-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12.5px; }
+.cm-field { display: flex; align-items: center; gap: 6px; }
+.cm-field > span { color: var(--text-2); }
+.cm-gene { width: 130px; }
+.cm-selection { font-size: 12px; }
+.cm-panes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; height: 460px; }
+.cm-pane { position: relative; min-width: 0; border-radius: calc(var(--radius) - 2px); overflow: hidden; background: #0b0d12; }
+.cm-map, .cm-tissue { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+.cm-map { cursor: grab; }
+.cm-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.cell-map.lassoing .cm-overlay { pointer-events: auto; cursor: crosshair; }
+.cm-pane-label { position: absolute; top: 6px; left: 8px; z-index: 2; font-size: 11px; color: #c9ced8; background: rgba(0, 0, 0, 0.45); padding: 1px 6px; border-radius: 4px; pointer-events: none; }
+.cm-status { position: absolute; left: 0; right: 0; top: 45%; text-align: center; font-size: 12px; color: #c9ced8; pointer-events: none; }
+.cm-legend { display: flex; flex-wrap: wrap; gap: 4px 6px; font-size: 12px; }
+.cm-legend-item { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface, transparent); color: var(--text); padding: 2px 9px; cursor: pointer; font: inherit; }
+.cm-legend-item:hover { border-color: var(--accent); }
+.cm-legend-item .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.cm-scale { display: flex; flex-direction: column; gap: 3px; min-width: 240px; }
+@media (max-width: 860px) { .cm-panes { grid-template-columns: 1fr; height: auto; } .cm-pane { height: 340px; } }
+
+/* --- Dot plot, names, selection (ui/mode-celltypes.js) --- */
+.ct-dotplot { overflow-x: auto; }
+.ct-dotplot svg { display: block; }
+.ct-dotplot text { font-size: 10.5px; fill: var(--text-2); }
+.ct-dotplot .ct-row-label { fill: var(--text); }
+.ct-name { min-width: 140px; }
+.ct-selection { display: flex; flex-direction: column; gap: 8px; }
+.ct-composition { display: flex; height: 12px; border-radius: 3px; overflow: hidden; border: 1px solid var(--line); }
+.ct-composition span { display: block; height: 100%; }
+.ct-contingency td { text-align: right; font-variant-numeric: tabular-nums; padding: 2px 5px; }
+.ct-contingency th { font-weight: 600; font-size: 11.5px; padding: 2px 5px; }
+.ct-warning { color: var(--text); }
+.ct-warning svg { color: var(--warn, #b7791f); vertical-align: -2px; }
+.ct-contrast { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 860px) { .ct-contrast { grid-template-columns: 1fr; } }

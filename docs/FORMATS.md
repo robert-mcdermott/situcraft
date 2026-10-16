@@ -89,7 +89,7 @@ A project is one JSON document, saved automatically in the library (`<data dir>/
 | `format`, `version` | `"situcraft-project"`, `1` |
 | `id`, `name`, `created`, `modified` | Its identity |
 | `datasets` | Each bundle: its place, run and analysis identifiers, panel, tissue, counts, pixel size, channels, a fingerprint of its files (each file's size; the SHA-256 of its manifest, metrics and panel), and its validation summary and findings |
-| `artifacts` | Results: filters (a name, a version, its parent version, its conditions, and its result: the number of cells, how many it keeps, and a checksum of which), from 0.2.0 segmentations and comparisons, and from 0.4.0 clusterings (below) |
+| `artifacts` | Results: filters (a name, a version, its parent version, its conditions, and its result: the number of cells, how many it keeps, and a checksum of which), from 0.2.0 segmentations and comparisons, and from 0.4.0 clusterings, their names and maps (below) |
 | `decisions` | Recorded choices, with their reasons (from 0.2.0) |
 | `views` | Saved views (below) |
 | `exports` | The exports written from its segmentations (from 0.2.0; absent until the first) |
@@ -233,9 +233,27 @@ little-endian, a string is its length (unsigned varint) then its UTF-8 bytes.
 | `neighbors.bin` | `SCKN` | The cells n and the neighbors k of each (u32, u32: the parameter less one, the cell itself not listed), each one's neighbors nearest first (u32 indices among the cells analyzed, n × k) and their Euclidean distances in the components (f64) |
 | `markers.bin` | `SCMR` | The clusters c and genes g (u32, u32), then six arrays of f64, each c × g, cluster-major: the rank-sum test's z-score, the log₂ fold change, the p-value, the Benjamini–Hochberg adjusted p-value, and the shares of cells expressing the gene in the cluster and out of it |
 
+A clustering of the instrument's (registered from the bundle's `analysis.tar.gz`) has a `source`
+in `clustering.json` (`tool`, `version`, `file`, `name`, `title`), keeps the instrument's cluster
+numbers (from 0 here: the instrument's Cluster 1 is 0), has no `neighbors.bin`, and its `pca.bin`
+holds the genes and their scaling with no components (k 0, the cells' count, no scores).
+
 The project records each clustering it uses (an `artifacts` entry of kind `clustering`, with its
-dataset, segmentation, parameters and summary). The Viewer's fill `clusters:<artifact id>` colors
-cells by a clustering of the segmentation drawn; saved views keep it.
+dataset, segmentation, parameters and summary), and each version of a clustering's names (kind
+`cluster-names`: `clustering`, `version`, `parent`, `names`, a name or `null` per cluster, `by`,
+`created`). The Viewer's fill `clusters:<artifact id>` colors cells by a clustering of the
+segmentation drawn; saved views keep it.
+
+### Maps
+
+A map of a clustering's cells (from 0.4.0) is an artifact of two files:
+
+| File | Magic | Holds |
+| --- | --- | --- |
+| `embedding.json` | | `format` (`"situcraft-embedding"`), `version`, `method`; the `segmentation` and the `clustering` (artifact id and name); `parameters` (`minDist`, `spread`, `epochs`, 0 for the default, `negativeRate`, `seed`); `fitted` (the curve's `a` and `b`, the `epochs` run, the `edges` optimized, the `init`ial layout); `cells`; `quality` (`k`, `kWide`, `trustworthiness` over `queries` cells, the mean `precision` and `recall`); `seconds`. A map of the instrument's has a `source` (`tool`, `version`, `file`, the `space` its quality is judged in) instead of `parameters` and `fitted` |
+| `embedding.bin` | `SCEB` | The cells (u32 count; u32 indices into the segmentation's cells, increasing), each one's place (f32 × 2, interleaved) and its reliability score (f32, 0 to 1: its neighborhood precision and recall, averaged over it and its 15 nearest on the map) |
+
+The project records each map it uses (kind `embedding`, with its segmentation and clustering).
 
 ### Jobs
 

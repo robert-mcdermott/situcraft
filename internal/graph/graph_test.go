@@ -229,3 +229,30 @@ func dedupe(edges [][3]float64) [][3]float64 {
 }
 
 const leidenDigest = "6510f8cc33e58ddd"
+
+// The grid search finds exactly what the brute-force search finds, ties included.
+func TestKNN2DIsKNN(t *testing.T) {
+	r := rand.New(rand.NewPCG(11, 12))
+	for _, n := range []int{20, 997, 4000} {
+		xy := make([]float64, 2*n)
+		for i := range xy {
+			xy[i] = float64(r.IntN(60)) / 7 // coarse: ties
+		}
+		if n == 4000 {
+			for i := 0; i < 100; i++ {
+				xy[2*i] += 1000 // a far cluster
+			}
+		}
+		k := min(25, n-1)
+		want, _ := KNN(context.Background(), xy, n, 2, k, 4, nil)
+		got, err := KNN2D(context.Background(), xy, n, k, 3)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i := range want.Index {
+			if want.Index[i] != got.Index[i] || want.Distances[i] != got.Distances[i] {
+				t.Fatalf("n %d: entry %d: grid %d at %g, brute force %d at %g", n, i, got.Index[i], got.Distances[i], want.Index[i], want.Distances[i])
+			}
+		}
+	}
+}
