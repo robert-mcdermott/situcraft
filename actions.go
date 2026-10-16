@@ -97,7 +97,7 @@ var remoteActions = []remoteAction{
 		"outlines":        flagArg("Draw the cell outlines."),
 		"nuclei":          flagArg("Draw the nucleus outlines."),
 		"segmentation":    textArg("The segmentation drawn: by its name or artifact ID, instrument for the instrument's, default for the dataset's default."),
-		"fill":            textArg("Fill the cells by transcripts, total, area, nucleusArea or method (the instrument's); limitations, certainty or probability (a refinement's); clusters (the latest clustering of the segmentation drawn) or clusters:<artifact id>; none for no fill."),
+		"fill":            textArg("Fill the cells by transcripts, total, area, nucleusArea or method (the instrument's); limitations, certainty or probability (a refinement's); clusters (the latest clustering of the segmentation drawn) or clusters:<artifact id>; labels (the latest label set, its first level), labels:<level> or labels:<artifact id>:<level>; none for no fill."),
 		"opacity":         numberArg("The fill's opacity, 0 to 1."),
 		"color_by":        textArg("Color the transcripts by gene (as listed) or probability (their assignment's, a refinement's; seen close up)."),
 		"cell":            textArg("A cell to select, by its ID in the segmentation drawn (as cells.parquet names the instrument's)."),
@@ -182,7 +182,7 @@ var remoteActions = []remoteAction{
 		"dataset":    datasetArg,
 		"clustering": textArg("A clustering, by artifact id or name; SituCraft's latest if not given."),
 		"map":        textArg("The map: a map's artifact id, or instrument for the instrument's; the clustering's own if not given."),
-		"color_by":   textArg("clusters (the clustering's), clusters:<clustering>, a gene's name, transcripts, area or reliability."),
+		"color_by":   textArg("clusters (the clustering's), clusters:<clustering>, labels (its latest label set, the first level), labels:<level>, labels:<label set>:<level>, confidence, a gene's name, transcripts, area or reliability."),
 		"select":     map[string]any{"description": "{\"clusters\": [numbers from 1]}, {\"polygon\": [[x, y], …], \"on\": \"map\" or \"tissue\" (µm)}, or \"none\"."},
 	}), long: true},
 	{Name: "name_clusters", Title: "Name clusters", Description: "Names a clustering's clusters (a new version of its names, appended; the clusters keep their numbers). Clusters given the same name are merged on the map and the tissue. An empty name removes one.", InputSchema: schema(map[string]any{
@@ -193,6 +193,20 @@ var remoteActions = []remoteAction{
 	{Name: "instrument_clusters", Title: "Add the instrument's clusters", Description: "Adds one of the instrument's own clusterings (analysis.tar.gz: graph-based, or k-means of 2 to 10 clusters) to the project as a clustering of its segmentation, its markers computed by SituCraft, and the instrument's map with it the first time.", InputSchema: schema(map[string]any{
 		"dataset":    datasetArg,
 		"clustering": textArg("graph-based (the default), k-means N, or its folder's name (gene_expression_kmeans_5_clusters)."),
+	}), long: true},
+	{Name: "label_cells", Title: "Label the cells from markers", Description: "Labels a clustering's cells from a marker set, as a job, in the Cell types view: each cell scored for each label by its markers' expression against control genes binned by mean expression (Tirosh et al. 2016, as scanpy's score_genes), a label's negative markers counting against it where expressed; labels assigned from the top of the hierarchy down, a level only when its best label leads the next by the margin. The marker set: one of the project's (by name or id, its latest version), one SituCraft ships (breast, lung, or simulated for a simulated tissue; the first that fits the panel if none is given), or a set given in full (saved in the project). Recorded as a labels artifact; asking again answers it. Answers the cells labeled at each level, each label's cells and markers, and each cluster's leading labels.", InputSchema: schema(map[string]any{
+		"dataset":       datasetArg,
+		"clustering":    textArg("A clustering, by artifact id or name; SituCraft's latest if not given."),
+		"markers":       textArg("A marker set: the project's by name or id, or SituCraft's breast, lung or simulated."),
+		"set":           map[string]any{"type": "object", "description": "A marker set in full (docs/FORMATS.md): {\"format\": \"situcraft-markers\", \"version\": 1, \"name\", \"levels\", \"labels\": [{\"name\", \"parent\", \"positive\", \"negative\"}], \"states\"}."},
+		"margin":        numberArg("How far a level's best label must lead the next (0.1)."),
+		"minimum":       numberArg("The score a label must reach (0)."),
+		"state":         numberArg("The score a state's markers must reach (0.25)."),
+		"bins":          numberArg("Expression bins (25)."),
+		"controls":      numberArg("Control genes per bin (50)."),
+		"lineage":       map[string]any{"type": "boolean", "description": "Leave each label's lineage's markers out of its controls (true)."},
+		"seed":          numberArg("The draws of control genes (20250)."),
+		"name_clusters": map[string]any{"description": "Name the clusters by their labels: true, or the share of a cluster's cells its label must hold (0.3 to 1; 0.5 for true)."},
 	}), long: true},
 	{Name: "show_comparison", Title: "Show a comparison", Description: "Opens a comparison of two segmentations (by id, or 'A and B' by their names; the dataset's latest if not given) in the Compare workspace: A and B side by side, overlaid or flickering, cells filled by the class of their difference, a map of disagreement. Ranks the review queue (reassigned transcripts, contamination, disagreement or low counts) among the classes and reassigned transcripts the rules keep, and shows a difference (by its place in the queue, or by a cell's id). Answers the queue's first ten, the difference shown and the cautions about the comparison's measures.", InputSchema: schema(map[string]any{
 		"dataset":     datasetArg,

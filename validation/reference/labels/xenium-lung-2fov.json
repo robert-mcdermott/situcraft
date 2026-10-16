@@ -1,0 +1,404 @@
+{
+ "dataSet": "xenium-lung-2fov",
+ "tools": {
+  "scanpy": "1.12.4",
+  "anndata": "0.13.4",
+  "numpy": "2.5.4",
+  "scipy": "1.18.1",
+  "pandas": "3.0.6",
+  "pyarrow": "26.0.0"
+ },
+ "situcraft": {
+  "version": "SituCraft labels from markers 1",
+  "digest": "7a3b5b3ab32f3795b9cca1df21d52e5af43fd07287ff33ecf33468188dd6d728",
+  "markers": "Human lung (Xenium Human Lung panel)",
+  "checksum": "d96c65a024d9df1bb3001d9da65ca06cd650a5ba78bb9d78894704e38d5825e6",
+  "cells": 11820,
+  "labeled": [
+   5555,
+   1364,
+   116
+  ]
+ },
+ "scores": {
+  "lists": 43,
+  "controlsSame": 43,
+  "maxAbs": 2.895911931991577,
+  "scanpyMaxAbsDiff": 2.7093020360524633e-07,
+  "combinedMaxAbs": 2.0489096641540527e-07,
+  "byList": [
+   {
+    "label": "Epithelial",
+    "part": "positive",
+    "genes": 3,
+    "controls": 21,
+    "controlsSame": true,
+    "maxAbsDiff": 9.082612539845769e-08
+   },
+   {
+    "label": "Epithelial",
+    "part": "negative",
+    "genes": 5,
+    "controls": 43,
+    "controlsSame": true,
+    "maxAbsDiff": 4.0059865868968814e-08
+   },
+   {
+    "label": "Alveolar type 1",
+    "part": "positive",
+    "genes": 2,
+    "controls": 22,
+    "controlsSame": true,
+    "maxAbsDiff": 5.960464477539063e-08
+   },
+   {
+    "label": "Alveolar type 2",
+    "part": "positive",
+    "genes": 4,
+    "controls": 44,
+    "controlsSame": true,
+    "maxAbsDiff": 3.793022851361627e-08
+   },
+   {
+    "label": "Ciliated",
+    "part": "positive",
+    "genes": 2,
+    "controls": 22,
+    "controlsSame": true,
+    "maxAbsDiff": 5.960464477539063e-08
+   },
+   {
+    "label": "Secretory (club and goblet)",
+    "part": "positive",
+    "genes": 2,
+    "controls": 21,
+    "controlsSame": true,
+    "maxAbsDiff": 2.9802322387695312e-08
+   },
+   {
+    "label": "Basal",
+    "part": "positive",
+    "genes": 2,
+    "controls": 21,
+    "controlsSame": true,
+    "maxAbsDiff": 2.9802322387695312e-08
+   },
+   {
+    "label": "Immune",
+    "part": "positive",
+    "genes": 8,
+    "controls": 69,
+    "controlsSame": true,
+    "maxAbsDiff": 2.9802322387695312e-08
+   },
+   {
+    "label": "Immune",
+    "part": "negative",
+    "genes": 1,
+    "controls": 9,
+    "controlsSame": true,
+    "maxAbsDiff": 1.721911959684519e-07
+   },
+   {
+    "label": "T cell",
+    "part": "positive",
+    "genes": 4,
+    "controls": 20,
+    "controlsSame": true,
+    "maxAbsDiff": 4.768371586472142e-08
+   },
+   {
+    "label": "T cell",
+    "part": "negative",
+    "genes": 2,
+    "controls": 22,
+    "controlsSame": true,
+    "maxAbsDiff": 5.960464477539063e-08
+   },
+   {
+    "label": "CD4 T cell",
+    "part": "positive",
+    "genes": 2,
+    "controls": 22,
+    "controlsSame": true,
+    "maxAbsDiff": 5.960464477539063e-08
+   },
+   {
+    "label": "CD4 T cell",
+    "part": "negative",
+    "genes": 2,
+    "controls": 22,
+    "controlsSame": true,
+    "maxAbsDiff": 5.960464477539063e-08
+   },
+   {
+    "label": "CD8 T cell",
+    "part": "positive",
+    "genes": 2,
+    "controls": 22,
+    "controlsSame": true,
+    "maxAbsDiff": 5.960464477539063e-08
+   },
+   {
+    "label": "CD8 T cell",
+    "part": "negative",
+    "genes": 2,
+    "controls": 22,
+    "controlsSame": true,
+    "maxAbsDiff": 5.960464477539063e-08
+   },
+   {
+    "label": "Regulatory T cell",
+    "part": "positive",
+    "genes": 3,
+    "controls": 32,
+    "controlsSame": true,
+    "maxAbsDiff": 1.9868214934382067e-08
+   },
+   {
+    "label": "Regulatory T cell",
+    "part": "negative",
+    "genes": 2,
+    "controls": 22,
+    "controlsSame": true,
+    "maxAbsDiff": 5.960464477539063e-08
+   },
+   {
+    "label": "NK cell",
+    "part": "positive",
+    "genes": 4,
+    "controls": 44,
+    "controlsSame": true,
+    "maxAbsDiff": 3.657557745562201e-08
+   },
+   {
+    "label": "NK cell",
+    "part": "negative",
+    "genes": 2,
+    "controls": 22,
+    "controlsSame": true,
+    "maxAbsDiff": 5.960464477539063e-08
+   },
+   {
+    "label": "B cell",
+    "part": "positive",
+    "genes": 4,
+    "controls": 44,
+    "controlsSame": true,
+    "maxAbsDiff": 2.9802322387695312e-08
+   },
+   {
+    "label": "B cell",
+    "part": "negative",
+    "genes": 1,
+    "controls": 11,
+    "controlsSame": true,
+    "maxAbsDiff": 5.960464477539063e-08
+   },
+   {
+    "label": "Plasma cell",
+    "part": "positive",
+    "genes": 3,
+    "controls": 33,
+    "controlsSame": true,
+    "maxAbsDiff": 6.863565160664109e-08
+   },
+   {
+    "label": "Plasma cell",
+    "part": "negative",
+    "genes": 1,
+    "controls": 11,
+    "controlsSame": true,
+    "maxAbsDiff": 1.1920928955078125e-07
+   },
+   {
+    "label": "Myeloid",
+    "part": "positive",
+    "genes": 5,
+    "controls": 55,
+    "controlsSame": true,
+    "maxAbsDiff": 8.453022348753336e-08
+   },
+   {
+    "label": "Myeloid",
+    "part": "negative",
+    "genes": 1,
+    "controls": 10,
+    "controlsSame": true,
+    "maxAbsDiff": 6.556510923072523e-08
+   },
+   {
+    "label": "Macrophage",
+    "part": "positive",
+    "genes": 4,
+    "controls": 44,
+    "controlsSame": true,
+    "maxAbsDiff": 4.470348358154297e-08
+   },
+   {
+    "label": "Monocyte",
+    "part": "positive",
+    "genes": 4,
+    "controls": 44,
+    "controlsSame": true,
+    "maxAbsDiff": 3.793022851361627e-08
+   },
+   {
+    "label": "Monocyte",
+    "part": "negative",
+    "genes": 1,
+    "controls": 11,
+    "controlsSame": true,
+    "maxAbsDiff": 5.960464477539063e-08
+   },
+   {
+    "label": "Dendritic cell",
+    "part": "positive",
+    "genes": 3,
+    "controls": 33,
+    "controlsSame": true,
+    "maxAbsDiff": 3.9736429868764134e-08
+   },
+   {
+    "label": "Mast cell",
+    "part": "positive",
+    "genes": 3,
+    "controls": 33,
+    "controlsSame": true,
+    "maxAbsDiff": 7.586045702723254e-08
+   },
+   {
+    "label": "Endothelial",
+    "part": "positive",
+    "genes": 5,
+    "controls": 55,
+    "controlsSame": true,
+    "maxAbsDiff": 4.768371586472142e-08
+   },
+   {
+    "label": "Endothelial",
+    "part": "negative",
+    "genes": 1,
+    "controls": 11,
+    "controlsSame": true,
+    "maxAbsDiff": 2.0590695459787867e-07
+   },
+   {
+    "label": "Blood vessel endothelial",
+    "part": "positive",
+    "genes": 4,
+    "controls": 44,
+    "controlsSame": true,
+    "maxAbsDiff": 6.773255090131158e-08
+   },
+   {
+    "label": "Blood vessel endothelial",
+    "part": "negative",
+    "genes": 1,
+    "controls": 11,
+    "controlsSame": true,
+    "maxAbsDiff": 1.1920928955078125e-07
+   },
+   {
+    "label": "Lymphatic endothelial",
+    "part": "positive",
+    "genes": 3,
+    "controls": 33,
+    "controlsSame": true,
+    "maxAbsDiff": 5.960464477539063e-08
+   },
+   {
+    "label": "Lymphatic endothelial",
+    "part": "negative",
+    "genes": 1,
+    "controls": 11,
+    "controlsSame": true,
+    "maxAbsDiff": 2.7093020360524633e-07
+   },
+   {
+    "label": "Stromal",
+    "part": "positive",
+    "genes": 5,
+    "controls": 55,
+    "controlsSame": true,
+    "maxAbsDiff": 6.610696967612739e-08
+   },
+   {
+    "label": "Stromal",
+    "part": "negative",
+    "genes": 1,
+    "controls": 11,
+    "controlsSame": true,
+    "maxAbsDiff": 2.1674416306183275e-07
+   },
+   {
+    "label": "Fibroblast",
+    "part": "positive",
+    "genes": 5,
+    "controls": 55,
+    "controlsSame": true,
+    "maxAbsDiff": 4.768371586472142e-08
+   },
+   {
+    "label": "Smooth muscle",
+    "part": "positive",
+    "genes": 4,
+    "controls": 44,
+    "controlsSame": true,
+    "maxAbsDiff": 2.9802322387695312e-08
+   },
+   {
+    "label": "Pericyte",
+    "part": "positive",
+    "genes": 4,
+    "controls": 44,
+    "controlsSame": true,
+    "maxAbsDiff": 9.75348732890069e-08
+   },
+   {
+    "label": "Pericyte",
+    "part": "negative",
+    "genes": 1,
+    "controls": 11,
+    "controlsSame": true,
+    "maxAbsDiff": 1.1920928955078125e-07
+   },
+   {
+    "label": "Proliferating",
+    "part": "positive",
+    "genes": 5,
+    "controls": 19,
+    "controlsSame": true,
+    "maxAbsDiff": 3.5762786843029915e-08
+   }
+  ]
+ },
+ "labels": {
+  "(none)": 6265,
+  "Alveolar type 1": 57,
+  "Alveolar type 2": 533,
+  "B cell": 3,
+  "Basal": 2,
+  "Blood vessel endothelial": 201,
+  "CD4 T cell": 1,
+  "CD8 T cell": 4,
+  "Ciliated": 78,
+  "Dendritic cell": 7,
+  "Endothelial": 141,
+  "Epithelial": 3908,
+  "Fibroblast": 91,
+  "Immune": 55,
+  "Lymphatic endothelial": 3,
+  "Macrophage": 76,
+  "Mast cell": 4,
+  "Monocyte": 28,
+  "Myeloid": 54,
+  "Pericyte": 162,
+  "Plasma cell": 10,
+  "Secretory (club and goblet)": 6,
+  "Smooth muscle": 37,
+  "Stromal": 87,
+  "T cell": 7
+ },
+ "truth": null
+}

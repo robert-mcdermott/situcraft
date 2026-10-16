@@ -1,0 +1,378 @@
+{
+ "dataSet": "xenium-breast-2fov",
+ "tools": {
+  "scanpy": "1.12.4",
+  "anndata": "0.13.4",
+  "numpy": "2.5.4",
+  "scipy": "1.18.1",
+  "pandas": "3.0.6",
+  "pyarrow": "26.0.0"
+ },
+ "situcraft": {
+  "version": "SituCraft labels from markers 1",
+  "digest": "6f12df3cf6bf4b715dcc9ab5aa6e16c4565db0fb90fa2b9127308c4f489da5a4",
+  "markers": "Human breast (Xenium Human Breast panel)",
+  "checksum": "82c17234a9da8b8d637beaefb12111f78eeb8c194eae5787696380e0fa969807",
+  "cells": 7163,
+  "labeled": [
+   5821,
+   3475,
+   451
+  ]
+ },
+ "scores": {
+  "lists": 40,
+  "controlsSame": 40,
+  "maxAbs": 3.7224020957946777,
+  "scanpyMaxAbsDiff": 2.7567148208618164e-07,
+  "combinedMaxAbs": 2.123415470123291e-07,
+  "byList": [
+   {
+    "label": "Epithelial",
+    "part": "positive",
+    "genes": 5,
+    "controls": 47,
+    "controlsSame": true,
+    "maxAbsDiff": 8.978742238596737e-08
+   },
+   {
+    "label": "Epithelial",
+    "part": "negative",
+    "genes": 2,
+    "controls": 20,
+    "controlsSame": true,
+    "maxAbsDiff": 1.3113021846145045e-07
+   },
+   {
+    "label": "Luminal",
+    "part": "positive",
+    "genes": 5,
+    "controls": 54,
+    "controlsSame": true,
+    "maxAbsDiff": 3.8853398165450415e-08
+   },
+   {
+    "label": "Luminal",
+    "part": "negative",
+    "genes": 2,
+    "controls": 20,
+    "controlsSame": true,
+    "maxAbsDiff": 9.238719944626439e-08
+   },
+   {
+    "label": "Basal (myoepithelial)",
+    "part": "positive",
+    "genes": 5,
+    "controls": 39,
+    "controlsSame": true,
+    "maxAbsDiff": 6.87745901339909e-08
+   },
+   {
+    "label": "Basal (myoepithelial)",
+    "part": "negative",
+    "genes": 2,
+    "controls": 19,
+    "controlsSame": true,
+    "maxAbsDiff": 5.960464477539063e-08
+   },
+   {
+    "label": "Immune",
+    "part": "positive",
+    "genes": 4,
+    "controls": 36,
+    "controlsSame": true,
+    "maxAbsDiff": 9.271833634194593e-08
+   },
+   {
+    "label": "Immune",
+    "part": "negative",
+    "genes": 1,
+    "controls": 1,
+    "controlsSame": true,
+    "maxAbsDiff": 2.7567148208618164e-07
+   },
+   {
+    "label": "T cell",
+    "part": "positive",
+    "genes": 4,
+    "controls": 18,
+    "controlsSame": true,
+    "maxAbsDiff": 7.285012149083059e-08
+   },
+   {
+    "label": "T cell",
+    "part": "negative",
+    "genes": 1,
+    "controls": 10,
+    "controlsSame": true,
+    "maxAbsDiff": 1.1920928955078125e-07
+   },
+   {
+    "label": "CD4 T cell",
+    "part": "positive",
+    "genes": 2,
+    "controls": 20,
+    "controlsSame": true,
+    "maxAbsDiff": 9.834766379057669e-08
+   },
+   {
+    "label": "CD4 T cell",
+    "part": "negative",
+    "genes": 1,
+    "controls": 10,
+    "controlsSame": true,
+    "maxAbsDiff": 1.9073486345888568e-07
+   },
+   {
+    "label": "CD8 T cell",
+    "part": "positive",
+    "genes": 4,
+    "controls": 29,
+    "controlsSame": true,
+    "maxAbsDiff": 8.940696716308594e-08
+   },
+   {
+    "label": "CD8 T cell",
+    "part": "negative",
+    "genes": 1,
+    "controls": 10,
+    "controlsSame": true,
+    "maxAbsDiff": 1.9669532758115338e-07
+   },
+   {
+    "label": "Regulatory T cell",
+    "part": "positive",
+    "genes": 4,
+    "controls": 29,
+    "controlsSame": true,
+    "maxAbsDiff": 4.521731677975538e-08
+   },
+   {
+    "label": "Regulatory T cell",
+    "part": "negative",
+    "genes": 1,
+    "controls": 10,
+    "controlsSame": true,
+    "maxAbsDiff": 1.9073486345888568e-07
+   },
+   {
+    "label": "NK cell",
+    "part": "positive",
+    "genes": 5,
+    "controls": 31,
+    "controlsSame": true,
+    "maxAbsDiff": 4.768371586472142e-08
+   },
+   {
+    "label": "NK cell",
+    "part": "negative",
+    "genes": 3,
+    "controls": 33,
+    "controlsSame": true,
+    "maxAbsDiff": 9.031006786841544e-08
+   },
+   {
+    "label": "B cell",
+    "part": "positive",
+    "genes": 5,
+    "controls": 30,
+    "controlsSame": true,
+    "maxAbsDiff": 3.5762786843029915e-08
+   },
+   {
+    "label": "B cell",
+    "part": "negative",
+    "genes": 1,
+    "controls": 11,
+    "controlsSame": true,
+    "maxAbsDiff": 2.0590695459787867e-07
+   },
+   {
+    "label": "Plasma cell",
+    "part": "positive",
+    "genes": 4,
+    "controls": 44,
+    "controlsSame": true,
+    "maxAbsDiff": 7.04418529062778e-08
+   },
+   {
+    "label": "Plasma cell",
+    "part": "negative",
+    "genes": 1,
+    "controls": 11,
+    "controlsSame": true,
+    "maxAbsDiff": 1.1920928955078125e-07
+   },
+   {
+    "label": "Myeloid",
+    "part": "positive",
+    "genes": 5,
+    "controls": 39,
+    "controlsSame": true,
+    "maxAbsDiff": 1.3571519108523944e-07
+   },
+   {
+    "label": "Myeloid",
+    "part": "negative",
+    "genes": 1,
+    "controls": 10,
+    "controlsSame": true,
+    "maxAbsDiff": 1.9073486345888568e-07
+   },
+   {
+    "label": "Macrophage",
+    "part": "positive",
+    "genes": 5,
+    "controls": 50,
+    "controlsSame": true,
+    "maxAbsDiff": 9.05990600319484e-08
+   },
+   {
+    "label": "Monocyte",
+    "part": "positive",
+    "genes": 4,
+    "controls": 40,
+    "controlsSame": true,
+    "maxAbsDiff": 1.043081283569336e-07
+   },
+   {
+    "label": "Monocyte",
+    "part": "negative",
+    "genes": 2,
+    "controls": 20,
+    "controlsSame": true,
+    "maxAbsDiff": 1.1920928955078125e-07
+   },
+   {
+    "label": "Dendritic cell",
+    "part": "positive",
+    "genes": 4,
+    "controls": 29,
+    "controlsSame": true,
+    "maxAbsDiff": 3.2885321243902865e-08
+   },
+   {
+    "label": "Mast cell",
+    "part": "positive",
+    "genes": 3,
+    "controls": 21,
+    "controlsSame": true,
+    "maxAbsDiff": 5.1089695474182406e-08
+   },
+   {
+    "label": "Plasmacytoid dendritic cell",
+    "part": "positive",
+    "genes": 3,
+    "controls": 33,
+    "controlsSame": true,
+    "maxAbsDiff": 5.960464477539063e-08
+   },
+   {
+    "label": "Endothelial",
+    "part": "positive",
+    "genes": 6,
+    "controls": 54,
+    "controlsSame": true,
+    "maxAbsDiff": 7.947285962650597e-08
+   },
+   {
+    "label": "Endothelial",
+    "part": "negative",
+    "genes": 2,
+    "controls": 15,
+    "controlsSame": true,
+    "maxAbsDiff": 1.1920928955078125e-07
+   },
+   {
+    "label": "Stromal",
+    "part": "positive",
+    "genes": 5,
+    "controls": 50,
+    "controlsSame": true,
+    "maxAbsDiff": 1.0609626754920498e-07
+   },
+   {
+    "label": "Stromal",
+    "part": "negative",
+    "genes": 4,
+    "controls": 35,
+    "controlsSame": true,
+    "maxAbsDiff": 9.025846203769561e-08
+   },
+   {
+    "label": "Fibroblast",
+    "part": "positive",
+    "genes": 6,
+    "controls": 66,
+    "controlsSame": true,
+    "maxAbsDiff": 9.392247046768887e-08
+   },
+   {
+    "label": "Perivascular",
+    "part": "positive",
+    "genes": 5,
+    "controls": 43,
+    "controlsSame": true,
+    "maxAbsDiff": 9.758527896863711e-08
+   },
+   {
+    "label": "Perivascular",
+    "part": "negative",
+    "genes": 2,
+    "controls": 20,
+    "controlsSame": true,
+    "maxAbsDiff": 9.238719944626439e-08
+   },
+   {
+    "label": "Adipocyte",
+    "part": "positive",
+    "genes": 1,
+    "controls": 11,
+    "controlsSame": true,
+    "maxAbsDiff": 1.1920928955078125e-07
+   },
+   {
+    "label": "Adipocyte",
+    "part": "negative",
+    "genes": 2,
+    "controls": 15,
+    "controlsSame": true,
+    "maxAbsDiff": 1.1920928955078125e-07
+   },
+   {
+    "label": "Proliferating",
+    "part": "positive",
+    "genes": 4,
+    "controls": 32,
+    "controlsSame": true,
+    "maxAbsDiff": 9.872019290924072e-08
+   }
+  ]
+ },
+ "labels": {
+  "(none)": 1342,
+  "Adipocyte": 12,
+  "B cell": 4,
+  "Basal (myoepithelial)": 473,
+  "CD4 T cell": 35,
+  "CD8 T cell": 41,
+  "Dendritic cell": 8,
+  "Endothelial": 85,
+  "Epithelial": 2055,
+  "Fibroblast": 582,
+  "Immune": 117,
+  "Luminal": 1735,
+  "Macrophage": 235,
+  "Mast cell": 28,
+  "Monocyte": 126,
+  "Myeloid": 84,
+  "NK cell": 5,
+  "Perivascular": 81,
+  "Plasma cell": 11,
+  "Plasmacytoid dendritic cell": 5,
+  "Regulatory T cell": 6,
+  "Stromal": 77,
+  "T cell": 16
+ },
+ "truth": null
+}

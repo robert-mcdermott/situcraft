@@ -89,7 +89,7 @@ A project is one JSON document, saved automatically in the library (`<data dir>/
 | `format`, `version` | `"situcraft-project"`, `1` |
 | `id`, `name`, `created`, `modified` | Its identity |
 | `datasets` | Each bundle: its place, run and analysis identifiers, panel, tissue, counts, pixel size, channels, a fingerprint of its files (each file's size; the SHA-256 of its manifest, metrics and panel), and its validation summary and findings |
-| `artifacts` | Results: filters (a name, a version, its parent version, its conditions, and its result: the number of cells, how many it keeps, and a checksum of which), from 0.2.0 segmentations and comparisons, and from 0.4.0 clusterings, their names and maps (below) |
+| `artifacts` | Results: filters (a name, a version, its parent version, its conditions, and its result: the number of cells, how many it keeps, and a checksum of which), from 0.2.0 segmentations and comparisons, and from 0.4.0 clusterings, their names and maps, marker sets and label sets (below) |
 | `decisions` | Recorded choices, with their reasons (from 0.2.0) |
 | `views` | Saved views (below) |
 | `exports` | The exports written from its segmentations (from 0.2.0; absent until the first) |
@@ -254,6 +254,45 @@ A map of a clustering's cells (from 0.4.0) is an artifact of two files:
 | `embedding.bin` | `SCEB` | The cells (u32 count; u32 indices into the segmentation's cells, increasing), each one's place (f32 × 2, interleaved) and its reliability score (f32, 0 to 1: its neighborhood precision and recall, averaged over it and its 15 nearest on the map) |
 
 The project records each map it uses (kind `embedding`, with its segmentation and clustering).
+
+### Marker sets
+
+A marker set (from 0.4.0) is a JSON file SituCraft reads, writes and ships (one for each
+development bundle's panel); the project keeps each version of one, and each label set keeps the
+one it was made from.
+
+| Field | Holds |
+| --- | --- |
+| `format`, `version` | `"situcraft-markers"`, 1 |
+| `name`, `about`, `panel` | Its name; what it is for; the panel it was made for (a design id, informative) |
+| `levels` | The levels' names, the top first (1 to 6): `["Class", "Lineage", "Subtype"]` |
+| `labels` | Each label (1 to 500): `name`; `parent`, a label listed before it, at the level above (none at the top); `positive` markers (1 to 200 genes) and `negative` (up to 200); `references`, DOIs among the set's |
+| `states` | Each state (up to 50), carried besides a label (proliferating, say): `name`, `positive`, `negative`, `references`, and `parent`, the label whose cells alone can carry it |
+| `references` | The published sources of its markers: `doi`, `citation` |
+
+Names are unique regardless of case; a gene is listed once in a label, not both positive and
+negative. Genes are matched to the panel by name (regardless of case where one gene matches); a set
+naming genes the panel lacks is refused, with them listed. Its checksum is the SHA-256 of its
+canonical form: the JSON as SituCraft writes it compactly, its fields in the order above.
+
+The project records each version of a marker set as kind `marker-set`: `family` (the first
+version's id), `version`, `parent`, `name`, `set` (the file), `checksum`, `source` (`{starter}`,
+`{file}` or `{edited: true}`), `by`, `created`.
+
+### Labels
+
+A label set (from 0.4.0) is an artifact of three files:
+
+| File | Magic | Holds |
+| --- | --- | --- |
+| `labels.json` | | `format` (`"situcraft-labels"`), `version`, `method`; the `segmentation` and the `clustering` (artifact id and name); `markers` (the set's `name` and `checksum`); `parameters` (`margin`, `minimum`, `state`, `bins`, `controls`, `lineage`, `seed`); `fixed` (the expression, its `targetSum`, the score, the negative markers' part, the assignment); `levels`; `sets`, each label then each state: `name`, `level` (−1 for a state), `parent` (an index, −1 for none), `state`, `positive` and `negative` markers and their control genes (`positiveControls`, `negativeControls`), and `cells` carrying it; `cells` (`analyzed`, those `labeled` at each level, `unlabeled`); `clusters`; `composition`, for each level and cluster the cells by the label they carry at the level (indices among the sets; the last count, cells without a label); `states`, for each state and cluster the cells carrying it; `seconds` |
+| `markers.json` | | The marker set, as above |
+| `labels.bin` | `SCLB` | The cells n (u32) and their indices into the segmentation's cells (u32 × n, increasing) and clusters (u32 × n); the sets S, levels L and states (u32 each); each set's score for each cell (f32, S × n, set-major) and its positive markers' part (f32, S × n); for each set with negative markers, their part (f32 × n); at each level each cell's label (u32 × n, an index among the sets, 0xFFFFFFFF where it took none), and its lead over the next label (f32 × n, NaN where the level was not reached); each cell's confidence (f32 × n); and for each state whether each cell carries it (u8 × n) |
+
+The project records each label set it uses (kind `labels`, with its dataset, segmentation,
+clustering, `markerSet`, the version's record id, `markers` and summary). The Viewer's fill
+`labels:<artifact id>:<level>` colors cells by the label they carry at a level, from 0; saved views
+keep it.
 
 ### Jobs
 

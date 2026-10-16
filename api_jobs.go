@@ -16,6 +16,7 @@ import (
 
 	"situcraft/internal/compare"
 	"situcraft/internal/jobs"
+	"situcraft/internal/label"
 	"situcraft/internal/xenium"
 )
 
@@ -250,6 +251,31 @@ func (a *app) handleJobs() {
 		var p embedSpec
 		if json.Unmarshal(spec, &p) == nil && p.Clustering != "" {
 			a.artifacts.Discard(embeddingID(p.Clustering, p.Parameters))
+		}
+	})
+	labelsOf := func(spec json.RawMessage) (labelSpec, string, error) {
+		var p labelSpec
+		if json.Unmarshal(spec, &p) != nil || p.Clustering == "" || p.Parameters.Check() != nil {
+			return p, "", errors.New("its spec names no clustering, marker set and parameters")
+		}
+		set, err := label.Parse(p.Markers)
+		if err != nil {
+			return p, "", err
+		}
+		return p, labelsID(p.Clustering, set.Checksum(), p.Parameters), nil
+	}
+	a.jobs.Handle("labels", func(spec json.RawMessage) (jobs.Func, error) {
+		if a.cache == nil {
+			return nil, errors.New("SituCraft has no cache folder")
+		}
+		p, id, err := labelsOf(spec)
+		if err != nil {
+			return nil, err
+		}
+		return a.labelsJob(p, id), nil
+	}, func(id string, spec json.RawMessage) {
+		if _, lid, err := labelsOf(spec); err == nil {
+			a.artifacts.Discard(lid)
 		}
 	})
 	a.jobs.Handle("analysis", func(spec json.RawMessage) (jobs.Func, error) {

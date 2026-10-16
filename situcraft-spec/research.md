@@ -1495,7 +1495,7 @@ at their pixel (§3.1: the 8 it records off its mask).
   doi:10.1038/s41598-019-41695-z).
 - **Display:** UMAP (McInnes, Healy & Melville 2018, arXiv:1802.03426).
 - **Marker scores:** gene-set scores against control gene sets binned by expression (Tirosh et al.
-  2016, *Science* 352:189–196, doi:10.1126/science.aad0501).
+  2016, *Science* 352:189–196, doi:10.1126/science.aad0501); §5.3.
 - **Reference mapping:** correlation-based mapping to a labeled single-cell reference with
   iterative fine-tuning (Aran et al. 2019, *Nat Immunol* 20:163–172,
   doi:10.1038/s41590-018-0276-y).
@@ -1677,6 +1677,117 @@ is smoother than 50, so the two maps' numbers do not compare). Read against the 
 of the graph-based clusters (`analysis.zarr.zip`'s `cell_groups`): every cell the same. That copy
 pads its index list to every cell's count: a cell without transcripts, in no cluster, leaves a
 trailing 0 in the last group, so cell 0 is listed twice.
+
+### 5.3 Labels from markers (verified, wave 4, slice 3)
+
+**A marker set** (`internal/label`, `docs/FORMATS.md`) is a hierarchy of labels (a class, a
+lineage, a subtype; up to six levels) and states (proliferating, say), each with positive and
+negative marker genes and the published sources they come from. SituCraft ships one for each
+development bundle's panel, every marker in the panel; the editor makes versions, kept in the
+project, and a set is saved and read as a file.
+
+**Each cell's score** for each label is computed as scanpy's `score_genes` computes it (Tirosh
+et al. 2016, *Science* 352:189–196, doi:10.1126/science.aad0501; Wolf et al. 2018), on the
+expression as the clustering normalized it (§5.1, step 2):
+
+1. each gene's mean over the cells; ranks by mean, equal means given the lowest rank (pandas'
+   `rank(method="min")`); the genes cut into 25 bins of round(G/24) ranks (numpy's rounding, half to
+   even);
+2. a list's control genes: the genes of each bin holding one of its markers, or 50 of them drawn at
+   random from a bin holding more, less the markers themselves. On panels of up to 1,200 genes no
+   bin holds more than 50 and nothing is drawn; above, SituCraft draws from its own seeded stream,
+   not numpy's;
+3. the score: the markers' mean value less the controls' mean value, in each cell.
+
+SituCraft's choices:
+- **Negative markers:** a label's score is its positive markers' score less its negative markers'
+  (scored alike) where that is above 0: a negative marker counts against a label where the cell
+  expresses it above its controls, and its absence earns nothing.
+- **The lineage left out of the controls** (scanpy's `gene_pool`; on by default): a label's control
+  genes leave out its ancestors' and descendants' positive markers. On a targeted panel, genes of
+  matched expression are often other labels' markers, and a type's class's markers its own cells
+  express: as controls they cancel its score. On the planted tissue of `internal/label`'s tests (two
+  classes of two types, 200 genes) the types are labeled 91.2% right with them left out and 89.0%
+  with every gene as controls; on Breast the lineage level's leads (10th and 25th percentiles) rise
+  from 0.002 and 0.021 to 0.022 and 0.061.
+
+**Labels from the top down.** At each level a cell's candidates are the children of the label it
+took above (the top level's labels at first). The best is taken when it leads the next by the
+margin (0.1) and scores at least the minimum (0); a label without siblings must lead the minimum.
+Otherwise the cell stays at the level above: it is not forced into a subtype its markers do not
+distinguish. Equal scores lead by 0 and are not taken. A cell's confidence is the lead of the label
+it carries (for a cell without a label, the top level's). A state is carried where its score
+reaches the state threshold (0.25), by cells of its label (or below it) when it names one. Scores
+are in log-normalized expression: in a cell of the median total, one transcript of a marker adds
+log 2 ≈ 0.69 over the markers' number, so a margin of 0.1 is about one transcript more of a 6-gene
+label's markers than of the next label's, and a threshold of 0.25 about two transcripts of a 5-gene
+state's.
+
+**Each cluster's labels:** for each level, a cluster's cells by the label they carry there (a cell
+that stopped above counted under the label it stopped at). Names for the clusters come from them on
+request: each cluster the most specific label at least a share (one half by default) of its cells
+carry, a new version of the clustering's names.
+
+**The artifact** (kind `labels`) keeps each cell's score for every label and state with its
+positive and negative parts, its label and lead at each level, its confidence and states, each
+label's markers and control genes, each cluster's composition, and the marker set (`markers.json`)
+by its checksum. Its check requires every cell's label to be the best of its candidates by the
+recorded scores, taken only by the margin and left only below it; the leads, confidences, states
+and composition to follow from them.
+
+**Against scanpy 1.12.4** (`validation/reference/labels/`): each data set's cells, read and
+normalized by scanpy from the bundle's own matrix, scored by `score_genes` with SituCraft's gene
+pool for every label's positive and negative markers:
+
+| | Lung 2-FOV | Breast 2-FOV | Simulated (standard) |
+| --- | --- | --- | --- |
+| Lists scored (positive and negative) | 43 | 40 | 4 |
+| Control genes the same as scanpy's | 43 | 40 | 4 |
+| Largest difference of a cell's score | 2.7 × 10⁻⁷ | 2.8 × 10⁻⁷ | 1.7 × 10⁻⁷ |
+| Cells labeled: top level; second; third | 47%; 12%; 1% | 81%; 49%; 6% | 98.7% |
+
+The tolerances: every list's controls scanpy's; each score within 10⁻⁵ (scanpy scores the float32
+matrix it reads, SituCraft in float64); a label's score from its parts within 10⁻⁶. All are met.
+The same files on arm64 and amd64.
+
+**Known truth:** on the standard simulated tissue, labeled from each type's own markers as the
+simulation made them, 97.2% of the cells take their true type (that of the true cell holding most
+of their transcripts), 1.5% another, 1.3% none (tolerances: at least 96%, at most 2%).
+
+**The development bundles.** Both 2-FOV regions are dominated by tumor, and their cells are sparse
+(median totals 111 transcripts on Breast, 57 on Lung). On Breast the tumor clusters are
+Epithelial (with Luminal or Basal where their markers lead), the macrophages Macrophage or
+Monocyte, the fibroblasts Fibroblast (71%), the vessels Endothelial (72%), the T cells CD8 and CD4
+T cells. On Lung about half the tumor cells take no label: see the second finding below.
+
+Found by slice 3:
+- **Markers that are textbook elsewhere are not in a tumor's tissue.** In the Breast region the
+  tumor cells express LPL (69% of a tumor cluster's cells) and PDGFRA (52%), and FOXA1, GATA3 and
+  ESR1 are nearly absent; in the Lung region the tumor expresses COL5A2 and PROX1. The starter sets
+  leave these out of the labels they would mislead (Adipocyte, Stromal, Lymphatic endothelial), and
+  say so. Abundant transcripts reach neighboring cells: in Breast's T cells LUM is at 1.67
+  (log-normalized; 2.54 in the fibroblasts), so Stromal counts immune markers (PTPRC, FCER1G, CD3E)
+  against it. Cells of the T cluster that carry fibroblasts' LUM and SFRP4 at fibroblasts' levels
+  (100% and 92% expressing) are labeled Fibroblast: outlines holding parts of two cells, which the
+  per-cluster shares show.
+- **Control genes binned by expression cancel a dominant type's markers on a targeted panel.** A
+  bin's genes are, on a panel built of cell-type markers, other types' markers; in a tissue a type
+  dominates, the top bins are its own genes (on Lung CXCL13, CD24, TM4SF4, ATP1B1, SEC11C, AGR3,
+  EHF …), so EPCAM's and CDH1's controls rise and fall with them and the epithelial score of the
+  tumor's cells is near 0 — as scanpy's is. On Lung about half of them take no label; on Breast,
+  17% to 28% of each tumor cluster. The scores are scanpy's by design; the label set says which
+  cells stayed without a label, and the clusters' markers name them.
+- **The margin is over the next label, not over 0.** Measuring a label's lead over the larger of
+  the next and the minimum left a dominant type's cells unlabeled whenever its depressed score was
+  near 0 even with every other label far below it (Breast's tumor clusters: 24% to 35% without a
+  label); the minimum is a separate gate.
+- **A state needs its own threshold.** At the margin, one transcript of a 4-gene proliferation set
+  passes in a cell of the median total: 36% of Breast's cells were proliferating. The threshold of
+  0.25 (about two transcripts) keeps 1,886 (26%), most in the cluster led by TOP2A and MKI67.
+- **Averaging each cell's scores over its 15 nearest cells in expression** (the clustering's
+  neighbors) labels more of Breast (81% to 97% at the top level) but loses every rare type (mast
+  cells 28 to 0, plasma cells 11 to 0, B, NK and dendritic cells), and labels fewer of Lung (47% to
+  28%): not taken.
 
 ## 6. Spatial analysis (wave 6) and cohorts (wave 7)
 

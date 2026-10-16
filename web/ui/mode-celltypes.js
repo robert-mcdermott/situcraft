@@ -2,9 +2,10 @@
 // cluster, api_clustering.go), each clustering an artifact with every parameter recorded; the map
 // of its cells (internal/embed, api_maps.go) beside the tissue, linked (ui/cell-map.js): colored by
 // cluster, gene or attribute, one selection on both; its clusters with their sizes, names and
-// markers, as a table and a dot plot; the markers of any selection; the instrument's own clusters
-// and map, registered from the bundle; and two clusterings compared. Labels from markers, imported
-// labels and a reference come in later slices of wave 4 (situcraft-spec/roadmap.md).
+// markers, as a table and a dot plot; the markers of any selection; labels from markers (ui/
+// labels-card.js); the instrument's own clusters and map, registered from the bundle; and two
+// clusterings compared. Imported labels and a reference come in later slices of wave 4
+// (situcraft-spec/roadmap.md).
 
 import { h, icon, clear, formatCount, relativeTime } from './dom.js';
 import { toast } from './overlays.js';
@@ -14,6 +15,8 @@ import { evaluate, keepChecksum } from '../lib/filters.js';
 import { readCells } from '../lib/viewer-data.js';
 import { PARAMETERS, checkParameters, clusterName, clusterNames, clusteringsOf, contingency, describeClustering, filterRequest, mapsOf, mergedOf, nameClusters, nameOf } from '../lib/clusterings.js';
 import { mountCellMap } from './cell-map.js';
+import { labelClustering, labelsSections } from './labels-card.js';
+import { labelSetsOf } from '../lib/labels.js';
 
 const exact = (v) => (Number.isFinite(v) ? v.toLocaleString('en-US') : '—');
 const percent = (v, digits = 1) => (Number.isFinite(v) ? `${(100 * v).toFixed(digits)}%` : '—');
@@ -50,13 +53,14 @@ export function mountCellTypes(app, container) {
 
   function target() {
     const { project, ui } = app.store;
-    const focusedClu = ui.focus?.kind === 'clustering' ? project.artifacts.find((a) => a.kind === 'clustering' && a.id === ui.focus.id) : null;
+    const focusedLabels = ui.focus?.kind === 'labels' ? project.artifacts.find((a) => a.kind === 'labels' && a.id === ui.focus.id) : null;
+    const focusedClu = ui.focus?.kind === 'clustering' || focusedLabels ? project.artifacts.find((a) => a.kind === 'clustering' && a.id === (focusedLabels?.clustering ?? ui.focus.id)) : null;
     const seg = ui.focus?.kind === 'segmentation' ? project.artifacts.find((a) => a.kind === 'segmentation' && a.id === ui.focus.id) : null;
     const id = focusedClu?.dataset ?? (ui.focus?.kind === 'dataset' ? ui.focus.id : seg?.dataset) ?? project.datasets[0]?.id;
     const dataset = project.datasets.find((d) => d.id === id) ?? project.datasets[0];
     if (!dataset) return null;
     const link = app.bundles.link(dataset.id);
-    return { dataset, item: link?.item ?? app.bundles.itemByPath(dataset.path), focusedClustering: focusedClu?.dataset === dataset.id ? focusedClu : null, focusedSegmentation: seg?.dataset === dataset.id ? seg.id : null };
+    return { dataset, item: link?.item ?? app.bundles.itemByPath(dataset.path), focusedClustering: focusedClu?.dataset === dataset.id ? focusedClu : null, focusedLabels: focusedLabels?.dataset === dataset.id ? focusedLabels : null, focusedSegmentation: seg?.dataset === dataset.id ? seg.id : null };
   }
 
   function sessionOf(dataset) {
@@ -231,6 +235,7 @@ export function mountCellTypes(app, container) {
     const names = Object.fromEntries(clusterings.map((c) => [c.id, clusterNames(project, c.id)]));
     const ctx = {
       item: t.item, dataset: t.dataset, segmentation: seg, instrument: seg.source === 'instrument', clusterings, maps, names, shown: session.shown,
+      labelSets: labelSetsOf(project, t.dataset.id).filter((r) => r.segmentation === seg.id),
       onSelect: (mask, count) => {
         selection = { mask, count, markers: null, clustering: session.shown };
         drawSelection(t, session);
@@ -578,12 +583,16 @@ export function mountCellTypes(app, container) {
     if (t.focusedClustering) {
       session.segmentation = t.focusedClustering.segmentation;
       session.shown = t.focusedClustering.id;
+      if (t.focusedLabels) {
+        session.labels ??= { choice: '', params: null, editing: null, shown: null, level: 0, share: 0.5, open: false };
+        session.labels.shown = t.focusedLabels.id;
+      }
     } else if (t.focusedSegmentation && segs.some((s) => s.id === t.focusedSegmentation)) session.segmentation = t.focusedSegmentation;
     if (!segs.some((s) => s.id === session.segmentation)) session.segmentation = segs[0]?.id ?? '';
     const seg = segs.find((s) => s.id === session.segmentation);
     const project = app.store.project;
-    const kinds = new Set(['clustering', 'embedding', 'cluster-names', 'filter']);
-    const next = JSON.stringify([t.dataset.id, Boolean(t.item), segs.map((s) => [s.id, s.isDefault]), project.artifacts.filter((a) => kinds.has(a.kind) && a.dataset === t.dataset.id).map((a) => [a.id, a.state]), session.segmentation, session.cells, session.shown, session.cluster, session.compare, app.bundles.clusterings(t.dataset.id), app.bundles.mappings(t.dataset.id), app.bundles.registeringAnalysis(t.dataset.id), Boolean(analyses.get(t.item?.path)?.clusterings)]);
+    const kinds = new Set(['clustering', 'embedding', 'cluster-names', 'filter', 'labels']);
+    const next = JSON.stringify([t.dataset.id, Boolean(t.item), segs.map((s) => [s.id, s.isDefault]), project.artifacts.filter((a) => (kinds.has(a.kind) && a.dataset === t.dataset.id) || a.kind === 'marker-set').map((a) => [a.id, a.state]), session.segmentation, session.cells, session.shown, session.cluster, session.compare, app.bundles.clusterings(t.dataset.id), app.bundles.mappings(t.dataset.id), app.bundles.registeringAnalysis(t.dataset.id), app.bundles.labelings(t.dataset.id), Boolean(analyses.get(t.item?.path)?.clusterings)]);
     if (!force && next === shape) {
       updateLive();
       return;
@@ -603,9 +612,11 @@ export function mountCellTypes(app, container) {
     const typingName = focused?.dataset?.name !== undefined ? { k: focused.dataset.name, value: focused.value } : null;
     if (selection.clustering && selection.clustering !== session.shown) selection = { mask: null, count: 0, markers: null, clustering: null };
     clear(body).append(
-      h('p.muted.seg-intro', 'Cell identities start from the cells\' expression. Each clustering is kept as an artifact of its segmentation with every parameter, so it can be made again, on another segmentation too, and compared. Labels from markers, imported labels and a reference come next.'),
+      h('p.muted.seg-intro', 'Cell identities start from the cells\' expression. Each clustering is kept as an artifact of its segmentation with every parameter, so it can be made again, on another segmentation too, and compared; labels from marker genes are kept the same way, with the marker set they came from. Imported labels and a reference come next.'),
       formCard(t, segs, session),
-      ...[listCard(t, seg, session), mapCard(t, seg, session), detailCard(t, session), instrumentCard(t, seg), compareCard(t, seg, session)].filter(Boolean));
+      ...[listCard(t, seg, session), mapCard(t, seg, session), detailCard(t, session)].filter(Boolean),
+      ...labelsSections(app, { t, seg, session, clustering: app.store.project.artifacts.find((a) => a.kind === 'clustering' && a.id === session.shown && a.state === 'complete'), cellMap, render }),
+      ...[instrumentCard(t, seg), compareCard(t, seg, session)].filter(Boolean));
     if (typingName) {
       const input = body.querySelector(`[data-name="${typingName.k}"]`);
       if (input) {
@@ -657,6 +668,23 @@ export function mountCellTypes(app, container) {
       for (let k = 0; k < 600 && !cellMap?.ready(); k += 1) await new Promise((r) => setTimeout(r, 50));
       await cellMap?.settled();
       return cellMap;
+    },
+    // Labels a clustering's cells from a marker set (labels-card.js labelClustering) and shows them.
+    label: async (dataset, clusteringId, request) => {
+      const t = target();
+      if (!t || t.dataset.id !== dataset.id) app.focusItem({ kind: 'dataset', id: dataset.id });
+      const now = target();
+      if (!now.item) throw new Error(`${dataset.name}'s bundle was not found where the project records it.`);
+      const c = app.store.project.artifacts.find((a) => a.kind === 'clustering' && a.id === clusteringId);
+      if (!c) throw new Error(`No clustering ${clusteringId}.`);
+      const session = sessionOf(dataset);
+      session.segmentation = c.segmentation;
+      session.shown = c.id;
+      render(true);
+      const manifest = await labelClustering(app, { t: now, session, clustering: c }, request);
+      render(true);
+      document.querySelector(`[data-labels="${CSS.escape(manifest.id)}"]`)?.scrollIntoView({ block: 'center' });
+      return manifest;
     },
     map: () => cellMap,
     selection: () => selection,

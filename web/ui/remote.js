@@ -16,6 +16,7 @@ import { parseProject, rename, serializeProject } from '../lib/project.js';
 import { removeView, sameView, viewLink } from '../lib/views.js';
 import { SEG_FILLS, defaultChoice, segmentationChoices } from '../lib/segview.js';
 import { clusterName, clusterNames, clusteringsOf, mapsOf, nameClusters } from '../lib/clusterings.js';
+import { composition as labelComposition, labelSetsOf, namesFromLabels } from '../lib/labels.js';
 
 export class ActionError extends Error {}
 
@@ -518,7 +519,7 @@ export function installRemote(app) {
       if (args.segmentation !== undefined) view.segmentation = segmentationRef(dataset, args.segmentation);
       if (args.outlines !== undefined) view.cells.outlines = Boolean(args.outlines);
       if (args.nuclei !== undefined) view.cells.nuclei = Boolean(args.nuclei);
-      if (args.fill !== undefined) view.cells.fill = args.fill === null || /^none$/i.test(String(args.fill)) ? null : /^clusters\b/i.test(String(args.fill)) ? clusterFill(dataset, view.segmentation, String(args.fill)) : choose(args.fill, view.segmentation === 'instrument' ? FILLS : [...FILLS.filter((f) => f !== 'method'), ...SEGMENTATION_FILLS], 'fill');
+      if (args.fill !== undefined) view.cells.fill = args.fill === null || /^none$/i.test(String(args.fill)) ? null : /^clusters\b/i.test(String(args.fill)) ? clusterFill(dataset, view.segmentation, String(args.fill)) : /^labels\b/i.test(String(args.fill)) ? await labelFill(dataset, view.segmentation, String(args.fill)) : choose(args.fill, view.segmentation === 'instrument' ? FILLS : [...FILLS.filter((f) => f !== 'method'), ...SEGMENTATION_FILLS], 'fill');
       if (args.opacity !== undefined) view.cells.opacity = Math.min(1, Math.max(0, finite(args.opacity, 'opacity')));
       if (args.color_by !== undefined) {
         if (choose(args.color_by, ['gene', 'probability'], 'coloring') === 'probability') view.transcripts.colorBy = 'probability';
@@ -858,7 +859,8 @@ export function installRemote(app) {
       }
       if (args.color_by !== undefined) {
         const v = String(args.color_by);
-        if (/^clusters?$/i.test(v)) await map.setColor({ kind: 'clusters', clustering: c.id });
+        if (/^(labels?|confidence)(:|$)/i.test(v)) await map.setColor(await labelColor(dataset, c, v));
+        else if (/^clusters?$/i.test(v)) await map.setColor({ kind: 'clusters', clustering: c.id });
         else if (/^clusters:/i.test(v)) await map.setColor({ kind: 'clusters', clustering: clusteringRef(list, v.slice(v.indexOf(':') + 1)).id });
         else if (/^reliability$/i.test(v)) await map.setColor({ kind: 'reliability' });
         else if (/^(transcripts|area)$/i.test(v)) await map.setColor({ kind: 'attribute', attribute: v.toLowerCase() });
@@ -877,11 +879,22 @@ export function installRemote(app) {
       await frames();
       const st = map.state;
       const composition = {};
-      if (st.count && st.clusters) {
-        const names = clusterNames(project(), st.color.clustering ?? c.id);
-        for (let i = 0; i < st.clusters.length; i += 1) {
-          if (st.selected[i] && st.clusters[i] >= 0) {
-            const key = names?.names?.[st.clusters[i]] || clusterName(st.clusters[i]);
+      if (st.count && st.groups && st.color.kind === 'labels') {
+        const { description } = await app.bundles.labelData(st.color.labels);
+        for (let i = 0; i < st.groups.length; i += 1) {
+          if (st.selected[i] && st.groups[i] >= 0) {
+            const key = description.sets[st.groups[i]]?.name ?? 'No label';
+            composition[key] = (composition[key] ?? 0) + 1;
+          }
+        }
+      } else if (st.count && st.clusters) {
+        // By the clusters coloring the cells, else the clustering shown.
+        const byColor = st.color.kind === 'clusters' && st.groups;
+        const of = byColor ? st.groups : st.clusters;
+        const names = clusterNames(project(), byColor ? st.color.clustering : c.id);
+        for (let i = 0; i < of.length; i += 1) {
+          if (st.selected[i] && of[i] >= 0) {
+            const key = names?.names?.[of[i]] || clusterName(of[i]);
             composition[key] = (composition[key] ?? 0) + 1;
           }
         }
@@ -911,6 +924,44 @@ export function installRemote(app) {
       store.commit(next, `Name the clusters of ${c.name}`);
       const version = clusterNames(project(), c.id);
       return { message: `${c.name}: names version ${version.version}.`, data: { version: version.version, names: version.names } };
+    },
+
+    async label_cells(args) {
+      const dataset = resolveDataset(args.dataset);
+      const list = clusteringsOf(project(), dataset.id).filter((c) => c.state === 'complete');
+      if (!list.length) throw new ActionError(`${dataset.name} has no clustering: cluster_cells makes one.`);
+      const c = clusteringRef(list, args.clustering);
+      const parameters = {};
+      for (const key of ['margin', 'minimum', 'state', 'bins', 'controls', 'seed']) if (args[key] !== undefined) parameters[key] = finite(args[key], key);
+      if (args.lineage !== undefined) parameters.lineage = Boolean(args.lineage);
+      if (args.set !== undefined && (typeof args.set !== 'object' || Array.isArray(args.set) || args.set === null)) throw new ActionError('set is a marker set in full: {"format": "situcraft-markers", "version": 1, "name": …, "levels": […], "labels": […]}.');
+      await settleMode('celltypes');
+      let manifest;
+      try {
+        manifest = await app.cellTypesView.label(dataset, c.id, { markers: args.markers, set: args.set, parameters, by: 'remote control' });
+      } catch (error) {
+        throw new ActionError(error.missing ? `The panel lacks some of the set's markers: ${Object.entries(error.missing).map(([l, g]) => `${l} (${g.join(', ')})`).join('; ')}.` : error.message);
+      }
+      await frames();
+      const { description: d } = await app.bundles.labelData(manifest.id);
+      const deepest = d.levels.length - 1;
+      const names = clusterNames(project(), c.id);
+      const clusters = labelComposition(d, deepest).map((row) => ({ cluster: row.cluster + 1, name: names?.names?.[row.cluster] ?? null, cells: row.cells, labels: row.labels.slice(0, 3).map((e) => ({ label: e.name, share: Number(e.share.toFixed(4)) })) }));
+      let named = null;
+      if (args.name_clusters !== undefined && args.name_clusters !== false) {
+        const share = args.name_clusters === true ? 0.5 : finite(args.name_clusters, 'name_clusters');
+        if (share < 0.3 || share > 1) throw new ActionError('name_clusters is the share of a cluster\'s cells its label must hold, from 0.3 to 1 (or true for 0.5).');
+        const proposal = namesFromLabels(d, share);
+        const merged = proposal.map((p, k) => p ?? names?.names?.[k] ?? null);
+        const next = nameClusters(project(), { clustering: c.id, names: merged, by: 'remote control' });
+        if (next !== project()) store.commit(next, `Name the clusters of ${c.name} from ${d.markers.name}`);
+        named = { version: clusterNames(project(), c.id)?.version ?? 0, names: proposal };
+      }
+      const pct = (v) => `${Math.round((100 * v) / d.cells.analyzed)}%`;
+      return {
+        message: `${c.name} labeled by ${d.markers.name}: ${d.levels.map((level, l) => `${level.toLowerCase()} ${pct(d.cells.labeled[l])}`).join(', ')} of ${plural(d.cells.analyzed, 'cell')}${named ? `; ${named.names.filter(Boolean).length} clusters named from the labels (names version ${named.version})` : ''}.`,
+        data: { id: manifest.id, clustering: c.id, markers: d.markers, parameters: d.parameters, levels: d.levels, cells: d.cells, labels: d.sets.map((x) => ({ name: x.name, level: x.state ? null : d.levels[x.level], state: Boolean(x.state), cells: x.cells, positive: x.positive, negative: x.negative ?? [], controls: x.positiveControls.length })), clusters, named },
+      };
     },
 
     async instrument_clusters(args) {
@@ -1153,6 +1204,49 @@ export function installRemote(app) {
     const id = text.includes(':') ? text.slice(text.indexOf(':') + 1).trim() : list.at(-1)?.id;
     if (!list.some((c) => c.id === id)) throw new ActionError(list.length ? `No clustering ${id} of the segmentation drawn; its clusterings are ${list.map((c) => c.id).join(', ')}.` : 'The segmentation drawn has no clustering: cluster_cells makes one.');
     return `clusters:${id}`;
+  }
+
+  // A label set of a clustering by id, its latest if not given; and a level by name or number from 1.
+  function labelsOf(dataset, clusteringId, ref) {
+    const sets = labelSetsOf(project(), dataset.id, clusteringId).filter((r) => r.state === 'complete');
+    if (!sets.length) throw new ActionError('The clustering has no label set: label_cells makes one.');
+    if (!ref) return sets.at(-1);
+    const r = sets.find((x) => x.id === ref);
+    if (!r) throw new ActionError(`No label set ${ref} of the clustering; its label sets are ${sets.map((x) => x.id).join(', ')}.`);
+    return r;
+  }
+  function levelOf(r, text) {
+    const levels = r.summary?.levels ?? [];
+    if (text === undefined || text === '') return 0;
+    if (/^\d+$/.test(text)) {
+      const l = Number(text) - 1;
+      if (l < 0 || l >= levels.length) throw new ActionError(`The labels have levels 1 to ${levels.length} (${levels.join(', ')}).`);
+      return l;
+    }
+    return levels.indexOf(choose(text, levels, 'level'));
+  }
+
+  // show_map's colorings by labels: labels[:<level>] or labels:<id>[:<level>] (the clustering's
+  // latest label set, its first level), confidence[:<id>].
+  async function labelColor(dataset, c, text) {
+    const parts = text.split(':').map((x) => x.trim());
+    const id = parts[1]?.startsWith('lab-') ? parts[1] : null;
+    const r = labelsOf(dataset, c.id, id);
+    if (/^confidence$/i.test(parts[0])) return { kind: 'confidence', labels: r.id };
+    return { kind: 'labels', labels: r.id, level: levelOf(r, id ? parts[2] : parts[1]) };
+  }
+
+  // A fill by a label set of the segmentation drawn: 'labels[:<level>]' for its latest,
+  // 'labels:<id>[:<level>]'.
+  async function labelFill(dataset, segRef, text) {
+    const seg = segRef === 'instrument' ? segmentationChoices(project(), dataset.id).find((c) => c.instrument)?.id : segRef;
+    const sets = project().artifacts.filter((a) => a.kind === 'labels' && a.dataset === dataset.id && a.segmentation === seg && a.state === 'complete');
+    if (!sets.length) throw new ActionError('The segmentation drawn has no label set: label_cells makes one.');
+    const parts = text.split(':').map((x) => x.trim());
+    const id = parts[1]?.startsWith('lab-') ? parts[1] : null;
+    const r = id ? sets.find((x) => x.id === id) : sets.at(-1);
+    if (!r) throw new ActionError(`No label set ${id} of the segmentation drawn; its label sets are ${sets.map((x) => x.id).join(', ')}.`);
+    return `labels:${r.id}:${levelOf(r, id ? parts[2] : parts[1])}`;
   }
 
   function segmentationRef(dataset, ref) {

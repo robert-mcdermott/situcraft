@@ -50,6 +50,7 @@ see `conventions.md`. For the methods, formats and datasets behind these choices
 │   internal/cluster   normalization, principal components, Leiden clusters, markers (wave 4)           │
 │   internal/graph     nearest neighbors (exact; a grid in two dimensions), UMAP's graph, Leiden         │
 │   internal/embed     UMAP maps and their quality                                                       │
+│   internal/label     marker sets, scores against binned control genes, hierarchical labels            │
 │   internal/linalg    symmetric eigendecomposition, the same on every processor                         │
 │   internal/register  image registration (later)                                                       │
 │   internal/spatial   graphs and spatial statistics on large tables (later)                            │
@@ -358,6 +359,17 @@ segmentation, made by a job, named by its inputs and parameters, and checked bef
   kept as an artifact of kind `embedding`. The instrument's own analysis (`internal/xenium`'s
   `ReadAnalysis`) registers as a clustering of the instrument's segmentation (its markers by
   SituCraft) and a map.
+- **Labels from markers** (`internal/label`, `api_labels.go`, slice 3): a marker set (a hierarchy
+  of labels and states with positive and negative markers, `docs/FORMATS.md`) checked against the
+  clustering's panel; each cell scored for each label as scanpy's `score_genes` scores a gene list
+  against control genes binned by expression, then labeled from the top of the hierarchy down by a
+  margin; kept as an artifact of kind `labels` with the marker set by its checksum. SituCraft ships
+  a starter set for each development bundle's panel (`internal/label/starters/`, embedded); the
+  project keeps each marker set's versions (records of kind `marker-set`, `lib/labels.js`), and
+  each label set the version it used. The labels' card (`ui/labels-card.js`) chooses, edits, reads
+  and saves marker sets, labels the shown clustering, and shows each cluster's labels, names from
+  them, and each label's markers and controls; the map, the tissue and the Viewer color the cells
+  by label (`labels:<id>:<level>` among the Viewer's fills), confidence or a label's score.
 - **The Cell types view** (`ui/mode-celltypes.js`, `lib/clusterings.js`) runs a clustering and
   shows its clusters, names, markers (a table and a dot plot) and the components' variances, and
   compares two clusterings. **The map and the tissue** (`ui/cell-map.js`, `lib/scatter.js`): the map

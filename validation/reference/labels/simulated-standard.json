@@ -1,0 +1,81 @@
+{
+ "dataSet": "simulated-standard",
+ "tools": {
+  "scanpy": "1.12.4",
+  "anndata": "0.13.4",
+  "numpy": "2.5.4",
+  "scipy": "1.18.1",
+  "pandas": "3.0.6",
+  "pyarrow": "26.0.0"
+ },
+ "situcraft": {
+  "version": "SituCraft labels from markers 1",
+  "digest": "33796ebd14464d4cdb146b4cd51504ea78e76bf3423e40bea00b83686a9b51ed",
+  "markers": "Simulated tissue's types",
+  "checksum": "5083a52e5c6b32415f1c35891d5220f93beb98a620f79695748f692212864f8c",
+  "cells": 2925,
+  "labeled": [
+   2887
+  ]
+ },
+ "scores": {
+  "lists": 4,
+  "controlsSame": 4,
+  "maxAbs": 2.278027837475141,
+  "scanpyMaxAbsDiff": 1.738468808909488e-07,
+  "combinedMaxAbs": 0.0,
+  "byList": [
+   {
+    "label": "epithelial-like",
+    "part": "positive",
+    "genes": 8,
+    "controls": 27,
+    "controlsSame": true,
+    "maxAbsDiff": 1.2307255348176227e-07
+   },
+   {
+    "label": "fibroblast-like",
+    "part": "positive",
+    "genes": 8,
+    "controls": 22,
+    "controlsSame": true,
+    "maxAbsDiff": 1.1785463849278699e-07
+   },
+   {
+    "label": "immune-like",
+    "part": "positive",
+    "genes": 8,
+    "controls": 8,
+    "controlsSame": true,
+    "maxAbsDiff": 1.341104507446289e-07
+   },
+   {
+    "label": "endothelial-like",
+    "part": "positive",
+    "genes": 6,
+    "controls": 24,
+    "controlsSame": true,
+    "maxAbsDiff": 1.738468808909488e-07
+   }
+  ]
+ },
+ "labels": {
+  "(none)": 38,
+  "endothelial-like": 634,
+  "epithelial-like": 621,
+  "fibroblast-like": 636,
+  "immune-like": 996
+ },
+ "truth": {
+  "cells": 2925,
+  "right": 0.9716239316239316,
+  "wrong": 0.015384615384615385,
+  "unlabeled": 0.012991452991452991,
+  "types": [
+   "endothelial-like",
+   "epithelial-like",
+   "fibroblast-like",
+   "immune-like"
+  ]
+ }
+}

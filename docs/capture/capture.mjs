@@ -313,6 +313,18 @@ const scenes = {
     await js(`window.situcraft.cellTypesView.map().settled()`);
     await sleep(400);
   },
+  // The Breast example labeled from the breast starter set (wave 4, slice 3): each cluster's labels
+  // at the lineage level as bars, names for the clusters from them, the labels with their markers.
+  async labels() {
+    await act('open_example', { example: 'breast' });
+    await act('cluster_cells', {});
+    await act('label_cells', { markers: 'breast' });
+    await waitFor(`Boolean(document.querySelector('.lb-composition tbody tr'))`);
+    await js(`[...document.querySelectorAll('.lb-levels button')].find((b) => b.textContent === 'Lineage')?.click()`);
+    await waitFor(`document.querySelector('.lb-levels button[aria-pressed="true"]')?.textContent === 'Lineage' && Boolean(document.querySelector('.lb-composition tbody tr'))`);
+    await scrollTo('.lb-shown', 'start');
+    await sleep(300);
+  },
   // The Breast example's clusters on the tissue (wave 4, slice 1): the cells filled by cluster,
   // with the legend.
   async clusters() {

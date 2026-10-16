@@ -301,7 +301,8 @@ export function mountViewerPanel(host, { desc, layers, cells, onChange, segmenta
   // --- Cells ---
   const outlines = h('input', { type: 'checkbox', checked: state.cells.outlines });
   const nuclei = h('input', { type: 'checkbox', checked: state.cells.nuclei });
-  // The cells' own fills, then the clusterings of the segmentation drawn (lib/clusterings.js).
+  // The cells' own fills, then the clusterings and label sets of the segmentation drawn
+  // (lib/clusterings.js, lib/labels.js).
   const fills = [...fillsOf(cells, desc), ...clusterings];
   const fill = h('select', { 'aria-label': 'Fill cells by' }, h('option', { value: '' }, 'No fill'), ...fills.map((f) => h('option', { value: f.id, title: f.help ?? '' }, f.label)));
   fill.value = fills.some((f) => f.id === state.cells.fill) ? state.cells.fill : '';
@@ -392,8 +393,8 @@ export function mountViewerPanel(host, { desc, layers, cells, onChange, segmenta
     // limitations' colors, or the certainty scale.
     legend() {
       const id = state.cells.fill;
-      // A clustering's legend is the Viewer's, once its clusters are read.
-      if (id?.startsWith('clusters:')) return null;
+      // A clustering's or label set's legend is the Viewer's, once its cells are read.
+      if (id?.startsWith('clusters:') || id?.startsWith('labels:')) return null;
       if (cells?.kind === 'segmentation') {
         const spec = fills.find((f) => f.id === id);
         if (!spec) return null;

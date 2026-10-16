@@ -395,3 +395,21 @@ func TestAnotherToolsClustersAndExpression(t *testing.T) {
 		t.Error("an empty selection's markers")
 	}
 }
+
+// Each gene's mean and each list's mean in each cell, by hand.
+func TestGeneAndListMeansByHand(t *testing.T) {
+	c := &segment.Counts{Genes: []string{"A", "B", "C"}, Offsets: []uint32{0, 2, 3}, Gene: []uint32{0, 2, 1}, Count: []uint32{1, 3, 2}}
+	e, err := LoadExpression(c, []uint32{0, 1}, []uint32{0, 0}, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Cell 0: A 1, C 3 of 4; cell 1: B 2 of 2. Values log1p(count·2/total).
+	a, b, cc := math.Log(1+0.5), math.Log(1+2), math.Log(1+1.5)
+	if m := e.GeneMeans(); math.Abs(m[0]-a/2) > 1e-15 || math.Abs(m[1]-b/2) > 1e-15 || math.Abs(m[2]-cc/2) > 1e-15 {
+		t.Errorf("gene means %v", m)
+	}
+	m := e.ListMeans([][]int{{0, 2}, {1}, {}})
+	if math.Abs(m[0][0]-(a+cc)/2) > 1e-15 || m[0][1] != 0 || m[1][0] != 0 || math.Abs(m[1][1]-b) > 1e-15 || m[2][0] != 0 {
+		t.Errorf("list means %v", m)
+	}
+}

@@ -9,6 +9,7 @@ import { removeView, renameView, viewLink } from '../lib/views.js';
 import { promotedSegmentation } from '../lib/segmentations.js';
 import { KIND_ICONS, KIND_LABELS } from './sidebar.js';
 import { askRemoveComparison } from './comparisons.js';
+import { describeLabels, markerSetFile, markerSetVersions } from '../lib/labels.js';
 
 export function mountInspector(app) {
   const root = document.getElementById('inspector');
@@ -202,6 +203,61 @@ export function mountInspector(app) {
       c.method?.citation ? h('p.muted', { style: { margin: '8px 0 0', fontSize: '11.5px' } }, c.method.citation) : null);
   }
 
+  // A label set: its clustering, marker set, cells labeled at each level, and parameters.
+  function labelsSection(r) {
+    const { project } = app.store;
+    const c = project.artifacts.find((a) => a.kind === 'clustering' && a.id === r.clustering);
+    const ms = project.artifacts.find((a) => a.kind === 'marker-set' && a.id === r.markerSet);
+    const s = r.summary ?? {};
+    const p = r.parameters ?? {};
+    const pct = (v) => (s.cells ? `${Math.round((100 * v) / s.cells)}%` : '—');
+    return h('section.inspector-section',
+      h('h3', icon('tag'), 'Label set'),
+      h('dl.kv',
+        h('dt', 'Clustering'), h('dd', c?.name ?? r.clustering),
+        h('dt', 'Marker set'), h('dd', `${r.markers?.name ?? '?'}${ms ? ` (version ${ms.version})` : ''}`),
+        h('dt', 'Checksum'), h('dd.mono', (r.markers?.checksum ?? '').slice(0, 16)),
+        h('dt', 'Cells'), h('dd', (s.cells ?? 0).toLocaleString('en-US')),
+        ...(s.levels ?? []).flatMap((level, l) => [h('dt', level), h('dd', `${(s.labeled?.[l] ?? 0).toLocaleString('en-US')} (${pct(s.labeled?.[l] ?? 0)})`)]),
+        h('dt', 'Margin'), h('dd', `${p.margin ?? '—'} (minimum ${p.minimum ?? '—'})`),
+        h('dt', 'Method'), h('dd', `${r.method?.name ?? ''} ${r.method?.version ?? ''}`.trim()),
+        h('dt', 'Artifact'), h('dd.mono', r.id)),
+      r.state === 'complete' ? h('div.btn-row', { style: { marginTop: '8px' } },
+        h('button.btn.small.primary', { type: 'button', onclick: () => app.showLabels(r, 0) }, icon('tissue'), 'Show on the tissue'),
+        h('button.btn.small', { type: 'button', onclick: () => {
+          app.focusItem({ kind: 'labels', id: r.id });
+          app.setMode('celltypes');
+        } }, icon('tag'), 'Its labels')) : null,
+      h('p.muted', { style: { margin: '8px 0 0', fontSize: '11.5px' } }, describeLabels(r)),
+      r.method?.citation ? h('p.muted', { style: { margin: '8px 0 0', fontSize: '11.5px' } }, r.method.citation) : null);
+  }
+
+  // A marker set: its versions, where it came from, and its file.
+  function markerSetSection(m) {
+    const versions = markerSetVersions(app.store.project, m.family);
+    const from = (v) => (v.source?.starter ? `SituCraft's starter set (${v.source.starter})` : v.source?.file ? `the file ${v.source.file}` : 'edited');
+    return h('section.inspector-section',
+      h('h3', icon('dna'), 'Marker set'),
+      h('dl.kv',
+        h('dt', 'Name'), h('dd', m.name),
+        h('dt', 'Levels'), h('dd', m.set.levels.join(', ')),
+        h('dt', 'Labels'), h('dd', String(m.set.labels.length)),
+        h('dt', 'States'), h('dd', String(m.set.states?.length ?? 0)),
+        h('dt', 'References'), h('dd', String(m.set.references?.length ?? 0)),
+        h('dt', 'Checksum'), h('dd.mono', m.checksum.slice(0, 16))),
+      h('div.section-title', { style: { marginTop: '8px' } }, 'Versions'),
+      h('ul.inspector-list', ...versions.map((v) => h('li', `Version ${v.version}: ${from(v)}, ${relativeTime(v.created)}`))),
+      h('div.btn-row', { style: { marginTop: '8px' } },
+        h('button.btn.small', { type: 'button', onclick: () => {
+          const blob = new Blob([markerSetFile(m.set)], { type: 'application/json' });
+          const a = h('a', { href: URL.createObjectURL(blob), download: `${m.name.replace(/[^\w.-]+/g, '_')}.markers.json` });
+          document.body.append(a);
+          a.click();
+          a.remove();
+          setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+        } }, icon('download'), 'Save as a file')));
+  }
+
   function focusSection() {
     const focus = app.store.ui.focus;
     if (focus?.kind === 'view') {
@@ -219,6 +275,14 @@ export function mountInspector(app) {
     if (focus?.kind === 'clustering') {
       const c = app.store.project.artifacts.find((a) => a.kind === 'clustering' && a.id === focus.id);
       if (c) return clusteringSection(c);
+    }
+    if (focus?.kind === 'labels') {
+      const r = app.store.project.artifacts.find((a) => a.kind === 'labels' && a.id === focus.id);
+      if (r) return labelsSection(r);
+    }
+    if (focus?.kind === 'marker-set') {
+      const m = app.store.project.artifacts.find((a) => a.kind === 'marker-set' && a.id === focus.id);
+      if (m) return markerSetSection(m);
     }
     if (focus?.kind === 'filter') {
       const filter = app.store.project.artifacts.find((a) => a.id === focus.id);

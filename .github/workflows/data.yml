@@ -37,14 +37,14 @@ jobs:
       - uses: astral-sh/setup-uv@v6
       - name: The Lung bundle as SpatialData, written by spatialdata-io (for the import test)
         run: uv run --with 'spatialdata-io==0.7.1' --with 'spatialdata==0.8.0' python -I validation/spatialdata.py
-      - name: Readers against independent readers, bundle validation (real, zipped and broken bundles), the derived-data cache, segmentations made and imported, the refinement's estimates against measured runs, the refinement against its reference numbers (validation/reference/segmentation/), the clustering against its own (validation/reference/clustering/), and exports (kept for the next step)
+      - name: Readers against independent readers, bundle validation (real, zipped and broken bundles), the derived-data cache, segmentations made and imported, the refinement's estimates against measured runs, the refinement against its reference numbers (validation/reference/segmentation/), the clustering against its own (validation/reference/clustering/), the labels from markers against theirs (validation/reference/labels/), and exports (kept for the next step)
         env:
           SITUCRAFT_REQUIRE_DATA: '1'
           SITUCRAFT_REQUIRE_SPATIALDATA: '1'
           # Outside the cached folder: the exports are rewritten each run.
           SITUCRAFT_EXPORT_DIR: ${{ runner.temp }}/exports
           JP2K_ZSTACK_ALL: '1'
-        run: go test -v -timeout 2h -run 'Real|Readers|Bundle|Estimates|ReferenceSegmentation|ReferenceClustering' . ./validation/ ./internal/jp2k/ ./internal/xenium/ ./internal/cache/ ./internal/view/ ./internal/segment/... ./internal/compare/ ./internal/export/
+        run: go test -v -timeout 2h -run 'Real|Readers|Bundle|Estimates|ReferenceSegmentation|ReferenceClustering|ReferenceLabels|StarterSets' . ./validation/ ./internal/jp2k/ ./internal/xenium/ ./internal/cache/ ./internal/view/ ./internal/segment/... ./internal/compare/ ./internal/export/
       - name: The exports read by spatialdata, anndata, pandas, scipy, geopandas and numpy, as the committed check recorded
         env:
           SITUCRAFT_EXPORT_DIR: ${{ runner.temp }}/exports

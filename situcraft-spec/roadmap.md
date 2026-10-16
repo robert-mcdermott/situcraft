@@ -1670,18 +1670,69 @@ same on every processor.
        files.
      - **A selection on the tissue was hard to see** under a white highlight among colored cells:
        the cells not selected are drawn faint instead, as on the map.
-3. **Labels from markers (T4).**
-   - Marker sets: a hierarchy of labels (class, lineage, subtype, state), each with positive and
-     negative markers. Starter sets for the development bundles' panels from published marker
-     studies, cited; edited in the app, versioned, saved as files.
-   - Scores against control genes binned by expression (Tirosh et al. 2016); labels assigned from
-     the top of the hierarchy down, a level only when its best label leads the next by a margin,
-     else the cell stays at the level above. Confidence from the margin. Each cluster's labels and
-     their shares.
-   - A label set is an artifact of kind `labels`: each cell's label at each level, scores and
-     confidence, the marker set by its checksum.
-   - Validation: scores against scanpy's `score_genes` with the same control genes; on simulated
-     tissues, labels against the true types.
+3. **Labels from markers (T4): done.**
+   - **Marker sets** (`internal/label`; `docs/FORMATS.md`): a hierarchy of labels on up to six
+     levels (class, lineage, subtype) and states (proliferating), each with positive and negative
+     markers and the DOIs of their sources; checked (names unique, parents listed first, a gene
+     once), matched to the panel (genes it lacks refused, listed), named by a checksum of their
+     canonical form.
+     - **Starter sets** for the development bundles' panels (Human breast: 22 labels on three
+       levels; Human lung: 26), from the breast and lung cell atlases (Wu et al. 2021, Kumar et al.
+       2023, Janesick et al. 2023; Travaglini et al. 2020, Sikkema et al. 2023), cited, embedded;
+       and the simulated tissue's types from its own markers.
+     - **Edited in the app as versions** (the project's `marker-set` records): chosen, edited
+       (labels, levels, states, markers; genes the panel lacks shown, and removed on request as a
+       new version), read from a file and saved as one.
+   - **Scores and labels** (research.md §5.3): each cell's score for each label as scanpy's
+     `score_genes` computes it (Tirosh et al. 2016: control genes binned by mean expression), less
+     its negative markers' where above 0; a label's lineage's markers left out of its controls.
+     Labels from the top of the hierarchy down: the best of a label's children when it leads the
+     next by the margin and scores the minimum, else the cell stays at the level above; confidence,
+     the lead; states by their own threshold. Each cluster's labels at each level, and names for
+     the clusters from them (a new version of the names).
+   - **An artifact** of kind `labels`: each cell's scores (and their parts), label and lead at each
+     level, confidence and states; each label's markers and control genes; each cluster's
+     composition; the marker set by its checksum. Checked: every label the best of its candidates
+     by the recorded scores, taken only by the margin and left only below it. Asking again answers
+     it.
+   - **In the app** (`ui/labels-card.js`): the Cell types view's labels — the marker set, its
+     sources and parameters, the label sets of the clustering, each cluster's labels as bars, the
+     labels with their markers and controls; the map and the tissue colored by the labels at a
+     level, their confidence or a label's score, a label's cells selected from the legend; the
+     Viewer's **Fill by** lists each label set's levels. The sidebar's **Label sets** and **Marker
+     sets**, and the inspector. Remote control: `label_cells`; `show_map` and `show_tissue` color by
+     `labels`.
+   - Validation:
+     - **Exact cases:** bins and controls as scanpy cuts and draws them (ties, rounding half to
+       even), a score by hand, the assignment's ties, margins, single children, minimum and states;
+       marker sets checked; a planted tissue's classes and types labeled, the files checked and
+       pinned; the expression's means by hand; the project's versions, the editor's operations,
+       names from labels and the cells' binary read.
+     - **Against scanpy 1.12.4** (`validation/reference/labels/`): every label's control genes
+       scanpy's on both bundles and the standard simulated tissue (87 lists), each cell's score
+       within 3 × 10⁻⁷. Checked weekly against SituCraft's labels made again, byte for byte.
+     - **Known truth:** on the standard simulated tissue 97.2% of the cells take their true type,
+       1.5% another.
+     - **In the app:** the Lung cells labeled by remote control and drawn on the tissue, each cell
+       in its label's color, the unlabeled grey, the 78 not analyzed clear; a cluster selected on
+       the labels' colors exactly its cells (viewer suite); capture scene `labels`, with no
+       accessibility violation.
+   - Found by slice 3:
+     - **A tumor's tissue is not the atlas's:** in the Breast region tumor cells express LPL and
+       PDGFRA, and FOXA1, GATA3 and ESR1 are nearly absent; in the Lung region the tumor expresses
+       COL5A2 and PROX1. The starter sets leave them out of the labels they would mislead, and
+       stromal transcripts reaching immune cells are answered by immune markers counted against
+       Stromal.
+     - **On a targeted panel, controls binned by expression cancel a dominant type's markers:** the
+       top bins hold the tumor's own genes, so its epithelial score is near 0, as scanpy's is. On
+       Lung about half the tumor cells take no label, on Breast 17% to 28%; reported, the label set
+       saying which.
+     - **The margin is over the next label, the minimum a separate gate:** a lead over the larger of
+       the two left a dominant type unlabeled whenever its score was near 0.
+     - **States need their own threshold:** at the margin one transcript of four proliferation
+       genes passed (36% of Breast's cells).
+     - **Averaging scores over each cell's neighbors in expression** labels more of Breast but
+       loses every rare type and labels less of Lung: not taken.
 4. **Imported labels (T1).**
    - Labels and confidence from CSV, Parquet or AnnData Zarr (an `obs` column), Xenium Explorer's
      cell groups, and the instrument's clusters, matched to a segmentation's cells by id: ids not in

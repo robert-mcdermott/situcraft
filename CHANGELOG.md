@@ -48,6 +48,25 @@ Wave 4 of the [roadmap](situcraft-spec/roadmap.md): cell identities with their e
     instrument's clusters as the bundle's other copy of them holds them; the map's selection and
     linking in the viewer suite.
 
+- **Labels from markers (wave 4, slice 3).** Under a clustering, the Cell types view labels each
+  cell from a marker set, as a job, and records the labels as an artifact with the marker set they
+  came from.
+  - **Marker sets:** a hierarchy of labels (class, lineage, subtype) and states, each with positive
+    and negative markers and the sources they come from. Starter sets for the Breast and Lung
+    panels, from published cell atlases; edited in the app as versions kept in the project; read
+    and saved as files. Genes the panel lacks are shown, and removed on request.
+  - **Scores and labels:** each cell scored for each label against control genes of similar
+    expression, as scanpy's `score_genes` scores a gene list (Tirosh et al. 2016), its negative
+    markers counting against it; labels taken from the top of the hierarchy down when the best
+    leads the next by a margin, else the cell stays at the level above; confidence from the lead.
+  - **What it shows:** each cluster's labels at each level as bars, names for the clusters from
+    them, each label's markers and control genes; the map, the tissue and the Viewer colored by the
+    labels, their confidence or a label's score.
+  - **Remote control:** `label_cells`; `show_map` and `show_tissue` color by `labels`.
+  - **Validated** against scanpy on both development bundles and the standard simulated tissue:
+    every label's control genes scanpy's, every cell's score within 3e-7. On the simulated tissue
+    97% of the cells take their true type.
+
 ### Changed
 
 - **A comparison can be removed from its project** (the inspector's **Remove**). The project's

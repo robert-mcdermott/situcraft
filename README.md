@@ -46,10 +46,11 @@ simulated tissue with its truth) come with guided tours and worked examples. See
 [roadmap](situcraft-spec/roadmap.md) and the [changelog](CHANGELOG.md).
 
 In development for 0.4.0: cell identities, starting with clusters of a segmentation's cells by
-their expression in the Cell types view, with each cluster's markers, and a map of the cells
-(UMAP) linked to the tissue: cells selected on either are selected on both. The steps and defaults
-are scanpy's, and the results are validated against scanpy, leidenalg, umap-learn and
-scikit-learn.
+their expression in the Cell types view, with each cluster's markers, a map of the cells (UMAP)
+linked to the tissue (cells selected on either are selected on both), and labels from marker
+genes: a hierarchy of cell types, each with positive and negative markers, starter sets for the
+example panels from published cell atlases, edited as versions. The steps and defaults are
+scanpy's, and the results are validated against scanpy, leidenalg, umap-learn and scikit-learn.
 
 ## A look around
 
@@ -91,6 +92,7 @@ More: [checking a bundle](docs/images/data-light.webp), [the tissue's stains](do
 [cells clustered by their expression](docs/images/celltypes-light.webp),
 [the clusters on the tissue](docs/images/clusters-light.webp),
 [the map of the cells beside the tissue](docs/images/cellmap-light.webp),
+[cells labeled from marker genes](docs/images/labels-light.webp),
 [the Jobs view](docs/images/jobs-light.webp).
 
 ## Install

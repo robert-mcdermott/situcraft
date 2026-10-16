@@ -1,0 +1,425 @@
+{
+ "format": "situcraft-markers",
+ "version": 1,
+ "name": "Human lung (Xenium Human Lung panel)",
+ "about": "The lung's main cell types from well-established markers, every one in the Xenium Human Lung Gene Expression panel (hLung_v1.1), chosen to be specific in this panel's development data set (where tumor cells express COL5A2 and PROX1). The panel has no pan-immune marker (PTPRC), so the immune class is scored by leading markers of each immune lineage. A starting point, to be checked against each cluster's markers and edited: tumor cells are labeled by the lineage they resemble.",
+ "panel": "hLung_v1.1",
+ "levels": [
+  "Class",
+  "Lineage",
+  "Subtype"
+ ],
+ "labels": [
+  {
+   "name": "Epithelial",
+   "positive": [
+    "EPCAM",
+    "CDH1",
+    "ELF3"
+   ],
+   "references": [
+    "10.1038/s41586-020-2922-4",
+    "10.1038/s41591-023-02327-2"
+   ],
+   "negative": [
+    "CD68",
+    "AIF1",
+    "VWF",
+    "PDGFRB",
+    "CD3E"
+   ]
+  },
+  {
+   "name": "Alveolar type 1",
+   "parent": "Epithelial",
+   "positive": [
+    "AGER",
+    "SCEL"
+   ],
+   "references": [
+    "10.1038/s41586-020-2922-4"
+   ]
+  },
+  {
+   "name": "Alveolar type 2",
+   "parent": "Epithelial",
+   "positive": [
+    "SFTPD",
+    "SFTA2",
+    "PEBP4",
+    "ETV5"
+   ],
+   "references": [
+    "10.1038/s41586-020-2922-4",
+    "10.1038/s41591-023-02327-2"
+   ]
+  },
+  {
+   "name": "Ciliated",
+   "parent": "Epithelial",
+   "positive": [
+    "FOXJ1",
+    "CCDC78"
+   ],
+   "references": [
+    "10.1038/s41586-020-2922-4"
+   ]
+  },
+  {
+   "name": "Secretory (club and goblet)",
+   "parent": "Epithelial",
+   "positive": [
+    "MUC5B",
+    "CYP2F1"
+   ],
+   "references": [
+    "10.1038/s41586-020-2922-4"
+   ]
+  },
+  {
+   "name": "Basal",
+   "parent": "Epithelial",
+   "positive": [
+    "TP63",
+    "KRT15"
+   ],
+   "references": [
+    "10.1038/s41586-020-2922-4"
+   ]
+  },
+  {
+   "name": "Immune",
+   "positive": [
+    "CD3E",
+    "CD2",
+    "MS4A1",
+    "MZB1",
+    "CD68",
+    "AIF1",
+    "MPEG1",
+    "MS4A2"
+   ],
+   "negative": [
+    "EPCAM"
+   ],
+   "references": [
+    "10.1038/s41586-020-2922-4"
+   ]
+  },
+  {
+   "name": "T cell",
+   "parent": "Immune",
+   "positive": [
+    "CD3E",
+    "CD3D",
+    "CD2",
+    "LCK"
+   ],
+   "negative": [
+    "MS4A1",
+    "CD68"
+   ],
+   "references": [
+    "10.1038/s41586-020-2922-4"
+   ]
+  },
+  {
+   "name": "CD4 T cell",
+   "parent": "T cell",
+   "positive": [
+    "CD4",
+    "CD40LG"
+   ],
+   "negative": [
+    "CD8A",
+    "CD8B"
+   ],
+   "references": [
+    "10.1038/s41586-020-2922-4"
+   ]
+  },
+  {
+   "name": "CD8 T cell",
+   "parent": "T cell",
+   "positive": [
+    "CD8A",
+    "CD8B"
+   ],
+   "negative": [
+    "CD4",
+    "CD40LG"
+   ],
+   "references": [
+    "10.1038/s41586-020-2922-4"
+   ]
+  },
+  {
+   "name": "Regulatory T cell",
+   "parent": "T cell",
+   "positive": [
+    "FOXP3",
+    "CTLA4",
+    "TNFRSF18"
+   ],
+   "negative": [
+    "CD8A",
+    "CD8B"
+   ],
+   "references": [
+    "10.1038/s41586-020-2922-4"
+   ]
+  },
+  {
+   "name": "NK cell",
+   "parent": "Immune",
+   "positive": [
+    "KLRD1",
+    "KLRC1",
+    "NKG7",
+    "FGFBP2"
+   ],
+   "negative": [
+    "CD3E",
+    "CD3D"
+   ],
+   "references": [
+    "10.1038/s41586-020-2922-4"
+   ]
+  },
+  {
+   "name": "B cell",
+   "parent": "Immune",
+   "positive": [
+    "MS4A1",
+    "CD19",
+    "BANK1",
+    "TNFRSF13C"
+   ],
+   "negative": [
+    "CD3E"
+   ],
+   "references": [
+    "10.1038/s41586-020-2922-4"
+   ]
+  },
+  {
+   "name": "Plasma cell",
+   "parent": "Immune",
+   "positive": [
+    "MZB1",
+    "TNFRSF17",
+    "FKBP11"
+   ],
+   "negative": [
+    "MS4A1"
+   ],
+   "references": [
+    "10.1038/s41586-020-2922-4"
+   ]
+  },
+  {
+   "name": "Myeloid",
+   "parent": "Immune",
+   "positive": [
+    "CD68",
+    "AIF1",
+    "CD14",
+    "CD163",
+    "MPEG1"
+   ],
+   "negative": [
+    "CD3E"
+   ],
+   "references": [
+    "10.1038/s41586-020-2922-4"
+   ]
+  },
+  {
+   "name": "Macrophage",
+   "parent": "Myeloid",
+   "positive": [
+    "CD68",
+    "MARCO",
+    "CD163",
+    "MCEMP1"
+   ],
+   "references": [
+    "10.1038/s41586-020-2922-4",
+    "10.1038/s41591-023-02327-2"
+   ]
+  },
+  {
+   "name": "Monocyte",
+   "parent": "Myeloid",
+   "positive": [
+    "FCN1",
+    "S100A12",
+    "CD14",
+    "CD300E"
+   ],
+   "negative": [
+    "MARCO"
+   ],
+   "references": [
+    "10.1038/s41586-020-2922-4"
+   ]
+  },
+  {
+   "name": "Dendritic cell",
+   "parent": "Myeloid",
+   "positive": [
+    "CD1C",
+    "CLEC10A",
+    "FCER1A"
+   ],
+   "references": [
+    "10.1038/s41586-020-2922-4"
+   ]
+  },
+  {
+   "name": "Mast cell",
+   "parent": "Immune",
+   "positive": [
+    "MS4A2",
+    "KIT",
+    "HPGDS"
+   ],
+   "references": [
+    "10.1038/s41586-020-2922-4"
+   ]
+  },
+  {
+   "name": "Endothelial",
+   "positive": [
+    "CLDN5",
+    "VWF",
+    "ADGRL4",
+    "ECSCR",
+    "RAMP2"
+   ],
+   "negative": [
+    "EPCAM"
+   ],
+   "references": [
+    "10.1038/s41586-020-2922-4",
+    "10.1038/s41591-023-02327-2"
+   ]
+  },
+  {
+   "name": "Blood vessel endothelial",
+   "parent": "Endothelial",
+   "positive": [
+    "PLVAP",
+    "ACKR1",
+    "CA4",
+    "FCN3"
+   ],
+   "negative": [
+    "MMRN1"
+   ],
+   "references": [
+    "10.1038/s41586-020-2922-4"
+   ]
+  },
+  {
+   "name": "Lymphatic endothelial",
+   "parent": "Endothelial",
+   "positive": [
+    "MMRN1",
+    "PDPN",
+    "LYVE1"
+   ],
+   "negative": [
+    "PLVAP"
+   ],
+   "references": [
+    "10.1038/s41586-020-2922-4"
+   ]
+  },
+  {
+   "name": "Stromal",
+   "positive": [
+    "PDGFRA",
+    "PDGFRB",
+    "FBN1",
+    "MYH11",
+    "DES"
+   ],
+   "negative": [
+    "EPCAM"
+   ],
+   "references": [
+    "10.1038/s41586-020-2922-4",
+    "10.1038/s41591-023-02327-2"
+   ]
+  },
+  {
+   "name": "Fibroblast",
+   "parent": "Stromal",
+   "positive": [
+    "PDGFRA",
+    "FBN1",
+    "MFAP5",
+    "SFRP2",
+    "SVEP1"
+   ],
+   "references": [
+    "10.1038/s41586-020-2922-4"
+   ]
+  },
+  {
+   "name": "Smooth muscle",
+   "parent": "Stromal",
+   "positive": [
+    "MYH11",
+    "DES",
+    "CNN1",
+    "LMOD1"
+   ],
+   "references": [
+    "10.1038/s41586-020-2922-4"
+   ]
+  },
+  {
+   "name": "Pericyte",
+   "parent": "Stromal",
+   "positive": [
+    "RGS5",
+    "HIGD1B",
+    "CSPG4",
+    "PDGFRB"
+   ],
+   "negative": [
+    "MYH11"
+   ],
+   "references": [
+    "10.1038/s41586-020-2922-4"
+   ]
+  }
+ ],
+ "states": [
+  {
+   "name": "Proliferating",
+   "positive": [
+    "MKI67",
+    "TOP2A",
+    "CDK1",
+    "UBE2C",
+    "CENPF"
+   ],
+   "references": [
+    "10.1038/s41586-020-2922-4"
+   ]
+  }
+ ],
+ "references": [
+  {
+   "doi": "10.1038/s41586-020-2922-4",
+   "citation": "Travaglini KJ, et al. A molecular cell atlas of the human lung from single-cell RNA sequencing. Nature 2020;587:619–625."
+  },
+  {
+   "doi": "10.1038/s41591-023-02327-2",
+   "citation": "Sikkema L, et al. An integrated cell atlas of the lung in health and disease. Nat Med 2023;29:1563–1577."
+  }
+ ]
+}

@@ -7,6 +7,7 @@
 import { openPaths } from './storage.js';
 import { addClustering, addEmbedding, clusteringRecord, embeddingRecord } from '../lib/clusterings.js';
 import { addDataset, compareFingerprint, datasetRecord, findDataset, relocateDataset, removeDataset } from '../lib/datasets.js';
+import { addLabels, labelsRecord, readLabelCells } from '../lib/labels.js';
 import { addComparison, addExport, addSegmentation, comparisonRecord, exportRecord, removeComparison as withoutComparison, segmentationRecord, segmentationsOf, withInstrumentSegmentation } from '../lib/segmentations.js';
 
 const BUNDLE_KINDS = new Set(['bundle', 'archive']);
@@ -14,7 +15,7 @@ const BUNDLE_KINDS = new Set(['bundle', 'archive']);
 async function getJSON(url, options = {}) {
   const response = await fetch(url, { cache: 'no-store', ...options });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.error ?? `${url}: HTTP ${response.status}`);
+  if (!response.ok) throw Object.assign(new Error(body.error ?? `${url}: HTTP ${response.status}`), { code: body.code, missing: body.missing, status: response.status });
   return body;
 }
 
@@ -532,6 +533,79 @@ export function createBundles(app) {
     return getJSON(`/api/clusterings/${encodeURIComponent(id)}/markers?top=${top}`);
   }
 
+  // --- Labels from markers (api_labels.go) ---
+
+  // The marker sets SituCraft offers for a clustering, with the genes its panel lacks: { genes,
+  // starters: [{ id, set, checksum, missing }] }.
+  function markerStarters(item, clustering) {
+    return getJSON(`${item.url}/clusterings/${encodeURIComponent(clustering)}/markers`);
+  }
+
+  // A marker set checked by the program (against a panel's genes when given): { set, checksum,
+  // missing: { label: [genes] } }; throws with the program's message when it is not a marker set.
+  function checkMarkers(set, genes = null) {
+    return getJSON('/api/markers/check', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ set, ...(genes ? { genes } : {}) }) });
+  }
+
+  // Labels a clustering's cells from a marker set (request { clustering, markers, parameters }),
+  // unless it was done already; recorded in the project with the marker set's version
+  // (markerSet). Answers the manifest.
+  const labeling = new Map(); // `${clustering}|${markerSet}` → { dataset, clustering, job, promise }
+  function labelCells(item, datasetId, request, markerSet = null) {
+    const key = `${request.clustering}|${markerSet}|${JSON.stringify(request.parameters ?? null)}`;
+    if (labeling.has(key)) return labeling.get(key).promise;
+    const entry = { dataset: datasetId, clustering: request.clustering, job: null, promise: null };
+    entry.promise = (async () => {
+      try {
+        const answer = await getJSON(`${item.url}/label`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) });
+        let manifest = answer.artifact;
+        if (!manifest) {
+          entry.job = answer.job?.id ?? null;
+          notify();
+          const job = await app.jobs.finished(entry.job);
+          if (job?.state !== 'complete') throw new Error(`the labels ${job?.state ?? 'ended'}${job?.error ? `: ${job.error}` : ''}`);
+          manifest = await getJSON(`/api/artifacts/${encodeURIComponent(answer.id)}`);
+        }
+        const dataset = app.store.project.datasets.find((d) => d.id === datasetId);
+        if (!dataset) throw new Error('the dataset is no longer in the project');
+        const next = addLabels(app.store.project, labelsRecord(dataset, manifest, markerSet));
+        if (next !== app.store.project) app.store.commit(next, `Label the cells of ${dataset.name}`);
+        return manifest;
+      } finally {
+        labeling.delete(key);
+        notify();
+      }
+    })();
+    labeling.set(key, entry);
+    notify();
+    return entry.promise;
+  }
+
+  // A label set's description, marker set and cells, kept for the session.
+  const labelSets = new Map();
+  function labelData(id) {
+    if (!labelSets.has(id)) {
+      const p = (async () => {
+        const [set, response] = await Promise.all([getJSON(`/api/labels/${encodeURIComponent(id)}`), fetch(`/api/labels/${encodeURIComponent(id)}/cells`)]);
+        if (!response.ok) throw new Error(`the labels' cells: HTTP ${response.status}`);
+        return { description: set.description, markers: set.markers, cells: readLabelCells(await response.arrayBuffer()) };
+      })();
+      p.catch(() => labelSets.delete(id));
+      labelSets.set(id, p);
+    }
+    return labelSets.get(id);
+  }
+
+  // A label's (or state's) score in each of a segmentation's cells (NaN where not labeled).
+  async function labelScores(id, set) {
+    const response = await fetch(`/api/labels/${encodeURIComponent(id)}/scores?set=${set}`);
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body.error ?? `HTTP ${response.status}`);
+    }
+    return { name: response.headers.get('X-Label') ?? '', values: new Float32Array(await response.arrayBuffer()) };
+  }
+
   function comparisonDescription(id) {
     if (!descriptions.has(id)) {
       const p = getJSON(`/api/artifacts/${encodeURIComponent(id)}/files/comparison.json`);
@@ -693,6 +767,13 @@ export function createBundles(app) {
     expression,
     dotPlot,
     contrast,
+    markerStarters,
+    checkMarkers,
+    labelCells,
+    labelData,
+    labelScores,
+    // The labelings of a dataset under way: [{ clustering, job }].
+    labelings: (id) => [...labeling.values()].filter((e) => e.dataset === id).map(({ clustering, job }) => ({ clustering, job })),
     // The maps under way of a dataset: [{ clustering, job }].
     mappings: (id) => [...mapping.values()].filter((e) => e.dataset === id).map(({ clustering, job }) => ({ clustering, job })),
     // The instrument's clusterings being registered: [{ name, job }].

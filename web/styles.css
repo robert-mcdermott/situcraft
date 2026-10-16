@@ -1083,3 +1083,22 @@ td div.studio-problem { padding: 2px 6px; margin-top: 4px; font-size: 11.5px; }
 .ct-warning svg { color: var(--warn, #b7791f); vertical-align: -2px; }
 .ct-contrast { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 @media (max-width: 860px) { .ct-contrast { grid-template-columns: 1fr; } }
+/* Labels from markers (ui/labels-card.js) */
+.lb-missing { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px 10px; margin: 8px 0; border-radius: 6px; background: var(--warn-soft); color: var(--text); }
+.lb-missing svg { color: var(--warn-text); flex: none; }
+.lb-check { display: flex; gap: 6px; align-items: center; margin: 6px 0; font-size: 13px; }
+.lb-sources { margin: 4px 0 8px; font-size: 12.5px; color: var(--text-2); }
+.lb-sources ul { margin: 4px 0 0 18px; padding: 0; }
+.lb-levels { display: inline-flex; gap: 4px; margin-right: 8px; }
+.lb-genes { min-width: 180px; width: 100%; }
+.lb-lacking { display: block; font-size: 11.5px; color: var(--danger-text); }
+.lb-actions { white-space: nowrap; }
+.lb-bar { min-width: 160px; width: 40%; }
+.lb-naming { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; margin: 10px 0; }
+.lb-naming .field { max-width: 360px; }
+.lb-naming .muted { font-size: 12.5px; flex: 1 1 260px; }
+.lb-labels td:first-child, .lb-composition td:first-child { white-space: nowrap; }
+.lb-edit-table td { vertical-align: top; }
+.lb-edit-table td.muted { padding-top: 9px; white-space: nowrap; }
+.lb-edit-table td:first-child .input { min-width: 150px; }
+.inspector-list { margin: 4px 0 0 16px; padding: 0; font-size: 12.5px; color: var(--text-2); }

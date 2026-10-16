@@ -598,16 +598,30 @@ func (a *app) expressionOf(w http.ResponseWriter, r *http.Request) (*cluster.Exp
 	if e := a.exprs.get(cm.ID); e != nil {
 		return e, d, true
 	}
-	a.exprs.load.Lock()
-	defer a.exprs.load.Unlock()
-	if e := a.exprs.get(cm.ID); e != nil {
-		return e, d, true
-	}
 	b, ok := a.openBundle(w, r)
 	if !ok {
 		return nil, nil, false
 	}
 	defer b.Close()
+	e, err := a.loadExpression(r.Context(), b, cm, dir, d)
+	if err != nil {
+		writeError(w, http.StatusUnprocessableEntity, err.Error())
+		return nil, nil, false
+	}
+	return e, d, true
+}
+
+// loadExpression loads a clustering's cells' expression from its segmentation's counts (or answers
+// it loaded), keeping it among the last few.
+func (a *app) loadExpression(ctx context.Context, b *xenium.Bundle, cm artifacts.Manifest, dir string, d *cluster.Description) (*cluster.Expression, error) {
+	if e := a.exprs.get(cm.ID); e != nil {
+		return e, nil
+	}
+	a.exprs.load.Lock()
+	defer a.exprs.load.Unlock()
+	if e := a.exprs.get(cm.ID); e != nil {
+		return e, nil
+	}
 	var segID string
 	for _, p := range cm.Lineage.Parents {
 		if p.Kind == "segmentation" {
@@ -616,31 +630,26 @@ func (a *app) expressionOf(w http.ResponseWriter, r *http.Request) (*cluster.Exp
 	}
 	sm, err := a.segmentationOf(segID, b.Experiment.AnalysisUUID)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return nil, nil, false
+		return nil, err
 	}
-	sdir, err := a.segmentationFolder(r.Context(), b, sm)
+	sdir, err := a.segmentationFolder(ctx, b, sm)
 	if err != nil {
-		writeError(w, http.StatusUnprocessableEntity, err.Error())
-		return nil, nil, false
+		return nil, err
 	}
 	counts, err := segment.ReadCounts(sdir)
 	if err != nil {
-		writeError(w, http.StatusUnprocessableEntity, err.Error())
-		return nil, nil, false
+		return nil, err
 	}
 	cells, clusters, err := cluster.ReadCells(dir)
 	if err != nil {
-		writeError(w, http.StatusUnprocessableEntity, err.Error())
-		return nil, nil, false
+		return nil, err
 	}
 	e, err := cluster.LoadExpression(counts, cells, clusters, d.Fixed.TargetSum)
 	if err != nil {
-		writeError(w, http.StatusUnprocessableEntity, err.Error())
-		return nil, nil, false
+		return nil, err
 	}
 	a.exprs.put(cm.ID, e)
-	return e, d, true
+	return e, nil
 }
 
 func geneIndex(e *cluster.Expression, name string) int {

@@ -19,6 +19,7 @@ import { defaultChoice, readSegCells, segmentationChoices } from '../lib/segview
 import { hexColor } from '../render/gl.js';
 import { categoricalColor } from '../lib/colormaps.js';
 import { clusterColors, clusterFills, clusterNames, mergedOf, nameOf } from '../lib/clusterings.js';
+import { labelColor, labelColors, labelFills, labelsPerCell, parseLabelFill } from '../lib/labels.js';
 
 // Per dataset id: { camera, layers, selected } for the session.
 const sessions = new Map();
@@ -177,12 +178,13 @@ export function mountViewer(app, container) {
     const choices = () => segmentationChoices(app.store.project, t.dataset.id);
     const drawnChoice = () => state.seg?.choice ?? choices().find((c) => c.instrument) ?? null;
     // What the panel lists: the segmentations, and the drawn one's clusterings.
-    const choiceKey = () => `${choices().map((c) => `${c.id}${c.isDefault ? '*' : ''}`).join()}|${clusterFills(app.store.project, t.dataset.id, drawnChoice()?.id).map((f) => f.id).join()}`;
+    const analysisFills = () => [...clusterFills(app.store.project, t.dataset.id, drawnChoice()?.id), ...labelFills(app.store.project, t.dataset.id, drawnChoice()?.id)];
+    const choiceKey = () => `${choices().map((c) => `${c.id}${c.isDefault ? '*' : ''}`).join()}|${analysisFills().map((f) => f.id).join()}`;
 
     function mountPanel(start) {
       clear(panelHost);
       state.choiceKey = choiceKey();
-      panel = mountViewerPanel(panelHost, { desc, layers: start, cells: renderer.cells, app, segmentations: choices(), drawn: drawnChoice(), clusterings: clusterFills(app.store.project, t.dataset.id, drawnChoice()?.id), onChange: (next, what) => {
+      panel = mountViewerPanel(panelHost, { desc, layers: start, cells: renderer.cells, app, segmentations: choices(), drawn: drawnChoice(), clusterings: analysisFills(), onChange: (next, what) => {
         state.layers = next;
         renderer.setLayers(next);
         if (what === 'segmentation') {
@@ -202,6 +204,26 @@ export function mountViewer(app, container) {
     function applyFill() {
       const fill = state.layers.cells.fill;
       state.clusterFill = null;
+      const asLabels = parseLabelFill(fill);
+      if (asLabels) {
+        const mine = (state.fillGeneration = (state.fillGeneration ?? 0) + 1);
+        renderer.setCellColors(null);
+        app.bundles.labelData(asLabels.id).then((data) => {
+          if (mine !== state.fillGeneration || current !== state) return;
+          if (data.cells.segCells !== renderer.cells?.n) {
+            toast(`The labels are of another segmentation's ${formatCount(data.cells.segCells)} cells; ${formatCount(renderer.cells?.n ?? 0)} are drawn.`, { kind: 'error' });
+            return;
+          }
+          const sets = data.description.sets;
+          const per = labelsPerCell(data.cells, asLabels.level, sets.length);
+          const counts = new Map();
+          for (const k of per) if (k >= 0) counts.set(k, (counts.get(k) ?? 0) + 1);
+          state.clusterFill = { labels: true, unlabeled: sets.length, sets, counts, analyzed: data.cells.n, cells: per.length, name: labelFills(app.store.project, t.dataset.id, drawnChoice()?.id).find((f) => f.id === fill)?.label ?? 'Labels', rgba: labelColors(per, sets.length) };
+          renderer.setCellColors(state.clusterFill.rgba);
+          updateLegend();
+        }).catch((error) => toast(`The labels could not be drawn: ${error.message}`, { kind: 'error' }));
+        return;
+      }
       if (!fill?.startsWith('clusters:')) {
         renderer.setCellColors(cellFillColors(fill, renderer.cells, desc));
         return;
@@ -230,6 +252,14 @@ export function mountViewer(app, container) {
     function clusterLegend() {
       const f = state.clusterFill;
       if (!f) return null;
+      if (f.labels) {
+        const entries = [...f.counts.entries()].sort((a, b) => (a[0] === f.unlabeled) - (b[0] === f.unlabeled) || b[1] - a[1]);
+        const shown = entries.slice(0, 24);
+        return h('div', h('b', f.name),
+          ...shown.map(([k, size]) => h('div.viewer-legend-item', h('span.dot', { style: { background: labelColor(k, f.unlabeled) } }), k === f.unlabeled ? 'No label' : f.sets[k].name, h('span.muted', formatCount(size)))),
+          entries.length > shown.length ? h('div.muted', `and ${entries.length - shown.length} more labels`) : null,
+          f.analyzed < f.cells ? h('div.muted', `${formatCount(f.cells - f.analyzed)} cells not analyzed are not filled.`) : null);
+      }
       // Clusters sharing a name are one entry, in the first one's color.
       const groups = new Map();
       f.sizes.forEach((size, k) => {
@@ -254,7 +284,7 @@ export function mountViewer(app, container) {
       const cellsShown = state.layers.cells.outlines || state.layers.cells.fill;
       if (state.loadingSeg) legend.append(h('div.viewer-legend-seg', h('b', state.loadingSeg.name), h('div.muted', 'Reading its cells…')));
       else if (c && cellsShown && choices().length > 1) legend.append(h('div.viewer-legend-seg', h('b', c.name), h('div.muted', `${c.about[0].toUpperCase()}${c.about.slice(1)}`)));
-      const part = state.layers.cells.fill ? (state.layers.cells.fill.startsWith('clusters:') ? clusterLegend() : panel.legend?.()) : null;
+      const part = state.layers.cells.fill ? (state.layers.cells.fill.startsWith('clusters:') || parseLabelFill(state.layers.cells.fill) ? clusterLegend() : panel.legend?.()) : null;
       if (part) legend.append(part);
       const probability = panel.probabilityLegend?.();
       if (probability) legend.append(probability);
@@ -675,7 +705,7 @@ export function mountViewer(app, container) {
       segmentationReady: () => state.segReady,
       cellsDrawn: () => renderer.cells,
       choices: () => choices(),
-      fillColors: () => (state.layers.cells.fill?.startsWith('clusters:') ? state.clusterFill?.rgba ?? null : cellFillColors(state.layers.cells.fill, renderer.cells, desc)),
+      fillColors: () => (state.layers.cells.fill?.startsWith('clusters:') || parseLabelFill(state.layers.cells.fill) ? state.clusterFill?.rgba ?? null : cellFillColors(state.layers.cells.fill, renderer.cells, desc)),
       clusterFill: () => state.clusterFill,
       setCells: (patch) => {
         state.layers = { ...state.layers, cells: { ...state.layers.cells, ...patch } };

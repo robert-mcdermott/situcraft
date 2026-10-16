@@ -446,6 +446,50 @@ clustering (SituCraft computes its markers), and the instrument's map comes with
 **Two clusterings compared** cross-tabulates any two clusterings of the same cells, with the
 adjusted Rand index (1: the same partition; about 0: as alike as chance).
 
+## Cell types: labels from markers
+
+Under a clustering, **Labels from markers** labels each cell from the genes known to mark cell
+types. A **marker set** is a hierarchy of labels (a class such as Immune, a lineage such as T cell,
+a subtype such as CD8 T cell) and states (Proliferating), each with **positive** markers, the genes
+its cells express, and **negative** ones, genes they do not. SituCraft offers a starter set for
+each example's panel, from published breast and lung cell atlases (the **Sources**), every marker
+in the panel.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/labels-dark.webp">
+  <img alt="The Cell types view of the Breast example labeled from the breast starter set: each cluster's labels at the lineage level as colored bars (the tumor clusters Epithelial and Luminal, with some cells left without a label; the macrophages Myeloid, the fibroblasts Fibroblast, the T cells T cell, the vessels Endothelial), names for the clusters from them, and the labels with their markers" src="images/labels-light.webp">
+</picture>
+
+**Label the cells** scores each cell for each label: its markers' expression less that of control
+genes of similar average expression (as scanpy's `score_genes` scores a gene list), its negative
+markers counting against it where the cell expresses them. Labels are then taken from the top
+down: a cell takes the best class when it leads the next by the **margin**, then the best of that
+class's lineages, and so on; where no label leads, the cell stays at the level above, so a T cell
+whose CD4 and CD8 markers are both faint stays a T cell. Each cell's **confidence** is how far its
+label led. A label set is kept as an artifact with the marker set it came from and every
+parameter; asking again answers it.
+
+Under the labels:
+- **Each cluster's labels** at the level chosen (Class, Lineage, Subtype), as bars. A cluster split
+  between labels may hold two kinds of cells, or cells whose outlines hold parts of two.
+- **Name the clusters** by the most specific label at least half (or a share you choose) of each
+  cluster's cells carry: a new version of the names, which you can edit. Clusters given the same
+  name merge on the map and the tissue.
+- **Color the map and the tissue** by the labels, their confidence, or one label's score (choose it
+  in the labels' table, which lists each label's markers and control genes). The Viewer's **Fill
+  by** lists each label set's levels.
+
+**Edit** the marker set to add labels, levels or states, or change markers (the panel's genes are
+offered as you type, and those it lacks are marked). Saving makes a new version, kept with the
+earlier ones and the labels made from them. **Save as a file** writes the set as JSON, and **Read
+a file…** reads one (`docs/FORMATS.md`); a set naming genes the panel lacks offers to remove them.
+
+Starter sets are a starting point. Markers that hold in an atlas may not in your tissue (in the
+Breast example the tumor cells express LPL, an adipocyte marker), and in a tissue one type
+dominates, its own markers score low against control genes that are mostly its other genes, so
+many of its cells may stay without a label. Check each cluster's labels against its markers before
+naming it.
+
 ## Keyboard
 
 | Action | Keys |

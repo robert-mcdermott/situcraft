@@ -393,6 +393,7 @@ async function start() {
   };
   // A clustering's clusters on the tissue: its segmentation drawn, its cells filled by cluster.
   app.showClusters = (clustering) => app.showOnTissue(clustering.dataset, clustering.segmentation, `clusters:${clustering.id}`);
+  app.showLabels = (labels, level = 0) => app.showOnTissue(labels.dataset, labels.segmentation, `labels:${labels.id}:${level}`);
 
   // A deep link (#project=…&view=…) opens its project from the library and shows the view.
   async function openLink(hash) {

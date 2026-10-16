@@ -1,8 +1,8 @@
 // The map and the tissue, side by side and linked: a clustering's cells on a map (lib/scatter.js,
 // drawn on a 2-D canvas) and on the tissue (the renderer, the segmentation's outlines), colored
-// alike (by a clustering's clusters, a gene's expression, a cell attribute or the map's
-// reliability), with one selection: cells lassoed on either, or chosen by cluster, are selected on
-// both. Clicking a cell on the map shows it on the tissue, and clicking a cell on the tissue marks
+// alike (by a clustering's clusters, a label set's labels at a level, their confidence or one
+// label's score, a gene's expression, a cell attribute or the map's reliability), with one
+// selection: cells lassoed on either, or chosen by cluster or label, are selected on both. Clicking a cell on the map shows it on the tissue, and clicking a cell on the tissue marks
 // it on the map.
 
 import { h, icon, clear, formatCount } from './dom.js';
@@ -16,6 +16,7 @@ import { readCells } from '../lib/viewer-data.js';
 import { readSegCells } from '../lib/segview.js';
 import { fitView, insidePolygon, nearestPoint, pointGrid, pointsInPolygon, rasterize, toPixel, toPlane, valueColors, zoomAt } from '../lib/scatter.js';
 import { clusterColors, mapWarning, mergedOf, nameOf } from '../lib/clusterings.js';
+import { labelColor, labelColors, labelsPerCell } from '../lib/labels.js';
 
 async function getJSON(url) {
   const response = await fetch(url, { cache: 'no-store' });
@@ -32,7 +33,7 @@ export const ATTRIBUTE_COLORS = [
 
 // ctx: { item, dataset, segmentation (record), instrument (whether it is the instrument's),
 // clusterings (records of the segmentation), maps (records), names (clustering id → names record),
-// onSelect(mask, count), onFocus(cell) }.
+// labelSets (label set records of its clusterings), onSelect(mask, count), onFocus(cell) }.
 export function mountCellMap(app, host, ctx) {
   const state = {
     ctx, cells: null, desc: null, outlines: null, renderer: null, nav: null, observer: null,
@@ -147,15 +148,22 @@ export function mountCellMap(app, host, ctx) {
     if (!maps.some((m) => m.id === state.mapId)) state.mapId = maps.find((m) => m.clustering === state.ctx.shown)?.id ?? maps[0]?.id ?? null;
     if (state.mapId) mapPick.value = state.mapId;
     mapPick.disabled = maps.length < 2;
+    const labelSets = (state.ctx.labelSets ?? []).filter((r) => r.state === 'complete');
+    const c = state.color;
     const options = [
       ...clusterings.map((c) => h('option', { value: `clusters:${c.id}` }, `Clusters: ${c.summary?.source ? c.name : `resolution ${c.parameters?.resolution}`} (${c.summary?.clusters})`)),
+      ...labelSets.flatMap((r) => [
+        ...(r.summary?.levels ?? []).map((level, l) => h('option', { value: `labels:${r.id}:${l}` }, `Labels by ${r.markers?.name ?? '?'}: ${level.toLowerCase()}`)),
+        h('option', { value: `confidence:${r.id}` }, `Labels by ${r.markers?.name ?? '?'}: confidence`),
+      ]),
+      ...(c.kind === 'score' ? [h('option', { value: `score:${c.labels}:${c.set}` }, `Score: ${c.name ?? 'a label'}`)] : []),
       h('option', { value: 'gene' }, 'A gene…'),
       ...ATTRIBUTE_COLORS.map((a) => h('option', { value: `attribute:${a.id}` }, a.label)),
       h('option', { value: 'reliability' }, 'How faithfully the map keeps neighbors'),
     ];
     clear(colorPick).append(...options);
     if (!state.color.clustering && state.color.kind === 'clusters') state.color.clustering = state.ctx.shown ?? clusterings[0]?.id ?? null;
-    colorPick.value = state.color.kind === 'clusters' ? `clusters:${state.color.clustering}` : state.color.kind === 'attribute' ? `attribute:${state.color.attribute}` : state.color.kind;
+    colorPick.value = colorValue(state.color);
     geneInput.hidden = state.color.kind !== 'gene';
   }
 
@@ -198,17 +206,72 @@ export function mountCellMap(app, host, ctx) {
   }
 
   // --- Colors ---
+  function colorValue(c) {
+    switch (c.kind) {
+      case 'clusters': return `clusters:${c.clustering}`;
+      case 'attribute': return `attribute:${c.attribute}`;
+      case 'labels': return `labels:${c.labels}:${c.level}`;
+      case 'confidence': return `confidence:${c.labels}`;
+      case 'score': return `score:${c.labels}:${c.set}`;
+      default: return c.kind;
+    }
+  }
+
+  // Values per segmentation cell (NaN for the others) between their 1st and 99th percentiles.
+  function percentiles(values) {
+    const finite = Float64Array.from([...values].filter(Number.isFinite)).sort();
+    if (!finite.length) return [0, 1];
+    return [finite[Math.floor(0.01 * (finite.length - 1))], finite[Math.floor(0.99 * (finite.length - 1))]];
+  }
+
   async function recolor() {
     const n = state.cells.n;
     const c = state.color;
     try {
-      if (c.kind === 'clusters' && c.clustering) {
+      // The shown clustering's clusters, for selecting by cluster whatever colors the cells.
+      const shown = state.ctx.shown;
+      if (shown && state.clustersOf !== shown) {
+        const data = await app.bundles.clusteringData(shown);
+        if (data.cluster.length === n) {
+          state.clusters = data.cluster;
+          state.clustersOf = shown;
+        }
+      }
+      if (c.kind === 'labels' || c.kind === 'confidence') {
+        const data = await app.bundles.labelData(c.labels);
+        const cells = data.cells;
+        if (cells.segCells !== n) throw new Error('the labels are of another segmentation');
+        const sets = data.description.sets;
+        if (c.kind === 'labels') {
+          const unlabeled = sets.length;
+          const per = labelsPerCell(cells, c.level, unlabeled);
+          state.colors = labelColors(per, unlabeled);
+          state.groups = per;
+          const counts = new Map();
+          for (const k of per) if (k >= 0) counts.set(k, (counts.get(k) ?? 0) + 1);
+          const entries = [...counts.entries()].sort((a, b) => (a[0] === unlabeled) - (b[0] === unlabeled) || b[1] - a[1])
+            .map(([k, size]) => ({ name: k === unlabeled ? 'No label' : sets[k].name, color: labelColor(k, unlabeled), cells: size, clusters: [k] }));
+          state.legend = { kind: 'clusters', entries, labels: c.labels };
+        } else {
+          const values = new Float32Array(n).fill(NaN);
+          for (let i = 0; i < cells.n; i += 1) values[cells.cells[i]] = cells.confidence[i];
+          const [, hi] = percentiles(values);
+          state.colors = valueColors(values, colormapLUT('viridis'), 0, hi || 1);
+          state.legend = { kind: 'scale', label: 'Confidence: how far each cell\'s label leads the next', lo: 0, hi: hi || 1, note: 'up to the 99th percentile; cells below 0 at the lowest' };
+        }
+      } else if (c.kind === 'score') {
+        const { name, values } = await app.bundles.labelScores(c.labels, c.set);
+        if (values.length !== n) throw new Error('the labels are of another segmentation');
+        const [lo, hi] = percentiles(values);
+        state.colors = valueColors(values, colormapLUT('viridis'), lo, hi);
+        state.legend = { kind: 'scale', label: `${name}: its markers' score against their controls`, lo, hi, note: '1st to 99th percentile' };
+      } else if (c.kind === 'clusters' && c.clustering) {
         const data = await app.bundles.clusteringData(c.clustering);
         if (data.cluster.length !== n) throw new Error('the clustering is of another segmentation');
         const names = state.ctx.names?.[c.clustering] ?? null;
         const merged = mergedOf(names, data.sizes.length);
         state.colors = clusterColors(data.cluster, (k) => merged[k]);
-        state.clusters = data.cluster;
+        state.groups = data.cluster;
         const shown = new Map();
         data.sizes.forEach((size, k) => {
           const rep = merged[k];
@@ -279,12 +342,13 @@ export function mountCellMap(app, host, ctx) {
       return;
     }
     const inSelection = new Map();
-    if (state.count && state.clusters) {
-      for (let i = 0; i < state.clusters.length; i += 1) if (state.selected[i] && state.clusters[i] >= 0) inSelection.set(state.clusters[i], (inSelection.get(state.clusters[i]) ?? 0) + 1);
+    const groups = state.groups;
+    if (state.count && groups) {
+      for (let i = 0; i < groups.length; i += 1) if (state.selected[i] && groups[i] >= 0) inSelection.set(groups[i], (inSelection.get(groups[i]) ?? 0) + 1);
     }
     legend.append(...l.entries.map((e) => {
       const picked = e.clusters.reduce((s, k) => s + (inSelection.get(k) ?? 0), 0);
-      return h('button.cm-legend-item', { type: 'button', title: `Select the cells of ${e.name}`, 'data-clusters': e.clusters.join(','), onclick: (event) => selectClusters(e.clusters, event.shiftKey) },
+      return h('button.cm-legend-item', { type: 'button', title: `Select the cells of ${e.name}`, 'data-clusters': e.clusters.join(','), onclick: (event) => selectGroups(groups, e.clusters, event.shiftKey) },
         h('span.dot', { style: { background: e.color } }), e.name, h('span.muted', state.count ? `${formatCount(picked)} of ${formatCount(e.cells)}` : formatCount(e.cells)));
     }));
   }
@@ -440,12 +504,18 @@ export function mountCellMap(app, host, ctx) {
     }
     select(mask);
   }
-  function selectClusters(list, add = false) {
-    if (!state.clusters) return;
+  // Selects the cells of some groups (each cell's group: its cluster, or its label).
+  function selectGroups(groups, list, add = false) {
+    if (!groups) return;
     const set = new Set(list);
     const mask = add && state.count ? state.selected.slice() : new Uint8Array(state.cells.n);
-    for (let i = 0; i < state.clusters.length; i += 1) if (set.has(state.clusters[i])) mask[i] = 1;
+    for (let i = 0; i < groups.length; i += 1) if (set.has(groups[i])) mask[i] = 1;
     select(mask);
+  }
+
+  // Selects the cells of some of the shown clustering's clusters, whatever colors them.
+  function selectClusters(list, add = false) {
+    selectGroups(state.clusters, list, add);
   }
 
   function select(mask) {
@@ -499,8 +569,12 @@ export function mountCellMap(app, host, ctx) {
   });
   colorPick.addEventListener('change', () => {
     const v = colorPick.value;
+    const [kind, id, k] = v.split(':');
     if (v.startsWith('clusters:')) state.color = { kind: 'clusters', clustering: v.slice(9) };
     else if (v.startsWith('attribute:')) state.color = { kind: 'attribute', attribute: v.slice(10) };
+    else if (kind === 'labels') state.color = { kind, labels: id, level: Number(k) };
+    else if (kind === 'confidence') state.color = { kind, labels: id };
+    else if (kind === 'score') state.color = { ...state.color, kind, labels: id, set: Number(k) };
     else if (v === 'gene') state.color = { kind: 'gene', gene: geneInput.value.trim() || null };
     else state.color = { kind: v };
     geneInput.hidden = state.color.kind !== 'gene';

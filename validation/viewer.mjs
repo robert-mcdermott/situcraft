@@ -575,6 +575,44 @@ export async function viewerSuite({ check, MissingData, verbose }) {
           return { want, wrong, count: st.count };
         })()`);
         check('viewer', 'remote control: show_map selects a cluster\'s cells on the map and the tissue, and the cells a polygon on the map holds', mapShown.ok && lassoed.ok ? `cluster 2: ${linked.count} of ${linked.size} cells, ${linked.wrong} wrong; polygon: ${inside.count} of ${inside.want}, ${inside.wrong} wrong; ${linked.drawn} map pixels drawn` : mapShown.message ?? lassoed.message, mapShown.ok && linked.wrong === 0 && linked.size > 0 && linked.highlight && linked.segCells === 11898 && linked.drawn > 1000 && inside.wrong === 0 && inside.want > 100 && lassoed.data.selected === inside.want, 'exactly the cluster\'s cells, then exactly the cells inside, highlighted');
+        // Labels from markers (wave 4, slice 3): the Lung cells labeled by a program from the panel's
+        // starter set; the tissue filled by their labels at the lineage level, each cell in its
+        // label's color (the one it carries there), unlabeled cells grey, cells not analyzed
+        // clear; and, colored by labels, a cluster selected is still exactly its cells.
+        const labeled = await act('label_cells', { dataset: 'xenium-lung-2fov', markers: 'lung' });
+        const shownLabels = await act('show_tissue', { fill: 'labels:lineage', whole: true });
+        const labelFill = await chrome.eval(`(async () => {
+          const v = window.situcraftViewer;
+          for (let k = 0; k < 300 && !v.clusterFill()?.labels; k += 1) await new Promise((r) => setTimeout(r, 100));
+          const f = v.clusterFill();
+          if (!f?.labels) return null;
+          const id = window.situcraft.store.project.artifacts.filter((a) => a.kind === 'labels').at(-1).id;
+          const buffer = await fetch('/api/labels/' + id + '/cells').then((r) => r.arrayBuffer());
+          const [segCells, n, levels] = new Uint32Array(buffer, 0, 3);
+          const cells = new Uint32Array(buffer, 16, n);
+          const lineage = new Int32Array(buffer, 16 + 8 * n + 4 * n, n);
+          const { categoricalColor } = await import('/lib/colormaps.js');
+          const rgba = v.fillColors();
+          const want = new Int32Array(segCells).fill(-2);
+          for (let i = 0; i < n; i += 1) want[cells[i]] = lineage[i];
+          let wrong = 0, clear = 0, grey = 0;
+          for (let i = 0; i < segCells; i += 1) {
+            const hex = '#' + [0, 1, 2].map((j) => rgba[4 * i + j].toString(16).padStart(2, '0')).join('');
+            if (want[i] === -2) { if (rgba[4 * i + 3] === 0) clear += 1; else wrong += 1; continue; }
+            if (want[i] === -1) { if (hex === '#9a9a9a' && rgba[4 * i + 3] === 150) grey += 1; else wrong += 1; continue; }
+            if (hex !== categoricalColor(want[i]).toLowerCase() || rgba[4 * i + 3] !== 255) wrong += 1;
+          }
+          return { segCells, n, levels, wrong, clear, grey, legend: document.querySelectorAll('.viewer-legend-item').length };
+        })()`);
+        const byLabels = await act('show_map', { dataset: 'xenium-lung-2fov', color_by: 'labels', select: { clusters: [2] } });
+        const stillClusters = await chrome.eval(`(async () => {
+          const st = window.situcraft.cellTypesView.map().state;
+          const cells = await fetch('/api/clusterings/' + st.clustersOf + '/cells').then((r) => r.json());
+          let wrong = 0, size = 0;
+          for (let i = 0; i < cells.cluster.length; i += 1) { const w = cells.cluster[i] === 1 ? 1 : 0; size += w; if (st.selected[i] !== w) wrong += 1; }
+          return { wrong, size, kind: st.color.kind, legend: document.querySelectorAll('.cm-legend-item').length };
+        })()`);
+        check('viewer', 'remote control: label_cells labels the Lung cells from the panel\'s starter set; the tissue shows each cell in its label\'s color, and a cluster selected on the labels\' colors is its cells', labeled.ok && shownLabels.ok && byLabels.ok ? `${labeled.message} ${JSON.stringify(labelFill)} ${JSON.stringify(stillClusters)}` : labeled.message ?? shownLabels.message ?? byLabels.message, labeled.ok && labeled.data.cells.analyzed === 11820 && labelFill?.segCells === 11898 && labelFill.wrong === 0 && labelFill.clear === 78 && labelFill.grey > 0 && labelFill.legend > 2 && stillClusters.kind === 'labels' && stillClusters.wrong === 0 && stillClusters.size > 0 && stillClusters.legend > 2, 'every cell in its label\'s color, the unlabeled grey, the 78 not analyzed clear; the cluster\'s cells exactly');
         // Nucleus expansion (wave 2, slice 3), run by a program in the Segmentation view.
         const expanded = await act('expand_nuclei', { dataset: 'xenium-lung-2fov', distance_um: 5 });
         const g = expanded.ok ? expanded.data.summary.agreement : null;

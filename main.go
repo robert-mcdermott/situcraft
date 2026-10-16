@@ -548,6 +548,7 @@ func (a *app) registerAPI(mux *http.ServeMux) {
 	a.registerComparisons(mux)
 	a.registerClusterings(mux)
 	a.registerMaps(mux)
+	a.registerLabels(mux)
 	a.registerWorkspace(mux)
 	a.registerSegView(mux)
 	a.registerPlant(mux)

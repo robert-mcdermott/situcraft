@@ -3,6 +3,7 @@ package cluster
 import (
 	"errors"
 	"fmt"
+	"runtime"
 	"sort"
 
 	"situcraft/internal/segment"
@@ -61,6 +62,53 @@ func (e *Expression) Values(gene int) []float32 {
 	out := make([]float32, len(e.Cells))
 	for _, k := range e.byGene[gene] {
 		out[e.cellOf(k)] = float32(e.m.value[k])
+	}
+	return out
+}
+
+// GeneMeans answers each gene's mean log-normalized value over the analyzed cells (zeros
+// included), summed in the cells' order.
+func (e *Expression) GeneMeans() []float64 {
+	out := make([]float64, e.m.genes)
+	for k, g := range e.m.gene {
+		out[g] += e.m.value[k]
+	}
+	n := float64(len(e.m.cells))
+	for g := range out {
+		out[g] /= n
+	}
+	return out
+}
+
+// ListMeans answers, for each list of genes (indices, each listed once), each analyzed cell's mean
+// log-normalized value over the list's genes (zeros included), summed in the genes' order.
+func (e *Expression) ListMeans(lists [][]int) [][]float64 {
+	in := make([][]int32, e.m.genes) // the lists each gene is in
+	for l, list := range lists {
+		for _, g := range list {
+			in[g] = append(in[g], int32(l))
+		}
+	}
+	n := len(e.m.cells)
+	out := make([][]float64, len(lists))
+	for l := range out {
+		out[l] = make([]float64, n)
+	}
+	parallel(n, runtime.NumCPU(), func(i int) {
+		for k := e.m.offsets[i]; k < e.m.offsets[i+1]; k++ {
+			for _, l := range in[e.m.gene[k]] {
+				out[l][i] += e.m.value[k]
+			}
+		}
+	})
+	for l, list := range lists {
+		if len(list) == 0 {
+			continue
+		}
+		size := float64(len(list))
+		for i := range out[l] {
+			out[l][i] /= size
+		}
 	}
 	return out
 }
