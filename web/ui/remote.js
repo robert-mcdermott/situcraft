@@ -13,7 +13,7 @@ import { decideSegmentation, DECISIONS, EXPORT_FORMATS, promotedSegmentation } f
 import { CLASS_INFO, RANKS, cellNames, warnings } from '../lib/review.js';
 import { workedExamples } from '../lib/tours.js';
 import { describeImage, describePlacement, imagesOf } from '../lib/images.js';
-import { describeTransform, transformInUse, transformsOf, useTransform } from '../lib/transforms.js';
+import { checksOf, describeCheck, describeTransform, transformInUse, transformsOf, useTransform } from '../lib/transforms.js';
 import { defaultImageLayer } from '../lib/overlays.js';
 import { parseProject, rename, serializeProject } from '../lib/project.js';
 import { removeView, sameView, viewLink } from '../lib/views.js';
@@ -675,6 +675,24 @@ export function installRemote(app) {
       return { message: `${record.name} is placed by ${tf.name}: ${describePlacement(tf.summary)}.`, data: { image: record.id, transform: tf.id } };
     },
 
+    async check_alignment(args) {
+      const dataset = resolveDataset(args.dataset);
+      const record = imageRef(dataset, args.image);
+      const item = bundleOf(dataset);
+      const tf = args.transform === undefined ? transformInUse(project(), record.id)?.record : transformRef(record, args.transform);
+      if (!tf) throw new ActionError(`${record.name} is not aligned: name a version (transform) to check.`);
+      try {
+        const m = await app.bundles.checkAlignment(item, dataset.id, record.id, tf.id);
+        const rec = project().artifacts.find((a) => a.kind === 'alignment-check' && a.id === m.id);
+        return {
+          message: `${tf.name}: ${rec ? describeCheck(rec) : ''}.`,
+          data: { id: m.id, transform: tf.id, ...m.summary },
+        };
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+    },
+
     async show_alignment(args) {
       const dataset = resolveDataset(args.dataset);
       const record = imageRef(dataset, args.image);
@@ -683,13 +701,25 @@ export function installRemote(app) {
       await app.showAlignment(dataset.id, record.id, { transform: tf?.id ?? null });
       const hook = await waitFor(() => store.ui.mode === 'alignment' && window.situcraftAlignment?.image === record.id && window.situcraftAlignment, 10 * 60000, `${record.name} to open in the Alignment view`);
       if (tf) await waitFor(() => hook.state().parent === tf.id || !['landmarks', 'keypoints'].includes(tf.summary?.method), 30000, 'its landmarks to load');
+      // What to see, and how.
+      const view = {};
+      if (args.show !== undefined) {
+        const text = String(args.show);
+        view.show = /^in use$/i.test(text) ? 'in-use' : /^fit$/i.test(text) ? 'fit' : /^none$/i.test(text) ? 'none' : transformRef(record, text).id;
+      }
+      if (args.display !== undefined) view.as = choose(args.display, ['overlay', 'checkerboard', 'flicker'], 'display');
+      if (args.opacity !== undefined) view.opacity = Math.min(1, Math.max(0, finite(args.opacity, 'opacity')));
+      if (args.cell !== undefined) view.cell = Math.min(400, Math.max(10, finite(args.cell, 'cell')));
+      for (const key of ['edges', 'outlines', 'map']) if (args[key] !== undefined) view[key] = Boolean(args[key]);
+      if (Object.keys(view).length) hook.setView(view);
+      await waitFor(() => hook.drawn(), 60000, 'the version to be drawn');
       await hook.settled();
       await frames();
       const st = hook.state();
       const inUse = transformInUse(project(), record.id);
       return {
         message: `${record.name} in the Alignment view: ${plural(st.landmarks.length, 'landmark')}${st.fit ? `, residuals ${st.fit.rms.toFixed(3)} µm root-mean-square` : ''}; ${inUse ? `placed by ${inUse.record.name}` : 'not aligned'}.`,
-        data: { ...st, versions: transformsOf(project(), record.id).map((x) => ({ id: x.id, name: x.name, how: describeTransform(x), parent: x.parent, inUse: inUse?.record.id === x.id })) },
+        data: { ...st, view: hook.view(), versions: transformsOf(project(), record.id).map((x) => ({ id: x.id, name: x.name, how: describeTransform(x), parent: x.parent, inUse: inUse?.record.id === x.id, check: checksOf(project(), x.id).at(-1)?.summary ?? null })) },
       };
     },
 

@@ -51,7 +51,10 @@
 //   tissue's H&E added unaligned and placed by six landmarks clicked on both images, within its
 //   truth's deformation, drawn where the fit puts it;
 // - automatic registration (wave 5, slice 3): the same H&E registered by its nuclei with a
-//   deformation allowed, within its truth's deformation, drawn where the version puts its pixels.
+//   deformation allowed, within its truth's deformation, drawn where the version puts its pixels;
+// - alignment checked in µm (wave 5, slice 4): the landmarks' version checked over the tissue, each
+//   patch's measured error against its true one; the automatic version measured less off; the map,
+//   a checkerboard and DAPI's edges drawn.
 //
 // It builds the program, starts it on the bundles with an empty cache and library, builds their
 // derived data, and drives the page through window.situcraft (the app, app.js), window.situcraftViewer
@@ -70,6 +73,7 @@ import { attributeRange, readCells } from '../web/lib/viewer-data.js';
 import { certaintyColor, readSegCells } from '../web/lib/segview.js';
 import { colormapLUT, hexToRgb } from '../web/lib/colormaps.js';
 import { placePoint } from '../web/lib/transforms.js';
+import { invert } from '../web/lib/overlays.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const BUNDLES = ['xenium-lung-2fov', 'xenium-breast-2fov'];
@@ -1361,6 +1365,85 @@ export async function viewerSuite({ check, MissingData, verbose }) {
       check('viewer', 'remote control: register_image aligns the simulated H&E by its nuclei, a version placing it, within its truth\'s deformation, drawn where it (and any deformation) puts three of its pixels', `${auto?.message ?? auto?.error ?? 'not run'}; at most ${autoWorst.toFixed(3)} µm from the truth over the section; ${JSON.stringify(autoProbes)}`,
         Boolean(auto?.ok) && auto.data.placedBy === auto.data.id && autoTF?.method === 'automatic' && auto.data.deformed && auto.data.kept >= 25 && autoWorst < bound && autoProbes.length === 3 && worstOf(autoProbes) <= 2,
         `placed by it, deformed; within ${bound.toFixed(1)} µm of the truth; the image's colour at three pixels, within 2`);
+
+      // Alignment checked in µm (wave 5, slice 4): the six landmarks' version and the automatic one
+      // checked by local matches over the tissue; the landmarks' measured errors against the true
+      // ones at each patch (the content drawn at a patch's centre c is the image's point the
+      // version takes c back to; it belongs where the truth puts that point); the automatic version
+      // measured less off; in the Alignment view, the map of where it is off (a square a patch), a
+      // checkerboard (at a square of the image, the image's pixel; at one of the stains', not) and
+      // DAPI's edges over the image only when asked.
+      const versionsNow = await act('get_state');
+      const lmId = versionsNow.data?.images?.find((i) => i.dataset === 'sim-pathology')?.alignments.find((x) => /landmarks/.test(x.name))?.id;
+      let checkLm = null;
+      let checkAuto = null;
+      let truthDiff = Infinity;
+      let measuredRMS = 0;
+      let trueRMS = 0;
+      let squares = -1;
+      const checker = {};
+      let edgeCounts = null;
+      if (lmId) {
+        checkLm = await act('check_alignment', { dataset: 'sim-pathology', transform: lmId });
+        checkAuto = await act('check_alignment', { dataset: 'sim-pathology' });
+        if (checkLm.ok) {
+          const cd = await fetch(`${url}/api/checks/${checkLm.data.id}`).then((r) => r.json());
+          const lm = await fetch(`${url}/api/transforms/${lmId}`).then((r) => r.json());
+          const inv = invert(lm.transform);
+          let dsq = 0;
+          let msq = 0;
+          let tsq = 0;
+          let n = 0;
+          for (const pt of cd.patches.filter((x) => x.matched)) {
+            const [qx, qy] = rowsOf(inv)(pt.centre.X, pt.centre.Y);
+            const [tx, ty] = truth(qx, qy);
+            const ex = pt.centre.X - tx;
+            const ey = pt.centre.Y - ty;
+            dsq += (pt.error.X - ex) ** 2 + (pt.error.Y - ey) ** 2;
+            msq += pt.error.X ** 2 + pt.error.Y ** 2;
+            tsq += ex ** 2 + ey ** 2;
+            n += 1;
+          }
+          truthDiff = Math.sqrt(dsq / n);
+          measuredRMS = Math.sqrt(msq / n);
+          trueRMS = Math.sqrt(tsq / n);
+          // The map, and a checkerboard of 20 µm squares: (110, 130) in a square of the image (its
+          // cells' indices summing odd), (110, 110) in one of the stains'.
+          await act('show_alignment', { dataset: 'sim-pathology', show: lmId, display: 'checkerboard', cell: 20, map: true, edges: false });
+          squares = await chrome.eval('window.situcraftAlignment.errorSquares()');
+          for (const [key, y] of [['image', [110, 130]], ['stains', [110, 110]]]) {
+            const [qx, qy] = rowsOf(inv)(...y);
+            const px = Math.floor(qx);
+            const py = Math.floor(qy);
+            checker[key] = await chrome.eval(`(async () => {
+              const a = window.situcraftAlignment;
+              a.setCamera('left', { cx: ${rowsOf(lm.transform)(px + 0.5, py + 0.5)[0]}, cy: ${rowsOf(lm.transform)(px + 0.5, py + 0.5)[1]}, scale: 400 });
+              await a.settled();
+              const [w, h] = a.renderers.left.size();
+              const got = a.readColor('left', w / 2, h / 2).slice(0, 3);
+              const tile = new Uint8Array(await fetch('/api/images/${simAdded.data.id}/tiles/0/0/${Math.floor(px / 512)}/${Math.floor(py / 512)}').then((x) => x.arrayBuffer()));
+              const i = 3 * (${py % 512} * 512 + ${px % 512});
+              return { got, image: [tile[i], tile[i + 1], tile[i + 2]] };
+            })()`);
+          }
+          // DAPI's edges, in yellow, over the image at its opacity: some only when asked.
+          edgeCounts = {};
+          for (const edges of [false, true]) {
+            await act('show_alignment', { dataset: 'sim-pathology', show: lmId, display: 'overlay', opacity: 1, map: false, edges });
+            edgeCounts[edges] = await chrome.eval(`(async () => {
+              const a = window.situcraftAlignment;
+              a.setCamera('left', { cx: ${simSize[0] / 2}, cy: ${simSize[1] / 2}, scale: 8 });
+              await a.settled();
+              return a.countColor('left', [255, 225, 77]);
+            })()`);
+          }
+        }
+      }
+      const imageSquare = checker.image && Math.max(...checker.image.got.map((g, k) => Math.abs(g - checker.image.image[k]))) <= 2;
+      const stainSquare = checker.stains && Math.max(...checker.stains.got.map((g, k) => Math.abs(g - checker.stains.image[k]))) > 20;
+      check('viewer', 'an alignment checked in µm: the landmarks\' version measured as its truth says it is off, patch by patch; the automatic one measured less off; its map, a checkerboard and DAPI\'s edges drawn in the Alignment view', `${checkLm?.message ?? checkLm?.error ?? 'no landmarks version'}; measured ${measuredRMS.toFixed(3)} µm root-mean-square, truly ${trueRMS.toFixed(3)}, each patch's ${truthDiff.toFixed(3)} µm from its true error; ${checkAuto?.message ?? checkAuto?.error}; ${squares} squares; checkerboard ${JSON.stringify(checker)}; edges ${JSON.stringify(edgeCounts)}`,
+        Boolean(checkLm?.ok && checkAuto?.ok) && truthDiff < 0.5 && Math.abs(measuredRMS - trueRMS) < 0.4 && checkAuto.data.median < checkLm.data.median && squares === checkLm.data.checked && imageSquare && stainSquare && edgeCounts?.false?.n === 0 && edgeCounts?.true?.n > edgeCounts.true.of / 1000,
+        'each patch within 0.5 µm of its true error; the automatic version less off; a square a patch; the image in its squares, the stains in theirs; edges only when asked');
     }
     check('viewer', 'no uncaught errors in the page', errors.length ? errors.slice(0, 3).join(' | ') : 'none', errors.length === 0, 'none');
   } finally {

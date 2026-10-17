@@ -19,7 +19,7 @@ import { readCells } from '../lib/viewer-data.js';
 import { defaultLayers } from './viewer-panel.js';
 import { describeImage, describePlacement, imagesOf } from '../lib/images.js';
 import { defaultImageLayer, invert } from '../lib/overlays.js';
-import { describeTransform, fitLandmarks, MIN_LANDMARKS, MODELS, placePoint, transformInUse, transformShape, transformsOf, useTransform } from '../lib/transforms.js';
+import { checksOf, describeCheck, describeTransform, fitLandmarks, MIN_LANDMARKS, MODELS, placePoint, transformInUse, transformShape, transformsOf, useTransform } from '../lib/transforms.js';
 
 // Per image id, for the session: { landmarks, model, parent, selected, dirty, cameras, overlay }.
 const sessions = new Map();
@@ -130,7 +130,10 @@ export function mountAlignment(app, container) {
   function open(t, desc, cells, imageDesc, key) {
     const record = t.image;
     const lv0 = imageDesc.image.levels[0];
-    const session = sessions.get(record.id) ?? { landmarks: [], model: 'similarity', parent: null, selected: -1, dirty: false, overlay: { visible: false, opacity: 0.5 }, link: true };
+    const session = sessions.get(record.id) ?? { landmarks: [], model: 'similarity', parent: null, selected: -1, dirty: false, link: true,
+      // What the Xenium image shows of the image: which version (in use, one by its id, the
+      // landmarks' fit, none), how (over the stains, as a checkerboard, flickering), and over it.
+      view: { show: 'in-use', as: 'overlay', opacity: 0.5, cell: 50, edges: false, outlines: false, map: true } };
     sessions.set(record.id, session);
     const st = session;
 
@@ -139,11 +142,12 @@ export function mountAlignment(app, container) {
       const canvas = h('canvas.viewer-canvas', { tabIndex: 0, 'aria-label': side === 'left' ? `The Xenium image of ${t.dataset.name}: click to place a landmark, drag to pan, scroll to zoom` : `${record.name}: click to place a landmark, drag to pan, scroll to zoom` });
       const marks = h('div.align-marks');
       const dots = h('div.align-marks');
+      const errs = h('div.align-marks');
       const zoomIn = h('button.icon-button', { type: 'button', title: 'Zoom in', 'aria-label': 'Zoom in' }, icon('plus'));
       const zoomOut = h('button.icon-button', { type: 'button', title: 'Zoom out', 'aria-label': 'Zoom out' }, icon('minus'));
       const fit = h('button.icon-button', { type: 'button', title: 'The whole image', 'aria-label': 'Show the whole image' }, icon('expand'));
-      const el = h('div.viewer-stage.align-stage', canvas, dots, marks, h('div.viewer-tools', zoomIn, zoomOut, fit), h('div.align-stage-label', label));
-      return { side, canvas, marks, dots, el, zoomIn, zoomOut, fit };
+      const el = h('div.viewer-stage.align-stage', canvas, errs, dots, marks, h('div.viewer-tools', zoomIn, zoomOut, fit), h('div.align-stage-label', label));
+      return { side, canvas, marks, dots, errs, el, zoomIn, zoomOut, fit };
     };
     const L = stage('left', `Xenium: ${desc.channels.map((c) => c.name).join(', ')} (µm)`);
     const R = stage('right', `${record.name} (its pixels)`);
@@ -189,10 +193,117 @@ export function mountAlignment(app, container) {
       renderPanel();
       placeAll();
     }
+    // What the Xenium image shows of the image: the version chosen (its deformation too), the
+    // landmarks' fit, or nothing; over the stains, as a checkerboard or flickering; DAPI's edges and
+    // the nuclei's outlines over it; and where a checked version is off.
+    let shown = null; // { id (a version's) or null, desc }
+    let showing = 0;
+    let flicker = null;
+    let flickerOn = true;
+    const shownId = () => (st.view.show === 'in-use' ? inUse()?.record.id ?? null : ['fit', 'none'].includes(st.view.show) ? null : st.view.show);
+    async function resolveShown() {
+      const v = st.view;
+      if (v.show === 'none') return null;
+      if (v.show === 'fit') return fit ? { id: null, desc: { ...imageDesc, transform: fit.transform } } : null;
+      const id = shownId();
+      if (!id) return null;
+      const d = await app.bundles.transformDescription(id);
+      const deformation = d.deformation ? await app.bundles.inverseField(id) : null;
+      return { id, desc: { ...imageDesc, transform: d.transform, ...(deformation ? { deformation } : {}) } };
+    }
+    let drawn = 0; // the last view drawn whole (its version and errors read)
     function applyOverlay() {
-      const tf = predictor();
-      const layer = { ...defaultImageLayer(imageDesc), visible: st.overlay.visible, opacity: st.overlay.opacity };
-      L.renderer.setOverlays(tf && st.overlay.visible ? [{ desc: { ...imageDesc, transform: tf }, layer }] : []);
+      const mine = (showing += 1);
+      resolveShown().then(async (sh) => {
+        if (mine !== showing) return;
+        shown = sh;
+        drawShown();
+        await loadErrors();
+        if (mine === showing) drawn = mine;
+      }).catch((error) => {
+        drawn = mine;
+        toast(`The version could not be drawn: ${error.message}`, { kind: 'error' });
+      });
+      const v = st.view;
+      if (v.as === 'flicker' && !flicker) {
+        flicker = setInterval(() => {
+          flickerOn = !flickerOn;
+          drawShown();
+        }, 700);
+      } else if (v.as !== 'flicker' && flicker) {
+        clearInterval(flicker);
+        flicker = null;
+        flickerOn = true;
+      }
+      const nuclear = Math.max(0, desc.channels.findIndex((c) => c.purpose === 'Nuclear' || /dapi/i.test(c.name)));
+      L.renderer.setEdges(v.edges ? { channel: nuclear, color: '#ffe14d', level: 0.3, threshold: 0.3 } : null);
+      L.renderer.setLayers({ ...quiet, cells: { ...quiet.cells, nuclei: v.outlines } });
+    }
+    function drawShown() {
+      const v = st.view;
+      if (!shown) {
+        L.renderer.setOverlays([]);
+        return;
+      }
+      const layer = { ...defaultImageLayer(imageDesc), visible: v.as !== 'flicker' || flickerOn, opacity: v.as === 'overlay' ? v.opacity : 1, checker: v.as === 'checkerboard' ? v.cell : 0 };
+      L.renderer.setOverlays([{ desc: shown.desc, layer }]);
+    }
+
+    // Where the version shown is off, by its latest check: each patch a square coloured by how far
+    // (green at 0, yellow at 1 µm, red at 2 µm or more), with an arrow twenty times the error from
+    // where the image belongs to where it is drawn.
+    let errors = null; // { id, check }
+    async function loadErrors() {
+      const id = shown?.id;
+      const latest = id ? checksOf(app.store.project, id).at(-1) : null;
+      if (!latest || !st.view.map) {
+        errors = null;
+        placeAll();
+        return;
+      }
+      if (errors?.id === latest.id) return;
+      const check = await app.bundles.checkDescription(latest.id);
+      const qs = check.patches.filter((x) => x.matched).map((x) => x.quality).sort((a, b) => a - b);
+      errors = { id: latest.id, check, medianQuality: qs.length ? qs[Math.floor(qs.length / 2)] : 0 };
+      placeAll();
+    }
+    const errorColor = (m) => {
+      const c = Math.min(1, m / 2);
+      const [a, b, t] = c < 0.5 ? [[61, 220, 132], [255, 210, 63], c * 2] : [[255, 210, 63], [255, 92, 92], c * 2 - 1];
+      return a.map((x, k) => Math.round(x + (b[k] - x) * t));
+    };
+    function placeErrors(s) {
+      s.errEls ??= [];
+      const list = s.side === 'left' && errors ? errors.check.patches : [];
+      const ratio = s.renderer.ratio || 1;
+      const [w, hh] = s.renderer.size();
+      const scale = s.renderer.camera.scale / ratio; // CSS pixels per µm
+      list.forEach((p, i) => {
+        let el = s.errEls[i];
+        if (!el) {
+          el = h('div.align-error', h('i'));
+          s.errEls[i] = el;
+          s.errs.append(el);
+        }
+        const [x, y] = worldToScreen(s.renderer.camera, w, hh, p.centre.X, p.centre.Y);
+        const side = p.size * scale;
+        el.hidden = x < -side * ratio || y < -side * ratio || x > w + side * ratio || y > hh + side * ratio;
+        const m = Math.hypot(p.error.X, p.error.Y);
+        const [r, g, b] = errorColor(m);
+        el.className = `align-error${p.matched ? '' : ' unmatched'}`;
+        el.style.left = `${x / ratio - side / 2}px`;
+        el.style.top = `${y / ratio - side / 2}px`;
+        el.style.width = el.style.height = `${side}px`;
+        el.style.borderColor = p.matched ? `rgb(${r}, ${g}, ${b})` : '';
+        el.style.background = p.matched ? `rgba(${r}, ${g}, ${b}, 0.18)` : '';
+        el.title = p.matched ? `Off by ${m.toFixed(2)} µm here (drawn ${p.error.X.toFixed(2)}, ${p.error.Y.toFixed(2)} µm from where it belongs); the match's quality ${p.quality.toFixed(0)}${p.quality < errors.medianQuality / 3 ? ', weak: a large error here may be a false match' : ''}` : 'Not matched clearly enough to tell';
+        const arrow = el.firstChild;
+        arrow.hidden = !p.matched;
+        arrow.style.width = `${m * 20 * scale}px`;
+        arrow.style.transform = `rotate(${Math.atan2(p.error.Y, p.error.X)}rad)`;
+        arrow.style.background = `rgb(${r}, ${g}, ${b})`;
+      });
+      for (const el of s.errEls.splice(list.length)) el.remove();
     }
     function changed() {
       st.dirty = true;
@@ -274,6 +385,7 @@ export function mountAlignment(app, container) {
       for (const s of sides) {
         placeMarks(s);
         placeDots(s);
+        placeErrors(s);
       }
     }
 
@@ -342,6 +454,7 @@ export function mountAlignment(app, container) {
     function afterFrame(s) {
       placeMarks(s);
       placeDots(s);
+      placeErrors(s);
       const cam = s.renderer.camera;
       const k = camKey(cam);
       if (lastCam.get(s) === k) return;
@@ -519,6 +632,58 @@ export function mountAlignment(app, container) {
         running ? h('p.muted.viewer-hint', 'Aligning: its progress is under Jobs. The result is saved as a version below.') : null);
     }
 
+    // Seeing a version (or the landmarks' fit) over the stains, and checking it.
+    function seeAndCheck(u) {
+      const v = st.view;
+      const versions = transformsOf(app.store.project, record.id);
+      const set = (patch) => {
+        st.view = { ...st.view, ...patch };
+        applyOverlay();
+        renderPanel();
+      };
+      const show = h('select.input', { 'aria-label': 'What to see over the stains', onchange: (e) => set({ show: e.target.value }) },
+        h('option', { value: 'in-use', selected: v.show === 'in-use' }, u ? `The version in use (${u.record.name})` : 'The version in use (none yet)'),
+        ...versions.map((x) => h('option', { value: x.id, selected: v.show === x.id }, x.name)),
+        h('option', { value: 'fit', selected: v.show === 'fit', disabled: !fit }, 'The landmarks\' fit (not saved)'),
+        h('option', { value: 'none', selected: v.show === 'none' }, 'Nothing: the stains alone'));
+      const as = h('select.input', { 'aria-label': 'How to see it', onchange: (e) => set({ as: e.target.value }) },
+        ...[['overlay', 'Over the stains'], ['checkerboard', 'A checkerboard of it and the stains'], ['flicker', 'Flickering: it, then the stains']].map(([k, label]) => h('option', { value: k, selected: v.as === k }, label)));
+      const opacity = h('input', { type: 'range', min: 0, max: 1, step: 0.05, value: v.opacity, 'aria-label': 'Its opacity', oninput: (e) => { st.view.opacity = Number(e.target.value); drawShown(); } });
+      // The squares' side, 10 to 400 µm, on a logarithmic slider.
+      const cell = h('input', { type: 'range', min: 0, max: 1, step: 0.01, value: Math.log(v.cell / 10) / Math.log(40), 'aria-label': 'The squares\' side', oninput: (e) => { st.view.cell = Math.round(10 * 40 ** Number(e.target.value)); cellLabel.textContent = `${st.view.cell} µm`; drawShown(); } });
+      const cellLabel = h('span.muted', `${v.cell} µm`);
+      const toggle = (key, label, onChange, checked = v[key]) => h('label.viewer-toggle', h('input', { type: 'checkbox', checked: Boolean(checked), onchange: (e) => (onChange ? onChange(e.target.checked) : set({ [key]: e.target.checked })) }), label);
+      const id = shownId();
+      const latest = id ? checksOf(app.store.project, id).at(-1) : null;
+      const running = id ? app.bundles.checking(id).length > 0 : false;
+      const measure = id ? h('button.btn.small', { type: 'button', disabled: running, onclick: async () => {
+        renderPanel();
+        try {
+          const m = await app.bundles.checkAlignment(t.item, t.dataset.id, record.id, id);
+          toast(`Checked: ${m.name}.`, { kind: 'ok' });
+          st.view.map = true;
+          applyOverlay();
+          renderPanel();
+        } catch (error) {
+          toast(`The alignment was not checked: ${error.message}`, { kind: 'error' });
+          renderPanel();
+        }
+      } }, icon('gauge'), running ? 'Measuring…' : latest ? 'Measure again' : 'Measure where it is off') : null;
+      return h('section.align-section',
+        h('h3', 'See and check'),
+        h('label.viewer-slider', 'See', show),
+        h('label.viewer-slider', 'As', as),
+        v.as === 'overlay' ? h('label.viewer-slider', 'Opacity', opacity) : null,
+        v.as === 'checkerboard' ? h('label.viewer-slider', h('span', 'Squares ', cellLabel), cell) : null,
+        toggle('edges', 'DAPI\'s edges over it (yellow)'),
+        toggle('outlines', 'The nuclei\'s outlines over it (the Xenium segmentation\'s)'),
+        toggle('link', 'Move the images together', (on) => { st.link = on; renderPanel(); }, st.link),
+        id ? h('div.align-check',
+          h('p', latest ? h('span', h('b', 'Measured: '), `${describeCheck(latest)}.`) : h('span.muted', 'Not measured yet: local matches over the tissue, between those an automatic alignment used, say how far it is off where.')),
+          latest ? toggle('map', 'Show where it is off (green 0, yellow 1, red 2 µm or more; arrows 20 times the error)') : null,
+          h('div.btn-row', measure)) : (v.show === 'fit' ? h('p.muted.viewer-hint', 'Save the fit as a version to measure where it is off.') : null));
+    }
+
     const byInput = h('input.input', { type: 'text', value: prefs.get('reviewer', ''), placeholder: 'Your name or initials', 'aria-label': 'Who places the landmarks' });
     const noteInput = h('input.input', { type: 'text', placeholder: 'A note (kept with the version)', 'aria-label': 'A note' });
     function renderPanel() {
@@ -570,16 +735,11 @@ export function mountAlignment(app, container) {
       } else {
         summary = h('p.muted', fitError || `Place at least ${MIN_LANDMARKS} landmarks: click a place on one image, then the same place on the other. Nuclei and the tissue's edges make good landmarks; spread them over the section.`);
       }
-      const overlayBox = h('input', { type: 'checkbox', checked: st.overlay.visible, disabled: !predictor(), onchange: (e) => { st.overlay.visible = e.target.checked; applyOverlay(); } });
-      const overlayOpacity = h('input', { type: 'range', min: 0, max: 1, step: 0.05, value: st.overlay.opacity, 'aria-label': 'Its opacity', oninput: (e) => { st.overlay.opacity = Number(e.target.value); applyOverlay(); } });
-      const linkBox = h('input', { type: 'checkbox', checked: st.link, onchange: (e) => { st.link = e.target.checked; } });
       const landmarks = h('section.align-section',
         h('h3', 'Landmarks'),
         h('label.viewer-slider', 'Fit', model),
         table, summary,
-        h('label.viewer-toggle', overlayBox, 'Lay the image over the stains, as fitted'),
-        h('label.viewer-slider', 'Opacity', overlayOpacity),
-        h('label.viewer-toggle', linkBox, 'Move the images together'),
+        fit ? h('div.btn-row', h('button.btn.small.ghost', { type: 'button', onclick: () => { st.view.show = 'fit'; applyOverlay(); renderPanel(); } }, icon('eye'), 'See the fit over the stains')) : null,
         h('label.viewer-slider', 'By', byInput),
         h('label.viewer-slider', 'Note', noteInput),
         h('div.btn-row',
@@ -608,7 +768,7 @@ export function mountAlignment(app, container) {
             editable ? h('a.btn.small.ghost', { href: `/api/transforms/${encodeURIComponent(v.id)}/xenium-explorer/keypoints`, download: '', title: 'Its landmarks as Xenium Explorer\'s keypoints' }, icon('download'), 'Keypoints') : null));
       });
       const versionSection = h('section.align-section', h('h3', 'Versions'), versions.length ? h('div', ...list) : h('p.muted', 'None yet: a version is saved from landmarks here, or supplied with the image (Xenium Explorer\'s matrix or keypoints).'));
-      panelHost.append(head, automatic(u), landmarks, versionSection);
+      panelHost.append(head, automatic(u), landmarks, seeAndCheck(u), versionSection);
     }
 
     readInUse();
@@ -626,11 +786,13 @@ export function mountAlignment(app, container) {
         st.model = model;
         changed();
       },
-      setOverlay: (visible, opacity = st.overlay.opacity) => {
-        st.overlay = { visible, opacity };
+      setView: (patch) => {
+        st.view = { ...st.view, ...patch };
         applyOverlay();
         renderPanel();
       },
+      view: () => ({ ...st.view, shown: shown ? (shown.id ?? 'fit') : null, errors: errors?.id ?? null }),
+      drawn: () => drawn === showing,
       place: (side, x, y) => {
         const s = side === 'left' ? L : R;
         const [w, hh] = s.renderer.size();
@@ -639,6 +801,14 @@ export function mountAlignment(app, container) {
       save: (use) => save(use),
       loadVersion: (id) => loadVersion(id),
       readColor: (side, x, y) => (side === 'left' ? L : R).renderer.readColor(x, y),
+      // How many of the stage's pixels are of a colour (within 12 of each component).
+      countColor: (side, rgb) => {
+        const { pixels } = (side === 'left' ? L : R).renderer.readRegion();
+        let n = 0;
+        for (let i = 0; i < pixels.length; i += 4) if (Math.abs(pixels[i] - rgb[0]) <= 12 && Math.abs(pixels[i + 1] - rgb[1]) <= 12 && Math.abs(pixels[i + 2] - rgb[2]) <= 12) n += 1;
+        return { n, of: pixels.length / 4 };
+      },
+      errorSquares: () => L.errs.querySelectorAll('.align-error').length,
       // Where a point (µm on the left, the image's pixels on the right) is in the window (CSS pixels).
       clientOf: (side, x, y) => {
         const s = side === 'left' ? L : R;
@@ -665,6 +835,7 @@ export function mountAlignment(app, container) {
       },
       dispose() {
         st.cameras = { left: L.renderer.camera, right: R.renderer.camera };
+        if (flicker) clearInterval(flicker);
         observer.disconnect();
         for (const n of navigations) n.dispose();
         window.removeEventListener('keydown', onKey);

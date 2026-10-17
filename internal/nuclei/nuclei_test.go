@@ -180,3 +180,100 @@ func fingerprint(res *register.Result) string {
 	}
 	return fmt.Sprintf("%08x", h)
 }
+
+// A check of an alignment, against the truth: the simulated H&E placed by its true transform
+// without its deformation is off at each patch's centre by the deformation there (drawn less true:
+// minus the displacement), which the check measures to within a fraction of a micron, without bias,
+// its bound of the matches' own error above what they are off by; placed by its automatic
+// registration with a deformation, it is off far less, and the bound tells that error is the
+// alignment's.
+func TestCheckAgainstTruth(t *testing.T) {
+	if testing.Short() || raceDetector {
+		t.Skip("simulates a tissue and checks two alignments")
+	}
+	p := simulate.Presets["small"]
+	p.WidthUm, p.HeightUm = 360, 280
+	p.PostXenium = simulate.DefaultPostXenium()
+	p.PostXenium.IF = nil
+	folder := filepath.Join(t.TempDir(), "sim")
+	if _, err := simulate.Run(context.Background(), p, folder, "test", nil); err != nil {
+		t.Fatal(err)
+	}
+	regs, err := simulate.ReadRegistrations(folder)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := regs[0]
+	b, err := xenium.Open(folder, xenium.Options{CacheDir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer b.Close()
+	fixed, pixel, _, closeFixed, err := FromBundle(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeFixed()
+	im, err := slide.Open(filepath.Join(folder, filepath.FromSlash(r.Image)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer im.Close()
+	moving, _, err := FromImage(im, -1, register.HAndE)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tr := r.Transform
+	affine := register.Affine{A: tr[0][0], B: tr[0][1], C: tr[0][2], D: tr[1][0], E: tr[1][1], F: tr[1][2]}
+	check, err := register.CheckLocal(context.Background(), fixed, moving, register.Placement{T: affine}, register.CheckOptions{FixedPixel: pixel})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sq, trueSq float64
+	n := 0
+	for _, pt := range check.Patches {
+		if !pt.Matched {
+			continue
+		}
+		dx, dy := r.Displacement(pt.Centre.X, pt.Centre.Y)
+		ex, ey := pt.Error.X+dx, pt.Error.Y+dy
+		sq += ex*ex + ey*ey
+		trueSq += dx*dx + dy*dy
+		n++
+	}
+	off := math.Sqrt(sq / float64(n))
+	var mx, my float64
+	for _, pt := range check.Patches {
+		if pt.Matched {
+			dx, dy := r.Displacement(pt.Centre.X, pt.Centre.Y)
+			mx, my = mx+pt.Error.X+dx, my+pt.Error.Y+dy
+		}
+	}
+	t.Logf("the measured errors less the true, on average: (%.3f, %.3f) µm", mx/float64(n), my/float64(n))
+	trueRMS := math.Sqrt(trueSq / float64(n))
+	t.Logf("by its transform without its deformation: %d of %d patches matched; measured %.3f µm root-mean-square (median %.3f, at most %.3f), truly %.3f; each measured error %.3f µm from the true one, root-mean-square; the matches' own error estimated %.3f µm",
+		check.Matched, check.Checked, check.RMS, check.Median, check.Max, trueRMS, off, check.Noise)
+	if check.Matched < check.Checked*3/4 || off > 0.5 || math.Abs(check.RMS-trueRMS) > 0.4 || math.Hypot(mx, my)/float64(n) > 0.1 || check.Noise < off/2 {
+		t.Errorf("measured %.3f against %.3f µm truly; %.3f off each; noise %.3f", check.RMS, trueRMS, off, check.Noise)
+	}
+	// The automatic registration with its deformation.
+	res, err := register.Register(context.Background(), fixed, moving, register.Options{Model: register.ModelAffine, NonRigid: true, FixedPixel: pixel, MovingPixel: im.PixelSize})
+	if err != nil {
+		t.Fatal(err)
+	}
+	good, err := register.CheckLocal(context.Background(), fixed, moving, register.Placement{T: res.Transform, D: res.Deformation}, register.CheckOptions{FixedPixel: pixel})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var gx, gy float64
+	for _, pt := range good.Patches {
+		if pt.Matched {
+			gx, gy = gx+pt.Error.X, gy+pt.Error.Y
+		}
+	}
+	t.Logf("its errors on average (%.3f, %.3f) µm", gx/float64(good.Matched), gy/float64(good.Matched))
+	t.Logf("by its automatic registration (deformed %v): measured %.3f µm root-mean-square (median %.3f, at most %.3f); the matches' own error %.3f µm", res.Deformation != nil, good.RMS, good.Median, good.Max, good.Noise)
+	if res.Deformation == nil || good.RMS > check.RMS/2 || good.Median > 0.5 || good.Noise > good.RMS/2 {
+		t.Errorf("the automatic registration checked %.3f µm root-mean-square, against %.3f without the deformation", good.RMS, check.RMS)
+	}
+}

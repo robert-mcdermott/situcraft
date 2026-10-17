@@ -323,3 +323,48 @@ export function describeTransform(record) {
   const fit = Number.isFinite(s.rms) && s.landmarks ? `, ${s.model}: residuals ${s.rms.toFixed(2)} µm root-mean-square${Number.isFinite(s.looRms) && s.looRms > 0 ? `, ${s.looRms.toFixed(2)} µm left out` : ''}` : '';
   return `${how}${fit}`;
 }
+
+// --- Checks (api_checks.go) ---------------------------------------------------------------------
+
+// The project's record of an alignment check: where a version places its image off, measured by
+// local matches over the tissue.
+export function checkRecord(dataset, manifest, now = new Date().toISOString()) {
+  const summary = manifest.summary ?? {};
+  return {
+    kind: 'alignment-check',
+    id: manifest.id,
+    name: manifest.name,
+    dataset: dataset.id,
+    image: summary.image ?? null,
+    transform: summary.transform ?? null,
+    state: manifest.state,
+    created: manifest.created,
+    registered: now,
+    summary,
+    findings: manifest.findings ?? [],
+  };
+}
+
+// A version's checks, the latest last.
+export function checksOf(project, transformId) {
+  return project.artifacts.filter((a) => a.kind === 'alignment-check' && a.transform === transformId && a.state === 'complete');
+}
+
+// The project with a check recorded (unchanged when it already is).
+export function addCheck(project, record, now = new Date().toISOString()) {
+  if (project.artifacts.some((a) => a.kind === 'alignment-check' && a.id === record.id && a.dataset === record.dataset)) return project;
+  const version = project.artifacts.find((a) => a.kind === 'transform' && a.id === record.transform);
+  return {
+    ...project,
+    modified: now,
+    artifacts: [...project.artifacts, record],
+    history: [...project.history, { time: now, action: 'check', detail: `Checked ${version?.name ?? record.transform}: ${describeCheck(record)} (artifact ${record.id})` }],
+  };
+}
+
+// A check in a line: how far the version places the image off, and the matches' own error.
+export function describeCheck(record) {
+  const s = record.summary ?? {};
+  if (!s.matched) return `none of its ${s.checked ?? 0} patches matched clearly enough to tell`;
+  return `off by ${s.median.toFixed(2)} µm (median), ${s.p90.toFixed(2)} µm (90th percentile), at most ${s.max.toFixed(2)} µm, over ${s.matched} of ${s.checked} patches; the matches' own error at most about ${s.noise.toFixed(2)} µm`;
+}

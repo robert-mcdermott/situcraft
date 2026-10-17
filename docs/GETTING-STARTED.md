@@ -695,8 +695,29 @@ seconds, a whole one a minute or so.
 - The result is saved as a version, like one made from landmarks; **Show its matches** draws the
   patches it matched on both images, in green, and those it dropped, in red.
 
-The same images always give the same alignment, on any computer. Checking an alignment in µm over
-the whole section arrives later in 0.5.0 (see the [roadmap](../situcraft-spec/roadmap.md)).
+The same images always give the same alignment, on any computer.
+
+### Seeing and checking an alignment
+
+**See and check** shows on the Xenium image (the left) any version of the alignment, the
+landmarks' fit before it is saved, or nothing:
+
+- **Over the stains** at an opacity; **a checkerboard** of the image and the stains, in squares of
+  a size you choose (a structure that runs straight across the squares' edges is aligned there);
+  or **flickering** between the image and the stains (what moves is off).
+- **DAPI's edges** over the image, in yellow: the nuclei as the Xenium image sees them, on the
+  image's nuclei. **The nuclei's outlines** draws the Xenium segmentation's instead.
+- **Move the images together** keeps both images on the same place as you pan.
+
+**Measure where it is off** checks a saved version over the whole section, as a job: patches of the
+Xenium image's DAPI where there is tissue, each compared with the image drawn there as the version
+places it (patches between those an automatic alignment used, so that it is not checked by its own
+matches). It reports how far the version is off, in µm (the median, the 90th percentile and the
+most, over how many patches), and a bound of the matches' own error: an error below it may be the
+matches', one well above it is the alignment's. **Show where it is off** draws each patch as a
+square coloured by its error (green at 0, yellow at 1 µm, red at 2 µm or more) with an arrow from
+where the image belongs to where it is drawn, twenty times as long. Check two versions to compare
+them: 10x's alignment against an automatic one, or one with a deformation against one without.
 
 ## Keyboard
 

@@ -450,6 +450,14 @@ matches and, when one is kept, a B-spline deformation; the page draws a deformed
 each fragment back through the deformation's inverse field (answered by the program as a grid of
 displacements, a half-float texture) and the transform's inverse.
 
+An alignment is checked (`internal/register/check.go`, `api_checks.go`) by the same patch matching,
+on a grid offset by half a patch from the registration's, against the image drawn as the version
+places it (each pixel's point taken back through the deformation, warm-started from its
+neighbour's); the check is an artifact of the image and the version. The renderer draws the
+visual checks itself: a checkerboard by discarding the image's fragments in every other square of
+the tissue, and the nuclear stain's edges as an iso-line of its windowed value (Sobel's gradient
+over a threshold), from the level drawn only.
+
 The Alignment view (`web/ui/mode-alignment.js`) is two renderers side by side: the dataset's stains
 in µm, and the post-Xenium image alone, drawn under the identity in its own pixels (a renderer with
 every stain off). Landmarks are DOM markers over the canvases, placed from the renderers' cameras

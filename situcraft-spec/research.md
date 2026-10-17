@@ -456,6 +456,52 @@ deformation (941 µm cells) predicts each fifth of the matches 0.49 µm off agai
 similarity: it is deformed against DAPI, by up to 2.6 µm, which no similarity (10x's included)
 follows. The H&E's deformation predicts 0.87 against 0.93 µm and is not kept.
 
+### 2.4 Checking an alignment in µm (verified, wave 5, slice 4)
+
+An alignment is checked where it can be wrong: everywhere between its landmarks or matches
+(`internal/register/check.go`). Square patches of the Xenium image's DAPI where there is tissue,
+on a grid offset by half a patch from the one automatic registration matches on (a version is not
+checked by the matches it was fitted to), are each compared with the image as the version draws
+there (each pixel's point on the tissue taken back through any deformation, then the transform);
+their residual shift by phase correlation, with the same sub-pixel estimate (§2.3), is how far the
+version draws the image from where it belongs there, in µm.
+
+**The matches' own error.** A patch's error is the alignment's plus the match's. Where the
+alignment's error changes little from a patch to the next, the difference between neighbouring
+patches' errors is the matches' alone: the median of their absolute differences, by component,
+over 0.6745 × √2, estimates a component's standard deviation, and √2 times that the 2-D error.
+Where the alignment's error changes between neighbours, that change is counted too, so the estimate
+is a bound: an error well above it is the alignment's.
+
+**Against the truth** (the simulated H&E of §3.4a, 360 × 280 µm, deformed by up to 2 µm; 35
+patches of 60 µm): placed by its true transform without its deformation, it is off at each patch's
+centre by minus the deformation there.
+
+| Placed by | Measured (RMS) | Truly | Each patch from its true error | The errors' mean from the true mean | The bound of the matches' error |
+|---|---|---|---|---|---|
+| Its true transform, no deformation | 0.877 µm | 0.871 µm | 0.151 µm RMS | 0.03 µm | 0.52 µm (the deformation's change between patches counted) |
+| Its automatic registration, deformed | 0.243 µm | about 0.2 µm (§2.3) | | | 0.02 µm |
+
+**On the pathology fixture** (216 patches of 160 µm over the Xenium image):
+
+| Image | Alignment | Median | 90th percentile | Bound of the matches' error |
+|---|---|---|---|---|
+| H&E | 10x's | 0.96 µm | 1.96 µm | 0.98 µm |
+| H&E | automatic | 0.88 µm | 1.24 µm | 1.02 µm |
+| Immunofluorescence | 10x's | 0.85 µm | 2.10 µm | 0.27 µm |
+| Immunofluorescence | automatic, deformed | 0.48 µm | 0.72 µm | 0.29 µm |
+
+The H&E's matches are noisier than the immunofluorescence image's (haematoxylin against DAPI,
+rather than DAPI against DAPI), so its errors are near its bound. Four patches along the tissue's
+top edge matched weakly (quality 6 to 19, against a median of 51) and report errors of 18 to 51 µm
+in disagreeing directions: false matches where the tissue is sparse. The median and the 90th
+percentile are robust to them; the most is not, and the map shows each match's quality.
+
+**Seen:** a checkerboard of the image and the stains (the renderer discards the image's fragments
+in every other square of the tissue), flicker, and DAPI's edges: an iso-line of the windowed stain
+at 0.3, where its 3 × 3 neighbourhood crosses the level and Sobel's gradient is over 0.3, from the
+level drawn only (a coarser level standing in would draw its own edges, filling the nuclei).
+
 ## 3. Segmentation
 
 ### 3.1 Nucleus expansion (verified, wave 2, slice 3)

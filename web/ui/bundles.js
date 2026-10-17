@@ -9,7 +9,7 @@ import { addClustering, addEmbedding, clusteringRecord, embeddingRecord } from '
 import { addDataset, compareFingerprint, datasetRecord, findDataset, relocateDataset, removeDataset } from '../lib/datasets.js';
 import { addLabels, labelsRecord, readLabelCells } from '../lib/labels.js';
 import { addImage as withImage, imageRecord } from '../lib/images.js';
-import { addTransform as withTransform, SUPPLIED_ALIGNMENT, transformInUse, transformRecord, useTransform } from '../lib/transforms.js';
+import { addCheck as withCheck, addTransform as withTransform, checkRecord, SUPPLIED_ALIGNMENT, transformInUse, transformRecord, useTransform } from '../lib/transforms.js';
 import { readInverseField } from '../lib/overlays.js';
 import { addComparison, addExport, addSegmentation, comparisonRecord, exportRecord, removeComparison as withoutComparison, segmentationRecord, segmentationsOf, withInstrumentSegmentation } from '../lib/segmentations.js';
 
@@ -327,6 +327,43 @@ export function createBundles(app) {
       aligning.delete(jobId);
       notify();
     }
+  }
+
+  // A version of an image's alignment checked over the tissue (api_checks.go): a job, the check
+  // recorded in the project. Resolves with the check's artifact.
+  const checking = new Map(); // job id → { image, transform }
+  async function checkAlignment(item, datasetId, imageId, transformId) {
+    const answer = await getJSON(`${item.url}/images/${encodeURIComponent(imageId)}/check`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ transform: transformId }) });
+    const jobId = answer.job?.id;
+    if (!jobId) throw new Error('no job was started');
+    checking.set(jobId, { image: imageId, transform: transformId });
+    notify();
+    try {
+      const job = await app.jobs.finished(jobId);
+      if (job?.state !== 'complete') throw new Error(`the check ${job?.state ?? 'ended'}${job?.error ? `: ${job.error}` : ''}`);
+      const id = (job.events ?? []).map((e) => /artifact (chk-[0-9a-f]+)/.exec(e.message)?.[1]).find(Boolean);
+      if (!id) throw new Error('the job recorded no check');
+      const manifest = await getJSON(`/api/artifacts/${encodeURIComponent(id)}`);
+      const dataset = app.store.project.datasets.find((d) => d.id === datasetId);
+      if (!dataset) throw new Error('the dataset is no longer in the project');
+      const next = withCheck(app.store.project, checkRecord(dataset, manifest));
+      if (next !== app.store.project) app.store.commit(next, `Check ${next.artifacts.find((a) => a.id === transformId)?.name ?? transformId}`);
+      return manifest;
+    } finally {
+      checking.delete(jobId);
+      notify();
+    }
+  }
+
+  // A check's description (api_checks.go); kept for the session.
+  const checkDescriptions = new Map();
+  function checkDescription(id) {
+    if (!checkDescriptions.has(id)) {
+      const p = getJSON(`/api/checks/${encodeURIComponent(id)}`);
+      p.catch(() => checkDescriptions.delete(id));
+      checkDescriptions.set(id, p);
+    }
+    return checkDescriptions.get(id);
   }
 
   // A deformed version's inverse field (api_register.go), read for drawing; kept for the session.
@@ -972,6 +1009,9 @@ export function createBundles(app) {
     registerImage,
     aligning: (imageId) => [...aligning.values()].filter((x) => x.image === imageId),
     inverseField,
+    checkAlignment,
+    checking: (transformId) => [...checking.values()].filter((x) => x.transform === transformId),
+    checkDescription,
     compareSegmentations,
     comparisonDescription,
     removeComparison,

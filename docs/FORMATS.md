@@ -379,6 +379,24 @@ Its summary gives the image, method, model, number of landmarks, the fit's error
 `use-transform`: the image, the version, the reason, who and when); the latest names it. An image
 with no decision is not aligned, and not drawn on the tissue.
 
+### Checks of alignments
+
+A check of a version of an image's alignment (from 0.5.0) is an artifact of kind `alignment-check`:
+one file in its folder, `check.json`; its parents are the image and the version. Its id is the
+SHA-256 of `check.json`: the same images and version give the same check.
+
+| Field of `check.json` | Holds |
+| --- | --- |
+| `format`, `version`, `name` | `"situcraft-alignment-check"`, `1`, what it is called |
+| `image`, `transform` | The image's and the version's artifacts |
+| `channel`, `fixed` | What of the image was compared (its haematoxylin, or a nuclear channel), and the Xenium image's channel |
+| `patches` | Each patch: its `centre` on the tissue (µm), its side (`size`, µm), how far the version draws the image there from where it belongs (`error`, µm, drawn less true), the correlation's `quality`, and whether it `matched` clearly enough to tell |
+| `patchUm`, `fine` | The patches' side and their µm per pixel |
+| `checked`, `matched`, `median`, `p90`, `max`, `rms`, `worst` | How many patches were checked and matched; the matched patches' errors' median, 90th percentile, most and root-mean-square (µm); where the most is |
+| `noise` | A bound of the matches' own error (root-mean-square, µm), from neighbouring patches' differences: an error well above it is the alignment's |
+
+The project records each check (kind `alignment-check`, with its image and version).
+
 ### Marker sets
 
 A marker set (from 0.4.0) is a JSON file SituCraft reads, writes and ships (one for each

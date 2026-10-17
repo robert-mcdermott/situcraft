@@ -2149,12 +2149,47 @@ range: 2.8 GB in all. Its bundle is of XOA 1, which SituCraft opens from this wa
        neither is the truth, and checking an alignment in µm is slice 4's.
      - **A deformation fitted to noisy matches makes an alignment worse** (0.19 to 0.40 µm on an
        undeformed simulated image): it is kept only when it predicts matches held out better.
-4. **Alignment checked in µm (R4).**
-   - The Xenium image and the post-Xenium image as a checkerboard, in flicker and with DAPI's
-     edges over the image; each landmark's residual and the leave-one-out error in µm; where the
-     alignment is worst, mapped by local matches over the tissue; the nuclei's outlines over the
-     H&E.
-   - Validation: residuals and local error on the simulated images against their truth.
+4. **Alignment checked in µm (R4): done.**
+   - **Seen** (the Alignment view's **See and check**): any version on the Xenium image, or the
+     landmarks' fit before it is saved, over the stains at an opacity, as a checkerboard (the
+     renderer discards the image in every other square of the tissue, 10 to 400 µm), or flickering;
+     DAPI's edges over it (an iso-line of the windowed stain where Sobel's gradient is steep, from
+     the level drawn only) or the Xenium segmentation's nuclei.
+   - **Measured** (`internal/register/check.go`, `api_checks.go`): patches of DAPI where there is
+     tissue, on a grid offset by half a patch from the registration's (a version is not checked
+     by its own matches), each against the image as the version draws it (its deformation taken
+     back pixel by pixel); each patch's error in µm by phase correlation; the median, 90th
+     percentile, most and root-mean-square; a bound of the matches' own error from neighbouring
+     patches' differences. Recorded as an artifact of kind `alignment-check` of the image and the
+     version; shown as a map, each patch a square coloured by its error with an arrow 20 times
+     it. Each landmark's residual and leave-one-out error in µm were slice 2's.
+   - Remote control: `check_alignment`; `show_alignment` takes `show`, `display`, `opacity`, `cell`,
+     `edges`, `outlines` and `map`.
+   - Validation:
+     - **Against the truth:** the simulated H&E (360 × 280 µm, deformed by up to 2 µm) placed by its
+       true transform without its deformation is off at each patch by minus the deformation
+       there: measured within 0.15 µm a patch, the errors' mean 0.03 µm from the true mean,
+       0.877 µm root-mean-square against 0.871 truly; its automatic registration measured 0.24 µm
+       off, its errors nearly the same from patch to patch (a bound of 0.02 µm on the matches').
+     - **In the page** (the viewer suite): six landmarks' version measured 0.85 µm off (truly 0.89),
+       each patch within 0.135 µm of its true error; the automatic version 0.23 µm; a square a
+       patch on the map; in a checkerboard, the image's own pixel in its squares and the stains in
+       theirs; DAPI's edges drawn only when asked.
+     - **The fixture** (weekly): 10x's alignment of the H&E off by 0.96 µm (median), 1.96 µm (90th
+       percentile), the automatic one 0.88 and 1.24 µm; of the immunofluorescence image, 10x's 0.85
+       and 2.10 µm, the automatic one (with its deformation) 0.48 and 0.72 µm.
+   - Found by slice 4:
+     - **A bound of the matches' error cannot be had for free:** neighbouring patches' differences
+       bound it only where the alignment's error changes little between them (on an alignment off
+       by an uncorrected 2 µm deformation over 300 µm, the bound is 0.52 µm though the matches are
+       0.15 µm off); it is reported as a bound.
+     - **A few weak matches at a tissue's edge give large, disagreeing errors:** on the fixture, four
+       patches along its top edge (quality 6 to 19, against a median of 51) report 18 to 51 µm in
+       disagreeing directions: false matches, which the median and the 90th percentile are robust
+       to; the map shows each one's quality.
+     - **The fixture's immunofluorescence image is better placed by its automatic alignment than by
+       10x's** (0.48 against 0.85 µm, median), as slice 3's deformation suggested; its H&E, about
+       as well (0.88 against 0.96 µm).
 5. **Regions (R6).**
    - Rectangle, polygon, freehand and brush on the tissue, on any layer; regions named and classed,
      their cells counted and chosen; kept in the project as versions.

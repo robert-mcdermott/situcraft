@@ -116,4 +116,24 @@ func TestRegisterImage(t *testing.T) {
 	if rec := local(http.MethodPost, "/api/local/0/images/img-0000000000/register", `{"model":"affine"}`); rec.Code != http.StatusNotFound {
 		t.Errorf("no such image: %d", rec.Code)
 	}
+
+	// The version checked over the tissue (api_checks.go): within its truth's deformation, as the
+	// check of its parent's version; checked again, the same check.
+	chk := logged(local(http.MethodPost, "/api/local/0/images/"+img+"/check", fmt.Sprintf(`{"transform":%q}`, tf)), `artifact (chk-[0-9a-f]+)`)
+	var c checkDescription
+	json.NewDecoder(request(t, f.handler, http.MethodGet, "/api/checks/"+chk, nil, nil).Body).Decode(&c)
+	cm, _ := f.a.artifacts.Get(chk)
+	t.Logf("%s: %d of %d patches matched; off by %.3f µm (median), %.3f (90th percentile), at most %.3f; the matches' own error at most %.3f", c.Name, c.Matched, c.Checked, c.Median, c.P90, c.Max, c.Noise)
+	if c.Format != "situcraft-alignment-check" || c.Transform != tf || c.Matched < 10 || c.Median > 1 || len(cm.Lineage.Parents) != 2 || cm.Lineage.Parents[1].ID != tf {
+		t.Errorf("the check: %+v; its lineage %+v", c, cm.Lineage.Parents)
+	}
+	if again := logged(local(http.MethodPost, "/api/local/0/images/"+img+"/check", fmt.Sprintf(`{"transform":%q}`, tf)), `artifact (chk-[0-9a-f]+)`); again != chk {
+		t.Errorf("checked again: %s, then %s", chk, again)
+	}
+	if rec := local(http.MethodPost, "/api/local/0/images/"+img+"/check", `{"transform":"tf-0000000000"}`); rec.Code != http.StatusUnprocessableEntity {
+		t.Errorf("a check of no version: %d", rec.Code)
+	}
+	if rec := request(t, f.handler, http.MethodGet, "/api/checks/chk-0000000000", nil, nil); rec.Code != http.StatusNotFound {
+		t.Errorf("no such check: %d", rec.Code)
+	}
 }

@@ -129,37 +129,13 @@ func (a *app) registerJob(spec registerSpec) jobs.Func {
 			return err
 		}
 		model, _ := register.ParseModel(spec.Model)
-		b, err := xenium.Open(spec.Bundle, xenium.Options{CacheDir: a.cacheDir})
-		if err != nil {
-			return err
-		}
-		defer b.Close()
 		r.Progress(0, "Reading the images")
-		fixed, pixel, fixedName, closeFixed, err := nuclei.FromBundle(b)
+		ims, err := a.openNuclei(spec.Bundle, idesc, spec.Channel)
 		if err != nil {
 			return err
 		}
-		defer closeFixed()
-		img, err := slide.Open(idesc.Source.Path)
-		if err != nil {
-			return fmt.Errorf("the image is not where it was recorded (%s): %w", idesc.Source.Path, err)
-		}
-		defer img.Close()
-		if img.Width != idesc.Image.Width || img.Height != idesc.Image.Height {
-			return fmt.Errorf("%s is not the image recorded: it changed", idesc.Source.Path)
-		}
-		channel := -1
-		if img.Kind == slide.Channels {
-			if spec.Channel != nil {
-				channel = *spec.Channel
-			} else if channel = nuclei.NuclearChannel(img.Description); channel < 0 {
-				return fmt.Errorf("none of the image's channels (%s) is named as a nuclear stain: name the one to register by (channel)", kindText(img.Description))
-			}
-		}
-		moving, what, err := nuclei.FromImage(img, channel, register.HAndE)
-		if err != nil {
-			return err
-		}
+		defer ims.close()
+		fixed, pixel, fixedName, moving, what := ims.fixed, ims.pixel, ims.fixedName, ims.moving, ims.what
 		var start *register.Affine
 		if spec.Start != "" {
 			_, sd, err := a.transformOf(spec.Start)
@@ -258,4 +234,55 @@ func (a *app) inverseField(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Write(out)
+}
+
+// nucleiImages are a dataset's DAPI and an image's nuclear signal, open for registration.
+type nucleiImages struct {
+	fixed, moving   register.Pyramid
+	pixel           float64
+	fixedName, what string
+	close           func()
+}
+
+// openNuclei opens a bundle's DAPI and an image's nuclear signal: an H&E's haematoxylin, or an
+// immunofluorescence image's nuclear channel (channel, else the one named as a nuclear stain).
+func (a *app) openNuclei(bundle string, idesc imageDescription, channel *int) (*nucleiImages, error) {
+	b, err := xenium.Open(bundle, xenium.Options{CacheDir: a.cacheDir})
+	if err != nil {
+		return nil, err
+	}
+	fixed, pixel, fixedName, closeFixed, err := nuclei.FromBundle(b)
+	if err != nil {
+		b.Close()
+		return nil, err
+	}
+	img, err := slide.Open(idesc.Source.Path)
+	if err != nil {
+		closeFixed()
+		b.Close()
+		return nil, fmt.Errorf("the image is not where it was recorded (%s): %w", idesc.Source.Path, err)
+	}
+	ims := &nucleiImages{fixed: fixed, pixel: pixel, fixedName: fixedName, close: func() {
+		img.Close()
+		closeFixed()
+		b.Close()
+	}}
+	if img.Width != idesc.Image.Width || img.Height != idesc.Image.Height {
+		ims.close()
+		return nil, fmt.Errorf("%s is not the image recorded: it changed", idesc.Source.Path)
+	}
+	c := -1
+	if img.Kind == slide.Channels {
+		if channel != nil {
+			c = *channel
+		} else if c = nuclei.NuclearChannel(img.Description); c < 0 {
+			ims.close()
+			return nil, fmt.Errorf("none of the image's channels (%s) is named as a nuclear stain: name the one to register by (channel)", kindText(img.Description))
+		}
+	}
+	if ims.moving, ims.what, err = nuclei.FromImage(img, c, register.HAndE); err != nil {
+		ims.close()
+		return nil, err
+	}
+	return ims, nil
 }

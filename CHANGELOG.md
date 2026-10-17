@@ -77,6 +77,24 @@ cells and regions reviewed with their provenance.
     scale, turn and mirror found and the result within 0.2 µm of the truth where the image was not
     deformed, and the deformation brings a deformed one from 0.9 µm to 0.2 µm and is refused where
     there is none; the page draws a deformed image where the program's deformation puts its pixels.
+- **Alignment checked in µm (wave 5, slice 4).** The Alignment view's **See and check** shows any
+  version on the Xenium image, and measures where it is off.
+  - **Seen:** over the stains at an opacity, as a checkerboard of the image and the stains (squares
+    of a size chosen), or flickering between them; with DAPI's edges (the nuclei's boundaries in
+    yellow) or the Xenium segmentation's nuclei over the image.
+  - **Measured:** **Measure where it is off** checks a version over the whole section, as a job:
+    patches of DAPI where there is tissue, between those an automatic alignment matched, each
+    against the image as the version draws it; how far it is off in µm (median, 90th percentile,
+    most) and a bound of the matches' own error, below which an error may be theirs. **Show where it
+    is off** maps each patch's error as a coloured square with an arrow. Each check is recorded as
+    an artifact of its version. Remote control: `check_alignment`; `show_alignment` shows a
+    version as asked.
+  - **Validated:** on a simulated H&E placed by its true transform without its deformation, each
+    patch's measured error within 0.15 µm of the true one, without bias (0.03 µm); in the page,
+    six landmarks' version measured 0.85 µm off (truly 0.89 µm), the automatic one 0.23 µm; the
+    checkerboard and DAPI's edges drawn as asked. On the pathology fixture, 10x's alignment of the
+    immunofluorescence image is off by 0.85 µm (median), 2.10 µm (90th percentile); the automatic
+    one with its deformation, 0.48 and 0.72 µm.
 
 ## 0.4.0 (2026-10-16)
 

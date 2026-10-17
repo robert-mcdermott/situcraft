@@ -140,10 +140,22 @@ var remoteActions = []remoteAction{
 		"rationale": textArg("Why it is chosen."),
 		"by":        textArg("Who chooses it (the client's name if not given)."),
 	}, "transform")},
-	{Name: "show_alignment", Title: "Show an image's alignment", Description: "Opens the Alignment view on a post-Xenium image: the Xenium image and the post-Xenium image side by side with the landmarks, their fit and each landmark's residual and leave-one-out error, and the image's versions of its alignment; with transform, that version's landmarks loaded to edit. Answers the landmarks, the fit and the versions.", InputSchema: schema(map[string]any{
+	{Name: "show_alignment", Title: "Show an image's alignment", Description: "Opens the Alignment view on a post-Xenium image: the Xenium image and the post-Xenium image side by side with the landmarks, their fit and each landmark's residual and leave-one-out error, and the image's versions of its alignment; with transform, that version's landmarks loaded to edit. What the Xenium image shows of the image: show (a version, 'in use', 'fit' for the landmarks' fit, 'none'), as display (overlay at opacity, checkerboard of cell µm squares, or flicker), with DAPI's edges and the nuclei's outlines over it, and where a checked version is off (map). Answers the landmarks, the fit, what is shown and the versions with their latest checks.", InputSchema: schema(map[string]any{
 		"dataset":   datasetArg,
 		"image":     textArg("The image, by name or artifact ID (the dataset's only image if not given)."),
 		"transform": textArg("A version whose landmarks to load, by name or ID."),
+		"show":      textArg("What the Xenium image shows of the image: a version by name or ID, 'in use', 'fit' or 'none'."),
+		"display":   textArg("overlay, checkerboard or flicker."),
+		"opacity":   numberArg("Over the stains, the image's opacity, 0 to 1."),
+		"cell":      numberArg("A checkerboard's squares' side, 10 to 400 µm."),
+		"edges":     flagArg("DAPI's edges over the image."),
+		"outlines":  flagArg("The nuclei's outlines over the image."),
+		"map":       flagArg("Where the version shown is off, by its latest check."),
+	}), long: true},
+	{Name: "check_alignment", Title: "Check an image's alignment", Description: "Measures where a version of a post-Xenium image's alignment places it off, as a job: patches of the Xenium image's DAPI over the tissue (between those an automatic alignment matched) against the image's nuclear signal drawn as the version places it, each one's residual shift by phase correlation in µm. Recorded as a check of the version. Answers how far it is off (median, 90th percentile, most, root-mean-square), over how many patches, and a bound of the matches' own error, below which an error is not the alignment's.", InputSchema: schema(map[string]any{
+		"dataset":   datasetArg,
+		"image":     textArg("The image, by name or artifact ID (the dataset's only image if not given)."),
+		"transform": textArg("The version, by name or ID (the one in use if not given)."),
 	}), long: true},
 	{Name: "select_cell", Title: "Select a cell", Description: "Selects a cell of the segmentation the Viewer draws and shows it in the inspector: its ID, position, areas, segmentation method (or, for another segmentation, the instrument's cell it came from and what its method flags), and its transcripts by gene. With no cell, clears the selection.", InputSchema: schema(map[string]any{
 		"cell":    textArg("The cell's ID in the segmentation drawn (as cells.parquet names the instrument's), or its row from 0 as \"#123\"."),

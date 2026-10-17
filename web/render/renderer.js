@@ -98,6 +98,7 @@ void main() {
 // deformation's inverse field (api_register.go: a displacement at each point of a grid), then to
 // the image's pixels by the transform's inverse. A fragment beyond its tile is not drawn.
 const OVERLAY_PLACE = `
+uniform float u_checker;
 uniform int u_deformed;
 uniform sampler2D u_inv;
 uniform vec3 u_invGrid;
@@ -108,6 +109,12 @@ uniform vec2 u_sizeFS;
 in vec2 v_tile;
 in vec2 v_world;
 vec2 tilePlace() {
+  // A checkerboard: the image drawn in every other square of u_checker µm (the stains show in the
+  // rest).
+  if (u_checker > 0.0) {
+    vec2 cell = floor(v_world / u_checker);
+    if (mod(cell.x + cell.y, 2.0) < 0.5) discard;
+  }
   vec2 t = v_tile;
   if (u_deformed == 1) {
     vec2 g = (v_world - u_invGrid.xy) / u_invGrid.z;
@@ -153,6 +160,42 @@ void main() {
   float v = float(lo) + 256.0 * float(hi);
   float n = clamp((v - u_window.x) / max(u_window.y - u_window.x, 1.0), 0.0, 1.0);
   o = vec4(u_color * pow(n, u_gamma), 1.0);
+}`;
+
+// A stain's edges (the nuclear stain's, over a post-Xenium image): where its windowed value crosses a
+// level (between the background's and the nuclei's) within a pixel's 3 × 3 neighbourhood, and
+// changes there (Sobel's gradient over a threshold, so that noise about the level is not an edge),
+// in one colour; elsewhere nothing. The nuclei's boundaries, a line a pixel or two wide.
+const EDGE_FS = `#version 300 es
+precision highp float;
+precision highp usampler2D;
+uniform usampler2D u_tex;
+uniform ivec2 u_dims;
+uniform vec2 u_window;
+uniform vec3 u_color;
+uniform float u_threshold;
+uniform float u_level;
+in vec2 v_tex;
+out vec4 o;
+float value(ivec2 t) {
+  t = clamp(t, ivec2(0), u_dims - 1);
+  uint lo = texelFetch(u_tex, t, 0).r;
+  uint hi = texelFetch(u_tex, ivec2(t.x, t.y + u_dims.y), 0).r;
+  float v = float(lo) + 256.0 * float(hi);
+  return clamp((v - u_window.x) / max(u_window.y - u_window.x, 1.0), 0.0, 1.0);
+}
+void main() {
+  ivec2 t = ivec2(floor(v_tex));
+  float a = value(t + ivec2(-1, -1)), b = value(t + ivec2(0, -1)), c = value(t + ivec2(1, -1));
+  float d = value(t + ivec2(-1, 0)), f = value(t + ivec2(1, 0));
+  float g = value(t + ivec2(-1, 1)), h = value(t + ivec2(0, 1)), i = value(t + ivec2(1, 1));
+  float e = value(t);
+  float lo = min(min(min(a, b), min(c, d)), min(min(f, g), min(h, min(i, e))));
+  float hi = max(max(max(a, b), max(c, d)), max(max(f, g), max(h, max(i, e))));
+  float gx = (c + 2.0 * f + i) - (a + 2.0 * d + g);
+  float gy = (g + 2.0 * h + i) - (a + 2.0 * b + c);
+  if (lo >= u_level || hi < u_level || e < u_level || sqrt(gx * gx + gy * gy) < u_threshold) discard;
+  o = vec4(u_color, 1.0);
 }`;
 
 const DENSITY_FS = `#version 300 es
@@ -317,6 +360,7 @@ export class TissueRenderer {
       shape: createProgram(gl, SHAPE_VS, SHAPE_FS),
       overlayRGB: createProgram(gl, OVERLAY_VS, RGB_FS),
       overlayChannel: createProgram(gl, OVERLAY_VS, CHANNEL_FS),
+      edges: createProgram(gl, IMAGE_VS, EDGE_FS),
     };
     this.quad = arrayBuffer(gl, QUAD);
     this.quadVAO = {
@@ -325,6 +369,7 @@ export class TissueRenderer {
       qcmap: vertexArray(gl, [{ location: this.programs.qcmap.a.a_pos, buffer: this.quad, size: 2 }]),
       overlayRGB: vertexArray(gl, [{ location: this.programs.overlayRGB.a.a_pos, buffer: this.quad, size: 2 }]),
       overlayChannel: vertexArray(gl, [{ location: this.programs.overlayChannel.a.a_pos, buffer: this.quad, size: 2 }]),
+      edges: vertexArray(gl, [{ location: this.programs.edges.a.a_pos, buffer: this.quad, size: 2 }]),
     };
     this.cellColors = null;
     this.selectionBuffer = null;
@@ -422,6 +467,14 @@ export class TissueRenderer {
     });
     for (const [key, texture] of this.fields ?? []) if (!fields.has(key)) gl.deleteTexture(texture);
     this.fields = fields;
+    this.request();
+  }
+
+  // A stain's edges drawn over everything but the transcripts and cells: { channel, color, level (of
+  // the windowed value, 0 to 1, that the edges follow), threshold (of its Sobel gradient, 0 to 4) },
+  // or null.
+  setEdges(edges) {
+    this.edges = edges ?? null;
     this.request();
   }
 
@@ -695,6 +748,7 @@ export class TissueRenderer {
     for (const c of Object.values(this.caches)) c.begin();
     this.drawImage(plan, view);
     this.drawOverlays(plan, view);
+    if (this.edges) this.drawEdges(plan, view);
     if (plan.qc) this.drawQCMap(plan, view);
     if (plan.fillVisible) this.drawShapes(plan, view, 'fill');
     if (this.highlight) this.drawShapes(plan, view, 'highlight');
@@ -801,6 +855,7 @@ export class TissueRenderer {
       gl.activeTexture(gl.TEXTURE2);
       gl.bindTexture(gl.TEXTURE_2D, o.field ?? null);
       gl.uniform1i(prog.u.u_deformed, def && o.field ? 1 : 0);
+      gl.uniform1f(prog.u.u_checker, layer.checker > 0 ? layer.checker : 0);
       // A deformed image's tiles are found over the view grown by its largest displacement, and
       // each is drawn grown by as many of its pixels.
       let rect = plan.rect;
@@ -861,6 +916,52 @@ export class TissueRenderer {
       gl.disable(gl.BLEND);
       gl.bindVertexArray(null);
     }
+  }
+
+  // The stain's edges, from its tiles at the level drawn only: an edge is drawn nowhere else, so a
+  // coarser level standing in (as for the stains) would draw its own, coarser edges there.
+  drawEdges(plan, view) {
+    const d = this.dataset;
+    const e = this.edges;
+    const info = d.channels[e.channel];
+    const ch = this.layers.channels[e.channel];
+    if (!info || !ch) return;
+    const gl = this.gl;
+    const prog = this.programs.edges;
+    gl.useProgram(prog.program);
+    gl.uniformMatrix3fv(prog.u.u_view, false, view);
+    gl.bindVertexArray(this.quadVAO.edges);
+    gl.uniform1i(prog.u.u_tex, 0);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.uniform2f(prog.u.u_window, ch.window[0], ch.window[1]);
+    gl.uniform3fv(prog.u.u_color, hexColor(e.color ?? '#ffe14d'));
+    gl.uniform1f(prog.u.u_threshold, e.threshold ?? 0.3);
+    gl.uniform1f(prog.u.u_level, e.level ?? 0.3);
+    const l = Math.min(plan.level, info.levels.length - 1);
+    const lv = info.levels[l];
+    const range = tileRange(d.grid, l, plan.rect, lv.across, lv.down);
+    const list = [];
+    if (range) {
+      const side = tileUm(d.grid, l);
+      for (let ty = range.ty0; ty <= range.ty1; ty += 1) {
+        for (let tx = range.tx0; tx <= range.tx1; tx += 1) {
+          const tile = this.caches.image.want(`img:${e.channel}:${l}:${tx}:${ty}`, priority(plan.rect, side, tx, ty));
+          if (tile) list.push({ tile, tx, ty, l });
+        }
+      }
+    }
+    const pixel = d.grid.pixelSize;
+    list.forEach(({ tile, tx, ty }) => {
+      const scale = pixel * 2 ** l;
+      const side = d.grid.tile * scale;
+      gl.uniform2f(prog.u.u_origin, tx * side, ty * side);
+      gl.uniform2f(prog.u.u_size, tile.width * scale, tile.height * scale);
+      gl.uniform2f(prog.u.u_texels, tile.width, tile.height);
+      gl.uniform2i(prog.u.u_dims, tile.width, tile.height);
+      gl.bindTexture(gl.TEXTURE_2D, tile.texture);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    });
+    gl.bindVertexArray(null);
   }
 
   drawDensity(plan, view) {
@@ -1197,6 +1298,18 @@ export class TissueRenderer {
     const out = new Uint8Array(4);
     gl.readPixels(Math.round(sx), h - 1 - Math.round(sy), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, out);
     return [...out];
+  }
+
+  // The canvas's pixels (RGBA, rows top down) as drawn now, for the validation harness.
+  readRegion() {
+    this.draw();
+    const gl = this.gl;
+    const [w, h] = this.size();
+    const raw = new Uint8Array(w * h * 4);
+    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, raw);
+    const out = new Uint8Array(raw.length);
+    for (let y = 0; y < h; y += 1) out.set(raw.subarray((h - 1 - y) * w * 4, (h - y) * w * 4), y * w * 4);
+    return { width: w, height: h, pixels: out };
   }
 
   // Draws one channel's raw samples at a level, one device pixel per sample, the sample at

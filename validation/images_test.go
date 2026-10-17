@@ -210,6 +210,22 @@ func TestPostXeniumImages(t *testing.T) {
 			if res.Transform.Reflected() != tenx.Reflected() || rms > 5 {
 				t.Errorf("%s: %.2f µm from 10x's alignment (mirrored %v, 10x's %v)", c.image, rms, res.Transform.Reflected(), tenx.Reflected())
 			}
+			// Each checked in µm (wave 5, slice 4): where 10x's alignment and the automatic one
+			// place the image off, by patches between the registration's.
+			for _, v := range []struct {
+				name string
+				p    register.Placement
+			}{{"10x's alignment", register.Placement{T: tenx}}, {"the automatic alignment", register.Placement{T: res.Transform, D: res.Deformation}}} {
+				chk, err := register.CheckLocal(context.Background(), fixed, moving, v.p, register.CheckOptions{FixedPixel: pixel})
+				if err != nil {
+					t.Fatal(err)
+				}
+				t.Logf("  %s, checked: %d of %d patches matched; off by %.2f µm (median), %.2f (90th percentile), at most %.2f at (%.0f, %.0f) µm; the matches' own error at most %.2f µm",
+					v.name, chk.Matched, chk.Checked, chk.Median, chk.P90, chk.Max, chk.Worst.X, chk.Worst.Y, chk.Noise)
+				if chk.Matched < chk.Checked/2 || chk.Median > 2 {
+					t.Errorf("%s of %s: %d of %d matched, median %.2f µm", v.name, c.image, chk.Matched, chk.Checked, chk.Median)
+				}
+			}
 			im.Close()
 		}
 	})

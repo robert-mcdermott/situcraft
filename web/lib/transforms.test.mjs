@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addTransform, deformationAt, describeTransform, fitLandmarks, placePoint, transformInUse, transformRecord, transformShape, transformsOf, useTransform } from './transforms.js';
+import { addCheck, checkRecord, checksOf, addTransform, deformationAt, describeTransform, fitLandmarks, placePoint, transformInUse, transformRecord, transformShape, transformsOf, useTransform } from './transforms.js';
 
 // The checksum of 300 fits of each model internal/register/fit_test.go computes (FNV-1a of every
 // coefficient's, residual's and leave-one-out error's bits).
@@ -120,4 +120,14 @@ test('a deformation evaluated as the program evaluates it', () => {
   assert.deepEqual(placePoint({ transform: [[2, 0, 1], [0, 2, 0]] }, 3, 4), [7, 8]);
   const [px, py] = placePoint({ transform: [[1, 0, 0], [0, 1, 0]], deformation: b }, 10, 0);
   assert.ok(Math.abs(px - 10 - 2 * 16 / 36) < 1e-12 && Math.abs(py + 16 / 36) < 1e-12);
+});
+
+test('a version\'s checks recorded and described', () => {
+  const dataset = { id: 'd1', name: 'Rep1' };
+  let project = { datasets: [dataset], artifacts: [{ kind: 'transform', id: 'tf-a', name: 'Automatic', dataset: 'd1', state: 'complete' }], history: [], decisions: [], views: [] };
+  const rec = checkRecord(dataset, { id: 'chk-1', name: 'Check of Automatic', state: 'complete', summary: { image: 'img-1', transform: 'tf-a', checked: 40, matched: 38, median: 0.42, p90: 0.9, max: 1.31, rms: 0.55, noise: 0.3 } });
+  project = addCheck(project, rec);
+  assert.equal(addCheck(project, rec), project, 'recorded once');
+  assert.equal(checksOf(project, 'tf-a').length, 1);
+  assert.match(project.history.at(-1).detail, /Checked Automatic: off by 0\.42 µm \(median\), 0\.90 µm \(90th percentile\), at most 1\.31 µm, over 38 of 40 patches; the matches' own error at most about 0\.30 µm/);
 });
