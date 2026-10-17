@@ -32,7 +32,8 @@ func openFile(t testing.TB, path string) *File {
 
 // Files written by tifffile 2025 with imagecodecs (testdata/make_fixtures.py): both byte orders,
 // BigTIFF, strips and tiles with partial edges, LZW, deflate and PackBits, both predictors, planar
-// RGB, a SubIFD pyramid and a three-channel OME-TIFF; every pixel compared by SHA-256.
+// RGB, a SubIFD pyramid and a three-channel OME-TIFF; every pixel compared by SHA-256. JPEG (YCbCr,
+// RGB and grey) within its tolerance of libjpeg-turbo's pixels: decoders round differently.
 func TestFilesFromTifffile(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join("testdata", "expected.json"))
 	if err != nil {
@@ -40,8 +41,9 @@ func TestFilesFromTifffile(t *testing.T) {
 	}
 	var doc struct {
 		Cases []struct {
-			Name   string  `json:"name"`
-			Levels []level `json:"levels"`
+			Name      string  `json:"name"`
+			Tolerance int     `json:"tolerance"`
+			Levels    []level `json:"levels"`
 		} `json:"cases"`
 	}
 	if err := json.Unmarshal(raw, &doc); err != nil {
@@ -68,6 +70,22 @@ func TestFilesFromTifffile(t *testing.T) {
 				}
 			} else if pixels, err = images[l].ReadImage(); err != nil {
 				t.Fatalf("%s level %d: %v", c.Name, l, err)
+			}
+			if c.Tolerance > 0 {
+				ref, err := os.ReadFile(filepath.Join("testdata", c.Name+".raw"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				worst := 0
+				for i := range ref {
+					if i < len(pixels) {
+						worst = max(worst, abs(int(pixels[i])-int(ref[i])))
+					}
+				}
+				if len(pixels) != len(ref) || worst > c.Tolerance {
+					t.Errorf("%s: %d samples, %d expected; at most %d from libjpeg-turbo's (tolerance %d)", c.Name, len(pixels), len(ref), worst, c.Tolerance)
+				}
+				continue
 			}
 			sum := sha256.Sum256(pixels)
 			if got := hex.EncodeToString(sum[:]); got != want.SHA256 {
@@ -198,4 +216,57 @@ func FuzzOpen(f *testing.F) {
 			}
 		}
 	})
+}
+
+func abs(v int) int {
+	if v < 0 {
+		return -v
+	}
+	return v
+}
+
+// A JPEG tile whose tables the image keeps in JPEGTables (an abbreviated stream) decodes as the
+// complete stream it came from.
+func TestJPEGSharedTables(t *testing.T) {
+	f := openFile(t, filepath.Join("testdata", "rgb-jpeg-ycbcr-tiles.tif"))
+	ifd := f.IFDs[0]
+	full, err := ifd.RawBlock(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The DQT and DHT segments go to the tables; SOI, the frame, the scan and EOI stay.
+	tables := []byte{0xFF, 0xD8}
+	stream := []byte{0xFF, 0xD8}
+	for p := 2; p+4 <= len(full); {
+		marker, n := full[p+1], int(full[p+2])<<8|int(full[p+3])
+		segment := full[p : p+2+n]
+		if marker == 0xDB || marker == 0xC4 {
+			tables = append(tables, segment...)
+		} else {
+			stream = append(stream, segment...)
+		}
+		if marker == 0xDA {
+			stream = append(stream, full[p+2+n:]...)
+			break
+		}
+		p += 2 + n
+	}
+	tables = append(tables, 0xFF, 0xD9)
+	want, err := ifd.DecodeBlock(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	abbreviated := *ifd
+	abbreviated.JPEGTables = tables
+	width, height := ifd.BlockSize(0)
+	got, err := decodeJPEG(&abbreviated, stream, width, height)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Error("the abbreviated stream decodes otherwise")
+	}
+	if _, err := decodeJPEG(ifd, stream, width, height); err == nil {
+		t.Error("an abbreviated stream without its tables decoded")
+	}
 }

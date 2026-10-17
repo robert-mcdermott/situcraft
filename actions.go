@@ -22,6 +22,8 @@ type remoteAction struct {
 	output bool
 	// reads: opens items on this computer by their paths (local.go), so it needs the token.
 	reads bool
+	// readsAt: reads the file at args.path where it lies (the page asks for it), so it needs the token.
+	readsAt bool
 	// writes: a job writes files on this computer where the arguments say, so it needs the token.
 	writes bool
 }
@@ -101,7 +103,14 @@ var remoteActions = []remoteAction{
 		"opacity":         numberArg("The fill's opacity, 0 to 1."),
 		"color_by":        textArg("Color the transcripts by gene (as listed) or probability (their assignment's, a refinement's; seen close up)."),
 		"cell":            textArg("A cell to select, by its ID in the segmentation drawn (as cells.parquet names the instrument's)."),
+		"images":          map[string]any{"type": "object", "description": "Post-Xenium images, by name or artifact ID: {visible, opacity (0 to 1), channels: {by name: {visible, color, window, gamma}} (immunofluorescence)}, each optional."},
 	}), long: true},
+	{Name: "add_image", Title: "Add a post-Xenium image", Description: "Adds an H&E or immunofluorescence image of a dataset's section, stained and scanned after the Xenium run, as a job: a pyramidal, tiled OME-TIFF (as Xenium Explorer requires; RGB, or channels of 8 or 16 bits; deflate, LZW, JPEG or JPEG 2000), read where it lies, never copied, and placed by its alignment, the transformation matrix or keypoints Xenium Explorer saves (found beside the image when 10x named it, else named). Recorded as an image artifact with both files' SHA-256; the Viewer draws it under the transcripts and cells. Needs the token (it reads files). Answers what the image is and how its alignment places it.", InputSchema: schema(map[string]any{
+		"dataset":   datasetArg,
+		"path":      textArg("The image: an OME-TIFF on this computer."),
+		"alignment": textArg("Its alignment: <name>_imagealignment.csv (the transformation matrix) or <name>_keypoints.csv (found beside the image if not given)."),
+		"name":      textArg("What to call it (from its file's name if not given)."),
+	}, "path"), long: true, readsAt: true},
 	{Name: "select_cell", Title: "Select a cell", Description: "Selects a cell of the segmentation the Viewer draws and shows it in the inspector: its ID, position, areas, segmentation method (or, for another segmentation, the instrument's cell it came from and what its method flags), and its transcripts by gene. With no cell, clears the selection.", InputSchema: schema(map[string]any{
 		"cell":    textArg("The cell's ID in the segmentation drawn (as cells.parquet names the instrument's), or its row from 0 as \"#123\"."),
 		"dataset": datasetArg,

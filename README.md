@@ -64,6 +64,11 @@ instrument's cells take their true type, and 99.9% of SituCraft's refined cells.
 cluster and label the Lung cells, read the simulated tissue's labels against its truth, and the
 Breast cells' labels under two segmentations.
 
+In development for 0.5.0: the pathology bridge, starting with post-Xenium H&E and
+immunofluorescence images drawn on the tissue, read where they lie (pyramidal OME-TIFFs, as Xenium
+Explorer requires) and placed by the alignment Xenium Explorer saves; and bundles of Xenium Onboard
+Analysis 1.0, such as the breast cancer section of Janesick et al. (2023).
+
 ## A look around
 
 <picture>

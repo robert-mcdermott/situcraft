@@ -6,9 +6,11 @@ the program needs no other software. The research notes
 
 ## Xenium output bundles
 
-SituCraft reads bundles written by Xenium Onboard Analysis (XOA) and Xenium Ranger. XOA 2.x is
-supported and checked against real bundles; other versions are read best-effort, and the Data view
-says so. A bundle opens as its folder, its `experiment.xenium`, or a `.zip` holding the bundle at
+SituCraft reads bundles written by Xenium Onboard Analysis (XOA) and Xenium Ranger. XOA 2.x and
+1.0 are supported and checked against real bundles (from 0.5.0, XOA 1.0's: its cells numbered
+rather than named, its count matrix in its earlier Zarr layout, without the cells' IDs, and its
+Parquet files as fastparquet 1.0 wrote them, the footer's row count wrong); other versions are read
+best-effort, and the Data view says so. A bundle opens as its folder, its `experiment.xenium`, or a `.zip` holding the bundle at
 its root or in one folder. SituCraft never writes to a bundle; a zipped bundle's compressed members
 are unpacked once into the cache.
 
@@ -46,7 +48,7 @@ shown, and lists its truth (`truth/`) among its files.
 | Zarr | Zarr storage specifications v2 and v3 | Directories and zips; Blosc, Zstandard, zlib, gzip and LZ4 chunks; C and F order; both byte orders; fill values; CRC-32C; sharding; text of fixed and varying length (VLenUTF8) |
 | AnnData | anndata's on-disk format, in Zarr | Data frames (text, categorical, nullable and numeric columns); matrices as sparse rows, sparse columns or dense |
 | GeoJSON, WKB | RFC 7946; OGC Simple Features | Polygons and MultiPolygons with holes |
-| TIFF | TIFF 6.0, BigTIFF, OME-TIFF | Strips and tiles, SubIFD pyramids, deflate, LZW, PackBits, predictors; OME-XML, multi-file OME-TIFF, z-stacks |
+| TIFF | TIFF 6.0, BigTIFF, OME-TIFF | Strips and tiles, SubIFD pyramids, deflate, LZW, PackBits, predictors; JPEG (TIFF Technical Note 2: shared tables, YCbCr or RGB, chroma interpolated as libjpeg-turbo does); OME-XML, multi-file OME-TIFF, z-stacks |
 | JPEG 2000 | ITU-T T.800 (ISO/IEC 15444-1), Part 1 | JP2 files and codestreams; every progression order and code-block style; tiles, layers and precincts; 5/3 and 9/7 wavelets; decoding at reduced resolution |
 | Zstandard | RFC 8878 | Frames with XXH64 checksums |
 | LZ4, Snappy, Blosc | Their projects' format descriptions | Blocks; Blosc byte and bit shuffling |
@@ -120,12 +122,29 @@ anndata.read_h5ad("reference.h5ad").write_zarr("reference.zarr")
 `situcraft simulate --reference N <folder>` writes a reference of the simulated tissue's types,
 N cells of each, as `<folder>-reference.zarr` (its types in `obs`'s `cell_type`, counts in `X`).
 
+## Post-Xenium images SituCraft reads
+
+An H&E or immunofluorescence image of a dataset's section, stained and scanned after the Xenium run
+(from 0.5.0), is added in the Viewer (**Post-Xenium images**) or by the `add_image` remote action,
+with its alignment. It is read where it lies, never copied, a tile at a time.
+
+| What | Form | What is read |
+| --- | --- | --- |
+| The image | A pyramidal, tiled OME-TIFF, as Xenium Explorer requires (10x Genomics' image conversion guide): its full-resolution image directory and its reduced levels in SubIFDs | RGB (an H&E: three samples a pixel, 8 bits, stored together), or one or more channels (an immunofluorescence image: a directory each, 8 or 16 bits, named by the OME-XML); tiles deflate (with or without a predictor), LZW, JPEG or JPEG 2000; the first z-plane and time point. A flat image larger than 4,096 pixels a side, or one in strips, is refused, with how to make a pyramid |
+| Its alignment: the transformation matrix | `<name>_imagealignment.csv`, as Xenium Explorer saves it | A 3×3 affine matrix, row-major, its last row `0,0,1`: the image's pixels to the Xenium image's pixels (its scale is the image's pixel size over the Xenium image's) |
+| Its alignment: the keypoints | `<name>_keypoints.csv`, as Xenium Explorer saves it | Columns `fixedX`, `fixedY` (the Xenium image's pixels) and `alignmentX`, `alignmentY` (the image's), a row each landmark; fitted by least squares as a similarity (translation, one scale, rotation and, where it fits better, a reflection), each keypoint's residual kept |
+
+The alignment found beside the image (named after it, as 10x names them) is offered. The image is
+placed by its alignment, then in µm by the dataset's pixel size; the pixel size its own metadata
+gives is recorded but never used to place it (post-Xenium images are often written with the Xenium
+image's).
+
 ## Other files
 
 SituCraft recognizes OME-TIFF images, Parquet and CSV tables, GeoJSON polygons and Zarr stores
 (on the command line or by **Open a bundle**) and lists them under **On this computer**. Reading
-them for analysis arrives with later releases: registered H&E and IF images and annotations (see
-the [roadmap](../situcraft-spec/roadmap.md)).
+more of them for analysis arrives with later releases: annotations exchanged with QuPath (see the
+[roadmap](../situcraft-spec/roadmap.md)).
 
 ## What SituCraft writes
 
@@ -193,7 +212,7 @@ What jobs make and register is kept in `<data dir>/artifacts/<id>/`, beside a `m
 | `format`, `version` | `"situcraft-artifact"`, `1` |
 | `id`, `kind`, `name`, `state`, `created` | Its identity; `state` is `complete` or `invalid` |
 | `lineage` | `parents` (a bundle by its analysis UUID and manifest's SHA-256, or other artifacts), `job` (its id, kind and spec), `method` (name, version, citation, detail), `parameters`, `software` (each program's name, version and commit) |
-| `files` | Each file's `path`, `role`, `size` and `sha256`; `location: "bundle"` for a file of the dataset's bundle, named by its path there and never copied |
+| `files` | Each file's `path`, `role`, `size` and `sha256`; `location: "bundle"` for a file of the dataset's bundle, named by its path there and never copied; `location: "place"` for a file where it lies on the computer (a post-Xenium image and its alignment), named by its absolute path and never copied |
 | `findings` | What the kind's check found: `severity`, `code`, `message`, `count` |
 | `summary` | What the kind says of it (a segmentation's cells, gene transcripts, medians and methods; for one SituCraft made, its agreement with the instrument's segmentation) |
 
@@ -304,6 +323,28 @@ A map of a clustering's cells (from 0.4.0) is an artifact of two files:
 | `embedding.bin` | `SCEB` | The cells (u32 count; u32 indices into the segmentation's cells, increasing), each one's place (f32 × 2, interleaved) and its reliability score (f32, 0 to 1: its neighborhood precision and recall, averaged over it and its 15 nearest on the map) |
 
 The project records each map it uses (kind `embedding`, with its segmentation and clustering).
+
+### Post-Xenium images
+
+A post-Xenium image (from 0.5.0) is an artifact of one file in its folder, `image.json`, and two in
+place: the image (role `image`) and its alignment (role `alignment`), by their absolute paths and
+SHA-256. Its id is made of the dataset (its analysis UUID and manifest's SHA-256) and the two
+files' SHA-256: the same image and alignment are the same artifact.
+
+| Field of `image.json` | Holds |
+| --- | --- |
+| `format`, `version`, `name` | `"situcraft-image"`, `1`, what it is called |
+| `source`, `alignmentFile` | Each file's `path`, `size` and `sha256` |
+| `image` | What the image is: `kind` (`rgb` or `channels`), `width`, `height`, `bits`, `compression`, `pixelSize` (µm, as its metadata says; absent when it says none), `channels` (each one's `name`), `levels` (each one's `width`, `height`, `tileWidth`, `tileHeight`, `across`, `down`), `notes` |
+| `alignment` | As its file gave it: `kind` (`matrix` or `keypoints`), `matrix` (the image's pixels to the Xenium image's, two rows of three), and for keypoints each one's `fixed` and `moving` position and `residuals` (the Xenium image's pixels) |
+| `xeniumPixelSize`, `transform` | The dataset's pixel size, and the image's pixels to µm (two rows of three) |
+| `ranges` | An immunofluorescence image's channels: each one's samples from the 0.1th to the 99.9th percentile over its smallest level, the window it is first shown with |
+
+Its summary says what it is and how it is placed (`umPerPixel`, the alignment's `scale`,
+`rotation`, `reflected`, and for keypoints their residuals). The project records each image (kind
+`image`, with its dataset and the two files' paths), and a saved view of the Viewer records each
+image's layer when there are some (`images`: each one's artifact `id`, `visible`, `opacity`, and an
+immunofluorescence image's `channels` as the stains': `visible`, `color`, `window`, `gamma`).
 
 ### Marker sets
 

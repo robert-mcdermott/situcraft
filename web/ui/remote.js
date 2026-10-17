@@ -12,6 +12,8 @@ import { ATTRIBUTES } from '../lib/cell-attributes.js';
 import { decideSegmentation, DECISIONS, EXPORT_FORMATS, promotedSegmentation } from '../lib/segmentations.js';
 import { CLASS_INFO, RANKS, cellNames, warnings } from '../lib/review.js';
 import { workedExamples } from '../lib/tours.js';
+import { describeAlignment, describeImage, imagesOf } from '../lib/images.js';
+import { defaultImageLayer } from '../lib/overlays.js';
 import { parseProject, rename, serializeProject } from '../lib/project.js';
 import { removeView, sameView, viewLink } from '../lib/views.js';
 import { SEG_FILLS, defaultChoice, segmentationChoices } from '../lib/segview.js';
@@ -540,10 +542,69 @@ export function installRemote(app) {
         else delete view.transcripts.colorBy;
       }
       if (args.cell !== undefined) view.cell = args.cell ? await cellRef(dataset, args.cell, view.segmentation) : null;
+      // Post-Xenium images, by name or artifact id.
+      if (args.images !== undefined) {
+        if (typeof args.images !== 'object' || Array.isArray(args.images) || args.images === null) throw new ActionError('images is an object by image name or ID: {"<name>": {"visible": true, "opacity": 0.5}}.');
+        const records = imagesOf(project(), dataset.id);
+        if (!records.length) throw new ActionError(`${dataset.name} has no post-Xenium image: add_image adds one.`);
+        view.images = (view.images ?? []).map((l) => ({ ...l, channels: l.channels.map((c) => ({ ...c })) }));
+        for (const [ref, patch] of Object.entries(args.images)) {
+          const rec = records.find((r) => r.id === ref) ?? records.find((r) => r.name === choose(ref, records.map((x) => x.name), 'image'));
+          let layer = view.images.find((l) => l.id === rec.id);
+          if (!layer) {
+            layer = defaultImageLayer(await app.bundles.imageDescription(rec.id));
+            view.images.push(layer);
+          }
+          if (patch.visible !== undefined) layer.visible = Boolean(patch.visible);
+          if (patch.opacity !== undefined) layer.opacity = Math.min(1, Math.max(0, finite(patch.opacity, 'opacity')));
+          if (patch.channels !== undefined) {
+            const desc = await app.bundles.imageDescription(rec.id);
+            const names = desc.image.channels.map((c) => c.name);
+            if (desc.image.kind === 'rgb') throw new ActionError(`${rec.name} is RGB: it has no channels to set.`);
+            for (const [name, cp] of Object.entries(patch.channels)) {
+              const c = layer.channels[names.indexOf(choose(name, names, 'channel'))];
+              if (cp.visible !== undefined) c.visible = Boolean(cp.visible);
+              if (cp.color !== undefined) {
+                if (!/^#[0-9a-f]{6}$/i.test(String(cp.color))) throw new ActionError(`${name}'s color is #rrggbb.`);
+                c.color = String(cp.color).toLowerCase();
+              }
+              if (cp.window !== undefined) {
+                if (!Array.isArray(cp.window) || cp.window.length !== 2 || !(finite(cp.window[1], 'window') > finite(cp.window[0], 'window'))) throw new ActionError(`${name}'s window is [low, high], low below high.`);
+                c.window = [Number(cp.window[0]), Number(cp.window[1])];
+              }
+              if (cp.gamma !== undefined) c.gamma = Math.min(4, Math.max(0.2, finite(cp.gamma, 'gamma')));
+            }
+          }
+        }
+      }
       const shownNow = await apply(view, dataset);
       if (view.cell) await waitFor(() => shownNow.detail()?.row === view.cell.row, 30000, 'the cell to be read');
       const now = showing();
       return { message: `${dataset.name} in the Viewer${now.camera ? ` at (${now.camera.cx.toFixed(0)}, ${now.camera.cy.toFixed(0)}) µm, ${now.camera.umPerCss.toPrecision(3)} µm per pixel` : ''}${now.transcripts.genes.length ? `, ${now.transcripts.genes.join(', ')}` : ''}${missing.length ? `. Not in this dataset: ${missing.join(', ')}` : ''}.`, data: { showing: now, missing } };
+    },
+
+    async add_image(args) {
+      const dataset = resolveDataset(args.dataset);
+      const link = app.bundles.link(dataset.id);
+      const item = link?.item ?? app.bundles.itemByPath(dataset.path);
+      if (!item) throw new ActionError(`${dataset.name}'s bundle was not found where the project records it.`);
+      if (args.path === undefined) throw new ActionError('Name the image: path, an OME-TIFF on this computer.');
+      let alignment = args.alignment === undefined ? '' : String(args.alignment);
+      try {
+        if (!alignment) {
+          const checked = await app.bundles.checkImage(item, String(args.path));
+          alignment = checked.siblings?.[0] ?? '';
+          if (!alignment) throw new Error(`no alignment beside ${args.path}: name it (alignment), the transformation matrix or keypoints Xenium Explorer saves`);
+        }
+        const manifest = await app.bundles.addImage(item, dataset.id, { path: String(args.path), alignment, ...(args.name ? { name: String(args.name) } : {}) });
+        const record = imagesOf(project(), dataset.id).find((r) => r.id === manifest.id);
+        return {
+          message: `${manifest.name} added to ${dataset.name}: ${record ? describeImage(record) : ''}. ${describeAlignment(manifest.summary)}`,
+          data: { id: manifest.id, name: manifest.name, image: record?.image, alignment: record?.alignment, summary: manifest.summary, findings: manifest.findings },
+        };
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
     },
 
     async select_cell(args) {

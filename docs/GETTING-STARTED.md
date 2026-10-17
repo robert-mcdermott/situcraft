@@ -619,6 +619,35 @@ The cells whose label changes are segmentation-sensitive: the review queue lists
 choose the other segmentation's label set in **Label changes against**, with what their
 counterparts carry.
 
+## Post-Xenium images: H&E and immunofluorescence
+
+A Xenium run leaves the section intact, so it can be stained (H&E) or imaged for proteins
+(immunofluorescence) afterwards. SituCraft draws such an image on the tissue, under the
+transcripts and cells, placed by its alignment to the Xenium image.
+
+In the Viewer, open **Post-Xenium images**, then **Add a post-Xenium image**:
+
+1. **Image:** the path of the OME-TIFF. SituCraft reads pyramidal, tiled OME-TIFFs, as Xenium
+   Explorer does; a flat image is refused with how to make one (10x's image conversion guide, or
+   `bfconvert -pyramid-resolutions 6 -pyramid-scale 2 -tilex 1024 -tiley 1024`).
+2. **Check:** says what the image is (RGB or its channels, its size and levels, its compression)
+   and fills in the alignment when one named after the image lies beside it, as 10x names them
+   (`<sample>_he_imagealignment.csv` for `<sample>_he_image.ome.tif`).
+3. **Alignment:** the transformation matrix or the keypoints Xenium Explorer saves (its **Download
+   Image Alignment File**). The image is placed by it alone: the pixel size an image's own metadata
+   gives is often the Xenium image's, whatever its own.
+4. **Add the image:** a job checksums the image where it lies (it is never copied) and records it,
+   with its alignment, as an artifact of the dataset.
+
+Each image is listed under **Images** in the project tree and in the Viewer's panel, with how its
+alignment places it (its scale, its turn, whether it is mirrored). Show or hide it and set its
+opacity; an H&E is drawn in its colours over the stains, an immunofluorescence image's channels
+each in a colour, window and gamma as the stains are (its nuclear stain off at first: the Xenium
+image's DAPI is the same nuclei). A saved view keeps each image's settings.
+
+Aligning an image without an alignment file (by landmarks, or automatically), and checking an
+alignment in µm, arrive later in 0.5.0 (see the [roadmap](../situcraft-spec/roadmap.md)).
+
 ## Keyboard
 
 | Action | Keys |

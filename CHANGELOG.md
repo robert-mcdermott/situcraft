@@ -1,5 +1,34 @@
 # Changelog
 
+## Unreleased (0.5.0)
+
+Wave 5 of the [roadmap](situcraft-spec/roadmap.md): the pathology bridge. Post-Xenium H&E and
+immunofluorescence images on the tissue, aligned and checked in µm; regions exchanged with QuPath;
+cells and regions reviewed with their provenance.
+
+### Added
+
+- **Post-Xenium images (wave 5, slice 1).** An H&E or immunofluorescence image of the section,
+  stained and scanned after the Xenium run, drawn on the tissue under the transcripts and cells.
+  - **The image:** a pyramidal, tiled OME-TIFF, as Xenium Explorer requires: RGB, or channels of
+    8 or 16 bits; deflate, LZW, JPEG or JPEG 2000 tiles. Read where it lies, never copied, a tile
+    at a time; recorded as an artifact of the dataset with its SHA-256.
+  - **Its alignment:** the transformation matrix or keypoints Xenium Explorer saves, found beside
+    the image when 10x named it, recorded with it. The image is placed by its alignment, never by
+    the pixel size its own metadata gives (on the pathology fixture's immunofluorescence image, the
+    Xenium image's, 3.5 times too small).
+  - **The Viewer** lists each image with how it is placed (scale, turn, mirroring), shows it at its
+    opacity at any rotation or reflection, an immunofluorescence image's channels each with a
+    colour, window and gamma as the stains have; saved views keep them. The project tree lists
+    **Images**. Remote control: `add_image`; `show_tissue` takes `images`.
+  - **XOA 1.0 bundles open:** cells numbered rather than named, the count matrix's earlier layout,
+    and Parquet files whose footer's row count is wrong (as fastparquet 1.0 wrote them).
+  - **JPEG tiles** in TIFFs, their shared tables and colours as libjpeg-turbo decodes them.
+  - **Validated** on the pathology fixture (the breast cancer section of Janesick et al. 2023, its
+    bundle's files and its H&E and immunofluorescence images, 2.8 GB): every level of both images
+    the pixels tifffile reads; the XOA 1.0.1 bundle's checks; its H&E drawn where its matrix puts
+    it.
+
 ## 0.4.0 (2026-10-16)
 
 Wave 4 of the [roadmap](situcraft-spec/roadmap.md): cell identities with their evidence. Cells are

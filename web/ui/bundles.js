@@ -8,6 +8,7 @@ import { openPaths } from './storage.js';
 import { addClustering, addEmbedding, clusteringRecord, embeddingRecord } from '../lib/clusterings.js';
 import { addDataset, compareFingerprint, datasetRecord, findDataset, relocateDataset, removeDataset } from '../lib/datasets.js';
 import { addLabels, labelsRecord, readLabelCells } from '../lib/labels.js';
+import { addImage as withImage, imageRecord } from '../lib/images.js';
 import { addComparison, addExport, addSegmentation, comparisonRecord, exportRecord, removeComparison as withoutComparison, segmentationRecord, segmentationsOf, withInstrumentSegmentation } from '../lib/segmentations.js';
 
 const BUNDLE_KINDS = new Set(['bundle', 'archive']);
@@ -238,6 +239,51 @@ export function createBundles(app) {
       importing.delete(jobId);
       notify();
     }
+  }
+
+  // What an image is, and the alignment files beside it (api_images.go); with alignment, what that
+  // file does.
+  async function checkImage(item, path, alignment = '') {
+    const q = new URLSearchParams({ path });
+    if (alignment) q.set('alignment', alignment);
+    return getJSON(`${item.url}/images/check?${q}`);
+  }
+
+  // A post-Xenium image added to a dataset with its alignment (api_images.go): a job reads and
+  // checksums it and records the artifact, then recorded in the project. Resolves with the artifact.
+  const addingImages = new Map(); // job id → { dataset, title }
+  async function addImage(item, datasetId, request) {
+    const answer = await getJSON(`${item.url}/images`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) });
+    const jobId = answer.job?.id;
+    if (!jobId) throw new Error('no job was started');
+    addingImages.set(jobId, { dataset: datasetId, title: answer.job.title });
+    notify();
+    try {
+      const job = await app.jobs.finished(jobId);
+      if (job?.state !== 'complete') throw new Error(`adding the image ${job?.state ?? 'ended'}${job?.error ? `: ${job.error}` : ''}`);
+      const id = (job.events ?? []).map((e) => /artifact (img-[0-9a-f]+)/.exec(e.message)?.[1]).find(Boolean);
+      if (!id) throw new Error('the job recorded no image');
+      const manifest = await getJSON(`/api/artifacts/${encodeURIComponent(id)}`);
+      const dataset = app.store.project.datasets.find((d) => d.id === datasetId);
+      if (!dataset) throw new Error('the dataset is no longer in the project');
+      const next = withImage(app.store.project, imageRecord(dataset, manifest));
+      if (next !== app.store.project) app.store.commit(next, `Add ${manifest.name} to ${dataset.name}`);
+      return manifest;
+    } finally {
+      addingImages.delete(jobId);
+      notify();
+    }
+  }
+
+  // An image's description (api_images.go), with its id, for drawing it; kept for the session.
+  const imageDescriptions = new Map();
+  function imageDescription(id) {
+    if (!imageDescriptions.has(id)) {
+      const p = getJSON(`/api/images/${encodeURIComponent(id)}`).then((d) => ({ ...d, id }));
+      p.catch(() => imageDescriptions.delete(id));
+      imageDescriptions.set(id, p);
+    }
+    return imageDescriptions.get(id);
   }
 
   // A comparison of two segmentations of a dataset (api_compare.go), made by a job and recorded as
@@ -838,6 +884,10 @@ export function createBundles(app) {
     refinementPresets,
     refinementPreflight,
     importSegmentation,
+    checkImage,
+    addImage,
+    addingImages: (datasetId) => [...addingImages.values()].filter((x) => x.dataset === datasetId),
+    imageDescription,
     compareSegmentations,
     comparisonDescription,
     removeComparison,

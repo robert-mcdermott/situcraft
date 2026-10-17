@@ -193,8 +193,10 @@ func (b *Bundle) Support() (level, message string) {
 		return "unknown", "The bundle does not say which software wrote it (analysis_sw_version); it is read as XOA 2.x."
 	case v.Major == 2:
 		return "supported", fmt.Sprintf("Written by %s %s: read and checked against XOA 2.0 bundles.", softwareName(v), v)
+	case v.Major == 1 && v.Minor == 0:
+		return "supported", fmt.Sprintf("Written by %s %s: read and checked against an XOA 1.0.1 bundle (its cells numbered, its count matrix in its earlier layout).", softwareName(v), v)
 	case v.Major == 1 || v.Major >= 3:
-		return "best-effort", fmt.Sprintf("Written by %s %s: read best-effort; SituCraft has been checked on XOA 2.0 bundles only so far.", softwareName(v), v)
+		return "best-effort", fmt.Sprintf("Written by %s %s: read best-effort; SituCraft has been checked on XOA 1.0.1 and 2.0 bundles so far.", softwareName(v), v)
 	}
 	return "best-effort", fmt.Sprintf("Written by %s: read best-effort.", v.Raw)
 }

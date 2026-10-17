@@ -27,13 +27,16 @@ const (
 
 // File is an open Parquet file.
 type File struct {
-	NumRows   int64
-	Columns   []Column
-	RowGroups []RowGroup
-	KeyValue  map[string]string
-	CreatedBy string
-	r         io.ReaderAt
-	size      int64
+	NumRows int64
+	// FooterRows is the row count the footer gave when it disagrees with the row groups', which
+	// NumRows holds (0 when they agree): fastparquet 1.0 wrote the first row group's.
+	FooterRows int64
+	Columns    []Column
+	RowGroups  []RowGroup
+	KeyValue   map[string]string
+	CreatedBy  string
+	r          io.ReaderAt
+	size       int64
 }
 
 // Values are one column's values for a run of rows: only the slice for the column's type is set,
@@ -120,7 +123,7 @@ func Open(r io.ReaderAt, size int64) (*File, error) {
 		rows += group.NumRows
 	}
 	if rows != f.NumRows {
-		return nil, fmt.Errorf("parquet: the row groups hold %d rows, the footer says %d", rows, f.NumRows)
+		f.FooterRows, f.NumRows = f.NumRows, rows
 	}
 	return f, nil
 }

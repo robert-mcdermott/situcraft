@@ -43,7 +43,9 @@
 // - the examples and the release (wave 4, slice 9): the worked examples clustering and labeling the
 //   Lung cells, reading the Breast labels under two segmentations, and the simulated tissue's labels
 //   against its truth, as their cards expect; the project saved by 0.4.0 reopened, each clustering,
-//   map and label set from markers it records made again with the same summary.
+//   map and label set from markers it records made again with the same summary;
+// - post-Xenium images (wave 5, slice 1): the pathology fixture's bundle (XOA 1.0.1) opened and its
+//   H&E added by a program, each of three of its pixels drawn where its alignment puts it.
 //
 // It builds the program, starts it on the bundles with an empty cache and library, builds their
 // derived data, and drives the page through window.situcraft (the app, app.js) and window.situcraftViewer
@@ -1184,6 +1186,38 @@ export async function viewerSuite({ check, MissingData, verbose }) {
           lsim.every((x) => x.ok) && lsim.at(-1).data.step === 11 && simInst?.matched.cells === 2916 && near(simInst.matched.agreement, 0.983, 0.003) && near(simInst.mecr?.a, 0.063, 0.002) && near(simInst.mecr?.b, 0.221, 0.005) && near(simRef?.matched.agreement, 0.9986, 0.002) && near(simRef?.mecr?.b, 0.090, 0.003),
           'the instrument\'s: 98.3% their true type, mixing 0.22 against the truth\'s 0.06; the refinement\'s: 99.9%, mixing 0.09');
         await act('tour', { end: true });
+      }
+
+      // Post-Xenium images (wave 5, slice 1): the pathology fixture's bundle (XOA 1.0.1) opened,
+      // its H&E added by a program with the alignment found beside it, and drawn where the matrix
+      // puts it: at three of its pixels, the Viewer's colour is the image's.
+      const pathology = join(dataRoot, 'xenium-breast-cancer-rep1');
+      const sample = 'Xenium_FFPE_Human_Breast_Cancer_Rep1';
+      if (existsSync(join(pathology, sample, 'experiment.xenium'))) {
+        await act('new_project', { name: 'Pathology' });
+        const opened = await act('open_paths', { paths: [join(pathology, sample)], add: true });
+        const added = await act('add_image', { dataset: sample, path: join(pathology, 'images', `${sample}_he_image.ome.tif`) });
+        const probes = [];
+        if (added.ok) {
+          const t = added.data.summary.transform;
+          for (const [px, py] of [[16342, 14283], [9000, 20000], [24000, 6000]]) {
+            const cx = t[0][0] * (px + 0.5) + t[0][1] * (py + 0.5) + t[0][2];
+            const cy = t[1][0] * (px + 0.5) + t[1][1] * (py + 0.5) + t[1][2];
+            await act('show_tissue', { dataset: sample, center: [cx, cy], um_per_pixel: 0.002, transcripts: false, outlines: false, channels: { DAPI: { visible: false } }, images: { [added.data.name]: { visible: true, opacity: 1 } } });
+            probes.push(await chrome.eval(`(async () => {
+              const r = window.situcraftViewer.renderer;
+              await r.settled();
+              const [w, h] = r.size();
+              const got = r.readColor(w / 2, h / 2).slice(0, 3);
+              const tile = new Uint8Array(await fetch('/api/images/${added.data.id}/tiles/0/0/${Math.floor(px / 1024)}/${Math.floor(py / 1024)}').then((x) => x.arrayBuffer()));
+              const i = 3 * (${py % 1024} * 1024 + ${px % 1024});
+              return { pixel: [${px}, ${py}], got, want: [tile[i], tile[i + 1], tile[i + 2]] };
+            })()`));
+          }
+        }
+        const worst = probes.length ? Math.max(...probes.flatMap((p) => p.got.map((g, k) => Math.abs(g - p.want[k])))) : Infinity;
+        check('viewer', 'remote control: add_image adds the pathology fixture\'s H&E with the alignment beside it, and the Viewer draws its pixels where the matrix puts them', `${opened.message ?? opened.error}; ${added.message ?? added.error}; ${JSON.stringify(probes)}`,
+          opened.ok && added.ok && added.data.summary.alignment.kind === 'matrix' && added.data.summary.alignment.reflected && probes.length === 3 && worst <= 2, 'the image\'s colour at three of its pixels, within 2');
       }
     }
     check('viewer', 'no uncaught errors in the page', errors.length ? errors.slice(0, 3).join(' | ') : 'none', errors.length === 0, 'none');

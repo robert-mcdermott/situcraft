@@ -1,0 +1,195 @@
+{
+ "tifffile": "2026.10.15",
+ "imagecodecs": "2026.10.10",
+ "images": {
+  "Xenium_FFPE_Human_Breast_Cancer_Rep1_he_image.ome.tif": {
+   "levels": [
+    {
+     "shape": [
+      24241,
+      30786,
+      3
+     ],
+     "axes": "YXS",
+     "sha256": [
+      "d79c965136ba28e779785749165c600860556cbc32ab6b9d55f0e1ebbf2a3611"
+     ]
+    },
+    {
+     "shape": [
+      12120,
+      15393,
+      3
+     ],
+     "axes": "YXS",
+     "sha256": [
+      "cfe148949f99c4e389615e04c3a57843d1839b47024774d89d111d8421677c5b"
+     ]
+    },
+    {
+     "shape": [
+      6060,
+      7696,
+      3
+     ],
+     "axes": "YXS",
+     "sha256": [
+      "a30d431393fd02155749b9246e0f3fcfb1b8901812035f708d1c1a282e7abc07"
+     ]
+    },
+    {
+     "shape": [
+      3030,
+      3848,
+      3
+     ],
+     "axes": "YXS",
+     "sha256": [
+      "c9773471ef21174499f835d3c38347546d9ca9555d180b9bfc7acbeb3b108e61"
+     ]
+    },
+    {
+     "shape": [
+      1515,
+      1924,
+      3
+     ],
+     "axes": "YXS",
+     "sha256": [
+      "5ee7e3a790334179d47a219af42165ea0062e1caf0b4c8d3d632ad7332b902d4"
+     ]
+    },
+    {
+     "shape": [
+      757,
+      962,
+      3
+     ],
+     "axes": "YXS",
+     "sha256": [
+      "1c2b04851ef20170bec61f581ba013519390fb80188e1203077425504ca27465"
+     ]
+    },
+    {
+     "shape": [
+      378,
+      481,
+      3
+     ],
+     "axes": "YXS",
+     "sha256": [
+      "9e593ace6f0925abce305a3ec4f71514bc3f447b3a11560e63eb44af2608c3fe"
+     ]
+    }
+   ]
+  },
+  "Xenium_FFPE_Human_Breast_Cancer_Rep1_if_image.ome.tif": {
+   "levels": [
+    {
+     "shape": [
+      3,
+      9777,
+      14239
+     ],
+     "axes": "CYX",
+     "sha256": [
+      "4590891b944ee9debb77c6826b566a05cf91511ed9dd8cb43775a4eb554f12b2",
+      "f01c86a9bd0a9ac8c0bc44fc43c1eee60d45d625eb289f52eaae7bfb9651296a",
+      "ac8e6fed9486be663d591d0e31085c80a64e32e75297adcd267d1c37d91fe155"
+     ]
+    },
+    {
+     "shape": [
+      3,
+      4888,
+      7119
+     ],
+     "axes": "CYX",
+     "sha256": [
+      "eded5311f7a594422be8c0fed31571e3972b5c8ab56853f9a4e167b307d7fa2a",
+      "461d1c83b91d38257bfa5bc1d78c4efd9449d2925dc0631f75bf2a425e224b53",
+      "5d31a15f6d065ca38aa9f3f57e604f2b15f336463e7ada539a107dceafbba4e8"
+     ]
+    },
+    {
+     "shape": [
+      3,
+      2444,
+      3559
+     ],
+     "axes": "CYX",
+     "sha256": [
+      "2b3121eff70999edae90051fa5356f1cc0ce7808ad602f2caa080247d8c07f89",
+      "34101f4acb458490d3784d6d072c2dcefac1bc10ecdf49478c07d08cd8ff3408",
+      "2f0e3f2c576f92586c19b45bcdafb10651007e1c957bf87fa5979fd7965728e7"
+     ]
+    },
+    {
+     "shape": [
+      3,
+      1222,
+      1779
+     ],
+     "axes": "CYX",
+     "sha256": [
+      "f4b0a460f12437940c15c442ae45ce55d5dcb31323e7cbb4b1d29e3250f3b07e",
+      "5544617bc01b748cd919f2048c0b62787ba5d2dbb2e685dec4c32326cd26f54a",
+      "1130869d44d74f11560144f952d84ce3624ea3809022f8309857beb229376200"
+     ]
+    },
+    {
+     "shape": [
+      3,
+      611,
+      889
+     ],
+     "axes": "CYX",
+     "sha256": [
+      "a6dfa205f651638484d30e762709119f13cac9f4a14fa36b99b48af6e8137e5b",
+      "878b08b88bf643b684e7e87d0d30421f7f79c327328be62bc9ef849f9401b1d5",
+      "8a3f99f1cab66ef7e334834543c4e71999a7504e7e36507178d7d2ecb654f22f"
+     ]
+    },
+    {
+     "shape": [
+      3,
+      305,
+      444
+     ],
+     "axes": "CYX",
+     "sha256": [
+      "493b7061c726ad8c8611294706a462470edb49fa1b0e751c6de5ed68b8440d97",
+      "6fb0a9e66e221b9fc5d167b2612dd9f41b4fc3d4d940de0203b6de380fedd2d0",
+      "bc06219d72a6cf4ed06473be4c62eb9d5b25232ff1ee7cbd920840ca6b82eed4"
+     ]
+    },
+    {
+     "shape": [
+      3,
+      152,
+      222
+     ],
+     "axes": "CYX",
+     "sha256": [
+      "6fa6a843a32754caf37424ae9c0232da71912827f2e042f996e57fdabc0c27f3",
+      "9e4e5d2fdb1788f4a74f146c91ae906ccfd3a16fa510f230303df0dd045190e7",
+      "c20d17898b8f4dae86a5502a8c1b6dac6ede8202a22455550ad809a623a07ed8"
+     ]
+    },
+    {
+     "shape": [
+      3,
+      76,
+      111
+     ],
+     "axes": "CYX",
+     "sha256": [
+      "3ad1858e7cef0327bacb40ba2bbf1fe29d1424e0d890563971d4d3f8d0317ef2",
+      "c76d2e64d4d3dd29eccfc34778cdb3b91b115384a8b6320a77bd4f0bb00c9b91",
+      "2feba4b05b0fe0715df66d4d14ad5925f9326fd3177783dedca561203f1b94f8"
+     ]
+    }
+   ]
+  }
+ }
+}

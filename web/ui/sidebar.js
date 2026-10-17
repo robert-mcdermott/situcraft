@@ -61,6 +61,14 @@ const SECTIONS = [
     empty: 'The instrument\'s segmentation, SituCraft\'s own, and ones imported from other tools, each kept with how it was made.',
   },
   {
+    kind: 'image', title: 'Images', icon: 'image',
+    items: (project) => project.artifacts.filter((a) => a.kind === 'image'),
+    label: (a) => a.name ?? 'Image',
+    itemIcon: (a) => (a.state === 'complete' ? 'image' : 'warning'),
+    meta: (a) => (a.state !== 'complete' ? a.state : a.summary?.kind === 'rgb' ? 'RGB' : `${(a.summary?.channels ?? []).length} channels`),
+    empty: 'Post-Xenium H&E and immunofluorescence images, read where they lie and placed by their alignment (the Viewer adds them).',
+  },
+  {
     kind: 'comparison', title: 'Comparisons', icon: 'compare',
     items: (project) => project.artifacts.filter((a) => a.kind === 'comparison'),
     label: (a, app) => {
@@ -145,6 +153,11 @@ export function mountSidebar(app) {
             // A filter is edited and compared in the QC view; a saved view opens.
             if (section.kind === 'filter') app.setMode('qc');
             if (section.kind === 'clustering') app.setMode('celltypes');
+            // An image is shown on its dataset's tissue.
+            if (section.kind === 'image') {
+              app.focusItem({ kind: 'dataset', id: item.dataset });
+              app.setMode('viewer');
+            }
             if (section.kind === 'view') app.applyView(item);
           },
         }, icon(section.itemIcon?.(item) ?? section.icon), h('span.label', section.label(item, app)), h('span.meta', section.meta(item, app)))));

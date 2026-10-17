@@ -38,9 +38,10 @@ see `conventions.md`. For the methods, formats and datasets behind these choices
 │   internal/codec     zstd (RFC 8878), LZ4 block, Blosc, Snappy; deflate/gzip from the standard library │
 │   internal/parquet   Parquet reader (flat schemas) and writer                                         │
 │   internal/zarr      Zarr v2 and v3: directory and zip stores; reader and writer                      │
-│   internal/tiff      TIFF/BigTIFF, OME-XML, SubIFD pyramids; reader and writer                        │
+│   internal/tiff      TIFF/BigTIFF, OME-XML, SubIFD pyramids, JPEG tiles; reader and writer            │
 │   internal/jp2k      JPEG 2000 Part 1 decoder (TIFF compression 34712)                                │
 │   internal/xenium    bundle scanner, version detection, validation, typed access                      │
+│   internal/slide     post-Xenium images (H&E, IF): pyramidal OME-TIFFs read in place, by tile          │
 │   internal/cache     derived data: image tile pyramids, transcript spatial index, geometry tiles      │
 │   internal/view      the viewer's queries: points and density by gene, cells, one cell                 │
 │   api_*.go           viewport queries: tiles, points, polygons, cells (binary, columnar responses)     │
@@ -52,7 +53,7 @@ see `conventions.md`. For the methods, formats and datasets behind these choices
 │   internal/embed     UMAP maps and their quality                                                       │
 │   internal/label     marker sets and scores, hierarchical labels, references, imports, review         │
 │   internal/linalg    symmetric eigendecomposition (whole, or Lanczos), the same on every processor     │
-│   internal/register  image registration (later)                                                       │
+│   internal/register  transforms, Xenium Explorer's alignments, fits; image registration (wave 5)      │
 │   internal/spatial   graphs and spatial statistics on large tables (later)                            │
 │   internal/jobs      durable background jobs: spec, state, progress, cancellation, logs               │
 │ embed web/ ──────────────────────────────────────────────────────────────────────────────────────┐   │
@@ -61,7 +62,7 @@ see `conventions.md`. For the methods, formats and datasets behind these choices
 ┌──────────────────────────────────────────── browser ──────────────────────────────────────────────────┐
 │ web/app.js           shell, views, commands, shortcuts                                                │
 │ web/ui/*.js          views and components (the only code that touches the DOM)                        │
-│ web/render/*.js      WebGL2 tile renderer: 16-bit image channels, points, polygons, fills             │
+│ web/render/*.js      WebGL2 tile renderer: 16-bit image channels, post-Xenium images, points, polygons│
 │ web/workers/*.js     module workers: cell-level analytics, decoding binary responses                  │
 │ web/lib/*.js         pure modules (no DOM), shared by page, workers and Node tests                    │
 └───────────────────────────────────────────────────────────────────────────────────────────────────────┘
@@ -423,6 +424,18 @@ segmentation, made by a job, named by its inputs and parameters, and checked bef
   the dot plot and a selection's markers come from the program, which keeps the last few
   clusterings' normalized expression in memory. Names are versions in the project. The Viewer fills
   the cells by cluster (`clusters:<id>` among its fills), with a legend, merged names one color.
+
+### Post-Xenium images
+
+An H&E or immunofluorescence image of the section, stained after the run (`internal/slide`,
+`api_images.go`), is read where it lies, never copied: a pyramidal, tiled OME-TIFF, as Xenium
+Explorer requires, each tile decoded by the program when the page asks for it (an RGB tile sent as
+its pixels, a channel's as the stains' two byte planes), not cached on disk: the file already is its
+pyramid. It is an artifact of kind `image` whose image and alignment files are recorded in place
+(`location: "place"`, by absolute path and SHA-256). Its alignment (`internal/register`) is the
+transform from its pixels to the Xenium image's, then µm; the renderer draws each image's tiles
+through that transform as a model matrix (any rotation or reflection), finding the tiles in view
+through its inverse. An image's own pixel size is recorded but never places it.
 
 ### Exports
 

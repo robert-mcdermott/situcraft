@@ -1,5 +1,5 @@
 {
- "tifffile": "2026.9.20",
+ "tifffile": "2026.10.15",
  "cases": [
   {
    "name": "u8-lzw-strips",
@@ -160,6 +160,35 @@
      ],
      "dtype": "uint16",
      "sha256": "d0e829168eff2ac635bfc637e47026028af9394ce2477a2f872a7e138a2a1861"
+    }
+   ]
+  },
+  {
+   "name": "rgb-jpeg-ycbcr-tiles",
+   "tolerance": 3,
+   "levels": [
+    {
+     "shape": [
+      48,
+      56,
+      3
+     ],
+     "dtype": "uint8",
+     "sha256": "8384dd11f66490a606fd35a6ec5969508dd0ad95caef80947fa3416d8c5c0bd6"
+    }
+   ]
+  },
+  {
+   "name": "u8-jpeg-strips",
+   "tolerance": 3,
+   "levels": [
+    {
+     "shape": [
+      48,
+      56
+     ],
+     "dtype": "uint8",
+     "sha256": "8896bf0536927c61a3179964647729b9f486f64eec6edf166263a1b817a9bf00"
     }
    ]
   }

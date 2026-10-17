@@ -106,8 +106,8 @@ Status: **planned (wave N)** until built. Then **done**, **partial** (the gap no
 
 | # | Requirement | Status |
 | --- | --- | --- |
-| R1 | Post-Xenium H&E and IF OME-TIFF images imported | planned (wave 5) |
-| R2 | A supplied 3×3 alignment read and applied | planned (wave 5) |
+| R1 | Post-Xenium H&E and IF OME-TIFF images imported | done (wave 5, slice 1: pyramidal, tiled OME-TIFFs as Xenium Explorer requires, RGB or channels of 8 or 16 bits, deflate, LZW, JPEG or JPEG 2000 tiles, read where they lie and recorded as artifacts by their SHA-256, drawn on the tissue at any rotation or reflection; validated against tifffile on the pathology fixture's H&E and IF, every level the same pixels) |
+| R2 | A supplied 3×3 alignment read and applied | done (wave 5, slice 1: Xenium Explorer's transformation matrix or keypoints (fitted as a similarity), the matrix's convention verified on the fixture: the image's pixels to the Xenium image's; an image placed by its alignment, never by its metadata's pixel size) |
 | R3 | Registration by landmarks (affine) and automatically (rigid/affine), optionally refined non-rigidly | planned (wave 5) |
 | R4 | Alignment checked by checkerboard, flicker, edge overlay and landmark residuals, in µm | planned (wave 5) |
 | R5 | Transforms versioned with source and destination coordinate systems, landmarks, residuals, author and time | planned (wave 5) |

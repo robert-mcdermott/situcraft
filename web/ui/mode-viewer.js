@@ -15,6 +15,8 @@ import { fitCamera, scaleBar, screenToWorld, visibleRect, worldToScreen } from '
 import { attachNavigation } from './navigation.js';
 import { readCells, joinSamples, nearestCell } from '../lib/viewer-data.js';
 import { mountViewerPanel, defaultLayers, cellFillColors } from './viewer-panel.js';
+import { imagesOf } from '../lib/images.js';
+import { defaultImageLayer } from '../lib/overlays.js';
 import { defaultChoice, readSegCells, segmentationChoices } from '../lib/segview.js';
 import { hexColor } from '../render/gl.js';
 import { categoricalColor } from '../lib/colormaps.js';
@@ -182,14 +184,24 @@ export function mountViewer(app, container) {
     // Curated and consensus label sets, drawn as labels at one level.
     const versionFills = () => labelVersions(app.store.project, t.dataset.id, drawnChoice()?.id).filter((v) => v.kind === 'curated' || v.kind === 'consensus').map((v) => ({ id: `labels:${v.id}:0`, labels: v.id, level: 0, label: `${v.kind === 'curated' ? 'Curated' : 'Consensus'} labels: ${v.name}` }));
     const analysisFills = () => [...clusterFills(app.store.project, t.dataset.id, drawnChoice()?.id), ...labelFills(app.store.project, t.dataset.id, drawnChoice()?.id), ...versionFills()];
-    const choiceKey = () => `${choices().map((c) => `${c.id}${c.isDefault ? '*' : ''}`).join()}|${analysisFills().map((f) => f.id).join()}`;
+    const imageRecords = () => imagesOf(app.store.project, t.dataset.id);
+    const choiceKey = () => `${choices().map((c) => `${c.id}${c.isDefault ? '*' : ''}`).join()}|${analysisFills().map((f) => f.id).join()}|${imageRecords().map((r) => r.id).join()}`;
+    // Adding a post-Xenium image, from the panel.
+    const imageActions = {
+      check: (path, alignment) => app.bundles.checkImage(t.item, path, alignment),
+      add: (request) => app.bundles.addImage(t.item, t.dataset.id, request),
+    };
 
     function mountPanel(start) {
       clear(panelHost);
       state.choiceKey = choiceKey();
-      panel = mountViewerPanel(panelHost, { desc, layers: start, cells: renderer.cells, app, segmentations: choices(), drawn: drawnChoice(), clusterings: analysisFills(), onChange: (next, what) => {
+      panel = mountViewerPanel(panelHost, { desc, layers: start, cells: renderer.cells, app, segmentations: choices(), drawn: drawnChoice(), clusterings: analysisFills(), images: state.imageEntries ?? [], imageActions, onChange: (next, what) => {
         state.layers = next;
         renderer.setLayers(next);
+        if (what === 'images') {
+          applyImages();
+          return;
+        }
         if (what === 'segmentation') {
           drawSegmentation(next.cells.segmentation);
           return;
@@ -201,6 +213,27 @@ export function mountViewer(app, container) {
       state.panel = panel;
     }
     mountPanel(layers);
+
+    // The dataset's post-Xenium images: their descriptions read, a layer each (kept while the image
+    // stays, a view's as it names them), drawn by the renderer over the stains.
+    async function syncImages() {
+      const records = imageRecords();
+      const entries = await Promise.all(records.map((record) => app.bundles.imageDescription(record.id).then((d) => ({ record, desc: d }), (error) => ({ record, error: error.message }))));
+      if (current && current !== state) return;
+      const prev = new Map((state.layers.images ?? []).map((l) => [l.id, l]));
+      const imageLayers = entries.filter((e) => e.desc).map((e) => prev.get(e.record.id) ?? defaultImageLayer(e.desc));
+      state.imageEntries = entries;
+      state.layers = { ...state.layers, images: imageLayers };
+      renderer.setLayers(state.layers);
+      applyImages();
+      panel?.setImages(entries, imageLayers);
+    }
+    function applyImages() {
+      const entries = state.imageEntries ?? [];
+      renderer.setOverlays((state.layers.images ?? []).map((layer) => ({ layer, desc: entries.find((e) => e.record.id === layer.id)?.desc })).filter((o) => o.desc));
+    }
+    state.syncImages = syncImages;
+    syncImages();
 
     // The fill's colors per cell; a clustering's are read first (each cell's cluster, from the
     // program), and must be of the cells drawn.
@@ -647,6 +680,7 @@ export function mountViewer(app, container) {
       next.transcripts.colors = next.transcripts.genes.map((_, i) => categoricalColor(i));
       state.layers = next;
       renderer.setLayers(next);
+      syncImages();
       const drawn = drawSegmentation(next.cells.segmentation);
       drawMinimap();
       // A view without a place (a tour's step) shows the whole section.
@@ -673,6 +707,7 @@ export function mountViewer(app, container) {
       else {
         if (state.seg) state.seg.choice = choices().find((c) => c.id === state.seg.id) ?? state.seg.choice;
         mountPanel(state.layers);
+        syncImages();
         updateLegend();
       }
     };

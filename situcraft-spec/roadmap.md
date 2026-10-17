@@ -1960,15 +1960,126 @@ same on every processor.
 
 ## 0.5.0: the pathology bridge (wave 5)
 
-Outline.
-- Post-Xenium H&E and IF OME-TIFF import: JPEG, deflate, LZW and JPEG 2000; RGB pyramids (R1).
-- Supplied alignment matrices (R2); landmark and automatic registration with optional non-rigid
-  refinement (R3); alignment QC in µm (R4); versioned transforms (R5).
-- ROI tools and GeoJSON interchange (R6); review actions, queues and provenance (R7, R8, T8).
-- The pathology fixture (≤ 3 GB, post-Xenium H&E with alignment) chosen and added to
-  `validation/sources.json`.
-- Validation: identity and known-affine recovery, the supplied 10x transform reproduced, landmark
-  residuals reported.
+Post-Xenium H&E and immunofluorescence images brought onto the tissue: added where they lie,
+aligned to the Xenium image by the alignment supplied with them, by landmarks or automatically,
+the alignment checked in µm and kept as versions; regions drawn and exchanged with QuPath; cells
+and regions reviewed, every decision with its provenance.
+
+**Where the work runs.** A post-Xenium image is read where it lies, never copied: a pyramidal, tiled
+OME-TIFF, as Xenium Explorer requires, its tiles decoded by the program when the page asks for
+them. Registration runs in the program as a job on the images' reduced levels, and its result is
+a transform: an artifact naming its source and destination coordinate systems, how it was made
+and how well it fits. The page draws an image under its transform, at any rotation or reflection.
+
+**The pathology fixture.** The breast cancer section of Janesick et al. (2023), replicate 1 (10x
+Genomics, CC BY 4.0; Xenium Onboard Analysis 1.0.1): its post-Xenium H&E (30,786 × 24,241 RGB,
+deflate, 0.364 µm) and immunofluorescence (CD20, HER2 and DAPI, JPEG 2000) images, each with 10x's
+alignment matrix, and the bundle's files SituCraft reads, taken from its 9.9 GB archive by HTTP
+range: 2.8 GB in all. Its bundle is of XOA 1, which SituCraft opens from this wave.
+
+### Wave 5
+
+1. **Post-Xenium images and their alignment (R1, R2): done.**
+   - **XOA 1 bundles open:** integer cell IDs (from 1; −1 none) in the cells, transcripts and
+     boundaries; the count matrix's earlier Zarr layout (by feature, its cells numbered by
+     `number_cells`); Parquet files whose footer's row count disagrees with their row groups (as
+     fastparquet 1.0 wrote them; the row groups read); `transcripts_per_cell` written as a
+     decimal. XOA 1.0 is checked against the fixture's bundle.
+   - **The image** (`internal/slide`): an OME-TIFF added to a dataset (RGB H&E, or IF of one or more
+     channels, 8 or 16 bits), its levels from its SubIFDs, its tiles deflate (with or without a
+     predictor), LZW, JPEG (`internal/tiff`'s new codec: shared tables; YCbCr or RGB; chroma
+     interpolated by the triangle filter, as libjpeg-turbo does) or JPEG 2000; read where it lies
+     and recorded as an artifact of kind `image` (`api_images.go`) with the file and its alignment
+     in place (`location: "place"`) by their SHA-256; each IF channel's 0.1th–99.9th percentile
+     over its smallest level kept as the window it is first shown with. A flat image, or one in
+     strips, is refused, saying how to make a pyramid.
+   - **Its alignment** (`internal/register`): Xenium Explorer's matrix (3×3, row-major, the image's
+     pixels to the Xenium image's) or its keypoints (fitted as a similarity by least squares,
+     Umeyama 1991, with and without a reflection), found beside the image when 10x named it;
+     recorded as the transform from the image's pixels to µm. An image's own pixel size is recorded,
+     never used to place it.
+   - **The Viewer:** each image a layer over the stains, drawn under its transform at any rotation
+     or reflection (a model matrix per image; the tiles in view found through its inverse; the level
+     whose pixels match the screen's; coarser tiles standing in), with its opacity; H&E in its
+     colours, IF channels as the stains. Saved views keep the images' layers; the project tree lists
+     **Images**. Remote control: `add_image`; `show_tissue` takes `images`.
+   - **The fixture** (`validation/sources.json`'s `fixtures`): `validation/fetch.mjs` takes ten
+     members of the 9.9 GB archive by HTTP range (each CRC-32 checked) and downloads the two
+     images and their alignments; 2.85 GB; weekly in `data.yml`.
+   - Validation:
+     - **The reader against tifffile** (`validation/reference/images/levels.py`, maintainer-run):
+       every level of the H&E (7, 30,786 × 24,241 at full resolution) and of the IF's three
+       channels (8 levels each) read a tile at a time, the same pixels (SHA-256); on files written
+       for it (`internal/tiff`, `internal/slide`): JPEG within 3 of libjpeg-turbo's pixels, shared
+       tables, both refusals.
+     - **XOA 1.0.1:** the bundle's checks, no fatal finding; 167,780 cells and 42,638,083
+       transcripts.
+     - **The alignments:** the H&E's scale makes its pixels 0.3639 µm, its metadata 0.3638; the
+       IF's 0.7387, its metadata 0.2125 (the Xenium image's); keypoints made from a known
+       similarity, reflection and all, fitted back exactly.
+     - **Drawn:** in the Viewer, three of the H&E's pixels each where the matrix puts it, its colour
+       there (the viewer suite).
+   - Found by slice 1:
+     - **An image's metadata does not place it:** the fixture's IF image says 0.2125 µm a pixel,
+       the Xenium image's; its alignment makes it 0.7387. Only the alignment places an image.
+     - **10x's alignment maps the image to the Xenium image,** not the reverse: its scale is the
+       image's pixel size over the Xenium image's (1.7125 for the H&E: 0.3638 / 0.2125), and both of
+       the fixture's are mirrored or turned half a turn.
+     - **JPEG decoders disagree at stain boundaries:** Go's decoder repeats each chroma sample over
+       its 2 × 2 pixels, libjpeg-turbo (which tifffile, OpenSlide and most slide readers use)
+       interpolates them; an H&E's colours differed by up to 74 levels where hues change. SituCraft
+       interpolates as libjpeg-turbo does (within 3 of its pixels, rounding).
+     - **XOA 1.0's metrics are not all its data's:** its median transcripts per cell is recorded as
+       166, its transcripts give 164; 17,358 cells' counts differ from cells.parquet's. The checks
+       say so, as for any bundle.
+2. **Transforms and landmarks (R3 by landmarks, R5).**
+   - **A transform as an artifact,** in versions: its source and destination systems, the
+     landmarks, the fit (similarity or affine), each landmark's residual in µm and the
+     leave-one-out error, who made it and when, its parent version; the one in use chosen.
+   - **Landmarks:** the Xenium image and the post-Xenium image side by side, each pair placed and
+     moved, the fit and its residuals updated as they change; Xenium Explorer's keypoints read
+     and written, the matrix written in its convention.
+   - **Simulated post-Xenium images:** the simulator renders an H&E (haematoxylin in the nuclei,
+     eosin elsewhere, with stain variation) and an IF of the simulated tissue, moved by a known
+     affine and a smooth deformation: a truth for registration.
+   - Validation: known transforms recovered from exact landmarks; residuals and leave-one-out
+     errors by hand; the fixture's keypoints fitted as 10x's matrix.
+3. **Automatic registration (R3).**
+   - **Rigid and affine:** the H&E's haematoxylin by colour deconvolution (Ruifrok & Johnston
+     2001), or the IF's nuclear channel, against DAPI; each of the eight orientations (rotations by
+     quarter turns, with and without a reflection) and the translation found by phase correlation
+     (Kuglin & Hines 1975), rotation and scale by its log-polar form (Reddy & Chatterji 1996);
+     refined over a pyramid by maximizing normalized mutual information (Studholme, Hill & Hawkes
+     1999). The same transform for the same images on any computer.
+   - **Non-rigid, optional:** a smooth deformation (B-splines, Rueckert et al. 1999) regularized
+     against folding, from local matches, for sections that stretched or tore.
+   - Validation: known affine and non-rigid transforms recovered on the simulated images; on the
+     fixture, 10x's matrix reproduced within a stated distance in µm, for the H&E and the IF.
+4. **Alignment checked in µm (R4).**
+   - The Xenium image and the post-Xenium image as a checkerboard, in flicker and with DAPI's
+     edges over the image; each landmark's residual and the leave-one-out error in µm; where the
+     alignment is worst, mapped by local matches over the tissue; the nuclei's outlines over the
+     H&E.
+   - Validation: residuals and local error on the simulated images against their truth.
+5. **Regions (R6).**
+   - Rectangle, polygon, freehand and brush on the tissue, on any layer; regions named and classed,
+     their cells counted and chosen; kept in the project as versions.
+   - **GeoJSON as QuPath reads and writes it:** a region drawn on the H&E in QuPath imported
+     through the image's transform, and SituCraft's regions written for QuPath, in the H&E's pixels
+     or in µm.
+   - Validation: round trips with QuPath's own files; cells in a region against an independent
+     point-in-polygon count.
+6. **Review with provenance (R7, R8).**
+   - Accept, relabel, ambiguous, exclude, segmentation concern and comment, on cells and on
+     regions; each with the reviewer, the action, the previous and new value, the time, the
+     segmentation, the label set, the transform in use and the confidence. The label review of
+     wave 4 joins the same record; reviews exported.
+   - Validation: a review's record against the state it changed; exports read back.
+7. **Examples, documentation, release 0.5.0.**
+   - Worked examples: an H&E aligned by its matrix, by landmarks and automatically, compared;
+     regions drawn on the H&E and taken to QuPath; a pathologist's review.
+   - The project fixture `validation/projects/0.5.0-*.situcraft.json`; guide pages; CHANGELOG;
+     release.
 
 ## 0.6.0: niches and spatial statistics (wave 6)
 

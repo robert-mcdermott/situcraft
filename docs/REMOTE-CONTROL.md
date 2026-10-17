@@ -79,9 +79,9 @@ an optional argument or a field does not change it.
 
 - SituCraft listens on this computer only, and refuses requests that do not name it (DNS
   rebinding) and web pages of other sites.
-- Opening paths (`open_paths`), reading files (`import_segmentation`) and writing them (`export`,
-  `export_segmentation`) also need the header `X-SituCraft-Token` with the token from
-  `remote.json`: another user of a shared computer can reach the port, but not your files.
+- Opening paths (`open_paths`), reading files (`import_segmentation`, `add_image`) and writing
+  them (`export`, `export_segmentation`) also need the header `X-SituCraft-Token` with the token
+  from `remote.json`: another user of a shared computer can reach the port, but not your files.
 - A file is written only at an absolute path in a folder that exists, never over an existing file
   unless `overwrite` is true, and through a temporary file renamed into place. An export's folder
   is written under a temporary name beside it and renamed into place; an existing folder is
@@ -117,7 +117,8 @@ case, then the one name that starts with or contains what was given. An error li
 | --- | --- | --- |
 | `set_mode` | `mode` | Shows a view: `start`, `data`, `viewer`, `qc`, `segmentation`, `compare`, `celltypes`, `spatial`, `cohort`, `reports`, `jobs` |
 | `focus` | `kind` (`dataset`, `filter`, `view`, `local`), `name` | Shows an item in the inspector (a saved view opens); no name clears the focus |
-| `show_tissue` | `dataset`, `center` ([x, y] µm), `um_per_pixel` or `width_um` or `whole`, `genes`, `all_transcripts`, `transcripts`, `min_quality`, `point_size`, `channels` ({stain: {visible, color, window, gamma}}), `segmentation` (a segmentation's name or artifact ID, `instrument`, `default`), `outlines`, `nuclei`, `fill` (`transcripts`, `total`, `area`, `nucleusArea`, `method` for the instrument's; `limitations`, `certainty`, `probability` for a refinement's; `clusters` (the latest clustering of the segmentation drawn) or `clusters:<id>`; `labels` (the latest label set, its first level), `labels:<level>` or `labels:<id>:<level>`; `none`), `opacity`, `color_by` (`gene`, `probability`), `cell` (an ID in the segmentation shown) | Shows a dataset in the Viewer as asked, everything not given as it is; answers what it shows and what the dataset lacks |
+| `show_tissue` | `dataset`, `center` ([x, y] µm), `um_per_pixel` or `width_um` or `whole`, `genes`, `all_transcripts`, `transcripts`, `min_quality`, `point_size`, `channels` ({stain: {visible, color, window, gamma}}), `segmentation` (a segmentation's name or artifact ID, `instrument`, `default`), `outlines`, `nuclei`, `fill` (`transcripts`, `total`, `area`, `nucleusArea`, `method` for the instrument's; `limitations`, `certainty`, `probability` for a refinement's; `clusters` (the latest clustering of the segmentation drawn) or `clusters:<id>`; `labels` (the latest label set, its first level), `labels:<level>` or `labels:<id>:<level>`; `none`), `opacity`, `color_by` (`gene`, `probability`), `cell` (an ID in the segmentation shown), `images` (post-Xenium images by name or artifact ID: {visible, opacity, channels: {by name: {visible, color, window, gamma}}}) | Shows a dataset in the Viewer as asked, everything not given as it is; answers what it shows and what the dataset lacks |
+| `add_image` | `dataset`, `path`, `alignment` (found beside the image if not given), `name` | Adds a post-Xenium H&E or immunofluorescence image (a pyramidal, tiled OME-TIFF), read where it lies, placed by its alignment (Xenium Explorer's transformation matrix or keypoints); needs the token (it reads files). Answers what the image is and how its alignment places it |
 | `select_cell` | `cell` (ID in the segmentation shown, or row as `#123`), `dataset`, `center` | Selects a cell and answers its detail: position, areas, transcripts by gene, and the segmentation method or, for a segmentation other than the instrument's, the instrument's cell it came from and what its method flags |
 
 ### Saved views

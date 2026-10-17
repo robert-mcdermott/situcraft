@@ -96,6 +96,8 @@ type app struct {
 	control *remoteHub
 	// refineInputs are the last bundle's inputs read for a refinement's preflight.
 	refineInputs refineInputs
+	// images are the post-Xenium images the page draws, kept open (api_images.go).
+	images openImages
 }
 
 func init() {
@@ -545,6 +547,7 @@ func (a *app) registerAPI(mux *http.ServeMux) {
 	a.registerExpansion(mux)
 	a.registerRefine(mux)
 	a.registerImports(mux)
+	a.registerImages(mux)
 	a.registerComparisons(mux)
 	a.registerClusterings(mux)
 	a.registerMaps(mux)

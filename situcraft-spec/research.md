@@ -259,6 +259,60 @@ neither constant exactly (on the Lung bundle's tiles, 1.03% of samples differ by
 standard's constant, about 1.3% with 2.5.4's), so the tests require the bit-for-bit match only
 from OpenJPEG 2.5.4.
 
+### 1.7 Xenium Onboard Analysis 1.0 bundles (verified, wave 5, slice 1)
+
+The pathology fixture's bundle (§7) was written by XOA 1.0.1 (`analysis_sw_version`
+"Xenium-1.0.1"). What differs from XOA 2.0, each now read:
+- **Cells are numbered,** not named: `cell_id` is INT32 in `cells.parquet` and both boundary
+  tables (from 1), and in `transcripts.parquet` (−1 for a transcript in no cell). A number is still
+  an identity: SituCraft reads it as its decimal text. The check that IDs have XOA 1.3's form says
+  so (a note).
+- **The count matrix** (`cell_feature_matrix.zarr.zip`) keeps `cell_features/data`, `indices` and
+  `indptr` by feature, as later versions do, but no `cell_id` array: `number_cells` in the group's
+  attributes, its cells in `cells.parquet`'s order, numbered from 1. The checks of the matrix
+  against the cells (counts, order) hold.
+- **Parquet footers that lie:** the files were written by fastparquet 1.0.0, whose footer gives
+  1,000,000 rows (the first row group's) for files of 42,638,083 (`transcripts.parquet`, 43 row
+  groups) and 2,181,086 (`cell_boundaries.parquet`). pyarrow 26 reads the same row groups.
+  SituCraft trusts the row groups and keeps the footer's figure.
+- **`transcripts_per_cell` is a decimal** (166.0) in `experiment.xenium`.
+- **Its metrics are not all its data's:** 4 of the 9 recomputable metrics agree; the median
+  transcripts per cell is recorded as 166, the transcripts (quality 20 or more) give 164; 17,358
+  cells' counts differ from `cells.parquet`'s, and 9,148 cells' totals are not the sum of their
+  parts. The checks say so as warnings, as for any bundle; nothing is fatal.
+- Not taken for the fixture: `morphology.ome.tif` (the z-stack, 5.2 GB), `morphology_mip.ome.tif`,
+  the CSV copies, `cells.zarr.zip` and `transcripts.zarr.zip` (Xenium Explorer's). Without the
+  cell masks, the instrument's segmentation is drawn from its polygons.
+
+### 1.8 Post-Xenium images (verified, wave 5, slice 1)
+
+Xenium Explorer opens a post-Xenium image as a pyramidal, tiled OME-TIFF (10x Genomics, Xenium
+Explorer: "Image alignment" and "Image file conversion"), and so does SituCraft (`internal/slide`):
+its full-resolution image directory and its reduced levels in SubIFDs, read a tile at a time where
+it lies.
+
+| Image (the fixture) | Written by | Pixels | Levels | Tiles |
+| --- | --- | --- | --- | --- |
+| H&E, `…_he_image.ome.tif` (1.43 GB) | Bio-Formats 6.7.0 (QuPath's export), big-endian classic TIFF | 30,786 × 24,241 RGB, 8 bits, stored together; 0.363788 µm in its OME-XML | 7 (to 481 × 378) | 1024², deflate, no predictor |
+| IF, `…_if_image.ome.tif` (64 MB) | tifffile 2023.7.4 | 14,239 × 9,777, three channels (CD20, HER2, DAPI) of 8 bits, a directory each; 0.2125 µm in its OME-XML | 8 (to 111 × 76) | 1024², JPEG 2000 |
+
+Every level of both, read through SituCraft's tiles, is the pixels tifffile 2026.10.15 with
+imagecodecs 2026.10.10 reads (SHA-256 of each level of each channel;
+`validation/reference/images/`). A deflate tile of the H&E (3 MB) decodes in about 25 ms; the
+page draws tiles as they arrive.
+
+**JPEG tiles** (TIFF Technical Note 2) are decoded by Go's `image/jpeg`, with the tables an image
+keeps in its JPEGTables tag put before an abbreviated stream. Go's decoder repeats each chroma
+sample over the pixels it covers; libjpeg-turbo, which tifffile, OpenSlide and most slide readers
+decode with, interpolates them by default (its "fancy upsampling": weights 3 and 1 between
+neighbouring samples, in each direction subsampled, rounding with alternating offsets). On a 4:2:0
+H&E-like image the two differed by up to 74 levels where hues change. SituCraft interpolates
+likewise: within 3 levels of libjpeg-turbo's pixels on tifffile's JPEG files, 99% within 1 (the
+transform's and the colour conversion's rounding).
+
+**Flat images are refused** (no reduced levels and larger than 4,096 pixels a side), as are images
+stored in strips: Xenium Explorer requires the same, and 10x's conversion guide makes one.
+
 ## 2. Coordinates and units
 
 - Transcript and polygon coordinates are in **microns**. Image pixels are related to them by
@@ -267,9 +321,30 @@ from OpenJPEG 2.5.4.
 - Coordinate systems are named and explicit in SituCraft (`global` in µm; each image's pixel
   system; each registered image's system). SituCraft never infers pixels versus microns from
   values.
-- Post-Xenium images come with a 3×3 alignment matrix (CSV) mapping image pixels to Xenium pixels,
-  per 10x's documentation of the H&E alignment file and Xenium Ranger's image inputs (to verify
-  exact orientation conventions on a real file in wave 5).
+- Post-Xenium images come with a 3×3 alignment matrix (CSV) mapping image pixels to Xenium pixels
+  (§2.1).
+
+### 2.1 Post-Xenium alignment (verified, wave 5, slice 1)
+
+Xenium Explorer saves an image's alignment as a transformation matrix (`<image>_imagealignment.csv`:
+3×3, row-major, its last row 0, 0, 1; "the transformation value units are in pixels") or as
+keypoints (`<image>_keypoints.csv`: `fixedX`, `fixedY` on the DAPI image, `alignmentX`,
+`alignmentY` on the image), and fits keypoints by least squares as a similarity (translation, one
+scale, rotation, reflection; after Horn 1987, in two dimensions). SituCraft reads both
+(`internal/register`); keypoints are fitted in closed form (Umeyama 1991), with and without a
+reflection, the better kept, and each keypoint's residual recorded.
+
+**The matrix maps the image's pixels to the Xenium image's**, verified on the fixture: its scale is
+the image's pixel size over the Xenium image's (H&E: 1.71252 against 0.363788 / 0.2125 = 1.71194;
+a step of one H&E pixel is 0.3639 µm), and the inverse puts the centre of the Xenium image on the
+H&E at (16,342, 14,283) of 30,786 × 24,241. Drawn so, the H&E's structures lie on the DAPI image's.
+Both of the fixture's alignments change orientation: the H&E's mirrors top to bottom (turned 0.3°),
+the IF's turns −179.6°.
+
+**An image's own pixel size does not place it:** the fixture's IF image says 0.2125 µm, the Xenium
+image's; its alignment makes its pixels 0.7387 µm (scale 3.476). SituCraft places an image by its
+alignment alone, then in µm by the dataset's pixel size; the metadata's figure is kept, and the
+artifact notes when the two differ by more than 5%.
 
 ## 3. Segmentation
 
@@ -2212,7 +2287,7 @@ apart (15) parallel to twelve digits, the 50 components' subspace the same (over
 | Xenium V1 human Breast 2-FOV (XOA 2.0, multimodal segmentation) | 10x Genomics example data: `cf.10xgenomics.com/samples/xenium/2.0.0/Xenium_V1_human_Breast_2fov/Xenium_V1_human_Breast_2fov_outs.zip` (md5 4632914eca973a1d532231ea646e10cc) | 379 MB | CC BY 4.0 | Primary development data |
 | Xenium V1 human Lung 2-FOV (XOA 2.0, nucleus expansion 5 µm) | `cf.10xgenomics.com/samples/xenium/2.0.0/Xenium_V1_human_Lung_2fov/Xenium_V1_human_Lung_2fov_outs.zip` (md5 bf9c5e6762681b81eab0a19d3d590381) | 278 MB | CC BY 4.0 | CI; nucleus-expansion validation |
 | Simulated tissues | `situcraft simulate` (seeded) | generated | — | Ground truth; scale |
-| A bundle with post-Xenium H&E and alignment (≤ 3 GB) | chosen in wave 5 planning (candidate: 10x human lymph node preview data, CC BY 4.0 (to verify size and files)) | | | Registration and pathology |
+| Xenium FFPE Human Breast Cancer, replicate 1 (XOA 1.0.1; Janesick et al. 2023), with its post-Xenium H&E and IF images | 10x Genomics: ten members of `cf.10xgenomics.com/samples/xenium/1.0.1/Xenium_FFPE_Human_Breast_Cancer_Rep1/Xenium_FFPE_Human_Breast_Cancer_Rep1_outs.zip` (9.9 GB) taken by range, and `…_he_image.ome.tif`, `…_if_image.ome.tif` and their `…_imagealignment.csv` | 2.85 GB | CC BY 4.0 | The pathology fixture (wave 5): XOA 1.0, post-Xenium images, alignment, registration |
 
 Notes:
 - The two 2-FOV bundles are also SituCraft's example datasets (wave 1, slice 7), downloaded from
@@ -2244,6 +2319,11 @@ Notes:
   1997;24:137–154.
 - Bookstein FL. Principal warps: thin-plate splines and the decomposition of deformations.
   *IEEE TPAMI* 1989;11:567–585.
+- Horn BKP. Closed-form solution of absolute orientation using unit quaternions. *J Opt Soc Am A*
+  1987;4:629–642 (Xenium Explorer's keypoint fit).
+- Janesick A, Shelansky R, Gottscho AD, et al. High resolution mapping of the tumor
+  microenvironment using integrated single-cell, spatial and in situ analysis. *Nat Commun*
+  2023;14:8353. doi:10.1038/s41467-023-43458-x (the pathology fixture).
 - Umeyama S. Least-squares estimation of transformation parameters between two point patterns.
   *IEEE TPAMI* 1991;13:376–380.
 - Douglas DH, Peucker TK. Algorithms for the reduction of the number of points required to
@@ -2353,7 +2433,9 @@ Notes:
   bundle fills them: whether "non-simple polygon" means what SituCraft's check (and GEOS) means.
 - Control-codeword prefixes across XOA versions (1.x, 2.x, 3.x, Prime 5K).
 - XOA 3.x and 4.x bundle differences (file names, Zarr versions, new files).
-- The H&E alignment matrix orientation on a real file.
+- Xenium Explorer's keypoints file on a real file (the fixture's keypoints are not published): its
+  coordinates' units (read as pixels, as the matrix's), and that its fit gives the matrix saved
+  beside it.
 - JPEG 2000 options of XOA versions other than 2.0 (the bundles in hand were written by OpenJPEG
   2.5.1; other versions may use other progressions or code-block styles, which the decoder reads
   but which have not been seen on real Xenium files).

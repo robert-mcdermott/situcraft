@@ -1,0 +1,157 @@
+{
+ "tifffile": "2026.10.15",
+ "cases": [
+  {
+   "name": "he-deflate",
+   "levels": [
+    {
+     "shape": [
+      70,
+      90,
+      3
+     ],
+     "sha256": [
+      "44039b04650b1a50136c0e1baaf736e2773dfd6592222dcc5b6a17f75f0028d2"
+     ]
+    },
+    {
+     "shape": [
+      35,
+      45,
+      3
+     ],
+     "sha256": [
+      "361b0bf69de183e5b40fef683a34d38b5a0127aa713c5e33a2a33d3381f35937"
+     ]
+    },
+    {
+     "shape": [
+      18,
+      23,
+      3
+     ],
+     "sha256": [
+      "4e22c943818daa7577fe07ed00b22c769a637a539e1b33f060be2976e6159164"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "he-jpeg",
+   "levels": [
+    {
+     "shape": [
+      70,
+      90,
+      3
+     ],
+     "sha256": [
+      "c1207d222d9dbe88a0e23199d9f534a3830debe0c6258a8e61fc7fa4447e61a9"
+     ]
+    },
+    {
+     "shape": [
+      35,
+      45,
+      3
+     ],
+     "sha256": [
+      "0e634441109b48e9f538b225a2926b670cf332f819f96f5c406c06c67e92a434"
+     ]
+    },
+    {
+     "shape": [
+      18,
+      23,
+      3
+     ],
+     "sha256": [
+      "b1914b42d449200f30f0fbfd7341005688e64580bc1705711ad1cd96dbc3798e"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "if-u16-deflate",
+   "levels": [
+    {
+     "shape": [
+      3,
+      70,
+      90
+     ],
+     "sha256": [
+      "ea47caa4a8b0795fab3a98d8001bb86e3743578b1bfffcd11fa08dd86333abcc",
+      "a8e6f7b06f000568eed22fd82653bd746eea4a092a7ecf6557295cff1ce5252b",
+      "2d383be38cd752192d94ac7d4110db133b0fa07d405228d6b4226df104a68306"
+     ]
+    },
+    {
+     "shape": [
+      3,
+      35,
+      45
+     ],
+     "sha256": [
+      "4ff1f54ee042eba0bcbfc94c096bed1ca46cf74d3d605bcb91e6c005bd975c31",
+      "9b3e374c0f27f3733bbaafea0ac3fba3b0d4c5646aea97bec695de00208fc85d",
+      "92197a3326aa304308c20699ff1d4de48f8b7837cbeb4700faf7feb14c63ca0b"
+     ]
+    },
+    {
+     "shape": [
+      3,
+      18,
+      23
+     ],
+     "sha256": [
+      "8212094404ebcb6a6b049a9afd027f9685ffe5f940e27ec94833b1e28cdc11b5",
+      "f1f3678afd4fe753eaf47959e741e7584fce108d5e74522189023e068ecf7934",
+      "7ca4c571617bc85e84f8455cec12ab7145f4977e5568871da236e47a47793db3"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "if-u8-jp2k",
+   "levels": [
+    {
+     "shape": [
+      3,
+      70,
+      90
+     ],
+     "sha256": [
+      "36241d94215ed13569ab6fd02e56482209e7957e710a15eb8ed3711c946966d3",
+      "c5731e4c8b7d1021fa88c2b39af5ee832421b2ffb628e7977c90bda16de6e364",
+      "ecd3e4da818f5eb94e5d76da5995b3655ee7f7450a255b99374be93f8f8c1f99"
+     ]
+    },
+    {
+     "shape": [
+      3,
+      35,
+      45
+     ],
+     "sha256": [
+      "bac493afae1b6ea0dbc84bf9ce4bc3a372071e79fcc2e558fedc144e14e346a6",
+      "62680ae20b05bf0b9b014e39502ff83d898e94193a9107e9fda68e5ac91709aa",
+      "2d7209c3beea0429d70c73f6b1baaa5db450b0a521485636cbb51ccde043ca38"
+     ]
+    },
+    {
+     "shape": [
+      3,
+      18,
+      23
+     ],
+     "sha256": [
+      "358a1bb69053f1bade141dfb0d5a3ad1374a8b01170f26c2fc219b221aaf9cc9",
+      "ce22e15155c13e317c319ce7191ccca5d5bbe299be62eae424e4ca2a391bb1dd",
+      "95d0ab3635918049fb9bb87873ac1d4214d363ba63d147f6debacfd771339ce9"
+     ]
+    }
+   ]
+  }
+ ]
+}
