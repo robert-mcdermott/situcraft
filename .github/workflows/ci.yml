@@ -80,8 +80,11 @@ jobs:
           fi
       - name: go vet
         run: go vet ./...
+      # A package's tests are bounded by -timeout as a whole. Under the race detector, sharing the
+      # runner's cores with the other packages, the sampler's (internal/segment/refine) take 6 to
+      # 10 minutes, at go test's default; 30 leaves room without hiding a test that hangs.
       - name: go test
-        run: go test -race ./...
+        run: go test -race -timeout 30m ./...
       - name: Cross-compile
         env:
           CGO_ENABLED: '0'

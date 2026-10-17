@@ -598,7 +598,8 @@ Tests and CI follow MaveScape: **each commit is tested once**.
 - Documentation-only changes (Markdown, the spec, license, citation) do not run CI.
 
 CI jobs (all on fixed data):
-- **Go:** gofmt, vet, `go test -race ./...`, and the six-platform cross-compile.
+- **Go:** gofmt, vet, `go test -race -timeout 30m ./...` (a package's tests are bounded as a whole,
+  and the sampler's take up to 10 minutes on a CI runner), and the six-platform cross-compile.
 - **Web modules:** `node --check`, `node --test`.
 - **Validation:** on the Lung 2-FOV bundle, cached by its checksum, with recorded reference
   numbers.

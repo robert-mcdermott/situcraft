@@ -2338,6 +2338,10 @@ range: 2.8 GB in all. Its bundle is of XOA 1, which SituCraft opens from this wa
      - **A region's outline faded on cells filled in a like color,** and a class named by the user
        could be given gray, which reads as QuPath's Ignore*: outlines are drawn over a dark casing,
        and such classes are never gray.
+     - **CI's Go tests passed or failed with the runner:** a test running several jobs had one
+       deadline for them all (registration, its child and two checks: 99 s on a laptop under the
+       race detector, 330 s on a CI runner), and the sampler's tests reached go test's default 10
+       minutes there. Each job now has its own deadline, and CI allows 30 minutes.
 
 ## 0.6.0: niches and spatial statistics (wave 6)
 

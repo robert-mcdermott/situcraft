@@ -29,7 +29,6 @@ type refineFixture struct {
 	a       *app
 	handler http.Handler
 	folder  string
-	ctx     context.Context
 }
 
 func newRefineFixture(t *testing.T, register bool) *refineFixture {
@@ -59,9 +58,7 @@ func newRefineFixtureWith(t *testing.T, register bool, p simulate.Params) *refin
 	}
 	t.Cleanup(func() { a.jobs.Close() })
 	h, _ := a.handler()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	t.Cleanup(cancel)
-	f := &refineFixture{t: t, a: a, handler: protect(h, "127.0.0.1", defaultPort), folder: folder, ctx: ctx}
+	f := &refineFixture{t: t, a: a, handler: protect(h, "127.0.0.1", defaultPort), folder: folder}
 	if register {
 		var registering struct{ Job *jobs.Job }
 		json.NewDecoder(f.post("/api/local/0/segmentation", "").Body).Decode(&registering)
@@ -77,9 +74,26 @@ func (f *refineFixture) post(target, body string) *httptest.ResponseRecorder {
 	return request(f.t, f.handler, http.MethodPost, target, strings.NewReader(body), nil)
 }
 
+// jobDeadline bounds each job a test waits for, not the test: a test may run several, and each
+// takes some three times as long under the race detector on a shared CI runner as on a laptop.
+const jobDeadline = 10 * time.Minute
+
+// finish waits for a job to end, however it ends.
+func (f *refineFixture) finish(id string) jobs.Job {
+	f.t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), jobDeadline)
+	defer cancel()
+	j, err := f.a.jobs.Wait(ctx, id)
+	if err != nil {
+		f.t.Fatalf("job %s has not ended after %v: %v", id, jobDeadline, err)
+	}
+	return j
+}
+
+// wait waits for a job to complete.
 func (f *refineFixture) wait(id string) jobs.Job {
 	f.t.Helper()
-	j, _ := f.a.jobs.Wait(f.ctx, id)
+	j := f.finish(id)
 	if j.State != jobs.Complete {
 		f.t.Fatalf("job %s ended %s: %s", j.Kind, j.State, j.Error)
 	}
@@ -379,7 +393,7 @@ func TestRefineCommandMatchesTheApp(t *testing.T) {
 	d.Width++
 	segment.WriteDescription(other, *d)
 	json.NewDecoder(importFolder(other).Body).Decode(&started)
-	if j, _ := f.a.jobs.Wait(f.ctx, started.Job.ID); j.State != jobs.Failed || !strings.Contains(j.Error, "morphology image") {
+	if j := f.finish(started.Job.ID); j.State != jobs.Failed || !strings.Contains(j.Error, "morphology image") {
 		t.Errorf("another dataset's segmentation: %s, %s", j.State, j.Error)
 	}
 }

@@ -222,7 +222,7 @@ lists the settings, `--preflight` says what a run would need, and
 ## Development
 
 ```sh
-go test -race ./...                      # the Go host
+go test -race -timeout 30m ./...         # the Go host (the sampler's tests take minutes)
 node --test "web/lib/**/*.test.mjs"      # the browser modules
 node validation/run.mjs                  # checks against references (validation/README.md)
 node validation/run.mjs viewer           # the tissue viewer in headless Chrome against its data
