@@ -13,6 +13,7 @@ import { addView, captureView, viewCamera, viewLayers } from '../lib/views.js';
 import { TissueRenderer } from '../render/renderer.js';
 import { fitCamera, scaleBar, screenToWorld, visibleRect, worldToScreen } from '../lib/viewport.js';
 import { attachNavigation } from './navigation.js';
+import { mountRegions } from './regions-layer.js';
 import { readCells, joinSamples, nearestCell } from '../lib/viewer-data.js';
 import { mountViewerPanel, defaultLayers, cellFillColors } from './viewer-panel.js';
 import { placedImages } from '../lib/images.js';
@@ -155,6 +156,7 @@ export function mountViewer(app, container) {
     const stage = h('div.viewer-stage', canvas, h('div.viewer-tools', zoomIn, zoomOut, fit), minimap, legend, h('div.viewer-foot', scale, readout, status));
     const panelHost = h('aside.viewer-panel', { 'aria-label': 'Layers' });
     body.append(panelHost, stage);
+    let regions = null;
 
     const session = sessions.get(t.dataset.id);
     const layers = session?.layers ?? defaultLayers(desc);
@@ -168,13 +170,15 @@ export function mountViewer(app, container) {
       dispose() {
         observer.disconnect();
         navigation.dispose();
+        regions?.dispose();
         renderer.destroy();
         window.removeEventListener('keydown', onKey);
         if (window.situcraftViewer?.renderer === renderer) delete window.situcraftViewer;
       },
     };
 
-    // The layers panel, mounted again when a saved view replaces every setting.
+    // The layers panel, mounted again when a saved view replaces every setting; the regions drawn
+    // (ui/regions-layer.js), their section after it.
     let panel = null;
     // The dataset's segmentations, its default first; the one drawn (the instrument's when its
     // own cells are).
@@ -212,6 +216,7 @@ export function mountViewer(app, container) {
         updateLegend();
       } });
       state.panel = panel;
+      if (regions) panelHost.append(regions.section);
     }
     mountPanel(layers);
 
@@ -444,6 +449,9 @@ export function mountViewer(app, container) {
       },
     });
     const zoomBy = (factor, sx, sy) => navigation.zoomBy(factor, sx, sy);
+    regions = mountRegions({ app, dataset: t.dataset, canvas, renderer, zoomBy, drawnCells: () => renderer.cells, ownCells: cells, images: () => state.imageEntries ?? [], pixelSize: desc.grid.pixelSize });
+    state.regions = regions;
+    panelHost.append(regions.section);
 
     function onKey(event) {
       if (document.activeElement !== canvas) return;
@@ -566,6 +574,7 @@ export function mountViewer(app, container) {
       const mode = plan.transcripts ? (plan.transcripts.mode === 'points' ? 'transcripts as points' : `transcript density (level ${plan.transcripts.level})`) : '';
       status.textContent = [`level ${plan.level}`, mode, pending ? `loading ${pending}` : ''].filter(Boolean).join(' · ');
       drawMinimapView();
+      regions?.afterFrame();
     }
 
     // The minimap: the coarsest level of the visible channels, and the view's rectangle.
@@ -795,6 +804,8 @@ export function mountViewer(app, container) {
         return view;
       },
       loadedPoints: (rect) => renderer.loadedPoints(rect),
+      // The regions drawn on the tissue (ui/regions-layer.js).
+      regions: regions.hook,
       select: (row) => selectRow(row),
       worldToScreen: (x, y) => worldToScreen(renderer.camera, ...renderer.size(), x, y),
       // Pans from one camera to another over `ms`, drawing every frame; reports the frame rate.
@@ -853,7 +864,10 @@ export function mountViewer(app, container) {
       }
       // Cells chosen in the QC view (a brushed plot) show here too.
       if (topics.has('selection') && current) current.showChosen();
-      if (topics.has('project') && current) current.refreshChoices();
+      if (topics.has('project') && current) {
+        current.refreshChoices();
+        current.regions?.refresh();
+      }
       // A saved view of the dataset shown.
       if (current && (topics.has('view-pending') || topics.has('focus'))) current.takePending();
     },

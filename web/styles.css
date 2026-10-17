@@ -926,6 +926,31 @@ td div.studio-problem { padding: 2px 6px; margin-top: 4px; font-size: 11.5px; }
 .viewer-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; outline: none; }
 .viewer-canvas:active { cursor: grabbing; }
 .viewer-canvas:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
+.viewer-regions { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: hidden; }
+.viewer-regions .catcher { display: none; }
+.viewer-regions.drawing { pointer-events: all; cursor: crosshair; touch-action: none; }
+.viewer-regions.drawing .catcher { display: inline; }
+.viewer-regions.drawing.panning { cursor: grab; }
+.viewer-regions path, .viewer-regions text { pointer-events: none; }
+.viewer-regions .region-label { font: 600 12px var(--font); paint-order: stroke; stroke: rgba(0, 0, 0, 0.75); stroke-width: 3px; }
+.viewer-regions .sketch-halo { fill: none; stroke: rgba(0, 0, 0, 0.7); stroke-width: 4; }
+.viewer-regions .sketch-line { fill: none; stroke: #ffd400; stroke-width: 2; stroke-dasharray: 6 3; }
+.viewer-regions .sketch-point { fill: #ffd400; stroke: #000; stroke-width: 1.5; }
+.viewer-regions .sketch-brush { fill: none; stroke: rgba(255, 212, 0, 0.4); stroke-linecap: round; stroke-linejoin: round; }
+.viewer-regions .sketch-brush.erase { stroke: rgba(255, 60, 60, 0.45); }
+.viewer-region-tools { flex-wrap: wrap; }
+.viewer-region-list { display: flex; flex-direction: column; gap: 2px; margin: 8px 0; }
+.viewer-region > .row { display: flex; gap: 8px; align-items: center; padding: 4px 6px; border-radius: 6px; cursor: pointer; }
+.viewer-region > .row:hover { background: var(--panel-2); }
+.viewer-region.chosen > .row { background: var(--panel-2); box-shadow: inset 2px 0 0 var(--accent); }
+.viewer-region .dot { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+.viewer-region .name { display: flex; flex-direction: column; font-size: 12.5px; min-width: 0; }
+.viewer-region .name .muted { font-size: 11.5px; }
+.viewer-region-detail { padding: 2px 6px 8px 24px; font-size: 12px; }
+.viewer-region-detail p { margin: 4px 0; }
+.viewer-region-detail .btn-row { flex-wrap: wrap; }
+.viewer-region-versions { margin: 4px 0; padding-left: 18px; font-size: 11.5px; }
+.viewer-region-files summary { font-size: 12px; cursor: pointer; margin: 6px 0; }
 .viewer-tools { position: absolute; top: 10px; left: 10px; display: flex; flex-direction: column; gap: 4px; }
 .viewer-tools .icon-button, .viewer-tools .icon-button:hover { background: rgba(18, 22, 32, 0.78); color: #f2f4f8; border: 1px solid rgba(255, 255, 255, 0.16); }
 .viewer-tools .icon-button:hover { background: rgba(40, 46, 64, 0.9); }

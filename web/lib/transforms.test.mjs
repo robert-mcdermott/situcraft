@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addCheck, checkRecord, checksOf, addTransform, deformationAt, describeTransform, fitLandmarks, placePoint, transformInUse, transformRecord, transformShape, transformsOf, useTransform } from './transforms.js';
+import { addCheck, checkRecord, checksOf, addTransform, deformationAt, describeTransform, fitLandmarks, placePoint, unplacePoint, transformInUse, transformRecord, transformShape, transformsOf, useTransform } from './transforms.js';
 
 // The checksum of 300 fits of each model internal/register/fit_test.go computes (FNV-1a of every
 // coefficient's, residual's and leave-one-out error's bits).
@@ -120,6 +120,13 @@ test('a deformation evaluated as the program evaluates it', () => {
   assert.deepEqual(placePoint({ transform: [[2, 0, 1], [0, 2, 0]] }, 3, 4), [7, 8]);
   const [px, py] = placePoint({ transform: [[1, 0, 0], [0, 1, 0]], deformation: b }, 10, 0);
   assert.ok(Math.abs(px - 10 - 2 * 16 / 36) < 1e-12 && Math.abs(py + 16 / 36) < 1e-12);
+  // And back: the image's point a version places at a point of the tissue.
+  const desc = { transform: [[0.5, 0.1, 3], [-0.1, 0.5, 7]], deformation: b };
+  for (const [u, v] of [[10, 0], [-4, 12], [30, 25]]) {
+    const [x, y] = placePoint(desc, u, v);
+    const [bu, bv] = unplacePoint(desc, x, y);
+    assert.ok(Math.abs(bu - u) < 1e-6 && Math.abs(bv - v) < 1e-6, `${u}, ${v}: back at ${bu}, ${bv}`);
+  }
 });
 
 test('a version\'s checks recorded and described', () => {

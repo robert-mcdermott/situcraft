@@ -465,6 +465,25 @@ each frame. The page fits landmarks as `internal/register` does, bit for bit (th
 in the same order, `fitFingerprint` in both), so the fit shown is the one recorded; saving posts
 the landmarks, and the program fits and records them again.
 
+### Regions
+
+Regions are kept in the project document (`regions`, `web/lib/regions.js`), not as artifacts: they
+are the user's drawings, small, and changed often, each change a version appended (as decisions
+are). A region's shape is a multipolygon in µm, the coordinates every layer is placed in, so that a
+region drawn over a post-Xenium image is on the tissue whichever version later places the image;
+the image's pixels are a coordinate system only for exchange (GeoJSON for QuPath), mapped through
+the version in use (`placePoint`, and `unplacePoint` back through the deformation by a fixed
+point). The Viewer draws regions as an SVG layer over its canvas (`web/ui/regions-layer.js`),
+placed from the renderer's camera after each frame; while a tool is chosen the layer takes the
+pointer, the wheel and the space bar still navigating. The brush works on a raster: the region
+and the stroke sampled on a grid of an eighth of the brush's radius as signed distances, painted
+as their maximum and erased as the minimum with the stroke's negative, the outline traced back by
+marching squares and simplified, so that holes and separate parts come out without polygon
+clipping. The grid keeps samples only in tiles near the region's edges and under the stroke, so a
+large region is painted at the brush's own step, and away from the stroke the region's own points
+are put back: a stroke changes a region only near it. Cells are counted in a region by their centroids, in the page, with the cells table
+drawn. The program only reads a GeoJSON file named by a path, for remote control (`api_regions.go`).
+
 ### Exports
 
 `internal/export` writes a segmentation from SituCraft's segmentation files and the dataset's

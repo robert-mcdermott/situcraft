@@ -99,6 +99,20 @@ export async function launch({ width = 1600, height = 1000, scale = 1, args = []
         await send('Input.dispatchMouseEvent', { type, x, y, button: type === 'mouseMoved' ? 'none' : 'left', buttons: type === 'mousePressed' ? 1 : 0, clickCount: type === 'mouseMoved' ? 0 : 1 });
       }
     },
+    // A drag of the left button through points [[x, y], …] in CSS pixels, a move at each.
+    async drag(points) {
+      const [x0, y0] = points[0];
+      await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: x0, y: y0, button: 'none', buttons: 0 });
+      await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: x0, y: y0, button: 'left', buttons: 1, clickCount: 1 });
+      for (const [x, y] of points.slice(1)) await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, button: 'left', buttons: 1 });
+      const [x1, y1] = points.at(-1);
+      await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: x1, y: y1, button: 'left', buttons: 0, clickCount: 1 });
+    },
+    // A key pressed and released: its key and code ('Enter', 'Escape', 'Backspace').
+    async key(key) {
+      const vk = { Enter: 13, Escape: 27, Backspace: 8 }[key] ?? 0;
+      for (const type of ['rawKeyDown', 'keyUp']) await send('Input.dispatchKeyEvent', { type, key, code: key, windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk });
+    },
     async theme(dark) {
       await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: dark ? 'dark' : 'light' }] });
     },

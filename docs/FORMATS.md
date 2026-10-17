@@ -146,12 +146,38 @@ transform), and for a version made from landmarks or keypoints its keypoints (`<
 their fixed positions in the Xenium image's pixels). Each number is written as short as reads back
 the same; written and read again, a file gives the same transform.
 
+## Regions SituCraft reads and writes (GeoJSON)
+
+Regions drawn on a dataset's tissue (from 0.5.0) are written, and regions are read, as GeoJSON
+(RFC 7946's objects) laid out as QuPath writes and reads its annotations (Bankhead et al. 2017), so
+that a region drawn in one opens in the other: the Viewer's **Regions** (GeoJSON, as QuPath reads
+and writes it), or the `export` (`what: "regions"`) and `import_regions` remote actions.
+
+| What | Written | Read |
+| --- | --- | --- |
+| The document | A `FeatureCollection` | A `FeatureCollection`, an array of Features (as QuPath 0.2 writes them) or one `Feature` |
+| Each region | A `Feature`: its `id` (a UUID-like id, the same for the same version of the same region), a `Polygon` (one part) or `MultiPolygon` (several), each ring closed, holes after their outer ring | `Polygon`, `MultiPolygon`, and the polygons of a `GeometryCollection`; points and lines are left out (they have no area), as are objects whose `objectType` (or `object_type`, or a QuPath 0.2 `id` of `PathDetectionObject` or `PathCellObject`) is not `annotation`. What is left out is counted and reported |
+| Its properties | `objectType: "annotation"`, `name`, `classification` (`name` and `color`, `[r, g, b]`), `isLocked: false`, and `metadata` (`SituCraft region`: its id; `SituCraft version`: its version; `SituCraft by`: who made it) | `name`; `classification.name` (or QuPath's `names`, joined), its `color` or a packed `colorRGB` (QuPath 0.2 and 0.3); an unclassified annotation becomes a `Region*` |
+| Its coordinates | Chosen when written | Chosen when read |
+
+The coordinates are one of: **µm** (the dataset's coordinates); **the Xenium image's pixels**
+(its full resolution, µm over the dataset's pixel size), as QuPath opens `morphology_focus`; or
+**a post-Xenium image's pixels** (its full resolution, (0, 0) the corner of its first pixel), as
+QuPath opens that image, through the version of its alignment in use: written, each point is taken
+back through any deformation and the version's transform; read, each point is placed by them. When
+the version deforms the image, each edge is first divided every 10 µm (or its pixels' worth), so
+that its points follow the deformation. Coordinates are written to 0.001.
+
+QuPath's own classes keep QuPath's colours: Tumor (200, 0, 0), Stroma (150, 200, 150), Immune
+cells (160, 90, 160), Necrosis (50, 50, 50), Other (255, 200, 0), Region\* (0, 0, 180) and
+Ignore\* (180, 180, 180); another class is given a colour from its name, and a region read keeps
+the colour its file gives.
+
 ## Other files
 
 SituCraft recognizes OME-TIFF images, Parquet and CSV tables, GeoJSON polygons and Zarr stores
-(on the command line or by **Open a bundle**) and lists them under **On this computer**. Reading
-more of them for analysis arrives with later releases: annotations exchanged with QuPath (see the
-[roadmap](../situcraft-spec/roadmap.md)).
+(on the command line or by **Open a bundle**) and lists them under **On this computer**. A GeoJSON
+file of regions is read into a dataset from the Viewer's **Regions** (above).
 
 ## What SituCraft writes
 
@@ -168,6 +194,7 @@ A project is one JSON document, saved automatically in the library (`<data dir>/
 | `decisions` | Recorded choices, with their reasons (from 0.2.0) |
 | `views` | Saved views (below) |
 | `exports` | The exports written from its segmentations (from 0.2.0; absent until the first) |
+| `regions` | The regions drawn on its datasets, each with its versions (from 0.5.0; absent until the first; below) |
 | `history` | Every change, with its time |
 
 A filter's checksum is the SHA-256 of the cell count (32-bit unsigned, little-endian) followed by
@@ -203,6 +230,15 @@ its summary and findings.
 the SituCraft that wrote it, the number and size of its files, its totals and content fingerprints
 (below), what it found, and the Xenium Ranger command when it prepared one. The export's own
 `situcraft-export.json` lists every file by its SHA-256.
+
+`regions` records each region drawn on a dataset (from 0.5.0): `{id, dataset, versions}`, its
+versions appended and never removed, the latest the region. A version is `{name, cls, color,
+geometry, tool, layer, by, time, note}`, and `removed: true` when it removed the region (a later
+version may return it). `geometry` is a multipolygon in µm (the dataset's coordinates): a list of
+polygons, each a list of rings (its outer ring, then its holes), each ring a list of `[x, y]` that
+does not repeat its first point. `tool` is how it was made (`rectangle`, `polygon`, `freehand`,
+`brush` or `imported`), `layer` what it was drawn over. No two of a dataset's regions (those not
+removed) have the same name.
 
 `decisions` records each decision about a dataset's segmentations, appended and never removed:
 `{kind, dataset, artifact, rationale, by, time, comparison}`, the kind `promote-segmentation` (its

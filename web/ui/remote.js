@@ -14,6 +14,7 @@ import { CLASS_INFO, RANKS, cellNames, warnings } from '../lib/review.js';
 import { workedExamples } from '../lib/tours.js';
 import { describeImage, describePlacement, imagesOf } from '../lib/images.js';
 import { checksOf, describeCheck, describeTransform, transformInUse, transformsOf, useTransform } from '../lib/transforms.js';
+import { addRegion, area, brushGeometry, editRegion, mapGeometry, nextRegionName, polygonOf, rectangle, regionsOf } from '../lib/regions.js';
 import { defaultImageLayer } from '../lib/overlays.js';
 import { parseProject, rename, serializeProject } from '../lib/project.js';
 import { removeView, sameView, viewLink } from '../lib/views.js';
@@ -691,6 +692,126 @@ export function installRemote(app) {
       } catch (error) {
         throw new ActionError(error.message);
       }
+    },
+
+    async draw_region(args) {
+      const dataset = resolveDataset(args.dataset);
+      const given = ['rectangle', 'polygon', 'brush'].filter((k) => args[k] !== undefined && args[k] !== null);
+      if (given.length !== 1) throw new ActionError('Give one shape: rectangle, polygon or brush.');
+      const v = await openIn('viewer', dataset);
+      const m = await v.regions.mapping(coordinatesRef(dataset, args.coordinates));
+      let geometry;
+      if (given[0] === 'rectangle') {
+        const r = args.rectangle;
+        if (!Array.isArray(r) || r.length !== 4) throw new ActionError('rectangle is [x0, y0, x1, y1].');
+        const [x0, y0, x1, y1] = r.map((x) => finite(x, 'the rectangle\'s corners'));
+        if (x0 === x1 || y0 === y1) throw new ActionError('The rectangle has no area.');
+        geometry = mapGeometry(rectangle(x0, y0, x1, y1), m.from, m.fromStep ?? 0);
+      } else if (given[0] === 'polygon') {
+        const pts = pointsArg(args.polygon, 'polygon');
+        if (pts.length < 3) throw new ActionError('A polygon has three corners or more.');
+        geometry = mapGeometry(polygonOf(pts), m.from, m.fromStep ?? 0);
+      } else {
+        const b = brushArg(args.brush);
+        geometry = brushGeometry(null, b.points.map(([x, y]) => m.from(x, y)), b.radius);
+      }
+      const cls = args.class ? String(args.class) : 'Region*';
+      const name = args.name ? String(args.name) : nextRegionName(project(), dataset.id, cls);
+      let next;
+      try {
+        next = addRegion(project(), { dataset: dataset.id, name, cls, geometry, tool: given[0], by: args.by ? String(args.by) : author, note: args.note ? String(args.note) : '' });
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      app.store.commit(next, `Draw ${name}`);
+      await frames();
+      return regionAnswer(dataset, v, next.regions.at(-1).id, 'Drew');
+    },
+
+    async edit_region(args) {
+      const dataset = resolveDataset(args.dataset);
+      const v = await openIn('viewer', dataset);
+      const r = regionRef(dataset, args.region);
+      const patch = {};
+      let tool;
+      let note = args.note ? String(args.note) : '';
+      if (args.name !== undefined) {
+        patch.name = String(args.name).trim();
+        if (!patch.name) throw new ActionError('A region needs a name.');
+      }
+      if (args.class !== undefined) patch.cls = String(args.class);
+      if (args.restore !== undefined) {
+        const k = finite(args.restore, 'restore');
+        const ver = r.versions[k - 1];
+        if (!Number.isInteger(k) || !ver || ver.removed) throw new ActionError(`${r.name} has versions 1 to ${r.versions.length}; restore one that was not a removal.`);
+        Object.assign(patch, { name: patch.name ?? ver.name, cls: patch.cls ?? ver.cls, color: ver.color, geometry: ver.geometry });
+        tool = ver.tool;
+        note ||= `Restored version ${k}`;
+      }
+      if (args.brush !== undefined && args.brush !== null) {
+        const b = brushArg(args.brush);
+        const m = await v.regions.mapping(coordinatesRef(dataset, args.coordinates));
+        patch.geometry = brushGeometry(patch.geometry ?? r.geometry, b.points.map(([x, y]) => m.from(x, y)), b.radius, b.erase);
+        tool = 'brush';
+        note ||= b.erase ? 'Erased with the brush' : 'Painted with the brush';
+      }
+      if (args.remove !== undefined && args.remove !== null) patch.removed = Boolean(args.remove);
+      if (!Object.keys(patch).length) throw new ActionError('Nothing to change: give name, class, brush, restore or remove.');
+      if (r.removed && patch.removed !== false) throw new ActionError(`${r.name} is removed: remove: false returns it.`);
+      try {
+        app.store.commit(editRegion(project(), r.id, patch, { by: args.by ? String(args.by) : author, note, tool }), `Change ${r.name}`);
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      await frames();
+      if (patch.removed) return { message: `Removed ${r.name}: kept with its ${plural(r.versions.length + 1, 'version')}; remove: false returns it.`, data: { id: r.id, removed: true, version: r.versions.length + 1 } };
+      return regionAnswer(dataset, v, r.id, 'Changed');
+    },
+
+    async regions(args) {
+      const dataset = resolveDataset(args.dataset);
+      const v = await openIn('viewer', dataset);
+      await v.segmentationReady?.();
+      const list = regionsOf(project(), dataset.id, { removed: Boolean(args.removed) });
+      const rows = list.map((r) => ({
+        id: r.id, name: r.name, class: r.cls, version: r.version, area: area(r.geometry), cells: r.removed ? null : v.regions.cellsOf(r.id), removed: Boolean(r.removed),
+        ...(args.versions ? { versions: r.versions.map((x, k) => ({ version: k + 1, name: x.name, class: x.cls, area: area(x.geometry), tool: x.tool, by: x.by, time: x.time, note: x.note, removed: Boolean(x.removed) })) } : {}),
+      }));
+      let chosen = null;
+      if (args.choose !== undefined && args.choose !== null) {
+        const r = regionRef(dataset, args.choose);
+        if (r.removed) throw new ActionError(`${r.name} is removed.`);
+        chosen = { region: r.id, name: r.name, count: v.regions.chooseCells(r.id) };
+        await frames();
+      }
+      const seg = v.segmentation() ? 'of the segmentation drawn' : 'of the instrument\'s segmentation';
+      return {
+        message: `${dataset.name}: ${plural(rows.length, 'region')}${rows.length ? `: ${rows.map((r) => `${r.name} (${r.class}, ${Math.round(r.area).toLocaleString('en-US')} µm²${r.cells === null ? '' : `, ${plural(r.cells, 'cell')}`}${r.removed ? ', removed' : ''})`).join('; ')}` : ''}; cells counted by centroid, ${seg}.${chosen ? ` Chose the ${plural(chosen.count, 'cell')} of the instrument's segmentation in ${chosen.name}: the Viewer, the QC view and the inspector show them.` : ''}`,
+        data: { regions: rows, segmentation: v.segmentation() ?? 'instrument', chosen },
+      };
+    },
+
+    async import_regions(args) {
+      const dataset = resolveDataset(args.dataset);
+      const v = await openIn('viewer', dataset);
+      const system = coordinatesRef(dataset, args.coordinates);
+      const path = String(args.path ?? '');
+      const response = await fetch(`/api/read-geojson?path=${encodeURIComponent(path)}`, { cache: 'no-store' });
+      if (!response.ok) throw new ActionError((await response.json().catch(() => ({}))).error ?? `HTTP ${response.status}`);
+      const doc = await response.json();
+      const source = path.split(/[\\/]/).at(-1);
+      let result;
+      try {
+        result = await v.regions.importRegions(doc, system, source, args.by ? String(args.by) : author);
+      } catch (error) {
+        throw new ActionError(`${source} was not read: ${error.message}`);
+      }
+      await frames();
+      const left = Object.entries(result.skipped).map(([k, n]) => `${n} ${k}`).join(', ');
+      return {
+        message: `Read ${plural(result.added, 'region')} from ${source} into ${dataset.name}${left ? `; left out: ${left}` : ''}.`,
+        data: { added: result.added, skipped: result.skipped, regions: result.ids.map((id) => v.regions.list().find((r) => r.id === id)).filter(Boolean) },
+      };
     },
 
     async show_alignment(args) {
@@ -1654,7 +1775,17 @@ export function installRemote(app) {
     },
 
     async export(args) {
-      const what = choose(args.what, ['project', 'archive', 'methods', 'alignment'], 'kind of file');
+      const what = choose(args.what, ['project', 'archive', 'methods', 'alignment', 'regions'], 'kind of file');
+      if (what === 'regions') {
+        const dataset = resolveDataset(args.dataset);
+        const v = await openIn('viewer', dataset);
+        const system = coordinatesRef(dataset, args.coordinates);
+        const ids = Array.isArray(args.regions) ? args.regions.map((x) => regionRef(dataset, x).id) : null;
+        const doc = await v.regions.exportDocument(system, ids);
+        if (!doc.features.length) throw new ActionError(`${dataset.name} has no region to write: draw_region draws one.`);
+        const label = v.regions.systems().find((x) => x.id === system)?.label ?? system;
+        return { file: `${JSON.stringify(doc, null, 1)}\n`, message: `${plural(doc.features.length, 'region')} of ${dataset.name} as GeoJSON, as QuPath imports annotations, in ${label}.` };
+      }
       if (what === 'alignment') {
         const dataset = resolveDataset(args.dataset);
         const record = imageRef(dataset, args.image);
@@ -1690,6 +1821,51 @@ export function installRemote(app) {
       return records[0];
     }
     return records.find((r) => r.id === String(ref)) ?? records.find((r) => r.name === choose(String(ref), records.map((x) => x.name), 'image'));
+  }
+
+  // The coordinates regions are given in: 'um', 'xenium' (the Xenium image's pixels) or a
+  // post-Xenium image's artifact ID (its pixels), by name or ID; an image must be aligned.
+  function coordinatesRef(dataset, ref) {
+    if (ref === undefined || ref === null || /^(um|µm|microns?)$/i.test(String(ref))) return 'um';
+    if (/^xenium$/i.test(String(ref))) return 'xenium';
+    const record = imageRef(dataset, ref);
+    if (!transformInUse(project(), record.id)) throw new ActionError(`${record.name} is not aligned: its pixels have no place on the tissue yet.`);
+    return record.id;
+  }
+
+  // A region of a dataset by its name or ID (removed ones too).
+  function regionRef(dataset, ref) {
+    const list = regionsOf(project(), dataset.id, { removed: true });
+    if (!list.length) throw new ActionError(`${dataset.name} has no region: draw_region draws one.`);
+    const text = String(ref ?? '');
+    return list.find((r) => r.id === text) ?? list.find((r) => r.name === choose(text, list.map((x) => x.name), 'region'));
+  }
+
+  function pointsArg(v, what) {
+    if (!Array.isArray(v)) throw new ActionError(`${what} is a list of [x, y].`);
+    return v.map((p, i) => {
+      if (!Array.isArray(p) || p.length !== 2) throw new ActionError(`${what}'s point ${i + 1} is [x, y].`);
+      return [finite(p[0], `${what}'s point ${i + 1}`), finite(p[1], `${what}'s point ${i + 1}`)];
+    });
+  }
+
+  function brushArg(b) {
+    if (!b || typeof b !== 'object') throw new ActionError('brush is {"points": [[x, y], …], "radius": µm}.');
+    const points = pointsArg(b.points, 'the brush stroke');
+    if (!points.length) throw new ActionError('The brush stroke has no point.');
+    const radius = finite(b.radius, 'the brush\'s radius');
+    if (!(radius > 0)) throw new ActionError('The brush\'s radius is above 0 µm.');
+    return { points, radius, erase: Boolean(b.erase) };
+  }
+
+  // A region as an answer: its area and cells.
+  function regionAnswer(dataset, v, id, verb) {
+    const r = v.regions.list().find((x) => x.id === id);
+    const seg = v.segmentation() ? 'of the segmentation drawn' : 'of the instrument\'s segmentation';
+    return {
+      message: `${verb} ${r.name} (${r.cls}, version ${r.version}) on ${dataset.name}: ${Math.round(r.area).toLocaleString('en-US')} µm², ${plural(r.cells ?? 0, 'cell')} ${seg} by centroid.`,
+      data: { id: r.id, name: r.name, class: r.cls, version: r.version, area: r.area, cells: r.cells, segmentation: v.segmentation() ?? 'instrument' },
+    };
   }
 
   // A version of an image's alignment by its name or artifact ID ('in use' for the one placing it).

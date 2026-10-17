@@ -502,6 +502,73 @@ in every other square of the tissue), flicker, and DAPI's edges: an iso-line of 
 at 0.3, where its 3 × 3 neighbourhood crosses the level and Sobel's gradient is over 0.3, from the
 level drawn only (a coarser level standing in would draw its own edges, filling the nuclei).
 
+### 2.5 Regions (verified, wave 5, slice 5)
+
+A region is a multipolygon in µm, the coordinates every layer is placed in (`web/lib/regions.js`),
+kept in the project as versions. It is drawn over any layer: a rectangle (two corners dragged), a
+polygon (its corners clicked), freehand (the pointer's path, a point every 2 CSS pixels) or a brush.
+
+**The brush.** A stroke is a capsule about each of its segments (its radius in CSS pixels, so in µm
+at the zoom painted). Painting onto a region, or erasing from it, must give holes, separate parts
+and merges without polygon clipping, so it is done on a raster: the region and the stroke are
+sampled on a grid of an eighth of the radius as signed distances, positive inside (the region's
+samples in or out by its rows' crossings, and within three samples of its edges their distance from
+them; the stroke's, the radius less the distance from it). Painting takes the larger of the two at
+each sample, erasing the smaller of the region's and the stroke's negative (the union and difference
+of signed distance fields). The outline is traced back by marching squares (the 2-D form of
+Lorensen and Cline 1987), each edge crossing a pair of samples where their values are 0 by linear
+interpolation (where an outline lies between samples, not at their midpoint: a disc's area is
+otherwise 3% large at this step), a saddle cut between its diagonal samples; then simplified (Douglas
+and Peucker 1973) to a sixteenth of a step. Away from the stroke (beyond its radius and three
+steps), the traced outline lies on the region's own edges, and is replaced there by the region's
+own points: a stroke changes a region only near it. The grid keeps its samples in tiles of 64 × 64
+only near the region's edges and under the stroke, each other tile wholly in or out, so the step
+stays an eighth of the radius however large the region (coarser only past 16 million samples).
+
+| Painted (radius *r*, grid *r*/8) | Area | Exact | Off |
+|---|---|---|---|
+| A dab (*r* = 5 µm; the same at any *r*) | 78.2 µm² | 78.5 µm² | −0.45% (the outline's chords between samples cut the curve) |
+| A stroke of two segments at a right angle (*r* = 5 µm, 70 µm long) | 771.6 µm² | 773.2 µm² | −0.13% |
+| A hole erased in a 40 µm square (*r* = 5 µm) | 78.2 µm² | 78.5 µm² | −0.42%, the square's corners its own |
+| A hole erased in a slanted quadrilateral (*r* = 8 µm) | 200.2 µm² | 201.1 µm² | −0.41%, its corners its own |
+| A 10 × 7 mm outline of 3,000 points, its edge painted (*r* = 6 µm) | | | every point beyond 60 µm of the stroke its own, exactly; painted inside it, no change; 0.24 s |
+
+**Cells in a region** are those whose centroid lies in it (an even–odd ray crossing, its holes
+excluded), of the segmentation the Viewer draws; **Choose its cells** takes the instrument's
+segmentation's, as the QC view's choices are.
+
+**GeoJSON as QuPath writes and reads it** (RFC 7946; Bankhead et al. 2017). QuPath exchanges objects
+as GeoJSON Features in the image's full-resolution pixels, (0, 0) the top-left corner of the first
+pixel. A Feature's `properties` give its `objectType` (`annotation`, `detection`, `cell`, `tile`),
+`name`, `classification` (`name`, and `color` as `[r, g, b]` from QuPath 0.4, a packed integer
+`colorRGB` in 0.2 and 0.3) and `isLocked`; QuPath 0.2 writes an array of Features, later versions a
+FeatureCollection (or an array), and 0.2 names the object's kind in the Feature's `id`
+(`PathAnnotationObject`, `PathDetectionObject`, `PathCellObject`). SituCraft reads all of these,
+regions from annotations' polygons and multipolygons (others counted and left out), and writes a
+FeatureCollection of annotations with QuPath 0.4's colours. A region is written in µm, the Xenium
+image's pixels, or a post-Xenium image's pixels: each point taken back through the version placing
+the image (back through its deformation by the fixed point *x* = *y* − *d*(*x*), then the
+transform's inverse); read, each point placed by it. Where the version deforms the image, each
+edge is first divided every 10 µm, so that the region bends as the image does.
+
+**Validated** (the viewer suite, in the page; §2.3's simulated H&E placed by its automatic version,
+deformed). Each region's cells are counted again by the suite with a winding number (Hormann and
+Agathos 2001), a different rule from the page's, over the cells' centroids, of the regions as
+written in µm.
+
+| Check | Result |
+|---|---|
+| A rectangle dragged, a polygon clicked (closed by Enter) | 0.0000 µm from the points (0.42 µm a CSS pixel) |
+| Freehand around 36 points; a brush stroke 15 CSS pixels each side | the path's area exactly; 0.42% under the capsule |
+| Six regions' cells, the page's against the suite's | 48, 50, 23, 13, 66 and 38, each the same; the 66 of one chosen |
+| A hole erased (*r* = 8 µm) and the first version restored | 200.2 µm² of 201.1; version 3 the first's area and cells; three versions in the document |
+| All six written in the H&E's pixels and read back | areas within 0.0008%, the same cells; a rectangle drawn in its pixels back at its corners (0.0000 px) |
+| A QuPath 0.4 file drawn on the H&E, read in its pixels | the corners where the version places them (0 µm), at most 0.18 µm from the truth's; a square with a hole 10,409.5 µm² against its outline placed a pixel at a time, 10,409.4; its colour kept; a detection and a point left out |
+
+A region read in a deformed image's pixels is stretched with the image: that square's area is 2.2%
+from its pixel area times the transform's scale squared, so areas are always computed from the
+placed outline.
+
 ## 3. Segmentation
 
 ### 3.1 Nucleus expansion (verified, wave 2, slice 3)
@@ -2550,6 +2617,15 @@ Notes:
   represent a digitized line or its caricature. *Cartographica* 1973;10(2):112–122.
   doi:10.3138/FM57-6770-U75U-7727 (polygon simplification in the geometry tiles and segmentation
   outlines).
+- Lorensen WE, Cline HE. Marching cubes: a high resolution 3D surface construction algorithm.
+  *Comput Graph* (SIGGRAPH '87) 1987;21(4):163–169. doi:10.1145/37402.37422 (the brush's outline,
+  by marching squares, its 2-D form).
+- Bankhead P, Loughrey MB, Fernández JA, et al. QuPath: Open source software for digital
+  pathology image analysis. *Sci Rep* 2017;7:16878. doi:10.1038/s41598-017-17204-5 (regions
+  exchanged as its annotations' GeoJSON).
+- Hormann K, Agathos A. The point in polygon problem for arbitrary polygons. *Comput Geom*
+  2001;20(3):131–144. doi:10.1016/S0925-7721(01)00012-8 (the viewer suite's count of the cells in
+  a region).
 - Felzenszwalb PF, Huttenlocher DP. Distance transforms of sampled functions. *Theory Comput*
   2012;8:415–428. doi:10.4086/toc.2012.v008a019 (nucleus expansion's exact distances).
 - Okabe A, Boots B, Sugihara K, Chiu SN. *Spatial Tessellations: Concepts and Applications of

@@ -2190,14 +2190,61 @@ range: 2.8 GB in all. Its bundle is of XOA 1, which SituCraft opens from this wa
      - **The fixture's immunofluorescence image is better placed by its automatic alignment than by
        10x's** (0.48 against 0.85 µm, median), as slice 3's deformation suggested; its H&E, about
        as well (0.88 against 0.96 µm).
-5. **Regions (R6).**
-   - Rectangle, polygon, freehand and brush on the tissue, on any layer; regions named and classed,
-     their cells counted and chosen; kept in the project as versions.
-   - **GeoJSON as QuPath reads and writes it:** a region drawn on the H&E in QuPath imported
-     through the image's transform, and SituCraft's regions written for QuPath, in the H&E's pixels
-     or in µm.
-   - Validation: round trips with QuPath's own files; cells in a region against an independent
-     point-in-polygon count.
+5. **Regions (R6): done.**
+   - **Drawn** (`web/lib/regions.js`, `web/ui/regions-layer.js`): the Viewer's **Regions** draws on
+     the tissue over any layer, an SVG layer over the canvas placed from the camera each frame: a
+     rectangle (dragged), a polygon (clicked; closed by a double-click, Enter or its first corner),
+     freehand, or a brush (its radius in CSS pixels; painting, or erasing from the region chosen).
+     While a tool is chosen the wheel zooms and the space bar pans.
+   - **The brush** paints on a raster: the region and the stroke as signed distances on a grid of an
+     eighth of the radius (kept in tiles only near the region's edges and the stroke), their union
+     or difference traced back by marching squares between samples where the values cross 0; away
+     from the stroke, the region's own points put back.
+   - **Kept** in the project (`regions`), each a multipolygon in µm with versions (named, classed with
+     QuPath's classes and colours or any other, reshaped, removed, returned, restored), each with
+     who, when, the tool and a note. Each region's cells (by centroid, of the segmentation drawn)
+     counted; **Choose its cells** chooses the instrument's cells in it, as the QC view does.
+   - **GeoJSON as QuPath writes and reads annotations**, in µm, the Xenium image's pixels, or a
+     post-Xenium image's pixels through the version placing it (edges divided every 10 µm where
+     it is deformed). Read: a FeatureCollection, an array (QuPath 0.2) or a Feature; polygons and
+     multipolygons of annotations, their names, classes and colours (`color` or 0.2's `colorRGB`);
+     detections, cells, points and lines counted and left out.
+   - Remote control: `draw_region`, `edit_region`, `regions`, `import_regions`; `export` writes
+     `regions`. The program reads a GeoJSON file by its path for remote control
+     (`GET /api/read-geojson`, this computer only).
+   - Validation:
+     - **The brush** (unit tests): a dab 0.45% small (the outline's chords), a stroke 0.13%, a hole
+       erased from a slanted quadrilateral 0.41% small with its corners its own; a 10 × 7 mm outline
+       of 3,000 points painted at its edge with a 6 µm brush keeps every point beyond 60 µm of the
+       stroke exactly (0.24 s); erased across, a rectangle is two.
+     - **In the page** (the viewer suite, the simulated H&E placed by its deformed automatic
+       version): a rectangle dragged and a polygon clicked where the pointer went (0.0000 µm off),
+       freehand's area its path's, a brush stroke's 0.42% under its capsule; each of six regions'
+       cells (48, 50, 23, 13, 66, 38) the suite's own winding-number count of the regions written in
+       µm, and the 66 chosen; a hole erased (200.2 µm² of the brush's 201.1) and the first version
+       restored, the document keeping three; all six written in the H&E's pixels through the
+       deformed version and read back, areas within 0.0008% and the same cells, a rectangle drawn in
+       its pixels back at its corners; a QuPath 0.4 file drawn on the H&E read in its pixels, its
+       corners where the version places them and at most 0.18 µm from where the truth puts them, a
+       holed square's area its outline's placed a pixel at a time (10,409.5 against 10,409.4 µm²),
+       its colour kept, a detection and a point left out.
+     - **QuPath itself** was not run: the layouts are those its documentation describes (0.2's array
+       and packed colours, 0.4's FeatureCollection and colours). A round trip with QuPath by its
+       interface is a maintainer's check before release (`validation/README.md`).
+   - Found by slice 5:
+     - **Outlines at the midpoints between samples are biased:** a disc traced so at an eighth of its
+       radius came out 3% large; with the samples' signed distances, interpolated, 0.45% small (the
+       chords).
+     - **Re-tracing a whole region at each stroke changes it everywhere:** simplification cut the
+       chords of a 10 mm outline (490 µm² lost) and rounded its corners; and a grid over the whole
+       region forced a 6 µm brush onto a 4.5 µm step. Hence the tiles, and the region's own points
+       put back away from the stroke.
+     - **A region read in a deformed image's pixels is stretched with it:** its area in µm is not its
+       area in pixels times a pixel's (a 300-pixel square with a hole, 2.2% off on the simulated
+       H&E); it is computed from the placed outline.
+     - **Regions are found by name,** so names repeated (a file read twice) made remote control's
+       choices ambiguous: no two of a dataset's regions share a name, and a name read again is
+       numbered.
 6. **Review with provenance (R7, R8).**
    - Accept, relabel, ambiguous, exclude, segmentation concern and comment, on cells and on
      regions; each with the reviewer, the action, the previous and new value, the time, the

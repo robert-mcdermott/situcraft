@@ -95,6 +95,32 @@ cells and regions reviewed with their provenance.
     checkerboard and DAPI's edges drawn as asked. On the pathology fixture, 10x's alignment of the
     immunofluorescence image is off by 0.85 µm (median), 2.10 µm (90th percentile); the automatic
     one with its deformation, 0.48 and 0.72 µm.
+- **Regions (wave 5, slice 5).** The Viewer's **Regions** draws areas on the tissue, over any layer
+  (the stains, an H&E, an immunofluorescence image).
+  - **Tools:** a rectangle (drag), a polygon (click its corners; double-click or Enter closes it,
+    Backspace takes a corner back), freehand, and a brush that paints a region, or paints onto the
+    region chosen or erases from it (holes, and parts cut apart). The wheel still zooms and the space
+    bar pans while drawing.
+  - **Named and classed,** with QuPath's classes and colours (Tumor, Stroma, Immune cells,
+    Necrosis, Other, Region\*, Ignore\*) or any other; each region's area and cells (those of the
+    segmentation drawn whose centre lies in it); **Choose its cells** chooses them for the QC view,
+    the Viewer and the inspector.
+  - **Kept as versions** in the project: renamed, reclassed, reshaped, removed and returned, each
+    change with who, when and why; any earlier version restored.
+  - **With QuPath:** regions written and read as GeoJSON as QuPath writes and reads annotations
+    (from QuPath 0.2's layout to 0.4's), in µm, the Xenium image's pixels, or a post-Xenium image's
+    pixels through its alignment (a deformation too): drawn on the H&E in QuPath, they land on the
+    tissue here, and back. Detections and cells in a file are left out, and counted.
+  - **The brush** paints at an eighth of its radius however large the region, and changes a region
+    only near its stroke.
+  - **Remote control:** `draw_region`, `edit_region`, `regions`, `import_regions`; `export` writes a
+    dataset's regions as GeoJSON.
+  - **Validated:** in the page, each region's cells the same as an independent count (a winding
+    number over the cells' centres); regions drawn by hand where the pointer went; regions written
+    in the simulated H&E's pixels through its deformed alignment and read back with the same areas
+    (within 0.001%) and cells; annotations laid out as QuPath 0.4 writes them, drawn on that H&E,
+    landing within 0.18 µm of where its truth puts them. The brush's area is within 0.5% of the
+    exact shape's.
 
 ## 0.4.0 (2026-10-16)
 

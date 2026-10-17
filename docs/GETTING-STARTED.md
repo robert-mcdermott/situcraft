@@ -719,6 +719,45 @@ square coloured by its error (green at 0, yellow at 1 µm, red at 2 µm or more)
 where the image belongs to where it is drawn, twenty times as long. Check two versions to compare
 them: 10x's alignment against an automatic one, or one with a deformation against one without.
 
+## Regions: drawing on the tissue
+
+The Viewer's **Regions** draws areas on the tissue, over any layer (the stains, an H&E or an
+immunofluorescence image): a tumor's invasive front, a stromal band, an area to leave out. Choose a
+**class** (QuPath's own: Tumor, Stroma, Immune cells, Necrosis, Other, Region\*, Ignore\*, or a new
+one), then a tool:
+
+- **Rectangle:** drag it.
+- **Polygon:** click its corners; double-click, press Enter or click its first corner to close it;
+  Backspace takes the last corner back.
+- **Freehand:** drag around it.
+- **Brush:** paint it, the brush's size in pixels of the screen (zoom in for a fine edge). With a
+  region chosen, the brush paints onto it, or with **Erase** takes from it, holes included.
+
+While a tool is chosen the wheel still zooms, holding the space bar pans, and Esc stops drawing.
+Each region is listed with its class, area and cells: those of the segmentation drawn whose centre
+lies in it. Click one to choose it; double-click to go to it. A region chosen can be renamed,
+reclassed, gone to, removed, and its cells chosen: **Choose its cells** chooses the instrument's
+cells in it, as brushing a plot in the QC view does, and the Viewer, the QC view and the inspector
+show them.
+
+Every change is a **version** of the region, with who made it, when and why: the region chosen
+lists its versions, and any earlier one can be restored. A region removed is kept with its versions.
+Regions are kept in the project.
+
+**With QuPath.** Under **GeoJSON, as QuPath reads and writes it**, regions are written and read as
+QuPath writes and reads annotations, in one of:
+
+- **µm**, the dataset's own coordinates;
+- **the Xenium image's pixels**, as QuPath opens `morphology_focus`;
+- **a post-Xenium image's pixels**, as QuPath opens that image: through the version of its
+  alignment in use.
+
+To take regions to QuPath, choose the image you will open there (the H&E, say) and **Write them
+all**; in QuPath, open that image and import the file's objects. To bring QuPath's annotations here,
+export them from QuPath as GeoJSON, choose the image they were drawn on, and **Read a file…**: each
+annotation becomes a region, with its name, class and colour; detections and cells are left out,
+and how many is reported.
+
 ## Keyboard
 
 | Action | Keys |
@@ -731,6 +770,7 @@ them: 10x's alignment against an automatic one, or one with a deformation agains
 | Hide the project tree; the inspector | ⌘\\; ⇧⌘\\ |
 | History and log | ⌘J |
 | Viewer: pan; zoom; whole tissue; clear the cell | arrows; + and −; 0; Esc |
+| Drawing a region: close a polygon; its last corner back; pan; stop | Enter; Backspace; hold space; Esc |
 | All shortcuts | ? |
 
 On Windows and Linux, use Ctrl for ⌘.

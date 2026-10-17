@@ -226,6 +226,31 @@ export function placePoint(desc, x, y) {
   return [px + dx, py + dy];
 }
 
+// The point of the image a version places at a point of the tissue (µm): back through any
+// deformation (a fixed point: x = y − d(x), from y), then the transform's inverse. Null when the
+// transform cannot be inverted.
+export function unplacePoint(desc, x, y) {
+  let px = x;
+  let py = y;
+  if (desc.deformation) {
+    for (let k = 0; k < 30; k += 1) {
+      const [dx, dy] = deformationAt(desc.deformation, px, py);
+      const nx = x - dx;
+      const ny = y - dy;
+      const done = Math.abs(nx - px) < 1e-9 && Math.abs(ny - py) < 1e-9;
+      px = nx;
+      py = ny;
+      if (done) break;
+    }
+  }
+  const t = desc.transform;
+  const det = t[0][0] * t[1][1] - t[0][1] * t[1][0];
+  if (!det) return null;
+  const dx = px - t[0][2];
+  const dy = py - t[1][2];
+  return [(t[1][1] * dx - t[0][1] * dy) / det, (t[0][0] * dy - t[1][0] * dx) / det];
+}
+
 // What a transform does, in numbers: its scale (µm per pixel, on average over directions), the
 // direction it turns the x axis to (turn: [cos, sin], shown in degrees by the page), whether it
 // mirrors, and for an affine transform how unequal its scales are and its shear.

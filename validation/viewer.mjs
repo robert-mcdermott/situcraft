@@ -1444,6 +1444,166 @@ export async function viewerSuite({ check, MissingData, verbose }) {
       check('viewer', 'an alignment checked in µm: the landmarks\' version measured as its truth says it is off, patch by patch; the automatic one measured less off; its map, a checkerboard and DAPI\'s edges drawn in the Alignment view', `${checkLm?.message ?? checkLm?.error ?? 'no landmarks version'}; measured ${measuredRMS.toFixed(3)} µm root-mean-square, truly ${trueRMS.toFixed(3)}, each patch's ${truthDiff.toFixed(3)} µm from its true error; ${checkAuto?.message ?? checkAuto?.error}; ${squares} squares; checkerboard ${JSON.stringify(checker)}; edges ${JSON.stringify(edgeCounts)}`,
         Boolean(checkLm?.ok && checkAuto?.ok) && truthDiff < 0.5 && Math.abs(measuredRMS - trueRMS) < 0.4 && checkAuto.data.median < checkLm.data.median && squares === checkLm.data.checked && imageSquare && stainSquare && edgeCounts?.false?.n === 0 && edgeCounts?.true?.n > edgeCounts.true.of / 1000,
         'each patch within 0.5 µm of its true error; the automatic version less off; a square a patch; the image in its squares, the stains in theirs; edges only when asked');
+
+      // Regions (wave 5, slice 5). Drawn by hand in the Viewer with each tool where the pointer
+      // dragged and clicked; drawn by a program in µm and in the H&E's pixels. Each one's cells (by
+      // centroid) against the suite's own count: a winding number (Hormann & Agathos 2001) over the
+      // cells' centroids, of the regions as written in µm. Cells chosen in one; one erased from and
+      // restored, as versions; all written in the H&E's pixels and read back alike; and a file of
+      // annotations as QuPath 0.4 writes them, drawn on the H&E, read in its pixels: its corners where
+      // the version in use places them and near where the truth puts them, its hole kept, a detection
+      // and a point left out.
+      if (auto?.ok && autoTF) {
+        await act('show_tissue', { dataset: 'sim-pathology', whole: true, transcripts: false });
+        await chrome.eval('window.situcraftViewer.settled()');
+        const tool = (name) => chrome.eval(`[...document.querySelectorAll('.viewer-region-tools button')].find((b) => b.textContent.includes('${name}')).click()`);
+        const client = (x, y) => chrome.eval(`window.situcraftViewer.regions.clientOf(${x}, ${y})`);
+        const umPerCss = await chrome.eval('(() => { const r = window.situcraftViewer.renderer; return (r.ratio || 1) / r.camera.scale; })()');
+        const latest = () => chrome.eval('window.situcraftViewer.regions.list().at(-1)');
+        const geometryOf = (id) => chrome.eval(`window.situcraft.store.project.regions.find((r) => r.id === '${id}').versions.at(-1).geometry`);
+        const shoelace = (ring) => Math.abs(ring.reduce((a, [x, y], i) => a + x * ring[(i + 1) % ring.length][1] - ring[(i + 1) % ring.length][0] * y, 0)) / 2;
+        const hand = {};
+        // A rectangle dragged from (40, 30) to (120, 95) µm.
+        await tool('Rectangle');
+        const ra = await client(40, 30);
+        const rb = await client(120, 95);
+        await chrome.drag([ra, [(ra[0] + rb[0]) / 2, (ra[1] + rb[1]) / 2], rb]);
+        const rect = await latest();
+        const rg = await geometryOf(rect.id);
+        const xs = rg[0][0].map((p) => p[0]);
+        const ys = rg[0][0].map((p) => p[1]);
+        hand.rectangle = Math.max(Math.abs(Math.min(...xs) - 40), Math.abs(Math.max(...xs) - 120), Math.abs(Math.min(...ys) - 30), Math.abs(Math.max(...ys) - 95));
+        // A polygon clicked at five corners, closed by Enter.
+        const corners = [[150, 40], [230, 50], [220, 110], [160, 100], [140, 70]];
+        await tool('Polygon');
+        for (const [x, y] of corners) await chrome.click(...(await client(x, y)));
+        await chrome.key('Enter');
+        const poly = await latest();
+        const pg = await geometryOf(poly.id);
+        hand.polygon = pg[0][0].length === 5 ? Math.max(...corners.map(([x, y], k) => Math.hypot(pg[0][0][k][0] - x, pg[0][0][k][1] - y))) : Infinity;
+        // Freehand around a circle of 36 points (30 µm about (80, 180)): the area of the path dragged.
+        const circle = Array.from({ length: 37 }, (_, k) => [80 + 30 * Math.cos((2 * Math.PI * k) / 36), 180 + 30 * Math.sin((2 * Math.PI * k) / 36)]);
+        await tool('Freehand');
+        await chrome.drag(await Promise.all(circle.map(([x, y]) => client(x, y))));
+        const free = await latest();
+        hand.freehand = Math.abs(free.area / shoelace(circle.slice(0, 36)) - 1);
+        // A brush stroke 15 CSS pixels wide each side, from (170, 170) to (250, 170) µm: a capsule.
+        await tool('Brush');
+        await chrome.eval('window.situcraftViewer.regions.setBrush(15, false, false)');
+        await chrome.drag(await Promise.all(Array.from({ length: 9 }, (_, k) => client(170 + 10 * k, 170))));
+        const brushed = await latest();
+        const rr = 15 * umPerCss;
+        hand.brush = Math.abs(brushed.area / (2 * rr * 80 + Math.PI * rr * rr) - 1);
+        await tool('Brush');
+        const handNames = [rect, poly, free, brushed].map((r) => `${r.name} (${r.cls}, ${r.cells} cells)`);
+        check('viewer', 'regions drawn by hand in the Viewer: a rectangle dragged, a polygon clicked and closed by Enter, freehand and a brush stroke, each where the pointer went', `${handNames.join('; ')}; rectangle ${hand.rectangle.toFixed(4)} µm and polygon ${hand.polygon.toFixed(4)} µm from the points; freehand's area ${(100 * hand.freehand).toFixed(3)}% from the path's, the brush's ${(100 * hand.brush).toFixed(3)}% from the capsule's (${umPerCss.toFixed(3)} µm a CSS pixel)`,
+          hand.rectangle <= umPerCss && hand.polygon <= umPerCss && hand.freehand < 0.005 && hand.brush < 0.01 && new Set([rect.id, poly.id, free.id, brushed.id]).size === 4,
+          'within a CSS pixel of the points; areas within 0.5% (freehand) and 1% (the brush)');
+
+        // Drawn by a program: a rectangle in the H&E's pixels and a polygon in µm.
+        const inPixels = await act('draw_region', { dataset: 'sim-pathology', rectangle: [100, 100, 400, 350], coordinates: simAdded.data.name, class: 'Necrosis', name: 'In the H&E\'s pixels' });
+        const inUm = await act('draw_region', { dataset: 'sim-pathology', polygon: [[250, 180], [300, 190], [290, 240], [240, 230]], class: 'Stroma', note: 'The viewer suite' });
+        // Each region's cells against the suite's own count, from the regions written in µm.
+        const winding = (ring, x, y) => {
+          let w = 0;
+          for (let i = 0; i + 1 < ring.length; i += 1) {
+            const [ax, ay] = ring[i];
+            const [bx, by] = ring[i + 1];
+            const side = (bx - ax) * (y - ay) - (x - ax) * (by - ay);
+            if (ay <= y) {
+              if (by > y && side > 0) w += 1;
+            } else if (by <= y && side < 0) w -= 1;
+          }
+          return w;
+        };
+        const inFeature = (g, x, y) => (g.type === 'Polygon' ? [g.coordinates] : g.coordinates).some((pl) => winding(pl[0], x, y) !== 0 && pl.slice(1).every((hole) => winding(hole, x, y) === 0));
+        const umFile = join(work, 'regions-um.geojson');
+        const wroteUm = await act('export', { what: 'regions', dataset: 'sim-pathology', coordinates: 'um', path: umFile });
+        const umDoc = wroteUm.ok ? JSON.parse(readFileSync(umFile, 'utf8')) : { features: [] };
+        const centroids = await chrome.eval('(() => { const c = window.situcraftViewer.cellsDrawn(); return { x: Array.from(c.x), y: Array.from(c.y) }; })()');
+        const listed = await act('regions', { dataset: 'sim-pathology' });
+        const counted = umDoc.features.map((f) => {
+          const id = f.properties.metadata['SituCraft region'];
+          const own = centroids.x.reduce((n, x, i) => n + (inFeature(f.geometry, x, centroids.y[i]) ? 1 : 0), 0);
+          return { id, name: f.properties.name, page: listed.data?.regions.find((r) => r.id === id)?.cells, suite: own };
+        });
+        const differing = counted.filter((c) => c.page !== c.suite);
+        // The cells in the H&E pixels' rectangle chosen: as many as the suite counts.
+        const chosen = inPixels.ok ? await act('regions', { dataset: 'sim-pathology', choose: inPixels.data.id }) : null;
+        const chosenState = await act('get_state');
+        const wantChosen = counted.find((c) => c.id === inPixels.data?.id)?.suite;
+        check('viewer', 'regions\' cells: each region\'s count, by centroid, the suite\'s own (a winding number over the cells, of the regions written in µm); the cells in one chosen', `${inPixels.message ?? inPixels.error}; ${inUm.message ?? inUm.error}; ${counted.map((c) => `${c.name} ${c.page}/${c.suite}`).join(', ')}; ${chosen?.message ?? chosen?.error}; chosen ${chosenState.data?.chosen?.count}`,
+          inPixels.ok && inUm.ok && wroteUm.ok && counted.length === 6 && differing.length === 0 && counted.every((c) => c.suite > 0) && chosen?.ok && chosen.data.chosen.count === wantChosen && chosenState.data?.chosen?.count === wantChosen,
+          'the same counts; the cells chosen as many');
+
+        // Versions: the µm polygon erased from with a brush, then its first version restored.
+        const erased = inUm.ok ? await act('edit_region', { dataset: 'sim-pathology', region: inUm.data.name, brush: { points: [[270, 210]], radius: 8, erase: true }, note: 'a hole' }) : null;
+        const restored = inUm.ok ? await act('edit_region', { dataset: 'sim-pathology', region: inUm.data.name, restore: 1 }) : null;
+        const projectFile = join(work, 'regions-project.json');
+        const wroteProject = await act('export', { what: 'project', path: projectFile });
+        const kept = wroteProject.ok ? JSON.parse(readFileSync(projectFile, 'utf8')).regions?.find((r) => r.id === inUm.data?.id) : null;
+        const hole = inUm.ok && erased?.ok ? inUm.data.area - erased.data.area : 0;
+        check('viewer', 'a region\'s versions: erased from with the brush, then its first version restored, each kept in the project document', `${erased?.message ?? erased?.error}; ${restored?.message ?? restored?.error}; the hole ${hole.toFixed(1)} µm² against ${(Math.PI * 64).toFixed(1)}; the document keeps ${kept?.versions.length} versions`,
+          Boolean(erased?.ok && restored?.ok) && Math.abs(hole / (Math.PI * 64) - 1) < 0.01 && erased.data.version === 2 && restored.data.version === 3 && restored.data.area === inUm.data.area && restored.data.cells === inUm.data.cells && kept?.versions.length === 3 && kept.versions[1].tool === 'brush',
+          'the hole within 1% of the brush\'s disc; version 3 the first again, its area and cells');
+
+        // Written in the H&E's pixels: the rectangle drawn in them comes back at its corners; read
+        // back in them, every region as it was (its area and cells).
+        const pxFile = join(work, 'regions-he.geojson');
+        const wrotePx = await act('export', { what: 'regions', dataset: 'sim-pathology', coordinates: simAdded.data.name, path: pxFile });
+        const pxDoc = wrotePx.ok ? JSON.parse(readFileSync(pxFile, 'utf8')) : { features: [] };
+        const pxRing = pxDoc.features.find((f) => f.properties.metadata['SituCraft region'] === inPixels.data?.id)?.geometry.coordinates[0] ?? [];
+        const cornerOff = Math.max(...[[100, 100], [400, 100], [400, 350], [100, 350]].map(([u, v]) => Math.min(...pxRing.map(([a, b]) => Math.hypot(a - u, b - v)))));
+        const before = await act('regions', { dataset: 'sim-pathology' });
+        const readBack = await act('import_regions', { dataset: 'sim-pathology', path: pxFile, coordinates: simAdded.data.name });
+        const after = await act('regions', { dataset: 'sim-pathology' });
+        const pairs = (before.data?.regions ?? []).map((r) => [r, after.data?.regions.find((x) => x.name === `${r.name} (2)`)]);
+        const worstArea = Math.max(...pairs.map(([a, b]) => (b ? Math.abs(b.area / a.area - 1) : Infinity)));
+        const sameCells = pairs.every(([a, b]) => b && b.cells === a.cells);
+        check('viewer', 'regions written in the H&E\'s pixels (through its deformed alignment) and read back in them: each as it was', `${wrotePx.message ?? wrotePx.error}; the rectangle drawn in its pixels back within ${cornerOff.toFixed(4)} pixels of its corners; ${readBack.message ?? readBack.error}; areas within ${(100 * worstArea).toFixed(4)}%; cells ${sameCells ? 'the same' : 'differing'}`,
+          wrotePx.ok && readBack.ok && autoTF.deformation && cornerOff < 0.01 && pairs.length === 6 && worstArea < 1e-4 && sameCells,
+          'corners within 0.01 pixels; areas within 0.01%; the same cells');
+
+        // A file as QuPath 0.4 writes annotations drawn on the H&E: a pentagon classed Tumor, a
+        // square with a hole classed Stroma, a detection and a point.
+        const pentagon = [[200, 200], [500, 180], [560, 420], [330, 520], [180, 380]];
+        const qupath = { type: 'FeatureCollection', features: [
+          { type: 'Feature', id: 'b1d8c0a2-4f6e-4a8b-9c1d-2e3f4a5b6c7d', geometry: { type: 'Polygon', coordinates: [[...pentagon, pentagon[0]]] }, properties: { objectType: 'annotation', name: 'Drawn in QuPath', classification: { name: 'Tumor', color: [200, 0, 0] }, isLocked: false } },
+          { type: 'Feature', id: 'c2e9d1b3-5a7f-4b9c-8d2e-3f4a5b6c7d8e', geometry: { type: 'Polygon', coordinates: [[[600, 100], [900, 100], [900, 400], [600, 400], [600, 100]], [[700, 200], [700, 300], [800, 300], [800, 200], [700, 200]]] }, properties: { objectType: 'annotation', classification: { name: 'Stroma', color: [150, 200, 150] } } },
+          { type: 'Feature', id: 'd3fae2c4-6b8a-4cad-9e3f-4a5b6c7d8e9f', geometry: { type: 'Polygon', coordinates: [[[300, 300], [310, 300], [310, 310], [300, 300]]] }, properties: { objectType: 'detection', classification: { name: 'Tumor', color: [200, 0, 0] } } },
+          { type: 'Feature', id: 'e4abf3d5-7c9b-4dbe-8f4a-5b6c7d8e9fa0', geometry: { type: 'Point', coordinates: [250, 250] }, properties: { objectType: 'annotation' } },
+        ] };
+        const qpFile = join(work, 'qupath-annotations.geojson');
+        writeFileSync(qpFile, JSON.stringify(qupath));
+        const fromQuPath = await act('import_regions', { dataset: 'sim-pathology', path: qpFile, coordinates: simAdded.data.name });
+        const imported = fromQuPath.data?.regions ?? [];
+        const qp = imported.find((r) => r.name === 'Drawn in QuPath');
+        const qg = qp ? await geometryOf(qp.id) : null;
+        const qpColor = qp ? await chrome.eval(`window.situcraft.store.project.regions.find((r) => r.id === '${qp.id}').versions[0].color`) : null;
+        const placedOff = qg ? Math.max(...pentagon.map(([u, v]) => {
+          const [x, y] = placePoint(autoTF, u, v);
+          return Math.min(...qg[0][0].map(([a, b]) => Math.hypot(a - x, b - y)));
+        })) : Infinity;
+        const truthOff = qg ? Math.max(...pentagon.map(([u, v]) => {
+          const [x, y] = truth(u, v);
+          return Math.min(...qg[0][0].map(([a, b]) => Math.hypot(a - x, b - y)));
+        })) : Infinity;
+        const holed = imported.find((r) => r.cls === 'Stroma');
+        const hg = holed ? await geometryOf(holed.id) : null;
+        // The square's area on the tissue: its outline and its hole's, placed a pixel at a time.
+        const placedArea = (x0, y0, x1, y1) => {
+          const ring = [];
+          for (let u = x0; u < x1; u += 1) ring.push([u, y0]);
+          for (let v = y0; v < y1; v += 1) ring.push([x1, v]);
+          for (let u = x1; u > x0; u -= 1) ring.push([u, y1]);
+          for (let v = y1; v > y0; v -= 1) ring.push([x0, v]);
+          return shoelace(ring.map(([u, v]) => placePoint(autoTF, u, v)));
+        };
+        const holedWant = placedArea(600, 100, 900, 400) - placedArea(700, 200, 800, 300);
+        check('viewer', 'annotations as QuPath 0.4 writes them, drawn on the H&E, read in its pixels: placed by its alignment in use (and its deformation), near where the truth puts them; a hole kept; a detection and a point left out', `${fromQuPath.message ?? fromQuPath.error}; the pentagon's corners ${placedOff.toExponential(2)} µm from where the version places them, at most ${truthOff.toFixed(3)} µm from the truth; its colour ${JSON.stringify(qpColor)}; the square ${hg?.[0].length} rings, ${holed ? holed.area.toFixed(1) : '?'} µm² against ${holedWant.toFixed(1)}`,
+          Boolean(fromQuPath.ok) && imported.length === 2 && JSON.stringify(fromQuPath.data.skipped) === JSON.stringify({ detection: 1, Point: 1 }) && qp?.cls === 'Tumor' && placedOff < 1e-3 && truthOff < bound && JSON.stringify(qpColor) === '[200,0,0]' && hg?.[0].length === 2 && Math.abs(holed.area / holedWant - 1) < 1e-3,
+          `corners within 0.001 µm of the version's placing, ${bound.toFixed(1)} µm of the truth; a hole, its area within 0.1% of its outline placed a pixel at a time; skipped: a detection, a point`);
+      }
     }
     check('viewer', 'no uncaught errors in the page', errors.length ? errors.slice(0, 3).join(' | ') : 'none', errors.length === 0, 'none');
   } finally {
