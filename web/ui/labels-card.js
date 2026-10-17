@@ -229,7 +229,7 @@ export function labelsSections(app, ctx) {
         h('details.seg-advanced', { open: st.open, ontoggle: (event) => { st.open = event.currentTarget.open; } },
           h('summary', 'Parameters'),
           h('div.seg-import-grid', ...inputs),
-          h('label.lb-check', { for: 'lb-lineage', title: 'On a targeted panel, genes of matched expression are often markers, and a type\'s class\'s markers its own cells express: leaving them out of its controls keeps them from cancelling its score.' }, lineage, ' Leave each label\'s lineage\'s markers (its class\'s and subtypes\') out of its control genes'),
+          h('label.lb-check', { for: 'lb-lineage', title: 'On a targeted panel, genes of matched expression are often markers, and a type\'s class\'s markers its own cells express: leaving them out of its controls keeps them from canceling its score.' }, lineage, ' Leave each label\'s lineage\'s markers (its class\'s and subtypes\') out of its control genes'),
           h('p.muted.seg-note', 'Hover a parameter for what it does. The bins and controls are scanpy\'s defaults; the margin is SituCraft\'s.')),
         h('div.seg-form', go),
         ...running.map((e) => progressBar(e)),

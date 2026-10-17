@@ -36,6 +36,8 @@ export function createProject(name = 'Untitled project', options = {}) {
     // Saved views: viewport, layers, colors, genes and filters, reopened exactly.
     views: [],
     // (exports: the exports written from its segmentations, added with the first; lib/segmentations.js.)
+    // (regions: the regions drawn on its datasets, added with the first; lib/regions.js.)
+    // (reviews: the reviews of its cells and regions, added with the first; lib/review-record.js.)
     // The log of material changes: [{ time, action, detail }].
     history: [],
   };
@@ -59,7 +61,7 @@ export function parseProject(text) {
     throw new Error(`The project was saved by a newer SituCraft (project version ${doc.version}; this program reads up to ${PROJECT_VERSION}). Update SituCraft to open it.`);
   }
   if (typeof doc.id !== 'string' || !ID_PATTERN.test(doc.id)) throw new Error('The project has no valid id.');
-  for (const field of ['datasets', 'artifacts', 'decisions', 'views', 'exports', 'history']) {
+  for (const field of ['datasets', 'artifacts', 'decisions', 'views', 'exports', 'regions', 'reviews', 'history']) {
     if (field in doc && !Array.isArray(doc[field])) throw new Error(`The project's ${field} is not a list.`);
   }
   const base = createProject(typeof doc.name === 'string' ? doc.name : 'Untitled project', { id: doc.id, now: doc.created ?? doc.modified });

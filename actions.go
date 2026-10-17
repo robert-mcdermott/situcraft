@@ -22,6 +22,8 @@ type remoteAction struct {
 	output bool
 	// reads: opens items on this computer by their paths (local.go), so it needs the token.
 	reads bool
+	// readsAt: reads the file at args.path where it lies (the page asks for it), so it needs the token.
+	readsAt bool
 	// writes: a job writes files on this computer where the arguments say, so it needs the token.
 	writes bool
 }
@@ -64,13 +66,14 @@ var remoteActions = []remoteAction{
 		"bundle": textArg("The bundle by its name or path."),
 		"wait":   flagArg("Wait for its derived data to be built (true if not given)."),
 	}, "bundle"), long: true},
-	{Name: "open_example", Title: "Open an example dataset", Description: "Opens an example dataset (xenium-lung-2fov, xenium-breast-2fov: 10x Genomics' Xenium 2-FOV bundles, CC BY 4.0; simulated-standard: a tissue SituCraft simulates on this computer, its truth beside it) in the project, or in a new project when this one has other datasets, and builds its derived data. A 10x Genomics example not on this computer is downloaded only with download: true (280 to 380 MB, checked by checksums); the simulated one is made in seconds.", InputSchema: schema(map[string]any{
+	{Name: "open_example", Title: "Open an example dataset", Description: "Opens an example dataset (xenium-lung-2fov, xenium-breast-2fov: 10x Genomics' Xenium 2-FOV bundles, CC BY 4.0; simulated-standard: a tissue SituCraft simulates on this computer, with an H&E and an immunofluorescence image of the section, its truth beside it) in the project, or in a new project when this one has other datasets, and builds its derived data. A 10x Genomics example not on this computer is downloaded only with download: true (280 to 380 MB, checked by checksums); the simulated one is made in seconds, and one made by an earlier SituCraft (without its images) is made again with remake: true (the same run, cells and transcripts).", InputSchema: schema(map[string]any{
 		"example":  textArg("xenium-lung-2fov, xenium-breast-2fov or simulated-standard (or lung, breast, simulated)."),
 		"download": flagArg("Download it first if it is not on this computer."),
+		"remake":   flagArg("Make the simulated example again if an earlier SituCraft made it."),
 	}, "example"), long: true},
-	{Name: "tour", Title: "Take an example's tour", Description: "Starts the guided tour of an example (opening it as open_example does), or one of its worked examples (name: compare-expansion or refine-compare on the Breast example, planted-errors on the Lung example, score-against-truth on the simulated one: a question answered step by step, some steps running a job first), or goes to one of its steps; run: true does the step's job (expanding, planting, refining, importing the truth, comparing) and goes on to the next; end: true closes it. Returns the step's title and text, and the comparison a step shows.", InputSchema: schema(map[string]any{
+	{Name: "tour", Title: "Take an example's tour", Description: "Starts the guided tour of an example (opening it as open_example does), or one of its worked examples (name: compare-expansion, refine-compare or labels-two-segmentations on the Breast example; planted-errors or cluster-label on the Lung example; score-against-truth, labels-against-truth, align-he, regions-qupath or pathologist-review on the simulated one: a question answered step by step, some steps running a job first), or goes to one of its steps; run: true does the step's job (expanding, planting, refining, importing the truth, comparing, clustering, labeling, adding and aligning the H&E, checking its alignments, drawing regions, reviewing) and goes on to the next; end: true closes it. Returns the step's title and text, and the comparison a step shows.", InputSchema: schema(map[string]any{
 		"example": textArg("xenium-lung-2fov, xenium-breast-2fov or simulated-standard; the tour running if not given."),
-		"name":    textArg("tour (the default; the 10x Genomics examples), or a worked example: compare-expansion, refine-compare, planted-errors, score-against-truth."),
+		"name":    textArg("tour (the default; the 10x Genomics examples), or a worked example: compare-expansion, refine-compare, labels-two-segmentations, planted-errors, cluster-label, score-against-truth, labels-against-truth, align-he, regions-qupath, pathologist-review."),
 		"step":    map[string]any{"type": "integer", "minimum": 1, "description": "The step to show, from 1 (1 if not given)."},
 		"run":     flagArg("Do the step's job, then go on to the next step."),
 		"end":     flagArg("Close the tour."),
@@ -97,11 +100,99 @@ var remoteActions = []remoteAction{
 		"outlines":        flagArg("Draw the cell outlines."),
 		"nuclei":          flagArg("Draw the nucleus outlines."),
 		"segmentation":    textArg("The segmentation drawn: by its name or artifact ID, instrument for the instrument's, default for the dataset's default."),
-		"fill":            textArg("Fill the cells by transcripts, total, area, nucleusArea or method (the instrument's); limitations, certainty or probability (a refinement's); clusters (the latest clustering of the segmentation drawn) or clusters:<artifact id>; labels (the latest label set, its first level), labels:<level> or labels:<artifact id>:<level>; none for no fill."),
+		"fill":            textArg("Fill the cells by transcripts, total, area, nucleusArea or method (the instrument's); limitations, certainty or probability (a refinement's); clusters (the latest clustering of the segmentation drawn) or clusters:<artifact id>; labels (the latest label set, its first level), labels:<level> or labels:<artifact id>:<level>; review (each cell by its review: excluded, a segmentation concern, ambiguous, relabeled, accepted or commented); none for no fill."),
 		"opacity":         numberArg("The fill's opacity, 0 to 1."),
 		"color_by":        textArg("Color the transcripts by gene (as listed) or probability (their assignment's, a refinement's; seen close up)."),
 		"cell":            textArg("A cell to select, by its ID in the segmentation drawn (as cells.parquet names the instrument's)."),
+		"images":          map[string]any{"type": "object", "description": "Post-Xenium images, by name or artifact ID: {visible, opacity (0 to 1), channels: {by name: {visible, color, window, gamma}} (immunofluorescence)}, each optional."},
 	}), long: true},
+	{Name: "add_image", Title: "Add a post-Xenium image", Description: "Adds an H&E or immunofluorescence image of a dataset's section, stained and scanned after the Xenium run, as a job: a pyramidal, tiled OME-TIFF (as Xenium Explorer requires; RGB, or channels of 8 or 16 bits; deflate, LZW, JPEG or JPEG 2000), read where it lies, never copied, and recorded as an image artifact with its SHA-256. Its alignment, the transformation matrix or keypoints Xenium Explorer saves (found beside the image when 10x named it, else named; null for none), is recorded as the image's first transform and places it; without one the image is not aligned until align_image places it. The Viewer draws an aligned image under the transcripts and cells. Needs the token (it reads files). Answers what the image is and how it is placed.", InputSchema: schema(map[string]any{
+		"dataset":   datasetArg,
+		"path":      textArg("The image: an OME-TIFF on this computer."),
+		"alignment": map[string]any{"type": []string{"string", "null"}, "description": "Its alignment: <name>_imagealignment.csv (the transformation matrix) or <name>_keypoints.csv (found beside the image if not given; null to add it unaligned)."},
+		"name":      textArg("What to call it (from its file's name if not given)."),
+	}, "path"), long: true, readsAt: true},
+	{Name: "align_image", Title: "Align an image by landmarks", Description: "Fits a post-Xenium image's alignment to landmarks, each a point placed on both images, and records it as a version of the image's alignment (a transform artifact: its landmarks, the fit, each landmark's residual and leave-one-out error in µm, who made it, a note and the version it was made from). A similarity (move, turn, one scale and a mirror when that fits better; Umeyama 1991) or an affine transform (also stretched and sheared), by least squares, from three landmarks or more. With use (the default), the version places the image. Answers the fit.", InputSchema: schema(map[string]any{
+		"dataset": datasetArg,
+		"image":   textArg("The image, by name or artifact ID (the dataset's only image if not given)."),
+		"landmarks": map[string]any{"type": "array", "description": "Each landmark: {\"fixed\": [x, y] on the tissue (µm, Xenium's coordinates), \"moving\": [x, y] on the image (its full-resolution pixels, (0, 0) the corner of its first)}.",
+			"items": map[string]any{"type": "object", "properties": map[string]any{"fixed": map[string]any{"type": "array", "items": map[string]any{"type": "number"}}, "moving": map[string]any{"type": "array", "items": map[string]any{"type": "number"}}}}},
+		"model":  textArg("similarity (the default) or affine."),
+		"use":    flagArg("Place the image by it (the default true)."),
+		"parent": textArg("The version it is made from, by name or ID."),
+		"by":     textArg("Who placed the landmarks (the client's name if not given)."),
+		"note":   textArg("A note kept with the version (and the reason, when it is used)."),
+	}, "landmarks"), long: true},
+	{Name: "register_image", Title: "Align an image automatically", Description: "Aligns a post-Xenium image to its dataset's Xenium image automatically, by the nuclei (an H&E's hematoxylin by color deconvolution, an immunofluorescence image's nuclear stain, against DAPI), as a job: its scale, turn and mirroring found whatever its metadata says (phase correlation and its log-polar form), refined by normalized mutual information, then fitted to local matches over the tissue; optionally a smooth deformation after it (B-splines), kept only when it predicts the matches better. Recorded as a version of the image's alignment with its matches, fit and what the search found; with use (the default), it places the image. The same images give the same version on any computer. Answers the fit.", InputSchema: schema(map[string]any{
+		"dataset":  datasetArg,
+		"image":    textArg("The image, by name or artifact ID (the dataset's only image if not given)."),
+		"model":    textArg("similarity (the default) or affine."),
+		"nonrigid": flagArg("Allow a smooth deformation after the model, for a section that stretched."),
+		"channel":  textArg("An immunofluorescence image's nuclear stain, by name (the channel named as one, DAPI or Hoechst, if not given)."),
+		"start":    textArg("A version to start from instead of searching, by name or ID ('in use' for the one placing the image)."),
+		"use":      flagArg("Place the image by it (the default true)."),
+		"by":       textArg("Who asked for it (the client's name if not given)."),
+		"note":     textArg("A note kept with the version (and the reason, when it is used)."),
+	}), long: true},
+	{Name: "use_transform", Title: "Place an image by a version of its alignment", Description: "Chooses which version of a post-Xenium image's alignment places it, as a decision recorded with its reason, who and when.", InputSchema: schema(map[string]any{
+		"dataset":   datasetArg,
+		"image":     textArg("The image, by name or artifact ID (the dataset's only image if not given)."),
+		"transform": textArg("The version, by name or artifact ID."),
+		"rationale": textArg("Why it is chosen."),
+		"by":        textArg("Who chooses it (the client's name if not given)."),
+	}, "transform")},
+	{Name: "show_alignment", Title: "Show an image's alignment", Description: "Opens the Alignment view on a post-Xenium image: the Xenium image and the post-Xenium image side by side with the landmarks, their fit and each landmark's residual and leave-one-out error, and the image's versions of its alignment; with transform, that version's landmarks loaded to edit. What the Xenium image shows of the image: show (a version, 'in use', 'fit' for the landmarks' fit, 'none'), as display (overlay at opacity, checkerboard of cell µm squares, or flicker), with DAPI's edges and the nuclei's outlines over it, and where a checked version is off (map). Answers the landmarks, the fit, what is shown and the versions with their latest checks.", InputSchema: schema(map[string]any{
+		"dataset":   datasetArg,
+		"image":     textArg("The image, by name or artifact ID (the dataset's only image if not given)."),
+		"transform": textArg("A version whose landmarks to load, by name or ID."),
+		"show":      textArg("What the Xenium image shows of the image: a version by name or ID, 'in use', 'fit' or 'none'."),
+		"display":   textArg("overlay, checkerboard or flicker."),
+		"opacity":   numberArg("Over the stains, the image's opacity, 0 to 1."),
+		"cell":      numberArg("A checkerboard's squares' side, 10 to 400 µm."),
+		"edges":     flagArg("DAPI's edges over the image."),
+		"outlines":  flagArg("The nuclei's outlines over the image."),
+		"map":       flagArg("Where the version shown is off, by its latest check."),
+	}), long: true},
+	{Name: "check_alignment", Title: "Check an image's alignment", Description: "Measures where a version of a post-Xenium image's alignment places it off, as a job: patches of the Xenium image's DAPI over the tissue (between those an automatic alignment matched) against the image's nuclear signal drawn as the version places it, each one's residual shift by phase correlation in µm. Recorded as a check of the version. Answers how far it is off (median, 90th percentile, most, root-mean-square), over how many patches, and a bound of the matches' own error, below which an error is not the alignment's.", InputSchema: schema(map[string]any{
+		"dataset":   datasetArg,
+		"image":     textArg("The image, by name or artifact ID (the dataset's only image if not given)."),
+		"transform": textArg("The version, by name or ID (the one in use if not given)."),
+	}), long: true},
+	{Name: "draw_region", Title: "Draw a region", Description: "Draws a region on a dataset's tissue, as the Viewer's tools draw one, and keeps it in the project as its first version (who drew it, when and why): a rectangle, a polygon, or a brush stroke (its points and radius), in µm (the dataset's coordinates), the Xenium image's pixels, or a post-Xenium image's pixels (through the version of its alignment placing it, and any deformation). Named and classed: QuPath's classes (Tumor, Stroma, Immune cells, Necrosis, Other, Region*, Ignore*) or any other. Opens the Viewer on the dataset. Answers the region: its area and the cells in it (by centroid, of the segmentation the Viewer draws).", InputSchema: schema(map[string]any{
+		"dataset":     datasetArg,
+		"rectangle":   map[string]any{"type": "array", "items": map[string]any{"type": "number"}, "description": "[x0, y0, x1, y1]: two opposite corners."},
+		"polygon":     map[string]any{"type": "array", "items": map[string]any{"type": "array", "items": map[string]any{"type": "number"}}, "description": "Its corners, [[x, y], …], three or more, in order."},
+		"brush":       map[string]any{"type": "object", "description": "A brush stroke: {\"points\": [[x, y], …] along it, \"radius\": the brush's radius in µm}."},
+		"coordinates": textArg("What the points are in: um (the default), xenium (the Xenium image's full-resolution pixels) or a post-Xenium image, by name or artifact ID (its full-resolution pixels, as QuPath opens it)."),
+		"name":        textArg("Its name (its class and a number if not given)."),
+		"class":       textArg("Its class (Region* if not given)."),
+		"by":          textArg("Who drew it (the client's name if not given)."),
+		"note":        textArg("A note kept with it."),
+	}), long: true},
+	{Name: "edit_region", Title: "Change a region", Description: "Changes a region of a dataset, each change a version appended (who, when and why; the earlier kept): its name or class, its shape painted onto or erased from with a brush stroke, an earlier version restored, or the region removed (or returned). Answers the region as it now is.", InputSchema: schema(map[string]any{
+		"dataset":     datasetArg,
+		"region":      textArg("The region, by name or ID."),
+		"name":        textArg("Its new name."),
+		"class":       textArg("Its new class."),
+		"brush":       map[string]any{"type": "object", "description": "A brush stroke painted onto it: {\"points\": [[x, y], …], \"radius\": µm, \"erase\": true to erase it from the region}."},
+		"coordinates": textArg("What the brush's points are in: um (the default), xenium or a post-Xenium image by name or artifact ID (its pixels)."),
+		"restore":     numberArg("A version to restore, from 1."),
+		"remove":      flagArg("true removes it (kept with its versions), false returns it."),
+		"by":          textArg("Who changed it (the client's name if not given)."),
+		"note":        textArg("Why (kept with the version)."),
+	}, "region"), long: true},
+	{Name: "regions", Title: "List the regions", Description: "Lists a dataset's regions: each one's name, class, version, area (µm²) and the cells in it (by centroid, of the segmentation the Viewer draws); with versions, each one's versions too. With choose, chooses the cells of the dataset's own segmentation in a region, as select_cells chooses cells: the Viewer, the QC view and the inspector show them. Opens the Viewer on the dataset.", InputSchema: schema(map[string]any{
+		"dataset":  datasetArg,
+		"choose":   textArg("A region whose cells to choose, by name or ID."),
+		"versions": flagArg("Each region's versions too."),
+		"removed":  flagArg("Regions removed too."),
+	}), long: true},
+	{Name: "import_regions", Title: "Read regions from GeoJSON", Description: "Reads regions from a GeoJSON file as QuPath exports annotations (a FeatureCollection or a list of Features; Polygon and MultiPolygon shapes, each one's name and classification, its name and color; detections, cells, points and lines are left out), its coordinates in µm, the Xenium image's pixels or a post-Xenium image's pixels (as QuPath opened that image, placed through the version of its alignment in use), each added to the project as a region. Needs the token (it reads a file). Answers how many were added and what was left out.", InputSchema: schema(map[string]any{
+		"dataset":     datasetArg,
+		"path":        textArg("The GeoJSON file on this computer."),
+		"coordinates": textArg("What its coordinates are in: um (the default), xenium or a post-Xenium image by name or artifact ID (its pixels)."),
+		"by":          textArg("Who imported them (the client's name if not given)."),
+	}, "path"), long: true, readsAt: true},
 	{Name: "select_cell", Title: "Select a cell", Description: "Selects a cell of the segmentation the Viewer draws and shows it in the inspector: its ID, position, areas, segmentation method (or, for another segmentation, the instrument's cell it came from and what its method flags), and its transcripts by gene. With no cell, clears the selection.", InputSchema: schema(map[string]any{
 		"cell":    textArg("The cell's ID in the segmentation drawn (as cells.parquet names the instrument's), or its row from 0 as \"#123\"."),
 		"dataset": datasetArg,
@@ -261,7 +352,7 @@ var remoteActions = []remoteAction{
 		"level":        textArg("Its level."),
 		"clustering":   textArg("The clustering (SituCraft's latest of the segmentation if not given)."),
 	}, "cell"), long: true},
-	{Name: "curate_labels", Title: "Curate labels", Description: "Appends an edit to a curated label set: cells or a clustering's clusters relabeled, or cells' labels accepted, with the reason kept and who. Given a predicted set, the curated set begun from it (made the first time). Edits are never changed or removed: undoing one is another edit.", InputSchema: schema(map[string]any{
+	{Name: "curate_labels", Title: "Curate labels", Description: "Appends an edit to a curated label set: cells or a clustering's clusters relabeled, or cells' labels accepted, with the reason kept and who, recorded as a review (as review records one). Given a predicted set, the curated set begun from it (made the first time). Edits are never changed or removed: undoing one is another edit.", InputSchema: schema(map[string]any{
 		"dataset":      datasetArg,
 		"segmentation": textArg("The segmentation, by name, id or instrument (the default if not given)."),
 		"labels":       textArg("A curated set (cur-…), or a predicted label set whose curated set to append to."),
@@ -275,6 +366,31 @@ var remoteActions = []remoteAction{
 		"by":           textArg("Who (remote control if not given)."),
 		"name":         textArg("The curated set's name, when it is begun."),
 	}, "reason"), long: true},
+	{Name: "review", Title: "Review cells or a region", Description: "Reviews cells of a segmentation (by ID or row), the cells chosen, or a region, recorded in the project with its provenance: who, the action, the value before and after, when, the segmentation, the label set, each cell's label and its confidence as shown, and the post-Xenium images' alignments in use. Actions: accept (the label, or a region's class), relabel (a new label, with a reason; a region is reclassed), ambiguous (with the labels it could be), exclude (from analyses, with a reason; a region's cells too unless cells_too is false), include (again), concern (its segmentation looks wrong: merged, split, boundary, not-a-cell, missed or other), resolve (the concern) and comment. Accepting and relabeling cells append to the curated set begun from the label set reviewed. Answers the review.", InputSchema: schema(map[string]any{
+		"dataset":      datasetArg,
+		"action":       textArg("accept, relabel, ambiguous, exclude, include, concern, resolve or comment."),
+		"cells":        map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Cells by ID (as the segmentation names them), or row as \"#123\"."},
+		"chosen":       flagArg("The cells chosen (the instrument's), instead."),
+		"region":       textArg("Or a region, by name or ID."),
+		"segmentation": textArg("The cells' segmentation, by name, ID or instrument (the default if not given)."),
+		"labels":       textArg("The label set reviewed (its ID; the latest if not given): for accept, relabel and ambiguous."),
+		"level":        textArg("The label set's level."),
+		"label":        textArg("relabel: the new label (or class)."),
+		"alternatives": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "ambiguous: the labels it could be."},
+		"concern":      textArg("concern: merged, split, boundary, not-a-cell, missed or other."),
+		"note":         textArg("Why, or the comment (needed to relabel, exclude and comment)."),
+		"cells_too":    flagArg("Excluding a region: its cells too (true if not given)."),
+		"by":           textArg("Who reviews (the client's name if not given)."),
+	}, "action"), long: true},
+	{Name: "reviews", Title: "List the reviews", Description: "Lists a dataset's reviews, the latest first (those of a reviewer, an action, a cell or a region if asked), with how many of a segmentation's cells are accepted, relabeled, ambiguous, excluded, of concern and commented, and each reviewed region's state. Label edits made before reviews were recorded are listed as reviews too.", InputSchema: schema(map[string]any{
+		"dataset":      datasetArg,
+		"reviewer":     textArg("Only this reviewer's."),
+		"action":       textArg("Only reviews of this action."),
+		"cell":         textArg("Only a cell's, by ID or row (#123)."),
+		"region":       textArg("Only a region's, by name or ID."),
+		"segmentation": textArg("The segmentation whose cells are counted (the default if not given)."),
+		"limit":        numberArg("At most this many (50 if not given)."),
+	}), long: true},
 	{Name: "consensus_labels", Title: "Make a consensus", Description: "Makes a consensus label set of a segmentation's label sets (two or more): each cell's label by a rule — unanimous (every set gives it), majority (at least min sets give it, more than any other) or priority (the first set's, else the next's) — with each set's labels mapped to common names where they differ. Answers the cells labeled and how far the first two sets agree.", InputSchema: schema(map[string]any{
 		"dataset":      datasetArg,
 		"segmentation": textArg("The segmentation, by name, id or instrument (the default if not given)."),
@@ -302,13 +418,13 @@ var remoteActions = []remoteAction{
 		"rationale":    textArg("Why (recorded with the decision)."),
 		"comparison":   textArg("The comparison it rests on (artifact id)."),
 	}, "segmentation", "decision", "rationale"), long: true},
-	{Name: "plant_errors", Title: "Plant errors in a segmentation", Description: "For practice: a copy of a dataset's instrument segmentation with known errors planted in it (neighbouring cells of different lineages merged, large cells split in two, cells missed, cells drawn too wide), simulated and named so (never promoted or exported), made as a job in the Segmentation view and recorded as a segmentation artifact with its answer key (planted.json). Compare it with the instrument's to find them. The same parameters (20 merges, 20 splits, 10 missed, 10 grown by 1 µm, seed 20261014 if not given) answer the same artifact. Answers its summary, and with reveal the answer key.", InputSchema: schema(map[string]any{
+	{Name: "plant_errors", Title: "Plant errors in a segmentation", Description: "For practice: a copy of a dataset's instrument segmentation with known errors planted in it (neighboring cells of different lineages merged, large cells split in two, cells missed, cells drawn too wide), simulated and named so (never promoted or exported), made as a job in the Segmentation view and recorded as a segmentation artifact with its answer key (planted.json). Compare it with the instrument's to find them. The same parameters (20 merges, 20 splits, 10 missed, 10 grown by 1 µm, seed 20261014 if not given) answer the same artifact. Answers its summary, and with reveal the answer key.", InputSchema: schema(map[string]any{
 		"dataset": datasetArg,
-		"merges":  map[string]any{"type": "integer", "minimum": 0, "maximum": 1000, "description": "Neighbouring cells merged (20 if not given)."},
+		"merges":  map[string]any{"type": "integer", "minimum": 0, "maximum": 1000, "description": "Neighboring cells merged (20 if not given)."},
 		"splits":  map[string]any{"type": "integer", "minimum": 0, "maximum": 1000, "description": "Cells split in two (20)."},
 		"missed":  map[string]any{"type": "integer", "minimum": 0, "maximum": 1000, "description": "Cells missed (10)."},
 		"grown":   map[string]any{"type": "integer", "minimum": 0, "maximum": 1000, "description": "Cells drawn too wide (10)."},
-		"grow_um": map[string]any{"type": "number", "minimum": 0, "maximum": 20, "description": "How far a grown cell reaches into its neighbours, µm (1)."},
+		"grow_um": map[string]any{"type": "number", "minimum": 0, "maximum": 20, "description": "How far a grown cell reaches into its neighbors, µm (1)."},
 		"seed":    map[string]any{"type": "integer", "minimum": 0, "description": "The seed choosing the cells (20261014)."},
 		"reveal":  flagArg("Answer the planted errors: each one's kind, cells and place."),
 	}), long: true},
@@ -329,11 +445,16 @@ var remoteActions = []remoteAction{
 		"filters": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Filters to describe, by name (their latest version) or id; the latest version of each if not given; [] for none."},
 		"show":    flagArg("Show the paragraph in the window."),
 	}), long: true},
-	{Name: "export", Title: "Write a file", Description: "Writes a file: the project document (project, JSON), a project archive (archive, .scz: the project, its bundles recorded relative to the archive), or a dataset's methods paragraph with its references (methods, Markdown). Needs the token.", InputSchema: schema(map[string]any{
-		"what":      textArg("project, archive or methods."),
-		"path":      textArg("The absolute path of the file to write."),
-		"overwrite": flagArg("Replace the file if it exists."),
-		"dataset":   datasetArg,
+	{Name: "export", Title: "Write a file", Description: "Writes a file: the project document (project, JSON), a project archive (archive, .scz: the project, its bundles recorded relative to the archive), a dataset's methods paragraph with its references (methods, Markdown), a post-Xenium image's alignment as Xenium Explorer reads it (alignment: its transformation matrix, the image's pixels to the Xenium image's, or its landmarks as keypoints; CSV), a dataset's regions as QuPath imports annotations (regions: GeoJSON, in µm, the Xenium image's pixels or a post-Xenium image's), or a dataset's reviews (reviews: CSV, a row a cell, cluster or region reviewed; or JSON, the record). Needs the token.", InputSchema: schema(map[string]any{
+		"what":        textArg("project, archive, methods, alignment, regions or reviews."),
+		"path":        textArg("The absolute path of the file to write."),
+		"overwrite":   flagArg("Replace the file if it exists."),
+		"dataset":     datasetArg,
+		"image":       textArg("For an alignment: the image, by name or artifact ID."),
+		"transform":   textArg("For an alignment: the version, by name or ID (the one in use if not given)."),
+		"format":      textArg("For an alignment: matrix (the default) or keypoints; for reviews: csv (the default) or json."),
+		"coordinates": textArg("For regions: um (the default), xenium (the Xenium image's pixels) or a post-Xenium image by name or artifact ID (its pixels, as QuPath opens it)."),
+		"regions":     map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "For regions: which, by name or ID (all if not given)."},
 	}, "what", "path"), long: true, output: true},
 }
 
@@ -366,7 +487,7 @@ func refineArgs() map[string]any {
 		"layers":     map[string]any{"type": "integer", "minimum": 1, "maximum": 16, "description": "Voxel layers in depth (1 if not given)."},
 		"regions":    map[string]any{"type": "array", "items": map[string]any{"type": "array", "items": map[string]any{"type": "number"}, "minItems": 4, "maxItems": 4}, "description": "Regions to refine, each [x0, y0, x1, y1] in µm; the rest of the tissue keeps the instrument's cells."},
 		"sections":   flagArg("Refine the tissue's separate sections apart, each with a model of its own."),
-		"min_qv":     map[string]any{"type": "number", "minimum": 0, "maximum": 40, "description": "The quality the modelled transcripts reach (20 if not given)."},
+		"min_qv":     map[string]any{"type": "number", "minimum": 0, "maximum": 40, "description": "The quality the modeled transcripts reach (20 if not given)."},
 		"seed_check": flagArg("Run again with the next seed and report how many transcripts both runs put in the same cell."),
 		"threads":    map[string]any{"type": "integer", "minimum": 1, "description": "Threads to run on (every core if not given); the result does not depend on them."},
 	}

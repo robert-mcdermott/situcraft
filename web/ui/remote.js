@@ -12,12 +12,18 @@ import { ATTRIBUTES } from '../lib/cell-attributes.js';
 import { decideSegmentation, DECISIONS, EXPORT_FORMATS, promotedSegmentation } from '../lib/segmentations.js';
 import { CLASS_INFO, RANKS, cellNames, warnings } from '../lib/review.js';
 import { workedExamples } from '../lib/tours.js';
+import { describeImage, describePlacement, imagesOf } from '../lib/images.js';
+import { checksOf, describeCheck, describeTransform, transformInUse, transformsOf, useTransform } from '../lib/transforms.js';
+import { addRegion, area, brushGeometry, editRegion, mapGeometry, nextRegionName, polygonOf, rectangle, regionsOf } from '../lib/regions.js';
+import { ACTIONS as REVIEW_ACTIONS, CONCERNS, addReview, cellReviewState, regionReviewState, reviewsCSV, reviewsJSON, reviewsOf, stateCounts } from '../lib/review-record.js';
+import { cellRows, imagesInUse, reviewCells, reviewLine, reviewRegion } from './reviewing.js';
+import { defaultImageLayer } from '../lib/overlays.js';
 import { parseProject, rename, serializeProject } from '../lib/project.js';
 import { removeView, sameView, viewLink } from '../lib/views.js';
 import { SEG_FILLS, defaultChoice, segmentationChoices } from '../lib/segview.js';
 import { clusterName, clusterNames, clusteringsOf, mapsOf, nameClusters } from '../lib/clusterings.js';
 import { composition as labelComposition, labelSetName, labelSetsFor, lowConfidenceDefault, namesFromLabels } from '../lib/labels.js';
-import { RULES, appendEdit, createCurated, crossTable, curatedSetsOf, saveConsensus } from '../lib/curation.js';
+import { RULES, createCurated, crossTable, curatedSetsOf, saveConsensus } from '../lib/curation.js';
 import { labelSource, labelVersions, refOf } from './label-sources.js';
 import { defaultPair, impactLines, sideOf } from '../lib/impact.js';
 import { remakeOnSegmentation } from './remake.js';
@@ -270,6 +276,7 @@ export function installRemote(app) {
       const data = {
         project: { id: p.id, name: p.name, created: p.created, modified: p.modified, history: p.history.length },
         segmentations: p.artifacts.filter((a) => a.kind === 'segmentation').map((a) => ({ id: a.id, name: a.name, dataset: datasetName(a.dataset), state: a.state, default: promotedSegmentation(p, a.dataset)?.record.id === a.id })),
+        images: p.artifacts.filter((a) => a.kind === 'image').map((a) => ({ id: a.id, name: a.name, dataset: datasetName(a.dataset), path: a.image, placedBy: transformInUse(p, a.id)?.record.id ?? null, alignments: transformsOf(p, a.id).map((x) => ({ id: x.id, name: x.name, how: describeTransform(x) })) })),
         mode,
         focus: store.ui.focus ?? null,
         datasets: p.datasets.map(datasetData),
@@ -279,7 +286,7 @@ export function installRemote(app) {
         showing: showing(),
         tour,
         local: app.localItems.map((i) => ({ name: i.name, kind: i.kind, path: i.path })),
-        examples: (app.examples.list() ?? []).map((e) => ({ name: e.name, title: e.title, state: e.state, download: e.download, size: e.size, license: e.license })),
+        examples: (app.examples.list() ?? []).map((e) => ({ name: e.name, title: e.title, state: e.state, download: e.download, size: e.size, license: e.license, ...(e.outdated ? { outdated: e.outdated } : {}) })),
         jobs: app.jobs.list().filter((j) => !['complete', 'cancelled'].includes(j.state)).map((j) => ({ id: j.id, title: j.title, state: j.state, progress: j.progress, message: j.message ?? '', resumable: Boolean(j.resumable) })),
         library: app.library.location,
       };
@@ -362,6 +369,15 @@ export function installRemote(app) {
     async open_example(args) {
       if (!app.examples.list()) await app.examples.refresh();
       let example = resolveExample(args.example);
+      // An example made by an earlier SituCraft, made again when asked (remake).
+      if (example.outdated && args.remake) {
+        await app.examples.download(example.name);
+        await waitFor(() => !app.examples.job(example.name) && !app.examples.list().find((e) => e.name === example.name)?.outdated, 60 * 60000, `${example.title} to be made again`).catch(async (error) => {
+          await app.examples.refresh();
+          throw error;
+        });
+        example = resolveExample(example.name);
+      }
       if (example.state !== 'ready') {
         // A generated example is made here, nothing downloaded.
         if (!args.download && !example.generated) throw new ActionError(`${example.title} is not on this computer: pass download: true to download it from 10x Genomics (${(example.download / 1e6).toFixed(0)} MB).`);
@@ -393,6 +409,7 @@ export function installRemote(app) {
         if (example.state !== 'ready') throw new ActionError(`${example.title} is not on this computer: ${example.generated ? 'open_example makes it' : 'open_example with download: true downloads it'}.`);
         const names = ['tour', ...workedExamples(example.name).map((w) => w.id)];
         const name = args.name === undefined ? 'tour' : choose(args.name, names, 'tour or worked example');
+        if (example.outdated && workedExamples(example.name).find((w) => w.id === name)?.images) throw new ActionError(`${example.outdated} open_example with remake: true makes it again.`);
         card = await app.examples.tour(example.name, name);
         if (!card) throw new ActionError(`${example.title}'s ${name === 'tour' ? 'tour' : `worked example ${name}`} could not start.`);
         const { item, dataset } = await app.examples.inProject(example.name);
@@ -533,17 +550,310 @@ export function installRemote(app) {
       if (args.segmentation !== undefined) view.segmentation = segmentationRef(dataset, args.segmentation);
       if (args.outlines !== undefined) view.cells.outlines = Boolean(args.outlines);
       if (args.nuclei !== undefined) view.cells.nuclei = Boolean(args.nuclei);
-      if (args.fill !== undefined) view.cells.fill = args.fill === null || /^none$/i.test(String(args.fill)) ? null : /^clusters\b/i.test(String(args.fill)) ? clusterFill(dataset, view.segmentation, String(args.fill)) : /^labels\b/i.test(String(args.fill)) ? await labelFill(dataset, view.segmentation, String(args.fill)) : choose(args.fill, view.segmentation === 'instrument' ? FILLS : [...FILLS.filter((f) => f !== 'method'), ...SEGMENTATION_FILLS], 'fill');
+      if (args.fill !== undefined) view.cells.fill = args.fill === null || /^none$/i.test(String(args.fill)) ? null : /^review( status)?$/i.test(String(args.fill)) ? 'review' : /^clusters\b/i.test(String(args.fill)) ? clusterFill(dataset, view.segmentation, String(args.fill)) : /^labels\b/i.test(String(args.fill)) ? await labelFill(dataset, view.segmentation, String(args.fill)) : choose(args.fill, view.segmentation === 'instrument' ? FILLS : [...FILLS.filter((f) => f !== 'method'), ...SEGMENTATION_FILLS], 'fill');
       if (args.opacity !== undefined) view.cells.opacity = Math.min(1, Math.max(0, finite(args.opacity, 'opacity')));
       if (args.color_by !== undefined) {
         if (choose(args.color_by, ['gene', 'probability'], 'coloring') === 'probability') view.transcripts.colorBy = 'probability';
         else delete view.transcripts.colorBy;
       }
       if (args.cell !== undefined) view.cell = args.cell ? await cellRef(dataset, args.cell, view.segmentation) : null;
+      // Post-Xenium images, by name or artifact id.
+      if (args.images !== undefined) {
+        if (typeof args.images !== 'object' || Array.isArray(args.images) || args.images === null) throw new ActionError('images is an object by image name or ID: {"<name>": {"visible": true, "opacity": 0.5}}.');
+        const records = imagesOf(project(), dataset.id);
+        if (!records.length) throw new ActionError(`${dataset.name} has no post-Xenium image: add_image adds one.`);
+        view.images = (view.images ?? []).map((l) => ({ ...l, channels: l.channels.map((c) => ({ ...c })) }));
+        for (const [ref, patch] of Object.entries(args.images)) {
+          const rec = records.find((r) => r.id === ref) ?? records.find((r) => r.name === choose(ref, records.map((x) => x.name), 'image'));
+          let layer = view.images.find((l) => l.id === rec.id);
+          if (!layer) {
+            layer = defaultImageLayer(await app.bundles.imageDescription(rec.id));
+            view.images.push(layer);
+          }
+          if (patch.visible !== undefined) layer.visible = Boolean(patch.visible);
+          if (patch.opacity !== undefined) layer.opacity = Math.min(1, Math.max(0, finite(patch.opacity, 'opacity')));
+          if (patch.channels !== undefined) {
+            const desc = await app.bundles.imageDescription(rec.id);
+            const names = desc.image.channels.map((c) => c.name);
+            if (desc.image.kind === 'rgb') throw new ActionError(`${rec.name} is RGB: it has no channels to set.`);
+            for (const [name, cp] of Object.entries(patch.channels)) {
+              const c = layer.channels[names.indexOf(choose(name, names, 'channel'))];
+              if (cp.visible !== undefined) c.visible = Boolean(cp.visible);
+              if (cp.color !== undefined) {
+                if (!/^#[0-9a-f]{6}$/i.test(String(cp.color))) throw new ActionError(`${name}'s color is #rrggbb.`);
+                c.color = String(cp.color).toLowerCase();
+              }
+              if (cp.window !== undefined) {
+                if (!Array.isArray(cp.window) || cp.window.length !== 2 || !(finite(cp.window[1], 'window') > finite(cp.window[0], 'window'))) throw new ActionError(`${name}'s window is [low, high], low below high.`);
+                c.window = [Number(cp.window[0]), Number(cp.window[1])];
+              }
+              if (cp.gamma !== undefined) c.gamma = Math.min(4, Math.max(0.2, finite(cp.gamma, 'gamma')));
+            }
+          }
+        }
+      }
       const shownNow = await apply(view, dataset);
       if (view.cell) await waitFor(() => shownNow.detail()?.row === view.cell.row, 30000, 'the cell to be read');
       const now = showing();
       return { message: `${dataset.name} in the Viewer${now.camera ? ` at (${now.camera.cx.toFixed(0)}, ${now.camera.cy.toFixed(0)}) µm, ${now.camera.umPerCss.toPrecision(3)} µm per pixel` : ''}${now.transcripts.genes.length ? `, ${now.transcripts.genes.join(', ')}` : ''}${missing.length ? `. Not in this dataset: ${missing.join(', ')}` : ''}.`, data: { showing: now, missing } };
+    },
+
+    async add_image(args) {
+      const dataset = resolveDataset(args.dataset);
+      const link = app.bundles.link(dataset.id);
+      const item = link?.item ?? app.bundles.itemByPath(dataset.path);
+      if (!item) throw new ActionError(`${dataset.name}'s bundle was not found where the project records it.`);
+      if (args.path === undefined) throw new ActionError('Name the image: path, an OME-TIFF on this computer.');
+      let alignment = args.alignment === undefined || args.alignment === null ? '' : String(args.alignment);
+      try {
+        if (!alignment && args.alignment === undefined) {
+          const checked = await app.bundles.checkImage(item, String(args.path));
+          alignment = checked.siblings?.[0] ?? '';
+        }
+        const manifest = await app.bundles.addImage(item, dataset.id, { path: String(args.path), alignment, ...(args.name ? { name: String(args.name) } : {}) });
+        const record = imagesOf(project(), dataset.id).find((r) => r.id === manifest.id);
+        const placed = manifest.transform ? `Placed by ${manifest.transform.name}: ${describePlacement(manifest.transform.summary)}.` : 'Not aligned: align_image places it by landmarks.';
+        return {
+          message: `${manifest.name} added to ${dataset.name}: ${record ? describeImage(record) : ''}. ${placed}`,
+          data: { id: manifest.id, name: manifest.name, image: record?.image, transform: manifest.transform ? { id: manifest.transform.id, name: manifest.transform.name, summary: manifest.transform.summary } : null, summary: manifest.summary, findings: manifest.findings },
+        };
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+    },
+
+    async align_image(args) {
+      const dataset = resolveDataset(args.dataset);
+      const record = imageRef(dataset, args.image);
+      if (!Array.isArray(args.landmarks)) throw new ActionError('landmarks is a list of {"fixed": [x, y] (µm), "moving": [x, y] (the image\'s pixels)}.');
+      const landmarks = args.landmarks.map((l, i) => {
+        const pair = (v, what) => {
+          if (!Array.isArray(v) || v.length !== 2) throw new ActionError(`Landmark ${i + 1}'s ${what} is [x, y].`);
+          return [finite(v[0], `landmark ${i + 1}'s ${what}`), finite(v[1], `landmark ${i + 1}'s ${what}`)];
+        };
+        return { fixed: pair(l?.fixed, 'fixed position'), moving: pair(l?.moving, 'moving position') };
+      });
+      const model = args.model === undefined ? 'similarity' : choose(args.model, ['similarity', 'affine'], 'model');
+      const parent = args.parent === undefined ? '' : transformRef(record, args.parent).id;
+      const use = args.use === undefined ? true : Boolean(args.use);
+      const by = args.by ? String(args.by) : author;
+      const note = args.note ? String(args.note) : '';
+      try {
+        const answer = await app.bundles.makeTransform(dataset.id, record.id, { landmarks, model, parent, by, note }, { use, rationale: note, by });
+        const fit = answer.transform.fit;
+        return {
+          message: `${answer.manifest.name}: residuals ${fit.rms.toFixed(3)} µm root-mean-square (at most ${fit.max.toFixed(3)})${fit.leaveOneOut ? `, left out ${fit.looRms.toFixed(3)} µm (at most ${fit.looMax.toFixed(3)})` : ''}. ${use ? `It places ${record.name}.` : 'Saved as a version; use_transform chooses it.'}`,
+          data: { id: answer.manifest.id, name: answer.manifest.name, transform: answer.transform.transform, model: answer.transform.model, fit, placedBy: transformInUse(project(), record.id)?.record.id ?? null },
+        };
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+    },
+
+    async register_image(args) {
+      const dataset = resolveDataset(args.dataset);
+      const record = imageRef(dataset, args.image);
+      const item = bundleOf(dataset);
+      const model = args.model === undefined ? 'similarity' : choose(args.model, ['similarity', 'affine'], 'model');
+      const by = args.by ? String(args.by) : author;
+      const note = args.note ? String(args.note) : '';
+      const request = { model, nonrigid: Boolean(args.nonrigid), by, note };
+      if (args.start !== undefined) request.start = transformRef(record, args.start).id;
+      if (args.channel !== undefined) {
+        const desc = await app.bundles.imageDescription(record.id);
+        if (desc.image.kind === 'rgb') throw new ActionError(`${record.name} is RGB: its hematoxylin is registered, it has no channel to name.`);
+        const names = desc.image.channels.map((c) => c.name);
+        request.channel = names.indexOf(choose(String(args.channel), names, 'channel'));
+      }
+      const use = args.use === undefined ? true : Boolean(args.use);
+      try {
+        const m = await app.bundles.registerImage(item, dataset.id, record.id, request, { use, rationale: note || 'Aligned automatically by the nuclei.', by });
+        const rec = project().artifacts.find((a) => a.kind === 'transform' && a.id === m.id);
+        const d = await app.bundles.transformDescription(m.id);
+        return {
+          message: `${m.name}: ${rec ? describeTransform(rec) : ''}. ${use ? `It places ${record.name}.` : 'Saved as a version; use_transform chooses it.'}${d.registration?.warnings?.length ? ` ${d.registration.warnings.join(' ')}` : ''}`,
+          data: { id: m.id, name: m.name, transform: d.transform, model: d.model, deformed: Boolean(d.deformation), fit: d.fit, registration: d.registration, matches: (d.matches ?? []).length, kept: (d.matches ?? []).filter((x) => x.kept).length, placedBy: transformInUse(project(), record.id)?.record.id ?? null },
+        };
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+    },
+
+    async use_transform(args) {
+      const dataset = resolveDataset(args.dataset);
+      const record = imageRef(dataset, args.image);
+      const tf = transformRef(record, args.transform);
+      const by = args.by ? String(args.by) : author;
+      app.store.commit(useTransform(project(), { transform: tf.id, rationale: args.rationale ? String(args.rationale) : '', by }), `Place ${record.name} by ${tf.name}`);
+      return { message: `${record.name} is placed by ${tf.name}: ${describePlacement(tf.summary)}.`, data: { image: record.id, transform: tf.id } };
+    },
+
+    async check_alignment(args) {
+      const dataset = resolveDataset(args.dataset);
+      const record = imageRef(dataset, args.image);
+      const item = bundleOf(dataset);
+      const tf = args.transform === undefined ? transformInUse(project(), record.id)?.record : transformRef(record, args.transform);
+      if (!tf) throw new ActionError(`${record.name} is not aligned: name a version (transform) to check.`);
+      try {
+        const m = await app.bundles.checkAlignment(item, dataset.id, record.id, tf.id);
+        const rec = project().artifacts.find((a) => a.kind === 'alignment-check' && a.id === m.id);
+        return {
+          message: `${tf.name}: ${rec ? describeCheck(rec) : ''}.`,
+          data: { id: m.id, transform: tf.id, ...m.summary },
+        };
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+    },
+
+    async draw_region(args) {
+      const dataset = resolveDataset(args.dataset);
+      const given = ['rectangle', 'polygon', 'brush'].filter((k) => args[k] !== undefined && args[k] !== null);
+      if (given.length !== 1) throw new ActionError('Give one shape: rectangle, polygon or brush.');
+      const v = await openIn('viewer', dataset);
+      const m = await v.regions.mapping(coordinatesRef(dataset, args.coordinates));
+      let geometry;
+      if (given[0] === 'rectangle') {
+        const r = args.rectangle;
+        if (!Array.isArray(r) || r.length !== 4) throw new ActionError('rectangle is [x0, y0, x1, y1].');
+        const [x0, y0, x1, y1] = r.map((x) => finite(x, 'the rectangle\'s corners'));
+        if (x0 === x1 || y0 === y1) throw new ActionError('The rectangle has no area.');
+        geometry = mapGeometry(rectangle(x0, y0, x1, y1), m.from, m.fromStep ?? 0);
+      } else if (given[0] === 'polygon') {
+        const pts = pointsArg(args.polygon, 'polygon');
+        if (pts.length < 3) throw new ActionError('A polygon has three corners or more.');
+        geometry = mapGeometry(polygonOf(pts), m.from, m.fromStep ?? 0);
+      } else {
+        const b = brushArg(args.brush);
+        geometry = brushGeometry(null, b.points.map(([x, y]) => m.from(x, y)), b.radius);
+      }
+      const cls = args.class ? String(args.class) : 'Region*';
+      const name = args.name ? String(args.name) : nextRegionName(project(), dataset.id, cls);
+      let next;
+      try {
+        next = addRegion(project(), { dataset: dataset.id, name, cls, geometry, tool: given[0], by: args.by ? String(args.by) : author, note: args.note ? String(args.note) : '' });
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      app.store.commit(next, `Draw ${name}`);
+      await frames();
+      return regionAnswer(dataset, v, next.regions.at(-1).id, 'Drew');
+    },
+
+    async edit_region(args) {
+      const dataset = resolveDataset(args.dataset);
+      const v = await openIn('viewer', dataset);
+      const r = regionRef(dataset, args.region);
+      const patch = {};
+      let tool;
+      let note = args.note ? String(args.note) : '';
+      if (args.name !== undefined) {
+        patch.name = String(args.name).trim();
+        if (!patch.name) throw new ActionError('A region needs a name.');
+      }
+      if (args.class !== undefined) patch.cls = String(args.class);
+      if (args.restore !== undefined) {
+        const k = finite(args.restore, 'restore');
+        const ver = r.versions[k - 1];
+        if (!Number.isInteger(k) || !ver || ver.removed) throw new ActionError(`${r.name} has versions 1 to ${r.versions.length}; restore one that was not a removal.`);
+        Object.assign(patch, { name: patch.name ?? ver.name, cls: patch.cls ?? ver.cls, color: ver.color, geometry: ver.geometry });
+        tool = ver.tool;
+        note ||= `Restored version ${k}`;
+      }
+      if (args.brush !== undefined && args.brush !== null) {
+        const b = brushArg(args.brush);
+        const m = await v.regions.mapping(coordinatesRef(dataset, args.coordinates));
+        patch.geometry = brushGeometry(patch.geometry ?? r.geometry, b.points.map(([x, y]) => m.from(x, y)), b.radius, b.erase);
+        tool = 'brush';
+        note ||= b.erase ? 'Erased with the brush' : 'Painted with the brush';
+      }
+      if (args.remove !== undefined && args.remove !== null) patch.removed = Boolean(args.remove);
+      if (!Object.keys(patch).length) throw new ActionError('Nothing to change: give name, class, brush, restore or remove.');
+      if (r.removed && patch.removed !== false) throw new ActionError(`${r.name} is removed: remove: false returns it.`);
+      try {
+        app.store.commit(editRegion(project(), r.id, patch, { by: args.by ? String(args.by) : author, note, tool }), `Change ${r.name}`);
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      await frames();
+      if (patch.removed) return { message: `Removed ${r.name}: kept with its ${plural(r.versions.length + 1, 'version')}; remove: false returns it.`, data: { id: r.id, removed: true, version: r.versions.length + 1 } };
+      return regionAnswer(dataset, v, r.id, 'Changed');
+    },
+
+    async regions(args) {
+      const dataset = resolveDataset(args.dataset);
+      const v = await openIn('viewer', dataset);
+      await v.segmentationReady?.();
+      const list = regionsOf(project(), dataset.id, { removed: Boolean(args.removed) });
+      const rows = list.map((r) => ({
+        id: r.id, name: r.name, class: r.cls, version: r.version, area: area(r.geometry), cells: r.removed ? null : v.regions.cellsOf(r.id), removed: Boolean(r.removed),
+        ...(args.versions ? { versions: r.versions.map((x, k) => ({ version: k + 1, name: x.name, class: x.cls, area: area(x.geometry), tool: x.tool, by: x.by, time: x.time, note: x.note, removed: Boolean(x.removed) })) } : {}),
+      }));
+      let chosen = null;
+      if (args.choose !== undefined && args.choose !== null) {
+        const r = regionRef(dataset, args.choose);
+        if (r.removed) throw new ActionError(`${r.name} is removed.`);
+        chosen = { region: r.id, name: r.name, count: v.regions.chooseCells(r.id) };
+        await frames();
+      }
+      const seg = v.segmentation() ? 'of the segmentation drawn' : 'of the instrument\'s segmentation';
+      return {
+        message: `${dataset.name}: ${plural(rows.length, 'region')}${rows.length ? `: ${rows.map((r) => `${r.name} (${r.class}, ${Math.round(r.area).toLocaleString('en-US')} µm²${r.cells === null ? '' : `, ${plural(r.cells, 'cell')}`}${r.removed ? ', removed' : ''})`).join('; ')}` : ''}; cells counted by centroid, ${seg}.${chosen ? ` Chose the ${plural(chosen.count, 'cell')} of the instrument's segmentation in ${chosen.name}: the Viewer, the QC view and the inspector show them.` : ''}`,
+        data: { regions: rows, segmentation: v.segmentation() ?? 'instrument', chosen },
+      };
+    },
+
+    async import_regions(args) {
+      const dataset = resolveDataset(args.dataset);
+      const v = await openIn('viewer', dataset);
+      const system = coordinatesRef(dataset, args.coordinates);
+      const path = String(args.path ?? '');
+      const response = await fetch(`/api/read-json?path=${encodeURIComponent(path)}`, { cache: 'no-store' });
+      if (!response.ok) throw new ActionError((await response.json().catch(() => ({}))).error ?? `HTTP ${response.status}`);
+      const doc = await response.json();
+      const source = path.split(/[\\/]/).at(-1);
+      let result;
+      try {
+        result = await v.regions.importRegions(doc, system, source, args.by ? String(args.by) : author);
+      } catch (error) {
+        throw new ActionError(`${source} was not read: ${error.message}`);
+      }
+      await frames();
+      const left = Object.entries(result.skipped).map(([k, n]) => `${n} ${k}`).join(', ');
+      return {
+        message: `Read ${plural(result.added, 'region')} from ${source} into ${dataset.name}${left ? `; left out: ${left}` : ''}.`,
+        data: { added: result.added, skipped: result.skipped, regions: result.ids.map((id) => v.regions.list().find((r) => r.id === id)).filter(Boolean) },
+      };
+    },
+
+    async show_alignment(args) {
+      const dataset = resolveDataset(args.dataset);
+      const record = imageRef(dataset, args.image);
+      const tf = args.transform === undefined ? null : transformRef(record, args.transform);
+      bundleOf(dataset);
+      await app.showAlignment(dataset.id, record.id, { transform: tf?.id ?? null });
+      const hook = await waitFor(() => store.ui.mode === 'alignment' && window.situcraftAlignment?.image === record.id && window.situcraftAlignment, 10 * 60000, `${record.name} to open in the Alignment view`);
+      if (tf) await waitFor(() => hook.state().parent === tf.id || !['landmarks', 'keypoints'].includes(tf.summary?.method), 30000, 'its landmarks to load');
+      // What to see, and how.
+      const view = {};
+      if (args.show !== undefined) {
+        const text = String(args.show);
+        view.show = /^in use$/i.test(text) ? 'in-use' : /^fit$/i.test(text) ? 'fit' : /^none$/i.test(text) ? 'none' : transformRef(record, text).id;
+      }
+      if (args.display !== undefined) view.as = choose(args.display, ['overlay', 'checkerboard', 'flicker'], 'display');
+      if (args.opacity !== undefined) view.opacity = Math.min(1, Math.max(0, finite(args.opacity, 'opacity')));
+      if (args.cell !== undefined) view.cell = Math.min(400, Math.max(10, finite(args.cell, 'cell')));
+      for (const key of ['edges', 'outlines', 'map']) if (args[key] !== undefined) view[key] = Boolean(args[key]);
+      if (Object.keys(view).length) hook.setView(view);
+      await waitFor(() => hook.drawn(), 60000, 'the version to be drawn');
+      await hook.settled();
+      await frames();
+      const st = hook.state();
+      const inUse = transformInUse(project(), record.id);
+      return {
+        message: `${record.name} in the Alignment view: ${plural(st.landmarks.length, 'landmark')}${st.fit ? `, residuals ${st.fit.rms.toFixed(3)} µm root-mean-square` : ''}; ${inUse ? `placed by ${inUse.record.name}` : 'not aligned'}.`,
+        data: { ...st, view: hook.view(), versions: transformsOf(project(), record.id).map((x) => ({ id: x.id, name: x.name, how: describeTransform(x), parent: x.parent, inUse: inUse?.record.id === x.id, check: checksOf(project(), x.id).at(-1)?.summary ?? null })) },
+      };
     },
 
     async select_cell(args) {
@@ -753,7 +1063,7 @@ export function installRemote(app) {
       const p = answer.preflight;
       const e = p.estimate ?? {};
       const size = (n) => (n >= 1e9 ? `${(n / 1e9).toFixed(1)} GB` : `${Math.round(n / 1e6)} MB`);
-      const covers = e.regions ? `refines ${plural(e.cells, 'cell')}${e.cellsHeld ? ` (${e.cellsHeld} held about them)` : ''} in ${p.patches?.length ? `${e.regions.toLocaleString('en-US')} patches` : plural(e.regions, 'region')}, ${plural(e.transcripts, 'transcript')} modelled; needs about ${size(e.peakMemoryBytes)} of memory${p.memoryBytes ? ` (the computer has ${size(p.memoryBytes)})` : ''}, ${size(e.diskBytes)} of disk${p.freeDiskBytes >= 0 ? ` (${size(p.freeDiskBytes)} free)` : ''} and about ${Math.max(1, Math.round(e.seconds))} s on ${e.cores} threads` : 'covers nothing yet';
+      const covers = e.regions ? `refines ${plural(e.cells, 'cell')}${e.cellsHeld ? ` (${e.cellsHeld} held about them)` : ''} in ${p.patches?.length ? `${e.regions.toLocaleString('en-US')} patches` : plural(e.regions, 'region')}, ${plural(e.transcripts, 'transcript')} modeled; needs about ${size(e.peakMemoryBytes)} of memory${p.memoryBytes ? ` (the computer has ${size(p.memoryBytes)})` : ''}, ${size(e.diskBytes)} of disk${p.freeDiskBytes >= 0 ? ` (${size(p.freeDiskBytes)} free)` : ''} and about ${Math.max(1, Math.round(e.seconds))} s on ${e.cores} threads` : 'covers nothing yet';
       const problems = p.problems.map((f) => `${f.message}${f.remedy ? ` ${f.remedy}` : ''}`);
       return {
         message: `${answer.name ?? 'The refinement'} of ${dataset.name} (${p.spec.preset}) ${covers}.${problems.length ? ` Problems: ${problems.join(' ')}` : ' No problems.'}${p.risks.length ? ` Risks: ${p.risks.map((f) => f.message).join(' ')}` : ''}${answer.artifact ? ' It was made already.' : ''}`,
@@ -1218,7 +1528,7 @@ export function installRemote(app) {
     },
 
     async curate_labels(args) {
-      const { dataset, seg, version } = labelVersionArg(args);
+      const { dataset, seg, item, version } = labelVersionArg(args);
       if (version.kind === 'consensus') throw new ActionError('A consensus is made by its rule: curate one of its sets, or a curated set begun from it.');
       if (!args.reason || !String(args.reason).trim()) throw new ActionError('Say why (reason): every edit keeps its reason.');
       let target = version.kind === 'curated' ? project().artifacts.find((a) => a.id === version.id) : curatedSetsOf(project(), dataset.id, seg.id).find((c) => c.base.labels === version.id && c.base.level === version.level);
@@ -1227,32 +1537,113 @@ export function installRemote(app) {
         store.commit(createCurated(project(), { dataset: dataset.id, segmentation: seg.id, base: { labels: version.id, level: version.level, name: version.name }, name, by: 'remote control' }), `Begin the curated label set ${name}`);
         target = curatedSetsOf(project(), dataset.id, seg.id).at(-1);
       }
-      const edit = { reason: String(args.reason), by: args.by ? String(args.by) : 'remote control' };
-      if (Array.isArray(args.clusters)) {
-        const clusterings = clusteringsOf(project(), dataset.id).filter((c) => c.state === 'complete' && c.segmentation === seg.id);
-        const c = clusteringRef(clusterings, args.clustering);
-        if (!c) throw new ActionError('The segmentation has no clustering.');
-        Object.assign(edit, { kind: 'cluster', clustering: c.id, clusters: args.clusters.map((k) => finite(k, 'cluster') - 1), label: String(args.label ?? '') });
-      } else if (Array.isArray(args.cells)) {
-        const cells = args.cells.map((v) => finite(String(v).replace(/^#/, ''), 'cell'));
-        let label = args.label === undefined ? null : String(args.label);
-        if (args.accept) {
-          const src = await labelSource(app, refOf(target.id));
-          const own = [...new Set(cells.map((i) => src.label[i]))];
-          if (own.length !== 1 || own[0] < 0) throw new ActionError('Accept cells of one label at a time (each has a label).');
-          label = src.names[own[0]];
-        }
-        Object.assign(edit, { kind: args.accept ? 'accept' : 'cells', cells, label });
-      } else throw new ActionError('Name cells (their rows, as #123) or clusters (numbers from 1) of a clustering.');
-      let next;
+      // Each edit is a review of the curated set's labels, recorded with its provenance.
+      const by = args.by ? String(args.by) : 'remote control';
+      const reason = String(args.reason);
+      const curatedSet = { id: target.id, level: 0, name: target.name, kind: 'curated' };
+      const segSpec = { id: seg.id, name: seg.name, instrument: seg.source === 'instrument' };
+      let review;
       try {
-        next = appendEdit(project(), target.id, edit);
+        if (Array.isArray(args.clusters)) {
+          const clusterings = clusteringsOf(project(), dataset.id).filter((c) => c.state === 'complete' && c.segmentation === seg.id);
+          const c = clusteringRef(clusterings, args.clustering);
+          if (!c) throw new ActionError('The segmentation has no clustering.');
+          const next = addReview(project(), { action: 'relabel', by, note: reason, dataset: dataset.id, target: 'clusters', segmentation: segSpec, clusters: { clustering: c.id, clusters: args.clusters.map((k) => finite(k, 'cluster') - 1) }, labels: curatedSet, label: String(args.label ?? ''), curated: target.id, images: imagesInUse(project(), dataset.id) });
+          store.commit(next, `Curate ${target.name}`);
+          review = next.reviews.at(-1);
+        } else if (Array.isArray(args.cells)) {
+          const rows = args.cells.map((v) => finite(String(v).replace(/^#/, ''), 'cell'));
+          if (args.accept) {
+            const src = await labelSource(app, refOf(target.id));
+            const own = [...new Set(rows.map((i) => src.label[i]))];
+            if (own.length !== 1 || own[0] < 0) throw new ActionError('Accept cells of one label at a time (each has a label).');
+          }
+          ({ record: review } = await reviewCells({ app, t: { dataset, item }, seg: segSpec, rows, action: args.accept ? 'accept' : 'relabel', labels: curatedSet, label: args.label === undefined ? undefined : String(args.label), note: reason, by }));
+        } else throw new ActionError('Name cells (their rows, as #123) or clusters (numbers from 1) of a clustering.');
       } catch (error) {
-        throw new ActionError(error.message);
+        throw error instanceof ActionError ? error : new ActionError(error.message);
       }
-      store.commit(next, `Curate ${target.name}`);
       const record = project().artifacts.find((a) => a.id === target.id);
-      return { message: `${record.name}: ${record.edits.length} edit${record.edits.length === 1 ? '' : 's'}; the last: ${project().history.at(-1).detail}.`, data: { id: record.id, base: record.base, edits: record.edits.length, last: record.edits.at(-1) } };
+      return { message: `${record.name}: ${record.edits.length} edit${record.edits.length === 1 ? '' : 's'}; the last: ${project().history.at(-1).detail}.`, data: { id: record.id, base: record.base, edits: record.edits.length, last: record.edits.at(-1), review: review.id } };
+    },
+
+    async review(args) {
+      const dataset = resolveDataset(args.dataset);
+      const action = choose(String(args.action ?? ''), REVIEW_ACTIONS.map((a) => a.id), 'review action');
+      const given = ['cells', 'chosen', 'region'].filter((k) => args[k] !== undefined && args[k] !== null && args[k] !== false);
+      if (given.length !== 1) throw new ActionError('Review one of: cells (their IDs, or rows as #123), chosen (the cells chosen) or a region.');
+      const item = bundleOf(dataset);
+      const t = { dataset, item };
+      const by = args.by ? String(args.by) : author;
+      const values = { label: args.label === undefined ? undefined : String(args.label), alternatives: Array.isArray(args.alternatives) ? args.alternatives.map(String) : undefined, concern: args.concern === undefined ? undefined : choose(String(args.concern), CONCERNS.map((c) => c.id), 'concern'), note: args.note === undefined ? (args.reason === undefined ? '' : String(args.reason)) : String(args.note), by };
+      try {
+        if (given[0] === 'region') {
+          const v = await openIn('viewer', dataset);
+          await v.segmentationReady?.();
+          const r = regionRef(dataset, args.region);
+          const seg = segmentationArg(dataset, v.segmentation() ?? 'instrument');
+          const segSpec = { id: seg.id, name: seg.name, instrument: seg.source === 'instrument' };
+          const rows = v.regions.rowsIn(r.id);
+          const { record } = await reviewRegion({ app, t, regionId: r.id, action, ...values, seg: segSpec, rows });
+          let cellsRecord = null;
+          if (action === 'exclude' && args.cells_too !== false && rows.length) ({ record: cellsRecord } = await reviewCells({ app, t, seg: segSpec, rows, action: 'exclude', note: `In ${r.name}, excluded: ${values.note}`, by }));
+          await frames();
+          return { message: `${reviewLine(record)}${cellsRecord ? `; its ${plural(rows.length, 'cell')} excluded too` : ''}.`, data: { review: record, cells: cellsRecord?.id ?? null } };
+        }
+        const seg = segmentationArg(dataset, args.segmentation);
+        const segSpec = { id: seg.id, name: seg.name, instrument: seg.source === 'instrument' };
+        let rows;
+        if (given[0] === 'chosen') {
+          if (app.selection?.dataset !== dataset.id) throw new ActionError(`No cells of ${dataset.name} are chosen: select_cells or regions (choose) chooses them.`);
+          if (!segSpec.instrument) throw new ActionError('The cells chosen are the instrument\'s: review them as its segmentation\'s (segmentation: instrument).');
+          rows = [];
+          for (let i = 0; i < app.selection.mask.length; i += 1) if (app.selection.mask[i]) rows.push(i);
+        } else {
+          if (!Array.isArray(args.cells) || !args.cells.length) throw new ActionError('cells is a list of cell IDs, or rows as "#123".');
+          const named = args.cells.map(String);
+          const ids = named.filter((c) => !/^#\d+$/.test(c));
+          const found = ids.length ? await cellRows(item, segSpec, ids) : [];
+          const missing = ids.filter((_, k) => found[k] < 0);
+          if (missing.length) throw new ActionError(`${seg.name} has no cell ${missing.slice(0, 5).join(', ')}${missing.length > 5 ? ` (and ${missing.length - 5} more)` : ''}.`);
+          const byId = new Map(ids.map((id, k) => [id, found[k]]));
+          rows = named.map((c) => (/^#\d+$/.test(c) ? Number(c.slice(1)) : byId.get(c)));
+        }
+        let labels = null;
+        if (args.labels !== undefined || ['accept', 'relabel', 'ambiguous'].includes(action)) {
+          const { version } = labelVersionArg({ ...args, dataset: dataset.id, segmentation: seg.id });
+          labels = { id: version.id, level: version.level };
+        }
+        const { record, curated } = await reviewCells({ app, t, seg: segSpec, rows, action, labels, ...values });
+        await frames();
+        return { message: `${reviewLine(record)} (${plural(rows.length, 'cell')} of ${seg.name}).`, data: { review: record, curated } };
+      } catch (error) {
+        throw error instanceof ActionError ? error : new ActionError(error.message);
+      }
+    },
+
+    async reviews(args) {
+      const dataset = resolveDataset(args.dataset);
+      let list = reviewsOf(project(), dataset.id);
+      if (args.reviewer !== undefined) list = list.filter((r) => r.by === String(args.reviewer));
+      if (args.action !== undefined) list = list.filter((r) => r.action === choose(String(args.action), REVIEW_ACTIONS.map((a) => a.id), 'review action'));
+      if (args.region !== undefined) {
+        const r = regionRef(dataset, args.region);
+        list = list.filter((x) => x.target === 'region' && x.region.id === r.id);
+      }
+      if (args.cell !== undefined) {
+        const text = String(args.cell);
+        list = list.filter((x) => x.target === 'cells' && x.cells.some((c) => (/^#\d+$/.test(text) ? c.row === Number(text.slice(1)) : c.id === text)));
+      }
+      const seg = segmentationArg(dataset, args.segmentation);
+      const n = seg.summary?.cells ?? Math.max(0, ...reviewsOf(project(), dataset.id).filter((r) => r.target === 'cells' && r.segmentation?.id === seg.id).flatMap((r) => r.cells.map((c) => c.row + 1)));
+      const counts = stateCounts(cellReviewState(reviewsOf(project(), dataset.id), seg.id, n));
+      const regions = Object.fromEntries([...regionReviewState(reviewsOf(project(), dataset.id))].map(([id, st]) => [regionsOf(project(), dataset.id, { removed: true }).find((r) => r.id === id)?.name ?? id, st]));
+      const limit = args.limit === undefined ? 50 : Math.max(1, finite(args.limit, 'limit'));
+      const shown = list.slice(-limit).reverse();
+      return {
+        message: `${dataset.name}: ${plural(list.length, 'review')}${list.length ? ` (the latest: ${reviewLine(list.at(-1))})` : ''}; of ${seg.name}'s cells, ${counts.reviewed} reviewed: ${['accepted', 'relabeled', 'ambiguous', 'excluded', 'concern', 'commented'].map((k) => `${counts[k]} ${k === 'concern' ? 'of concern' : k}`).join(', ')}.`,
+        data: { reviews: shown, total: list.length, counts, regions, segmentation: { id: seg.id, name: seg.name } },
+      };
     },
 
     async consensus_labels(args) {
@@ -1477,7 +1868,35 @@ export function installRemote(app) {
     },
 
     async export(args) {
-      const what = choose(args.what, ['project', 'archive', 'methods'], 'kind of file');
+      const what = choose(args.what, ['project', 'archive', 'methods', 'alignment', 'regions', 'reviews'], 'kind of file');
+      if (what === 'reviews') {
+        const dataset = resolveDataset(args.dataset);
+        const format = args.format === undefined ? 'csv' : choose(String(args.format), ['csv', 'json'], 'format');
+        const records = reviewsOf(project(), dataset.id);
+        if (!records.length) throw new ActionError(`${dataset.name} has no review yet: review reviews its cells and regions.`);
+        const file = format === 'csv' ? reviewsCSV(records, { [dataset.id]: dataset.name }) : `${JSON.stringify(reviewsJSON(records, { project: project(), datasets: [dataset], situcraft: app.version }), null, 1)}\n`;
+        return { file, message: `${plural(records.length, 'review')} of ${dataset.name}, as ${format === 'csv' ? 'CSV (a row a cell, cluster or region)' : 'JSON (the record)'}.` };
+      }
+      if (what === 'regions') {
+        const dataset = resolveDataset(args.dataset);
+        const v = await openIn('viewer', dataset);
+        const system = coordinatesRef(dataset, args.coordinates);
+        const ids = Array.isArray(args.regions) ? args.regions.map((x) => regionRef(dataset, x).id) : null;
+        const doc = await v.regions.exportDocument(system, ids);
+        if (!doc.features.length) throw new ActionError(`${dataset.name} has no region to write: draw_region draws one.`);
+        const label = v.regions.systems().find((x) => x.id === system)?.label ?? system;
+        return { file: `${JSON.stringify(doc, null, 1)}\n`, message: `${plural(doc.features.length, 'region')} of ${dataset.name} as GeoJSON, as QuPath imports annotations, in ${label}.` };
+      }
+      if (what === 'alignment') {
+        const dataset = resolveDataset(args.dataset);
+        const record = imageRef(dataset, args.image);
+        const tf = args.transform === undefined ? transformInUse(project(), record.id)?.record : transformRef(record, args.transform);
+        if (!tf) throw new ActionError(`${record.name} is not aligned: name an alignment (transform).`);
+        const format = args.format === undefined ? 'matrix' : choose(args.format, ['matrix', 'keypoints'], 'format');
+        const response = await fetch(`/api/transforms/${encodeURIComponent(tf.id)}/xenium-explorer/${format}`, { cache: 'no-store' });
+        if (!response.ok) throw new ActionError((await response.json().catch(() => ({}))).error ?? `HTTP ${response.status}`);
+        return { file: await response.text(), message: `${tf.name} as Xenium Explorer's ${format === 'matrix' ? 'transformation matrix' : 'keypoints'} for ${record.name}.` };
+      }
       if (what === 'project') {
         return { file: `${JSON.stringify(parseProject(serializeProject(project())), null, 2)}\n`, message: `The project document of ${project().name}.` };
       }
@@ -1493,6 +1912,76 @@ export function installRemote(app) {
       return { message: `Wrote ${body.path} (${body.bytes} bytes): ${project().name}, its bundles recorded relative to it.`, data: { path: body.path, bytes: body.bytes } };
     },
   };
+
+  // A post-Xenium image of a dataset by its name or artifact ID (its only image if not named).
+  function imageRef(dataset, ref) {
+    const records = imagesOf(project(), dataset.id);
+    if (!records.length) throw new ActionError(`${dataset.name} has no post-Xenium image: add_image adds one.`);
+    if (ref === undefined || ref === null || ref === '') {
+      if (records.length > 1) throw new ActionError(`${dataset.name} has ${records.length} images (${records.map((r) => r.name).join('; ')}): name one (image).`);
+      return records[0];
+    }
+    return records.find((r) => r.id === String(ref)) ?? records.find((r) => r.name === choose(String(ref), records.map((x) => x.name), 'image'));
+  }
+
+  // The coordinates regions are given in: 'um', 'xenium' (the Xenium image's pixels) or a
+  // post-Xenium image's artifact ID (its pixels), by name or ID; an image must be aligned.
+  function coordinatesRef(dataset, ref) {
+    if (ref === undefined || ref === null || /^(um|µm|microns?)$/i.test(String(ref))) return 'um';
+    if (/^xenium$/i.test(String(ref))) return 'xenium';
+    const record = imageRef(dataset, ref);
+    if (!transformInUse(project(), record.id)) throw new ActionError(`${record.name} is not aligned: its pixels have no place on the tissue yet.`);
+    return record.id;
+  }
+
+  // A region of a dataset by its name or ID (removed ones too).
+  function regionRef(dataset, ref) {
+    const list = regionsOf(project(), dataset.id, { removed: true });
+    if (!list.length) throw new ActionError(`${dataset.name} has no region: draw_region draws one.`);
+    const text = String(ref ?? '');
+    return list.find((r) => r.id === text) ?? list.find((r) => r.name === choose(text, list.map((x) => x.name), 'region'));
+  }
+
+  function pointsArg(v, what) {
+    if (!Array.isArray(v)) throw new ActionError(`${what} is a list of [x, y].`);
+    return v.map((p, i) => {
+      if (!Array.isArray(p) || p.length !== 2) throw new ActionError(`${what}'s point ${i + 1} is [x, y].`);
+      return [finite(p[0], `${what}'s point ${i + 1}`), finite(p[1], `${what}'s point ${i + 1}`)];
+    });
+  }
+
+  function brushArg(b) {
+    if (!b || typeof b !== 'object') throw new ActionError('brush is {"points": [[x, y], …], "radius": µm}.');
+    const points = pointsArg(b.points, 'the brush stroke');
+    if (!points.length) throw new ActionError('The brush stroke has no point.');
+    const radius = finite(b.radius, 'the brush\'s radius');
+    if (!(radius > 0)) throw new ActionError('The brush\'s radius is above 0 µm.');
+    return { points, radius, erase: Boolean(b.erase) };
+  }
+
+  // A region as an answer: its area and cells.
+  function regionAnswer(dataset, v, id, verb) {
+    const r = v.regions.list().find((x) => x.id === id);
+    const seg = v.segmentation() ? 'of the segmentation drawn' : 'of the instrument\'s segmentation';
+    return {
+      message: `${verb} ${r.name} (${r.cls}, version ${r.version}) on ${dataset.name}: ${Math.round(r.area).toLocaleString('en-US')} µm², ${plural(r.cells ?? 0, 'cell')} ${seg} by centroid.`,
+      data: { id: r.id, name: r.name, class: r.cls, version: r.version, area: r.area, cells: r.cells, segmentation: v.segmentation() ?? 'instrument' },
+    };
+  }
+
+  // A version of an image's alignment by its name or artifact ID ('in use' for the one placing it).
+  function transformRef(record, ref) {
+    const list = transformsOf(project(), record.id);
+    if (/^in use$/i.test(String(ref))) {
+      const used = transformInUse(project(), record.id);
+      if (!used) throw new ActionError(`${record.name} is not aligned.`);
+      return used.record;
+    }
+    const byId = list.find((x) => x.id === String(ref));
+    if (byId) return byId;
+    if (!list.length) throw new ActionError(`${record.name} has no alignment yet: align_image or add_image with an alignment makes one.`);
+    return list.find((x) => x.name === choose(String(ref), list.map((x) => x.name), 'alignment'));
+  }
 
   // A cell of a dataset by its ID, or by its row as "#123": { row, id }.
   // A cell by its ID (or "#row") in a segmentation of a dataset ('instrument' for the dataset's

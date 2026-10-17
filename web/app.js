@@ -18,7 +18,7 @@ import { colorVisionFriendly, setColorVisionFriendly } from './lib/colormaps.js'
 import { createProject, isEmptyProject, parseProject, rename, serializeProject } from './lib/project.js';
 import { parseViewLink } from './lib/views.js';
 
-const VERSION = '0.4.0';
+const VERSION = '0.5.0';
 
 const toOpen = { label: 'Open a bundle', icon: 'bundle', run: (app) => app.openPathDialog() };
 
@@ -29,6 +29,7 @@ const MODES = [
   { id: 'welcome', label: 'Start', icon: 'grid', hidden: true, load: () => import('./ui/mode-welcome.js').then((m) => m.mountWelcome) },
   { id: 'data', label: 'Data', icon: 'database', load: () => import('./ui/mode-data.js').then((m) => m.mountData) },
   { id: 'viewer', label: 'Viewer', icon: 'tissue', load: () => import('./ui/mode-viewer.js').then((m) => m.mountViewer) },
+  { id: 'alignment', label: 'Alignment', icon: 'target', load: () => import('./ui/mode-alignment.js').then((m) => m.mountAlignment) },
   { id: 'qc', label: 'QC', icon: 'qc', load: () => import('./ui/mode-qc.js').then((m) => m.mountQC) },
   { id: 'segmentation', label: 'Segmentation', icon: 'segment', load: () => import('./ui/mode-segmentation.js').then((m) => m.mountSegmentation) },
   { id: 'compare', label: 'Compare', icon: 'compare', load: () => import('./ui/mode-compare.js').then((m) => m.mountCompare) },
@@ -197,6 +198,15 @@ async function start() {
   };
 
   app.focusItem = (focus) => store.setUI({ focus }, ['focus']);
+
+  // Opens a dataset's post-Xenium image in the Alignment view; with transform, that version's
+  // landmarks to edit.
+  app.showAlignment = async (datasetId, imageId, { transform = null } = {}) => {
+    app.pendingAlignment = { dataset: datasetId, image: imageId, transform };
+    if (store.ui.focus?.kind !== 'dataset' || store.ui.focus.id !== datasetId) app.focusItem({ kind: 'dataset', id: datasetId });
+    if (store.ui.mode !== 'alignment') await app.setMode('alignment');
+    else store.notify?.(['alignment']);
+  };
 
   app.toggleDrawer = (open = !store.ui.drawer.open, tab = store.ui.drawer.tab) => {
     store.setUI({ drawer: { open, tab } }, ['drawer']);
@@ -597,7 +607,7 @@ async function start() {
     const next = !app.practice();
     prefs.set('practice', next);
     store.notify(['project']);
-    toast(next ? 'Practice tools: the Segmentation view offers to plant errors in a copy of any dataset\'s segmentation, simulated, to practise finding them.' : 'Practice tools only for the example datasets.', { timeout: 4000 });
+    toast(next ? 'Practice tools: the Segmentation view offers to plant errors in a copy of any dataset\'s segmentation, simulated, to practice finding them.' : 'Practice tools only for the example datasets.', { timeout: 4000 });
   }
   function setTheme(next) {
     prefs.set('theme', next);

@@ -79,9 +79,10 @@ an optional argument or a field does not change it.
 
 - SituCraft listens on this computer only, and refuses requests that do not name it (DNS
   rebinding) and web pages of other sites.
-- Opening paths (`open_paths`), reading files (`import_segmentation`) and writing them (`export`,
-  `export_segmentation`) also need the header `X-SituCraft-Token` with the token from
-  `remote.json`: another user of a shared computer can reach the port, but not your files.
+- Opening paths (`open_paths`), reading files (`import_segmentation`, `add_image`,
+  `import_regions`) and writing
+  them (`export`, `export_segmentation`) also need the header `X-SituCraft-Token` with the token
+  from `remote.json`: another user of a shared computer can reach the port, but not your files.
 - A file is written only at an absolute path in a folder that exists, never over an existing file
   unless `overwrite` is true, and through a temporary file renamed into place. An export's folder
   is written under a temporary name beside it and renamed into place; an existing folder is
@@ -108,8 +109,8 @@ case, then the one name that starts with or contains what was given. An error li
 | `open_project` | `project` (name or id) | Opens a project from the library, finding its bundles |
 | `open_paths` | `paths` (absolute), `add` | Opens bundles (folder, `.zip`, `experiment.xenium`), project archives (`.scz`) or folders of them; with `add`, adds each bundle with no fatal problem to the project and waits for its derived data. Needs the token |
 | `add_dataset` | `bundle` (name or path), `wait` | Adds a bundle already opened to the project, checking it and building its derived data |
-| `open_example` | `example` (`lung`, `breast`, `simulated`, or their names), `download` | Opens an example dataset (in a new project when this one has other datasets); with `download`, downloads a 10x Genomics one first if needed. The simulated one is made on this computer, in seconds, with its truth |
-| `tour` | `example`, `name` (`tour`, or a worked example: `compare-expansion`, `refine-compare` and `labels-two-segmentations` on Breast, `planted-errors` and `cluster-label` on Lung, `score-against-truth` and `labels-against-truth` on the simulated example), `step`, `run`, `end` | Starts an example's guided tour or worked example (opening the example), or goes to a step; `run` does the step's job (expanding, planting, refining, importing the truth, comparing, clustering, labeling, importing the true types, making the labels again on another segmentation) and goes on; answers the step, the comparison it shows (in the Labels tab, the two label sets read through it: the matched cells labeled alike, split and merged cells, marker mixing, the cells whose label changes) and, in the Cell types view, the clustering, the map's colors and selection, and the review queue's counts |
+| `open_example` | `example` (`lung`, `breast`, `simulated`, or their names), `download`, `remake` | Opens an example dataset (in a new project when this one has other datasets); with `download`, downloads a 10x Genomics one first if needed. The simulated one is made on this computer, in seconds, with its truth and an H&E and immunofluorescence image of the section; `remake` makes one an earlier SituCraft made (without its images) again, the same run, cells and transcripts |
+| `tour` | `example`, `name` (`tour`, or a worked example: `compare-expansion`, `refine-compare` and `labels-two-segmentations` on Breast, `planted-errors` and `cluster-label` on Lung, `score-against-truth`, `labels-against-truth`, `align-he`, `regions-qupath` and `pathologist-review` on the simulated example), `step`, `run`, `end` | Starts an example's guided tour or worked example (opening the example), or goes to a step; `run` does the step's job (expanding, planting, refining, importing the truth, comparing, clustering, labeling, importing the true types, making the labels again on another segmentation, adding the H&E with its matrix, placing landmarks, aligning it automatically, checking its alignments, drawing regions and writing and reading them in its pixels, deciding the review queue's first cells, excluding a fold) and goes on; answers the step, the comparison it shows (in the Labels tab, the two label sets read through it: the matched cells labeled alike, split and merged cells, marker mixing, the cells whose label changes) and, in the Cell types view, the clustering, the map's colors and selection, and the review queue's counts |
 
 ### Seeing the tissue
 
@@ -117,8 +118,42 @@ case, then the one name that starts with or contains what was given. An error li
 | --- | --- | --- |
 | `set_mode` | `mode` | Shows a view: `start`, `data`, `viewer`, `qc`, `segmentation`, `compare`, `celltypes`, `spatial`, `cohort`, `reports`, `jobs` |
 | `focus` | `kind` (`dataset`, `filter`, `view`, `local`), `name` | Shows an item in the inspector (a saved view opens); no name clears the focus |
-| `show_tissue` | `dataset`, `center` ([x, y] µm), `um_per_pixel` or `width_um` or `whole`, `genes`, `all_transcripts`, `transcripts`, `min_quality`, `point_size`, `channels` ({stain: {visible, color, window, gamma}}), `segmentation` (a segmentation's name or artifact ID, `instrument`, `default`), `outlines`, `nuclei`, `fill` (`transcripts`, `total`, `area`, `nucleusArea`, `method` for the instrument's; `limitations`, `certainty`, `probability` for a refinement's; `clusters` (the latest clustering of the segmentation drawn) or `clusters:<id>`; `labels` (the latest label set, its first level), `labels:<level>` or `labels:<id>:<level>`; `none`), `opacity`, `color_by` (`gene`, `probability`), `cell` (an ID in the segmentation shown) | Shows a dataset in the Viewer as asked, everything not given as it is; answers what it shows and what the dataset lacks |
+| `show_tissue` | `dataset`, `center` ([x, y] µm), `um_per_pixel` or `width_um` or `whole`, `genes`, `all_transcripts`, `transcripts`, `min_quality`, `point_size`, `channels` ({stain: {visible, color, window, gamma}}), `segmentation` (a segmentation's name or artifact ID, `instrument`, `default`), `outlines`, `nuclei`, `fill` (`transcripts`, `total`, `area`, `nucleusArea`, `method` for the instrument's; `limitations`, `certainty`, `probability` for a refinement's; `clusters` (the latest clustering of the segmentation drawn) or `clusters:<id>`; `labels` (the latest label set, its first level), `labels:<level>` or `labels:<id>:<level>`; `review`, each cell by its review; `none`), `opacity`, `color_by` (`gene`, `probability`), `cell` (an ID in the segmentation shown), `images` (post-Xenium images by name or artifact ID: {visible, opacity, channels: {by name: {visible, color, window, gamma}}}) | Shows a dataset in the Viewer as asked, everything not given as it is; answers what it shows and what the dataset lacks |
+| `add_image` | `dataset`, `path`, `alignment` (found beside the image if not given; `null` for none), `name` | Adds a post-Xenium H&E or immunofluorescence image (a pyramidal, tiled OME-TIFF), read where it lies. Its alignment (Xenium Explorer's transformation matrix or keypoints) is recorded as its first version and places it; without one it is not aligned until `align_image` places it. Needs the token (it reads files). Answers what the image is and how it is placed |
+| `align_image` | `dataset`, `image`, `landmarks` ([{`fixed`: [x, y] µm, `moving`: [x, y] the image's pixels}]), `model` (`similarity`, `affine`), `use` (default true), `parent`, `by`, `note` | Fits the image's alignment to the landmarks (three or more) and records it as a version, with each landmark's residual and leave-one-out error in µm; with `use`, it places the image. Answers the fit |
+| `register_image` | `dataset`, `image`, `model` (`similarity`, `affine`), `nonrigid`, `channel` (an immunofluorescence image's nuclear stain), `start` (a version, or `in use`), `use` (default true), `by`, `note` | Aligns the image automatically by its nuclei against DAPI, as a job: its scale, turn and mirroring found, refined, fitted to local matches over the tissue, and a smooth deformation after it when asked and it helps. Recorded as a version with its matches and fit; with `use`, it places the image. Answers the fit |
+| `use_transform` | `dataset`, `image`, `transform` (a version by name or ID), `rationale`, `by` | Chooses the version that places the image, recorded as a decision |
+| `show_alignment` | `dataset`, `image`, `transform`, `show` (a version, `in use`, `fit`, `none`), `display` (`overlay`, `checkerboard`, `flicker`), `opacity`, `cell` (µm), `edges`, `outlines`, `map` | Opens the Alignment view on the image (with `transform`, that version's landmarks to edit), the Xenium image showing the version chosen as asked: over the stains, as a checkerboard or flickering, with DAPI's edges, the nuclei's outlines and where it is off (`map`, by its latest check). Answers the landmarks, the fit, what is shown and the image's versions with their latest checks |
+| `check_alignment` | `dataset`, `image`, `transform` (the one in use if not given) | Measures where the version places the image off, by local matches over the tissue, as a job, recorded as a check of it. Answers how far off (median, 90th percentile, most), over how many patches, and a bound of the matches' own error |
 | `select_cell` | `cell` (ID in the segmentation shown, or row as `#123`), `dataset`, `center` | Selects a cell and answers its detail: position, areas, transcripts by gene, and the segmentation method or, for a segmentation other than the instrument's, the instrument's cell it came from and what its method flags |
+
+### Regions
+
+Regions are areas drawn on a dataset's tissue, named and classed, kept in the project as versions.
+Their points are in `coordinates`: `um` (the default; the dataset's coordinates), `xenium` (the
+Xenium image's full-resolution pixels) or a post-Xenium image by name or artifact ID (its
+full-resolution pixels, as QuPath opens it, placed through the version of its alignment in use).
+Their cells are counted by centroid, of the segmentation the Viewer draws.
+
+| Action | Arguments | What it does |
+| --- | --- | --- |
+| `draw_region` | `dataset`, one of `rectangle` ([x0, y0, x1, y1]), `polygon` ([[x, y], …]) or `brush` ({`points`, `radius` µm}), `coordinates`, `name`, `class`, `by`, `note` | Draws a region and keeps it as its first version. Classes are QuPath's (`Tumor`, `Stroma`, `Immune cells`, `Necrosis`, `Other`, `Region*`, `Ignore*`) or any other. Answers its area and cells |
+| `edit_region` | `dataset`, `region` (name or ID), `name`, `class`, `brush` ({`points`, `radius`, `erase`}), `coordinates`, `restore` (a version from 1), `remove` (`true` removes, `false` returns), `by`, `note` | Changes a region, each change a version appended: renamed, reclassed, painted onto or erased from, an earlier version restored, removed or returned |
+| `regions` | `dataset`, `choose` (a region), `versions`, `removed` | Lists the regions with their class, version, area and cells; with `choose`, chooses the cells of the instrument's segmentation in a region, as `select_cells` does |
+| `import_regions` | `dataset`, `path`, `coordinates`, `by` | Reads regions from GeoJSON as QuPath exports annotations (Polygon and MultiPolygon, each one's name and classification; detections, cells, points and lines left out), each a region. Needs the token. Answers how many and what was left out |
+
+### Reviews
+
+A review of cells or a region is recorded in the project with who made it, the action, the value
+before and after, when, the segmentation, the label set reviewed, each cell's label and its
+confidence as shown, and the post-Xenium images' alignments in use. Accepting and relabeling cells
+append to the curated set begun from the label set reviewed (as `curate_labels` does, which records
+a review too).
+
+| Action | Arguments | What it does |
+| --- | --- | --- |
+| `review` | `dataset`, `action` (`accept`, `relabel`, `ambiguous`, `exclude`, `include`, `concern`, `resolve`, `comment`), one of `cells` (IDs, or rows as `#123`), `chosen` or `region`, `segmentation`, `labels`, `level`, `label` (relabel), `alternatives` (ambiguous), `concern` (`merged`, `split`, `boundary`, `not-a-cell`, `missed`, `other`), `note` (needed to relabel, exclude and comment), `cells_too` (excluding a region: its cells too, the default), `by` | Reviews cells, the cells chosen or a region. Answers the review |
+| `reviews` | `dataset`, `reviewer`, `action`, `cell`, `region`, `segmentation`, `limit` | Lists the reviews, the latest first, with how many of the segmentation's cells are accepted, relabeled, ambiguous, excluded, of concern and commented, and each reviewed region's state |
 
 ### Saved views
 
@@ -174,7 +209,7 @@ Cell attributes: `transcripts`, `genes`, `total`, `controls`, `area`, `nucleusAr
 | Action | Arguments | What it does |
 | --- | --- | --- |
 | `methods` | `dataset`, `filters` (names), `show` | The methods paragraph and its references; `show` shows it in the window |
-| `export` | `what` (`project`, `archive`, `methods`), `path` (absolute), `overwrite`, `dataset` | Writes the project document (JSON), a project archive (`.scz`) or the methods (Markdown). Needs the token |
+| `export` | `what` (`project`, `archive`, `methods`, `alignment`, `regions`, `reviews`), `path` (absolute), `overwrite`, `dataset`; for an alignment `image`, `transform` (the one in use if not given), `format` (`matrix`, `keypoints`); for regions `coordinates`, `regions` (names or IDs; all if not given); for reviews `format` (`csv`, `json`) | Writes the project document (JSON), a project archive (`.scz`), the methods (Markdown), an image's alignment as Xenium Explorer reads it (CSV), a dataset's regions as QuPath imports annotations (GeoJSON), or a dataset's reviews (CSV, a row a cell, cluster or region reviewed; JSON, the record). Needs the token |
 
 ## The documentation's screenshots
 

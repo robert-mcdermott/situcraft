@@ -834,6 +834,26 @@ func TestBundleViewEndpoints(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&byID); err != nil || byID.Row != 42 || byID.ID != cell.ID {
 		t.Errorf("cell %s by its ID: %d %+v %v", cell.ID, rec.Code, byID, err)
 	}
+	// Rows' IDs and IDs' rows, as a review names its cells (none for a cell there is not); one of
+	// the two asked.
+	var lookup struct {
+		Rows []int
+		IDs  []string
+	}
+	ask := func(body string) *httptest.ResponseRecorder {
+		return request(t, handler, http.MethodPost, "/api/local/0/cells/lookup", strings.NewReader(body), map[string]string{"Content-Type": "application/json"})
+	}
+	rec = ask(`{"rows": [42, 99999]}`)
+	if err := json.NewDecoder(rec.Body).Decode(&lookup); err != nil || len(lookup.IDs) != 2 || lookup.IDs[0] != cell.ID || lookup.IDs[1] != "" {
+		t.Errorf("the IDs of rows 42 and 99999: %d %+v %v", rec.Code, lookup, err)
+	}
+	rec = ask(`{"ids": ["` + cell.ID + `", "no-such-cell"]}`)
+	if err := json.NewDecoder(rec.Body).Decode(&lookup); err != nil || len(lookup.Rows) != 2 || lookup.Rows[0] != 42 || lookup.Rows[1] != -1 {
+		t.Errorf("the rows of %s and no-such-cell: %d %+v %v", cell.ID, rec.Code, lookup, err)
+	}
+	if rec = ask(`{}`); rec.Code != http.StatusBadRequest {
+		t.Errorf("a lookup of nothing answered %d", rec.Code)
+	}
 	// A region's points.
 	rec = get("/api/local/0/points?x0=100&y0=100&x1=300&y1=250&minq=20")
 	if rec.Code != http.StatusOK || binary.LittleEndian.Uint32(rec.Body.Bytes()[4:]) == 0 {

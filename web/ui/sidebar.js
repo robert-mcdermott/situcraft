@@ -6,6 +6,7 @@
 
 import { h, icon, clear, formatBytes, formatCount } from './dom.js';
 import { promotedSegmentation } from '../lib/segmentations.js';
+import { transformInUse } from '../lib/transforms.js';
 import { labelSetName, markerSetsOf } from '../lib/labels.js';
 
 // The icon of an item handed to the program, by its kind (local.go, fileKind and dirKind).
@@ -59,6 +60,18 @@ const SECTIONS = [
       return [promoted ? 'default' : '', Number.isFinite(cells) ? `${formatCount(cells)} cells` : ''].filter(Boolean).join(' · ');
     },
     empty: 'The instrument\'s segmentation, SituCraft\'s own, and ones imported from other tools, each kept with how it was made.',
+  },
+  {
+    kind: 'image', title: 'Images', icon: 'image',
+    items: (project) => project.artifacts.filter((a) => a.kind === 'image'),
+    label: (a) => a.name ?? 'Image',
+    itemIcon: (a) => (a.state === 'complete' ? 'image' : 'warning'),
+    meta: (a, app) => {
+      if (a.state !== 'complete') return a.state;
+      const what = a.summary?.kind === 'rgb' ? 'RGB' : `${(a.summary?.channels ?? []).length} channels`;
+      return transformInUse(app.store.project, a.id) ? what : `${what} · not aligned`;
+    },
+    empty: 'Post-Xenium H&E and immunofluorescence images, read where they lie and placed by an alignment (the Viewer adds them; the Alignment view aligns them by landmarks).',
   },
   {
     kind: 'comparison', title: 'Comparisons', icon: 'compare',
@@ -145,6 +158,13 @@ export function mountSidebar(app) {
             // A filter is edited and compared in the QC view; a saved view opens.
             if (section.kind === 'filter') app.setMode('qc');
             if (section.kind === 'clustering') app.setMode('celltypes');
+            // An image is shown on its dataset's tissue; one not aligned yet, in the Alignment view.
+            if (section.kind === 'image') {
+              if (transformInUse(app.store.project, item.id)) {
+                app.focusItem({ kind: 'dataset', id: item.dataset });
+                app.setMode('viewer');
+              } else app.showAlignment(item.dataset, item.id);
+            }
             if (section.kind === 'view') app.applyView(item);
           },
         }, icon(section.itemIcon?.(item) ?? section.icon), h('span.label', section.label(item, app)), h('span.meta', section.meta(item, app)))));

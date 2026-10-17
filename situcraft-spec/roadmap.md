@@ -294,7 +294,7 @@ The data plane built here (readers, codecs, the derived-data cache) carries ever
      tile, counting all transcripts and those of quality 20 or more, and every gene together.
      Level 1's grids count the points; each coarser level's add up the level below's. The levels
      nest, so the index is a complete quadtree aligned with the image's tiles.
-   - **Geometry tiles:** cell and nucleus polygons, per level, each in the tile holding the centre
+   - **Geometry tiles:** cell and nucleus polygons, per level, each in the tile holding the center
      of its bounding box. Level 0 holds the bundle's vertices exactly; each level above holds them
      simplified (Douglas–Peucker) to within half a pixel of that level, keeping at least three.
    - **One binary layout** for all three (`internal/cache/binfile.go`): a header, a table of the
@@ -313,7 +313,7 @@ The data plane built here (readers, codecs, the derived-data cache) carries ever
      was used least recently, never what was used since the program started; zipped bundles'
      unpacked files count. A build first checks the disk has room.
    - **Jobs** (`internal/jobs`, first version): an immutable spec; a state (declared, queued,
-     running, validating, then complete, cancelled, failed or invalid); progress; an append-only
+     running, validating, then complete, canceled, failed or invalid); progress; an append-only
      log; cooperative cancellation; one job at a time and one per key.
      - Jobs live in memory; persisting them comes with the artifact store (wave 2, slice 2).
      - A build job ends by checking what it built: every tile present, the transcripts and polygons
@@ -354,8 +354,8 @@ The data plane built here (readers, codecs, the derived-data cache) carries ever
        - polygons with and without closing vertices;
        - the grid, entry names, the checksum record, locks, eviction and sizes.
      - **Fuzzing:** every reader on damaged files; the polygon simplification.
-     - **Jobs:** states, cancelling queued and running jobs, one job per key, the log, a panic
-       turned into a failure; over HTTP, the event stream and cancelling.
+     - **Jobs:** states, canceling queued and running jobs, one job per key, the log, a panic
+       turned into a failure; over HTTP, the event stream and canceling.
      - **In the window:**
        - add the Breast bundle and watch it build;
        - **Stop** partway: the image is kept and the index "partly built";
@@ -387,7 +387,7 @@ The data plane built here (readers, codecs, the derived-data cache) carries ever
      - **Fills:** cells by an attribute, through a per-cell color texture; rings triangulated by
        ear clipping, with a fan for rings that cross themselves.
      - **The selected cell** is drawn from its full-resolution polygons.
-     - **Tiles** are fetched nearest the centre of the view first, a few at a time; those no
+     - **Tiles** are fetched nearest the center of the view first, a few at a time; those no
        longer wanted are not fetched, and the GPU's copies are kept within a budget.
    - **Program** (`internal/view`, `api_view.go`):
      - `GET /api/local/{i}/view`: what can be shown, with each channel's default window (the 1st
@@ -454,7 +454,7 @@ The data plane built here (readers, codecs, the derived-data cache) carries ever
      - **A sampler must always have a texture of its kind bound:** the outline shader's
        per-cell color lookup, unused for plain outlines, made WebGL refuse the draw while an
        integer image tile was bound. It now has its own texture unit with a placeholder.
-     - **Outlines drawn at whole-tissue zoom only grey the image:** they are drawn once a cell
+     - **Outlines drawn at whole-tissue zoom only gray the image:** they are drawn once a cell
        spans about ten pixels.
      - **XOA 2.0 records each cell's segmentation method only in cells.zarr.zip.**
 6. **QC (Q1, Q2, Q3, Q4, V6): done.** The QC view (`ui/mode-qc.js`) has four parts.
@@ -755,7 +755,7 @@ other tools can be imported.
    - **The method** (`internal/segment/expand`; research.md §3.1):
      - each nucleus grows into a cell of its own by up to the distance, every pixel going to the
        nearest nucleus within it (a Voronoi partition clipped at the distance, Okabe et al. 2000),
-       by exact Euclidean distances between pixel centres (Felzenszwalb and Huttenlocher 2012);
+       by exact Euclidean distances between pixel centers (Felzenszwalb and Huttenlocher 2012);
        ties broken by position;
      - in bands of rows with a margin of the distance, on every core; the same result for any band
        height and number of workers;
@@ -792,7 +792,7 @@ other tools can be imported.
        97.0% within 5% and 99.95% within 10% (at least 96% and 99.5%); 98.28% of gene transcripts
        assigned, the instrument 97.97% (at most 0.5 points more). Every transcript given
        differently is explained, one by one: 2,534 on the rim (4.56–4.98 µm from their nucleus,
-       which the instrument's cells do not reach), 6,182 on boundaries between neighbours (within
+       which the instrument's cells do not reach), 6,182 on boundaries between neighbors (within
        0.34 µm of equidistant), 8 the instrument records off its own mask.
      - **Breast:** 7,312 nuclei grown into cells; the instrument's 7,275 cells accounted for (6,752
        with one nucleus, 255 with none, 268 with several).
@@ -811,7 +811,7 @@ other tools can be imported.
        lies in.
      - **A truncated file read without error,** its last bytes (the zlib checksum) never read: each
        file is now read to its end.
-     - **Nucleus polygons drawn by pixel centres missed their edge pixels** (92.0% of the mask's
+     - **Nucleus polygons drawn by pixel centers missed their edge pixels** (92.0% of the mask's
        pixels): the polygons' vertices lie on the edge pixels' own coordinates (98.56%).
      - **The viewer suite counted jobs for two bundles,** failing on CI, which fetches one.
 4. **Importing segmentations (S10, D6): done.**
@@ -898,7 +898,7 @@ other tools can be imported.
    - Validation:
      - **Hand-drawn fixtures** of each class, every count and measure worked out by hand: a cell
        shifted one pixel (IoU 0.5, the boundary moved 0.5 µm on average), a boundary between
-       neighbours moved (contracted and expanded), a split, a merge, columns become rows, a cell in
+       neighbors moved (contracted and expanded), a split, a merge, columns become rows, a cell in
        one only, a cell without outline, two cells joined by a nucleus. A planted leak of
        transcripts raises the spurious co-expression (the nuclei score 1); the MECR by hand.
      - **The instrument's segmentation and the 5 µm expansion:** on Lung, 11,898 cells one to one,
@@ -910,15 +910,15 @@ other tools can be imported.
      - **In headless Chrome** (67 checks): `compare_segmentations` by remote control, as the
        expansion counted, recorded and shown.
    - Found by slice 5:
-     - **A fifth of either cell was too little to correspond:** neighbours whose shared boundary
+     - **A fifth of either cell was too little to correspond:** neighbors whose shared boundary
        moved one column joined into one "rearranged" difference. Cells now correspond when half of
-       one lies within the other: fragments of a split still do, neighbours do not.
+       one lies within the other: fragments of a split still do, neighbors do not.
      - **The MECR's reference** had a wrong identifier in research.md: it is
        doi:10.1101/2024.01.11.575135.
      - **A segmentation's cost:** the instrument's showed its registration's time; it shows none.
 6. **The comparison workspace (V7, C4, C5): done.**
    - **The Compare view** (`ui/mode-compare.js`): a comparison's two segmentations on the tissue,
-     side by side with one camera, overlaid (B's outlines over A's, each in its colour) or in
+     side by side with one camera, overlaid (B's outlines over A's, each in its color) or in
      turns (flicker); cells filled by the class of their difference, the classes chosen; the
      chosen difference lit in both and described in the inspector; a disagreement map (each 50 µm
      region shaded by its share of disagreeing pixels).
@@ -987,9 +987,9 @@ other tools can be imported.
      segmentation**: the segmentation, the formats, the folder; the exports listed with their
      findings and Xenium Ranger's command (copied with a button).
    - **Errors planted for practice** (`internal/segment/plant`, `api_plant.go`): a copy of the
-     instrument's segmentation with merges of neighbouring cells whose merged cell mixes lineage
+     instrument's segmentation with merges of neighboring cells whose merged cell mixes lineage
      markers, splits across the long axis, missed cells and cells grown 1 µm into their
-     neighbours, each kept apart from the others, seeded; a segmentation artifact with its answer
+     neighbors, each kept apart from the others, seeded; a segmentation artifact with its answer
      key (`planted.json`), simulated, never promoted or exported. The Segmentation view's
      **Practice: find planted errors** plants, compares, and opens the answer key, each error shown
      in the workspace; it is offered on the example datasets, and on others only when the user
@@ -1030,7 +1030,7 @@ other tools can be imported.
      - **A dataset opened by several requests at once** could be closed by one while another read
        it ("damaged cache file"): the Compare view opened first, before any Viewer, asks four
        things at once. One request now opens it while the others wait.
-     - **Grown by 2 µm, Lung's small cells** took more than half of a neighbour and became
+     - **Grown by 2 µm, Lung's small cells** took more than half of a neighbor and became
        rearranged differences: they grow by 1 µm.
      - **Merges chosen by unlike counts alone** mixed lineage markers in 5 of 20: they are chosen
        first among pairs whose merged cell would.
@@ -1091,7 +1091,7 @@ independent reference outputs.
    - **`situcraft simulate`:**
      - presets (`standard`, `small`), the seed, the field's size and a parameter file;
      - written beside the folder and renamed into place; interruptible.
-   - **Labelled simulated:** the validator's support level `simulated` and an INFO finding instead
+   - **Labeled simulated:** the validator's support level `simulated` and an INFO finding instead
      of the version warning; the Data view's badge and notice; the inspector; the dataset list.
      The methods paragraph says that the data were simulated and implies no instrument.
    - Validation:
@@ -1136,7 +1136,7 @@ independent reference outputs.
    - **The equations** are written out in research.md §3.2 (notation, likelihood, priors, every
      conditional, their order, defaults).
    - **The model** (`internal/segment/refine`):
-     - a voxel lattice and the labelling's state: cells, transcripts by voxel, prior cells,
+     - a voxel lattice and the labeling's state: cells, transcripts by voxel, prior cells,
        attributions;
      - the Poisson likelihood with per-gene background, the attributions integrated out or drawn;
      - the gamma–negative-binomial mixture of expression states;
@@ -1172,7 +1172,7 @@ independent reference outputs.
        the rates drawn before the shapes; with 40 the error accumulates and is caught.
 3. **The sampler (S2, S8): done.**
    - **Moves** (`internal/segment/refine`; research.md §3.2, the sampler): Metropolis–Hastings
-     with a label copied from a face neighbour or a background "bubble", the proposal ratio local
+     with a label copied from a face neighbor or a background "bubble", the proposal ratio local
      and exact.
    - **Constraints:** no cell emptied; connectivity by a local simple-point test applied to both
      cells a move touches, so that a move is allowed exactly when its reverse is; a perimeter
@@ -1185,7 +1185,7 @@ independent reference outputs.
    - **Multi-resolution:** stages refined by whole factors; the run starts at the coarsest stage
      that keeps every cell.
    - **The start:** the instrument's cells (masks/1) on the first lattice by majority, each seeded
-     at its nucleus's centre; each transcript over a nucleus has that nucleus's cell as its prior.
+     at its nucleus's center; each transcript over a nucleus has that nucleus's cell as its prior.
    - **Posterior summaries:** each voxel's most frequent label and each transcript's most frequent
      cell with its probability, over the last sweeps; 2D footprints by each column's dominant
      label.
@@ -1281,7 +1281,7 @@ independent reference outputs.
    - **Regions and sections** (`refine.RunArea`): a region's cells refined on its lattice, the
      cells about it held in a 20 µm margin, the rest of the tissue the instrument's; separate
      sections by single linkage, each with a model of its own, one region in memory at a time.
-   - **The preflight** (`refine.Check`): the transcripts modelled and those left out, the cells and
+   - **The preflight** (`refine.Check`): the transcripts modeled and those left out, the cells and
      nuclei, the regions, and estimates of memory (by phase: reading, sampling, writing), disk and
      time. It refuses a run past 85% of the computer's memory (`internal/sysinfo`) or the free
      disk, and warns past half of either.
@@ -1374,7 +1374,7 @@ independent reference outputs.
        Breast's assigned fraction fell from 98.80% to 97.03%, its co-expression from 1.94 to 1.83.
      - **The background is under-estimated:** on the simulated tissue SituCraft's accounts for
        0.68% of transcripts against the truth's 2.46%, from any start. It is the published model's
-       behaviour when cells cover nearly every transcript; slice 7 takes it up (research.md §9).
+       behavior when cells cover nearly every transcript; slice 7 takes it up (research.md §9).
      - **Spurious co-expression does not rank methods by accuracy:** Proseg's is below the truth's
        own on the simulated tissue, while it puts 9.4 points fewer transcripts in their true cells.
      - **Proseg's four-layer default lost 61% of Lung's transcripts to the background** (4% with one
@@ -1444,7 +1444,7 @@ independent reference outputs.
      assignment certainty (its transcripts' mean probability), on one scale from 0.5, a coin's toss,
      drawn brightest, to 1, every sample agreeing, drawn darkest.
    - **Transcripts by their assignment's probability,** close up, on the same scale, so the
-     doubtful ones stand out; those assigned by place in grey.
+     doubtful ones stand out; those assigned by place in gray.
    - **Each refined cell's boundary certainty is recorded** (`certainty.bin`): the mean share of the
      summarized sweeps its pixels were its, which the uncertain-boundary flag already measured.
    - **The inspector** describes the segmentation's cell: the instrument's cell it came from, its
@@ -1475,7 +1475,7 @@ independent reference outputs.
        design, so the refinement and the planted errors are the ones that tell.
 9. **Larger tissues and release (S12, P6): done.**
    - **Patches** (research.md §3.2, large tissues): a region of more than twice
-     `patch_transcripts` (2 million by default) modelled transcripts is cut into equal rectangles
+     `patch_transcripts` (2 million by default) modeled transcripts is cut into equal rectangles
      of about that many, refined one after another, each refining the cells within 40 µm of its
      rectangle and holding the rest, each sampler released when its run ends. They are stitched:
      each pixel and transcript from the patch whose rectangle holds it, each cell's certainty and
@@ -1714,7 +1714,7 @@ same on every processor.
      - **Known truth:** on the standard simulated tissue 97.2% of the cells take their true type,
        1.5% another.
      - **In the app:** the Lung cells labeled by remote control and drawn on the tissue, each cell
-       in its label's color, the unlabeled grey, the 78 not analyzed clear; a cluster selected on
+       in its label's color, the unlabeled gray, the 78 not analyzed clear; a cluster selected on
        the labels' colors exactly its cells (viewer suite); capture scene `labels`, with no
        accessibility violation.
    - Found by slice 3:
@@ -1955,20 +1955,393 @@ same on every processor.
        were made again on another segmentation, it never took them up, and listed no
        segmentation-sensitive cell until one was chosen by hand. It now follows the latest until
        the user chooses.
-     - **A lineage fill leaves most of a tumor section grey:** on Lung, 12% of the cells take a
+     - **A lineage fill leaves most of a tumor section gray:** on Lung, 12% of the cells take a
        lineage; the example fills the cells by class (47%) and names the lineage level.
 
 ## 0.5.0: the pathology bridge (wave 5)
 
-Outline.
-- Post-Xenium H&E and IF OME-TIFF import: JPEG, deflate, LZW and JPEG 2000; RGB pyramids (R1).
-- Supplied alignment matrices (R2); landmark and automatic registration with optional non-rigid
-  refinement (R3); alignment QC in µm (R4); versioned transforms (R5).
-- ROI tools and GeoJSON interchange (R6); review actions, queues and provenance (R7, R8, T8).
-- The pathology fixture (≤ 3 GB, post-Xenium H&E with alignment) chosen and added to
-  `validation/sources.json`.
-- Validation: identity and known-affine recovery, the supplied 10x transform reproduced, landmark
-  residuals reported.
+Post-Xenium H&E and immunofluorescence images brought onto the tissue: added where they lie,
+aligned to the Xenium image by the alignment supplied with them, by landmarks or automatically,
+the alignment checked in µm and kept as versions; regions drawn and exchanged with QuPath; cells
+and regions reviewed, every decision with its provenance.
+
+**Where the work runs.** A post-Xenium image is read where it lies, never copied: a pyramidal, tiled
+OME-TIFF, as Xenium Explorer requires, its tiles decoded by the program when the page asks for
+them. Registration runs in the program as a job on the images' reduced levels, and its result is
+a transform: an artifact naming its source and destination coordinate systems, how it was made
+and how well it fits. The page draws an image under its transform, at any rotation or reflection.
+
+**The pathology fixture.** The breast cancer section of Janesick et al. (2023), replicate 1 (10x
+Genomics, CC BY 4.0; Xenium Onboard Analysis 1.0.1): its post-Xenium H&E (30,786 × 24,241 RGB,
+deflate, 0.364 µm) and immunofluorescence (CD20, HER2 and DAPI, JPEG 2000) images, each with 10x's
+alignment matrix, and the bundle's files SituCraft reads, taken from its 9.9 GB archive by HTTP
+range: 2.8 GB in all. Its bundle is of XOA 1, which SituCraft opens from this wave.
+
+### Wave 5
+
+1. **Post-Xenium images and their alignment (R1, R2): done.**
+   - **XOA 1 bundles open:** integer cell IDs (from 1; −1 none) in the cells, transcripts and
+     boundaries; the count matrix's earlier Zarr layout (by feature, its cells numbered by
+     `number_cells`); Parquet files whose footer's row count disagrees with their row groups (as
+     fastparquet 1.0 wrote them; the row groups read); `transcripts_per_cell` written as a
+     decimal. XOA 1.0 is checked against the fixture's bundle.
+   - **The image** (`internal/slide`): an OME-TIFF added to a dataset (RGB H&E, or IF of one or more
+     channels, 8 or 16 bits), its levels from its SubIFDs, its tiles deflate (with or without a
+     predictor), LZW, JPEG (`internal/tiff`'s new codec: shared tables; YCbCr or RGB; chroma
+     interpolated by the triangle filter, as libjpeg-turbo does) or JPEG 2000; read where it lies
+     and recorded as an artifact of kind `image` (`api_images.go`) with the file and its alignment
+     in place (`location: "place"`) by their SHA-256; each IF channel's 0.1th–99.9th percentile
+     over its smallest level kept as the window it is first shown with. A flat image, or one in
+     strips, is refused, saying how to make a pyramid.
+   - **Its alignment** (`internal/register`): Xenium Explorer's matrix (3×3, row-major, the image's
+     pixels to the Xenium image's) or its keypoints (fitted as a similarity by least squares,
+     Umeyama 1991, with and without a reflection), found beside the image when 10x named it;
+     recorded as the transform from the image's pixels to µm. An image's own pixel size is recorded,
+     never used to place it.
+   - **The Viewer:** each image a layer over the stains, drawn under its transform at any rotation
+     or reflection (a model matrix per image; the tiles in view found through its inverse; the level
+     whose pixels match the screen's; coarser tiles standing in), with its opacity; H&E in its
+     colors, IF channels as the stains. Saved views keep the images' layers; the project tree lists
+     **Images**. Remote control: `add_image`; `show_tissue` takes `images`.
+   - **The fixture** (`validation/sources.json`'s `fixtures`): `validation/fetch.mjs` takes ten
+     members of the 9.9 GB archive by HTTP range (each CRC-32 checked) and downloads the two
+     images and their alignments; 2.85 GB; weekly in `data.yml`.
+   - Validation:
+     - **The reader against tifffile** (`validation/reference/images/levels.py`, maintainer-run):
+       every level of the H&E (7, 30,786 × 24,241 at full resolution) and of the IF's three
+       channels (8 levels each) read a tile at a time, the same pixels (SHA-256); on files written
+       for it (`internal/tiff`, `internal/slide`): JPEG within 3 of libjpeg-turbo's pixels, shared
+       tables, both refusals.
+     - **XOA 1.0.1:** the bundle's checks, no fatal finding; 167,780 cells and 42,638,083
+       transcripts.
+     - **The alignments:** the H&E's scale makes its pixels 0.3639 µm, its metadata 0.3638; the
+       IF's 0.7387, its metadata 0.2125 (the Xenium image's); keypoints made from a known
+       similarity, reflection and all, fitted back exactly.
+     - **Drawn:** in the Viewer, three of the H&E's pixels each where the matrix puts it, its color
+       there (the viewer suite).
+   - Found by slice 1:
+     - **An image's metadata does not place it:** the fixture's IF image says 0.2125 µm a pixel,
+       the Xenium image's; its alignment makes it 0.7387. Only the alignment places an image.
+     - **10x's alignment maps the image to the Xenium image,** not the reverse: its scale is the
+       image's pixel size over the Xenium image's (1.7125 for the H&E: 0.3638 / 0.2125), and both of
+       the fixture's are mirrored or turned half a turn.
+     - **JPEG decoders disagree at stain boundaries:** Go's decoder repeats each chroma sample over
+       its 2 × 2 pixels, libjpeg-turbo (which tifffile, OpenSlide and most slide readers use)
+       interpolates them; an H&E's colors differed by up to 74 levels where hues change. SituCraft
+       interpolates as libjpeg-turbo does (within 3 of its pixels, rounding).
+     - **XOA 1.0's metrics are not all its data's:** its median transcripts per cell is recorded as
+       166, its transcripts give 164; 17,358 cells' counts differ from cells.parquet's. The checks
+       say so, as for any bundle.
+2. **Transforms and landmarks (R3 by landmarks, R5): done.**
+   - **A transform as an artifact,** in versions (`api_transforms.go`): kind `transform`, its
+     source and destination systems (the image's pixels, the dataset's µm), method (`matrix`,
+     `keypoints`, `landmarks`), model, transform, landmarks, fit (each landmark's residual and
+     leave-one-out error in µm), who made it, a note and its parent version, named by its
+     description's checksum. An image's supplied alignment is its first version; the image
+     artifact holds the image alone, and an image is added without an alignment. Which version
+     places an image is a decision (`use-transform`), as a segmentation's promotion is; an image
+     with none is listed, not drawn.
+   - **Fits** (`internal/register/fit.go`): a similarity (Umeyama 1991, the better of with and
+     without a reflection) or an affine transform (least squares), from three landmarks; each
+     landmark's residual and leave-one-out error (Stone 1974; a similarity keeps the full fit's
+     handedness). `web/lib/transforms.js` fits the same, bit for bit (a fingerprint of 600 fits).
+   - **The Alignment view** (`web/ui/mode-alignment.js`): the Xenium image and the post-Xenium
+     image side by side, each its own renderer and camera. A click on each places a landmark; from
+     the fourth, the fit predicts the second click's place and the other image goes there;
+     landmarks are dragged to move them; the fit and each landmark's errors update as they change;
+     the fitted image laid over the stains; the images moved together through the fit. Saved as a
+     version, with who and a note, used or not; versions listed, used, edited from (their
+     landmarks loaded, the new version their child), and written as Xenium Explorer's matrix and
+     keypoints. The Viewer offers it beside each image.
+   - **Xenium Explorer's files written:** the matrix (the transform to the Xenium image's pixels)
+     and the keypoints (their fixed positions in its pixels), each number as short as reads back
+     the same.
+   - **Simulated post-Xenium images** (`internal/simulate/postxenium.go`, `situcraft simulate
+     --post-xenium`): an H&E by Beer–Lambert's law (Ruifrok and Johnston's stain colours, varied
+     per section) and a two-channel immunofluorescence image (DAPI, a membrane stain) of the same
+     cells, each placed by a known affine transform (pixel size, aspect, shear, reflection, turn)
+     and a smooth deformation (sine waves, another family than registration's B-splines), written
+     with their truth (`truth/post_xenium/`). Sines are `internal/dmath`'s, the same on every
+     processor. The TIFF writer writes RGB and multi-channel pyramids.
+   - Remote control: `align_image`, `use_transform`, `show_alignment`; `add_image` with no
+     alignment; `export` writes an alignment for Xenium Explorer.
+   - Validation:
+     - **By hand:** a square of four landmarks, one 2 µm off: an affine fit's residuals 0.5 µm and
+       leave-one-out errors 2 µm each; a similarity's 0, 0.71, 0.71, 1 µm and 0, 1.41, 1.41, 2 µm.
+     - **Known transforms recovered** from exact landmarks (200 similarities, turned and reflected,
+       and affine transforms, 3 to 14 landmarks), to 1e-9.
+     - **The fixture:** 10x's two matrices are exact similarities; keypoints made with each,
+       written as Xenium Explorer writes them, fit back within 1e-15.
+     - **Simulated images against their truth:** nuclei found in each image lie a median 0.03 µm
+       (H&E) and 0.07 µm (immunofluorescence) from the true nuclei; twelve landmarks' leave-one-out
+       error is near the fit's true error over the section; the same images on one core.
+     - **In the page** (the viewer suite): landmarks made with 10x's matrix fitted back to it as a
+       version, listed in the Alignment view, written as keypoints; a simulated H&E (320 × 260 µm,
+       deformed by up to 2 µm) placed by six landmarks clicked on both images (from the fourth,
+       the image went to within 1.2 to 13.9 pixels of the place), the fit at most 1.45 µm from its
+       truth, drawn where the fit puts it.
+   - Found by slice 2:
+     - **10x's alignments are similarities, exactly:** the fixture's H&E matrix has A = −E and
+       B = D to the last bit, its immunofluorescence matrix A = E and B = −D: fitted from
+       keypoints, as Xenium Explorer fits them.
+     - **Residuals understate the error between landmarks;** the leave-one-out error estimates
+       it: on the simulated H&E, twelve landmarks' residuals 0.16 µm, left out 0.21 µm, the true
+       error 0.31 µm.
+     - **An image not aligned is not drawn:** placed by its metadata's pixel size it would look
+       aligned and be off by the scan's turn and mirror (and, on the fixture's immunofluorescence
+       image, 3.5 times too small).
+3. **Automatic registration (R3): done.**
+   - **The signals** (`internal/nuclei`): the Xenium image's DAPI read from the bundle's own
+     pyramid, a block at a time (so the derived data need not be built); the image's nuclear
+     signal, an H&E's hematoxylin by color deconvolution (Ruifrok & Johnston 2001; the glass's
+     light each channel's 99.5th percentile) or an immunofluorescence image's nuclear stain (by
+     its name, or named).
+   - **The search** (`internal/register/auto.go`), both images about 256 pixels across: scales a
+     quarter octave apart, two octaves each way of the metadata's (an image's metadata often gives
+     the Xenium image's), the image as it is and mirrored; for each, the turn and what is left of
+     the scale from the log-polar forms of the magnitude spectra (Reddy & Chatterji 1996), both
+     turns half a turn apart, each with its shift by phase correlation (Kuglin & Hines 1975) and the
+     shifts its wrapping allows; the best by normalized mutual information (Studholme, Hill & Hawkes
+     1999) over at least 30% of the Xenium image.
+   - **Refined** over a pyramid, each level twice as fine to about 4 µm a pixel, by a compass search
+     (Hooke & Jeeves 1961) of the model's parameters maximizing the mutual information.
+   - **Local matches:** patches of 128 pixels (a sixth of the tissue's smaller side, 32 to 160 µm)
+     where the Xenium image has tissue, the image drawn under the transform in each, their shift by
+     phase correlation to a fraction of a pixel (Foroosh, Zerubia & Berthod 2002); the model fitted
+     to them, matches over three robust standard deviations dropped; twice.
+   - **A deformation** (`bspline.go`), when asked: cubic B-splines (Rueckert et al. 1999) on a grid
+     of about eight cells across the tissue, fitted to what the model leaves of the kept matches,
+     their second differences penalized; the smoothness that best predicts each fifth of the
+     matches from the rest, raised until the deformation nowhere folds; kept only when it predicts
+     them clearly better (by 10%) than the model alone, from 25 kept matches.
+   - **Recorded** as a version (`api_register.go`): method `automatic`, its matches, the fit to those
+     kept, the deformation, what the search found; started afresh or from a version. Every
+     operation rounded on its own, every sine and logarithm `dmath`'s: the same images give the same
+     version on any computer (a fingerprint pinned in a test that continuous integration, on another
+     kind of processor, checks).
+   - **The renderer** draws a deformed image by mapping each fragment back: its place on the tissue
+     moved by the deformation's inverse field (a half-float texture), then through the transform's
+     inverse.
+   - **The Alignment view** aligns automatically (the model, a deformation, the nuclear stain, from
+     the version in use or not, used when done) and shows an automatic version's matches on both
+     images. Remote control: `register_image`.
+   - Validation:
+     - **Units:** the FFT against the transform computed directly; shifts found to a tenth of a
+       pixel; turns and scales from the log-polar form; color deconvolution of colors made from
+       known amounts; mutual information's bounds; B-splines fitted back, never folding.
+     - **Simulated images:** the search finds each image's scale, turn and mirror with its metadata
+       right or 3 times wrong; undeformed, the result 0.13 to 0.16 µm from the truth and no
+       deformation kept; deformed (by up to 2 µm), the affine fit 0.87 µm from the truth and the
+       deformation 0.20 µm.
+     - **The fixture against 10x's alignment,** over the Xenium image every 100 µm, without the
+       images' alignments: the H&E within 0.61 µm root-mean-square (at most 0.91), the
+       immunofluorescence image within 0.68 µm (at most 1.19), its scale found (0.7387 µm) though
+       its metadata says 0.2125; 10 s and 3 s (checked weekly).
+     - **In the page** (the viewer suite): the simulated H&E registered by `register_image` with a
+       deformation (42 matches kept, the deformation kept), at most 0.58 µm from its truth over the
+       section (six clicked landmarks: 1.45 µm), drawn where the program's deformation puts three
+       of its pixels.
+   - Found by slice 3:
+     - **The fixture's immunofluorescence image is deformed against DAPI,** by up to 2.6 µm: a
+       deformation predicts its matches 0.49 µm off, any similarity (10x's among them) 1.05 µm. Its
+       H&E is not, beyond what the matches tell.
+     - **An automatic alignment agrees with 10x's within a micron:** about two of the H&E's pixels;
+       neither is the truth, and checking an alignment in µm is slice 4's.
+     - **A deformation fitted to noisy matches makes an alignment worse** (0.19 to 0.40 µm on an
+       undeformed simulated image): it is kept only when it predicts matches held out better.
+4. **Alignment checked in µm (R4): done.**
+   - **Seen** (the Alignment view's **See and check**): any version on the Xenium image, or the
+     landmarks' fit before it is saved, over the stains at an opacity, as a checkerboard (the
+     renderer discards the image in every other square of the tissue, 10 to 400 µm), or flickering;
+     DAPI's edges over it (an iso-line of the windowed stain where Sobel's gradient is steep, from
+     the level drawn only) or the Xenium segmentation's nuclei.
+   - **Measured** (`internal/register/check.go`, `api_checks.go`): patches of DAPI where there is
+     tissue, on a grid offset by half a patch from the registration's (a version is not checked
+     by its own matches), each against the image as the version draws it (its deformation taken
+     back pixel by pixel); each patch's error in µm by phase correlation; the median, 90th
+     percentile, most and root-mean-square; a bound of the matches' own error from neighboring
+     patches' differences. Recorded as an artifact of kind `alignment-check` of the image and the
+     version; shown as a map, each patch a square colored by its error with an arrow 20 times
+     it. Each landmark's residual and leave-one-out error in µm were slice 2's.
+   - Remote control: `check_alignment`; `show_alignment` takes `show`, `display`, `opacity`, `cell`,
+     `edges`, `outlines` and `map`.
+   - Validation:
+     - **Against the truth:** the simulated H&E (360 × 280 µm, deformed by up to 2 µm) placed by its
+       true transform without its deformation is off at each patch by minus the deformation
+       there: measured within 0.15 µm a patch, the errors' mean 0.03 µm from the true mean,
+       0.877 µm root-mean-square against 0.871 truly; its automatic registration measured 0.24 µm
+       off, its errors nearly the same from patch to patch (a bound of 0.02 µm on the matches').
+     - **In the page** (the viewer suite): six landmarks' version measured 0.85 µm off (truly 0.89),
+       each patch within 0.135 µm of its true error; the automatic version 0.23 µm; a square a
+       patch on the map; in a checkerboard, the image's own pixel in its squares and the stains in
+       theirs; DAPI's edges drawn only when asked.
+     - **The fixture** (weekly): 10x's alignment of the H&E off by 0.96 µm (median), 1.96 µm (90th
+       percentile), the automatic one 0.88 and 1.24 µm; of the immunofluorescence image, 10x's 0.85
+       and 2.10 µm, the automatic one (with its deformation) 0.48 and 0.72 µm.
+   - Found by slice 4:
+     - **A bound of the matches' error cannot be had for free:** neighboring patches' differences
+       bound it only where the alignment's error changes little between them (on an alignment off
+       by an uncorrected 2 µm deformation over 300 µm, the bound is 0.52 µm though the matches are
+       0.15 µm off); it is reported as a bound.
+     - **A few weak matches at a tissue's edge give large, disagreeing errors:** on the fixture, four
+       patches along its top edge (quality 6 to 19, against a median of 51) report 18 to 51 µm in
+       disagreeing directions: false matches, which the median and the 90th percentile are robust
+       to; the map shows each one's quality.
+     - **The fixture's immunofluorescence image is better placed by its automatic alignment than by
+       10x's** (0.48 against 0.85 µm, median), as slice 3's deformation suggested; its H&E, about
+       as well (0.88 against 0.96 µm).
+5. **Regions (R6): done.**
+   - **Drawn** (`web/lib/regions.js`, `web/ui/regions-layer.js`): the Viewer's **Regions** draws on
+     the tissue over any layer, an SVG layer over the canvas placed from the camera each frame: a
+     rectangle (dragged), a polygon (clicked; closed by a double-click, Enter or its first corner),
+     freehand, or a brush (its radius in CSS pixels; painting, or erasing from the region chosen).
+     While a tool is chosen the wheel zooms and the space bar pans.
+   - **The brush** paints on a raster: the region and the stroke as signed distances on a grid of an
+     eighth of the radius (kept in tiles only near the region's edges and the stroke), their union
+     or difference traced back by marching squares between samples where the values cross 0; away
+     from the stroke, the region's own points put back.
+   - **Kept** in the project (`regions`), each a multipolygon in µm with versions (named, classed with
+     QuPath's classes and colors or any other, reshaped, removed, returned, restored), each with
+     who, when, the tool and a note. Each region's cells (by centroid, of the segmentation drawn)
+     counted; **Choose its cells** chooses the instrument's cells in it, as the QC view does.
+   - **GeoJSON as QuPath writes and reads annotations**, in µm, the Xenium image's pixels, or a
+     post-Xenium image's pixels through the version placing it (edges divided every 10 µm where
+     it is deformed). Read: a FeatureCollection, an array (QuPath 0.2) or a Feature; polygons and
+     multipolygons of annotations, their names, classes and colors (`color` or 0.2's `colorRGB`);
+     detections, cells, points and lines counted and left out.
+   - Remote control: `draw_region`, `edit_region`, `regions`, `import_regions`; `export` writes
+     `regions`. The program reads a GeoJSON file by its path for remote control
+     (`GET /api/read-json`, this computer only).
+   - Validation:
+     - **The brush** (unit tests): a dab 0.45% small (the outline's chords), a stroke 0.13%, a hole
+       erased from a slanted quadrilateral 0.41% small with its corners its own; a 10 × 7 mm outline
+       of 3,000 points painted at its edge with a 6 µm brush keeps every point beyond 60 µm of the
+       stroke exactly (0.24 s); erased across, a rectangle is two.
+     - **In the page** (the viewer suite, the simulated H&E placed by its deformed automatic
+       version): a rectangle dragged and a polygon clicked where the pointer went (0.0000 µm off),
+       freehand's area its path's, a brush stroke's 0.42% under its capsule; each of six regions'
+       cells (48, 50, 23, 13, 66, 38) the suite's own winding-number count of the regions written in
+       µm, and the 66 chosen; a hole erased (200.2 µm² of the brush's 201.1) and the first version
+       restored, the document keeping three; all six written in the H&E's pixels through the
+       deformed version and read back, areas within 0.0008% and the same cells, a rectangle drawn in
+       its pixels back at its corners; a QuPath 0.4 file drawn on the H&E read in its pixels, its
+       corners where the version places them and at most 0.18 µm from where the truth puts them, a
+       holed square's area its outline's placed a pixel at a time (10,409.5 against 10,409.4 µm²),
+       its color kept, a detection and a point left out.
+     - **With QuPath 0.7.0 itself** (run after the slice, before slice 6): five SituCraft regions on
+       the simulated H&E (a rectangle, a polygon with a hole, a region cut in two, a brush stroke, a
+       class of its own), written in its pixels, are read by QuPath as annotations with their names,
+       classes, colors, hole and two parts, their areas SituCraft's within 1 px² of 60,000; QuPath's
+       own export of them read back into SituCraft gives each region's area within 0.002% and the
+       same cells. Annotations made in QuPath (an ellipse, a polygon, a square with an elliptical
+       hole) and a detection: the detection left out, every vertex back at its pixel (0.0000 px)
+       after being placed in µm through the deformed version and written again.
+   - Found by slice 5:
+     - **Outlines at the midpoints between samples are biased:** a disc traced so at an eighth of its
+       radius came out 3% large; with the samples' signed distances, interpolated, 0.45% small (the
+       chords).
+     - **Re-tracing a whole region at each stroke changes it everywhere:** simplification cut the
+       chords of a 10 mm outline (490 µm² lost) and rounded its corners; and a grid over the whole
+       region forced a 6 µm brush onto a 4.5 µm step. Hence the tiles, and the region's own points
+       put back away from the stroke.
+     - **A region read in a deformed image's pixels is stretched with it:** its area in µm is not its
+       area in pixels times a pixel's (a 300-pixel square with a hole, 2.2% off on the simulated
+       H&E); it is computed from the placed outline.
+     - **Regions are found by name,** so names repeated (a file read twice) made remote control's
+       choices ambiguous: no two of a dataset's regions share a name, and a name read again is
+       numbered.
+6. **Review with provenance (R7, R8): done.**
+   - **The record** (`web/lib/review-record.js`): the project's `reviews`, appended and never
+     changed. Each review: who, the action (accept, relabel, ambiguous, exclude and include again,
+     a segmentation concern and its resolution, comment), the value before and after, when, the
+     segmentation, the label set reviewed, each cell's ID (the program answers rows' IDs,
+     `api_reviews.go`), its label and that label's confidence as shown, and each post-Xenium image's
+     alignment version in use and whether it was shown; of cells, clusters or a region.
+   - **Labels** change as in wave 4, by edits appended to a curated set (begun from the set reviewed),
+     each edit and its review naming each other: the Cell types view's review queue and
+     `curate_labels` write the same record, and earlier curated edits are read as reviews. A region
+     relabeled is reclassed as a version of it; excluded, it may take its cells with it.
+   - **Where:** a cell's inspector in the Viewer (its label in the set filling the cells, its
+     confidence, its reviews, the review form), the cells chosen (the Viewer's **Reviews**), a
+     region's details, the review queue. **Reviews** counts the cells drawn by state, lists the
+     record (each review going to its cell or region) and writes it as CSV (a row a cell) and JSON;
+     **Fill by: Review status** colors each cell by its state (Okabe and Ito's palette).
+   - Remote control: `review`, `reviews`; `export` writes `reviews`; `show_tissue` fills by `review`;
+     `curate_labels` records a review.
+   - Validation:
+     - **Unit tests** (`web/lib/review-record.test.mjs`): a relabel's record and the curated labels it
+       leaves; accepting cells of two labels; what each action needs; states by the latest review,
+       exclusions and concerns taken back; a region reclassed; earlier edits read as reviews; the
+       record as CSV (quotes, commas, line breaks) and JSON, read back.
+     - **In the page** (the viewer suite, the simulated tissue with labels imported, each with a
+       confidence, its H&E placed by its automatic version): a cell relabeled by hand in the
+       inspector recorded with its ID, its label and confidence as the table gave them (0.75), the
+       label set, the segmentation, the reviewer and reason, and the H&E's version in use (shown);
+       the curated set begun carries the new label for that cell and no other of 924, and the Viewer
+       shows it. By remote control: three cells accepted (one edit, their labels as they were), one
+       ambiguous, one of concern, a region excluded with its 66 cells (the cells excluded exactly
+       those in it), a region reclassed (Stroma to Necrosis, its version 4), a comment; an exclusion
+       without a reason refused. The record written as CSV (75 rows, one per cell or region, each its
+       review's) and JSON (the project's eight reviews), read back; the Review status fill each of
+       924 cells' status as the suite reads it from the CSV.
+   - Found by slice 6:
+     - **A review needs cell IDs, the page has rows:** rows change when a segmentation is made again,
+       IDs do not, so the program answers them when a review is made.
+     - **Exclusions are recorded, not yet applied:** no analysis leaves excluded cells out yet; the
+       clustering, labels and niches that should will read them from the record (wave 6).
+     - **A cell is judged through an alignment:** a cell relabeled on the H&E was judged where the
+       version in use placed it; the record keeps that version, as a later one may place it
+       elsewhere.
+7. **Examples, documentation, release 0.5.0: done.**
+   - **The simulated example's images:** made with an H&E and an immunofluorescence image of its
+     section (`situcraft simulate --post-xenium`), Xenium Explorer's matrix and where each image's
+     pixels lie in its truth, and each instrument cell's true cell and type
+     (`truth/instrument_cell_types.csv`). One made by an earlier SituCraft is listed as outdated, with
+     **Make it again** (`open_example` with `remake`): a simulation's run (its UUIDs) no longer
+     depends on its post-Xenium images, so the same run, cells and transcripts.
+   - **Worked examples** (`web/lib/tours.js`; the steps' jobs in `web/ui/tour.js`), on the simulated
+     example:
+     - *Align an H&E three ways* (`align-he`): added with its matrix, placed by six landmarks where
+       the truth places six of its points (deterministic: `lib/dmath.js`'s sine, the Go one's bit
+       for bit), and automatically with a deformation; each checked over the tissue: the matrix
+       0.63 µm off (median) and 1.09 µm (90th percentile), the landmarks 0.58 and 1.19 µm (their
+       fit 0.57 µm, left out 1.00 µm), the automatic version 0.41 and 0.62 µm; against the truth
+       0.69 and 1.12, 0.72 and 1.22, 0.47 and 0.75 µm: the check ranks them as the truth does.
+     - *Regions for QuPath* (`regions-qupath`): the epithelial and immune domains drawn on the H&E
+       (1,043 cells, 440 epithelial-like; 475 cells, 319 immune-like: domains mix their types),
+       written in its pixels and read back, each area within 0.05 µm² and the same cells.
+     - *A pathologist's review* (`pathologist-review`): the review queue (662 of 2,887 labeled cells)
+       decided against the truth for its first twenty (2 mislabeled, against 1.7% of all the labels:
+       18 accepted, 2 relabeled, the curated set's wrong labels 49 to 47), a fold's 43 cells excluded,
+       22 reviews recorded.
+   - **Documentation:** Getting started (the example's images, the worked examples), the README,
+     remote control, FORMATS (the truth's new file, the run's identity), the CHANGELOG; the
+     screenshots taken again, three added (the Alignment view's map of where a version is off,
+     regions on the H&E, a review's record); American spelling in the documentation and the
+     interface.
+   - **Release 0.5.0:** the Lung project as the viewer suite leaves it in 0.5.0, with regions and
+     reviews, kept as `validation/projects/0.5.0-lung.situcraft.json` and reopened by every later
+     release, its regions and reviews as saved.
+   - **Validated** in the viewer suite: each worked example run step by step, each number its card
+     states; the 0.2.0 to 0.5.0 projects reopened, their artifacts made again with the same
+     checksums.
+   - Found by slice 7:
+     - **A simulation's identity depended on its images:** adding post-Xenium images, made after the
+       run, changed its experiment and analysis UUIDs, so an example made again with them was
+       another run. They are now left out of the identity.
+     - **Text written into artifacts is part of them:** respelling the expansion's and the planted
+       errors' descriptions changed those artifacts' checksums, and earlier releases' projects no
+       longer reproduced them; such text stays as it was written.
+     - **A simulated example is not a fixture across releases:** its files name the SituCraft that
+       made them (the TIFFs' software, the Parquet metadata), so its artifacts differ from release
+       to release; the release fixture stays the Lung project, which a download fixes.
+     - **A region's outline faded on cells filled in a like color,** and a class named by the user
+       could be given gray, which reads as QuPath's Ignore*: outlines are drawn over a dark casing,
+       and such classes are never gray.
+     - **CI's Go tests passed or failed with the runner:** a test running several jobs had one
+       deadline for them all (registration, its child and two checks: 99 s on a laptop under the
+       race detector, 330 s on a CI runner), and the sampler's tests reached go test's default 10
+       minutes there. Each job now has its own deadline, and CI allows 30 minutes.
 
 ## 0.6.0: niches and spatial statistics (wave 6)
 

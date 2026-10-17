@@ -11,6 +11,11 @@
 // when a data set is added). The data are not part of the repository or of the SituCraft program;
 // sources.json records where each comes from and its license. Adapted from MaveScape 0.8.0
 // validation/fetch.mjs.
+//
+// A fixture (sources.json's fixtures: data the validation suites use that are not examples) may
+// take only some members of a large archive, read from it by HTTP range (its central directory,
+// then each member, CRC-32 checked), beside files downloaded whole: the pathology fixture is 2.8 GB
+// of a 9.9 GB bundle and its images.
 
 import { createHash } from 'node:crypto';
 import { createReadStream, createWriteStream } from 'node:fs';
@@ -29,12 +34,12 @@ const names = args.filter((a) => !a.startsWith('--'));
 const record = args.includes('--record');
 const dataRoot = process.env.SITUCRAFT_DATA || `${here}/cache`;
 // The data sets, and the tools the checks use (axe-core): each an archive, or files under a base URL.
-const sets = { ...manifest.datasets, ...(manifest.tools ?? {}) };
+const sets = { ...manifest.datasets, ...(manifest.fixtures ?? {}), ...(manifest.tools ?? {}) };
 const USER_AGENT = 'SituCraft-validation (+https://github.com/robert-mcdermott/situcraft)';
 
 if (args.includes('--list')) {
   for (const [name, set] of Object.entries(sets)) {
-    const bytes = set.archive?.size ?? set.files.reduce((sum, f) => sum + f.size, 0);
+    const bytes = set.archive?.size ?? set.files.reduce((sum, f) => sum + (f.size ?? 0), 0);
     console.log(`${name}: ${set.title}, ${(bytes / 1e6).toFixed(1)} MB to download\n  ${set.source}\n  ${set.license}`);
   }
   process.exit(0);
@@ -140,6 +145,84 @@ async function zipEntries(handle, size) {
   return entries;
 }
 
+// A remote file read by HTTP range, as zipEntries reads a local one, each request retried.
+function remoteFile(url) {
+  async function ranged(start, end) {
+    let lastError;
+    for (let attempt = 1; attempt <= 4; attempt += 1) {
+      try {
+        const response = await fetch(url, { headers: { 'User-Agent': USER_AGENT, Range: `bytes=${start}-${end}` } });
+        if (response.status !== 206 || !response.body) throw new Error(`HTTP ${response.status} for a range`);
+        return response;
+      } catch (error) {
+        lastError = error;
+        await new Promise((resolve) => setTimeout(resolve, 2000 * attempt));
+      }
+    }
+    throw new Error(`${url}: ${lastError.message}`);
+  }
+  return {
+    async size() {
+      const response = await fetch(url, { method: 'HEAD', headers: { 'User-Agent': USER_AGENT } });
+      if (!response.ok) throw new Error(`${url}: HTTP ${response.status}`);
+      return Number(response.headers.get('content-length'));
+    },
+    async read(buffer, offset, length, position) {
+      const bytes = Buffer.from(await (await ranged(position, position + length - 1)).arrayBuffer());
+      bytes.copy(buffer, offset);
+      return { bytesRead: bytes.length };
+    },
+    async stream(start, end) {
+      return Readable.fromWeb((await ranged(start, end)).body);
+    },
+  };
+}
+
+// Takes the named members of a remote zip archive into root, each under its name less strip, each
+// one's CRC-32 and size checked (a member is fetched again, up to three times, when its transfer
+// breaks).
+async function extractRemote(remote, size, names, strip, root) {
+  const entries = await zipEntries(remote, size);
+  const wanted = new Set(names);
+  const found = entries.filter((e) => wanted.has(e.name.startsWith(strip) ? e.name.slice(strip.length) : e.name));
+  if (found.length !== wanted.size) throw new Error(`the archive lacks ${[...wanted].filter((n) => !found.some((e) => e.name === strip + n)).join(', ')}`);
+  for (const entry of found) {
+    const name = entry.name.slice(strip.length);
+    const relative = normalize(name);
+    if (name.startsWith('/') || relative.startsWith('..') || relative.split(sep).includes('..')) throw new Error(`unsafe member name ${entry.name}`);
+    if (entry.method !== 0 && entry.method !== 8) throw new Error(`${entry.name}: compression method ${entry.method} is not read`);
+    const local = Buffer.alloc(30);
+    await remote.read(local, 0, 30, entry.offset);
+    if (local.readUInt32LE(0) !== 0x04034b50) throw new Error(`${entry.name}: corrupt local header`);
+    const start = entry.offset + 30 + local.readUInt16LE(26) + local.readUInt16LE(28);
+    const target = join(root, relative);
+    await mkdir(dirname(target), { recursive: true });
+    console.log(`  … ${name}: ${(entry.compressed / 1e6).toFixed(0)} MB`);
+    for (let attempt = 1; ; attempt += 1) {
+      let crc = 0;
+      let written = 0;
+      const check = new Transform({
+        transform(chunk, _, done) {
+          crc = crc32(chunk, crc);
+          written += chunk.length;
+          done(null, chunk);
+        },
+      });
+      try {
+        const source = entry.compressed > 0 ? await remote.stream(start, start + entry.compressed - 1) : Readable.from([]);
+        const stages = entry.method === 8 ? [source, createInflateRaw(), check] : [source, check];
+        await pipeline(...stages, createWriteStream(`${target}.part`));
+        if (written !== entry.uncompressed || (crc >>> 0) !== entry.crc) throw new Error(`${entry.name}: size or CRC-32 does not match the archive's record`);
+        break;
+      } catch (error) {
+        if (attempt >= 4) throw error;
+        await new Promise((resolve) => setTimeout(resolve, 2000 * attempt));
+      }
+    }
+    await rename(`${target}.part`, target);
+  }
+}
+
 // Extracts an archive into root: members only inside it (no absolute paths or ".."), each one's
 // CRC-32 and size checked.
 async function extract(archive, root) {
@@ -212,6 +295,36 @@ for (const [name, set] of Object.entries(sets)) {
         await rename(`${target}.part`, target);
       }
       console.log(`✓ ${name}: downloaded ${set.files.length} file${set.files.length === 1 ? '' : 's'}${record ? ', recorded in sources.json' : ''} (${set.title})`);
+      continue;
+    }
+    // Members of a remote archive, and files downloaded whole (a fixture).
+    if (set.members || set.downloads) {
+      await mkdir(root, { recursive: true });
+      if (set.members) {
+        const remote = remoteFile(set.members.url);
+        const size = await remote.size();
+        if (size !== set.members.size) throw new Error(`the archive is ${size} bytes, not the ${set.members.size} recorded: the publisher has changed it`);
+        console.log(`… ${name}: ${set.members.names.length} members of ${new URL(set.members.url).pathname.split('/').pop()} (${(set.members.size / 1e9).toFixed(1)} GB), by range`);
+        await extractRemote(remote, size, set.members.names, set.members.strip ?? '', join(root, set.members.into ?? ''));
+      }
+      for (const file of set.downloads ?? []) {
+        console.log(`  … ${file.path}`);
+        await download(file.url, join(root, file.path));
+      }
+      const files = [];
+      for (const path of [...(set.members?.names ?? []).map((n) => `${set.members.into ?? ''}${n}`), ...(set.downloads ?? []).map((d) => d.path)].sort()) {
+        const info = await stat(join(root, path));
+        const [digest] = await hashFile(join(root, path));
+        files.push({ path, size: info.size, sha256: digest });
+      }
+      if (record) {
+        set.files = files;
+        recorded = true;
+        console.log(`✓ ${name}: ${files.length} files; their sizes and SHA-256 recorded in sources.json`);
+        continue;
+      }
+      if (!(await intact(root, set.files))) throw new Error(set.files.length ? 'the files do not match sources.json' : 'sources.json records no files for this data set yet (the maintainer runs --record once)');
+      console.log(`✓ ${name}: ${files.length} files (${set.title})`);
       continue;
     }
     if (!set.archive) throw new Error('no archive to download');

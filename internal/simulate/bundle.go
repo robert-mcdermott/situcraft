@@ -113,6 +113,8 @@ type writer struct {
 	trueID   []string // true cell ids by true label − 1
 	inst     *segmentation
 	w        written
+	// postXenium are the post-Xenium images written, and where each lies.
+	postXenium []Registration
 }
 
 func writeJSON(path string, v any) error {
@@ -144,10 +146,18 @@ func (wr *writer) prepare() {
 	wr.run = runOf(wr.t.p, wr.software)
 }
 
+// runParams are the parameters that make a run, as its identities (experiment and analysis UUIDs)
+// are made from them: not its post-Xenium images, made after the run, so that a run imaged after it
+// is the same run.
+func runParams(p Params) string {
+	p.PostXenium = nil
+	params, _ := json.Marshal(p)
+	return string(params)
+}
+
 // runOf is experiment.xenium's description of the run, but its cells.
 func runOf(p Params, software string) map[string]any {
-	params, _ := json.Marshal(p)
-	experiment := uuidOf("situcraft simulation experiment\n" + string(params))
+	experiment := uuidOf("situcraft simulation experiment\n" + runParams(p))
 	return map[string]any{
 		"major_version": 5, "minor_version": 0, "patch_version": 0,
 		"run_name": "SituCraft simulation", "region_name": fmt.Sprintf("simulated tissue, seed %d", p.Seed),
@@ -173,6 +183,7 @@ func (wr *writer) writeAll(progress func(float64, string)) error {
 		}},
 		{"Writing the stain", wr.writeImage},
 		{"Writing the truth", wr.writeTruth},
+		{"Rendering the post-Xenium images", wr.writePostXenium},
 		{"Writing the description", wr.writeDescription},
 	}
 	for i, s := range steps {
@@ -776,6 +787,9 @@ func (wr *writer) writeTruth() error {
 	if err != nil {
 		return err
 	}
+	if err := wr.writeInstrumentTypes(filepath.Join(dir, InstrumentTypesFile)); err != nil {
+		return err
+	}
 	if err := wr.writeBoundaries(filepath.Join(dir, "cell_boundaries.parquet"), seg, false); err != nil {
 		return err
 	}
@@ -785,11 +799,33 @@ func (wr *writer) writeTruth() error {
 	return wr.writeCellsZarr(filepath.Join(dir, "cells.zarr.zip"), seg)
 }
 
+// InstrumentTypesFile names, in the truth folder, each instrument cell's true cell (the one whose
+// nucleus it grew from) and that cell's type: imported as labels of the instrument's own cells, it
+// scores any labels of them by cell ID.
+const InstrumentTypesFile = "instrument_cell_types.csv"
+
+func (wr *writer) writeInstrumentTypes(path string) error {
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	w := csv.NewWriter(f)
+	w.Write([]string{"cell_id", "true_cell_id", "cell_type"})
+	for j, k := range wr.in.cells {
+		w.Write([]string{wr.instID[j], wr.trueID[k], wr.t.p.Types[wr.t.cells[k].typ].Name})
+	}
+	w.Flush()
+	if err := w.Error(); err != nil {
+		f.Close()
+		return err
+	}
+	return f.Close()
+}
+
 // writeTruthRun writes the truth's experiment.xenium: the run's, as Xenium Ranger's output of it.
 func writeTruthRun(dir string, run map[string]any, p Params, software string) error {
 	run["analysis_sw_version"] = analysisSoftware(software) + " truth"
-	params, _ := json.Marshal(p)
-	run["analysis_uuid"] = uuidOf("situcraft simulation truth\n" + string(params))
+	run["analysis_uuid"] = uuidOf("situcraft simulation truth\n" + runParams(p))
 	delete(run, "images")
 	return writeJSON(filepath.Join(dir, "experiment.xenium"), run)
 }
@@ -873,8 +909,7 @@ func (wr *writer) writeDescription() error {
 	for k, v := range wr.run {
 		run[k] = v
 	}
-	params, _ := json.Marshal(p)
-	run["analysis_uuid"] = uuidOf("situcraft simulation instrument\n" + string(params))
+	run["analysis_uuid"] = uuidOf("situcraft simulation instrument\n" + runParams(p))
 	run["num_cells"] = w.instrumentCells
 	run["transcripts_per_cell"] = int64(math.Floor(median(w.transcriptCounts)))
 	if err := writeJSON(filepath.Join(wr.dir, "experiment.xenium"), run); err != nil {

@@ -145,6 +145,7 @@ func FromBundle(ctx context.Context, b *xenium.Bundle, dir string, p Params, wor
 	}
 	rec := Recorded{
 		DistanceUm: p.DistanceUm, DistancePx: p.DistanceUm / nuc.pixelSize, Nuclei: nuc.source,
+		// Written into the artifact as earlier releases wrote it, so that it is made again byte for byte.
 		Distance:         "Euclidean, between pixel centres, from each nucleus's pixels",
 		Assignment:       "a transcript belongs to the cell holding the pixel it lies in",
 		CountsMinQuality: 20, OutlineTolerancePx: outlineTol,

@@ -10,8 +10,10 @@
 //	<dir>/<id>/manifest.json   an artifact (its files beside it)
 //	<dir>/staging/<id>/        outputs being written, not yet an artifact
 //
-// A file of an artifact either lies in its folder or is a file of the dataset's bundle (Location
-// "bundle"), named by its path in the bundle and recorded by its SHA-256, never copied.
+// A file of an artifact lies in its folder, or is a file of the dataset's bundle (Location
+// "bundle"), named by its path in the bundle, or a file elsewhere on the computer (Location
+// "place": a post-Xenium image), named by its absolute path; either is recorded by its SHA-256 and
+// never copied.
 package artifacts
 
 import (
@@ -44,6 +46,7 @@ const (
 const (
 	InArtifact = ""       // in the artifact's folder
 	InBundle   = "bundle" // a file of the dataset's bundle, by its path there
+	InPlace    = "place"  // a file where it lies on the computer, by its absolute path
 )
 
 // File is one file of an artifact.
@@ -225,9 +228,12 @@ func (s *Store) Promote(m Manifest, check Check) (Manifest, error) {
 	listed := map[string]bool{}
 	for i := range m.Files {
 		f := &m.Files[i]
-		if f.Location == InBundle {
+		if f.Location == InBundle || f.Location == InPlace {
 			if f.SHA256 == "" {
-				return Manifest{}, fmt.Errorf("the bundle's %s has no recorded SHA-256", f.Path)
+				return Manifest{}, fmt.Errorf("%s has no recorded SHA-256", f.Path)
+			}
+			if f.Location == InPlace && !filepath.IsAbs(f.Path) {
+				return Manifest{}, fmt.Errorf("a file in place is named by its absolute path, not %s", f.Path)
 			}
 			continue
 		}
@@ -369,6 +375,12 @@ func (s *Store) Verify(id string, openBundle func(path string) (io.ReadCloser, e
 		switch {
 		case f.Location == InBundle && openBundle == nil:
 			continue
+		case f.Location == InPlace:
+			size, sum, err = hashFile(f.Path)
+			if err != nil {
+				out = append(out, Finding{Severity: "fatal", Code: "artifact.file-missing", Message: fmt.Sprintf("%s cannot be read where it was: %v", f.Path, err)})
+				continue
+			}
 		case f.Location == InBundle:
 			r, err := openBundle(f.Path)
 			if err != nil {

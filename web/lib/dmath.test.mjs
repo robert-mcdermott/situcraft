@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { erfc, exp, fingerprint, FINGERPRINT, log, log10, normalCdf, normalPdf, normalUpper, pow, square } from './dmath.js';
+import { erfc, exp, fingerprint, FINGERPRINT, log, log10, normalCdf, normalPdf, normalUpper, pow, sincos, sincosFingerprint, SINCOS_FINGERPRINT, square } from './dmath.js';
 
 // Units in the last place between two doubles.
 const ulps = (a, b) => {
@@ -55,4 +55,13 @@ test('the normal distribution: Φ to 1e-13 against Python\'s math.erfc, in the b
 // A change here means results change in their last bits: bump SCORING_VERSION.
 test('the same bits as recorded: fingerprint', () => {
   assert.equal(fingerprint(), FINGERPRINT);
+});
+
+test('sin and cos as internal/dmath computes them: the same bits as recorded, near the engine\'s', () => {
+  assert.equal(sincosFingerprint(), SINCOS_FINGERPRINT);
+  for (const x of [0, 1e-9, 0.5, Math.PI / 4, 1, 2, 3, -7.25, 100.5, 12345.678]) {
+    const [s, c] = sincos(x);
+    assert.ok(Math.abs(s - Math.sin(x)) < 1e-14 && Math.abs(c - Math.cos(x)) < 1e-14, `${x}: ${s}, ${c}`);
+  }
+  assert.ok(sincos(Infinity).every(Number.isNaN));
 });

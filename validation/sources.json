@@ -1,5 +1,5 @@
 {
-  "about": "Public data the validation suites use, and SituCraft's example datasets: downloaded and checked by node validation/fetch.mjs into validation/cache/<name>/ (or $SITUCRAFT_DATA/<name>/); the program embeds this list (not the data) and downloads an example, with the same checks, when a user asks. tools are what the checks use, never part of SituCraft (axe-core, for the documentation's accessibility audit). Nothing here is stored in the repository or the SituCraft program. An archive is checked by its MD5 (as its publisher gives it) and SHA-256, extracted, every extracted file checked against the size and SHA-256 recorded here, and the archive deleted, so a bundle takes only its extracted size on disk.",
+  "about": "Public data the validation suites use, and SituCraft's example datasets: downloaded and checked by node validation/fetch.mjs into validation/cache/<name>/ (or $SITUCRAFT_DATA/<name>/); the program embeds this list (not the data) and downloads an example, with the same checks, when a user asks. fixtures are data only the validation suites use, never offered as examples (the pathology fixture: members of an archive taken by range, beside files downloaded whole); tools are what the checks use, never part of SituCraft (axe-core, for the documentation's accessibility audit). Nothing here is stored in the repository or the SituCraft program. An archive is checked by its MD5 (as its publisher gives it) and SHA-256, extracted, every extracted file checked against the size and SHA-256 recorded here, and the archive deleted, so a bundle takes only its extracted size on disk.",
   "datasets": {
     "xenium-lung-2fov": {
       "title": "Xenium V1 human Lung, 2 FOVs (XOA 2.0, nucleus expansion 5 µm)",
@@ -269,6 +269,127 @@
           "path": "transcripts.zarr.zip",
           "size": 24811019,
           "sha256": "595697ccd55d9a0e45ec6cc9badd6fd32f70a680ec85e0c837bf124739e08b3c"
+        }
+      ]
+    }
+  },
+  "fixtures": {
+    "xenium-breast-cancer-rep1": {
+      "title": "Xenium FFPE Human Breast Cancer, replicate 1 (XOA 1.0.1), with its post-Xenium H&E and immunofluorescence images",
+      "description": "The pathology fixture (wave 5): the breast cancer section of Janesick et al. (2023), replicate 1, as 10x Genomics publishes it: the bundle's files SituCraft reads (taken from its 9.9 GB archive by range; not its z-stack, its maximum-intensity projection, its CSV copies or its Explorer cells and transcripts), and its post-Xenium H&E (30,786 × 24,241 RGB, deflate) and immunofluorescence (CD20, HER2, DAPI; JPEG 2000) OME-TIFFs, each with 10x's alignment matrix. 167,780 cells; 42.6 million transcripts; Xenium Onboard Analysis 1.0.1.",
+      "summary": "A breast cancer section (167,780 cells, 313 genes) with its post-Xenium H&E and immunofluorescence images and their alignments.",
+      "source": "10x Genomics, FFPE Human Breast using the Entire Sample Area (https://www.10xgenomics.com/products/xenium-in-situ/preview-dataset-human-breast)",
+      "publisher": "10x Genomics",
+      "page": "https://www.10xgenomics.com/products/xenium-in-situ/preview-dataset-human-breast",
+      "license": "CC BY 4.0 (10x Genomics)",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "citation": "Janesick A, Shelansky R, Gottscho AD, et al. High resolution mapping of the tumor microenvironment using integrated single-cell, spatial and in situ analysis. Nat Commun. 2023;14:8353. doi:10.1038/s41467-023-43458-x",
+      "members": {
+        "url": "https://cf.10xgenomics.com/samples/xenium/1.0.1/Xenium_FFPE_Human_Breast_Cancer_Rep1/Xenium_FFPE_Human_Breast_Cancer_Rep1_outs.zip",
+        "size": 9861155708,
+        "strip": "outs/",
+        "names": [
+          "analysis.zarr.zip",
+          "cell_boundaries.parquet",
+          "cell_feature_matrix.zarr.zip",
+          "cells.parquet",
+          "experiment.xenium",
+          "gene_panel.json",
+          "metrics_summary.csv",
+          "morphology_focus.ome.tif",
+          "nucleus_boundaries.parquet",
+          "transcripts.parquet"
+        ],
+        "into": "Xenium_FFPE_Human_Breast_Cancer_Rep1/"
+      },
+      "downloads": [
+        {
+          "url": "https://cf.10xgenomics.com/samples/xenium/1.0.1/Xenium_FFPE_Human_Breast_Cancer_Rep1/Xenium_FFPE_Human_Breast_Cancer_Rep1_he_image.ome.tif",
+          "path": "images/Xenium_FFPE_Human_Breast_Cancer_Rep1_he_image.ome.tif"
+        },
+        {
+          "url": "https://cf.10xgenomics.com/samples/xenium/1.0.1/Xenium_FFPE_Human_Breast_Cancer_Rep1/Xenium_FFPE_Human_Breast_Cancer_Rep1_he_imagealignment.csv",
+          "path": "images/Xenium_FFPE_Human_Breast_Cancer_Rep1_he_imagealignment.csv"
+        },
+        {
+          "url": "https://cf.10xgenomics.com/samples/xenium/1.0.1/Xenium_FFPE_Human_Breast_Cancer_Rep1/Xenium_FFPE_Human_Breast_Cancer_Rep1_if_image.ome.tif",
+          "path": "images/Xenium_FFPE_Human_Breast_Cancer_Rep1_if_image.ome.tif"
+        },
+        {
+          "url": "https://cf.10xgenomics.com/samples/xenium/1.0.1/Xenium_FFPE_Human_Breast_Cancer_Rep1/Xenium_FFPE_Human_Breast_Cancer_Rep1_if_imagealignment.csv",
+          "path": "images/Xenium_FFPE_Human_Breast_Cancer_Rep1_if_imagealignment.csv"
+        }
+      ],
+      "files": [
+        {
+          "path": "Xenium_FFPE_Human_Breast_Cancer_Rep1/analysis.zarr.zip",
+          "size": 1443055,
+          "sha256": "59d36ef8f3a39c2c237f891a8c7855d80b4774eed0df5dbb35d0e2ee56c59d04"
+        },
+        {
+          "path": "Xenium_FFPE_Human_Breast_Cancer_Rep1/cell_boundaries.parquet",
+          "size": 8807145,
+          "sha256": "b25587098e36211ec2a46059fbbd4656f9407b1b8c3e06d868304060ad02206a"
+        },
+        {
+          "path": "Xenium_FFPE_Human_Breast_Cancer_Rep1/cell_feature_matrix.zarr.zip",
+          "size": 17160563,
+          "sha256": "3c88e493550cc0dc19aae25ace1828e6dd6715cc9104a63c0e8d4cc259556f77"
+        },
+        {
+          "path": "Xenium_FFPE_Human_Breast_Cancer_Rep1/cells.parquet",
+          "size": 3453894,
+          "sha256": "aac8cc395143de2d7a73a951028686c9eb4c06b9a3b32677ff1413cd20f65bd3"
+        },
+        {
+          "path": "Xenium_FFPE_Human_Breast_Cancer_Rep1/experiment.xenium",
+          "size": 1383,
+          "sha256": "9ae8b95739f4b475e01c2f7d22ce17609813e76290794f190d8d9efe4235eac8"
+        },
+        {
+          "path": "Xenium_FFPE_Human_Breast_Cancer_Rep1/gene_panel.json",
+          "size": 153839,
+          "sha256": "ed73cb83dc581172fa6635a44e553453a4ba1c2a5f02287032c4731882a2111e"
+        },
+        {
+          "path": "Xenium_FFPE_Human_Breast_Cancer_Rep1/metrics_summary.csv",
+          "size": 726,
+          "sha256": "fdfd4b973a1ae737bdcc646f46708bdbb81d0ea75dab2f1c6306222089c71142"
+        },
+        {
+          "path": "Xenium_FFPE_Human_Breast_Cancer_Rep1/morphology_focus.ome.tif",
+          "size": 654773879,
+          "sha256": "434d4f1b1837bd2f4281d3fe5e99d39ebfd7a8d0a791e93352a3eac7e17a5767"
+        },
+        {
+          "path": "Xenium_FFPE_Human_Breast_Cancer_Rep1/nucleus_boundaries.parquet",
+          "size": 8250328,
+          "sha256": "3aa33e81e00a0a6fc623ca0ed5f48fe8d3a3506380f1f84a210236f6d62e138e"
+        },
+        {
+          "path": "Xenium_FFPE_Human_Breast_Cancer_Rep1/transcripts.parquet",
+          "size": 669769801,
+          "sha256": "fa788504ef9314e9f065d26b205ff1586ffb6015987aad26ef48921d41b0f409"
+        },
+        {
+          "path": "images/Xenium_FFPE_Human_Breast_Cancer_Rep1_he_image.ome.tif",
+          "size": 1427110955,
+          "sha256": "3c2bd89588f97e886dc1288e68d4eaae1b21231cd59774bc01d2d7e3876430f0"
+        },
+        {
+          "path": "images/Xenium_FFPE_Human_Breast_Cancer_Rep1_he_imagealignment.csv",
+          "size": 126,
+          "sha256": "1d5cb2bd56dd92ff877933fe7df46498a912c549030cb7e24a6e45d1b0bf03c2"
+        },
+        {
+          "path": "images/Xenium_FFPE_Human_Breast_Cancer_Rep1_if_image.ome.tif",
+          "size": 63643728,
+          "sha256": "c1937d2b70e51bc1f9b65b71dd5807cffe6f3c3e1948d9c596d18bf420975849"
+        },
+        {
+          "path": "images/Xenium_FFPE_Human_Breast_Cancer_Rep1_if_imagealignment.csv",
+          "size": 125,
+          "sha256": "038550d739ac6eed4bd26207c64a412332099ce4a672f8d734e1450eada5fd6f"
         }
       ]
     }

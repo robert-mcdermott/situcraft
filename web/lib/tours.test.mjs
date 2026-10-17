@@ -88,7 +88,8 @@ test('every worked example asks its question, says what to expect, and its steps
       // of a segmentation (clustering:role, labels:role).
       const made = new Set(['instrument']);
       for (const step of w.steps) {
-        assert.ok(['segmentation', 'compare', 'viewer', 'qc', 'data', 'celltypes'].includes(step.mode), step.title);
+        assert.ok(['segmentation', 'compare', 'viewer', 'qc', 'data', 'celltypes', 'alignment'].includes(step.mode), step.title);
+        assert.ok(step.mode !== 'alignment' || step.alignment, `${step.title}: an Alignment view step says what it shows`);
         assert.ok(step.title && step.text.length > 40, step.title);
         if (step.do) {
           const d = step.do;
@@ -120,6 +121,30 @@ test('every worked example asks its question, says what to expect, and its steps
             assert.ok(roles.has(d.to) && made.has(d.to) && made.has(`labels:${d.from}`), `${step.title}: its labels and the other segmentation are made before`);
             made.add(`clustering:${d.to}`).add(`labels:${d.to}`);
           }
+          // Post-Xenium images (the simulated example's): added, then aligned, checked, drawn on.
+          if (d.action === 'add-image') {
+            assert.ok(w.images && ['he', 'if'].includes(d.image), `${step.title}: an image of the example's`);
+            made.add(`image:${d.image}`);
+            if (d.alignment === 'matrix') made.add(`version:${d.image}:matrix`);
+          }
+          if (['landmarks', 'register', 'check', 'write-regions', 'read-regions'].includes(d.action)) assert.ok(made.has(`image:${d.image}`), `${step.title}: its image is added before`);
+          if (d.action === 'landmarks') {
+            assert.ok(d.count >= 3 && d.within.length === 4, step.title);
+            made.add(`version:${d.image}:landmarks`);
+          }
+          if (d.action === 'register') made.add(`version:${d.image}:automatic`);
+          if (d.action === 'check') assert.ok(d.versions.every((m) => made.has(`version:${d.image}:${m}`)), `${step.title}: its versions are made before`);
+          if (d.action === 'draw-regions') d.regions.forEach((r) => made.add(`region:${r.name}`));
+          if (d.action === 'write-regions' || d.action === 'read-regions') assert.ok([...made].some((x) => x.startsWith('region:')), `${step.title}: its regions are drawn before`);
+          if (d.action === 'import-instrument-types') made.add('labels:true-types');
+          if (d.action === 'review-queue') assert.ok(step.mode === 'celltypes' && made.has('labels:instrument') && d.first > 0, `${step.title}: the labels are made before`);
+          if (d.action === 'exclude-fold') assert.ok(step.mode === 'viewer' && d.region.name && d.note, step.title);
+        }
+        if (step.images) assert.ok(Object.keys(step.images).every((k) => made.has(`image:${k}`)), `${step.title}: its images are added before`);
+        if (step.alignment) {
+          const a = step.alignment;
+          assert.ok(step.mode === 'alignment' && made.has(`image:${a.image}`), `${step.title}: its image is added before`);
+          assert.ok(a.show === 'in use' || made.has(`version:${a.image}:${a.show}`), `${step.title}: the version it shows is made before`);
         }
         if (step.segmentation) assert.ok(step.mode === 'viewer' && roles.has(step.segmentation) && made.has(step.segmentation), `${step.title}: its segmentation is made before`);
         if (step.compare) {
@@ -137,6 +162,7 @@ test('every worked example asks its question, says what to expect, and its steps
         }
         const fill = step.cells?.fill ?? '';
         if (fill === 'clusters' || /^labels/.test(fill)) assert.ok(made.has(`${fill === 'clusters' ? 'clustering' : 'labels'}:${step.segmentation ?? 'instrument'}`), `${step.title}: what fills the cells is made before`);
+        if (fill === 'true-types') assert.ok(made.has('labels:true-types'), `${step.title}: the true types are imported before`);
       }
     }
   }

@@ -29,6 +29,8 @@ type Summary struct {
 	WideDisplacements int            `json:"wide_displacements"`
 	ImageWidth        int            `json:"image_width_px"`
 	ImageHeight       int            `json:"image_height_px"`
+	// PostXeniumImages are the post-Xenium images made, within the bundle.
+	PostXeniumImages []string `json:"post_xenium_images,omitempty"`
 }
 
 // Run makes the tissue p describes and writes it, as a simulated Xenium-shaped bundle with its
@@ -216,22 +218,31 @@ func (wr *writer) summary(folder string) *Summary {
 	return &Summary{
 		Folder: folder, Cells: wr.w.trueCells, CellsByType: wr.w.trueCellsByType, VisibleNuclei: wr.w.visibleNuclei,
 		InstrumentCells: wr.w.instrumentCells, Transcripts: wr.w.transcripts, MoleculesByOrigin: wr.w.moleculesByOrigin,
-		WideDisplacements: wr.w.wide, ImageWidth: wr.t.w, ImageHeight: wr.t.h,
+		WideDisplacements: wr.w.wide, ImageWidth: wr.t.w, ImageHeight: wr.t.h, PostXeniumImages: wr.postXeniumImages(),
 	}
+}
+
+func (wr *writer) postXeniumImages() []string {
+	var out []string
+	for _, r := range wr.postXenium {
+		out = append(out, r.Image)
+	}
+	return out
 }
 
 // description is situcraft-simulation.json: that the bundle is simulated, by what, with what
 // settings, where its truth is and what it holds.
 func (wr *writer) description() any {
 	s := wr.summary("")
-	return map[string]any{
+	d := map[string]any{
 		"format":    "situcraft-simulation",
 		"version":   1,
 		"simulated": true,
 		"software":  "SituCraft " + wr.software,
 		"about": "Every cell, nucleus and molecule in this bundle is simulated. The files are laid out as a Xenium output bundle " +
 			"so that any tool reading Xenium data can read them; no instrument made them. The instrument's segmentation is a " +
-			"simulated nucleus expansion; the true segmentation, every molecule's true cell and place, and each cell's type are in truth/.",
+			"simulated nucleus expansion; the true segmentation, every molecule's true cell and place, and each cell's type are in truth/." +
+			postXeniumAbout(wr.postXenium),
 		"truth":      "truth",
 		"parameters": wr.t.p,
 		"made": map[string]any{
@@ -240,6 +251,10 @@ func (wr *writer) description() any {
 			"wide_displacements": s.WideDisplacements, "image_width_px": s.ImageWidth, "image_height_px": s.ImageHeight,
 		},
 	}
+	if len(s.PostXeniumImages) > 0 {
+		d["made"].(map[string]any)["post_xenium_images"] = s.PostXeniumImages
+	}
+	return d
 }
 
 func tiffWrite(path string, plane *tiff.Plane16, description, software string, levels int) error {

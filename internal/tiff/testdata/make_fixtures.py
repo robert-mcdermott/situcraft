@@ -1,7 +1,8 @@
 # Writes the TIFFs the tests read, with tifffile and imagecodecs: each container and codec choice a
 # reader's code depends on (byte order, BigTIFF, strips and tiles with partial edges, LZW, deflate,
-# PackBits, both predictors, planar RGB, SubIFD pyramids, OME-XML), and expected.json with the
-# SHA-256 of every image directory's pixels (row-major, samples little-endian).
+# PackBits, JPEG (YCbCr and grey), both predictors, planar RGB, SubIFD pyramids, OME-XML), and
+# expected.json with the SHA-256 of every image directory's pixels (row-major, samples
+# little-endian).
 #
 #   uv run --with tifffile --with imagecodecs --with numpy python -I make_fixtures.py
 #
@@ -52,6 +53,21 @@ full = image('u2', (70, 90))
 add('bigtiff-pyramid', [full, full[::2, ::2].copy(), full[::4, ::4].copy()], bigtiff=True, compression='zlib', tile=(32, 32))
 add('ome-3channels', [image('u2', (3, H, W))], ome=True, compression='zlib', photometric='minisblack',
     metadata={'axes': 'CYX', 'PhysicalSizeX': 0.5, 'PhysicalSizeY': 0.5, 'Channel': {'Name': ['DAPI', 'CD45', 'PanCK']}})
+
+# JPEG is lossy and decoders round differently: a JPEG case's expected pixels are libjpeg-turbo's
+# (imagecodecs), kept beside it (<name>.raw), and a reader must come within a tolerance of them.
+def add_jpeg(name, data, tolerance, **kwargs):
+    path = os.path.join(here, name + '.tif')
+    tifffile.imwrite(path, data, compression='jpeg', **kwargs)
+    decoded = tifffile.imread(path)
+    with open(os.path.join(here, name + '.raw'), 'wb') as f:
+        f.write(np.ascontiguousarray(decoded).tobytes())
+    cases.append({'name': name, 'tolerance': tolerance, 'levels': [{'shape': list(decoded.shape), 'dtype': str(decoded.dtype), 'sha256': digest(decoded)}]})
+
+y, x = np.mgrid[0:48, 0:56]
+photo = np.stack([(120 + 80 * np.sin(x / 7.0 + y / 11.0)), (90 + 60 * np.cos(y / 5.0)), (160 + 50 * np.sin((x - y) / 9.0))], axis=-1).astype('u1')
+add_jpeg('rgb-jpeg-ycbcr-tiles', photo, 3, photometric='ycbcr', tile=(16, 16))
+add_jpeg('u8-jpeg-strips', photo[..., 1].copy(), 3, photometric='minisblack', rowsperstrip=16)
 
 with open(os.path.join(here, 'expected.json'), 'w') as f:
     json.dump({'tifffile': tifffile.__version__, 'cases': cases}, f, indent=1)

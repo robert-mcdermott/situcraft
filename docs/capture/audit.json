@@ -280,6 +280,36 @@
   "violations": []
  },
  {
+  "scene": "alignment",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "alignment",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "regions",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "regions",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "reviews",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "reviews",
+  "theme": "light",
+  "violations": []
+ },
+ {
   "scene": "clusters",
   "theme": "dark",
   "violations": []

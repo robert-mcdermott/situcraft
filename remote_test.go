@@ -247,6 +247,15 @@ func TestOpeningPathsNeedsTheToken(t *testing.T) {
 	if rec := post(mux, "/api/remote/action", `{"action":"open_paths","args":{}}`, map[string]string{remoteTokenHeader: hub.token}); rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "paths") {
 		t.Fatalf("no paths: %d %s", rec.Code, rec.Body)
 	}
+	// A post-Xenium image is read where it lies: the token, and the page given its path, nothing opened.
+	image, _ := json.Marshal(map[string]any{"action": "add_image", "args": map[string]any{"path": filepath.Join(dir, "S1_he_image.ome.tif")}})
+	if rec := post(mux, "/api/remote/action", string(image), nil); rec.Code != http.StatusUnauthorized || !strings.Contains(rec.Body.String(), "Reading files") {
+		t.Fatalf("add_image without the token: %d %s", rec.Code, rec.Body)
+	}
+	seen = remoteEvent{}
+	if rec := post(mux, "/api/remote/action", string(image), map[string]string{remoteTokenHeader: hub.token}); rec.Code != http.StatusOK || seen.Action != "add_image" || len(seen.Files) != 0 {
+		t.Fatalf("add_image: %d %s, the page got %+v", rec.Code, rec.Body, seen)
+	}
 }
 
 // A page that answers the export action by uploading a file, as remote.js does.

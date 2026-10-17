@@ -43,11 +43,23 @@
 // - the examples and the release (wave 4, slice 9): the worked examples clustering and labeling the
 //   Lung cells, reading the Breast labels under two segmentations, and the simulated tissue's labels
 //   against its truth, as their cards expect; the project saved by 0.4.0 reopened, each clustering,
-//   map and label set from markers it records made again with the same summary.
+//   map and label set from markers it records made again with the same summary;
+// - post-Xenium images (wave 5, slice 1): the pathology fixture's bundle (XOA 1.0.1) opened and its
+//   H&E added by a program, each of three of its pixels drawn where its alignment puts it;
+// - transforms and landmarks (wave 5, slice 2): landmarks made with 10x's matrix fitted back to it as
+//   a version, listed in the Alignment view and written as Xenium Explorer's keypoints; a simulated
+//   tissue's H&E added unaligned and placed by six landmarks clicked on both images, within its
+//   truth's deformation, drawn where the fit puts it;
+// - automatic registration (wave 5, slice 3): the same H&E registered by its nuclei with a
+//   deformation allowed, within its truth's deformation, drawn where the version puts its pixels;
+// - alignment checked in µm (wave 5, slice 4): the landmarks' version checked over the tissue, each
+//   patch's measured error against its true one; the automatic version measured less off; the map,
+//   a checkerboard and DAPI's edges drawn.
 //
 // It builds the program, starts it on the bundles with an empty cache and library, builds their
-// derived data, and drives the page through window.situcraft (the app, app.js) and window.situcraftViewer
-// (ui/mode-viewer.js). Run by validation/run.mjs's "viewer" suite.
+// derived data, and drives the page through window.situcraft (the app, app.js), window.situcraftViewer
+// (ui/mode-viewer.js) and window.situcraftAlignment (ui/mode-alignment.js). Run by
+// validation/run.mjs's "viewer" suite.
 
 import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -60,6 +72,8 @@ import { inflateSync } from 'node:zlib';
 import { attributeRange, readCells } from '../web/lib/viewer-data.js';
 import { certaintyColor, readSegCells } from '../web/lib/segview.js';
 import { colormapLUT, hexToRgb } from '../web/lib/colormaps.js';
+import { placePoint } from '../web/lib/transforms.js';
+import { invert } from '../web/lib/overlays.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const BUNDLES = ['xenium-lung-2fov', 'xenium-breast-2fov'];
@@ -616,7 +630,7 @@ export async function viewerSuite({ check, MissingData, verbose }) {
           for (let i = 0; i < cells.cluster.length; i += 1) { const w = cells.cluster[i] === 1 ? 1 : 0; size += w; if (st.selected[i] !== w) wrong += 1; }
           return { wrong, size, kind: st.color.kind, legend: document.querySelectorAll('.cm-legend-item').length };
         })()`);
-        check('viewer', 'remote control: label_cells labels the Lung cells from the panel\'s starter set; the tissue shows each cell in its label\'s color, and a cluster selected on the labels\' colors is its cells', labeled.ok && shownLabels.ok && byLabels.ok ? `${labeled.message} ${JSON.stringify(labelFill)} ${JSON.stringify(stillClusters)}` : labeled.message ?? shownLabels.message ?? byLabels.message, labeled.ok && labeled.data.cells.analyzed === 11820 && labelFill?.segCells === 11898 && labelFill.wrong === 0 && labelFill.clear === 78 && labelFill.grey > 0 && labelFill.legend > 2 && stillClusters.kind === 'labels' && stillClusters.wrong === 0 && stillClusters.size > 0 && stillClusters.legend > 2, 'every cell in its label\'s color, the unlabeled grey, the 78 not analyzed clear; the cluster\'s cells exactly');
+        check('viewer', 'remote control: label_cells labels the Lung cells from the panel\'s starter set; the tissue shows each cell in its label\'s color, and a cluster selected on the labels\' colors is its cells', labeled.ok && shownLabels.ok && byLabels.ok ? `${labeled.message} ${JSON.stringify(labelFill)} ${JSON.stringify(stillClusters)}` : labeled.message ?? shownLabels.message ?? byLabels.message, labeled.ok && labeled.data.cells.analyzed === 11820 && labelFill?.segCells === 11898 && labelFill.wrong === 0 && labelFill.clear === 78 && labelFill.grey > 0 && labelFill.legend > 2 && stillClusters.kind === 'labels' && stillClusters.wrong === 0 && stillClusters.size > 0 && stillClusters.legend > 2, 'every cell in its label\'s color, the unlabeled gray, the 78 not analyzed clear; the cluster\'s cells exactly');
         // Imported labels (wave 4, slice 4): a table of three of the Lung cells' labels (their ids
         // as select_cell answers them), each cell taking its row's label and the others none; a
         // table naming a cell the segmentation does not have refused, with how many; the
@@ -880,7 +894,7 @@ export async function viewerSuite({ check, MissingData, verbose }) {
           const app = window.situcraft;
           const r = app.store.project.artifacts.find((a) => a.kind === 'segmentation' && a.method?.name === 'SituCraft transcript-informed segmentation');
           return { files: r ? r.files.map((f) => f.path).sort().join() : '', comparisons: app.store.project.artifacts.filter((a) => a.kind === 'comparison').length, card: Boolean(document.querySelector('.seg-refined')), lines: document.querySelectorAll('.seg-refined .seg-differs li').length,
-            background: (document.querySelector('.seg-refined')?.textContent ?? '').match(/The model's background accounts for [\\d.]+% of the modelled transcripts: false decodes [\\d.]+%, measured by [\\d,]+ negative-control transcripts/)?.[0] ?? '' };
+            background: (document.querySelector('.seg-refined')?.textContent ?? '').match(/The model's background accounts for [\\d.]+% of the modeled transcripts: false decodes [\\d.]+%, measured by [\\d,]+ negative-control transcripts/)?.[0] ?? '' };
         })()`);
         check('viewer', 'the refinement is recorded with its probabilities and diagnostics, its comparison too, and shown with its convergence, background and limitations', JSON.stringify(shownRefined),
           /diagnostics\.json/.test(shownRefined.files) && /probabilities\.bin/.test(shownRefined.files) && shownRefined.comparisons === comparisonsBefore + 1 && shownRefined.card && shownRefined.lines >= 5 && shownRefined.background !== '', 'its 9 files; one more comparison; the card with its convergence, background (the controls measuring the false decodes) and limitations');
@@ -1007,6 +1021,25 @@ export async function viewerSuite({ check, MissingData, verbose }) {
         check('viewer', 'a region holding no nucleus fails, classified, with what to do, in the answer and the studio', `${failed.message ?? failed.error}; the studio: ${failure.replace(/\s+/g, ' ')}`,
           !failed.ok && /holds no cell's nucleus/.test(failed.message ?? failed.error ?? '') && /What to do/.test(failed.message ?? failed.error ?? '') && /What to do/.test(failure), 'refused by the job, with the region\'s remedy');
 
+        // Regions and reviews on the Lung tissue (wave 5), kept in the project this release saves:
+        // a tumor nest drawn and commented on, an edge's artifact excluded with its cells, a cell's
+        // segmentation of concern.
+        {
+          const drawnLung = [
+            await act('draw_region', { dataset: 'xenium-lung-2fov', polygon: [[600, 250], [800, 260], [790, 420], [610, 400]], class: 'Tumor', name: 'Tumor nest', by: 'validation' }),
+            await act('draw_region', { dataset: 'xenium-lung-2fov', rectangle: [430, 120, 510, 180], class: 'Ignore*', name: 'Edge artifact', by: 'validation' }),
+          ];
+          const reviewedLung = [
+            await act('review', { dataset: 'xenium-lung-2fov', action: 'exclude', region: 'Edge artifact', note: 'Folded tissue at the edge', by: 'validation' }),
+            await act('review', { dataset: 'xenium-lung-2fov', action: 'comment', region: 'Tumor nest', note: 'Check against the H&E when it is scanned', by: 'validation' }),
+            await act('review', { dataset: 'xenium-lung-2fov', action: 'concern', cells: ['#100'], concern: 'merged', note: 'Two nuclei in one outline', by: 'validation' }),
+          ];
+          const lungState = await act('reviews', { dataset: 'xenium-lung-2fov' });
+          check('viewer', 'regions and reviews on the Lung tissue: a region drawn and commented on, another excluded with its cells, a cell of concern', `${[...drawnLung, ...reviewedLung].map((x) => x.message ?? x.error).join(' | ')}; ${lungState.message ?? lungState.error}`,
+            [...drawnLung, ...reviewedLung].every((x) => x.ok) && lungState.data?.counts.excluded === reviewedLung[0].data?.review.cells?.length && lungState.data.counts.excluded > 0 && lungState.data.counts.concern === 1,
+            'each as asked; the excluded cells those in the region');
+        }
+
         // The projects as 0.2.0, 0.3.0 and 0.4.0 saved them
         // (validation/projects/<version>-lung.situcraft.json): this release's written when asked
         // (SITUCRAFT_WRITE_FIXTURE=1), the places of this run's folders made neutral and given its
@@ -1019,14 +1052,14 @@ export async function viewerSuite({ check, MissingData, verbose }) {
           const doc = await chrome.eval(`(async () => {
             const app = window.situcraft;
             const { rename, serializeProject } = await import('/lib/project.js');
-            app.store.commit(rename(app.store.project, 'Lung example, as SituCraft 0.4.0 saved it'), 'Rename');
+            app.store.commit(rename(app.store.project, 'Lung example, as SituCraft 0.5.0 saved it'), 'Rename');
             return serializeProject(app.store.project);
           })()`);
           // Its own id: it grew from the 0.1.0 project in this run.
           const neutral = JSON.parse(doc.split(join(dataRoot, 'xenium-lung-2fov')).join('/data/examples/xenium-lung-2fov').split(work).join('/data/work'));
-          writeFileSync(fixtureOf('0.4.0'), `${JSON.stringify({ ...neutral, id: 'p-situcraft-0-4-0-lung' }, null, 1)}\n`);
+          writeFileSync(fixtureOf('0.5.0'), `${JSON.stringify({ ...neutral, id: 'p-situcraft-0-5-0-lung' }, null, 1)}\n`);
         }
-        for (const v of ['0.2.0', '0.3.0', '0.4.0']) {
+        for (const v of ['0.2.0', '0.3.0', '0.4.0', '0.5.0']) {
           if (!existsSync(fixtureOf(v))) continue;
           const text = readFileSync(fixtureOf(v), 'utf8');
           const fixture = JSON.parse(text);
@@ -1068,9 +1101,11 @@ export async function viewerSuite({ check, MissingData, verbose }) {
             const before = (await wait(() => { const l = app.bundles.link(dataset.id); return l && l.state !== 'checking' ? l : null; }))?.state;
             const link = await app.bundles.locate(dataset.id, ${JSON.stringify(join(dataRoot, 'xenium-lung-2fov'))});
             const p = app.store.project;
-            return { before, after: link?.state, segmentations: p.artifacts.filter((a) => a.kind === 'segmentation').length, comparisons: p.artifacts.filter((a) => a.kind === 'comparison').length, decisions: p.decisions.length, exports: exportsOf(p, dataset.id).length, default: promotedSegmentation(p, dataset.id)?.record.id, saved: promotedSegmentation(saved, saved.datasets[0].id)?.record.id };
+            return { before, after: link?.state, segmentations: p.artifacts.filter((a) => a.kind === 'segmentation').length, comparisons: p.artifacts.filter((a) => a.kind === 'comparison').length, decisions: p.decisions.length, exports: exportsOf(p, dataset.id).length, default: promotedSegmentation(p, dataset.id)?.record.id, saved: promotedSegmentation(saved, saved.datasets[0].id)?.record.id, regions: JSON.stringify(p.regions ?? []), reviews: JSON.stringify(p.reviews ?? []) };
           })()`);
-          check('viewer', `${v} Lung project: it opens and finds its moved bundle; its segmentations, comparisons, decisions and exports are there, and its default`, JSON.stringify(reopened), reopened.before === 'missing' && reopened.after === 'ok' && reopened.segmentations === fixture.artifacts.filter((a) => a.kind === 'segmentation').length && reopened.comparisons >= 2 && reopened.decisions === fixture.decisions.length && reopened.exports >= 1 && reopened.default && reopened.default === reopened.saved, 'missing, then ok; all there');
+          // From 0.5.0, its regions and reviews as they were saved.
+          const kept = v < '0.5.0' || (reopened.regions === JSON.stringify(fixture.regions ?? []) && reopened.reviews === JSON.stringify(fixture.reviews ?? []) && (fixture.regions ?? []).length >= 2 && (fixture.reviews ?? []).length >= 3);
+          check('viewer', `${v} Lung project: it opens and finds its moved bundle; its segmentations, comparisons, decisions, exports${v < '0.5.0' ? '' : ', regions and reviews'} are there, and its default`, JSON.stringify({ ...reopened, regions: (fixture.regions ?? []).length, reviews: (fixture.reviews ?? []).length }), reopened.before === 'missing' && reopened.after === 'ok' && reopened.segmentations === fixture.artifacts.filter((a) => a.kind === 'segmentation').length && reopened.comparisons >= 2 && reopened.decisions === fixture.decisions.length && reopened.exports >= 1 && reopened.default && reopened.default === reopened.saved && kept, 'missing, then ok; all there');
         }
 
         // The worked example on the Breast data: the instrument's cells, drawn from stains, against
@@ -1184,6 +1219,641 @@ export async function viewerSuite({ check, MissingData, verbose }) {
           lsim.every((x) => x.ok) && lsim.at(-1).data.step === 11 && simInst?.matched.cells === 2916 && near(simInst.matched.agreement, 0.983, 0.003) && near(simInst.mecr?.a, 0.063, 0.002) && near(simInst.mecr?.b, 0.221, 0.005) && near(simRef?.matched.agreement, 0.9986, 0.002) && near(simRef?.mecr?.b, 0.090, 0.003),
           'the instrument\'s: 98.3% their true type, mixing 0.22 against the truth\'s 0.06; the refinement\'s: 99.9%, mixing 0.09');
         await act('tour', { end: true });
+
+        {
+          // The post-Xenium worked examples (wave 5, slice 7), on the simulated example's H&E, run step
+          // by step in the same project, each number their cards state checked: the H&E placed three
+          // ways and each checked (and against the truth); two regions drawn on it, their cells and true
+          // types, written in its pixels and read back; the review queue's first twenty decided by the
+          // truth and a fold excluded.
+          const card = (name) => (async () => {
+            await act('tour', { example: 'simulated-standard', name });
+            const out = [];
+            for (let k = 0; k < 12; k += 1) {
+              const x = await act('tour', { run: true });
+              out.push(x);
+              if (!x.ok || /finished/.test(x.message ?? '')) break;
+            }
+            return out;
+          })();
+          const close2 = (v, want) => Number.isFinite(v) && Math.abs(v - want) < 0.0051;
+          const alignSteps = await card('align-he');
+          const aligned = await chrome.eval(`(async () => {
+            const app = window.situcraft;
+            const { truePlace } = await import('/lib/simulated-truth.js');
+            const { placePoint } = await import('/lib/transforms.js');
+            const p = app.store.project;
+            const ds = p.datasets.find((x) => x.name === 'simulated-standard');
+            const reg = (await (await fetch('/api/read-json?path=' + encodeURIComponent(ds.path + '/truth/post_xenium/registration.json'))).json()).images.find((x) => x.kind === 'he');
+            const out = {};
+            for (const t of p.artifacts.filter((a) => a.kind === 'transform' && a.dataset === ds.id)) {
+              const check = p.artifacts.find((a) => a.kind === 'alignment-check' && a.transform === t.id)?.summary;
+              const d = await app.bundles.transformDescription(t.id);
+              const desc = { transform: d.transform, deformation: d.deformation ?? null };
+              const errs = [];
+              for (let v = 0; v < reg.height; v += 20) for (let u = 0; u < reg.width; u += 20) {
+                const [tx, ty] = truePlace(reg, u + 0.5, v + 0.5);
+                if (tx < 0 || ty < 0 || tx > 500 || ty > 500) continue;
+                const [x, y] = placePoint(desc, u + 0.5, v + 0.5);
+                errs.push(Math.hypot(x - tx, y - ty));
+              }
+              errs.sort((a, b) => a - b);
+              out[t.summary.method] = { median: check?.median, p90: check?.p90, trueMedian: errs[Math.floor(errs.length / 2)], trueP90: errs[Math.floor(0.9 * errs.length)], fit: d.fit ? { rms: d.fit.rms, looRms: d.fit.looRms } : null };
+            }
+            return { versions: out, inUse: p.decisions.filter((x) => x.kind === 'use-transform').at(-1)?.artifact, auto: p.artifacts.find((a) => a.kind === 'transform' && a.summary?.method === 'automatic')?.id };
+          })()`);
+          const av = aligned.versions;
+          const t2 = (x) => x && [x.median, x.p90, x.trueMedian, x.trueP90].map((v) => v?.toFixed(2)).join('/');
+          check('viewer', 'the worked example Align an H&E three ways: by the matrix, six landmarks and automatically, each checked over the tissue and against the truth, as its card states', `${alignSteps.map((x) => x.ok ? `step ${x.data.step}` : x.message).join('; ')}; matrix ${t2(av.matrix)}, landmarks ${t2(av.landmarks)} (fit ${av.landmarks?.fit?.rms.toFixed(2)}, left out ${av.landmarks?.fit?.looRms.toFixed(2)}), automatic ${t2(av.automatic)} (median/p90 checked, then truly)`,
+            alignSteps.every((x) => x.ok) && /finished/.test(alignSteps.at(-1).message ?? '') && aligned.inUse === aligned.auto
+            && close2(av.matrix?.median, 0.63) && close2(av.matrix?.p90, 1.09) && close2(av.matrix?.trueMedian, 0.69) && close2(av.matrix?.trueP90, 1.12)
+            && close2(av.landmarks?.median, 0.58) && close2(av.landmarks?.p90, 1.19) && close2(av.landmarks?.trueMedian, 0.72) && close2(av.landmarks?.trueP90, 1.22) && close2(av.landmarks?.fit?.rms, 0.57) && close2(av.landmarks?.fit?.looRms, 1.00)
+            && close2(av.automatic?.median, 0.41) && close2(av.automatic?.p90, 0.62) && close2(av.automatic?.trueMedian, 0.47) && close2(av.automatic?.trueP90, 0.75),
+            'matrix 0.63/1.09 checked, 0.69/1.12 truly; landmarks 0.58/1.19, 0.72/1.22 (fit 0.57, left out 1.00); automatic 0.41/0.62, 0.47/0.75; the automatic version in use');
+          await act('tour', { end: true });
+
+          const regionSteps = await card('regions-qupath');
+          const drawn = await chrome.eval(`(async () => {
+            const app = window.situcraft;
+            const v = window.situcraftViewer;
+            const { labelSource, refOf } = await import('/ui/label-sources.js');
+            const types = app.store.project.artifacts.find((a) => a.kind === 'labels' && /instrument_cell_types/.test(a.name ?? ''));
+            const t = types ? await labelSource(app, refOf(types.id, 0)) : null;
+            return v.regions.list().map((r) => {
+              const rows = v.regions.rowsIn(r.id);
+              const c = {};
+              for (const i of rows) if (t) c[t.names[t.label[i]]] = (c[t.names[t.label[i]]] ?? 0) + 1;
+              return { name: r.name, area: r.area, cells: rows.length, types: c };
+            });
+          })()`);
+          const R = (n) => drawn.find((r) => r.name === n);
+          const back = (n) => R(n) && R(`${n} (2)`) && Math.abs(R(n).area - R(`${n} (2)`).area) < 0.05 && R(n).cells === R(`${n} (2)`).cells;
+          check('viewer', 'the worked example Regions for QuPath: two domains drawn on the H&E, their cells and true types, written in its pixels and read back as they were, as its card states', `${regionSteps.map((x) => x.ok ? `step ${x.data.step}` : x.message).join('; ')}; ${JSON.stringify(drawn)}`,
+            regionSteps.every((x) => x.ok) && /finished/.test(regionSteps.at(-1).message ?? '') && R('Epithelial domain')?.cells === 1043 && Math.round(R('Epithelial domain').area) === 105675 && R('Epithelial domain').types['epithelial-like'] === 440
+            && R('Immune domain')?.cells === 475 && Math.round(R('Immune domain').area) === 33650 && R('Immune domain').types['immune-like'] === 319 && back('Epithelial domain') && back('Immune domain'),
+            'the epithelial domain 1,043 cells (440 epithelial-like), the immune 475 (319 immune-like); back within 0.05 µm², the same cells');
+          await act('tour', { end: true });
+
+          const reviewSteps = await card('pathologist-review');
+          const reviewed = await chrome.eval(`(async () => {
+            const app = window.situcraft;
+            const { labelSource, refOf } = await import('/ui/label-sources.js');
+            const p = app.store.project;
+            const ds = p.datasets.find((x) => x.name === 'simulated-standard');
+            const truthSet = p.artifacts.find((a) => a.kind === 'labels' && /instrument_cell_types/.test(a.name ?? ''));
+            const t = await labelSource(app, refOf(truthSet.id, 0));
+            const wrong = async (id) => {
+              const s = await labelSource(app, refOf(id, 0));
+              let n = 0;
+              for (let i = 0; i < s.label.length; i += 1) if (s.label[i] >= 0 && s.names[s.label[i]] !== t.names[t.label[i]]) n += 1;
+              return n;
+            };
+            const records = (p.reviews ?? []).filter((r) => r.dataset === ds.id && r.by === 'the worked example');
+            const accept = records.filter((r) => r.action === 'accept' && r.target === 'cells');
+            const relabel = records.filter((r) => r.action === 'relabel' && r.target === 'cells');
+            const excludedCells = records.filter((r) => r.action === 'exclude' && r.target === 'cells').flatMap((r) => r.cells).length;
+            const curated = p.artifacts.find((a) => a.kind === 'curated-labels' && a.dataset === ds.id && relabel[0] && a.id === relabel[0].edits[0].set);
+            const markers = relabel[0] ? relabel[0].labels.id : null;
+            // Each relabel's new label is the cell's true type; each accept's, its label already.
+            const right = [...accept, ...relabel].every((r) => r.cells.length === 1 && r.next === (r.action === 'accept' ? r.cells[0].label : t.names[t.label[r.cells[0].row]]) && r.images.length === 1);
+            return { records: records.length, accepted: accept.length, relabeled: relabel.length, excludedCells, right, queue: app.labelReview?.queue?.()?.counts?.flagged, before: markers ? await wrong(markers) : null, after: curated ? await wrong(curated.id) : null };
+          })()`);
+          check('viewer', 'the worked example A pathologist\'s review: the queue\'s first twenty decided by the truth (accepted where right, relabeled where not, each recorded with its provenance), a fold\'s cells excluded, as its card states', `${reviewSteps.map((x) => x.ok ? `step ${x.data.step}` : x.message).join('; ')}; ${JSON.stringify(reviewed)}`,
+            reviewSteps.every((x) => x.ok) && /finished/.test(reviewSteps.at(-1).message ?? '') && reviewed.accepted === 18 && reviewed.relabeled === 2 && reviewed.right && reviewed.excludedCells === 43 && reviewed.records === 22 && reviewed.before === 49 && reviewed.after === 47,
+            '18 accepted, 2 relabeled (to their true types), 43 cells excluded, 22 reviews; 49 wrong labels before, 47 after');
+          await act('tour', { end: true });
+        }
+      }
+
+      // Post-Xenium images (wave 5, slice 1): the pathology fixture's bundle (XOA 1.0.1) opened,
+      // its H&E added by a program with the alignment found beside it, and drawn where the matrix
+      // puts it: at three of its pixels, the Viewer's colour is the image's.
+      const pathology = join(dataRoot, 'xenium-breast-cancer-rep1');
+      const sample = 'Xenium_FFPE_Human_Breast_Cancer_Rep1';
+      const rowsOf = (t) => (u, v) => [t[0][0] * u + t[0][1] * v + t[0][2], t[1][0] * u + t[1][1] * v + t[1][2]];
+      // The Viewer's colour where an image's pixel (px, py) is placed by t (a transform's rows, or a
+      // function placing a point), against the pixel's own.
+      const probe = async (dataset, added, t, px, py) => {
+        const [cx, cy] = (typeof t === 'function' ? t : rowsOf(t))(px + 0.5, py + 0.5);
+        await act('show_tissue', { dataset, center: [cx, cy], um_per_pixel: 0.002, transcripts: false, outlines: false, channels: { DAPI: { visible: false } }, images: { [added.data.name]: { visible: true, opacity: 1 } } });
+        const side = added.data.summary.width > 4096 ? 1024 : 512;
+        return chrome.eval(`(async () => {
+          const r = window.situcraftViewer.renderer;
+          await r.settled();
+          const [w, h] = r.size();
+          const got = r.readColor(w / 2, h / 2).slice(0, 3);
+          const tile = new Uint8Array(await fetch('/api/images/${added.data.id}/tiles/0/0/${Math.floor(px / side)}/${Math.floor(py / side)}').then((x) => x.arrayBuffer()));
+          const i = 3 * (${py % side} * ${side} + ${px % side});
+          return { pixel: [${px}, ${py}], got, want: [tile[i], tile[i + 1], tile[i + 2]] };
+        })()`);
+      };
+      const worstOf = (probes) => (probes.length ? Math.max(...probes.flatMap((p) => p.got.map((g, k) => Math.abs(g - p.want[k])))) : Infinity);
+      if (existsSync(join(pathology, sample, 'experiment.xenium'))) {
+        await act('new_project', { name: 'Pathology' });
+        const opened = await act('open_paths', { paths: [join(pathology, sample)], add: true });
+        const added = await act('add_image', { dataset: sample, path: join(pathology, 'images', `${sample}_he_image.ome.tif`) });
+        const probes = [];
+        const tenx = added.data?.transform;
+        if (added.ok && tenx) {
+          for (const [px, py] of [[16342, 14283], [9000, 20000], [24000, 6000]]) probes.push(await probe(sample, added, tenx.summary.transform, px, py));
+        }
+        check('viewer', 'remote control: add_image adds the pathology fixture\'s H&E with the alignment beside it, and the Viewer draws its pixels where the matrix puts them', `${opened.message ?? opened.error}; ${added.message ?? added.error}; ${JSON.stringify(probes)}`,
+          opened.ok && added.ok && tenx?.summary.method === 'matrix' && tenx.summary.reflected && probes.length === 3 && worstOf(probes) <= 2, 'the image\'s color at three of its pixels, within 2');
+
+        // Transforms and landmarks (wave 5, slice 2): landmarks made with 10x's matrix fit back to
+        // it as a similarity (10x's is one), recorded as a version that places the image; the
+        // Alignment view lists both versions and the landmarks; written as Xenium Explorer's
+        // keypoints, which read back in the Xenium image's pixels; the matrix chosen again.
+        if (added.ok && tenx) {
+          const t = tenx.summary.transform;
+          const landmarks = [[2000, 3000], [28000, 2500], [15000, 12000], [5000, 22000], [26000, 21000], [9000, 9000]].map(([u, v]) => ({ fixed: rowsOf(t)(u, v), moving: [u, v] }));
+          const aligned = await act('align_image', { dataset: sample, landmarks, model: 'similarity', by: 'validation', note: 'Landmarks made with 10x\'s matrix' });
+          const shown = await act('show_alignment', { dataset: sample, transform: aligned.data?.id });
+          const ui = await chrome.eval(`({ rows: document.querySelectorAll('.align-landmarks tbody tr').length, versions: document.querySelectorAll('.align-version').length, inUse: document.querySelector('.align-version.in-use b')?.textContent ?? '', fit: document.querySelector('.align-fit')?.innerText ?? '' })`);
+          const file = join(work, 'exports', 'he_keypoints.csv');
+          mkdirSync(dirname(file), { recursive: true });
+          const exported = await act('export', { what: 'alignment', dataset: sample, format: 'keypoints', path: file });
+          const lines = existsSync(file) ? readFileSync(file, 'utf8').trim().split('\n') : [];
+          const first = lines[1]?.split(',').map(Number) ?? [];
+          const back = await act('use_transform', { dataset: sample, transform: tenx.id, rationale: '10x\'s alignment, for the checks that follow' });
+          const got = aligned.data?.transform ?? [[0, 0, 0], [0, 0, 0]];
+          const worst = Math.max(...[0, 1].flatMap((r) => [0, 1, 2].map((c) => Math.abs(got[r][c] - t[r][c]) / (c === 2 ? 1000 : 1))));
+          check('viewer', 'remote control: landmarks made with 10x\'s matrix fit back to it, a version that places the H&E; the Alignment view lists both versions; its keypoints written for Xenium Explorer in its pixels', `${aligned.message ?? aligned.error}; ${shown.message ?? shown.error}; ${JSON.stringify(ui)}; ${exported.message ?? exported.error}; ${lines.slice(0, 2).join(' | ')}; ${back.message ?? back.error}`,
+            aligned.ok && aligned.data.fit.rms < 1e-6 && aligned.data.fit.leaveOneOut.length === 6 && worst < 1e-9 && aligned.data.placedBy === aligned.data.id &&
+            shown.ok && shown.data.versions.length === 2 && ui.rows === 6 && ui.versions === 2 && /landmarks, similarity/.test(ui.inUse) && /6 landmarks, similarity: residuals 0\.00 µm/.test(ui.fit) &&
+            exported.ok && lines[0] === 'fixedX,fixedY,alignmentX,alignmentY' && lines.length === 7 && Math.abs(first[0] * 0.2125 - landmarks[0].fixed[0]) < 1e-6 && first[2] === 2000 && back.ok,
+            'the matrix to a millionth of a pixel; 2 versions, 6 rows; 6 keypoints in the Xenium image\'s pixels');
+        }
+      }
+
+      // Simulated post-Xenium images (wave 5, slice 2): a small simulated tissue with its H&E and
+      // immunofluorescence images; the H&E added without an alignment (not drawn), then placed by
+      // six landmarks clicked on both images in the Alignment view at places its truth maps (the
+      // second image followed to its predicted place from the fourth on), fitted as an affine
+      // transform and saved for use; the fit within the truth's deformation of it over the section,
+      // and the Viewer's colour at three of its pixels the image's where the fit puts them.
+      const simDir = join(work, 'sim-pathology');
+      const simSize = [320, 260];
+      execFileSync(bin, ['simulate', '--preset', 'small', '--width', String(simSize[0]), '--height', String(simSize[1]), '--post-xenium', '--quiet', simDir]);
+      await act('new_project', { name: 'Simulated pathology' });
+      const simOpened = await act('open_paths', { paths: [simDir], add: true });
+      const simAdded = await act('add_image', { dataset: 'sim-pathology', path: join(simDir, 'post_xenium', 'simulated_he_image.ome.tif'), alignment: null });
+      const reg = JSON.parse(readFileSync(join(simDir, 'truth', 'post_xenium', 'registration.json'), 'utf8')).images.find((i) => i.kind === 'he');
+      const truth = (u, v) => {
+        const [x, y] = rowsOf(reg.transform)(u, v);
+        const d = [0, 0];
+        for (const w of reg.deformation) d[w.axis] += w.amplitude_um * Math.sin(2 * Math.PI * (w.frequency_per_um[0] * x + w.frequency_per_um[1] * y) + w.phase);
+        return [x + d[0], y + d[1]];
+      };
+      const clicks = [];
+      const predictedOff = [];
+      let simTF = null;
+      let simShown = null;
+      if (simAdded.ok) {
+        simShown = await act('show_alignment', { dataset: 'sim-pathology' });
+        await chrome.eval(`(() => {
+          const model = document.querySelector('select[aria-label="What the fit may change"]');
+          model.value = 'affine';
+          model.dispatchEvent(new Event('change'));
+          [...document.querySelectorAll('.align-panel label')].find((l) => l.textContent.includes('Move the images together')).querySelector('input').click();
+        })()`);
+        // Each place clicked close up (the image there filling the stage), as a person would.
+        const clickAt = async (side, x, y, centre = true) => {
+          if (centre) await chrome.eval(`window.situcraftAlignment.setCamera('${side}', { cx: ${x}, cy: ${y}, scale: ${side === 'left' ? 8 : 3} })`);
+          await chrome.eval('window.situcraftAlignment.settled()');
+          const [cx, cy] = await chrome.eval(`window.situcraftAlignment.clientOf('${side}', ${x}, ${y})`);
+          await chrome.click(cx, cy);
+        };
+        for (const [a, b] of [[0.2, 0.2], [0.8, 0.25], [0.5, 0.5], [0.25, 0.8], [0.8, 0.75], [0.55, 0.3]]) {
+          const moving = [a * reg.width, b * reg.height];
+          const fixed = truth(...moving);
+          await clickAt('left', ...fixed);
+          // From the fourth landmark on, the image has gone where the fit predicts.
+          if (clicks.length >= 3) {
+            const cam = await chrome.eval('window.situcraftAlignment.renderers.right.camera');
+            predictedOff.push(Math.hypot(cam.cx - moving[0], cam.cy - moving[1]));
+          }
+          await clickAt('right', ...moving);
+          clicks.push({ fixed, moving });
+        }
+        // Saved: the program fits and records the landmarks, then the version places the image.
+        await chrome.eval(`(async () => {
+          [...document.querySelectorAll('.align-panel button')].find((b) => b.textContent.includes('Save and use')).click();
+          for (let i = 0; i < 300 && !window.situcraftAlignment.state().inUse; i += 1) await new Promise((r) => setTimeout(r, 100));
+        })()`);
+        const state = await act('get_state');
+        const placedBy = state.data?.images?.find((i) => i.dataset === 'sim-pathology')?.placedBy;
+        simTF = placedBy ? await fetch(`${url}/api/transforms/${placedBy}`).then((r) => r.json()) : null;
+      }
+      const simState = await chrome.eval('window.situcraftAlignment?.state()');
+      let simWorst = Infinity;
+      if (simTF) {
+        simWorst = 0;
+        for (let v = 0; v < reg.height; v += 25) {
+          for (let u = 0; u < reg.width; u += 25) {
+            const [tx, ty] = truth(u, v);
+            if (tx < 0 || ty < 0 || tx > simSize[0] || ty > simSize[1]) continue;
+            const [fx, fy] = rowsOf(simTF.transform)(u, v);
+            simWorst = Math.max(simWorst, Math.hypot(fx - tx, fy - ty));
+          }
+        }
+      }
+      const simProbes = [];
+      if (simTF) for (const [px, py] of [[300, 250], [420, 330], [210, 390]]) simProbes.push(await probe('sim-pathology', simAdded, simTF.transform, px, py));
+      const bound = Math.SQRT2 * reg.parameters.deformation_um * 2;
+      check('viewer', 'the Alignment view: an image added without an alignment is placed by six landmarks clicked on both images, fitted as an affine transform within its truth\'s deformation, and drawn where the fit puts it', `${simOpened.message ?? simOpened.error}; ${simAdded.message ?? simAdded.error}; ${simShown?.message ?? ''}; predicted ${predictedOff.map((d) => d.toFixed(1)).join(', ')} pixels off; ${simTF ? `${simTF.name}: residuals ${simTF.fit.rms.toFixed(3)} µm, left out ${simTF.fit.looRms.toFixed(3)} µm; at most ${simWorst.toFixed(3)} µm from the truth over the section` : 'not saved'}; ${JSON.stringify(simProbes)}`,
+        simOpened.ok && simAdded.ok && simAdded.data.transform === null && simState?.landmarks.length === 6 && simState.landmarks.every((l, i) => Math.hypot(l.fixed[0] - clicks[i].fixed[0], l.fixed[1] - clicks[i].fixed[1]) < 0.2 && Math.hypot(l.moving[0] - clicks[i].moving[0], l.moving[1] - clicks[i].moving[1]) < 0.5) &&
+          predictedOff.length === 3 && Math.max(...predictedOff) < 30 && simTF?.model === 'affine' && simTF.method === 'landmarks' && simWorst < bound && simProbes.length === 3 && worstOf(simProbes) <= 2,
+        `six landmarks within 0.2 µm and half a pixel of the places clicked; predicted within 30 pixels (the deformation's few µm); the fit within ${bound.toFixed(1)} µm of the truth; the image's color at three pixels, within 2`);
+
+      // Automatic registration (wave 5, slice 3): the same H&E registered by its nuclei with a
+      // deformation allowed (and, with the matches a section of this size gives, kept), as a job,
+      // the version placing it; within its truth's deformation of the truth, and drawn where the
+      // version (its deformation too) puts three of its pixels.
+      let autoTF = null;
+      const auto = simAdded.ok ? await act('register_image', { dataset: 'sim-pathology', model: 'affine', nonrigid: true, note: 'The viewer suite' }) : null;
+      if (auto?.ok) autoTF = await fetch(`${url}/api/transforms/${auto.data.id}`).then((r) => r.json());
+      let autoWorst = Infinity;
+      const autoProbes = [];
+      if (autoTF) {
+        autoWorst = 0;
+        for (let v = 0; v < reg.height; v += 25) {
+          for (let u = 0; u < reg.width; u += 25) {
+            const [tx, ty] = truth(u, v);
+            if (tx < 0 || ty < 0 || tx > simSize[0] || ty > simSize[1]) continue;
+            const [fx, fy] = placePoint(autoTF, u, v);
+            autoWorst = Math.max(autoWorst, Math.hypot(fx - tx, fy - ty));
+          }
+        }
+        for (const [px, py] of [[300, 250], [420, 330], [210, 390]]) autoProbes.push(await probe('sim-pathology', simAdded, (x, y) => placePoint(autoTF, x, y), px, py));
+      }
+      check('viewer', 'remote control: register_image aligns the simulated H&E by its nuclei, a version placing it, within its truth\'s deformation, drawn where it (and any deformation) puts three of its pixels', `${auto?.message ?? auto?.error ?? 'not run'}; at most ${autoWorst.toFixed(3)} µm from the truth over the section; ${JSON.stringify(autoProbes)}`,
+        Boolean(auto?.ok) && auto.data.placedBy === auto.data.id && autoTF?.method === 'automatic' && auto.data.deformed && auto.data.kept >= 25 && autoWorst < bound && autoProbes.length === 3 && worstOf(autoProbes) <= 2,
+        `placed by it, deformed; within ${bound.toFixed(1)} µm of the truth; the image's color at three pixels, within 2`);
+
+      // Alignment checked in µm (wave 5, slice 4): the six landmarks' version and the automatic one
+      // checked by local matches over the tissue; the landmarks' measured errors against the true
+      // ones at each patch (the content drawn at a patch's centre c is the image's point the
+      // version takes c back to; it belongs where the truth puts that point); the automatic version
+      // measured less off; in the Alignment view, the map of where it is off (a square a patch), a
+      // checkerboard (at a square of the image, the image's pixel; at one of the stains', not) and
+      // DAPI's edges over the image only when asked.
+      const versionsNow = await act('get_state');
+      const lmId = versionsNow.data?.images?.find((i) => i.dataset === 'sim-pathology')?.alignments.find((x) => /landmarks/.test(x.name))?.id;
+      let checkLm = null;
+      let checkAuto = null;
+      let truthDiff = Infinity;
+      let measuredRMS = 0;
+      let trueRMS = 0;
+      let squares = -1;
+      const checker = {};
+      let edgeCounts = null;
+      if (lmId) {
+        checkLm = await act('check_alignment', { dataset: 'sim-pathology', transform: lmId });
+        checkAuto = await act('check_alignment', { dataset: 'sim-pathology' });
+        if (checkLm.ok) {
+          const cd = await fetch(`${url}/api/checks/${checkLm.data.id}`).then((r) => r.json());
+          const lm = await fetch(`${url}/api/transforms/${lmId}`).then((r) => r.json());
+          const inv = invert(lm.transform);
+          let dsq = 0;
+          let msq = 0;
+          let tsq = 0;
+          let n = 0;
+          for (const pt of cd.patches.filter((x) => x.matched)) {
+            const [qx, qy] = rowsOf(inv)(pt.centre.X, pt.centre.Y);
+            const [tx, ty] = truth(qx, qy);
+            const ex = pt.centre.X - tx;
+            const ey = pt.centre.Y - ty;
+            dsq += (pt.error.X - ex) ** 2 + (pt.error.Y - ey) ** 2;
+            msq += pt.error.X ** 2 + pt.error.Y ** 2;
+            tsq += ex ** 2 + ey ** 2;
+            n += 1;
+          }
+          truthDiff = Math.sqrt(dsq / n);
+          measuredRMS = Math.sqrt(msq / n);
+          trueRMS = Math.sqrt(tsq / n);
+          // The map, and a checkerboard of 20 µm squares: (110, 130) in a square of the image (its
+          // cells' indices summing odd), (110, 110) in one of the stains'.
+          await act('show_alignment', { dataset: 'sim-pathology', show: lmId, display: 'checkerboard', cell: 20, map: true, edges: false });
+          squares = await chrome.eval('window.situcraftAlignment.errorSquares()');
+          for (const [key, y] of [['image', [110, 130]], ['stains', [110, 110]]]) {
+            const [qx, qy] = rowsOf(inv)(...y);
+            const px = Math.floor(qx);
+            const py = Math.floor(qy);
+            checker[key] = await chrome.eval(`(async () => {
+              const a = window.situcraftAlignment;
+              a.setCamera('left', { cx: ${rowsOf(lm.transform)(px + 0.5, py + 0.5)[0]}, cy: ${rowsOf(lm.transform)(px + 0.5, py + 0.5)[1]}, scale: 400 });
+              await a.settled();
+              const [w, h] = a.renderers.left.size();
+              const got = a.readColor('left', w / 2, h / 2).slice(0, 3);
+              const tile = new Uint8Array(await fetch('/api/images/${simAdded.data.id}/tiles/0/0/${Math.floor(px / 512)}/${Math.floor(py / 512)}').then((x) => x.arrayBuffer()));
+              const i = 3 * (${py % 512} * 512 + ${px % 512});
+              return { got, image: [tile[i], tile[i + 1], tile[i + 2]] };
+            })()`);
+          }
+          // DAPI's edges, in yellow, over the image at its opacity: some only when asked.
+          edgeCounts = {};
+          for (const edges of [false, true]) {
+            await act('show_alignment', { dataset: 'sim-pathology', show: lmId, display: 'overlay', opacity: 1, map: false, edges });
+            edgeCounts[edges] = await chrome.eval(`(async () => {
+              const a = window.situcraftAlignment;
+              a.setCamera('left', { cx: ${simSize[0] / 2}, cy: ${simSize[1] / 2}, scale: 8 });
+              await a.settled();
+              return a.countColor('left', [255, 225, 77]);
+            })()`);
+          }
+        }
+      }
+      const imageSquare = checker.image && Math.max(...checker.image.got.map((g, k) => Math.abs(g - checker.image.image[k]))) <= 2;
+      const stainSquare = checker.stains && Math.max(...checker.stains.got.map((g, k) => Math.abs(g - checker.stains.image[k]))) > 20;
+      check('viewer', 'an alignment checked in µm: the landmarks\' version measured as its truth says it is off, patch by patch; the automatic one measured less off; its map, a checkerboard and DAPI\'s edges drawn in the Alignment view', `${checkLm?.message ?? checkLm?.error ?? 'no landmarks version'}; measured ${measuredRMS.toFixed(3)} µm root-mean-square, truly ${trueRMS.toFixed(3)}, each patch's ${truthDiff.toFixed(3)} µm from its true error; ${checkAuto?.message ?? checkAuto?.error}; ${squares} squares; checkerboard ${JSON.stringify(checker)}; edges ${JSON.stringify(edgeCounts)}`,
+        Boolean(checkLm?.ok && checkAuto?.ok) && truthDiff < 0.5 && Math.abs(measuredRMS - trueRMS) < 0.4 && checkAuto.data.median < checkLm.data.median && squares === checkLm.data.checked && imageSquare && stainSquare && edgeCounts?.false?.n === 0 && edgeCounts?.true?.n > edgeCounts.true.of / 1000,
+        'each patch within 0.5 µm of its true error; the automatic version less off; a square a patch; the image in its squares, the stains in theirs; edges only when asked');
+
+      // Regions (wave 5, slice 5). Drawn by hand in the Viewer with each tool where the pointer
+      // dragged and clicked; drawn by a program in µm and in the H&E's pixels. Each one's cells (by
+      // centroid) against the suite's own count: a winding number (Hormann & Agathos 2001) over the
+      // cells' centroids, of the regions as written in µm. Cells chosen in one; one erased from and
+      // restored, as versions; all written in the H&E's pixels and read back alike; and a file of
+      // annotations as QuPath 0.4 writes them, drawn on the H&E, read in its pixels: its corners where
+      // the version in use places them and near where the truth puts them, its hole kept, a detection
+      // and a point left out.
+      if (auto?.ok && autoTF) {
+        await act('show_tissue', { dataset: 'sim-pathology', whole: true, transcripts: false });
+        await chrome.eval('window.situcraftViewer.settled()');
+        const tool = (name) => chrome.eval(`[...document.querySelectorAll('.viewer-region-tools button')].find((b) => b.textContent.includes('${name}')).click()`);
+        const client = (x, y) => chrome.eval(`window.situcraftViewer.regions.clientOf(${x}, ${y})`);
+        const umPerCss = await chrome.eval('(() => { const r = window.situcraftViewer.renderer; return (r.ratio || 1) / r.camera.scale; })()');
+        const latest = () => chrome.eval('window.situcraftViewer.regions.list().at(-1)');
+        const geometryOf = (id) => chrome.eval(`window.situcraft.store.project.regions.find((r) => r.id === '${id}').versions.at(-1).geometry`);
+        const shoelace = (ring) => Math.abs(ring.reduce((a, [x, y], i) => a + x * ring[(i + 1) % ring.length][1] - ring[(i + 1) % ring.length][0] * y, 0)) / 2;
+        const hand = {};
+        // A rectangle dragged from (40, 30) to (120, 95) µm.
+        await tool('Rectangle');
+        const ra = await client(40, 30);
+        const rb = await client(120, 95);
+        await chrome.drag([ra, [(ra[0] + rb[0]) / 2, (ra[1] + rb[1]) / 2], rb]);
+        const rect = await latest();
+        const rg = await geometryOf(rect.id);
+        const xs = rg[0][0].map((p) => p[0]);
+        const ys = rg[0][0].map((p) => p[1]);
+        hand.rectangle = Math.max(Math.abs(Math.min(...xs) - 40), Math.abs(Math.max(...xs) - 120), Math.abs(Math.min(...ys) - 30), Math.abs(Math.max(...ys) - 95));
+        // A polygon clicked at five corners, closed by Enter.
+        const corners = [[150, 40], [230, 50], [220, 110], [160, 100], [140, 70]];
+        await tool('Polygon');
+        for (const [x, y] of corners) await chrome.click(...(await client(x, y)));
+        await chrome.key('Enter');
+        const poly = await latest();
+        const pg = await geometryOf(poly.id);
+        hand.polygon = pg[0][0].length === 5 ? Math.max(...corners.map(([x, y], k) => Math.hypot(pg[0][0][k][0] - x, pg[0][0][k][1] - y))) : Infinity;
+        // Freehand around a circle of 36 points (30 µm about (80, 180)): the area of the path dragged.
+        const circle = Array.from({ length: 37 }, (_, k) => [80 + 30 * Math.cos((2 * Math.PI * k) / 36), 180 + 30 * Math.sin((2 * Math.PI * k) / 36)]);
+        await tool('Freehand');
+        await chrome.drag(await Promise.all(circle.map(([x, y]) => client(x, y))));
+        const free = await latest();
+        hand.freehand = Math.abs(free.area / shoelace(circle.slice(0, 36)) - 1);
+        // A brush stroke 15 CSS pixels wide each side, from (170, 170) to (250, 170) µm: a capsule.
+        await tool('Brush');
+        await chrome.eval('window.situcraftViewer.regions.setBrush(15, false, false)');
+        await chrome.drag(await Promise.all(Array.from({ length: 9 }, (_, k) => client(170 + 10 * k, 170))));
+        const brushed = await latest();
+        const rr = 15 * umPerCss;
+        hand.brush = Math.abs(brushed.area / (2 * rr * 80 + Math.PI * rr * rr) - 1);
+        await tool('Brush');
+        const handNames = [rect, poly, free, brushed].map((r) => `${r.name} (${r.cls}, ${r.cells} cells)`);
+        check('viewer', 'regions drawn by hand in the Viewer: a rectangle dragged, a polygon clicked and closed by Enter, freehand and a brush stroke, each where the pointer went', `${handNames.join('; ')}; rectangle ${hand.rectangle.toFixed(4)} µm and polygon ${hand.polygon.toFixed(4)} µm from the points; freehand's area ${(100 * hand.freehand).toFixed(3)}% from the path's, the brush's ${(100 * hand.brush).toFixed(3)}% from the capsule's (${umPerCss.toFixed(3)} µm a CSS pixel)`,
+          hand.rectangle <= umPerCss && hand.polygon <= umPerCss && hand.freehand < 0.005 && hand.brush < 0.01 && new Set([rect.id, poly.id, free.id, brushed.id]).size === 4,
+          'within a CSS pixel of the points; areas within 0.5% (freehand) and 1% (the brush)');
+
+        // Drawn by a program: a rectangle in the H&E's pixels and a polygon in µm.
+        const inPixels = await act('draw_region', { dataset: 'sim-pathology', rectangle: [100, 100, 400, 350], coordinates: simAdded.data.name, class: 'Necrosis', name: 'In the H&E\'s pixels' });
+        const inUm = await act('draw_region', { dataset: 'sim-pathology', polygon: [[250, 180], [300, 190], [290, 240], [240, 230]], class: 'Stroma', note: 'The viewer suite' });
+        // Each region's cells against the suite's own count, from the regions written in µm.
+        const winding = (ring, x, y) => {
+          let w = 0;
+          for (let i = 0; i + 1 < ring.length; i += 1) {
+            const [ax, ay] = ring[i];
+            const [bx, by] = ring[i + 1];
+            const side = (bx - ax) * (y - ay) - (x - ax) * (by - ay);
+            if (ay <= y) {
+              if (by > y && side > 0) w += 1;
+            } else if (by <= y && side < 0) w -= 1;
+          }
+          return w;
+        };
+        const inFeature = (g, x, y) => (g.type === 'Polygon' ? [g.coordinates] : g.coordinates).some((pl) => winding(pl[0], x, y) !== 0 && pl.slice(1).every((hole) => winding(hole, x, y) === 0));
+        const umFile = join(work, 'regions-um.geojson');
+        const wroteUm = await act('export', { what: 'regions', dataset: 'sim-pathology', coordinates: 'um', path: umFile });
+        const umDoc = wroteUm.ok ? JSON.parse(readFileSync(umFile, 'utf8')) : { features: [] };
+        const centroids = await chrome.eval('(() => { const c = window.situcraftViewer.cellsDrawn(); return { x: Array.from(c.x), y: Array.from(c.y) }; })()');
+        const listed = await act('regions', { dataset: 'sim-pathology' });
+        const counted = umDoc.features.map((f) => {
+          const id = f.properties.metadata['SituCraft region'];
+          const own = centroids.x.reduce((n, x, i) => n + (inFeature(f.geometry, x, centroids.y[i]) ? 1 : 0), 0);
+          return { id, name: f.properties.name, page: listed.data?.regions.find((r) => r.id === id)?.cells, suite: own };
+        });
+        const differing = counted.filter((c) => c.page !== c.suite);
+        // The cells in the H&E pixels' rectangle chosen: as many as the suite counts.
+        const chosen = inPixels.ok ? await act('regions', { dataset: 'sim-pathology', choose: inPixels.data.id }) : null;
+        const chosenState = await act('get_state');
+        const wantChosen = counted.find((c) => c.id === inPixels.data?.id)?.suite;
+        check('viewer', 'regions\' cells: each region\'s count, by centroid, the suite\'s own (a winding number over the cells, of the regions written in µm); the cells in one chosen', `${inPixels.message ?? inPixels.error}; ${inUm.message ?? inUm.error}; ${counted.map((c) => `${c.name} ${c.page}/${c.suite}`).join(', ')}; ${chosen?.message ?? chosen?.error}; chosen ${chosenState.data?.chosen?.count}`,
+          inPixels.ok && inUm.ok && wroteUm.ok && counted.length === 6 && differing.length === 0 && counted.every((c) => c.suite > 0) && chosen?.ok && chosen.data.chosen.count === wantChosen && chosenState.data?.chosen?.count === wantChosen,
+          'the same counts; the cells chosen as many');
+
+        // Versions: the µm polygon erased from with a brush, then its first version restored.
+        const erased = inUm.ok ? await act('edit_region', { dataset: 'sim-pathology', region: inUm.data.name, brush: { points: [[270, 210]], radius: 8, erase: true }, note: 'a hole' }) : null;
+        const restored = inUm.ok ? await act('edit_region', { dataset: 'sim-pathology', region: inUm.data.name, restore: 1 }) : null;
+        const projectFile = join(work, 'regions-project.json');
+        const wroteProject = await act('export', { what: 'project', path: projectFile });
+        const kept = wroteProject.ok ? JSON.parse(readFileSync(projectFile, 'utf8')).regions?.find((r) => r.id === inUm.data?.id) : null;
+        const hole = inUm.ok && erased?.ok ? inUm.data.area - erased.data.area : 0;
+        check('viewer', 'a region\'s versions: erased from with the brush, then its first version restored, each kept in the project document', `${erased?.message ?? erased?.error}; ${restored?.message ?? restored?.error}; the hole ${hole.toFixed(1)} µm² against ${(Math.PI * 64).toFixed(1)}; the document keeps ${kept?.versions.length} versions`,
+          Boolean(erased?.ok && restored?.ok) && Math.abs(hole / (Math.PI * 64) - 1) < 0.01 && erased.data.version === 2 && restored.data.version === 3 && restored.data.area === inUm.data.area && restored.data.cells === inUm.data.cells && kept?.versions.length === 3 && kept.versions[1].tool === 'brush',
+          'the hole within 1% of the brush\'s disc; version 3 the first again, its area and cells');
+
+        // Written in the H&E's pixels: the rectangle drawn in them comes back at its corners; read
+        // back in them, every region as it was (its area and cells).
+        const pxFile = join(work, 'regions-he.geojson');
+        const wrotePx = await act('export', { what: 'regions', dataset: 'sim-pathology', coordinates: simAdded.data.name, path: pxFile });
+        const pxDoc = wrotePx.ok ? JSON.parse(readFileSync(pxFile, 'utf8')) : { features: [] };
+        const pxRing = pxDoc.features.find((f) => f.properties.metadata['SituCraft region'] === inPixels.data?.id)?.geometry.coordinates[0] ?? [];
+        const cornerOff = Math.max(...[[100, 100], [400, 100], [400, 350], [100, 350]].map(([u, v]) => Math.min(...pxRing.map(([a, b]) => Math.hypot(a - u, b - v)))));
+        const before = await act('regions', { dataset: 'sim-pathology' });
+        const readBack = await act('import_regions', { dataset: 'sim-pathology', path: pxFile, coordinates: simAdded.data.name });
+        const after = await act('regions', { dataset: 'sim-pathology' });
+        const pairs = (before.data?.regions ?? []).map((r) => [r, after.data?.regions.find((x) => x.name === `${r.name} (2)`)]);
+        const worstArea = Math.max(...pairs.map(([a, b]) => (b ? Math.abs(b.area / a.area - 1) : Infinity)));
+        const sameCells = pairs.every(([a, b]) => b && b.cells === a.cells);
+        check('viewer', 'regions written in the H&E\'s pixels (through its deformed alignment) and read back in them: each as it was', `${wrotePx.message ?? wrotePx.error}; the rectangle drawn in its pixels back within ${cornerOff.toFixed(4)} pixels of its corners; ${readBack.message ?? readBack.error}; areas within ${(100 * worstArea).toFixed(4)}%; cells ${sameCells ? 'the same' : 'differing'}`,
+          wrotePx.ok && readBack.ok && autoTF.deformation && cornerOff < 0.01 && pairs.length === 6 && worstArea < 1e-4 && sameCells,
+          'corners within 0.01 pixels; areas within 0.01%; the same cells');
+
+        // A file as QuPath 0.4 writes annotations drawn on the H&E: a pentagon classed Tumor, a
+        // square with a hole classed Stroma, a detection and a point.
+        const pentagon = [[200, 200], [500, 180], [560, 420], [330, 520], [180, 380]];
+        const qupath = { type: 'FeatureCollection', features: [
+          { type: 'Feature', id: 'b1d8c0a2-4f6e-4a8b-9c1d-2e3f4a5b6c7d', geometry: { type: 'Polygon', coordinates: [[...pentagon, pentagon[0]]] }, properties: { objectType: 'annotation', name: 'Drawn in QuPath', classification: { name: 'Tumor', color: [200, 0, 0] }, isLocked: false } },
+          { type: 'Feature', id: 'c2e9d1b3-5a7f-4b9c-8d2e-3f4a5b6c7d8e', geometry: { type: 'Polygon', coordinates: [[[600, 100], [900, 100], [900, 400], [600, 400], [600, 100]], [[700, 200], [700, 300], [800, 300], [800, 200], [700, 200]]] }, properties: { objectType: 'annotation', classification: { name: 'Stroma', color: [150, 200, 150] } } },
+          { type: 'Feature', id: 'd3fae2c4-6b8a-4cad-9e3f-4a5b6c7d8e9f', geometry: { type: 'Polygon', coordinates: [[[300, 300], [310, 300], [310, 310], [300, 300]]] }, properties: { objectType: 'detection', classification: { name: 'Tumor', color: [200, 0, 0] } } },
+          { type: 'Feature', id: 'e4abf3d5-7c9b-4dbe-8f4a-5b6c7d8e9fa0', geometry: { type: 'Point', coordinates: [250, 250] }, properties: { objectType: 'annotation' } },
+        ] };
+        const qpFile = join(work, 'qupath-annotations.geojson');
+        writeFileSync(qpFile, JSON.stringify(qupath));
+        const fromQuPath = await act('import_regions', { dataset: 'sim-pathology', path: qpFile, coordinates: simAdded.data.name });
+        const imported = fromQuPath.data?.regions ?? [];
+        const qp = imported.find((r) => r.name === 'Drawn in QuPath');
+        const qg = qp ? await geometryOf(qp.id) : null;
+        const qpColor = qp ? await chrome.eval(`window.situcraft.store.project.regions.find((r) => r.id === '${qp.id}').versions[0].color`) : null;
+        const placedOff = qg ? Math.max(...pentagon.map(([u, v]) => {
+          const [x, y] = placePoint(autoTF, u, v);
+          return Math.min(...qg[0][0].map(([a, b]) => Math.hypot(a - x, b - y)));
+        })) : Infinity;
+        const truthOff = qg ? Math.max(...pentagon.map(([u, v]) => {
+          const [x, y] = truth(u, v);
+          return Math.min(...qg[0][0].map(([a, b]) => Math.hypot(a - x, b - y)));
+        })) : Infinity;
+        const holed = imported.find((r) => r.cls === 'Stroma');
+        const hg = holed ? await geometryOf(holed.id) : null;
+        // The square's area on the tissue: its outline and its hole's, placed a pixel at a time.
+        const placedArea = (x0, y0, x1, y1) => {
+          const ring = [];
+          for (let u = x0; u < x1; u += 1) ring.push([u, y0]);
+          for (let v = y0; v < y1; v += 1) ring.push([x1, v]);
+          for (let u = x1; u > x0; u -= 1) ring.push([u, y1]);
+          for (let v = y1; v > y0; v -= 1) ring.push([x0, v]);
+          return shoelace(ring.map(([u, v]) => placePoint(autoTF, u, v)));
+        };
+        const holedWant = placedArea(600, 100, 900, 400) - placedArea(700, 200, 800, 300);
+        check('viewer', 'annotations as QuPath 0.4 writes them, drawn on the H&E, read in its pixels: placed by its alignment in use (and its deformation), near where the truth puts them; a hole kept; a detection and a point left out', `${fromQuPath.message ?? fromQuPath.error}; the pentagon's corners ${placedOff.toExponential(2)} µm from where the version places them, at most ${truthOff.toFixed(3)} µm from the truth; its color ${JSON.stringify(qpColor)}; the square ${hg?.[0].length} rings, ${holed ? holed.area.toFixed(1) : '?'} µm² against ${holedWant.toFixed(1)}`,
+          Boolean(fromQuPath.ok) && imported.length === 2 && JSON.stringify(fromQuPath.data.skipped) === JSON.stringify({ detection: 1, Point: 1 }) && qp?.cls === 'Tumor' && placedOff < 1e-3 && truthOff < bound && JSON.stringify(qpColor) === '[200,0,0]' && hg?.[0].length === 2 && Math.abs(holed.area / holedWant - 1) < 1e-3,
+          `corners within 0.001 µm of the version's placing, ${bound.toFixed(1)} µm of the truth; a hole, its area within 0.1% of its outline placed a pixel at a time; skipped: a detection, a point`);
+
+        // Reviews (wave 5, slice 6). Labels imported for the simulated tissue's cells, each with a
+        // confidence; a cell relabeled by hand in the Viewer's inspector, with its reason; by a program,
+        // cells accepted, one ambiguous, one of concern, a region excluded with its cells, a region
+        // relabeled, a comment. Each review's record against the state it changed (the label each
+        // relabeled cell now carries in the curated set and no other cell's; the label and confidence the
+        // table gave; the cells excluded those in the region; the version of the H&E's alignment in use;
+        // the region's new class); the Review status fill against the suite's own reading of the
+        // record; the record written as CSV and JSON and read back, row for row.
+        {
+          const simId = await chrome.eval(`window.situcraft.store.project.datasets.find((d) => d.name === 'sim-pathology').id`);
+          const itemUrl = await chrome.eval(`window.situcraft.bundles.link('${simId}').item.url`);
+          const own = await chrome.eval('(() => { const c = window.situcraftViewer.cells; return { n: c.n, x: Array.from(c.x) }; })()');
+          const ids = (await fetch(`${url}${itemUrl}/cells/lookup`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rows: [...Array(own.n).keys()] }) }).then((r) => r.json())).ids;
+          const typeOf = (i) => (own.x[i] < simSize[0] / 2 ? 'Epithelial' : 'Immune');
+          const confOf = (i) => ((i * 37) % 100) / 100;
+          const labelsFile = join(work, 'sim-labels.csv');
+          writeFileSync(labelsFile, `cell_id,cell_type,confidence\n${ids.map((id, i) => `${id},${typeOf(i)},${confOf(i)}`).join('\n')}\n`);
+          const imported = await act('import_labels', { dataset: 'sim-pathology', path: labelsFile });
+          await act('show_tissue', { dataset: 'sim-pathology', whole: true, transcripts: false, fill: 'labels', images: { [simAdded.data.name]: { visible: true, opacity: 1 } } });
+          // By hand: the cell nearest the middle, relabeled in the inspector.
+          const r1 = await chrome.eval(`(() => { const c = window.situcraftViewer.cells; let best = -1, d = Infinity; for (let i = 0; i < c.n; i += 1) { const e = (c.x[i] - ${simSize[0] / 2 - 30}) ** 2 + (c.y[i] - ${simSize[1] / 2}) ** 2; if (e < d) { d = e; best = i; } } return best; })()`);
+          const other = typeOf(r1) === 'Epithelial' ? 'Immune' : 'Epithelial';
+          await act('select_cell', { dataset: 'sim-pathology', cell: `#${r1}` });
+          const byHand = await chrome.eval(`(async () => {
+            let form = null;
+            for (let k = 0; k < 100 && !form; k += 1) { form = document.querySelector('.viewer-cell .review-form'); if (!form) await new Promise((r) => setTimeout(r, 100)); }
+            if (!form) return { error: 'no review form' };
+            form.querySelector('.review-by input').value = 'validation';
+            form.querySelector('[data-review="relabel"]').click();
+            await new Promise((r) => setTimeout(r, 50));
+            form.querySelector('[data-review-label]').value = '${other}';
+            form.querySelector('[data-review-note]').value = 'Its markers say otherwise';
+            form.querySelector('[data-review-go]').click();
+            for (let k = 0; k < 100 && !(window.situcraft.store.project.reviews ?? []).length; k += 1) await new Promise((r) => setTimeout(r, 100));
+            const p = window.situcraft.store.project;
+            return { review: p.reviews?.at(-1) ?? null, fill: window.situcraftViewer.layers().cells.fill, layerShown: window.situcraftViewer.layers().images?.find((l) => l.id === '${simAdded.data.id}')?.visible ?? null };
+          })()`);
+          const rec = byHand.review;
+          const curatedId = rec?.edits?.[0]?.set;
+          const curatedLabels = curatedId ? await chrome.eval(`(async () => { const { labelSource, refOf } = await import('/ui/label-sources.js'); const src = await labelSource(window.situcraft, refOf('${curatedId}')); return Array.from(src.label, (k) => (k >= 0 ? src.names[k] : null)); })()`) : [];
+          const changed = curatedLabels.map((l, i) => (l !== typeOf(i) ? i : -1)).filter((i) => i >= 0);
+          const handOk = rec && rec.action === 'relabel' && rec.by === 'validation' && rec.cells.length === 1 && rec.cells[0].row === r1 && rec.cells[0].id === ids[r1] && rec.cells[0].label === typeOf(r1)
+            && Math.abs(rec.cells[0].confidence - confOf(r1)) < 1e-6 && rec.previous === typeOf(r1) && rec.next === other && rec.note === 'Its markers say otherwise' && rec.labels?.kind === 'imported'
+            && rec.segmentation?.name && rec.images.length === 1 && rec.images[0].transform === auto.data.id && rec.images[0].shown === byHand.layerShown && changed.length === 1 && changed[0] === r1 && byHand.fill === `labels:${curatedId}:0`;
+          check('viewer', 'a cell relabeled by hand in the Viewer\'s inspector: its review records who, why, its label and confidence as the table gave them, the label set, the segmentation and the H&E\'s version in use; the curated set begun carries the new label for that cell and no other, and the Viewer shows it', `${imported.message ?? imported.error}; cell ${ids[r1]} (#${r1}): ${rec ? `${rec.previous} → ${rec.next}, confidence ${rec.cells[0].confidence} (the table's ${confOf(r1)}), images ${JSON.stringify(rec.images)}` : JSON.stringify(byHand)}; ${changed.length} cell${changed.length === 1 ? '' : 's'} changed; the fill ${byHand.fill}`,
+            Boolean(imported.ok && handOk), 'the record its state; one cell changed, the one relabeled');
+
+          // By a program, of cells apart from each other and from the region excluded.
+          const regionRows = await chrome.eval(`window.situcraftViewer.regions.rowsIn('${inPixels.data.id}')`);
+          const free = [...Array(own.n).keys()].filter((i) => i !== r1 && !regionRows.includes(i));
+          const epithelial = free.filter((i) => typeOf(i) === 'Epithelial').slice(0, 3);
+          const [ambiguousRow, concernRow] = free.filter((i) => typeOf(i) === 'Immune').slice(0, 2);
+          const steps = [];
+          steps.push(await act('review', { dataset: 'sim-pathology', action: 'accept', cells: epithelial.map((i) => ids[i]), labels: curatedId, by: 'validation' }));
+          steps.push(await act('review', { dataset: 'sim-pathology', action: 'ambiguous', cells: [`#${ambiguousRow}`], alternatives: ['Epithelial', 'Immune'], note: 'Mixed markers', by: 'validation' }));
+          steps.push(await act('review', { dataset: 'sim-pathology', action: 'concern', cells: [ids[concernRow]], concern: 'split', note: 'One nucleus, two outlines', by: 'validation' }));
+          steps.push(await act('review', { dataset: 'sim-pathology', action: 'exclude', region: inPixels.data.name, note: 'Out of focus', by: 'validation' }));
+          steps.push(await act('review', { dataset: 'sim-pathology', action: 'relabel', region: inUm.data.name, label: 'Necrosis', note: 'Necrotic on the H&E', by: 'validation' }));
+          steps.push(await act('review', { dataset: 'sim-pathology', action: 'comment', region: rect.name, note: 'Check against the IF', by: 'validation' }));
+          const refused = await act('review', { dataset: 'sim-pathology', action: 'exclude', cells: ['#3'], by: 'validation' });
+          const pageState = await chrome.eval('window.situcraftViewer.reviewState()');
+          const excludedOk = JSON.stringify([...pageState.excluded].sort((a, b) => a - b)) === JSON.stringify([...regionRows].sort((a, b) => a - b));
+          const relabeledRegion = (await act('regions', { dataset: 'sim-pathology' })).data?.regions.find((r) => r.id === inUm.data.id);
+          const acceptRec = steps[0].data?.review;
+          const acceptLabels = acceptRec ? await chrome.eval(`(async () => { const { labelSource, refOf } = await import('/ui/label-sources.js'); const src = await labelSource(window.situcraft, refOf('${curatedId}')); return { labels: [${epithelial.join(',')}].map((i) => src.names[src.label[i]]), edited: [${epithelial.join(',')}].map((i) => src.edited[i]) }; })()`) : null;
+          check('viewer', 'remote control: review accepts cells (an accept edit each, their labels as they were), marks one ambiguous and one of concern, excludes a region with its cells (those in it exactly), relabels a region (a version of it with the new class), comments on another, and refuses an exclusion without a reason', `${steps.map((x) => x.message ?? x.error).join(' | ')}; refused: ${refused.message ?? refused.error}; excluded ${pageState.excluded.length} cells, the region holds ${regionRows.length}; ${JSON.stringify(pageState.counts)}; ${inUm.data.name} now ${relabeledRegion?.class} (version ${relabeledRegion?.version}); accepted ${JSON.stringify(acceptLabels)}`,
+            steps.every((x) => x.ok) && !refused.ok && /Say why it is left out/.test(refused.error ?? refused.message ?? '') && excludedOk && regionRows.length > 0 && pageState.counts.ambiguous === 1 && pageState.counts.concern === 1 && pageState.counts.accepted === 3 && pageState.counts.relabeled === 1
+            && relabeledRegion?.class === 'Necrosis' && relabeledRegion.version === 4 && steps[4].data.review.previous === 'Stroma' && steps[4].data.review.next === 'Necrosis' && acceptLabels?.labels.every((l) => l === 'Epithelial') && acceptLabels.edited.every((e) => e >= 0) && acceptRec.edits.length === 1,
+            'each as asked; the cells excluded those in the region; the region reclassed; the reason required');
+
+          // The record written and read back; the Review status fill against the suite's own reading.
+          const csvFile = join(work, 'reviews.csv');
+          const jsonFile = join(work, 'reviews.json');
+          const wroteCsv = await act('export', { what: 'reviews', dataset: 'sim-pathology', path: csvFile });
+          const wroteJson = await act('export', { what: 'reviews', dataset: 'sim-pathology', format: 'json', path: jsonFile });
+          const parseCsv = (text) => {
+            const rows = [];
+            let row = [];
+            let field = '';
+            let quoted = false;
+            for (let i = 0; i < text.length; i += 1) {
+              const ch = text[i];
+              if (quoted) {
+                if (ch === '"' && text[i + 1] === '"') { field += '"'; i += 1; } else if (ch === '"') quoted = false; else field += ch;
+              } else if (ch === '"') quoted = true;
+              else if (ch === ',') { row.push(field); field = ''; } else if (ch === '\n') { row.push(field); rows.push(row); row = []; field = ''; } else field += ch;
+            }
+            const [head, ...body] = rows;
+            return body.map((r) => Object.fromEntries(head.map((name, k) => [name, r[k]])));
+          };
+          const csvRows = wroteCsv.ok ? parseCsv(readFileSync(csvFile, 'utf8')) : [];
+          const doc = wroteJson.ok ? JSON.parse(readFileSync(jsonFile, 'utf8')) : { reviews: [] };
+          const pageRecords = await chrome.eval(`window.situcraft.store.project.reviews.filter((r) => r.dataset === '${simId}')`);
+          const expectedRows = doc.reviews.reduce((n, r) => n + (r.target === 'cells' ? r.cells.length : r.target === 'clusters' ? r.clusters.clusters.length : 1), 0);
+          const rowMismatch = csvRows.filter((row) => {
+            const r = doc.reviews.find((x) => x.id === row.review);
+            if (!r || r.action !== row.action || r.by !== row.reviewer || r.note !== row.note || String(r.next ?? '') !== row.new) return true;
+            if (r.target !== 'cells') return row.region !== (r.region?.id ?? '');
+            const c = r.cells.find((x) => String(x.row) === row.cell_row);
+            return !c || (c.id ?? '') !== row.cell_id || String(c.previous ?? '') !== row.previous || (c.confidence === null ? row.confidence !== '' : Math.abs(Number(row.confidence) - c.confidence) > 1e-9);
+          });
+          // Each cell's status by the suite's reading of the CSV: the latest of its reviews deciding,
+          // excluded first, then a concern, ambiguous, relabeled, accepted, commented.
+          const status = Array.from({ length: own.n }, () => ({ label: '', excluded: false, concern: false, commented: false }));
+          for (const row of [...csvRows].sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : 0))) {
+            if (row.target !== 'cells' || row.segmentation !== pageState.segmentation.id) continue;
+            const st = status[Number(row.cell_row)];
+            if (row.action === 'accept') st.label = 'accepted';
+            else if (row.action === 'relabel') st.label = 'relabeled';
+            else if (row.action === 'ambiguous') st.label = 'ambiguous';
+            else if (row.action === 'exclude') st.excluded = true;
+            else if (row.action === 'include') st.excluded = false;
+            else if (row.action === 'concern') st.concern = true;
+            else if (row.action === 'resolve') st.concern = false;
+            else if (row.action === 'comment') st.commented = true;
+          }
+          const palette = { excluded: [140, 140, 140], concern: [213, 94, 0], ambiguous: [230, 159, 0], relabeled: [0, 114, 178], accepted: [0, 158, 115], commented: [204, 121, 167] };
+          const want = status.map((st) => (st.excluded ? palette.excluded : st.concern ? palette.concern : st.label ? palette[st.label] : st.commented ? palette.commented : null));
+          await act('show_tissue', { dataset: 'sim-pathology', fill: 'review' });
+          const rgba = await chrome.eval(`(async () => { for (let k = 0; k < 50 && !window.situcraftViewer.clusterFill()?.review; k += 1) await new Promise((r) => setTimeout(r, 100)); return Array.from(window.situcraftViewer.fillColors() ?? []); })()`);
+          const fillWrong = want.filter((w, i) => (w ? rgba[4 * i + 3] !== 255 || rgba[4 * i] !== w[0] || rgba[4 * i + 1] !== w[1] || rgba[4 * i + 2] !== w[2] : rgba[4 * i + 3] !== 0)).length;
+          check('viewer', 'the review record written as CSV (a row a cell or region) and JSON, read back: the JSON the project\'s record, every CSV row its review\'s and cell\'s; the Review status fill each cell\'s status by the suite\'s reading of the CSV', `${wroteCsv.message ?? wroteCsv.error}; ${wroteJson.message ?? wroteJson.error}; ${csvRows.length} rows (${expectedRows} expected), ${rowMismatch.length} differing; ${doc.reviews.length} reviews in the JSON, ${pageRecords.length} in the project; the fill ${fillWrong} of ${own.n} cells otherwise`,
+            wroteCsv.ok && wroteJson.ok && doc.format === 'situcraft-reviews' && JSON.stringify(doc.reviews.filter((r) => !r.derived)) === JSON.stringify(pageRecords) && csvRows.length === expectedRows && rowMismatch.length === 0 && rgba.length === 4 * own.n && fillWrong === 0,
+            'the same, row for row; every cell\'s color its status');
+        }
       }
     }
     check('viewer', 'no uncaught errors in the page', errors.length ? errors.slice(0, 3).join(' | ') : 'none', errors.length === 0, 'none');

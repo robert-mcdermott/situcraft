@@ -11,7 +11,7 @@ import { isFinished } from './jobs.js';
 const KINDS = { cache: 'Derived data', example: 'Example download', segmentation: 'Segmentation', expansion: 'Nucleus expansion', import: 'Import', comparison: 'Comparison' };
 const STATES = {
   queued: ['', 'Waiting'], declared: ['', 'Waiting'], running: ['accent', 'Running'], validating: ['accent', 'Checking its outputs'],
-  complete: ['ok', 'Complete'], cancelled: ['', 'Cancelled'], failed: ['danger', 'Failed'], invalid: ['danger', 'Invalid outputs'], orphaned: ['warn', 'Interrupted'],
+  complete: ['ok', 'Complete'], cancelled: ['', 'Canceled'], failed: ['danger', 'Failed'], invalid: ['danger', 'Invalid outputs'], orphaned: ['warn', 'Interrupted'],
 };
 
 function duration(job) {

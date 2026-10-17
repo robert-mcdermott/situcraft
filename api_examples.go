@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 
 	"situcraft/internal/examples"
 	"situcraft/internal/jobs"
@@ -28,12 +30,21 @@ func newExamples(dir string) *examples.Library {
 		Generated: []examples.Generated{{
 			Name:    simulatedExample,
 			Title:   "A simulated tissue with known truth",
-			Summary: "SituCraft's standard simulated tissue: 500 × 500 µm, about 3,000 cells of four types and 440,000 transcripts, every cell, nucleus and molecule known. Made on this computer in seconds; its truth is beside it, so any segmentation can be scored.",
-			Size:    35 << 20,
+			Summary: "SituCraft's standard simulated tissue: 500 × 500 µm, about 3,000 cells of four types and 440,000 transcripts, every cell, nucleus and molecule known, with an H&E and an immunofluorescence image of the section stained after the run. Made on this computer in seconds; its truth is beside it, so any segmentation, label or alignment can be scored.",
+			Size:    43 << 20,
 			Make: func(ctx context.Context, dir string, progress examples.Progress) error {
-				_, err := simulate.Run(ctx, simulate.Presets["standard"], dir, version, func(f float64, message string) { progress(f, message) })
+				p := simulate.Presets["standard"]
+				p.PostXenium = simulate.DefaultPostXenium()
+				_, err := simulate.Run(ctx, p, dir, version, func(f float64, message string) { progress(f, message) })
 				return err
 			},
+			// From 0.5.0 it has post-Xenium images; made again, its run, cells and transcripts are
+			// the same.
+			Current: func(dir string) bool {
+				_, err := os.Stat(filepath.Join(dir, simulate.PostXeniumFolder, simulate.HEImageName))
+				return err == nil
+			},
+			Outdated: "Made by an earlier SituCraft, without the H&E and immunofluorescence image of the section: make it again to add them (its run, cells and transcripts stay the same).",
 		}}}
 }
 

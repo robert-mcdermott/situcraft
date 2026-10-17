@@ -6,9 +6,11 @@ the program needs no other software. The research notes
 
 ## Xenium output bundles
 
-SituCraft reads bundles written by Xenium Onboard Analysis (XOA) and Xenium Ranger. XOA 2.x is
-supported and checked against real bundles; other versions are read best-effort, and the Data view
-says so. A bundle opens as its folder, its `experiment.xenium`, or a `.zip` holding the bundle at
+SituCraft reads bundles written by Xenium Onboard Analysis (XOA) and Xenium Ranger. XOA 2.x and
+1.0 are supported and checked against real bundles (from 0.5.0, XOA 1.0's: its cells numbered
+rather than named, its count matrix in its earlier Zarr layout, without the cells' IDs, and its
+Parquet files as fastparquet 1.0 wrote them, the footer's row count wrong); other versions are read
+best-effort, and the Data view says so. A bundle opens as its folder, its `experiment.xenium`, or a `.zip` holding the bundle at
 its root or in one folder. SituCraft never writes to a bundle; a zipped bundle's compressed members
 are unpacked once into the cache.
 
@@ -46,7 +48,7 @@ shown, and lists its truth (`truth/`) among its files.
 | Zarr | Zarr storage specifications v2 and v3 | Directories and zips; Blosc, Zstandard, zlib, gzip and LZ4 chunks; C and F order; both byte orders; fill values; CRC-32C; sharding; text of fixed and varying length (VLenUTF8) |
 | AnnData | anndata's on-disk format, in Zarr | Data frames (text, categorical, nullable and numeric columns); matrices as sparse rows, sparse columns or dense |
 | GeoJSON, WKB | RFC 7946; OGC Simple Features | Polygons and MultiPolygons with holes |
-| TIFF | TIFF 6.0, BigTIFF, OME-TIFF | Strips and tiles, SubIFD pyramids, deflate, LZW, PackBits, predictors; OME-XML, multi-file OME-TIFF, z-stacks |
+| TIFF | TIFF 6.0, BigTIFF, OME-TIFF | Strips and tiles, SubIFD pyramids, deflate, LZW, PackBits, predictors; JPEG (TIFF Technical Note 2: shared tables, YCbCr or RGB, chroma interpolated as libjpeg-turbo does); OME-XML, multi-file OME-TIFF, z-stacks |
 | JPEG 2000 | ITU-T T.800 (ISO/IEC 15444-1), Part 1 | JP2 files and codestreams; every progression order and code-block style; tiles, layers and precincts; 5/3 and 9/7 wavelets; decoding at reduced resolution |
 | Zstandard | RFC 8878 | Frames with XXH64 checksums |
 | LZ4, Snappy, Blosc | Their projects' format descriptions | Blocks; Blosc byte and bit shuffling |
@@ -120,12 +122,62 @@ anndata.read_h5ad("reference.h5ad").write_zarr("reference.zarr")
 `situcraft simulate --reference N <folder>` writes a reference of the simulated tissue's types,
 N cells of each, as `<folder>-reference.zarr` (its types in `obs`'s `cell_type`, counts in `X`).
 
+## Post-Xenium images SituCraft reads
+
+An H&E or immunofluorescence image of a dataset's section, stained and scanned after the Xenium run
+(from 0.5.0), is added in the Viewer (**Post-Xenium images**) or by the `add_image` remote action,
+with its alignment or without one. It is read where it lies, never copied, a tile at a time.
+
+| What | Form | What is read |
+| --- | --- | --- |
+| The image | A pyramidal, tiled OME-TIFF, as Xenium Explorer requires (10x Genomics' image conversion guide): its full-resolution image directory and its reduced levels in SubIFDs | RGB (an H&E: three samples a pixel, 8 bits, stored together), or one or more channels (an immunofluorescence image: a directory each, 8 or 16 bits, named by the OME-XML); tiles deflate (with or without a predictor), LZW, JPEG or JPEG 2000; the first z-plane and time point. A flat image larger than 4,096 pixels a side, or one in strips, is refused, with how to make a pyramid |
+| Its alignment: the transformation matrix | `<name>_imagealignment.csv`, as Xenium Explorer saves it | A 3×3 affine matrix, row-major, its last row `0,0,1`: the image's pixels to the Xenium image's pixels (its scale is the image's pixel size over the Xenium image's) |
+| Its alignment: the keypoints | `<name>_keypoints.csv`, as Xenium Explorer saves it | Columns `fixedX`, `fixedY` (the Xenium image's pixels) and `alignmentX`, `alignmentY` (the image's), a row each landmark; fitted by least squares as a similarity (translation, one scale, rotation and, where it fits better, a reflection), each keypoint's residual kept |
+
+The alignment found beside the image (named after it, as 10x names them) is offered, and recorded
+as the first version of the image's alignment; versions are also made from landmarks (below). An
+image is placed by an alignment, its pixels to the Xenium image's, then in µm by the dataset's
+pixel size; the pixel size its own metadata gives is recorded but never used to place it
+(post-Xenium images are often written with the Xenium image's).
+
+SituCraft writes any version of an alignment back in Xenium Explorer's convention, to load with
+the image there: the transformation matrix (`<name>_imagealignment.csv`, from the version's
+transform), and for a version made from landmarks or keypoints its keypoints (`<name>_keypoints.csv`,
+their fixed positions in the Xenium image's pixels). Each number is written as short as reads back
+the same; written and read again, a file gives the same transform.
+
+## Regions SituCraft reads and writes (GeoJSON)
+
+Regions drawn on a dataset's tissue (from 0.5.0) are written, and regions are read, as GeoJSON
+(RFC 7946's objects) laid out as QuPath writes and reads its annotations (Bankhead et al. 2017), so
+that a region drawn in one opens in the other: the Viewer's **Regions** (GeoJSON, as QuPath reads
+and writes it), or the `export` (`what: "regions"`) and `import_regions` remote actions.
+
+| What | Written | Read |
+| --- | --- | --- |
+| The document | A `FeatureCollection` | A `FeatureCollection`, an array of Features (as QuPath 0.2 writes them) or one `Feature` |
+| Each region | A `Feature`: its `id` (a UUID-like id, the same for the same version of the same region), a `Polygon` (one part) or `MultiPolygon` (several), each ring closed, holes after their outer ring | `Polygon`, `MultiPolygon`, and the polygons of a `GeometryCollection`; points and lines are left out (they have no area), as are objects whose `objectType` (or `object_type`, or a QuPath 0.2 `id` of `PathDetectionObject` or `PathCellObject`) is not `annotation`. What is left out is counted and reported |
+| Its properties | `objectType: "annotation"`, `name`, `classification` (`name` and `color`, `[r, g, b]`), `isLocked: false`, and `metadata` (`SituCraft region`: its id; `SituCraft version`: its version; `SituCraft by`: who made it) | `name`; `classification.name` (or QuPath's `names`, joined), its `color` or a packed `colorRGB` (QuPath 0.2 and 0.3); an unclassified annotation becomes a `Region*` |
+| Its coordinates | Chosen when written | Chosen when read |
+
+The coordinates are one of: **µm** (the dataset's coordinates); **the Xenium image's pixels**
+(its full resolution, µm over the dataset's pixel size), as QuPath opens `morphology_focus`; or
+**a post-Xenium image's pixels** (its full resolution, (0, 0) the corner of its first pixel), as
+QuPath opens that image, through the version of its alignment in use: written, each point is taken
+back through any deformation and the version's transform; read, each point is placed by them. When
+the version deforms the image, each edge is first divided every 10 µm (or its pixels' worth), so
+that its points follow the deformation. Coordinates are written to 0.001.
+
+QuPath's own classes keep QuPath's colors: Tumor (200, 0, 0), Stroma (150, 200, 150), Immune
+cells (160, 90, 160), Necrosis (50, 50, 50), Other (255, 200, 0), Region\* (0, 0, 180) and
+Ignore\* (180, 180, 180); another class is given a color from its name, and a region read keeps
+the color its file gives.
+
 ## Other files
 
 SituCraft recognizes OME-TIFF images, Parquet and CSV tables, GeoJSON polygons and Zarr stores
-(on the command line or by **Open a bundle**) and lists them under **On this computer**. Reading
-them for analysis arrives with later releases: registered H&E and IF images and annotations (see
-the [roadmap](../situcraft-spec/roadmap.md)).
+(on the command line or by **Open a bundle**) and lists them under **On this computer**. A GeoJSON
+file of regions is read into a dataset from the Viewer's **Regions** (above).
 
 ## What SituCraft writes
 
@@ -142,6 +194,8 @@ A project is one JSON document, saved automatically in the library (`<data dir>/
 | `decisions` | Recorded choices, with their reasons (from 0.2.0) |
 | `views` | Saved views (below) |
 | `exports` | The exports written from its segmentations (from 0.2.0; absent until the first) |
+| `regions` | The regions drawn on its datasets, each with its versions (from 0.5.0; absent until the first; below) |
+| `reviews` | The reviews of its cells and regions, appended and never changed (from 0.5.0; absent until the first; below) |
 | `history` | Every change, with its time |
 
 A filter's checksum is the SHA-256 of the cell count (32-bit unsigned, little-endian) followed by
@@ -178,6 +232,36 @@ the SituCraft that wrote it, the number and size of its files, its totals and co
 (below), what it found, and the Xenium Ranger command when it prepared one. The export's own
 `situcraft-export.json` lists every file by its SHA-256.
 
+`regions` records each region drawn on a dataset (from 0.5.0): `{id, dataset, versions}`, its
+versions appended and never removed, the latest the region. A version is `{name, cls, color,
+geometry, tool, layer, by, time, note}`, and `removed: true` when it removed the region (a later
+version may return it). `geometry` is a multipolygon in µm (the dataset's coordinates): a list of
+polygons, each a list of rings (its outer ring, then its holes), each ring a list of `[x, y]` that
+does not repeat its first point. `tool` is how it was made (`rectangle`, `polygon`, `freehand`,
+`brush` or `imported`), `layer` what it was drawn over. No two of a dataset's regions (those not
+removed) have the same name.
+
+`reviews` records each review of a dataset's cells, clusters or regions (from 0.5.0), appended and
+never changed or removed (taking one back is another review):
+
+| Field | Holds |
+| --- | --- |
+| `id`, `time`, `by` | The review's id (`rev-…`), when, and who (the reviewer's name or initials) |
+| `action` | `accept`, `relabel`, `ambiguous`, `exclude`, `include` (an exclusion taken back), `concern` (its segmentation looks wrong), `resolve` (the concern answered) or `comment` |
+| `dataset`, `target` | The dataset, and what was reviewed: `cells`, `clusters` or `region` |
+| `segmentation` | `{id, name}`: the segmentation the cells are of (for a region, the one drawn) |
+| `cells` | Each cell reviewed: `{row, id, label, confidence, previous}`: its row and ID in the segmentation, its label in the set reviewed and that label's confidence (as shown; `null` for none), and its value before (its label, `included` or `excluded`, its concern or `none`) |
+| `clusters` | `{clustering, clusters}`: a clustering's clusters reviewed (numbered from 0) |
+| `region` | `{id, name, version, cls}`: the region and its version and class after the review |
+| `labels` | `{id, level, name, kind}`: the label set reviewed (`markers`, `reference`, `imported`, `curated`) |
+| `previous`, `next` | The value before (`mixed` when the cells' differ) and after: a label or class, `ambiguous`, `excluded`, `included`, a concern or `none` |
+| `alternatives`, `concern`, `note` | The labels an ambiguous one could be; the concern (`merged`, `split`, `boundary`, `not-a-cell`, `missed`, `other`); why, or the comment |
+| `images` | Each post-Xenium image of the dataset: `{image, name, transform, version, shown}`, the version of its alignment placing it and whether it was shown (`null` when not known) |
+| `edits` | Accepting or relabeling cells: the edits appended to the curated set (`{set, index}`), each naming the review back (`review`) |
+
+Relabeling a region appends a version of it with the new class. Curated edits made before 0.5.0
+(or without a review) are read as reviews, their label before, cells' IDs and alignments unknown.
+
 `decisions` records each decision about a dataset's segmentations, appended and never removed:
 `{kind, dataset, artifact, rationale, by, time, comparison}`, the kind `promote-segmentation` (its
 default), `keep-segmentation` (kept for exploration) or `reject-segmentation`, and `comparison`
@@ -193,7 +277,7 @@ What jobs make and register is kept in `<data dir>/artifacts/<id>/`, beside a `m
 | `format`, `version` | `"situcraft-artifact"`, `1` |
 | `id`, `kind`, `name`, `state`, `created` | Its identity; `state` is `complete` or `invalid` |
 | `lineage` | `parents` (a bundle by its analysis UUID and manifest's SHA-256, or other artifacts), `job` (its id, kind and spec), `method` (name, version, citation, detail), `parameters`, `software` (each program's name, version and commit) |
-| `files` | Each file's `path`, `role`, `size` and `sha256`; `location: "bundle"` for a file of the dataset's bundle, named by its path there and never copied |
+| `files` | Each file's `path`, `role`, `size` and `sha256`; `location: "bundle"` for a file of the dataset's bundle, named by its path there and never copied; `location: "place"` for a file where it lies on the computer (a post-Xenium image and its alignment), named by its absolute path and never copied |
 | `findings` | What the kind's check found: `severity`, `code`, `message`, `count` |
 | `summary` | What the kind says of it (a segmentation's cells, gene transcripts, medians and methods; for one SituCraft made, its agreement with the instrument's segmentation) |
 
@@ -223,7 +307,7 @@ SituCraft's transcript-informed segmentation (`SituCraft transcript-informed seg
   refined cell's 2D footprint (its voxels' most frequent labels, at the image's resolution), and
   the cells held about the region as the instrument drew them. Its outlines are simplified to half
   a voxel.
-- **A region of more than 4 million modelled transcripts** (twice `area.patch_transcripts`, 2
+- **A region of more than 4 million modeled transcripts** (twice `area.patch_transcripts`, 2
   million by default) is refined in patches, one after another: equal rectangles of about 2
   million transcripts each, each run refining the cells within 40 µm of its rectangle and holding
   the rest. The patches are stitched: each pixel and transcript is taken from the patch whose
@@ -238,7 +322,7 @@ SituCraft's transcript-informed segmentation (`SituCraft transcript-informed seg
   `regions`, with `regions` and `section_gap_um`; `patch_transcripts`, when set, the transcripts a
   patch aims at) and `regions`, the rectangles refined (µm: `x0_um`, `y0_um`, `x1_um`, `y1_um`;
   for a region refined in patches, each patch's rectangle of refined cells); `patches`, each
-  patch's own rectangle, when there are patches; `min_qv`, the quality modelled, and `counts_min_quality`
+  patch's own rectangle, when there are patches; `min_qv`, the quality modeled, and `counts_min_quality`
   (20); `start` and `start_stages`, each region's first stage; `preset` and `presets_version`; and
   `second_seed`, when a second run checked the first.
 
@@ -246,7 +330,7 @@ SituCraft's transcript-informed segmentation (`SituCraft transcript-informed seg
 | --- | --- | --- |
 | `probabilities.bin` | `SCPR` | Each transcript's posterior probability of its cell (`float32`, in the row order of `transcripts.parquet`): the share of the summarized sweeps it lay in that cell; NaN for a transcript assigned by place |
 | `certainty.bin` | `SCBC` | Each cell's boundary certainty (`float32`, in `cells.bin`'s order): the mean, over its pixels, of the share of the summarized sweeps each was its; NaN for a cell held or outside the regions refined. A cell is flagged uncertain below 0.75 |
-| `diagnostics.json` | | `summary` (the sweeps and samples; the split-half agreement, on every eighth transcript; the mean assignment probability and the share below 0.5; the log-likelihood's drift, Geweke's z and `gewekeJudged`, false when fewer than 100 sweeps were summarized; the voxels moved per sweep at the end; the cells refined, held and flagged; the regions, and `patches`, the patches they were refined in; the transcripts modelled; the background: `falseDecodeShare` and `ambientShare`, the shares of the modelled transcripts its rates account for (their mean over the summarized sweeps), `negativeControls`, the negative controls' transcripts in the regions that measure the false decodes, and `inBackgroundShare`, the share the summary leaves in no cell; `seedAgreement`, with a second seed: the share of transcripts either run put in a refined cell that both put in the same cell), `limitations` (the cells, by id, with fewer than 10 gene transcripts, uncertain boundaries, or no nucleus, and the instrument's cells left out; the thresholds) and `regions` (each region or patch refined: its rectangle, a patch's own rectangle as `patch`, its own `summary`, and its `trace`, each sweep's stage, voxels moved, transcripts repositioned and log-likelihood). Over several regions, the summary's Geweke's z is the one farthest from 0 |
+| `diagnostics.json` | | `summary` (the sweeps and samples; the split-half agreement, on every eighth transcript; the mean assignment probability and the share below 0.5; the log-likelihood's drift, Geweke's z and `gewekeJudged`, false when fewer than 100 sweeps were summarized; the voxels moved per sweep at the end; the cells refined, held and flagged; the regions, and `patches`, the patches they were refined in; the transcripts modeled; the background: `falseDecodeShare` and `ambientShare`, the shares of the modeled transcripts its rates account for (their mean over the summarized sweeps), `negativeControls`, the negative controls' transcripts in the regions that measure the false decodes, and `inBackgroundShare`, the share the summary leaves in no cell; `seedAgreement`, with a second seed: the share of transcripts either run put in a refined cell that both put in the same cell), `limitations` (the cells, by id, with fewer than 10 gene transcripts, uncertain boundaries, or no nucleus, and the instrument's cells left out; the thresholds) and `regions` (each region or patch refined: its rectangle, a patch's own rectangle as `patch`, its own `summary`, and its `trace`, each sweep's stage, voxels moved, transcripts repositioned and log-likelihood). Over several regions, the summary's Geweke's z is the one farthest from 0 |
 | `layers.bin` | `SCLY` | With more than one layer: each layer's depths (µm) and each cell's outline in it, as `outlines.bin` holds them |
 
 A segmentation with errors planted for practice (`SituCraft planted errors`, simulated) is the
@@ -304,6 +388,72 @@ A map of a clustering's cells (from 0.4.0) is an artifact of two files:
 | `embedding.bin` | `SCEB` | The cells (u32 count; u32 indices into the segmentation's cells, increasing), each one's place (f32 × 2, interleaved) and its reliability score (f32, 0 to 1: its neighborhood precision and recall, averaged over it and its 15 nearest on the map) |
 
 The project records each map it uses (kind `embedding`, with its segmentation and clustering).
+
+### Post-Xenium images
+
+A post-Xenium image (from 0.5.0) is an artifact of one file in its folder, `image.json`, and one in
+place: the image (role `image`), by its absolute path and SHA-256. Its id is made of the dataset
+(its analysis UUID and manifest's SHA-256) and the image's SHA-256: the same image is the same
+artifact.
+
+| Field of `image.json` | Holds |
+| --- | --- |
+| `format`, `version`, `name` | `"situcraft-image"`, `1`, what it is called |
+| `source` | The image's `path`, `size` and `sha256` |
+| `image` | What the image is: `kind` (`rgb` or `channels`), `width`, `height`, `bits`, `compression`, `pixelSize` (µm, as its metadata says; absent when it says none), `channels` (each one's `name`), `levels` (each one's `width`, `height`, `tileWidth`, `tileHeight`, `across`, `down`), `notes` |
+| `xeniumPixelSize` | The dataset's pixel size (µm) |
+| `ranges` | An immunofluorescence image's channels: each one's samples from the 0.1th to the 99.9th percentile over its smallest level, the window it is first shown with |
+
+Its summary says what it is. The project records each image (kind `image`, with its dataset and the
+image's path), and a saved view of the Viewer records each
+image's layer when there are some (`images`: each one's artifact `id`, `visible`, `opacity`, and an
+immunofluorescence image's `channels` as the stains': `visible`, `color`, `window`, `gamma`).
+
+### Alignments of post-Xenium images
+
+Each version of an image's alignment (from 0.5.0) is an artifact of kind `transform`: one file in
+its folder, `transform.json`, and, when it was read from Xenium Explorer's file, that file in place
+(role `alignment`, by its absolute path and SHA-256). Its parents are the image and, when it was
+made from another version, that version. Its id is the SHA-256 of `transform.json`: the same
+version made again is the same artifact; the time it was made is its manifest's `created`.
+
+| Field of `transform.json` | Holds |
+| --- | --- |
+| `format`, `version`, `name` | `"situcraft-transform"`, `1`, what it is called |
+| `source`, `destination` | The coordinate systems it maps between: `name` (`image:<artifact id>`, `global`), `units` (`pixels`, `µm`), and the `image` artifact or the `dataset` (its analysis UUID). An image's pixels are its full-resolution pixels, (0, 0) the corner of its first |
+| `method`, `model` | How it was made (`matrix` or `keypoints`, Xenium Explorer's file; `landmarks`, placed in SituCraft; `automatic`, registered by the nuclei) and what its fit may change (`similarity`: move, turn, one scale and a mirror; `affine`: also a scale along each axis and a shear; a matrix is `affine`) |
+| `transform` | The source to the destination, two rows of three: (x, y) → (a·x + b·y + c, d·x + e·y + f) |
+| `landmarks` | Each landmark's `fixed` position (µm) and `moving` position (the image's pixels); Xenium Explorer's keypoints, their fixed positions converted to µm |
+| `fit` | Each landmark's `residuals` (µm from where the fit puts it) and `leaveOneOut` errors (µm from where the fit of the others puts it; absent when too few remain to fit), and their `rms`, `max`, `looRms`, `looMax` |
+| `file` | Xenium Explorer's file it was read from: `path`, `size`, `sha256` |
+| `matches` | An automatic version's local matches: each patch's center on the Xenium image (`fixed`, µm), where it matched on the image (`moving`, its pixels), the correlation's `quality` (its peak's height over the surface's standard deviation) and whether the fit `kept` it; `fit` is of those kept |
+| `deformation` | A smooth deformation after the transform (an automatic version's, when one was kept): cubic B-splines on a grid of control points, its `origin` (µm), `spacing`, `nx` × `ny` points and each one's displacement `dx`, `dy` (µm, row by row); a point x of the transform is moved to x + the B-splines' sum at x |
+| `registration` | What an automatic registration found: the image's `channel` registered and the Xenium image's (`fixed`), the search's `best` candidate and best few (`candidates`: mirrored or not, pixel size, turn, normalized mutual information, overlap, transform), the mutual information at the finest level refined (`nmi`, `resolution`), the patches' side (`patchUm`) and pixel (`fine`), a deformation's errors (`deformedRms`; each fifth of the matches predicted from the rest, `heldOut`, and by the model alone, `modelHeldOut`), its `smoothness` and `maxDisplacement`, and `warnings` |
+| `xeniumPixelSize`, `parent`, `by`, `note` | The dataset's pixel size; the version it was made from; who made it; a note |
+
+Its summary gives the image, method, model, number of landmarks, the fit's errors, `umPerPixel`,
+`rotation` (degrees) and `reflected`, `by` and `parent`. The project records each version (kind
+`transform`, with its image and parent), and which version places each image as a decision (kind
+`use-transform`: the image, the version, the reason, who and when); the latest names it. An image
+with no decision is not aligned, and not drawn on the tissue.
+
+### Checks of alignments
+
+A check of a version of an image's alignment (from 0.5.0) is an artifact of kind `alignment-check`:
+one file in its folder, `check.json`; its parents are the image and the version. Its id is the
+SHA-256 of `check.json`: the same images and version give the same check.
+
+| Field of `check.json` | Holds |
+| --- | --- |
+| `format`, `version`, `name` | `"situcraft-alignment-check"`, `1`, what it is called |
+| `image`, `transform` | The image's and the version's artifacts |
+| `channel`, `fixed` | What of the image was compared (its hematoxylin, or a nuclear channel), and the Xenium image's channel |
+| `patches` | Each patch: its `centre` on the tissue (µm), its side (`size`, µm), how far the version draws the image there from where it belongs (`error`, µm, drawn less true), the correlation's `quality`, and whether it `matched` clearly enough to tell |
+| `patchUm`, `fine` | The patches' side and their µm per pixel |
+| `checked`, `matched`, `median`, `p90`, `max`, `rms`, `worst` | How many patches were checked and matched; the matched patches' errors' median, 90th percentile, most and root-mean-square (µm); where the most is |
+| `noise` | A bound of the matches' own error (root-mean-square, µm), from neighboring patches' differences: an error well above it is the alignment's |
+
+The project records each check (kind `alignment-check`, with its image and version).
 
 ### Marker sets
 
@@ -385,6 +535,22 @@ keep it.
 Each job is kept in `<data dir>/jobs/<id>.json`: its kind, title, spec (every effective
 parameter), state, times, number of runs, error and log. A job interrupted by SituCraft stopping is
 `orphaned` when it starts again, to be resumed or discarded.
+
+### Reviews
+
+A dataset's reviews (from 0.5.0) are written from the Viewer's **Reviews** or by `export` (`what:
+"reviews"`):
+
+- **CSV** (`<dataset>-reviews.csv`): a row for each cell, cluster or region a review is of; its
+  columns `review`, `time`, `reviewer`, `action`, `dataset`, `dataset_name`, `segmentation`,
+  `segmentation_name`, `target`, `cell_id`, `cell_row` (from 0), `clustering`, `cluster` (from 1),
+  `region`, `region_name`, `region_version`, `label_set`, `label_set_name`, `label_set_level`,
+  `label` (the cell's, as shown), `confidence`, `previous` (the cell's value before), `new`,
+  `concern`, `alternatives` (separated by `; `), `note`, `images` (each image's alignment version
+  in use, with its artifact and whether it was shown) and `derived` (`yes` for a label edit read as
+  a review). RFC 4180: a field with a comma, a quote or a line break is quoted.
+- **JSON** (`<dataset>-reviews.json`): `{format: "situcraft-reviews", version: 1, written,
+  situcraft, project, datasets, actions, concerns, reviews}`, the reviews as the project keeps them.
 
 ### Project archives (`.scz`)
 
@@ -478,7 +644,7 @@ without the app, and writes the segmentation's files (above) to the new folder w
 | `--recipe` | A recipe to run (the bundle defaults to its `dataset.path`); the flags below change it |
 | `--preset` | `balanced` (the default), `conservative`, `flexible`, `low-memory`, `roi-pilot` or `expert` |
 | `--seed`, `--sweeps`, `--samples` | The seed, the last stage's sweeps and the sweeps summarized |
-| `--min-qv` | The quality the modelled transcripts reach (20) |
+| `--min-qv` | The quality the modeled transcripts reach (20) |
 | `--region x0,y0,x1,y1` | A region to refine, in µm (repeatable); `--sections` refines the tissue's separate sections apart |
 | `--seed-check` | Run again with the next seed and report the two runs' agreement |
 | `--threads` | Threads to run on (every core); the result does not depend on them |
@@ -504,6 +670,7 @@ are in [research.md](../situcraft-spec/research.md) §3.4.
 | `--params` | | A JSON file of parameters, each overriding the preset's; `--print-params` prints them all, with their names |
 | `--quiet` | | Print only the summary |
 | `--reference` | 0 | Also write a single-cell reference of the tissue's types, this many cells of each, as `<folder>-reference.zarr` (below) |
+| `--post-xenium` | | Also make post-Xenium images of the section, an H&E and an immunofluorescence image, each placed by a known transform and deformation (below); not for a mosaic |
 
 The folder must not exist: it is written under a temporary name beside it and renamed into place
 when complete, so an interrupted run (Ctrl+C) leaves nothing behind.
@@ -519,14 +686,16 @@ are numbered across the mosaic, and coordinates placed in it.
 | File | Holds |
 | --- | --- |
 | `situcraft-simulation.json` | `format` (`"situcraft-simulation"`), `version` (1), `simulated` (`true`), `software`, `about`, `truth` (the truth's folder), `parameters` (every parameter, with the seed) and `made` (the cells by type, nuclei in the section, the instrument's cells, the transcripts by origin) |
-| `experiment.xenium` | The run: one `experiment_uuid` derived from the parameters, the pixel size, the cell count and median transcripts per cell, the image's path. `analysis_sw_version` names the layout the files follow, then what wrote them (`xenium-2.0.0 layout, situcraft-simulate 0.3.0`): readers choose how to read a bundle by its version |
+| `experiment.xenium` | The run: one `experiment_uuid` derived from the parameters (not those of its post-Xenium images, made after the run), the pixel size, the cell count and median transcripts per cell, the image's path. `analysis_sw_version` names the layout the files follow, then what wrote them (`xenium-2.0.0 layout, situcraft-simulate 0.3.0`): readers choose how to read a bundle by its version |
 | `transcripts.parquet` | Every observed molecule, in Xenium's columns and types: `transcript_id` (its field of view of 250 µm in the top 16 bits), `cell_id` (the simulated instrument's cell, or `UNASSIGNED`), `overlaps_nucleus` (`uint8`), `feature_name`, `x_location`, `y_location`, `z_location` (µm), `qv`, `fov_name`, `nucleus_distance` (µm to the nearest nucleus in the section, from the molecule's pixel; 0 over one), `codeword_index` (its feature's codeword in `gene_panel.json`) |
 | `cells.parquet`, `cell_boundaries.parquet`, `nucleus_boundaries.parquet` | The simulated instrument's cells (Xenium's columns; `segmentation_method` "Segmented by nucleus expansion of 5.0µm") and their outlines along pixel edges |
 | `cell_feature_matrix.h5`, `cell_feature_matrix/` | Their counts of Q20 molecules of every feature: as a 10x Genomics feature-barcode matrix in HDF5 (`/matrix`: `barcodes`, `data`, `indices`, `indptr`, `shape`, and `features/` with `id`, `name`, `feature_type`, `genome`), and as Matrix Market |
 | `cells.zarr.zip` | Zarr format 2, zipped, as XOA 2 lays it out: `masks/0` (nuclei: label *p* + 1 is nucleus *p*) and `masks/1` (cells: label *k* + 1 is `cells.parquet`'s row *k*) as `uint32` labels on the image's pixels; `masks/homogeneous_transform` (4 × 4, µm to pixels); `cell_id`; `cell_summary`; and `polygon_sets/0` (nuclei) and `polygon_sets/1` (cells), each with its outlines' `vertices` and `num_vertices`, each polygon's `cell_index` and `method`; the root's attributes name the sets and the segmentation methods |
 | `morphology_focus/morphology_focus_0000.ome.tif` | The DAPI stain of the nuclei in the section: a tiled, deflate-compressed OME-TIFF with its reduced levels as SubIFDs (Xenium's own are JPEG 2000) |
 | `metrics_summary.csv`, `gene_panel.json` | The run's metrics, computed as SituCraft's validation recomputes them, and the panel: genes `SIM001`…, negative control probes `NegControlProbe_SIM01`… and codewords `NegControlCodeword_0500`… |
-| `truth/` | A Xenium Ranger-shaped bundle of the same run: `experiment.xenium`; `cells.parquet` (every true cell: `cell_type`, `nucleus_in_section`, areas, centroid, Q20 gene transcripts), both boundary tables and `cells.zarr.zip` of the true cells (the nuclei in the section numbered in their cells' order, `cell_index` naming each one's cell); `transcripts.parquet`, the observed molecules row for row in the bundle's columns, with their true `cell_id`, and `true_x_location`, `true_y_location`, `true_z_location`, `origin` (`cell`, `background`, `control probe`, `control codeword`) and `wide_displacement` |
+| `truth/` | A Xenium Ranger-shaped bundle of the same run: `experiment.xenium`; `cells.parquet` (every true cell: `cell_type`, `nucleus_in_section`, areas, centroid, Q20 gene transcripts), both boundary tables and `cells.zarr.zip` of the true cells (the nuclei in the section numbered in their cells' order, `cell_index` naming each one's cell); `transcripts.parquet`, the observed molecules row for row in the bundle's columns, with their true `cell_id`, and `true_x_location`, `true_y_location`, `true_z_location`, `origin` (`cell`, `background`, `control probe`, `control codeword`) and `wide_displacement`; and `instrument_cell_types.csv`, each of the instrument's cells (`cell_id`) with its true cell (`true_cell_id`, the one whose nucleus it grew from) and that cell's `cell_type`: imported as labels of the instrument's own cells, it scores any labels of them by cell ID |
+| `post_xenium/` | With `--post-xenium`: `simulated_he_image.ome.tif` (an H&E, 8-bit RGB) and `simulated_if_image.ome.tif` (an immunofluorescence image, 16-bit channels `DAPI` and `Membrane`), pyramidal, tiled OME-TIFFs (deflate) of the same cells and nuclei, as Xenium Explorer reads them, with no alignment beside them |
+| `truth/post_xenium/` | Where each image lies: `registration.json` (each image's `transform`, its pixels to µm, two rows of three; its `deformation`, waves each displacing points along an `axis` by `amplitude_um` × sin(2π `frequency_per_um` · x + `phase`), x a point in µm after the transform; its `parameters`; the H&E's `stains`, the hematoxylin and eosin colors of this section), and `<name>_imagealignment.csv`, each transform without its deformation as Xenium Explorer's matrix |
 
 To score a segmentation against the truth, import `truth/` into the simulated dataset as a
 Xenium Ranger bundle (Segmentation view, **Import a segmentation**) and compare the two.

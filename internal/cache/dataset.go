@@ -365,7 +365,7 @@ func (c *Cache) buildItem(ctx context.Context, b *xenium.Bundle, p *plan, it *pl
 	var summary any
 	switch it.kind {
 	case KindImage:
-		chans, bits, closeAll, err := imageSources(b, p.image)
+		chans, bits, closeAll, err := ImageSources(b, p.image)
 		if err != nil {
 			return nil, err
 		}
@@ -430,8 +430,9 @@ func cellsOf(b *xenium.Bundle, p *plan) (*xenium.Cells, error) {
 	return p.cells, nil
 }
 
-// imageSources opens each channel's levels for decoding a block at a time.
-func imageSources(b *xenium.Bundle, img *xenium.Image) ([]SourceChannel, int, func(), error) {
+// ImageSources opens each channel's levels for decoding a block at a time (safe to decode from
+// several goroutines at once); the function closes the files.
+func ImageSources(b *xenium.Bundle, img *xenium.Image) ([]SourceChannel, int, func(), error) {
 	var files []io.Closer
 	closeAll := func() {
 		for _, f := range files {
@@ -469,7 +470,7 @@ func imageSources(b *xenium.Bundle, img *xenium.Image) ([]SourceChannel, int, fu
 			if ifd.SamplesPerPixel != 1 || len(ifd.BitsPerSample) == 0 || (ifd.BitsPerSample[0] != 8 && ifd.BitsPerSample[0] != 16) || ifd.SampleFormat == 3 {
 				if ifd == top {
 					closeAll()
-					return nil, 0, nil, fmt.Errorf("%s: channel %s is not 8- or 16-bit grey", ch.File, ch.Name)
+					return nil, 0, nil, fmt.Errorf("%s: channel %s is not 8- or 16-bit gray", ch.File, ch.Name)
 				}
 				break
 			}

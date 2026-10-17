@@ -257,9 +257,9 @@ func (h *remoteHub) serveAction(w http.ResponseWriter, r *http.Request) {
 		h.respond(w, r, event)
 		return
 	}
-	if (action.output || action.reads || action.writes) && !h.hasToken(r) {
+	if (action.output || action.reads || action.readsAt || action.writes) && !h.hasToken(r) {
 		what := "Writing files"
-		if action.reads {
+		if action.reads || action.readsAt {
 			what = "Reading files"
 		}
 		writeError(w, http.StatusUnauthorized, what+" needs the "+remoteTokenHeader+" header with the token SituCraft printed when it started (also in remote.json).")

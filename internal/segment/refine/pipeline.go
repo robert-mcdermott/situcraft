@@ -242,7 +242,7 @@ func Check(in *Inputs, idx *BundleIndex, spec Spec, cores int, memory, free int6
 		risk("convergence", "Only %d sweeps are summarized: convergence is judged on %d or more, so this run's will not be.", spec.Options.Samples, minGeweke)
 	}
 	if spec.MinQV < 20 {
-		risk("quality", "Transcripts below Q20 are modelled (%g or more): more of them were misread. The cells' counts remain of Q20 or more.", spec.MinQV)
+		risk("quality", "Transcripts below Q20 are modeled (%g or more): more of them were misread. The cells' counts remain of Q20 or more.", spec.MinQV)
 	}
 	if p.Cells > 0 && float64(p.Cells-p.Nuclei) > 0.1*float64(p.Cells) {
 		risk("prior", "%d of the %d cells have no nucleus in the section: no nuclear prior holds them.", p.Cells-p.Nuclei, p.Cells)
@@ -371,7 +371,7 @@ func Refine(ctx context.Context, b *xenium.Bundle, spec Spec, dir string, job Jo
 	if len(pre.Patches) > 0 {
 		runsOf = "patches"
 	}
-	log("info", "%d %s: %d cells refined, %d held about them, %d transcripts modelled; about %s of memory, %s of disk and %s on %d threads.",
+	log("info", "%d %s: %d cells refined, %d held about them, %d transcripts modeled; about %s of memory, %s of disk and %s on %d threads.",
 		e.Regions, runsOf, e.Cells, e.Held, e.Transcripts, Memory(e.PeakBytes), Bytes(e.DiskBytes), Duration(e.Seconds), cores)
 	opt := spec.Options
 	opt.Workers = cores
@@ -420,7 +420,7 @@ func Refine(ctx context.Context, b *xenium.Bundle, spec Spec, dir string, job Jo
 		return nil, nil, err
 	}
 	s := diag.Summary
-	log("info", "%d cells; %.1f%% of modelled transcripts in the same cell over both halves of the last %d sweeps; mean assignment probability %.3f; Geweke's z %.1f.",
+	log("info", "%d cells; %.1f%% of modeled transcripts in the same cell over both halves of the last %d sweeps; mean assignment probability %.3f; Geweke's z %.1f.",
 		d.Cells, 100*s.SplitHalf, s.Samples, s.MeanProbability, s.GewekeZ)
 	if s.SeedAgreement != nil {
 		log("info", "Seeds %d and %d put %.1f%% of the transcripts in refined cells in the same cell.", opt.Seed, rec.SecondSeed, 100*(*s.SeedAgreement))

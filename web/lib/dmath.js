@@ -198,6 +198,57 @@ export const normalUpper = (z) => 0.5 * erfc(z * SQRT1_2);
 // The standard normal density φ(z).
 export const normalPdf = (z) => 0.3989422804014327 * exp(-0.5 * z * z);
 
+// sin and cos of x (radians), [sin, cos], as internal/dmath's SinCos computes them, bit for bit:
+// x reduced by multiples of π/2 (in two parts, Cody and Waite's reduction) to |r| ≤ π/4, then
+// Taylor's series. NaN beyond 2²⁰·π/2.
+const PIO2_HI = 1.57079632673412561417e+00;
+const PIO2_LO = 6.07710050650619224932e-11;
+const SIN_TAYLOR = [-1 / 6, 1 / 120, -1 / 5040, 1 / 362880, -1 / 39916800, 1 / 6227020800, -1 / 1307674368000, 1 / 355687428096000];
+const COS_TAYLOR = [-1 / 2, 1 / 24, -1 / 720, 1 / 40320, -1 / 3628800, 1 / 479001600, -1 / 87178291200, 1 / 20922789888000, -1 / 6402373705728000];
+
+function horner(z, c) {
+  let h = c[c.length - 1];
+  for (let i = c.length - 2; i >= 0; i -= 1) h = c[i] + z * h;
+  return h;
+}
+
+export function sincos(x) {
+  if (!Number.isFinite(x) || Math.abs(x) > 1647099) return [NaN, NaN];
+  // Halves rounded away from zero, as Go's math.Round.
+  const q = x / (Math.PI / 2);
+  const k = q < 0 ? -Math.round(-q) : Math.round(q);
+  const r = x - k * PIO2_HI - k * PIO2_LO;
+  const z = r * r;
+  const sin = r + r * z * horner(z, SIN_TAYLOR);
+  const cos = 1 + z * horner(z, COS_TAYLOR);
+  switch (k & 3) {
+    case 0: return [sin, cos];
+    case 1: return [cos, -sin];
+    case 2: return [-sin, -cos];
+    default: return [-cos, sin];
+  }
+}
+
+// A checksum of sin and cos over 20,000 fixed arguments: SINCOS_FINGERPRINT in every engine and in
+// Go (internal/dmath's test).
+export const SINCOS_FINGERPRINT = '52c6523f';
+
+export function sincosFingerprint() {
+  let h = 0x811c9dc5;
+  const mix = (v) => {
+    f64[0] = v;
+    for (const word of [u32[LO], u32[HI]]) {
+      for (let b = 0; b < 32; b += 8) h = Math.imul(h ^ ((word >>> b) & 0xff), 0x01000193);
+    }
+  };
+  for (let i = 0; i < 10000; i += 1) {
+    const [s, c] = sincos(-2000 + i * 0.4001);
+    mix(s);
+    mix(c);
+  }
+  return (h >>> 0).toString(16).padStart(8, '0');
+}
+
 // A checksum of log, exp and pow over 30,000 fixed arguments (FNV-1a of their bits): FINGERPRINT in
 // every engine, which the tests check in Node and validation/remote-session.mjs in the browser.
 export const FINGERPRINT = '7bf3fe17';

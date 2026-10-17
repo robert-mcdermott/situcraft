@@ -192,13 +192,12 @@ func (b *Bundle) ReadCells() (*Cells, error) {
 	for _, col := range p.Columns {
 		c.Columns = append(c.Columns, col.Name)
 	}
-	ids, _, err := column(p, name, "cell_id", parquet.ByteArray)
+	ids, _, err := column(p, name, "cell_id", parquet.ByteArray, parquet.Int32, parquet.Int64)
 	if err != nil {
 		return nil, err
 	}
-	c.IDs = make([]string, ids.Len)
-	for i, b := range ids.Bytes {
-		c.IDs[i] = string(b)
+	c.IDs = idStrings(ids)
+	for i := range c.IDs {
 		if _, dup := c.Index[c.IDs[i]]; dup {
 			return nil, fmt.Errorf("%s: cell %s appears twice", name, c.IDs[i])
 		}
@@ -400,10 +399,11 @@ func (b *Bundle) ReadBoundaries(name string) (*Polygons, error) {
 		return nil, err
 	}
 	defer f.Close()
-	ids, _, err := column(p, name, "cell_id", parquet.ByteArray)
+	idv, _, err := column(p, name, "cell_id", parquet.ByteArray, parquet.Int32, parquet.Int64)
 	if err != nil {
 		return nil, err
 	}
+	ids := idStrings(idv)
 	xs, _, err := column(p, name, "vertex_x", parquet.Float, parquet.Double)
 	if err != nil {
 		return nil, err
@@ -412,17 +412,33 @@ func (b *Bundle) ReadBoundaries(name string) (*Polygons, error) {
 	if err != nil {
 		return nil, err
 	}
-	poly := &Polygons{X: make([]float32, ids.Len), Y: make([]float32, ids.Len)}
+	poly := &Polygons{X: make([]float32, len(ids)), Y: make([]float32, len(ids))}
 	x, y := floats(xs), floats(ys)
-	for i := 0; i < ids.Len; i++ {
+	for i := range ids {
 		poly.X[i], poly.Y[i] = float32(x[i]), float32(y[i])
-		if i == 0 || string(ids.Bytes[i]) != poly.CellIDs[len(poly.CellIDs)-1] {
-			poly.CellIDs = append(poly.CellIDs, string(ids.Bytes[i]))
+		if i == 0 || ids[i] != poly.CellIDs[len(poly.CellIDs)-1] {
+			poly.CellIDs = append(poly.CellIDs, ids[i])
 			poly.Offsets = append(poly.Offsets, int32(i))
 		}
 	}
-	poly.Offsets = append(poly.Offsets, int32(ids.Len))
+	poly.Offsets = append(poly.Offsets, int32(len(ids)))
 	return poly, nil
+}
+
+// idStrings are a cell_id column's values as text: XOA 1.0 numbered its cells (from 1), and a
+// number is still an identity.
+func idStrings(v *parquet.Values) []string {
+	out := make([]string, v.Len)
+	if v.Bytes != nil {
+		for i, b := range v.Bytes {
+			out[i] = string(b)
+		}
+		return out
+	}
+	for i, n := range ints(v) {
+		out[i] = strconv.FormatInt(n, 10)
+	}
+	return out
 }
 
 // Feature is one row of the cell-by-feature matrix.
@@ -506,15 +522,20 @@ func (b *Bundle) readZarrMatrix(name string) (*Matrix, error) {
 		data, err := a.ReadAll()
 		return data, a, err
 	}
-	cellIDs, a, err := read("cell_id")
-	if err != nil {
+	if cellIDs, a, err := read("cell_id"); err == nil {
+		if len(a.Shape) != 2 || a.Shape[1] != 2 || a.DType.Size != 4 {
+			return nil, fmt.Errorf("%s: cell_id has shape %v", name, a.Shape)
+		}
+		for i := 0; i < a.Shape[0]; i++ {
+			m.CellIDs = append(m.CellIDs, CellIDString(le32(cellIDs[8*i:]), le32(cellIDs[8*i+4:])))
+		}
+	} else if n, ok := attrs["number_cells"].(float64); ok && n >= 0 && n == float64(int(n)) {
+		// XOA 1.0 kept no cell IDs here: its cells are numbered from 1, in cells.parquet's order.
+		for i := 1; i <= int(n); i++ {
+			m.CellIDs = append(m.CellIDs, strconv.Itoa(i))
+		}
+	} else {
 		return nil, fmt.Errorf("%s: %w", name, err)
-	}
-	if len(a.Shape) != 2 || a.Shape[1] != 2 || a.DType.Size != 4 {
-		return nil, fmt.Errorf("%s: cell_id has shape %v", name, a.Shape)
-	}
-	for i := 0; i < a.Shape[0]; i++ {
-		m.CellIDs = append(m.CellIDs, CellIDString(le32(cellIDs[8*i:]), le32(cellIDs[8*i+4:])))
 	}
 	indptr, a, err := read("indptr")
 	if err != nil {

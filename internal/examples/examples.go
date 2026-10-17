@@ -85,6 +85,10 @@ type Generated struct {
 	Size int64
 	// Make writes it into dir, which must not exist yet (written beside it, then moved).
 	Make func(ctx context.Context, dir string, progress Progress) error
+	// Current says whether one made before is as this SituCraft makes it (nil: always); one that is
+	// not is listed as outdated, with Outdated saying what making it again adds.
+	Current  func(dir string) bool
+	Outdated string
 }
 
 // Library is the examples folder.
@@ -120,6 +124,8 @@ type State struct {
 	Path  string `json:"path,omitempty"`
 	// Generated: made on this computer, nothing downloaded.
 	Generated bool `json:"generated,omitempty"`
+	// Outdated: a generated example made by an earlier SituCraft, and what making it again adds.
+	Outdated string `json:"outdated,omitempty"`
 }
 
 func (s Source) diskSize() int64 {
@@ -182,6 +188,9 @@ func (l *Library) List() []State {
 		if raw, err := os.ReadFile(filepath.Join(dir, "experiment.xenium")); err == nil {
 			sum := sha256.Sum256(raw)
 			st.ManifestSHA256, st.State, st.Path = hex.EncodeToString(sum[:]), "ready", dir
+			if g.Current != nil && !g.Current(dir) {
+				st.Outdated = g.Outdated
+			}
 		}
 		out = append(out, st)
 	}

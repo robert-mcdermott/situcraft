@@ -13,8 +13,14 @@ import { addView, captureView, viewCamera, viewLayers } from '../lib/views.js';
 import { TissueRenderer } from '../render/renderer.js';
 import { fitCamera, scaleBar, screenToWorld, visibleRect, worldToScreen } from '../lib/viewport.js';
 import { attachNavigation } from './navigation.js';
+import { mountRegions } from './regions-layer.js';
+import { mountReviews } from './reviews-section.js';
+import { cellsState, labelSetFor, reviewCells, reviewForm, reviewLine, reviewsOfCell, segmentationFor } from './reviewing.js';
+import { cellReviewState, reviewColors, reviewsOf, stateCounts, STATUS_COLORS } from '../lib/review-record.js';
 import { readCells, joinSamples, nearestCell } from '../lib/viewer-data.js';
 import { mountViewerPanel, defaultLayers, cellFillColors } from './viewer-panel.js';
+import { placedImages } from '../lib/images.js';
+import { defaultImageLayer } from '../lib/overlays.js';
 import { defaultChoice, readSegCells, segmentationChoices } from '../lib/segview.js';
 import { hexColor } from '../render/gl.js';
 import { categoricalColor } from '../lib/colormaps.js';
@@ -153,6 +159,8 @@ export function mountViewer(app, container) {
     const stage = h('div.viewer-stage', canvas, h('div.viewer-tools', zoomIn, zoomOut, fit), minimap, legend, h('div.viewer-foot', scale, readout, status));
     const panelHost = h('aside.viewer-panel', { 'aria-label': 'Layers' });
     body.append(panelHost, stage);
+    let regions = null;
+    let reviews = null;
 
     const session = sessions.get(t.dataset.id);
     const layers = session?.layers ?? defaultLayers(desc);
@@ -166,13 +174,15 @@ export function mountViewer(app, container) {
       dispose() {
         observer.disconnect();
         navigation.dispose();
+        regions?.dispose();
         renderer.destroy();
         window.removeEventListener('keydown', onKey);
         if (window.situcraftViewer?.renderer === renderer) delete window.situcraftViewer;
       },
     };
 
-    // The layers panel, mounted again when a saved view replaces every setting.
+    // The layers panel, mounted again when a saved view replaces every setting; the regions drawn
+    // (ui/regions-layer.js), their section after it.
     let panel = null;
     // The dataset's segmentations, its default first; the one drawn (the instrument's when its
     // own cells are).
@@ -181,15 +191,26 @@ export function mountViewer(app, container) {
     // What the panel lists: the segmentations, and the drawn one's clusterings.
     // Curated and consensus label sets, drawn as labels at one level.
     const versionFills = () => labelVersions(app.store.project, t.dataset.id, drawnChoice()?.id).filter((v) => v.kind === 'curated' || v.kind === 'consensus').map((v) => ({ id: `labels:${v.id}:0`, labels: v.id, level: 0, label: `${v.kind === 'curated' ? 'Curated' : 'Consensus'} labels: ${v.name}` }));
-    const analysisFills = () => [...clusterFills(app.store.project, t.dataset.id, drawnChoice()?.id), ...labelFills(app.store.project, t.dataset.id, drawnChoice()?.id), ...versionFills()];
-    const choiceKey = () => `${choices().map((c) => `${c.id}${c.isDefault ? '*' : ''}`).join()}|${analysisFills().map((f) => f.id).join()}`;
+    const analysisFills = () => [...clusterFills(app.store.project, t.dataset.id, drawnChoice()?.id), ...labelFills(app.store.project, t.dataset.id, drawnChoice()?.id), ...versionFills(), { id: 'review', label: 'Review status', help: 'Each cell by its review: excluded, a segmentation concern, ambiguous, relabeled, accepted or commented' }];
+    const imageRecords = () => placedImages(app.store.project, t.dataset.id);
+    const choiceKey = () => `${choices().map((c) => `${c.id}${c.isDefault ? '*' : ''}`).join()}|${analysisFills().map((f) => f.id).join()}|${imageRecords().map((r) => `${r.record.id}:${r.transform?.id ?? ''}`).join()}`;
+    // Adding a post-Xenium image, from the panel, or aligning one.
+    const imageActions = {
+      check: (path, alignment) => app.bundles.checkImage(t.item, path, alignment),
+      add: (request) => app.bundles.addImage(t.item, t.dataset.id, request),
+      align: (imageId) => app.showAlignment?.(t.dataset.id, imageId),
+    };
 
     function mountPanel(start) {
       clear(panelHost);
       state.choiceKey = choiceKey();
-      panel = mountViewerPanel(panelHost, { desc, layers: start, cells: renderer.cells, app, segmentations: choices(), drawn: drawnChoice(), clusterings: analysisFills(), onChange: (next, what) => {
+      panel = mountViewerPanel(panelHost, { desc, layers: start, cells: renderer.cells, app, segmentations: choices(), drawn: drawnChoice(), clusterings: analysisFills(), images: state.imageEntries ?? [], imageActions, onChange: (next, what) => {
         state.layers = next;
         renderer.setLayers(next);
+        if (what === 'images') {
+          applyImages();
+          return;
+        }
         if (what === 'segmentation') {
           drawSegmentation(next.cells.segmentation);
           return;
@@ -199,8 +220,44 @@ export function mountViewer(app, container) {
         updateLegend();
       } });
       state.panel = panel;
+      if (regions) panelHost.append(regions.section);
+      if (reviews) panelHost.append(reviews.section);
     }
     mountPanel(layers);
+
+    // The dataset's post-Xenium images: their descriptions read, a layer each (kept while the image
+    // stays, a view's as it names them), drawn by the renderer over the stains, each placed by its
+    // transform in use (an image not aligned is listed, not drawn).
+    async function syncImages() {
+      const records = imageRecords();
+      const entries = await Promise.all(records.map(async ({ record, transform }) => {
+        try {
+          const d = await app.bundles.imageDescription(record.id);
+          const tf = transform ? await app.bundles.transformDescription(transform.id) : null;
+          const deformation = tf?.deformation ? await app.bundles.inverseField(transform.id) : null;
+          return { record, transform, desc: tf ? { ...d, transform: tf.transform, ...(deformation ? { deformation } : {}) } : d };
+        } catch (error) {
+          return { record, transform, error: error.message };
+        }
+      }));
+      if (current && current !== state) return;
+      const prev = new Map((state.layers.images ?? []).map((l) => [l.id, l]));
+      const imageLayers = entries.filter((e) => e.desc).map((e) => prev.get(e.record.id) ?? defaultImageLayer(e.desc));
+      state.imageEntries = entries;
+      state.layers = { ...state.layers, images: imageLayers };
+      renderer.setLayers(state.layers);
+      applyImages();
+      panel?.setImages(entries, imageLayers);
+    }
+    function applyImages() {
+      const entries = state.imageEntries ?? [];
+      renderer.setOverlays((state.layers.images ?? []).map((layer) => {
+        const e = entries.find((x) => x.record.id === layer.id);
+        return { layer, desc: e?.transform ? e.desc : null };
+      }).filter((o) => o.desc?.transform));
+    }
+    state.syncImages = syncImages;
+    syncImages();
 
     // The fill's colors per cell; a clustering's are read first (each cell's cluster, from the
     // program), and must be of the cells drawn.
@@ -209,6 +266,22 @@ export function mountViewer(app, container) {
       state.clusterFill = null;
       // Every change of fill: a clustering's or labels' colors read for an earlier one are dropped.
       const mine = (state.fillGeneration = (state.fillGeneration ?? 0) + 1);
+      if (fill === 'review') {
+        renderer.setCellColors(null);
+        const seg = segmentationFor(app.store.project, t.dataset.id, state.seg?.id ?? null);
+        const records = reviewsOf(app.store.project, t.dataset.id);
+        // Reviews of clusters, by their clusterings' clusters.
+        const needed = [...new Set(records.filter((r) => r.target === 'clusters' && r.segmentation?.id === seg?.id).map((r) => r.clusters.clustering))];
+        Promise.all(needed.map((id) => app.bundles.clusteringData(id).then((d) => [id, d.cluster]).catch(() => [id, null]))).then((pairs) => {
+          if (mine !== state.fillGeneration || current !== state || !seg || !renderer.cells) return;
+          const clusters = new Map(pairs);
+          const st = cellReviewState(records, seg.id, renderer.cells.n, (id) => clusters.get(id) ?? null);
+          state.clusterFill = { review: true, counts: stateCounts(st), cells: renderer.cells.n, name: 'Review status', rgba: reviewColors(st) };
+          renderer.setCellColors(state.clusterFill.rgba);
+          updateLegend();
+        });
+        return;
+      }
       const asLabels = parseLabelFill(fill);
       if (asLabels) {
         renderer.setCellColors(null);
@@ -261,6 +334,12 @@ export function mountViewer(app, container) {
     function clusterLegend() {
       const f = state.clusterFill;
       if (!f) return null;
+      if (f.review) {
+        const shown = STATUS_COLORS.filter((x) => f.counts[x.id]);
+        return h('div', h('b', f.name),
+          ...shown.map((x) => h('div.viewer-legend-item', h('span.dot', { style: { background: `rgb(${x.color.join(',')})` } }), x.label, h('span.muted', formatCount(f.counts[x.id])))),
+          h('div.muted', shown.length ? `${formatCount(f.cells - f.counts.reviewed)} cells not reviewed are not filled.` : 'No cell drawn is reviewed yet.'));
+      }
       if (f.labels) {
         const entries = [...f.counts.entries()].sort((a, b) => (a[0] === f.unlabeled) - (b[0] === f.unlabeled) || b[1] - a[1]);
         const shown = entries.slice(0, 24);
@@ -293,7 +372,7 @@ export function mountViewer(app, container) {
       const cellsShown = state.layers.cells.outlines || state.layers.cells.fill;
       if (state.loadingSeg) legend.append(h('div.viewer-legend-seg', h('b', state.loadingSeg.name), h('div.muted', 'Reading its cells…')));
       else if (c && cellsShown && choices().length > 1) legend.append(h('div.viewer-legend-seg', h('b', c.name), h('div.muted', `${c.about[0].toUpperCase()}${c.about.slice(1)}`)));
-      const part = state.layers.cells.fill ? (state.layers.cells.fill.startsWith('clusters:') || parseLabelFill(state.layers.cells.fill) ? clusterLegend() : panel.legend?.()) : null;
+      const part = state.layers.cells.fill ? (state.layers.cells.fill.startsWith('clusters:') || parseLabelFill(state.layers.cells.fill) || state.layers.cells.fill === 'review' ? clusterLegend() : panel.legend?.()) : null;
       if (part) legend.append(part);
       const probability = panel.probabilityLegend?.();
       if (probability) legend.append(probability);
@@ -397,6 +476,23 @@ export function mountViewer(app, container) {
       },
     });
     const zoomBy = (factor, sx, sy) => navigation.zoomBy(factor, sx, sy);
+    regions = mountRegions({ app, dataset: t.dataset, canvas, renderer, zoomBy, drawnCells: () => renderer.cells, ownCells: cells, images: () => state.imageEntries ?? [], pixelSize: desc.grid.pixelSize,
+      item: t.item, segOf: () => segmentationFor(app.store.project, t.dataset.id, state.seg?.id ?? null), shown: (id) => imageShown(id), reviewed: () => reviewed(null) });
+    state.regions = regions;
+    panelHost.append(regions.section);
+    // Reviews of the cells and regions: after one, a curated set it began is shown.
+    const imageShown = (id) => {
+      const layer = (state.layers.images ?? []).find((l) => l.id === id);
+      return Boolean(layer?.visible && layer.opacity > 0 && renderer.overlays.some((o) => o.desc.id === id));
+    };
+    const reviewed = (curated) => {
+      if (curated) setFill(`labels:${curated}:0`);
+      else if (state.layers.cells.fill === 'review' || parseLabelFill(state.layers.cells.fill)) applyFill();
+      if (state.selectedRow >= 0) selectRow(state.selectedRow);
+    };
+    reviews = mountReviews({ app, t, segId: () => state.seg?.id ?? null, cellsDrawn: () => renderer.cells, labelsRef: () => parseLabelFill(state.layers.cells.fill), shown: imageShown, select: (row) => selectRow(row).then(() => state.detail && centerOn(state.detail)), region: (id) => regions.hook.goTo(id), after: reviewed });
+    state.reviews = reviews;
+    panelHost.append(reviews.section);
 
     function onKey(event) {
       if (document.activeElement !== canvas) return;
@@ -469,9 +565,39 @@ export function mountViewer(app, container) {
           h('div.muted', { style: { fontSize: '11.5px', margin: '8px 0 4px' } }, 'Top genes (Q20 transcripts); click one to show it'),
           ...d.genes.map((g) => h('button.viewer-gene-bar', { type: 'button', title: `Show ${g.name}'s transcripts`, onclick: () => panel.addGene(g.gene) },
             h('span.name', g.name), h('span.bar', h('span', { style: { width: `${(100 * g.count) / maxGene}%` } })), h('span.n', String(g.count))))) : null,
+        reviewBlock(d),
         h('div.btn-row', { style: { marginTop: '10px' } },
           h('button.btn.small', { type: 'button', onclick: () => centerOn(d) }, icon('target'), 'Center'),
           h('button.btn.small', { type: 'button', onclick: () => selectRow(-1) }, icon('close'), 'Clear')));
+    }
+
+    // The cell's review: its label in the label set filling the cells (and its confidence), its
+    // reviews, and the review form.
+    function reviewBlock(d) {
+      const host = h('div.viewer-review');
+      const project = app.store.project;
+      const seg = segmentationFor(project, t.dataset.id, state.seg?.id ?? null);
+      if (!seg || !renderer.cells) return null;
+      const set = labelSetFor(project, t.dataset.id, seg.id, parseLabelFill(state.layers.cells.fill));
+      (set ? labelSource(app, refOf(set.id, set.level)).catch(() => null) : Promise.resolve(null)).then((src) => {
+        const label = src && src.label[d.row] >= 0 ? src.names[src.label[d.row]] : null;
+        const conf = src?.confidence?.[d.row];
+        const past = reviewsOfCell(project, t.dataset.id, seg.id, d.row);
+        host.append(
+          h('div.section-title', 'Review'),
+          h('p.muted.seg-note', set ? `${set.name}: ${label ?? 'no label'}${Number.isFinite(conf) ? `, confidence ${conf.toFixed(2)}` : ''}.` : 'Fill the cells by a label set to review their labels; excluding, a segmentation concern and a comment need none.'),
+          past.length ? h('ul.inspector-list.review-past', ...past.slice(0, 6).map((r) => h('li', reviewLine(r)))) : null,
+          reviewForm({
+            names: src?.names ?? [], current: label, state: cellsState(project, t.dataset.id, seg.id, [d.row], renderer.cells.n),
+            canLabel: Boolean(src) && set.kind !== 'consensus', labelHint: set ? 'A consensus is made by its rule: fill by one of its sets to review labels.' : 'Fill the cells by a label set to review their labels.',
+            submit: async (action, v) => {
+              const { curated } = await reviewCells({ app, t, seg, rows: [d.row], action, labels: set, ...v, shown: imageShown });
+              toast(`Cell ${d.id}: ${action === 'relabel' ? `relabeled "${v.label}"` : action}.`, { kind: 'ok' });
+              reviewed(curated && set.kind !== 'curated' ? curated : null);
+            },
+          }));
+      });
+      return host;
     }
 
     // A cell of a segmentation other than the instrument's: where it came from, its counts, and
@@ -497,6 +623,7 @@ export function mountViewer(app, container) {
           h('div.muted', { style: { fontSize: '11.5px', margin: '8px 0 4px' } }, 'Top genes (Q20 transcripts); click one to show it'),
           ...d.genes.map((g) => h('button.viewer-gene-bar', { type: 'button', disabled: g.gene < 0, title: g.gene < 0 ? `${g.name} is not among the dataset's features` : `Show ${g.name}'s transcripts`, onclick: () => panel.addGene(g.gene) },
             h('span.name', g.name), h('span.bar', h('span', { style: { width: `${(100 * g.count) / maxGene}%` } })), h('span.n', String(g.count))))) : null,
+        reviewBlock(d),
         h('div.btn-row', { style: { marginTop: '10px' } },
           h('button.btn.small', { type: 'button', onclick: () => centerOn(d) }, icon('target'), 'Center'),
           h('button.btn.small', { type: 'button', onclick: () => selectRow(-1) }, icon('close'), 'Clear')));
@@ -519,6 +646,7 @@ export function mountViewer(app, container) {
       const mode = plan.transcripts ? (plan.transcripts.mode === 'points' ? 'transcripts as points' : `transcript density (level ${plan.transcripts.level})`) : '';
       status.textContent = [`level ${plan.level}`, mode, pending ? `loading ${pending}` : ''].filter(Boolean).join(' · ');
       drawMinimapView();
+      regions?.afterFrame();
     }
 
     // The minimap: the coarsest level of the visible channels, and the view's rectangle.
@@ -647,6 +775,7 @@ export function mountViewer(app, container) {
       next.transcripts.colors = next.transcripts.genes.map((_, i) => categoricalColor(i));
       state.layers = next;
       renderer.setLayers(next);
+      syncImages();
       const drawn = drawSegmentation(next.cells.segmentation);
       drawMinimap();
       // A view without a place (a tour's step) shows the whole section.
@@ -673,6 +802,7 @@ export function mountViewer(app, container) {
       else {
         if (state.seg) state.seg.choice = choices().find((c) => c.id === state.seg.id) ?? state.seg.choice;
         mountPanel(state.layers);
+        syncImages();
         updateLegend();
       }
     };
@@ -714,7 +844,7 @@ export function mountViewer(app, container) {
       segmentationReady: () => state.segReady,
       cellsDrawn: () => renderer.cells,
       choices: () => choices(),
-      fillColors: () => (state.layers.cells.fill?.startsWith('clusters:') || parseLabelFill(state.layers.cells.fill) ? state.clusterFill?.rgba ?? null : cellFillColors(state.layers.cells.fill, renderer.cells, desc)),
+      fillColors: () => (state.layers.cells.fill?.startsWith('clusters:') || parseLabelFill(state.layers.cells.fill) || state.layers.cells.fill === 'review' ? state.clusterFill?.rgba ?? null : cellFillColors(state.layers.cells.fill, renderer.cells, desc)),
       clusterFill: () => state.clusterFill,
       setCells: (patch) => {
         state.layers = { ...state.layers, cells: { ...state.layers.cells, ...patch } };
@@ -746,6 +876,13 @@ export function mountViewer(app, container) {
         return view;
       },
       loadedPoints: (rect) => renderer.loadedPoints(rect),
+      // The regions drawn on the tissue (ui/regions-layer.js), and the review state of the cells drawn.
+      regions: regions.hook,
+      reviewState: () => {
+        const seg = segmentationFor(app.store.project, t.dataset.id, state.seg?.id ?? null);
+        const st = cellReviewState(reviewsOf(app.store.project, t.dataset.id), seg.id, renderer.cells.n);
+        return { segmentation: seg, counts: stateCounts(st), excluded: [...st.excluded].flatMap((v, i) => (v ? [i] : [])) };
+      },
       select: (row) => selectRow(row),
       worldToScreen: (x, y) => worldToScreen(renderer.camera, ...renderer.size(), x, y),
       // Pans from one camera to another over `ms`, drawing every frame; reports the frame rate.
@@ -804,7 +941,12 @@ export function mountViewer(app, container) {
       }
       // Cells chosen in the QC view (a brushed plot) show here too.
       if (topics.has('selection') && current) current.showChosen();
-      if (topics.has('project') && current) current.refreshChoices();
+      if (topics.has('project') && current) {
+        current.refreshChoices();
+        current.regions?.refresh();
+        current.reviews?.refresh();
+      }
+      if (topics.has('selection') && current) current.reviews?.refresh();
       // A saved view of the dataset shown.
       if (current && (topics.has('view-pending') || topics.has('focus'))) current.takePending();
     },

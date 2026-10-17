@@ -1020,7 +1020,7 @@ func (v *validator) checkMetrics() error {
 		v.compareManifest("num_cells", float64(*e.NumCells), float64(len(v.cells.IDs)))
 	}
 	if v.cells != nil && e.TranscriptsPerCell != nil && v.cells.TranscriptCounts != nil {
-		v.compareManifest("transcripts_per_cell", float64(*e.TranscriptsPerCell), math.Floor(s.MedianPerCell))
+		v.compareManifest("transcripts_per_cell", *e.TranscriptsPerCell, math.Floor(s.MedianPerCell))
 	}
 	if v.b.Metrics == nil || v.cells == nil {
 		return nil

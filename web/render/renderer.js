@@ -25,11 +25,12 @@
 // each with its cell in that segmentation and, when it gives them, colored by their assignment's
 // probability.
 
-import { createContext, createProgram, arrayBuffer, vertexArray, byteTexture, floatTexture, colorTexture, hexColor } from './gl.js';
+import { createContext, createProgram, arrayBuffer, vertexArray, byteTexture, floatTexture, fieldTexture, colorTexture, hexColor } from './gl.js';
 import { TileCache } from './tiles.js';
 import { densityLevel, gridTileRange, imageLevel, tileRange, tileUm, viewMatrix, visibleRect, screenToWorld } from '../lib/viewport.js';
 import { readPolygonTile, outlineSegments, fillTriangles, pointInRing } from '../lib/polygons.js';
 import { readPoints, readDensity, densityGrid } from '../lib/viewer-data.js';
+import { invert as invertAffine, modelMatrix, overlayLevel, overlayTileRange, tileGeometry, umPerPixel } from '../lib/overlays.js';
 import { probabilityColors, probabilitySlot } from '../lib/segview.js';
 
 const QUAD = new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]);
@@ -69,6 +70,132 @@ void main() {
   float v = float(lo) + 256.0 * float(hi);
   float n = clamp((v - u_window.x) / max(u_window.y - u_window.x, 1.0), 0.0, 1.0);
   o = vec4(u_color * pow(n, u_gamma), 1.0);
+}`;
+
+// A post-Xenium image's tile (lib/overlays.js): its corners placed by the image's transform, from
+// its full-resolution pixels to µm, at any scale, rotation or reflection; grown by u_margin pixels
+// each way when the image is deformed after its transform, so that the deformation cannot move its
+// pixels beyond what is drawn.
+const OVERLAY_VS = `#version 300 es
+in vec2 a_pos;
+uniform mat3 u_view;
+uniform mat3 u_model;
+uniform vec2 u_origin;
+uniform vec2 u_size;
+uniform float u_margin;
+out vec2 v_tile;
+out vec2 v_world;
+void main() {
+  vec2 px = u_origin - u_margin + a_pos * (u_size + 2.0 * u_margin);
+  vec3 world = u_model * vec3(px, 1.0);
+  v_world = world.xy;
+  v_tile = (px - u_origin) / u_size;
+  gl_Position = vec4((u_view * world).xy, 0.0, 1.0);
+}`;
+
+// Where in its tile a fragment of an image is (0 to 1 across the tile's texels): as interpolated;
+// or, for an image deformed after its transform, its place on the tissue moved back by the
+// deformation's inverse field (api_register.go: a displacement at each point of a grid), then to
+// the image's pixels by the transform's inverse. A fragment beyond its tile is not drawn.
+const OVERLAY_PLACE = `
+uniform float u_checker;
+uniform int u_deformed;
+uniform sampler2D u_inv;
+uniform vec3 u_invGrid;
+uniform vec2 u_invSize;
+uniform mat3 u_modelInv;
+uniform vec2 u_originFS;
+uniform vec2 u_sizeFS;
+in vec2 v_tile;
+in vec2 v_world;
+vec2 tilePlace() {
+  // A checkerboard: the image drawn in every other square of u_checker µm (the stains show in the
+  // rest).
+  if (u_checker > 0.0) {
+    vec2 cell = floor(v_world / u_checker);
+    if (mod(cell.x + cell.y, 2.0) < 0.5) discard;
+  }
+  vec2 t = v_tile;
+  if (u_deformed == 1) {
+    vec2 g = (v_world - u_invGrid.xy) / u_invGrid.z;
+    vec2 e = texture(u_inv, (g + 0.5) / u_invSize).rg;
+    vec2 px = (u_modelInv * vec3(v_world + e, 1.0)).xy;
+    t = (px - u_originFS) / u_sizeFS;
+  }
+  if (t.x < 0.0 || t.y < 0.0 || t.x >= 1.0 || t.y >= 1.0) discard;
+  return t;
+}`;
+
+// An RGB image (an H&E) in its own colours, over what is beneath at its opacity.
+const RGB_FS = `#version 300 es
+precision highp float;
+uniform sampler2D u_tex;
+uniform vec2 u_texSize;
+uniform vec2 u_texels;
+uniform float u_opacity;
+${OVERLAY_PLACE}
+out vec4 o;
+void main() {
+  vec2 t = tilePlace();
+  o = vec4(texture(u_tex, t * u_texels / u_texSize).rgb, u_opacity);
+}`;
+
+// An immunofluorescence image's channel, as the stains are drawn (IMAGE_FS).
+const CHANNEL_FS = `#version 300 es
+precision highp float;
+precision highp usampler2D;
+uniform usampler2D u_tex;
+uniform ivec2 u_dims;
+uniform vec2 u_texels;
+uniform vec2 u_window;
+uniform float u_gamma;
+uniform vec3 u_color;
+${OVERLAY_PLACE}
+out vec4 o;
+void main() {
+  vec2 p = tilePlace() * u_texels;
+  ivec2 t = clamp(ivec2(floor(p)), ivec2(0), u_dims - 1);
+  uint lo = texelFetch(u_tex, t, 0).r;
+  uint hi = texelFetch(u_tex, ivec2(t.x, t.y + u_dims.y), 0).r;
+  float v = float(lo) + 256.0 * float(hi);
+  float n = clamp((v - u_window.x) / max(u_window.y - u_window.x, 1.0), 0.0, 1.0);
+  o = vec4(u_color * pow(n, u_gamma), 1.0);
+}`;
+
+// A stain's edges (the nuclear stain's, over a post-Xenium image): where its windowed value crosses a
+// level (between the background's and the nuclei's) within a pixel's 3 × 3 neighbourhood, and
+// changes there (Sobel's gradient over a threshold, so that noise about the level is not an edge),
+// in one colour; elsewhere nothing. The nuclei's boundaries, a line a pixel or two wide.
+const EDGE_FS = `#version 300 es
+precision highp float;
+precision highp usampler2D;
+uniform usampler2D u_tex;
+uniform ivec2 u_dims;
+uniform vec2 u_window;
+uniform vec3 u_color;
+uniform float u_threshold;
+uniform float u_level;
+in vec2 v_tex;
+out vec4 o;
+float value(ivec2 t) {
+  t = clamp(t, ivec2(0), u_dims - 1);
+  uint lo = texelFetch(u_tex, t, 0).r;
+  uint hi = texelFetch(u_tex, ivec2(t.x, t.y + u_dims.y), 0).r;
+  float v = float(lo) + 256.0 * float(hi);
+  return clamp((v - u_window.x) / max(u_window.y - u_window.x, 1.0), 0.0, 1.0);
+}
+void main() {
+  ivec2 t = ivec2(floor(v_tex));
+  float a = value(t + ivec2(-1, -1)), b = value(t + ivec2(0, -1)), c = value(t + ivec2(1, -1));
+  float d = value(t + ivec2(-1, 0)), f = value(t + ivec2(1, 0));
+  float g = value(t + ivec2(-1, 1)), h = value(t + ivec2(0, 1)), i = value(t + ivec2(1, 1));
+  float e = value(t);
+  float lo = min(min(min(a, b), min(c, d)), min(min(f, g), min(h, min(i, e))));
+  float hi = max(max(max(a, b), max(c, d)), max(max(f, g), max(h, max(i, e))));
+  float gx = (c + 2.0 * f + i) - (a + 2.0 * d + g);
+  float gy = (g + 2.0 * h + i) - (a + 2.0 * b + c);
+  if (lo >= u_level || hi < u_level || e < u_level || sqrt(gx * gx + gy * gy) < u_threshold) discard;
+  o = vec4(u_color, 1.0);
 }`;
 
 const DENSITY_FS = `#version 300 es
@@ -205,6 +332,7 @@ export class TissueRenderer {
     this.ownCells = null; // the dataset's own
     this.segmentation = null; // { id, polygonsBase, geometry, cells, points, probability }, or null for the dataset's own
     this.qcMap = null; // { ratio, num, den, q20Num, q20Den, minDen, scale, range, lut, opacity }
+    this.overlays = []; // post-Xenium images drawn, in order: [{ desc (api_images.go), layer }]
     this.highlight = null; // { texture }: cells chosen elsewhere, drawn over the tissue
     this.selected = null; // { row, boundaries: [Float32Array], nuclei: [Float32Array] }
     this.frameRequested = false;
@@ -230,12 +358,18 @@ export class TissueRenderer {
       qcmap: createProgram(gl, IMAGE_VS, QCMAP_FS),
       points: createProgram(gl, POINTS_VS, POINTS_FS),
       shape: createProgram(gl, SHAPE_VS, SHAPE_FS),
+      overlayRGB: createProgram(gl, OVERLAY_VS, RGB_FS),
+      overlayChannel: createProgram(gl, OVERLAY_VS, CHANNEL_FS),
+      edges: createProgram(gl, IMAGE_VS, EDGE_FS),
     };
     this.quad = arrayBuffer(gl, QUAD);
     this.quadVAO = {
       image: vertexArray(gl, [{ location: this.programs.image.a.a_pos, buffer: this.quad, size: 2 }]),
       density: vertexArray(gl, [{ location: this.programs.density.a.a_pos, buffer: this.quad, size: 2 }]),
       qcmap: vertexArray(gl, [{ location: this.programs.qcmap.a.a_pos, buffer: this.quad, size: 2 }]),
+      overlayRGB: vertexArray(gl, [{ location: this.programs.overlayRGB.a.a_pos, buffer: this.quad, size: 2 }]),
+      overlayChannel: vertexArray(gl, [{ location: this.programs.overlayChannel.a.a_pos, buffer: this.quad, size: 2 }]),
+      edges: vertexArray(gl, [{ location: this.programs.edges.a.a_pos, buffer: this.quad, size: 2 }]),
     };
     this.cellColors = null;
     this.selectionBuffer = null;
@@ -243,6 +377,8 @@ export class TissueRenderer {
     // of its kind bound (WebGL refuses a draw otherwise), so a 1×1 one stands in when cells are
     // not filled.
     this.noColors = colorTexture(gl, 1, 1, new Uint8Array([255, 255, 255, 255]));
+    // The deformed images' inverse fields, by field (a lost context loses them).
+    this.fields = new Map();
     const dispose = (value) => value?.dispose?.();
     const onLoad = () => this.request();
     this.caches = {
@@ -250,6 +386,7 @@ export class TissueRenderer {
       points: new TileCache({ load: (key, signal) => this.loadPoints(key, signal), dispose, budget: 256 * 2 ** 20, onLoad }),
       density: new TileCache({ load: (key, signal) => this.loadDensity(key, signal), dispose, budget: 256 * 2 ** 20, onLoad }),
       shapes: new TileCache({ load: (key, signal) => this.loadShapes(key, signal), dispose, budget: 256 * 2 ** 20, onLoad }),
+      overlay: new TileCache({ load: (key, signal) => this.loadOverlay(key, signal), dispose, budget: 512 * 2 ** 20, onLoad }),
     };
   }
 
@@ -306,6 +443,38 @@ export class TissueRenderer {
 
   setCamera(cam) {
     this.camera = { ...cam };
+    this.request();
+  }
+
+  // The post-Xenium images drawn over the stains, in order: [{ desc (api_images.go's description
+  // with its id, its transform's rows as transform and, when it is deformed after it, deformation:
+  // { x0, y0, step, nx, ny, field (each point's displacement back, x then y), max (µm) }), layer:
+  // { visible, opacity, channels: [{ visible, color, window, gamma }] } }].
+  setOverlays(list) {
+    const ids = new Set(list.map((o) => o.desc.id));
+    if (this.overlays.some((o) => !ids.has(o.desc.id))) this.caches.overlay.clear();
+    const gl = this.gl;
+    const fields = new Map();
+    this.overlays = list.map((o) => {
+      const inverse = invertAffine(o.desc.transform);
+      const def = o.desc.deformation ?? null;
+      let field = null;
+      if (def) {
+        field = this.fields?.get(def.field) ?? fieldTexture(gl, def.nx, def.ny, def.field);
+        fields.set(def.field, field);
+      }
+      return { ...o, inverse, model: modelMatrix(o.desc.transform), modelInv: inverse ? modelMatrix(inverse) : null, field };
+    });
+    for (const [key, texture] of this.fields ?? []) if (!fields.has(key)) gl.deleteTexture(texture);
+    this.fields = fields;
+    this.request();
+  }
+
+  // A stain's edges drawn over everything but the transcripts and cells: { channel, color, level (of
+  // the windowed value, 0 to 1, that the edges follow), threshold (of its Sobel gradient, 0 to 4) },
+  // or null.
+  setEdges(edges) {
+    this.edges = edges ?? null;
     this.request();
   }
 
@@ -398,8 +567,8 @@ export class TissueRenderer {
 
   // --- Loading ---------------------------------------------------------------------------------
 
-  async fetch(url, signal) {
-    const response = await fetch(url, { signal });
+  async fetch(url, signal, options = {}) {
+    const response = await fetch(url, { signal, ...options });
     if (!response.ok) throw new Error(`${url}: HTTP ${response.status}`);
     return { buffer: await response.arrayBuffer(), headers: response.headers };
   }
@@ -412,6 +581,34 @@ export class TissueRenderer {
     if (buffer.byteLength !== 2 * width * height) throw new Error(`image tile ${key}: ${buffer.byteLength} bytes for ${width}×${height}`);
     const gl = this.gl;
     const texture = byteTexture(gl, width, 2 * height, new Uint8Array(buffer));
+    return { value: { texture, width, height, dispose: () => gl.deleteTexture(texture) }, bytes: buffer.byteLength };
+  }
+
+  async loadOverlay(key, signal) {
+    // key: ovl:<image>:<channel>:<level>:<tx>:<ty>; an RGB tile's pixels as RGB bytes, a channel's
+    // as the stains' two byte planes.
+    const [, id, c, l, tx, ty] = key.split(':');
+    const o = this.overlays.find((x) => x.desc.id === id);
+    if (!o) throw new Error('the image is no longer drawn');
+    const { buffer, headers } = await this.fetch(`/api/images/${encodeURIComponent(id)}/tiles/${l}/${c}/${tx}/${ty}`, signal, { cache: 'no-store' });
+    const width = Number(headers.get('X-Tile-Width'));
+    const height = Number(headers.get('X-Tile-Height'));
+    const gl = this.gl;
+    let texture;
+    if (o.desc.image.kind === 'rgb') {
+      if (buffer.byteLength !== 3 * width * height) throw new Error(`image tile ${key}: ${buffer.byteLength} bytes for ${width}×${height}`);
+      texture = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB8, width, height, 0, gl.RGB, gl.UNSIGNED_BYTE, new Uint8Array(buffer));
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    } else {
+      if (buffer.byteLength !== 2 * width * height) throw new Error(`image tile ${key}: ${buffer.byteLength} bytes for ${width}×${height}`);
+      texture = byteTexture(gl, width, 2 * height, new Uint8Array(buffer));
+    }
     return { value: { texture, width, height, dispose: () => gl.deleteTexture(texture) }, bytes: buffer.byteLength };
   }
 
@@ -550,6 +747,8 @@ export class TissueRenderer {
     const view = viewMatrix(this.camera, w, h);
     for (const c of Object.values(this.caches)) c.begin();
     this.drawImage(plan, view);
+    this.drawOverlays(plan, view);
+    if (this.edges) this.drawEdges(plan, view);
     if (plan.qc) this.drawQCMap(plan, view);
     if (plan.fillVisible) this.drawShapes(plan, view, 'fill');
     if (this.highlight) this.drawShapes(plan, view, 'highlight');
@@ -629,6 +828,139 @@ export class TissueRenderer {
       });
     });
     gl.disable(gl.BLEND);
+    gl.bindVertexArray(null);
+  }
+
+  // Each post-Xenium image over the stains: its level for the zoom, its tiles in view (coarser
+  // ones standing in until they load, each pixel drawn once), placed by its transform and any
+  // deformation after it. An RGB image is laid over at its opacity; an immunofluorescence image's
+  // channels add up as the stains do.
+  drawOverlays(plan, view) {
+    if (this.forced) return;
+    const gl = this.gl;
+    for (const o of this.overlays) {
+      const layer = o.layer;
+      if (!layer?.visible || !o.inverse || !(layer.opacity > 0)) continue;
+      const levels = o.desc.image.levels;
+      const rgb = o.desc.image.kind === 'rgb';
+      const prog = rgb ? this.programs.overlayRGB : this.programs.overlayChannel;
+      const def = o.desc.deformation;
+      gl.useProgram(prog.program);
+      gl.uniformMatrix3fv(prog.u.u_view, false, view);
+      gl.uniformMatrix3fv(prog.u.u_model, false, o.model);
+      gl.uniformMatrix3fv(prog.u.u_modelInv, false, o.modelInv);
+      gl.bindVertexArray(rgb ? this.quadVAO.overlayRGB : this.quadVAO.overlayChannel);
+      gl.uniform1i(prog.u.u_tex, 0);
+      gl.uniform1i(prog.u.u_inv, 2);
+      gl.activeTexture(gl.TEXTURE2);
+      gl.bindTexture(gl.TEXTURE_2D, o.field ?? null);
+      gl.uniform1i(prog.u.u_deformed, def && o.field ? 1 : 0);
+      gl.uniform1f(prog.u.u_checker, layer.checker > 0 ? layer.checker : 0);
+      // A deformed image's tiles are found over the view grown by its largest displacement, and
+      // each is drawn grown by as many of its pixels.
+      let rect = plan.rect;
+      let margin = 0;
+      if (def && o.field) {
+        gl.uniform3f(prog.u.u_invGrid, def.x0, def.y0, def.step);
+        gl.uniform2f(prog.u.u_invSize, def.nx, def.ny);
+        rect = { x0: rect.x0 - def.max, y0: rect.y0 - def.max, x1: rect.x1 + def.max, y1: rect.y1 + def.max };
+        margin = def.max / umPerPixel(o.desc.transform) + 2;
+      }
+      gl.activeTexture(gl.TEXTURE0);
+      gl.enable(gl.BLEND);
+      const level = overlayLevel(levels, o.desc.transform, this.camera.scale);
+      const top = levels.length - 1;
+      const channels = rgb ? [{ visible: true }] : layer.channels;
+      channels.forEach((ch, c) => {
+        if (!ch.visible) return;
+        const list = [];
+        for (let l = level; l <= top; l += 1) {
+          const range = overlayTileRange(levels, l, o.inverse, rect);
+          const tiles = [];
+          if (range) {
+            for (let ty = range.ty0; ty <= range.ty1; ty += 1) {
+              for (let tx = range.tx0; tx <= range.tx1; tx += 1) {
+                const key = `ovl:${o.desc.id}:${c}:${l}:${tx}:${ty}`;
+                const near = Math.hypot(tx - (range.tx0 + range.tx1) / 2, ty - (range.ty0 + range.ty1) / 2);
+                const tile = l === level || l === top ? this.caches.overlay.want(key, near + (l === level ? 0 : -1000)) : this.caches.overlay.peek(key);
+                if (tile) tiles.push({ tile, tx, ty, l });
+              }
+            }
+          }
+          list.push({ level: l, list: tiles });
+        }
+        if (rgb) {
+          gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+          gl.uniform1f(prog.u.u_opacity, layer.opacity);
+        } else {
+          gl.blendFunc(gl.ONE, gl.ONE);
+          const [r, g, b] = hexColor(ch.color);
+          gl.uniform3f(prog.u.u_color, r * layer.opacity, g * layer.opacity, b * layer.opacity);
+          gl.uniform2f(prog.u.u_window, ch.window[0], ch.window[1]);
+          gl.uniform1f(prog.u.u_gamma, ch.gamma);
+        }
+        this.stencilled(list, ({ tile, tx, ty, l }) => {
+          const g = tileGeometry(levels, l, tx, ty);
+          gl.uniform2f(prog.u.u_origin, g.origin[0], g.origin[1]);
+          gl.uniform2f(prog.u.u_size, g.size[0], g.size[1]);
+          gl.uniform2f(prog.u.u_originFS, g.origin[0], g.origin[1]);
+          gl.uniform2f(prog.u.u_sizeFS, g.size[0], g.size[1]);
+          gl.uniform1f(prog.u.u_margin, margin);
+          gl.uniform2f(prog.u.u_texels, g.texels[0], g.texels[1]);
+          if (rgb) gl.uniform2f(prog.u.u_texSize, tile.width, tile.height);
+          else gl.uniform2i(prog.u.u_dims, tile.width, tile.height);
+          gl.bindTexture(gl.TEXTURE_2D, tile.texture);
+          gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        });
+      });
+      gl.disable(gl.BLEND);
+      gl.bindVertexArray(null);
+    }
+  }
+
+  // The stain's edges, from its tiles at the level drawn only: an edge is drawn nowhere else, so a
+  // coarser level standing in (as for the stains) would draw its own, coarser edges there.
+  drawEdges(plan, view) {
+    const d = this.dataset;
+    const e = this.edges;
+    const info = d.channels[e.channel];
+    const ch = this.layers.channels[e.channel];
+    if (!info || !ch) return;
+    const gl = this.gl;
+    const prog = this.programs.edges;
+    gl.useProgram(prog.program);
+    gl.uniformMatrix3fv(prog.u.u_view, false, view);
+    gl.bindVertexArray(this.quadVAO.edges);
+    gl.uniform1i(prog.u.u_tex, 0);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.uniform2f(prog.u.u_window, ch.window[0], ch.window[1]);
+    gl.uniform3fv(prog.u.u_color, hexColor(e.color ?? '#ffe14d'));
+    gl.uniform1f(prog.u.u_threshold, e.threshold ?? 0.3);
+    gl.uniform1f(prog.u.u_level, e.level ?? 0.3);
+    const l = Math.min(plan.level, info.levels.length - 1);
+    const lv = info.levels[l];
+    const range = tileRange(d.grid, l, plan.rect, lv.across, lv.down);
+    const list = [];
+    if (range) {
+      const side = tileUm(d.grid, l);
+      for (let ty = range.ty0; ty <= range.ty1; ty += 1) {
+        for (let tx = range.tx0; tx <= range.tx1; tx += 1) {
+          const tile = this.caches.image.want(`img:${e.channel}:${l}:${tx}:${ty}`, priority(plan.rect, side, tx, ty));
+          if (tile) list.push({ tile, tx, ty, l });
+        }
+      }
+    }
+    const pixel = d.grid.pixelSize;
+    list.forEach(({ tile, tx, ty }) => {
+      const scale = pixel * 2 ** l;
+      const side = d.grid.tile * scale;
+      gl.uniform2f(prog.u.u_origin, tx * side, ty * side);
+      gl.uniform2f(prog.u.u_size, tile.width * scale, tile.height * scale);
+      gl.uniform2f(prog.u.u_texels, tile.width, tile.height);
+      gl.uniform2i(prog.u.u_dims, tile.width, tile.height);
+      gl.bindTexture(gl.TEXTURE_2D, tile.texture);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    });
     gl.bindVertexArray(null);
   }
 
@@ -968,6 +1300,18 @@ export class TissueRenderer {
     return [...out];
   }
 
+  // The canvas's pixels (RGBA, rows top down) as drawn now, for the validation harness.
+  readRegion() {
+    this.draw();
+    const gl = this.gl;
+    const [w, h] = this.size();
+    const raw = new Uint8Array(w * h * 4);
+    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, raw);
+    const out = new Uint8Array(raw.length);
+    for (let y = 0; y < h; y += 1) out.set(raw.subarray((h - 1 - y) * w * 4, (h - y) * w * 4), y * w * 4);
+    return { width: w, height: h, pixels: out };
+  }
+
   // Draws one channel's raw samples at a level, one device pixel per sample, the sample at
   // (x0, y0) of the level in the canvas's top-left pixel, and reads back a w × h block: the low
   // byte of each sample in red and the high byte in green, before any window or color. For the
@@ -1011,6 +1355,7 @@ export class TissueRenderer {
     if (this.highlight) this.gl.deleteTexture(this.highlight.texture);
     if (this.qcMap?.lutTexture) this.gl.deleteTexture(this.qcMap.lutTexture);
     this.gl.deleteTexture(this.noColors);
+    for (const texture of this.fields?.values() ?? []) this.gl.deleteTexture(texture);
     this.gl.getExtension('WEBGL_lose_context')?.loseContext();
   }
 }

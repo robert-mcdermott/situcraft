@@ -44,7 +44,7 @@ func digest(t *testing.T, dir string) (string, map[string]string) {
 
 // pinnedSmall is the small preset's bundle (written by version "test"), the same on every
 // processor: a change here is a change to what the simulator makes, which must be deliberate.
-const pinnedSmall = "bbc1124e4f57e5b2"
+const pinnedSmall = "d9a914a6e236a034"
 
 // The same parameters give the same bundle, byte for byte, with any number of workers and on any
 // processor.

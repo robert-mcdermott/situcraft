@@ -41,6 +41,28 @@ func TestTheSameBitsAsThePage(t *testing.T) {
 	}
 }
 
+// web/lib/dmath.js's checksum of sin and cos over the same 20,000 values: the page's sincos and
+// SinCos give the same bits.
+func TestSinCosTheSameBitsAsThePage(t *testing.T) {
+	h := uint32(0x811c9dc5)
+	mix := func(v float64) {
+		bits := math.Float64bits(v)
+		for _, word := range []uint32{uint32(bits), uint32(bits >> 32)} {
+			for b := 0; b < 32; b += 8 {
+				h = (h ^ (word>>b)&0xff) * 0x01000193
+			}
+		}
+	}
+	for i := 0; i < 10000; i++ {
+		s, c := SinCos(-2000 + mul(float64(i), 0.4001))
+		mix(s)
+		mix(c)
+	}
+	if got := fmt.Sprintf("%08x", h); got != "52c6523f" {
+		t.Fatalf("sincos fingerprint %s, the page's 52c6523f", got)
+	}
+}
+
 func ulps(a, b float64) uint64 {
 	x, y := math.Float64bits(a), math.Float64bits(b)
 	if x > y {
@@ -111,4 +133,28 @@ func TestErfc(t *testing.T) {
 func ulp(x float64) float64 {
 	x = math.Abs(x)
 	return math.Nextafter(x, math.Inf(1)) - x
+}
+
+// SinCos within a few units in the last place of math.Sin and math.Cos, over turns of any size a
+// simulation uses; its quadrants exact.
+func TestSinCos(t *testing.T) {
+	worst := 0.0
+	for i := 0; i < 200000; i++ {
+		x := (float64(i) - 100000) * 0.0137
+		s, c := SinCos(x)
+		ws, wc := math.Sin(x), math.Cos(x)
+		worst = math.Max(worst, math.Max(math.Abs(s-ws), math.Abs(c-wc)))
+	}
+	if worst > 4e-15 {
+		t.Errorf("at most %g from math.Sin and math.Cos", worst)
+	}
+	if s, c := SinCos(0); s != 0 || c != 1 {
+		t.Errorf("SinCos(0) = %v, %v", s, c)
+	}
+	if s, c := SinCos(math.Pi / 2); math.Abs(s-1) > 1e-16 || math.Abs(c) > 1e-16 {
+		t.Errorf("SinCos(π/2) = %v, %v", s, c)
+	}
+	if s, _ := SinCos(math.Inf(1)); !math.IsNaN(s) {
+		t.Error("SinCos(∞) is a number")
+	}
 }

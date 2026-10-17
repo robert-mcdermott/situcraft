@@ -38,9 +38,10 @@ see `conventions.md`. For the methods, formats and datasets behind these choices
 │   internal/codec     zstd (RFC 8878), LZ4 block, Blosc, Snappy; deflate/gzip from the standard library │
 │   internal/parquet   Parquet reader (flat schemas) and writer                                         │
 │   internal/zarr      Zarr v2 and v3: directory and zip stores; reader and writer                      │
-│   internal/tiff      TIFF/BigTIFF, OME-XML, SubIFD pyramids; reader and writer                        │
+│   internal/tiff      TIFF/BigTIFF, OME-XML, SubIFD pyramids, JPEG tiles; reader and writer            │
 │   internal/jp2k      JPEG 2000 Part 1 decoder (TIFF compression 34712)                                │
 │   internal/xenium    bundle scanner, version detection, validation, typed access                      │
+│   internal/slide     post-Xenium images (H&E, IF): pyramidal OME-TIFFs read in place, by tile          │
 │   internal/cache     derived data: image tile pyramids, transcript spatial index, geometry tiles      │
 │   internal/view      the viewer's queries: points and density by gene, cells, one cell                 │
 │   api_*.go           viewport queries: tiles, points, polygons, cells (binary, columnar responses)     │
@@ -52,7 +53,8 @@ see `conventions.md`. For the methods, formats and datasets behind these choices
 │   internal/embed     UMAP maps and their quality                                                       │
 │   internal/label     marker sets and scores, hierarchical labels, references, imports, review         │
 │   internal/linalg    symmetric eigendecomposition (whole, or Lanczos), the same on every processor     │
-│   internal/register  image registration (later)                                                       │
+│   internal/register  transforms, Xenium Explorer's alignments, fits; automatic registration           │
+│   internal/nuclei    the nuclear signal registration reads: a bundle's DAPI, an H&E's haematoxylin    │
 │   internal/spatial   graphs and spatial statistics on large tables (later)                            │
 │   internal/jobs      durable background jobs: spec, state, progress, cancellation, logs               │
 │ embed web/ ──────────────────────────────────────────────────────────────────────────────────────┐   │
@@ -61,7 +63,7 @@ see `conventions.md`. For the methods, formats and datasets behind these choices
 ┌──────────────────────────────────────────── browser ──────────────────────────────────────────────────┐
 │ web/app.js           shell, views, commands, shortcuts                                                │
 │ web/ui/*.js          views and components (the only code that touches the DOM)                        │
-│ web/render/*.js      WebGL2 tile renderer: 16-bit image channels, points, polygons, fills             │
+│ web/render/*.js      WebGL2 tile renderer: 16-bit image channels, post-Xenium images, points, polygons│
 │ web/workers/*.js     module workers: cell-level analytics, decoding binary responses                  │
 │ web/lib/*.js         pure modules (no DOM), shared by page, workers and Node tests                    │
 └───────────────────────────────────────────────────────────────────────────────────────────────────────┘
@@ -108,7 +110,7 @@ covers the same tissue in every layer, so the renderer asks for the same tiles o
   transcripts have grids too (every transcript, gene transcripts, gene transcripts in a cell,
   negative controls), from which the QC maps compute per-bin shares. Level 1 counts the points; each coarser level adds up the level below, so every level
   sums exactly to each gene's count. The levels nest: a complete quadtree.
-- **Geometry tiles.** Cell and nucleus polygons are placed by the centre of their bounding box,
+- **Geometry tiles.** Cell and nucleus polygons are placed by the center of their bounding box,
   once per level; level 0 holds the bundle's vertices exactly, each level above them simplified
   to half a pixel of that level.
 - **Files.** One layout for every kind: a header, a table of the tiles' blocks with their counts,
@@ -202,11 +204,11 @@ segmentation's clustering its latest of SituCraft's, its labels that clustering'
 markers) so that a step already done is not done again. A step may show a comparison in the
 workspace as it describes it (the view, the ranking, the classes kept, the difference shown, the
 side panel, the Labels tab), or a clustering in the Cell types view (the map's colors, clusters
-selected, a section in view, the review queue made). The Lung example's practises on
-errors planted in its instrument segmentation (`internal/segment/plant`): neighbouring cells whose
+selected, a section in view, the review queue made). The Lung example's practices on
+errors planted in its instrument segmentation (`internal/segment/plant`): neighboring cells whose
 merged cell would mix markers of two lineages, large cells split across their long axis, cells
-dropped, and cells grown into their neighbours; each error kept apart from the others by its
-neighbours, so that each is one difference; seeded, so the same errors each time; recorded as a
+dropped, and cells grown into their neighbors; each error kept apart from the others by its
+neighbors, so that each is one difference; seeded, so the same errors each time; recorded as a
 segmentation artifact with its answer key, simulated, never promoted and never exported. The
 Segmentation view offers it on the example datasets, and on others only once the user turns
 practice tools on (a preference of the browser, off by default), so that simulated cells stay out
@@ -233,7 +235,7 @@ Segmentation is SituCraft's own code (`internal/segment`), not an external progr
   and connectivity constraints, transcript repositioning, multi-resolution sampling, and
   initialization from nuclei (`research.md` §3). Its parameters are drawn by a partially
   collapsed Gibbs sweep in which every update is an exact draw (a gamma prior on the components'
-  rate parameters, where the publication uses Pólya–Gamma variables). The labelling's moves keep
+  rate parameters, where the publication uses Pólya–Gamma variables). The labeling's moves keep
   detailed balance exactly (constraints that hold both ways); the reported segmentation is the
   posterior's summary over the last sweeps; the default schedule is the one that recovers
   simulated cells best (research.md §3.2). Unlike the published implementation, it is **deterministic for a
@@ -254,7 +256,7 @@ Segmentation is SituCraft's own code (`internal/segment`), not an external progr
     the page, the terminal and remote control say the same.
   - **Regions** hold the cells about them, so a region never cuts a cell. **Sections** are found
     by single linkage, and each gets a model of its own.
-  - **Patches** (`refine.Units`): a region of more than about 4 million modelled transcripts is
+  - **Patches** (`refine.Units`): a region of more than about 4 million modeled transcripts is
     cut into rectangles of about 2 million, run one at a time as regions are (each also refining
     the cells within 40 µm of its rectangle), and stitched by rectangle and by seed, so the
     sampling holds one patch. They depend on the data and settings alone.
@@ -285,7 +287,7 @@ Segmentation is SituCraft's own code (`internal/segment`), not an external progr
 Long computations (indexing, segmentation, comparison, registration, permutation tests) are jobs:
 
 - Each job has an immutable JSON spec and a state (`declared → queued → running → validating →
-  complete`, or `cancelled | failed | invalid | orphaned`).
+  complete`, or `canceled | failed | invalid | orphaned`).
 - A job keeps an append-only event log and its outputs in a temporary directory until it is
   validated and promoted.
 - Jobs run in the host and survive browser refresh. Closing the window while a job runs asks
@@ -342,7 +344,7 @@ The comparison workspace (`ui/mode-compare.js`, `lib/review.js`) draws on it. Ea
 outlines are geometry tiles on the dataset's grid: the instrument's are the dataset's own; any
 other's are tiled once into a cache entry of their own. Two renderers share one camera (side by
 side, or stacked: B transparent over A for the overlay, in turns for the flicker); cells are
-filled by their difference's class through the renderer's per-cell colours; the regions' counts
+filled by their difference's class through the renderer's per-cell colors; the regions' counts
 give the disagreement map, drawn on a 2-D canvas over the tissue. The differences come to the page
 column by column; ranking and the reviewer's rules are pure functions, tested in Node. Decisions
 (promote, keep, reject) are appended to the project with their reason and comparison.
@@ -423,6 +425,76 @@ segmentation, made by a job, named by its inputs and parameters, and checked bef
   the dot plot and a selection's markers come from the program, which keeps the last few
   clusterings' normalized expression in memory. Names are versions in the project. The Viewer fills
   the cells by cluster (`clusters:<id>` among its fills), with a legend, merged names one color.
+
+### Post-Xenium images
+
+An H&E or immunofluorescence image of the section, stained after the run (`internal/slide`,
+`api_images.go`), is read where it lies, never copied: a pyramidal, tiled OME-TIFF, as Xenium
+Explorer requires, each tile decoded by the program when the page asks for it (an RGB tile sent as
+its pixels, a channel's as the stains' two byte planes), not cached on disk: the file already is its
+pyramid. It is an artifact of kind `image` whose image is recorded in place (`location: "place"`,
+by absolute path and SHA-256). It is placed by a transform (`api_transforms.go`,
+`internal/register`): an artifact of kind `transform`, its pixels to µm, a version of its alignment
+(Xenium Explorer's matrix or keypoints, their file in place, or landmarks placed in SituCraft and
+fitted as a similarity or affine transform), with its landmarks, fit, author, note and parent
+version. Which version places an image is a project decision (`web/lib/transforms.js`), as a
+segmentation's promotion is; an image with none is listed but not drawn. The renderer draws each
+image's tiles through its transform as a model matrix (any rotation or reflection), finding the
+tiles in view through its inverse. An image's own pixel size is recorded but never places it.
+
+Automatic registration (`internal/register/auto.go`, `api_register.go`) is a job reading both
+images a region of a level at a time through `internal/nuclei`: the Xenium image's DAPI from the
+bundle's own pyramid (the derived data need not be built), the post-Xenium image's nuclear signal
+from its tiles, blocks kept as they are read. Its result is a version like any other, with its
+matches and, when one is kept, a B-spline deformation; the page draws a deformed image by mapping
+each fragment back through the deformation's inverse field (answered by the program as a grid of
+displacements, a half-float texture) and the transform's inverse.
+
+An alignment is checked (`internal/register/check.go`, `api_checks.go`) by the same patch matching,
+on a grid offset by half a patch from the registration's, against the image drawn as the version
+places it (each pixel's point taken back through the deformation, warm-started from its
+neighbor's); the check is an artifact of the image and the version. The renderer draws the
+visual checks itself: a checkerboard by discarding the image's fragments in every other square of
+the tissue, and the nuclear stain's edges as an iso-line of its windowed value (Sobel's gradient
+over a threshold), from the level drawn only.
+
+The Alignment view (`web/ui/mode-alignment.js`) is two renderers side by side: the dataset's stains
+in µm, and the post-Xenium image alone, drawn under the identity in its own pixels (a renderer with
+every stain off). Landmarks are DOM markers over the canvases, placed from the renderers' cameras
+each frame. The page fits landmarks as `internal/register` does, bit for bit (the same operations
+in the same order, `fitFingerprint` in both), so the fit shown is the one recorded; saving posts
+the landmarks, and the program fits and records them again.
+
+### Regions
+
+Regions are kept in the project document (`regions`, `web/lib/regions.js`), not as artifacts: they
+are the user's drawings, small, and changed often, each change a version appended (as decisions
+are). A region's shape is a multipolygon in µm, the coordinates every layer is placed in, so that a
+region drawn over a post-Xenium image is on the tissue whichever version later places the image;
+the image's pixels are a coordinate system only for exchange (GeoJSON for QuPath), mapped through
+the version in use (`placePoint`, and `unplacePoint` back through the deformation by a fixed
+point). The Viewer draws regions as an SVG layer over its canvas (`web/ui/regions-layer.js`),
+placed from the renderer's camera after each frame; while a tool is chosen the layer takes the
+pointer, the wheel and the space bar still navigating. The brush works on a raster: the region
+and the stroke sampled on a grid of an eighth of the brush's radius as signed distances, painted
+as their maximum and erased as the minimum with the stroke's negative, the outline traced back by
+marching squares and simplified, so that holes and separate parts come out without polygon
+clipping. The grid keeps samples only in tiles near the region's edges and under the stroke, so a
+large region is painted at the brush's own step, and away from the stroke the region's own points
+are put back: a stroke changes a region only near it. Cells are counted in a region by their centroids, in the page, with the cells table
+drawn. The program only reads a GeoJSON file named by a path, for remote control (`api_regions.go`).
+
+### Reviews
+
+A review is the user's decision, so like a region it is kept in the project document (`reviews`,
+`web/lib/review-record.js`), appended and never changed: the provenance travels with the project,
+and a project archive carries it. Labels stay where they were: accepting or relabeling cells
+appends an edit to a curated label set (wave 4), the edit and the review naming each other, so
+every view of labels (the map, the tissue, label impact) sees a review at once; a curated edit
+without a review (made before) is read as one. Exclusions and concerns are states the reviews
+leave, the latest deciding, not changes to the cells; no analysis leaves excluded cells out yet,
+and one that does will read them from the record. The page has rows, not cell IDs, so the program answers the IDs of rows
+(and rows of IDs) of any segmentation (`api_reviews.go`) when a review is made.
 
 ### Exports
 
@@ -526,7 +598,8 @@ Tests and CI follow MaveScape: **each commit is tested once**.
 - Documentation-only changes (Markdown, the spec, license, citation) do not run CI.
 
 CI jobs (all on fixed data):
-- **Go:** gofmt, vet, `go test -race ./...`, and the six-platform cross-compile.
+- **Go:** gofmt, vet, `go test -race -timeout 30m ./...` (a package's tests are bounded as a whole,
+  and the sampler's take up to 10 minutes on a CI runner), and the six-platform cross-compile.
 - **Web modules:** `node --check`, `node --test`.
 - **Validation:** on the Lung 2-FOV bundle, cached by its checksum, with recorded reference
   numbers.

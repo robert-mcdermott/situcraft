@@ -1,13 +1,16 @@
 // The tissue viewer's layers panel: the morphology channels (shown or not, color, contrast window,
-// gamma), transcripts (genes found by name, each in its own color, or all transcripts in one, or
-// colored by their assignment's probability; quality floor, point size, density gain) and cells
-// (which segmentation, outlines, nuclei, fill by an attribute).
+// gamma), post-Xenium images (each shown or not at an opacity, an immunofluorescence image's
+// channels as the stains', and a form adding one with its alignment), transcripts (genes found by
+// name, each in its own color, or all transcripts in one, or colored by their assignment's
+// probability; quality floor, point size, density gain) and cells (which segmentation, outlines,
+// nuclei, fill by an attribute).
 
 import { h, icon, clear, formatCount } from './dom.js';
 import { showMenu } from './overlays.js';
 import { categoricalColor, colormapLUT, colormapCSS } from '../lib/colormaps.js';
 import { attributeRange } from '../lib/viewer-data.js';
 import { CERTAINTY_RANGE, LIMITATIONS, NO_PROBABILITY_COLOR, SEVERAL, certaintyCSS, segFillColors, segFills } from '../lib/segview.js';
+import { describeImage, describePlacement } from '../lib/images.js';
 
 // Channel colors by Xenium's channel purpose, then in order.
 const PURPOSE_COLORS = [
@@ -106,8 +109,12 @@ function certaintyLegend(label, help) {
     h('div.viewer-legend-range', h('span', `${CERTAINTY_RANGE[0]} or less`), h('span', String(CERTAINTY_RANGE[1]))), help ? h('div.muted', help) : null);
 }
 
-export function mountViewerPanel(host, { desc, layers, cells, onChange, segmentations = [], drawn = null, clusterings = [] }) {
+// images: the dataset's post-Xenium images, [{ record (lib/images.js), transform (the record placing
+// it, or null: not aligned), desc (api_images.go, with the transform's) or error }]; imageActions:
+// { check(path, alignment), add({ path, alignment }), align(imageId) } to add one or align one.
+export function mountViewerPanel(host, { desc, layers, cells, onChange, segmentations = [], drawn = null, clusterings = [], images = [], imageActions = null }) {
   let state = structuredClone(layers);
+  state.images ??= [];
   const emit = (what) => onChange(structuredClone(state), what);
   const genes = desc.transcripts?.genes ?? [];
 
@@ -159,6 +166,133 @@ export function mountViewerPanel(host, { desc, layers, cells, onChange, segmenta
           } }, 'Auto')),
         h('div.ranges', h('label', 'Low', lo), h('label', 'High', hi), h('label', 'Gamma', gamma), values)));
     });
+  }
+
+  // --- Post-Xenium images ---
+  const imageList = h('div.viewer-images');
+  let imageEntries = images;
+  function renderImages() {
+    clear(imageList);
+    if (!imageEntries.length) imageList.append(h('p.muted.viewer-hint', 'No post-Xenium image yet: add an H&E or immunofluorescence image of this section below.'));
+    for (const { record, transform, desc: idesc, error } of imageEntries) {
+      const layer = state.images.find((l) => l.id === record.id);
+      const alignButton = (label) => imageActions?.align ? h('button.btn.small', { type: 'button', onclick: () => imageActions.align(record.id) }, icon('target'), label) : null;
+      if (error || !idesc || !layer) {
+        imageList.append(h('div.viewer-channel.off', h('div.row', h('div.name', h('b', record.name), h('span.muted', error ?? 'Reading…')))));
+        continue;
+      }
+      if (!transform) {
+        imageList.append(h('div.viewer-channel.off', h('div.row', h('div.name', h('b', record.name), h('span.muted', describeImage(record)))),
+          h('p.muted.viewer-hint', 'Not aligned yet, so not drawn: place it by landmarks.'), h('div.btn-row', alignButton('Align it…'))));
+        continue;
+      }
+      const eye = h('button.icon-button', {
+        type: 'button', title: layer.visible ? `Hide ${record.name}` : `Show ${record.name}`, 'aria-pressed': String(layer.visible),
+        onclick: () => {
+          layer.visible = !layer.visible;
+          renderImages();
+          emit('images');
+        },
+      }, icon(layer.visible ? 'eye' : 'dot'));
+      const opacity = h('input', { type: 'range', min: 0, max: 1, step: 0.05, value: layer.opacity, 'aria-label': `${record.name}: opacity` });
+      opacity.addEventListener('input', () => {
+        layer.opacity = Number(opacity.value);
+        emit('images');
+      });
+      const rows = [h('div.row', eye, h('div.name', h('b', record.name), h('span.muted', describeImage(record)))),
+        h('p.muted.viewer-hint', `Placed by ${transform.name}: ${describePlacement(transform.summary)}.`),
+        h('div.ranges', h('label', 'Opacity', opacity)),
+        h('div.btn-row', alignButton('Alignment…'))];
+      if (idesc.image.kind !== 'rgb') {
+        const ceiling = 2 ** idesc.image.bits - 1;
+        idesc.image.channels.forEach((info, c) => {
+          const ch = layer.channels[c];
+          const lo = h('input', { type: 'range', min: 0, max: ceiling, step: 1, value: ch.window[0], 'aria-label': `${info.name}: lowest value shown` });
+          const hi = h('input', { type: 'range', min: 0, max: ceiling, step: 1, value: ch.window[1], 'aria-label': `${info.name}: value shown brightest` });
+          const gamma = h('input', { type: 'range', min: -1.2, max: 1.2, step: 0.05, value: Math.log2(ch.gamma), 'aria-label': `${info.name}: gamma` });
+          const sync = () => {
+            const a = Number(lo.value);
+            const b = Math.max(a + 1, Number(hi.value));
+            ch.window = [a, b];
+            ch.gamma = 2 ** Number(gamma.value);
+            emit('images');
+          };
+          for (const input of [lo, hi, gamma]) input.addEventListener('input', sync);
+          const swatch = h('button.viewer-swatch', {
+            type: 'button', title: `Color of ${info.name}`, 'aria-label': `Color of ${info.name}`, style: { background: ch.color },
+            onclick: (event) => showMenu(event.currentTarget, SWATCHES.map(([label, color]) => ({ label, swatch: color, onSelect: () => {
+              ch.color = color;
+              renderImages();
+              emit('images');
+            } }))),
+          });
+          const chEye = h('button.icon-button', {
+            type: 'button', title: ch.visible ? `Hide ${info.name}` : `Show ${info.name}`, 'aria-pressed': String(ch.visible),
+            onclick: () => {
+              ch.visible = !ch.visible;
+              renderImages();
+              emit('images');
+            },
+          }, icon(ch.visible ? 'eye' : 'dot'));
+          rows.push(h(`div.viewer-subchannel${ch.visible ? '' : '.off'}`, h('div.row', chEye, swatch, h('div.name', h('b', info.name))), h('div.ranges', h('label', 'Low', lo), h('label', 'High', hi), h('label', 'Gamma', gamma))));
+        });
+      }
+      imageList.append(h(`div.viewer-channel${layer.visible ? '' : '.off'}`, ...rows));
+    }
+  }
+
+  // Adding an image: its path, then its alignment (found beside it when 10x named it; without one, the
+  // image is added unaligned, to place by landmarks), checked before it is added.
+  let addForm = null;
+  if (imageActions) {
+    const imagePath = h('input.input', { type: 'text', placeholder: '/data/sample_he_image.ome.tif', 'aria-label': 'The image\'s path', spellcheck: false });
+    const alignmentPath = h('input.input', { type: 'text', placeholder: '/data/sample_he_imagealignment.csv', 'aria-label': 'Its alignment\'s path', spellcheck: false });
+    const found = h('p.muted.viewer-hint', { hidden: true });
+    const add = h('button.btn.small.primary', { type: 'button', disabled: true }, icon('plus'), 'Add the image');
+    const checkBtn = h('button.btn.small', { type: 'button' }, 'Check');
+    let checked = '';
+    const check = async () => {
+      found.hidden = false;
+      found.textContent = 'Reading…';
+      add.disabled = true;
+      try {
+        const answer = await imageActions.check(imagePath.value.trim(), alignmentPath.value.trim());
+        if (!alignmentPath.value.trim() && answer.siblings?.length) {
+          alignmentPath.value = answer.siblings[0];
+          return check();
+        }
+        const im = answer.image;
+        const what = im.kind === 'rgb' ? 'An RGB image' : `${im.channels.length} channels (${im.channels.map((c) => c.name).join(', ')})`;
+        const a = answer.alignment;
+        found.textContent = `${what}, ${im.width.toLocaleString('en-US')} × ${im.height.toLocaleString('en-US')}, ${im.levels.length} levels, ${im.compression}${im.pixelSize ? `; its metadata says ${im.pixelSize} µm per pixel` : ''}. ${a ? `Its alignment: ${a.kind === 'keypoints' ? `${a.keypoints} keypoints` : 'a transformation matrix'}, scale ${a.scale.toFixed(4)}${a.reflected ? ', mirrored' : ''}.` : 'No alignment beside it: it is added unaligned, to place by landmarks (or name the transformation matrix or keypoints Xenium Explorer saves).'}`;
+        checked = `${imagePath.value}|${alignmentPath.value}`;
+        add.disabled = false;
+      } catch (error) {
+        found.textContent = error.message;
+      }
+    };
+    checkBtn.addEventListener('click', check);
+    for (const input of [imagePath, alignmentPath]) input.addEventListener('input', () => {
+      add.disabled = true;
+    });
+    add.addEventListener('click', async () => {
+      if (checked !== `${imagePath.value}|${alignmentPath.value}`) return check();
+      add.disabled = true;
+      found.textContent = 'Adding: the image is checksummed where it lies, never copied…';
+      try {
+        await imageActions.add({ path: imagePath.value.trim(), alignment: alignmentPath.value.trim() });
+        found.textContent = 'Added.';
+        imagePath.value = '';
+        alignmentPath.value = '';
+      } catch (error) {
+        found.textContent = error.message;
+        add.disabled = false;
+      }
+    });
+    addForm = h('details.viewer-add-image', h('summary', 'Add a post-Xenium image'),
+      h('label.viewer-slider', 'Image (OME-TIFF)', imagePath),
+      h('label.viewer-slider', 'Alignment (CSV, optional)', alignmentPath),
+      h('div.btn-row', checkBtn, add), found);
   }
 
   // --- Transcripts ---
@@ -340,6 +474,7 @@ export function mountViewerPanel(host, { desc, layers, cells, onChange, segmenta
   const toggle = (box, label) => h('label.viewer-toggle', box, label);
   host.append(
     desc.channels.length ? section('Image', 'image', channelList) : null,
+    imageActions || imageEntries.length ? section('Post-Xenium images', 'image', imageList, addForm) : null,
     desc.transcripts ? section('Transcripts', 'dots',
       toggle(visibleBox, 'Show transcripts'),
       h('div.viewer-gene-find', search, suggestions),
@@ -358,18 +493,25 @@ export function mountViewerPanel(host, { desc, layers, cells, onChange, segmenta
       h('label.viewer-slider', 'Fill by', fill),
       h('label.viewer-slider', 'Fill opacity', opacity)) : null);
   renderChannels();
+  renderImages();
   renderChips();
 
   // The transcripts' probability legend, when they are colored by it.
   function probabilityLegend() {
     if (!(probable && state.transcripts.colorBy === 'probability' && state.transcripts.visible)) return null;
     return h('div', certaintyLegend('Transcripts by their assignment\'s probability', 'Close up, each transcript is drawn by its probability of the cell (or the background) it is in.'),
-      h('div.viewer-legend-item', h('span.dot', { style: { background: NO_PROBABILITY_COLOR } }), 'Assigned by place (not modelled)'));
+      h('div.viewer-legend-item', h('span.dot', { style: { background: NO_PROBABILITY_COLOR } }), 'Assigned by place (not modeled)'));
   }
 
   return {
     probabilityLegend,
     addGene,
+    // The images once their descriptions are read, and their layers (the Viewer's).
+    setImages(entries, imageLayers) {
+      imageEntries = entries;
+      state.images = structuredClone(imageLayers);
+      renderImages();
+    },
     setGenes(list) {
       state.transcripts.genes = list.filter((g) => g >= 0 && g < genes.length).slice(0, MAX_GENES);
       state.transcripts.all = false;

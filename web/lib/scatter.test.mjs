@@ -54,7 +54,7 @@ test('the point nearest a place, and the points inside a polygon', () => {
   assert.equal(insidePolygon([[0, 0], [4, 0], [0, 4]], 3, 3), false);
 });
 
-test('values on a colormap, missing values faint grey', () => {
+test('values on a colormap, missing values faint gray', () => {
   const lut = new Uint8Array(256 * 3);
   for (let k = 0; k < 256; k += 1) lut.set([k, 0, 255 - k], 3 * k);
   const c = valueColors(Float32Array.from([0, 1, NaN, 2]), lut, 0, 1);

@@ -193,8 +193,10 @@ func (b *Bundle) Support() (level, message string) {
 		return "unknown", "The bundle does not say which software wrote it (analysis_sw_version); it is read as XOA 2.x."
 	case v.Major == 2:
 		return "supported", fmt.Sprintf("Written by %s %s: read and checked against XOA 2.0 bundles.", softwareName(v), v)
+	case v.Major == 1 && v.Minor == 0:
+		return "supported", fmt.Sprintf("Written by %s %s: read and checked against an XOA 1.0.1 bundle (its cells numbered, its count matrix in its earlier layout).", softwareName(v), v)
 	case v.Major == 1 || v.Major >= 3:
-		return "best-effort", fmt.Sprintf("Written by %s %s: read best-effort; SituCraft has been checked on XOA 2.0 bundles only so far.", softwareName(v), v)
+		return "best-effort", fmt.Sprintf("Written by %s %s: read best-effort; SituCraft has been checked on XOA 1.0.1 and 2.0 bundles so far.", softwareName(v), v)
 	}
 	return "best-effort", fmt.Sprintf("Written by %s: read best-effort.", v.Raw)
 }
@@ -301,6 +303,18 @@ func (b *Bundle) Inventory() []Item {
 			if strings.HasPrefix(f.Path, prefix) {
 				truth.Files = append(truth.Files, f.Path)
 				truth.Size += f.Size
+				claimed[f.Path] = true
+			}
+		}
+		var post *Item
+		for _, f := range b.Files {
+			if strings.HasPrefix(f.Path, "post_xenium/") {
+				if post == nil {
+					post = add("post_xenium", "Post-Xenium images, simulated (an H&E and an immunofluorescence image; where each lies is in the truth)", false)
+					post.Format = "OME-TIFF (deflate)"
+				}
+				post.Files = append(post.Files, f.Path)
+				post.Size += f.Size
 				claimed[f.Path] = true
 			}
 		}

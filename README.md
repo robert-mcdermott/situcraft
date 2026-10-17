@@ -20,7 +20,7 @@ tissue-level spatial analysis one reproducible workflow:
 SituCraft runs as one self-contained program on macOS, Linux and Windows. It opens as a desktop
 window, needs no other software, and keeps your data on your computer.
 
-**Status:** 0.4.0. SituCraft opens a Xenium output bundle (folder or zip), reads every byte of it
+**Status:** 0.5.0. SituCraft opens a Xenium output bundle (folder or zip), reads every byte of it
 with its own readers, validates it (fatal problems, warnings and notes, and 22 of the run's
 recorded values recomputed from its data) and records it in a project. Its tissue viewer shows the
 morphology stains, the transcripts of chosen genes and the cells at any zoom, every image sample
@@ -63,6 +63,23 @@ against the simulated tissue's true types: labeled from its types' markers, 98.3
 instrument's cells take their true type, and 99.9% of SituCraft's refined cells. Worked examples
 cluster and label the Lung cells, read the simulated tissue's labels against its truth, and the
 Breast cells' labels under two segmentations.
+
+Since 0.5.0, SituCraft bridges to pathology. Post-Xenium H&E and immunofluorescence images of the
+section are drawn on the tissue, read where they lie (pyramidal OME-TIFFs, as Xenium Explorer
+requires, from bundles of Xenium Onboard Analysis 1.0 on), and placed by the alignment Xenium
+Explorer saves, by landmarks placed on both images side by side, or automatically by the nuclei,
+with a smooth deformation for a section that stretched. Every alignment is a version with its
+fit's errors in µm, and is checked over the whole section: a checkerboard, flicker, DAPI's edges,
+and where it is off, measured by local matches. On the breast cancer section of Janesick et al.
+(2023), the automatic alignment of its immunofluorescence image is off by 0.48 µm (median) where
+10x's is off by 0.85 µm. Regions are drawn over any layer (a rectangle, a polygon, freehand or a
+brush), named and classed, their cells counted and chosen, kept as versions and exchanged with
+QuPath as GeoJSON in an image's own pixels, checked against QuPath itself. Cells and regions are
+reviewed (accepted, relabeled, ambiguous, excluded, a segmentation concern, a comment), each review
+kept with who, why, the value before and after, the label set, the label's confidence and the
+alignment in use, and written as CSV or JSON. The simulated example now has an H&E and an
+immunofluorescence image with their truth, and worked examples that align the H&E three ways and
+score each, take regions to QuPath and back, and review the cells a queue ranks first.
 
 ## A look around
 
@@ -170,7 +187,7 @@ QC, saved views and the methods paragraph.
 ## Simulated tissues
 
 `situcraft simulate <new folder>` makes a tissue whose every cell, nucleus and transcript is
-known. It writes the tissue as a Xenium output bundle labelled simulated, with the truth in its
+known. It writes the tissue as a Xenium output bundle labeled simulated, with the truth in its
 `truth/` folder, so that any segmentation can be scored against it. SituCraft and other tools
 (spatialdata-io among them) read the bundle as they read Xenium's. The same seed gives the same
 bundle on any computer. `--preset large` makes a tissue of 6 × 5 mm and 55 million transcripts,
@@ -205,7 +222,7 @@ lists the settings, `--preflight` says what a run would need, and
 ## Development
 
 ```sh
-go test -race ./...                      # the Go host
+go test -race -timeout 30m ./...         # the Go host (the sampler's tests take minutes)
 node --test "web/lib/**/*.test.mjs"      # the browser modules
 node validation/run.mjs                  # checks against references (validation/README.md)
 node validation/run.mjs viewer           # the tissue viewer in headless Chrome against its data

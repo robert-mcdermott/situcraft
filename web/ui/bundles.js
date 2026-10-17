@@ -8,6 +8,9 @@ import { openPaths } from './storage.js';
 import { addClustering, addEmbedding, clusteringRecord, embeddingRecord } from '../lib/clusterings.js';
 import { addDataset, compareFingerprint, datasetRecord, findDataset, relocateDataset, removeDataset } from '../lib/datasets.js';
 import { addLabels, labelsRecord, readLabelCells } from '../lib/labels.js';
+import { addImage as withImage, imageRecord } from '../lib/images.js';
+import { addCheck as withCheck, addTransform as withTransform, checkRecord, SUPPLIED_ALIGNMENT, transformInUse, transformRecord, useTransform } from '../lib/transforms.js';
+import { readInverseField } from '../lib/overlays.js';
 import { addComparison, addExport, addSegmentation, comparisonRecord, exportRecord, removeComparison as withoutComparison, segmentationRecord, segmentationsOf, withInstrumentSegmentation } from '../lib/segmentations.js';
 
 const BUNDLE_KINDS = new Set(['bundle', 'archive']);
@@ -238,6 +241,165 @@ export function createBundles(app) {
       importing.delete(jobId);
       notify();
     }
+  }
+
+  // What an image is, and the alignment files beside it (api_images.go); with alignment, what that
+  // file does.
+  async function checkImage(item, path, alignment = '') {
+    const q = new URLSearchParams({ path });
+    if (alignment) q.set('alignment', alignment);
+    return getJSON(`${item.url}/images/check?${q}`);
+  }
+
+  // A post-Xenium image added to a dataset (api_images.go): a job reads and checksums it and records
+  // the artifact, and its alignment when one was supplied as its first transform; both recorded in
+  // the project, the alignment placing the image when it is the image's first or new to the
+  // project. Resolves with the image's artifact, its transform's (or null) as its transform.
+  const addingImages = new Map(); // job id → { dataset, title }
+  async function addImage(item, datasetId, request) {
+    const answer = await getJSON(`${item.url}/images`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) });
+    const jobId = answer.job?.id;
+    if (!jobId) throw new Error('no job was started');
+    addingImages.set(jobId, { dataset: datasetId, title: answer.job.title });
+    notify();
+    try {
+      const job = await app.jobs.finished(jobId);
+      if (job?.state !== 'complete') throw new Error(`adding the image ${job?.state ?? 'ended'}${job?.error ? `: ${job.error}` : ''}`);
+      const found = (pattern) => (job.events ?? []).map((e) => pattern.exec(e.message)?.[1]).find(Boolean);
+      const id = found(/artifact (img-[0-9a-f]+)/);
+      if (!id) throw new Error('the job recorded no image');
+      const tf = found(/artifact (tf-[0-9a-f]+)/);
+      const manifest = await getJSON(`/api/artifacts/${encodeURIComponent(id)}`);
+      const transform = tf ? await getJSON(`/api/artifacts/${encodeURIComponent(tf)}`) : null;
+      const dataset = app.store.project.datasets.find((d) => d.id === datasetId);
+      if (!dataset) throw new Error('the dataset is no longer in the project');
+      let next = withImage(app.store.project, imageRecord(dataset, manifest));
+      if (transform) {
+        const isNew = !next.artifacts.some((a) => a.kind === 'transform' && a.id === transform.id);
+        next = withTransform(next, transformRecord(dataset, transform));
+        if (isNew || !transformInUse(next, id)) next = useTransform(next, { transform: transform.id, rationale: SUPPLIED_ALIGNMENT, by: 'SituCraft' });
+      }
+      if (next !== app.store.project) app.store.commit(next, `Add ${manifest.name} to ${dataset.name}`);
+      return { ...manifest, transform };
+    } finally {
+      addingImages.delete(jobId);
+      notify();
+    }
+  }
+
+  // A version of an image's alignment (api_transforms.go): from landmarks ({ landmarks, model,
+  // parent, by, note }) or Xenium Explorer's file ({ alignment }), recorded in the project and, with
+  // use, chosen to place the image (rationale, by). Resolves with { manifest, transform }.
+  async function makeTransform(datasetId, imageId, request, { use = false, rationale = '', by = 'the user' } = {}) {
+    const answer = await getJSON(`/api/images/${encodeURIComponent(imageId)}/transforms`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) });
+    const dataset = app.store.project.datasets.find((d) => d.id === datasetId);
+    if (!dataset) throw new Error('the dataset is no longer in the project');
+    transformDescriptions.set(answer.manifest.id, Promise.resolve(answer.transform));
+    let next = withTransform(app.store.project, transformRecord(dataset, answer.manifest));
+    if (use && transformInUse(next, imageId)?.record.id !== answer.manifest.id) next = useTransform(next, { transform: answer.manifest.id, rationale, by });
+    if (next !== app.store.project) app.store.commit(next, `Align ${next.artifacts.find((a) => a.id === imageId)?.name ?? imageId}: ${answer.manifest.name}`);
+    return answer;
+  }
+
+  // An image registered automatically to its dataset's DAPI (api_register.go): a job, its version
+  // recorded in the project and, with use, chosen to place the image. Resolves with the version's
+  // artifact.
+  const aligning = new Map(); // job id → { dataset, image, title }
+  async function registerImage(item, datasetId, imageId, request, { use = false, rationale = '', by = 'the user' } = {}) {
+    const answer = await getJSON(`${item.url}/images/${encodeURIComponent(imageId)}/register`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) });
+    const jobId = answer.job?.id;
+    if (!jobId) throw new Error('no job was started');
+    aligning.set(jobId, { dataset: datasetId, image: imageId, title: answer.job.title });
+    notify();
+    try {
+      const job = await app.jobs.finished(jobId);
+      if (job?.state !== 'complete') throw new Error(`the registration ${job?.state ?? 'ended'}${job?.error ? `: ${job.error}` : ''}`);
+      const id = (job.events ?? []).map((e) => /artifact (tf-[0-9a-f]+)/.exec(e.message)?.[1]).find(Boolean);
+      if (!id) throw new Error('the job recorded no alignment');
+      const manifest = await getJSON(`/api/artifacts/${encodeURIComponent(id)}`);
+      const dataset = app.store.project.datasets.find((d) => d.id === datasetId);
+      if (!dataset) throw new Error('the dataset is no longer in the project');
+      let next = withTransform(app.store.project, transformRecord(dataset, manifest));
+      if (use && transformInUse(next, imageId)?.record.id !== id) next = useTransform(next, { transform: id, rationale, by });
+      if (next !== app.store.project) app.store.commit(next, `Align ${next.artifacts.find((a) => a.id === imageId)?.name ?? imageId} automatically`);
+      return manifest;
+    } finally {
+      aligning.delete(jobId);
+      notify();
+    }
+  }
+
+  // A version of an image's alignment checked over the tissue (api_checks.go): a job, the check
+  // recorded in the project. Resolves with the check's artifact.
+  const checking = new Map(); // job id → { image, transform }
+  async function checkAlignment(item, datasetId, imageId, transformId) {
+    const answer = await getJSON(`${item.url}/images/${encodeURIComponent(imageId)}/check`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ transform: transformId }) });
+    const jobId = answer.job?.id;
+    if (!jobId) throw new Error('no job was started');
+    checking.set(jobId, { image: imageId, transform: transformId });
+    notify();
+    try {
+      const job = await app.jobs.finished(jobId);
+      if (job?.state !== 'complete') throw new Error(`the check ${job?.state ?? 'ended'}${job?.error ? `: ${job.error}` : ''}`);
+      const id = (job.events ?? []).map((e) => /artifact (chk-[0-9a-f]+)/.exec(e.message)?.[1]).find(Boolean);
+      if (!id) throw new Error('the job recorded no check');
+      const manifest = await getJSON(`/api/artifacts/${encodeURIComponent(id)}`);
+      const dataset = app.store.project.datasets.find((d) => d.id === datasetId);
+      if (!dataset) throw new Error('the dataset is no longer in the project');
+      const next = withCheck(app.store.project, checkRecord(dataset, manifest));
+      if (next !== app.store.project) app.store.commit(next, `Check ${next.artifacts.find((a) => a.id === transformId)?.name ?? transformId}`);
+      return manifest;
+    } finally {
+      checking.delete(jobId);
+      notify();
+    }
+  }
+
+  // A check's description (api_checks.go); kept for the session.
+  const checkDescriptions = new Map();
+  function checkDescription(id) {
+    if (!checkDescriptions.has(id)) {
+      const p = getJSON(`/api/checks/${encodeURIComponent(id)}`);
+      p.catch(() => checkDescriptions.delete(id));
+      checkDescriptions.set(id, p);
+    }
+    return checkDescriptions.get(id);
+  }
+
+  // A deformed version's inverse field (api_register.go), read for drawing; kept for the session.
+  const inverseFields = new Map();
+  function inverseField(id) {
+    if (!inverseFields.has(id)) {
+      const p = fetch(`/api/transforms/${encodeURIComponent(id)}/inverse`).then(async (r) => {
+        if (!r.ok) throw new Error(`its deformation: HTTP ${r.status}`);
+        return readInverseField(await r.arrayBuffer());
+      });
+      p.catch(() => inverseFields.delete(id));
+      inverseFields.set(id, p);
+    }
+    return inverseFields.get(id);
+  }
+
+  // A transform's description (api_transforms.go); kept for the session.
+  const transformDescriptions = new Map();
+  function transformDescription(id) {
+    if (!transformDescriptions.has(id)) {
+      const p = getJSON(`/api/transforms/${encodeURIComponent(id)}`);
+      p.catch(() => transformDescriptions.delete(id));
+      transformDescriptions.set(id, p);
+    }
+    return transformDescriptions.get(id);
+  }
+
+  // An image's description (api_images.go), with its id, for drawing it; kept for the session.
+  const imageDescriptions = new Map();
+  function imageDescription(id) {
+    if (!imageDescriptions.has(id)) {
+      const p = getJSON(`/api/images/${encodeURIComponent(id)}`).then((d) => ({ ...d, id }));
+      p.catch(() => imageDescriptions.delete(id));
+      imageDescriptions.set(id, p);
+    }
+    return imageDescriptions.get(id);
   }
 
   // A comparison of two segmentations of a dataset (api_compare.go), made by a job and recorded as
@@ -838,6 +1000,18 @@ export function createBundles(app) {
     refinementPresets,
     refinementPreflight,
     importSegmentation,
+    checkImage,
+    addImage,
+    addingImages: (datasetId) => [...addingImages.values()].filter((x) => x.dataset === datasetId),
+    imageDescription,
+    makeTransform,
+    transformDescription,
+    registerImage,
+    aligning: (imageId) => [...aligning.values()].filter((x) => x.image === imageId),
+    inverseField,
+    checkAlignment,
+    checking: (transformId) => [...checking.values()].filter((x) => x.transform === transformId),
+    checkDescription,
     compareSegmentations,
     comparisonDescription,
     removeComparison,

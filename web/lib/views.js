@@ -10,7 +10,7 @@ function newId() {
 }
 
 // A view from what a view shows. state: { camera: { cx, cy, scale }, ratio (device pixels per
-// CSS pixel), layers (the renderer's: channels, transcripts, cells), cell: { row, id } or null,
+// CSS pixel), layers (the renderer's: channels, transcripts, cells, images), cell: { row, id } or null,
 // qc: { map, filter } (the QC view only) }; desc: the dataset's descriptor.
 export function captureView({ name, dataset, mode = 'viewer', state, desc, id = newId(), now = new Date().toISOString() }) {
   const { camera, ratio = 1, layers } = state;
@@ -42,6 +42,11 @@ export function captureView({ name, dataset, mode = 'viewer', state, desc, id = 
     cells: { outlines: layers.cells.outlines, nuclei: layers.cells.nuclei, fill: layers.cells.fill ?? null, opacity: layers.cells.opacity },
     cell: state.cell ?? null,
   };
+  // The post-Xenium images, by their artifacts' ids: recorded only when there are some, so that
+  // views saved before reopen exactly.
+  if (layers.images?.length) {
+    view.images = layers.images.map((l) => ({ id: l.id, visible: l.visible, opacity: l.opacity, channels: l.channels.map((c) => ({ visible: c.visible, color: c.color, window: [c.window[0], c.window[1]], gamma: c.gamma })) }));
+  }
   if (mode === 'qc') view.qc = { map: state.qc?.map ?? 'none', filter: state.qc?.filter ?? null };
   return view;
 }
@@ -74,6 +79,8 @@ export function viewLayers(view, desc, defaults) {
       transcripts: { ...defaults.transcripts, visible: t.visible ?? defaults.transcripts.visible, all: t.all ?? false, genes, colors: [], minQ: t.minQ ?? defaults.transcripts.minQ, pointSize: t.pointSize ?? defaults.transcripts.pointSize, gain: t.gain ?? defaults.transcripts.gain, colorBy: t.colorBy ?? 'gene' },
       // A view that names no segmentation (a tour's step) draws the dataset's default.
       cells: { ...defaults.cells, ...(view.cells ?? {}), segmentation: view.segmentation === undefined ? undefined : view.segmentation === 'instrument' ? null : view.segmentation },
+      // The images the view names, as it shows them (the Viewer adds the others).
+      images: (view.images ?? []).map((l) => ({ ...l, channels: (l.channels ?? []).map((c) => ({ ...c, window: [...c.window] })) })),
     },
     missing,
   };
