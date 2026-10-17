@@ -112,3 +112,27 @@ func ulp(x float64) float64 {
 	x = math.Abs(x)
 	return math.Nextafter(x, math.Inf(1)) - x
 }
+
+// SinCos within a few units in the last place of math.Sin and math.Cos, over turns of any size a
+// simulation uses; its quadrants exact.
+func TestSinCos(t *testing.T) {
+	worst := 0.0
+	for i := 0; i < 200000; i++ {
+		x := (float64(i) - 100000) * 0.0137
+		s, c := SinCos(x)
+		ws, wc := math.Sin(x), math.Cos(x)
+		worst = math.Max(worst, math.Max(math.Abs(s-ws), math.Abs(c-wc)))
+	}
+	if worst > 4e-15 {
+		t.Errorf("at most %g from math.Sin and math.Cos", worst)
+	}
+	if s, c := SinCos(0); s != 0 || c != 1 {
+		t.Errorf("SinCos(0) = %v, %v", s, c)
+	}
+	if s, c := SinCos(math.Pi / 2); math.Abs(s-1) > 1e-16 || math.Abs(c) > 1e-16 {
+		t.Errorf("SinCos(π/2) = %v, %v", s, c)
+	}
+	if s, _ := SinCos(math.Inf(1)); !math.IsNaN(s) {
+		t.Error("SinCos(∞) is a number")
+	}
+}

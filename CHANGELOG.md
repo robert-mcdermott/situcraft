@@ -14,9 +14,9 @@ cells and regions reviewed with their provenance.
     8 or 16 bits; deflate, LZW, JPEG or JPEG 2000 tiles. Read where it lies, never copied, a tile
     at a time; recorded as an artifact of the dataset with its SHA-256.
   - **Its alignment:** the transformation matrix or keypoints Xenium Explorer saves, found beside
-    the image when 10x named it, recorded with it. The image is placed by its alignment, never by
-    the pixel size its own metadata gives (on the pathology fixture's immunofluorescence image, the
-    Xenium image's, 3.5 times too small).
+    the image when 10x named it, recorded as the first version of its alignment (slice 2). The
+    image is placed by an alignment, never by the pixel size its own metadata gives (on the
+    pathology fixture's immunofluorescence image, the Xenium image's, 3.5 times too small).
   - **The Viewer** lists each image with how it is placed (scale, turn, mirroring), shows it at its
     opacity at any rotation or reflection, an immunofluorescence image's channels each with a
     colour, window and gamma as the stains have; saved views keep them. The project tree lists
@@ -28,6 +28,34 @@ cells and regions reviewed with their provenance.
     bundle's files and its H&E and immunofluorescence images, 2.8 GB): every level of both images
     the pixels tifffile reads; the XOA 1.0.1 bundle's checks; its H&E drawn where its matrix puts
     it.
+- **Alignment by landmarks, kept as versions (wave 5, slice 2).** An image can be added without an
+  alignment and placed by landmarks; every alignment of an image is a version, and one places it.
+  - **The Alignment view:** the Xenium image and the post-Xenium image side by side. A landmark is
+    a place clicked on both; once three are placed, the fit predicts where the next one falls and
+    the other image goes there. Landmarks are dragged to move them. The fit, a similarity (move,
+    turn, one scale, a mirror) or an affine transform (also stretched and sheared), updates as they
+    change, with each landmark's residual and its leave-one-out error in µm (where it falls when
+    fitted from the others: the error to expect where no landmark is), and the image can be laid
+    over the stains as fitted.
+  - **Versions:** each alignment is an artifact naming its source and destination coordinate
+    systems (the image's pixels, the dataset's µm), with its landmarks, fit and errors, who made
+    it, a note and the version it was made from. Which one places the image is a decision kept
+    with its reason. Any version is written as Xenium Explorer's transformation matrix or
+    keypoints, to load with the image there.
+  - **Simulated post-Xenium images:** `situcraft simulate --post-xenium` also makes an H&E
+    (haematoxylin and eosin by Beer–Lambert's law, their colours varied per section) and an
+    immunofluorescence image (DAPI and a membrane stain) of the simulated section, each moved by a
+    known transform and a smooth deformation, written as its truth.
+  - **Remote control:** `align_image`, `use_transform`, `show_alignment`; `add_image` without an
+    alignment; `export` writes an alignment for Xenium Explorer.
+  - **Validated:** fits worked by hand (residuals and leave-one-out errors of a square of
+    landmarks); known similarities and affine transforms recovered exactly from their landmarks;
+    the page's fits the program's bit for bit; 10x's matrices for the fixture's H&E and
+    immunofluorescence image are similarities, and keypoints made with them fit back to them; the
+    simulated images' nuclei, found in them, lie where their truth puts them (a median 0.03 µm off
+    on the H&E), and the leave-one-out error of landmarks on them is near their fit's true error;
+    in the page, an image placed by six landmarks clicked on both images is drawn where the fit
+    puts it.
 
 ## 0.4.0 (2026-10-16)
 

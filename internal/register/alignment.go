@@ -138,8 +138,8 @@ func readKeypoints(rows [][]string) (*Alignment, error) {
 // fits better) mapping the keypoints' moving positions to their fixed ones with the least sum of
 // squared distances (Umeyama 1991). It needs three keypoints not on one line.
 func FitSimilarity(kps []Keypoint) (Affine, error) {
-	if len(kps) < 3 {
-		return Affine{}, fmt.Errorf("%d keypoints: a similarity is fitted to three or more", len(kps))
+	if len(kps) < MinKeypoints {
+		return Affine{}, fmt.Errorf("%d landmarks: a similarity is fitted to three or more (a third tells whether it reflects)", len(kps))
 	}
 	proper, okP := fitProper(kps, false)
 	mirrored, okM := fitProper(kps, true)
@@ -180,7 +180,7 @@ func fitProper(kps []Keypoint, reflect bool) (Affine, bool) {
 	if ss == 0 {
 		return Affine{}, false
 	}
-	norm := math.Hypot(sxx, sxy)
+	norm := math.Sqrt(mul(sxx, sxx) + mul(sxy, sxy))
 	if norm == 0 {
 		return Affine{}, false
 	}
@@ -205,12 +205,30 @@ func sumSquares(t Affine, kps []Keypoint) float64 {
 }
 
 // Residuals are each keypoint's distance from where t puts its moving position, in the fixed
-// image's pixels.
+// positions' units.
 func Residuals(t Affine, kps []Keypoint) []float64 {
 	out := make([]float64, len(kps))
 	for i, k := range kps {
-		x, y := t.Apply(k.Moving.X, k.Moving.Y)
-		out[i] = math.Hypot(x-k.Fixed.X, y-k.Fixed.Y)
+		out[i] = distance(t, k)
 	}
 	return out
+}
+
+// MatrixCSV is a transformation matrix as Xenium Explorer writes it: the image's pixels to the
+// Xenium image's, three rows of three, each number as short as reads back the same.
+func MatrixCSV(m Affine) []byte {
+	f := func(v float64) string { return strconv.FormatFloat(v, 'g', -1, 64) }
+	return []byte(f(m.A) + "," + f(m.B) + "," + f(m.C) + "\n" + f(m.D) + "," + f(m.E) + "," + f(m.F) + "\n0,0,1\n")
+}
+
+// KeypointsCSV is keypoints as Xenium Explorer writes them: each landmark's position on the Xenium
+// image (fixedX, fixedY) and on the image (alignmentX, alignmentY), in their pixels.
+func KeypointsCSV(kps []Keypoint) []byte {
+	f := func(v float64) string { return strconv.FormatFloat(v, 'g', -1, 64) }
+	var b strings.Builder
+	b.WriteString("fixedX,fixedY,alignmentX,alignmentY\n")
+	for _, k := range kps {
+		b.WriteString(f(k.Fixed.X) + "," + f(k.Fixed.Y) + "," + f(k.Moving.X) + "," + f(k.Moving.Y) + "\n")
+	}
+	return []byte(b.String())
 }

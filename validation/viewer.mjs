@@ -45,11 +45,16 @@
 //   against its truth, as their cards expect; the project saved by 0.4.0 reopened, each clustering,
 //   map and label set from markers it records made again with the same summary;
 // - post-Xenium images (wave 5, slice 1): the pathology fixture's bundle (XOA 1.0.1) opened and its
-//   H&E added by a program, each of three of its pixels drawn where its alignment puts it.
+//   H&E added by a program, each of three of its pixels drawn where its alignment puts it;
+// - transforms and landmarks (wave 5, slice 2): landmarks made with 10x's matrix fitted back to it as
+//   a version, listed in the Alignment view and written as Xenium Explorer's keypoints; a simulated
+//   tissue's H&E added unaligned and placed by six landmarks clicked on both images, within its
+//   truth's deformation, drawn where the fit puts it.
 //
 // It builds the program, starts it on the bundles with an empty cache and library, builds their
-// derived data, and drives the page through window.situcraft (the app, app.js) and window.situcraftViewer
-// (ui/mode-viewer.js). Run by validation/run.mjs's "viewer" suite.
+// derived data, and drives the page through window.situcraft (the app, app.js), window.situcraftViewer
+// (ui/mode-viewer.js) and window.situcraftAlignment (ui/mode-alignment.js). Run by
+// validation/run.mjs's "viewer" suite.
 
 import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -1193,32 +1198,139 @@ export async function viewerSuite({ check, MissingData, verbose }) {
       // puts it: at three of its pixels, the Viewer's colour is the image's.
       const pathology = join(dataRoot, 'xenium-breast-cancer-rep1');
       const sample = 'Xenium_FFPE_Human_Breast_Cancer_Rep1';
+      const rowsOf = (t) => (u, v) => [t[0][0] * u + t[0][1] * v + t[0][2], t[1][0] * u + t[1][1] * v + t[1][2]];
+      // The Viewer's colour where an image's pixel (px, py) is placed by t, against the pixel's own.
+      const probe = async (dataset, added, t, px, py) => {
+        const [cx, cy] = rowsOf(t)(px + 0.5, py + 0.5);
+        await act('show_tissue', { dataset, center: [cx, cy], um_per_pixel: 0.002, transcripts: false, outlines: false, channels: { DAPI: { visible: false } }, images: { [added.data.name]: { visible: true, opacity: 1 } } });
+        const side = added.data.summary.width > 4096 ? 1024 : 512;
+        return chrome.eval(`(async () => {
+          const r = window.situcraftViewer.renderer;
+          await r.settled();
+          const [w, h] = r.size();
+          const got = r.readColor(w / 2, h / 2).slice(0, 3);
+          const tile = new Uint8Array(await fetch('/api/images/${added.data.id}/tiles/0/0/${Math.floor(px / side)}/${Math.floor(py / side)}').then((x) => x.arrayBuffer()));
+          const i = 3 * (${py % side} * ${side} + ${px % side});
+          return { pixel: [${px}, ${py}], got, want: [tile[i], tile[i + 1], tile[i + 2]] };
+        })()`);
+      };
+      const worstOf = (probes) => (probes.length ? Math.max(...probes.flatMap((p) => p.got.map((g, k) => Math.abs(g - p.want[k])))) : Infinity);
       if (existsSync(join(pathology, sample, 'experiment.xenium'))) {
         await act('new_project', { name: 'Pathology' });
         const opened = await act('open_paths', { paths: [join(pathology, sample)], add: true });
         const added = await act('add_image', { dataset: sample, path: join(pathology, 'images', `${sample}_he_image.ome.tif`) });
         const probes = [];
-        if (added.ok) {
-          const t = added.data.summary.transform;
-          for (const [px, py] of [[16342, 14283], [9000, 20000], [24000, 6000]]) {
-            const cx = t[0][0] * (px + 0.5) + t[0][1] * (py + 0.5) + t[0][2];
-            const cy = t[1][0] * (px + 0.5) + t[1][1] * (py + 0.5) + t[1][2];
-            await act('show_tissue', { dataset: sample, center: [cx, cy], um_per_pixel: 0.002, transcripts: false, outlines: false, channels: { DAPI: { visible: false } }, images: { [added.data.name]: { visible: true, opacity: 1 } } });
-            probes.push(await chrome.eval(`(async () => {
-              const r = window.situcraftViewer.renderer;
-              await r.settled();
-              const [w, h] = r.size();
-              const got = r.readColor(w / 2, h / 2).slice(0, 3);
-              const tile = new Uint8Array(await fetch('/api/images/${added.data.id}/tiles/0/0/${Math.floor(px / 1024)}/${Math.floor(py / 1024)}').then((x) => x.arrayBuffer()));
-              const i = 3 * (${py % 1024} * 1024 + ${px % 1024});
-              return { pixel: [${px}, ${py}], got, want: [tile[i], tile[i + 1], tile[i + 2]] };
-            })()`));
+        const tenx = added.data?.transform;
+        if (added.ok && tenx) {
+          for (const [px, py] of [[16342, 14283], [9000, 20000], [24000, 6000]]) probes.push(await probe(sample, added, tenx.summary.transform, px, py));
+        }
+        check('viewer', 'remote control: add_image adds the pathology fixture\'s H&E with the alignment beside it, and the Viewer draws its pixels where the matrix puts them', `${opened.message ?? opened.error}; ${added.message ?? added.error}; ${JSON.stringify(probes)}`,
+          opened.ok && added.ok && tenx?.summary.method === 'matrix' && tenx.summary.reflected && probes.length === 3 && worstOf(probes) <= 2, 'the image\'s colour at three of its pixels, within 2');
+
+        // Transforms and landmarks (wave 5, slice 2): landmarks made with 10x's matrix fit back to
+        // it as a similarity (10x's is one), recorded as a version that places the image; the
+        // Alignment view lists both versions and the landmarks; written as Xenium Explorer's
+        // keypoints, which read back in the Xenium image's pixels; the matrix chosen again.
+        if (added.ok && tenx) {
+          const t = tenx.summary.transform;
+          const landmarks = [[2000, 3000], [28000, 2500], [15000, 12000], [5000, 22000], [26000, 21000], [9000, 9000]].map(([u, v]) => ({ fixed: rowsOf(t)(u, v), moving: [u, v] }));
+          const aligned = await act('align_image', { dataset: sample, landmarks, model: 'similarity', by: 'validation', note: 'Landmarks made with 10x\'s matrix' });
+          const shown = await act('show_alignment', { dataset: sample, transform: aligned.data?.id });
+          const ui = await chrome.eval(`({ rows: document.querySelectorAll('.align-landmarks tbody tr').length, versions: document.querySelectorAll('.align-version').length, inUse: document.querySelector('.align-version.in-use b')?.textContent ?? '', fit: document.querySelector('.align-fit')?.innerText ?? '' })`);
+          const file = join(work, 'exports', 'he_keypoints.csv');
+          mkdirSync(dirname(file), { recursive: true });
+          const exported = await act('export', { what: 'alignment', dataset: sample, format: 'keypoints', path: file });
+          const lines = existsSync(file) ? readFileSync(file, 'utf8').trim().split('\n') : [];
+          const first = lines[1]?.split(',').map(Number) ?? [];
+          const back = await act('use_transform', { dataset: sample, transform: tenx.id, rationale: '10x\'s alignment, for the checks that follow' });
+          const got = aligned.data?.transform ?? [[0, 0, 0], [0, 0, 0]];
+          const worst = Math.max(...[0, 1].flatMap((r) => [0, 1, 2].map((c) => Math.abs(got[r][c] - t[r][c]) / (c === 2 ? 1000 : 1))));
+          check('viewer', 'remote control: landmarks made with 10x\'s matrix fit back to it, a version that places the H&E; the Alignment view lists both versions; its keypoints written for Xenium Explorer in its pixels', `${aligned.message ?? aligned.error}; ${shown.message ?? shown.error}; ${JSON.stringify(ui)}; ${exported.message ?? exported.error}; ${lines.slice(0, 2).join(' | ')}; ${back.message ?? back.error}`,
+            aligned.ok && aligned.data.fit.rms < 1e-6 && aligned.data.fit.leaveOneOut.length === 6 && worst < 1e-9 && aligned.data.placedBy === aligned.data.id &&
+            shown.ok && shown.data.versions.length === 2 && ui.rows === 6 && ui.versions === 2 && /landmarks, similarity/.test(ui.inUse) && /6 landmarks, similarity: residuals 0\.00 µm/.test(ui.fit) &&
+            exported.ok && lines[0] === 'fixedX,fixedY,alignmentX,alignmentY' && lines.length === 7 && Math.abs(first[0] * 0.2125 - landmarks[0].fixed[0]) < 1e-6 && first[2] === 2000 && back.ok,
+            'the matrix to a millionth of a pixel; 2 versions, 6 rows; 6 keypoints in the Xenium image\'s pixels');
+        }
+      }
+
+      // Simulated post-Xenium images (wave 5, slice 2): a small simulated tissue with its H&E and
+      // immunofluorescence images; the H&E added without an alignment (not drawn), then placed by
+      // six landmarks clicked on both images in the Alignment view at places its truth maps (the
+      // second image followed to its predicted place from the fourth on), fitted as an affine
+      // transform and saved for use; the fit within the truth's deformation of it over the section,
+      // and the Viewer's colour at three of its pixels the image's where the fit puts them.
+      const simDir = join(work, 'sim-pathology');
+      execFileSync(bin, ['simulate', '--preset', 'small', '--post-xenium', '--quiet', simDir]);
+      await act('new_project', { name: 'Simulated pathology' });
+      const simOpened = await act('open_paths', { paths: [simDir], add: true });
+      const simAdded = await act('add_image', { dataset: 'sim-pathology', path: join(simDir, 'post_xenium', 'simulated_he_image.ome.tif'), alignment: null });
+      const reg = JSON.parse(readFileSync(join(simDir, 'truth', 'post_xenium', 'registration.json'), 'utf8')).images.find((i) => i.kind === 'he');
+      const truth = (u, v) => {
+        const [x, y] = rowsOf(reg.transform)(u, v);
+        const d = [0, 0];
+        for (const w of reg.deformation) d[w.axis] += w.amplitude_um * Math.sin(2 * Math.PI * (w.frequency_per_um[0] * x + w.frequency_per_um[1] * y) + w.phase);
+        return [x + d[0], y + d[1]];
+      };
+      const clicks = [];
+      const predictedOff = [];
+      let simTF = null;
+      let simShown = null;
+      if (simAdded.ok) {
+        simShown = await act('show_alignment', { dataset: 'sim-pathology' });
+        await chrome.eval(`(() => {
+          const model = document.querySelector('select[aria-label="What the fit may change"]');
+          model.value = 'affine';
+          model.dispatchEvent(new Event('change'));
+          [...document.querySelectorAll('.align-panel label')].find((l) => l.textContent.includes('Move the images together')).querySelector('input').click();
+        })()`);
+        // Each place clicked close up (the image there filling the stage), as a person would.
+        const clickAt = async (side, x, y, centre = true) => {
+          if (centre) await chrome.eval(`window.situcraftAlignment.setCamera('${side}', { cx: ${x}, cy: ${y}, scale: ${side === 'left' ? 8 : 3} })`);
+          await chrome.eval('window.situcraftAlignment.settled()');
+          const [cx, cy] = await chrome.eval(`window.situcraftAlignment.clientOf('${side}', ${x}, ${y})`);
+          await chrome.click(cx, cy);
+        };
+        for (const [a, b] of [[0.2, 0.2], [0.8, 0.25], [0.5, 0.5], [0.25, 0.8], [0.8, 0.75], [0.55, 0.3]]) {
+          const moving = [a * reg.width, b * reg.height];
+          const fixed = truth(...moving);
+          await clickAt('left', ...fixed);
+          // From the fourth landmark on, the image has gone where the fit predicts.
+          if (clicks.length >= 3) {
+            const cam = await chrome.eval('window.situcraftAlignment.renderers.right.camera');
+            predictedOff.push(Math.hypot(cam.cx - moving[0], cam.cy - moving[1]));
+          }
+          await clickAt('right', ...moving);
+          clicks.push({ fixed, moving });
+        }
+        // Saved: the program fits and records the landmarks, then the version places the image.
+        await chrome.eval(`(async () => {
+          [...document.querySelectorAll('.align-panel button')].find((b) => b.textContent.includes('Save and use')).click();
+          for (let i = 0; i < 300 && !window.situcraftAlignment.state().inUse; i += 1) await new Promise((r) => setTimeout(r, 100));
+        })()`);
+        const state = await act('get_state');
+        const placedBy = state.data?.images?.find((i) => i.dataset === 'sim-pathology')?.placedBy;
+        simTF = placedBy ? await fetch(`${url}/api/transforms/${placedBy}`).then((r) => r.json()) : null;
+      }
+      const simState = await chrome.eval('window.situcraftAlignment?.state()');
+      let simWorst = Infinity;
+      if (simTF) {
+        simWorst = 0;
+        for (let v = 0; v < reg.height; v += 25) {
+          for (let u = 0; u < reg.width; u += 25) {
+            const [tx, ty] = truth(u, v);
+            if (tx < 0 || ty < 0 || tx > 160 || ty > 120) continue;
+            const [fx, fy] = rowsOf(simTF.transform)(u, v);
+            simWorst = Math.max(simWorst, Math.hypot(fx - tx, fy - ty));
           }
         }
-        const worst = probes.length ? Math.max(...probes.flatMap((p) => p.got.map((g, k) => Math.abs(g - p.want[k])))) : Infinity;
-        check('viewer', 'remote control: add_image adds the pathology fixture\'s H&E with the alignment beside it, and the Viewer draws its pixels where the matrix puts them', `${opened.message ?? opened.error}; ${added.message ?? added.error}; ${JSON.stringify(probes)}`,
-          opened.ok && added.ok && added.data.summary.alignment.kind === 'matrix' && added.data.summary.alignment.reflected && probes.length === 3 && worst <= 2, 'the image\'s colour at three of its pixels, within 2');
       }
+      const simProbes = [];
+      if (simTF) for (const [px, py] of [[300, 250], [420, 330], [210, 390]]) simProbes.push(await probe('sim-pathology', simAdded, simTF.transform, px, py));
+      const bound = Math.SQRT2 * reg.parameters.deformation_um * 2;
+      check('viewer', 'the Alignment view: an image added without an alignment is placed by six landmarks clicked on both images, fitted as an affine transform within its truth\'s deformation, and drawn where the fit puts it', `${simOpened.message ?? simOpened.error}; ${simAdded.message ?? simAdded.error}; ${simShown?.message ?? ''}; predicted ${predictedOff.map((d) => d.toFixed(1)).join(', ')} pixels off; ${simTF ? `${simTF.name}: residuals ${simTF.fit.rms.toFixed(3)} µm, left out ${simTF.fit.looRms.toFixed(3)} µm; at most ${simWorst.toFixed(3)} µm from the truth over the section` : 'not saved'}; ${JSON.stringify(simProbes)}`,
+        simOpened.ok && simAdded.ok && simAdded.data.transform === null && simState?.landmarks.length === 6 && simState.landmarks.every((l, i) => Math.hypot(l.fixed[0] - clicks[i].fixed[0], l.fixed[1] - clicks[i].fixed[1]) < 0.2 && Math.hypot(l.moving[0] - clicks[i].moving[0], l.moving[1] - clicks[i].moving[1]) < 0.5) &&
+          predictedOff.length === 3 && Math.max(...predictedOff) < 15 && simTF?.model === 'affine' && simTF.method === 'landmarks' && simWorst < bound && simProbes.length === 3 && worstOf(simProbes) <= 2,
+        `six landmarks within 0.2 µm and half a pixel of the places clicked; predicted within 15 pixels; the fit within ${bound.toFixed(1)} µm of the truth; the image's colour at three pixels, within 2`);
     }
     check('viewer', 'no uncaught errors in the page', errors.length ? errors.slice(0, 3).join(' | ') : 'none', errors.length === 0, 'none');
   } finally {

@@ -1,10 +1,10 @@
 package main
 
-// Post-Xenium images (internal/slide): an H&E or immunofluorescence OME-TIFF added to a dataset with
-// its alignment (internal/register), recorded as an artifact of kind "image" that names the image
-// and the alignment file where they lie, by their SHA-256, and copies neither. The image is placed
-// by its alignment: the transform from its pixels to the Xenium image's, then µm by the dataset's
-// pixel size. Its tiles are read from the file when the page asks for them.
+// Post-Xenium images (internal/slide): an H&E or immunofluorescence OME-TIFF added to a dataset,
+// recorded as an artifact of kind "image" that names the image where it lies, by its SHA-256, and
+// copies it not. An image is placed by a transform (api_transforms.go): its alignment supplied with
+// it (Xenium Explorer's matrix or keypoints), recorded as its first, or one made from landmarks
+// later. Its tiles are read from the file when the page asks for them.
 
 import (
 	"context"
@@ -32,20 +32,15 @@ import (
 // The image artifact's file in its folder.
 const imageFile = "image.json"
 
-// imageDescription is image.json: the image as read, where it is, its alignment and its
-// transform to µm.
+// imageDescription is image.json: the image as read and where it is.
 type imageDescription struct {
 	Format  string            `json:"format"`
 	Version int               `json:"version"`
 	Name    string            `json:"name"`
 	Source  imageSource       `json:"source"`
 	Image   slide.Description `json:"image"`
-	// Alignment is as its file gave it: the image's pixels to the Xenium image's.
-	Alignment     register.Alignment `json:"alignment"`
-	AlignmentFile imageSource        `json:"alignmentFile"`
-	// XeniumPixelSize is the dataset's pixel size (µm), and Transform the image's pixels to µm.
-	XeniumPixelSize float64         `json:"xeniumPixelSize"`
-	Transform       register.Affine `json:"transform"`
+	// XeniumPixelSize is the dataset's pixel size (µm).
+	XeniumPixelSize float64 `json:"xeniumPixelSize"`
 	// Ranges are each channel's samples from the 0.1th to the 99.9th percentile over its smallest
 	// level, the window it is first shown with (none for an RGB image).
 	Ranges [][2]int `json:"ranges,omitempty"`
@@ -57,7 +52,8 @@ type imageSource struct {
 	SHA256 string `json:"sha256"`
 }
 
-// imageSpec is what a job adding an image is asked.
+// imageSpec is what a job adding an image is asked: the image, and its alignment when one was
+// supplied with it.
 type imageSpec struct {
 	Bundle    string `json:"bundle"`
 	Path      string `json:"path"`
@@ -151,7 +147,8 @@ func alignmentSummary(al *register.Alignment) map[string]any {
 	return out
 }
 
-// startImage starts the job adding an image to a bundle's dataset: {path, alignment, name}.
+// startImage starts the job adding an image to a bundle's dataset: {path, alignment (optional),
+// name}.
 func (a *app) startImage(w http.ResponseWriter, r *http.Request) {
 	if !isLoopbackRequest(r) {
 		writeError(w, http.StatusForbidden, "Only this computer may add its files.")
@@ -167,9 +164,11 @@ func (a *app) startImage(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "The image: "+err.Error())
 		return
 	}
-	if spec.Alignment, err = namedFile(spec.Alignment); err != nil {
-		writeError(w, http.StatusBadRequest, "The alignment: "+err.Error()+" (the transformation matrix or keypoints Xenium Explorer saves); an image is placed by its alignment")
-		return
+	if strings.TrimSpace(spec.Alignment) != "" {
+		if spec.Alignment, err = namedFile(spec.Alignment); err != nil {
+			writeError(w, http.StatusBadRequest, "The alignment: "+err.Error())
+			return
+		}
 	}
 	b, ok := a.openBundle(w, r)
 	if !ok {
@@ -188,7 +187,8 @@ func (a *app) startImage(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"job": job})
 }
 
-// imageJob reads the image and its alignment, checksums both and records the artifact.
+// imageJob reads the image, checksums it and records the artifact; then its alignment, when one
+// was supplied, as its first transform.
 func (a *app) imageJob(spec imageSpec) jobs.Func {
 	return func(ctx context.Context, r *jobs.Run) error {
 		b, err := xenium.Open(spec.Bundle, xenium.Options{CacheDir: a.cacheDir})
@@ -216,17 +216,16 @@ func (a *app) imageJob(spec imageSpec) jobs.Func {
 		if err != nil {
 			return err
 		}
-		alignment, err := readAlignmentFile(spec.Alignment)
-		if err != nil {
-			return err
+		if spec.Alignment != "" {
+			// Read before the image is checksummed, so that a file that is not an alignment stops
+			// the job at once.
+			if _, err := readAlignmentFile(spec.Alignment); err != nil {
+				return err
+			}
 		}
-		r.Log("info", "%s: %s, %d×%d, %d levels, %s; aligned by %s (scale %.4f%s).", filepath.Base(spec.Path), kindText(desc), desc.Width, desc.Height, len(desc.Levels), desc.Compression, alignment.Kind, alignment.Matrix.Scale(), map[bool]string{true: ", mirrored", false: ""}[alignment.Matrix.Reflected()])
+		r.Log("info", "%s: %s, %d×%d, %d levels, %s.", filepath.Base(spec.Path), kindText(desc), desc.Width, desc.Height, len(desc.Levels), desc.Compression)
 		r.Progress(0.05, "Checksumming the image")
 		src, err := checksum(ctx, spec.Path, func(f float64) { r.Progress(0.05+0.9*f, "Checksumming the image") })
-		if err != nil {
-			return err
-		}
-		al, err := checksum(ctx, spec.Alignment, nil)
 		if err != nil {
 			return err
 		}
@@ -236,11 +235,10 @@ func (a *app) imageJob(spec imageSpec) jobs.Func {
 		}
 		d := imageDescription{
 			Format: "situcraft-image", Version: 1, Name: name,
-			Source: src, Image: desc, Alignment: *alignment, AlignmentFile: al,
-			XeniumPixelSize: pixelSize, Transform: alignment.Matrix.Then(register.Scaling(pixelSize)), Ranges: ranges,
+			Source: src, Image: desc, XeniumPixelSize: pixelSize, Ranges: ranges,
 		}
-		// The artifact's name: the dataset, the image and the alignment, by their contents.
-		h := sha256.Sum256([]byte(run + "\n" + manifestSum + "\n" + src.SHA256 + "\n" + al.SHA256))
+		// The artifact's name: the dataset and the image, by their contents.
+		h := sha256.Sum256([]byte(run + "\n" + manifestSum + "\n" + src.SHA256))
 		id := "img-" + hex.EncodeToString(h[:10])
 		dir, err := a.artifacts.Stage(id)
 		if err != nil {
@@ -253,8 +251,7 @@ func (a *app) imageJob(spec imageSpec) jobs.Func {
 		}
 		r.Validating()
 		summary := map[string]any{"kind": desc.Kind, "width": desc.Width, "height": desc.Height, "bits": desc.Bits, "compression": desc.Compression, "levels": len(desc.Levels),
-			"channels": desc.Channels, "pixelSize": desc.PixelSize, "transform": d.Transform, "alignment": alignmentSummary(alignment),
-			"umPerPixel": d.Transform.Scale()}
+			"channels": desc.Channels, "pixelSize": desc.PixelSize}
 		sum, _ := json.Marshal(summary)
 		jobSpec, _ := json.Marshal(spec)
 		m := artifacts.Manifest{
@@ -262,16 +259,14 @@ func (a *app) imageJob(spec imageSpec) jobs.Func {
 			Kind: "image",
 			Name: name,
 			Lineage: artifacts.Lineage{
-				Parents: []artifacts.Parent{{Kind: "bundle", ID: run, Name: bundleName, SHA256: manifestSum}},
-				Job:     &artifacts.Job{ID: r.ID(), Kind: "image", Spec: jobSpec},
-				Method: artifacts.Method{Name: "Post-Xenium image, aligned by " + map[string]string{"matrix": "its transformation matrix", "keypoints": "its keypoints"}[alignment.Kind],
-					Version: "1", Citation: "10x Genomics. Xenium Explorer: image alignment (transformation matrix and keypoints)."},
+				Parents:  []artifacts.Parent{{Kind: "bundle", ID: run, Name: bundleName, SHA256: manifestSum}},
+				Job:      &artifacts.Job{ID: r.ID(), Kind: "image", Spec: jobSpec},
+				Method:   artifacts.Method{Name: "Post-Xenium image, read where it lies", Version: "1"},
 				Software: []artifacts.Software{{Name: "situcraft", Version: version, Commit: buildCommit()}},
 			},
 			Files: []artifacts.File{
 				{Path: imageFile, Role: "description"},
 				{Path: src.Path, Role: "image", Size: src.Size, SHA256: src.SHA256, Location: artifacts.InPlace},
-				{Path: al.Path, Role: "alignment", Size: al.Size, SHA256: al.SHA256, Location: artifacts.InPlace},
 			},
 			Summary: sum,
 		}
@@ -283,7 +278,16 @@ func (a *app) imageJob(spec imageSpec) jobs.Func {
 		if recorded.State == artifacts.Invalid {
 			return fmt.Errorf("%w: the image's check found fatal problems (artifact %s, kept for review)", jobs.ErrInvalid, recorded.ID)
 		}
-		r.Log("info", "Recorded the image as artifact %s: %.4f µm per pixel as aligned (its metadata says %s).", recorded.ID, d.Transform.Scale(), pixelSizeText(desc.PixelSize))
+		r.Log("info", "Recorded the image as artifact %s (its metadata says its pixels are %s).", recorded.ID, pixelSizeText(desc.PixelSize))
+		if spec.Alignment == "" {
+			r.Log("info", "No alignment was supplied: align it by landmarks in the Alignment view.")
+			return nil
+		}
+		tm, td, err := a.makeTransform(recorded.ID, transformRequest{Alignment: spec.Alignment, By: "supplied with the image"})
+		if err != nil {
+			return fmt.Errorf("its alignment: %w", err)
+		}
+		r.Log("info", "Recorded its alignment as artifact %s: %s, %.4f µm per pixel.", tm.ID, td.Name, td.Transform.Scale())
 		return nil
 	}
 }
@@ -406,7 +410,7 @@ func checksum(ctx context.Context, path string, progress func(float64)) (imageSo
 }
 
 // checkImageArtifact checks an image artifact before it is recorded: its description reads back,
-// its transform is invertible, and the image still opens as described.
+// and the image still opens as described.
 func checkImageArtifact(dir string, m *artifacts.Manifest) []artifacts.Finding {
 	raw, err := os.ReadFile(filepath.Join(dir, imageFile))
 	if err != nil {
@@ -417,9 +421,6 @@ func checkImageArtifact(dir string, m *artifacts.Manifest) []artifacts.Finding {
 		return []artifacts.Finding{{Severity: "fatal", Code: "image.description", Message: fmt.Sprintf("image.json is not an image's description (%v)", err)}}
 	}
 	var out []artifacts.Finding
-	if !d.Transform.Valid() {
-		out = append(out, artifacts.Finding{Severity: "fatal", Code: "image.transform", Message: "The image's transform to µm cannot be inverted."})
-	}
 	im, err := slide.Open(d.Source.Path)
 	if err != nil {
 		return append(out, artifacts.Finding{Severity: "fatal", Code: "image.unreadable", Message: err.Error()})
@@ -427,11 +428,6 @@ func checkImageArtifact(dir string, m *artifacts.Manifest) []artifacts.Finding {
 	defer im.Close()
 	if im.Width != d.Image.Width || im.Height != d.Image.Height || len(im.Levels) != len(d.Image.Levels) {
 		out = append(out, artifacts.Finding{Severity: "fatal", Code: "image.changed", Message: "The image is not the one described."})
-	}
-	if d.Image.PixelSize > 0 {
-		if ratio := d.Transform.Scale() / d.Image.PixelSize; ratio < 0.95 || ratio > 1.05 {
-			out = append(out, artifacts.Finding{Severity: "info", Code: "image.pixel-size", Message: fmt.Sprintf("The alignment makes the image's pixels %.4f µm; its metadata says %.4f µm. The alignment places it.", d.Transform.Scale(), d.Image.PixelSize)})
-		}
 	}
 	for _, n := range d.Image.Notes {
 		out = append(out, artifacts.Finding{Severity: "info", Code: "image.planes", Message: n})

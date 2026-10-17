@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { apply, defaultImageLayer, invert, modelMatrix, overlayBounds, overlayLevel, overlayTileRange, tileGeometry, umPerPixel } from './overlays.js';
-import { addImage, describeAlignment, describeImage, imageRecord, imagesOf } from './images.js';
+import { addImage, describeImage, describePlacement, imageRecord, imagesOf, placedImages } from './images.js';
 import { captureView, viewLayers } from './views.js';
 
 // The pathology fixture's immunofluorescence image: its pixels to µm, turned half a turn (its
@@ -61,22 +61,22 @@ test('an image starts opaque if RGB; an immunofluorescence image\'s channels in 
 
 const manifest = {
   id: 'img-1', name: 'H&E (S1_he_image.ome.tif)', state: 'complete', created: '2026-10-16T00:00:00Z',
-  lineage: { method: { name: 'Post-Xenium image, aligned by its transformation matrix', version: '1' }, job: { id: 'j1', kind: 'image' } },
-  files: [{ path: 'image.json', role: 'description', size: 10, sha256: 'a' }, { path: '/data/S1_he_image.ome.tif', role: 'image', size: 9, sha256: 'b', location: 'place' }, { path: '/data/S1_he_imagealignment.csv', role: 'alignment', size: 1, sha256: 'c', location: 'place' }],
-  summary: { kind: 'rgb', width: 30786, height: 24241, levels: 7, compression: 'deflate', channels: [{ name: 'RGB' }], umPerPixel: 0.36390, alignment: { kind: 'matrix', scale: 1.71252, rotation: 0.28, reflected: true } },
+  lineage: { method: { name: 'Post-Xenium image, read where it lies', version: '1' }, job: { id: 'j1', kind: 'image' } },
+  files: [{ path: 'image.json', role: 'description', size: 10, sha256: 'a' }, { path: '/data/S1_he_image.ome.tif', role: 'image', size: 9, sha256: 'b', location: 'place' }],
+  summary: { kind: 'rgb', width: 30786, height: 24241, levels: 7, compression: 'deflate', channels: [{ name: 'RGB' }], pixelSize: 0.3638 },
 };
 
-test('an image recorded in the project, described in words', () => {
-  const project = { datasets: [{ id: 'd1', name: 'Rep1' }], artifacts: [], history: [], views: [] };
+test('an image recorded in the project, described in words, not placed until aligned', () => {
+  const project = { datasets: [{ id: 'd1', name: 'Rep1' }], artifacts: [], history: [], decisions: [], views: [] };
   const record = imageRecord(project.datasets[0], manifest, 'now');
   assert.equal(record.image, '/data/S1_he_image.ome.tif');
-  assert.equal(record.alignment, '/data/S1_he_imagealignment.csv');
   const next = addImage(project, record, 'now');
   assert.equal(imagesOf(next, 'd1').length, 1);
   assert.equal(addImage(next, record, 'now'), next, 'recorded once');
-  assert.match(next.history[0].detail, /Added H&E .* to Rep1, aligned by its transformation matrix \(0\.3639 µm per pixel/);
-  assert.equal(describeImage(record), 'RGB, 30,786 × 24,241, 7 levels, deflate; 0.3639 µm per pixel');
-  assert.equal(describeAlignment(record.summary), 'Aligned by its transformation matrix: scaled 1.7125, turned 0.3°, mirrored.');
+  assert.match(next.history[0].detail, /Added H&E .* to Rep1, read where it lies \(artifact img-1, by SHA-256\)/);
+  assert.equal(describeImage(record), 'RGB, 30,786 × 24,241, 7 levels, deflate');
+  assert.deepEqual(placedImages(next, 'd1').map((p) => p.transform), [null], 'not aligned');
+  assert.equal(describePlacement({ umPerPixel: 0.363902, rotation: 0.28, reflected: true }), '0.3639 µm per pixel, turned 0.3°, mirrored');
 });
 
 test('a saved view keeps its images\' layers, and a view without images is as before', () => {

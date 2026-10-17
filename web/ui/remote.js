@@ -12,7 +12,8 @@ import { ATTRIBUTES } from '../lib/cell-attributes.js';
 import { decideSegmentation, DECISIONS, EXPORT_FORMATS, promotedSegmentation } from '../lib/segmentations.js';
 import { CLASS_INFO, RANKS, cellNames, warnings } from '../lib/review.js';
 import { workedExamples } from '../lib/tours.js';
-import { describeAlignment, describeImage, imagesOf } from '../lib/images.js';
+import { describeImage, describePlacement, imagesOf } from '../lib/images.js';
+import { describeTransform, transformInUse, transformsOf, useTransform } from '../lib/transforms.js';
 import { defaultImageLayer } from '../lib/overlays.js';
 import { parseProject, rename, serializeProject } from '../lib/project.js';
 import { removeView, sameView, viewLink } from '../lib/views.js';
@@ -272,6 +273,7 @@ export function installRemote(app) {
       const data = {
         project: { id: p.id, name: p.name, created: p.created, modified: p.modified, history: p.history.length },
         segmentations: p.artifacts.filter((a) => a.kind === 'segmentation').map((a) => ({ id: a.id, name: a.name, dataset: datasetName(a.dataset), state: a.state, default: promotedSegmentation(p, a.dataset)?.record.id === a.id })),
+        images: p.artifacts.filter((a) => a.kind === 'image').map((a) => ({ id: a.id, name: a.name, dataset: datasetName(a.dataset), path: a.image, placedBy: transformInUse(p, a.id)?.record.id ?? null, alignments: transformsOf(p, a.id).map((x) => ({ id: x.id, name: x.name, how: describeTransform(x) })) })),
         mode,
         focus: store.ui.focus ?? null,
         datasets: p.datasets.map(datasetData),
@@ -589,22 +591,77 @@ export function installRemote(app) {
       const item = link?.item ?? app.bundles.itemByPath(dataset.path);
       if (!item) throw new ActionError(`${dataset.name}'s bundle was not found where the project records it.`);
       if (args.path === undefined) throw new ActionError('Name the image: path, an OME-TIFF on this computer.');
-      let alignment = args.alignment === undefined ? '' : String(args.alignment);
+      let alignment = args.alignment === undefined || args.alignment === null ? '' : String(args.alignment);
       try {
-        if (!alignment) {
+        if (!alignment && args.alignment === undefined) {
           const checked = await app.bundles.checkImage(item, String(args.path));
           alignment = checked.siblings?.[0] ?? '';
-          if (!alignment) throw new Error(`no alignment beside ${args.path}: name it (alignment), the transformation matrix or keypoints Xenium Explorer saves`);
         }
         const manifest = await app.bundles.addImage(item, dataset.id, { path: String(args.path), alignment, ...(args.name ? { name: String(args.name) } : {}) });
         const record = imagesOf(project(), dataset.id).find((r) => r.id === manifest.id);
+        const placed = manifest.transform ? `Placed by ${manifest.transform.name}: ${describePlacement(manifest.transform.summary)}.` : 'Not aligned: align_image places it by landmarks.';
         return {
-          message: `${manifest.name} added to ${dataset.name}: ${record ? describeImage(record) : ''}. ${describeAlignment(manifest.summary)}`,
-          data: { id: manifest.id, name: manifest.name, image: record?.image, alignment: record?.alignment, summary: manifest.summary, findings: manifest.findings },
+          message: `${manifest.name} added to ${dataset.name}: ${record ? describeImage(record) : ''}. ${placed}`,
+          data: { id: manifest.id, name: manifest.name, image: record?.image, transform: manifest.transform ? { id: manifest.transform.id, name: manifest.transform.name, summary: manifest.transform.summary } : null, summary: manifest.summary, findings: manifest.findings },
         };
       } catch (error) {
         throw new ActionError(error.message);
       }
+    },
+
+    async align_image(args) {
+      const dataset = resolveDataset(args.dataset);
+      const record = imageRef(dataset, args.image);
+      if (!Array.isArray(args.landmarks)) throw new ActionError('landmarks is a list of {"fixed": [x, y] (µm), "moving": [x, y] (the image\'s pixels)}.');
+      const landmarks = args.landmarks.map((l, i) => {
+        const pair = (v, what) => {
+          if (!Array.isArray(v) || v.length !== 2) throw new ActionError(`Landmark ${i + 1}'s ${what} is [x, y].`);
+          return [finite(v[0], `landmark ${i + 1}'s ${what}`), finite(v[1], `landmark ${i + 1}'s ${what}`)];
+        };
+        return { fixed: pair(l?.fixed, 'fixed position'), moving: pair(l?.moving, 'moving position') };
+      });
+      const model = args.model === undefined ? 'similarity' : choose(args.model, ['similarity', 'affine'], 'model');
+      const parent = args.parent === undefined ? '' : transformRef(record, args.parent).id;
+      const use = args.use === undefined ? true : Boolean(args.use);
+      const by = args.by ? String(args.by) : author;
+      const note = args.note ? String(args.note) : '';
+      try {
+        const answer = await app.bundles.makeTransform(dataset.id, record.id, { landmarks, model, parent, by, note }, { use, rationale: note, by });
+        const fit = answer.transform.fit;
+        return {
+          message: `${answer.manifest.name}: residuals ${fit.rms.toFixed(3)} µm root-mean-square (at most ${fit.max.toFixed(3)})${fit.leaveOneOut ? `, left out ${fit.looRms.toFixed(3)} µm (at most ${fit.looMax.toFixed(3)})` : ''}. ${use ? `It places ${record.name}.` : 'Saved as a version; use_transform chooses it.'}`,
+          data: { id: answer.manifest.id, name: answer.manifest.name, transform: answer.transform.transform, model: answer.transform.model, fit, placedBy: transformInUse(project(), record.id)?.record.id ?? null },
+        };
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+    },
+
+    async use_transform(args) {
+      const dataset = resolveDataset(args.dataset);
+      const record = imageRef(dataset, args.image);
+      const tf = transformRef(record, args.transform);
+      const by = args.by ? String(args.by) : author;
+      app.store.commit(useTransform(project(), { transform: tf.id, rationale: args.rationale ? String(args.rationale) : '', by }), `Place ${record.name} by ${tf.name}`);
+      return { message: `${record.name} is placed by ${tf.name}: ${describePlacement(tf.summary)}.`, data: { image: record.id, transform: tf.id } };
+    },
+
+    async show_alignment(args) {
+      const dataset = resolveDataset(args.dataset);
+      const record = imageRef(dataset, args.image);
+      const tf = args.transform === undefined ? null : transformRef(record, args.transform);
+      bundleOf(dataset);
+      await app.showAlignment(dataset.id, record.id, { transform: tf?.id ?? null });
+      const hook = await waitFor(() => store.ui.mode === 'alignment' && window.situcraftAlignment?.image === record.id && window.situcraftAlignment, 10 * 60000, `${record.name} to open in the Alignment view`);
+      if (tf) await waitFor(() => hook.state().parent === tf.id || !['landmarks', 'keypoints'].includes(tf.summary?.method), 30000, 'its landmarks to load');
+      await hook.settled();
+      await frames();
+      const st = hook.state();
+      const inUse = transformInUse(project(), record.id);
+      return {
+        message: `${record.name} in the Alignment view: ${plural(st.landmarks.length, 'landmark')}${st.fit ? `, residuals ${st.fit.rms.toFixed(3)} µm root-mean-square` : ''}; ${inUse ? `placed by ${inUse.record.name}` : 'not aligned'}.`,
+        data: { ...st, versions: transformsOf(project(), record.id).map((x) => ({ id: x.id, name: x.name, how: describeTransform(x), parent: x.parent, inUse: inUse?.record.id === x.id })) },
+      };
     },
 
     async select_cell(args) {
@@ -1538,7 +1595,17 @@ export function installRemote(app) {
     },
 
     async export(args) {
-      const what = choose(args.what, ['project', 'archive', 'methods'], 'kind of file');
+      const what = choose(args.what, ['project', 'archive', 'methods', 'alignment'], 'kind of file');
+      if (what === 'alignment') {
+        const dataset = resolveDataset(args.dataset);
+        const record = imageRef(dataset, args.image);
+        const tf = args.transform === undefined ? transformInUse(project(), record.id)?.record : transformRef(record, args.transform);
+        if (!tf) throw new ActionError(`${record.name} is not aligned: name an alignment (transform).`);
+        const format = args.format === undefined ? 'matrix' : choose(args.format, ['matrix', 'keypoints'], 'format');
+        const response = await fetch(`/api/transforms/${encodeURIComponent(tf.id)}/xenium-explorer/${format}`, { cache: 'no-store' });
+        if (!response.ok) throw new ActionError((await response.json().catch(() => ({}))).error ?? `HTTP ${response.status}`);
+        return { file: await response.text(), message: `${tf.name} as Xenium Explorer's ${format === 'matrix' ? 'transformation matrix' : 'keypoints'} for ${record.name}.` };
+      }
       if (what === 'project') {
         return { file: `${JSON.stringify(parseProject(serializeProject(project())), null, 2)}\n`, message: `The project document of ${project().name}.` };
       }
@@ -1554,6 +1621,31 @@ export function installRemote(app) {
       return { message: `Wrote ${body.path} (${body.bytes} bytes): ${project().name}, its bundles recorded relative to it.`, data: { path: body.path, bytes: body.bytes } };
     },
   };
+
+  // A post-Xenium image of a dataset by its name or artifact ID (its only image if not named).
+  function imageRef(dataset, ref) {
+    const records = imagesOf(project(), dataset.id);
+    if (!records.length) throw new ActionError(`${dataset.name} has no post-Xenium image: add_image adds one.`);
+    if (ref === undefined || ref === null || ref === '') {
+      if (records.length > 1) throw new ActionError(`${dataset.name} has ${records.length} images (${records.map((r) => r.name).join('; ')}): name one (image).`);
+      return records[0];
+    }
+    return records.find((r) => r.id === String(ref)) ?? records.find((r) => r.name === choose(String(ref), records.map((x) => x.name), 'image'));
+  }
+
+  // A version of an image's alignment by its name or artifact ID ('in use' for the one placing it).
+  function transformRef(record, ref) {
+    const list = transformsOf(project(), record.id);
+    if (/^in use$/i.test(String(ref))) {
+      const used = transformInUse(project(), record.id);
+      if (!used) throw new ActionError(`${record.name} is not aligned.`);
+      return used.record;
+    }
+    const byId = list.find((x) => x.id === String(ref));
+    if (byId) return byId;
+    if (!list.length) throw new ActionError(`${record.name} has no alignment yet: align_image or add_image with an alignment makes one.`);
+    return list.find((x) => x.name === choose(String(ref), list.map((x) => x.name), 'alignment'));
+  }
 
   // A cell of a dataset by its ID, or by its row as "#123": { row, id }.
   // A cell by its ID (or "#row") in a segmentation of a dataset ('instrument' for the dataset's

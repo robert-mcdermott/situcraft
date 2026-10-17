@@ -90,6 +90,9 @@ type Params struct {
 	// shared), written into one bundle a tile at a time. 0 or 1: one field.
 	TilesAcross int `json:"tiles_across,omitempty"`
 	TilesDown   int `json:"tiles_down,omitempty"`
+	// PostXenium asks for post-Xenium images of the section (postxenium.go): an H&E, an
+	// immunofluorescence image, or both, each placed by a known transform.
+	PostXenium *PostXenium `json:"post_xenium,omitempty"`
 
 	// part is a mosaic's tile, from 0: its streams' own (the first tile's, a single field's, are
 	// the seed's).
@@ -201,6 +204,17 @@ func (p *Params) Check() error {
 	if across, down := p.tiles(); across*down > 1 {
 		w, h := int(math.Ceil(p.WidthUm/p.PixelUm)), int(math.Ceil(p.HeightUm/p.PixelUm))
 		need(w%mosaicBlock == 0 && h%mosaicBlock == 0, fmt.Sprintf("a mosaic's tiles whole %d-pixel blocks each way (%d × %d pixels asked; %.1f µm is %d at %g µm)", mosaicBlock, w, h, float64(mosaicBlock)*8*p.PixelUm, 8*mosaicBlock, p.PixelUm))
+	}
+	if px := p.PostXenium; px != nil {
+		across, down := p.tiles()
+		need(across*down == 1, "post-Xenium images of a single field (not a mosaic)")
+		need(px.HE != nil || px.IF != nil, "post-Xenium images: an H&E, an immunofluorescence image, or both")
+		if px.HE != nil {
+			px.HE.check("the H&E", need)
+		}
+		if px.IF != nil {
+			px.IF.check("the immunofluorescence image", need)
+		}
 	}
 	if len(bad) > 0 {
 		return fmt.Errorf("the simulation's parameters: %s", joinAnd(bad))

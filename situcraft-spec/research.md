@@ -346,6 +346,48 @@ image's; its alignment makes its pixels 0.7387 µm (scale 3.476). SituCraft plac
 alignment alone, then in µm by the dataset's pixel size; the metadata's figure is kept, and the
 artifact notes when the two differ by more than 5%.
 
+### 2.2 Landmark fits (verified, wave 5, slice 2)
+
+An image is aligned by landmarks, each a place marked on both images: its fixed position (µm, the
+dataset's coordinates) and its moving position (the image's full-resolution pixels, (0, 0) the
+corner of its first). Two models, fitted by least squares (`internal/register/fit.go`):
+
+- **A similarity:** translation, one scale and a rotation, and a reflection when that fits better
+  (Umeyama 1991, in closed form, with and without a reflection; Xenium Explorer fits its keypoints
+  so). Three landmarks at least: two fix a similarity up to its reflection, the third tells it.
+- **An affine transform:** a scale along each axis and a shear as well (scanners' pixels need not
+  be square, and a section may stretch one way). From the normal equations of the centred
+  positions; three landmarks not on a line at least.
+
+**How well a fit fits** is said two ways, each landmark's:
+- **residual:** its distance from where the fit puts it, the landmark among those fitted;
+- **leave-one-out error:** its distance from where the fit of the others puts it (cross-validation,
+  Stone 1974), when the others still fit the model (two for a similarity, which keeps the full
+  fit's reflection; three not on a line for an affine transform).
+
+Residuals understate the error where no landmark is: a fit is drawn toward its own landmarks. A
+square of landmarks, one placed 2 µm off, worked by hand: an affine fit leaves every residual at
+0.5 µm, and each landmark left out is predicted 2 µm off (the three others fit exactly); a
+similarity's residuals are 0, 0.71, 0.71 and 1 µm, its leave-one-out errors 0, 1.41, 1.41 and 2 µm.
+On the simulated images (§3.4a), twelve landmarks at nuclei fitted as an affine transform leave
+residuals of 0.16 µm root-mean-square; left out, 0.21 µm; the fit's true error over the section is
+0.31 µm (a smooth deformation no affine transform follows).
+
+**The page fits as the program does,** bit for bit: the same operations in the same order, every
+product rounded on its own and square roots IEEE 754's (`web/lib/transforms.js`; a checksum of 600
+fits agrees). What the page shows while landmarks are placed is what is recorded.
+
+**10x's alignments are similarities.** The fixture's H&E matrix is exactly a reflected similarity
+(its A is −E, its B is D, to the last bit) and its immunofluorescence matrix exactly a similarity
+turned −179.6°: as fitted from keypoints. Keypoints made with either, written as Xenium Explorer
+writes them and read back, fit to it within 1e-15.
+
+**Versions.** Each alignment is an artifact of kind `transform`, named by its description's
+checksum: its source and destination systems, method, model, transform, landmarks, fit, who made
+it, a note and its parent version. Which one places an image is a decision with its reason; the
+latest names it. An image with none is not drawn on the tissue: a place guessed from its metadata
+would look aligned and not be.
+
 ## 3. Segmentation
 
 ### 3.1 Nucleus expansion (verified, wave 2, slice 3)
@@ -1456,6 +1498,55 @@ matching it row for row, and its masks whole (`TestAMosaicIsOneBundle`).
   expansion's are where it fills the gaps between cells. These are the baselines the
   transcript-informed segmentation must beat (wave 3, slice 3).
 
+### 3.4a Simulated post-Xenium images (verified, wave 5, slice 2)
+
+Registration, like segmentation, is scored only against a truth. `situcraft simulate --post-xenium`
+makes an H&E and an immunofluorescence image of the simulated section (`internal/simulate/
+postxenium.go`), each placed by a known transform, written with the bundle (FORMATS.md).
+
+**Where each lies.** A pixel q of an image (full resolution, (0, 0) the corner of its first) is at
+x = A·q on the section, then displaced by a smooth deformation d(x): along each axis, three sine
+waves of random direction, a length about the wavelength asked for (0.7 to 1.3 times it), and
+amplitudes summing to at most the deformation asked for. A is the image's pixel size and aspect,
+a shear, a reflection and a turn, its translation such that the image covers the section and a
+margin of glass. The defaults: an H&E of 0.3638 µm pixels (a 40× scanner's), aspect 1.004, shear
+0.003, mirrored, turned 2.5°, deformed by up to 2 µm over 300 µm; an immunofluorescence image of
+0.65 µm pixels turned −177°, deformed by up to 1.5 µm over 400 µm. The deformation is of another
+family than the B-splines registration may fit (wave 5, slice 3): a method is not scored on its own
+model (the "inverse crime", §3.4).
+
+**What each shows,** each pixel the mean of 2 × 2 points of the section:
+- **The H&E,** by Beer–Lambert's law: each point's optical densities of haematoxylin and eosin
+  (haematoxylin log-normal about 0.85 in a nucleus, 0.05 in cytoplasm, 0.02 between cells; eosin
+  by the cell's type, 0.18 to 0.40, varied by cell, 0.09 between cells, 0.12 in nuclei), with
+  grain, blurred by a 3 × 3 mean; the light through them over the glass's (241, 238, 243), each
+  channel exp(−ln 10 · (h·H + e·E)), with the camera's noise (σ 1.2). The stains' colours are
+  Ruifrok and Johnston's (2001), haematoxylin (0.65, 0.70, 0.29) and eosin (0.07, 0.99, 0.11),
+  each component varied by 4% per section and recorded in the truth, so that colour deconvolution
+  (slice 3) is not handed its vectors.
+- **The immunofluorescence image,** two 16-bit channels: DAPI, each nucleus of its own brightness
+  (log-normal about 2,400); and a membrane stain, bright (log-normal about 1,600 per cell) where a
+  point's neighbours 0.6 µm away are another cell's or none's, faint (120) inside cells; blurred,
+  on a background of 110, with noise (σ 9).
+
+Every product is rounded on its own and every sine is `internal/dmath`'s (Taylor's series on a
+reduced turn, within a few units in the last place of Go's): the images are the same on every
+processor and however many cores render them.
+
+**Checked against their truth** (the small preset, 160 × 120 µm, 208 nuclei in the section), by
+finding the nuclei in each image (haematoxylin's optical density in red above 0.2; DAPI above
+1,000; 4-connected pieces of 6 µm² or more) and mapping each through the truth onto the true
+nuclei:
+
+| Image | Size | Nuclei found | From a true nucleus (median) | Twelve landmarks, affine: residuals / left out / true error over the section |
+|---|---|---|---|---|
+| H&E, 0.3638 µm | 699 × 593 | 206 | 0.032 µm | 0.16 / 0.21 / 0.31 µm |
+| Immunofluorescence, 0.65 µm | 360 × 302 | 202 | 0.067 µm | 0.16 / 0.24 / 0.17 µm |
+
+A half-pixel error in the truth's convention would put the nuclei 0.26 µm (H&E) and 0.46 µm off.
+On the standard preset the images are 1,675 × 1,672 (6.4 MB) and 913 × 914 (2.8 MB), and the
+simulation takes 4.5 s with them.
+
 ## 4. Comparing segmentations (verified, wave 2, slice 5)
 
 Every segmentation is compared as SituCraft's own files (§3.1, §3.3): the instrument's is written
@@ -2326,6 +2417,10 @@ Notes:
   2023;14:8353. doi:10.1038/s41467-023-43458-x (the pathology fixture).
 - Umeyama S. Least-squares estimation of transformation parameters between two point patterns.
   *IEEE TPAMI* 1991;13:376–380.
+- Stone M. Cross-validatory choice and assessment of statistical predictions. *J R Stat Soc B*
+  1974;36(2):111–147 (leave-one-out errors of landmark fits).
+- Ruifrok AC, Johnston DA. Quantification of histochemical staining by color deconvolution.
+  *Anal Quant Cytol Histol* 2001;23(4):291–299 (the stains' colours of the simulated H&E).
 - Douglas DH, Peucker TK. Algorithms for the reduction of the number of points required to
   represent a digitized line or its caricature. *Cartographica* 1973;10(2):112–122.
   doi:10.3138/FM57-6770-U75U-7727 (polygon simplification in the geometry tiles and segmentation

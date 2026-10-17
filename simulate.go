@@ -37,6 +37,7 @@ func runSimulate(args []string, stdout, stderr io.Writer) int {
 	paramsFile := flags.String("params", "", "a JSON file of parameters, each overriding the preset's (as --print-params writes them)")
 	printParams := flags.Bool("print-params", false, "print the parameters as JSON and exit")
 	quiet := flags.Bool("quiet", false, "print only the summary")
+	postXenium := flags.Bool("post-xenium", false, "also make post-Xenium images of the section, an H&E and an immunofluorescence image (DAPI and a membrane stain), each placed by a known transform and deformation, in its post_xenium/ folder; where each lies is in truth/post_xenium/")
 	reference := flags.Int("reference", 0, "also write a single-cell reference of the tissue's types, this many cells of each, as an AnnData object in Zarr beside the bundle (<folder>-reference.zarr), to label its cells from")
 	flags.Usage = func() {
 		fmt.Fprintln(stderr, "Usage: situcraft simulate [flags] <new output folder>")
@@ -76,6 +77,9 @@ func runSimulate(args []string, stdout, stderr io.Writer) int {
 	}
 	if *height != 0 {
 		p.HeightUm = *height
+	}
+	if *postXenium && p.PostXenium == nil {
+		p.PostXenium = simulate.DefaultPostXenium()
 	}
 	if err := p.Check(); err != nil {
 		fmt.Fprintf(stderr, "situcraft simulate: %v\n", err)
@@ -123,6 +127,9 @@ func runSimulate(args []string, stdout, stderr io.Writer) int {
 	fmt.Fprintf(stdout, "%d nuclei are in the section; the simulated instrument segmented %d cells by nucleus expansion.\n", sum.VisibleNuclei, sum.InstrumentCells)
 	fmt.Fprintf(stdout, "%d transcripts: %d from cells, %d background, %d negative controls.\n", sum.Transcripts, sum.MoleculesByOrigin["cell"], sum.MoleculesByOrigin["background"],
 		sum.MoleculesByOrigin["control probe"]+sum.MoleculesByOrigin["control codeword"])
+	if len(sum.PostXeniumImages) > 0 {
+		fmt.Fprintf(stdout, "Post-Xenium images: %s (where each lies: %s).\n", strings.Join(sum.PostXeniumImages, ", "), simulate.RegistrationFile)
+	}
 	fmt.Fprintf(stdout, "Written to %s (the truth in its truth/ folder). Open it with: situcraft %s\n", sum.Folder, sum.Folder)
 	if *reference > 0 {
 		path := strings.TrimRight(sum.Folder, "/") + "-reference.zarr"

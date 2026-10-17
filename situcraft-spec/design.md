@@ -431,11 +431,22 @@ An H&E or immunofluorescence image of the section, stained after the run (`inter
 `api_images.go`), is read where it lies, never copied: a pyramidal, tiled OME-TIFF, as Xenium
 Explorer requires, each tile decoded by the program when the page asks for it (an RGB tile sent as
 its pixels, a channel's as the stains' two byte planes), not cached on disk: the file already is its
-pyramid. It is an artifact of kind `image` whose image and alignment files are recorded in place
-(`location: "place"`, by absolute path and SHA-256). Its alignment (`internal/register`) is the
-transform from its pixels to the Xenium image's, then µm; the renderer draws each image's tiles
-through that transform as a model matrix (any rotation or reflection), finding the tiles in view
-through its inverse. An image's own pixel size is recorded but never places it.
+pyramid. It is an artifact of kind `image` whose image is recorded in place (`location: "place"`,
+by absolute path and SHA-256). It is placed by a transform (`api_transforms.go`,
+`internal/register`): an artifact of kind `transform`, its pixels to µm, a version of its alignment
+(Xenium Explorer's matrix or keypoints, their file in place, or landmarks placed in SituCraft and
+fitted as a similarity or affine transform), with its landmarks, fit, author, note and parent
+version. Which version places an image is a project decision (`web/lib/transforms.js`), as a
+segmentation's promotion is; an image with none is listed but not drawn. The renderer draws each
+image's tiles through its transform as a model matrix (any rotation or reflection), finding the
+tiles in view through its inverse. An image's own pixel size is recorded but never places it.
+
+The Alignment view (`web/ui/mode-alignment.js`) is two renderers side by side: the dataset's stains
+in µm, and the post-Xenium image alone, drawn under the identity in its own pixels (a renderer with
+every stain off). Landmarks are DOM markers over the canvases, placed from the renderers' cameras
+each frame. The page fits landmarks as `internal/register` does, bit for bit (the same operations
+in the same order, `fitFingerprint` in both), so the fit shown is the one recorded; saving posts
+the landmarks, and the program fits and records them again.
 
 ### Exports
 

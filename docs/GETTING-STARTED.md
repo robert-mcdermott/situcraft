@@ -623,7 +623,7 @@ counterparts carry.
 
 A Xenium run leaves the section intact, so it can be stained (H&E) or imaged for proteins
 (immunofluorescence) afterwards. SituCraft draws such an image on the tissue, under the
-transcripts and cells, placed by its alignment to the Xenium image.
+transcripts and cells, placed by an alignment to the Xenium image.
 
 In the Viewer, open **Post-Xenium images**, then **Add a post-Xenium image**:
 
@@ -633,20 +633,54 @@ In the Viewer, open **Post-Xenium images**, then **Add a post-Xenium image**:
 2. **Check:** says what the image is (RGB or its channels, its size and levels, its compression)
    and fills in the alignment when one named after the image lies beside it, as 10x names them
    (`<sample>_he_imagealignment.csv` for `<sample>_he_image.ome.tif`).
-3. **Alignment:** the transformation matrix or the keypoints Xenium Explorer saves (its **Download
-   Image Alignment File**). The image is placed by it alone: the pixel size an image's own metadata
-   gives is often the Xenium image's, whatever its own.
-4. **Add the image:** a job checksums the image where it lies (it is never copied) and records it,
-   with its alignment, as an artifact of the dataset.
+3. **Alignment (optional):** the transformation matrix or the keypoints Xenium Explorer saves (its
+   **Download Image Alignment File**). Without one, the image is added unaligned, to place by
+   landmarks. An image is placed by an alignment alone: the pixel size its own metadata gives is
+   often the Xenium image's, whatever its own.
+4. **Add the image:** a job checksums the image where it lies (it is never copied) and records it
+   as an artifact of the dataset, with its alignment as the first version of it.
 
-Each image is listed under **Images** in the project tree and in the Viewer's panel, with how its
-alignment places it (its scale, its turn, whether it is mirrored). Show or hide it and set its
-opacity; an H&E is drawn in its colours over the stains, an immunofluorescence image's channels
-each in a colour, window and gamma as the stains are (its nuclear stain off at first: the Xenium
-image's DAPI is the same nuclei). A saved view keeps each image's settings.
+Each image is listed under **Images** in the project tree and in the Viewer's panel, with the
+version of its alignment that places it (its scale, its turn, whether it is mirrored). Show or
+hide it and set its opacity; an H&E is drawn in its colours over the stains, an
+immunofluorescence image's channels each in a colour, window and gamma as the stains are (its
+nuclear stain off at first: the Xenium image's DAPI is the same nuclei). A saved view keeps each
+image's settings. An image not aligned yet is listed but not drawn.
 
-Aligning an image without an alignment file (by landmarks, or automatically), and checking an
-alignment in µm, arrive later in 0.5.0 (see the [roadmap](../situcraft-spec/roadmap.md)).
+## Aligning an image by landmarks
+
+The **Alignment** view (**Align it…** or **Alignment…** beside an image in the Viewer) shows the
+Xenium image on the left, in µm, and the post-Xenium image on the right, in its own pixels; each
+pans and zooms on its own.
+
+1. **Place landmarks.** Click a place on one image, then the same place on the other: a nucleus,
+   a vessel, the tissue's edge. Spread them over the section. From the fourth on, the fit
+   predicts where the second click falls and that image goes there (a dashed marker); click the
+   exact place. Drag a landmark to move it; Delete removes the one chosen, Escape one placed on
+   one image only.
+2. **Read the fit.** A similarity moves, turns, scales (one scale) and mirrors the image; an affine
+   transform also stretches and shears it (scanners' pixels are not always square). For each
+   landmark: its **residual**, how far the fit puts it from where it was placed, and its **left
+   out** error, how far the fit of the other landmarks puts it. Residuals understate the error
+   between landmarks; the left-out error is what to expect where no landmark is. A landmark
+   whose left-out error stands out is likely misplaced. With an alignment in use, the panel also
+   says how far these landmarks are from it.
+3. **See it.** **Lay the image over the stains, as fitted** draws it under the fit on the left;
+   **Move the images together** keeps the two images on the same place as you pan.
+4. **Save.** **Save and use** records the fit as a version of the image's alignment, with your
+   name and a note, and places the image by it; **Save as a version** keeps it without using it.
+
+Every version is listed under **Versions**, with how it was made, how well it fits, who made it,
+when, and the version it was made from. **Use** places the image by another (the reason is kept
+with the decision); **Edit from it** loads its landmarks to change them into a new version;
+**Matrix** and **Keypoints** write it as Xenium Explorer's files, to load with the image there.
+
+To practise, `situcraft simulate --post-xenium <folder>` makes a simulated tissue with an H&E and an
+immunofluorescence image of it in `post_xenium/`, each moved by a known transform and a smooth
+deformation; `truth/post_xenium/registration.json` says where each pixel truly lies.
+
+Aligning an image automatically, and checking an alignment in µm over the whole section, arrive
+later in 0.5.0 (see the [roadmap](../situcraft-spec/roadmap.md)).
 
 ## Keyboard
 

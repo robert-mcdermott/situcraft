@@ -126,7 +126,7 @@ N cells of each, as `<folder>-reference.zarr` (its types in `obs`'s `cell_type`,
 
 An H&E or immunofluorescence image of a dataset's section, stained and scanned after the Xenium run
 (from 0.5.0), is added in the Viewer (**Post-Xenium images**) or by the `add_image` remote action,
-with its alignment. It is read where it lies, never copied, a tile at a time.
+with its alignment or without one. It is read where it lies, never copied, a tile at a time.
 
 | What | Form | What is read |
 | --- | --- | --- |
@@ -134,10 +134,17 @@ with its alignment. It is read where it lies, never copied, a tile at a time.
 | Its alignment: the transformation matrix | `<name>_imagealignment.csv`, as Xenium Explorer saves it | A 3×3 affine matrix, row-major, its last row `0,0,1`: the image's pixels to the Xenium image's pixels (its scale is the image's pixel size over the Xenium image's) |
 | Its alignment: the keypoints | `<name>_keypoints.csv`, as Xenium Explorer saves it | Columns `fixedX`, `fixedY` (the Xenium image's pixels) and `alignmentX`, `alignmentY` (the image's), a row each landmark; fitted by least squares as a similarity (translation, one scale, rotation and, where it fits better, a reflection), each keypoint's residual kept |
 
-The alignment found beside the image (named after it, as 10x names them) is offered. The image is
-placed by its alignment, then in µm by the dataset's pixel size; the pixel size its own metadata
-gives is recorded but never used to place it (post-Xenium images are often written with the Xenium
-image's).
+The alignment found beside the image (named after it, as 10x names them) is offered, and recorded
+as the first version of the image's alignment; versions are also made from landmarks (below). An
+image is placed by an alignment, its pixels to the Xenium image's, then in µm by the dataset's
+pixel size; the pixel size its own metadata gives is recorded but never used to place it
+(post-Xenium images are often written with the Xenium image's).
+
+SituCraft writes any version of an alignment back in Xenium Explorer's convention, to load with
+the image there: the transformation matrix (`<name>_imagealignment.csv`, from the version's
+transform), and for a version made from landmarks or keypoints its keypoints (`<name>_keypoints.csv`,
+their fixed positions in the Xenium image's pixels). Each number is written as short as reads back
+the same; written and read again, a file gives the same transform.
 
 ## Other files
 
@@ -326,25 +333,48 @@ The project records each map it uses (kind `embedding`, with its segmentation an
 
 ### Post-Xenium images
 
-A post-Xenium image (from 0.5.0) is an artifact of one file in its folder, `image.json`, and two in
-place: the image (role `image`) and its alignment (role `alignment`), by their absolute paths and
-SHA-256. Its id is made of the dataset (its analysis UUID and manifest's SHA-256) and the two
-files' SHA-256: the same image and alignment are the same artifact.
+A post-Xenium image (from 0.5.0) is an artifact of one file in its folder, `image.json`, and one in
+place: the image (role `image`), by its absolute path and SHA-256. Its id is made of the dataset
+(its analysis UUID and manifest's SHA-256) and the image's SHA-256: the same image is the same
+artifact.
 
 | Field of `image.json` | Holds |
 | --- | --- |
 | `format`, `version`, `name` | `"situcraft-image"`, `1`, what it is called |
-| `source`, `alignmentFile` | Each file's `path`, `size` and `sha256` |
+| `source` | The image's `path`, `size` and `sha256` |
 | `image` | What the image is: `kind` (`rgb` or `channels`), `width`, `height`, `bits`, `compression`, `pixelSize` (µm, as its metadata says; absent when it says none), `channels` (each one's `name`), `levels` (each one's `width`, `height`, `tileWidth`, `tileHeight`, `across`, `down`), `notes` |
-| `alignment` | As its file gave it: `kind` (`matrix` or `keypoints`), `matrix` (the image's pixels to the Xenium image's, two rows of three), and for keypoints each one's `fixed` and `moving` position and `residuals` (the Xenium image's pixels) |
-| `xeniumPixelSize`, `transform` | The dataset's pixel size, and the image's pixels to µm (two rows of three) |
+| `xeniumPixelSize` | The dataset's pixel size (µm) |
 | `ranges` | An immunofluorescence image's channels: each one's samples from the 0.1th to the 99.9th percentile over its smallest level, the window it is first shown with |
 
-Its summary says what it is and how it is placed (`umPerPixel`, the alignment's `scale`,
-`rotation`, `reflected`, and for keypoints their residuals). The project records each image (kind
-`image`, with its dataset and the two files' paths), and a saved view of the Viewer records each
+Its summary says what it is. The project records each image (kind `image`, with its dataset and the
+image's path), and a saved view of the Viewer records each
 image's layer when there are some (`images`: each one's artifact `id`, `visible`, `opacity`, and an
 immunofluorescence image's `channels` as the stains': `visible`, `color`, `window`, `gamma`).
+
+### Alignments of post-Xenium images
+
+Each version of an image's alignment (from 0.5.0) is an artifact of kind `transform`: one file in
+its folder, `transform.json`, and, when it was read from Xenium Explorer's file, that file in place
+(role `alignment`, by its absolute path and SHA-256). Its parents are the image and, when it was
+made from another version, that version. Its id is the SHA-256 of `transform.json`: the same
+version made again is the same artifact; the time it was made is its manifest's `created`.
+
+| Field of `transform.json` | Holds |
+| --- | --- |
+| `format`, `version`, `name` | `"situcraft-transform"`, `1`, what it is called |
+| `source`, `destination` | The coordinate systems it maps between: `name` (`image:<artifact id>`, `global`), `units` (`pixels`, `µm`), and the `image` artifact or the `dataset` (its analysis UUID). An image's pixels are its full-resolution pixels, (0, 0) the corner of its first |
+| `method`, `model` | How it was made (`matrix` or `keypoints`, Xenium Explorer's file; `landmarks`, placed in SituCraft) and what its fit may change (`similarity`: move, turn, one scale and a mirror; `affine`: also a scale along each axis and a shear; a matrix is `affine`) |
+| `transform` | The source to the destination, two rows of three: (x, y) → (a·x + b·y + c, d·x + e·y + f) |
+| `landmarks` | Each landmark's `fixed` position (µm) and `moving` position (the image's pixels); Xenium Explorer's keypoints, their fixed positions converted to µm |
+| `fit` | Each landmark's `residuals` (µm from where the fit puts it) and `leaveOneOut` errors (µm from where the fit of the others puts it; absent when too few remain to fit), and their `rms`, `max`, `looRms`, `looMax` |
+| `file` | Xenium Explorer's file it was read from: `path`, `size`, `sha256` |
+| `xeniumPixelSize`, `parent`, `by`, `note` | The dataset's pixel size; the version it was made from; who made it; a note |
+
+Its summary gives the image, method, model, number of landmarks, the fit's errors, `umPerPixel`,
+`rotation` (degrees) and `reflected`, `by` and `parent`. The project records each version (kind
+`transform`, with its image and parent), and which version places each image as a decision (kind
+`use-transform`: the image, the version, the reason, who and when); the latest names it. An image
+with no decision is not aligned, and not drawn on the tissue.
 
 ### Marker sets
 
@@ -545,6 +575,7 @@ are in [research.md](../situcraft-spec/research.md) §3.4.
 | `--params` | | A JSON file of parameters, each overriding the preset's; `--print-params` prints them all, with their names |
 | `--quiet` | | Print only the summary |
 | `--reference` | 0 | Also write a single-cell reference of the tissue's types, this many cells of each, as `<folder>-reference.zarr` (below) |
+| `--post-xenium` | | Also make post-Xenium images of the section, an H&E and an immunofluorescence image, each placed by a known transform and deformation (below); not for a mosaic |
 
 The folder must not exist: it is written under a temporary name beside it and renamed into place
 when complete, so an interrupted run (Ctrl+C) leaves nothing behind.
@@ -568,6 +599,8 @@ are numbered across the mosaic, and coordinates placed in it.
 | `morphology_focus/morphology_focus_0000.ome.tif` | The DAPI stain of the nuclei in the section: a tiled, deflate-compressed OME-TIFF with its reduced levels as SubIFDs (Xenium's own are JPEG 2000) |
 | `metrics_summary.csv`, `gene_panel.json` | The run's metrics, computed as SituCraft's validation recomputes them, and the panel: genes `SIM001`…, negative control probes `NegControlProbe_SIM01`… and codewords `NegControlCodeword_0500`… |
 | `truth/` | A Xenium Ranger-shaped bundle of the same run: `experiment.xenium`; `cells.parquet` (every true cell: `cell_type`, `nucleus_in_section`, areas, centroid, Q20 gene transcripts), both boundary tables and `cells.zarr.zip` of the true cells (the nuclei in the section numbered in their cells' order, `cell_index` naming each one's cell); `transcripts.parquet`, the observed molecules row for row in the bundle's columns, with their true `cell_id`, and `true_x_location`, `true_y_location`, `true_z_location`, `origin` (`cell`, `background`, `control probe`, `control codeword`) and `wide_displacement` |
+| `post_xenium/` | With `--post-xenium`: `simulated_he_image.ome.tif` (an H&E, 8-bit RGB) and `simulated_if_image.ome.tif` (an immunofluorescence image, 16-bit channels `DAPI` and `Membrane`), pyramidal, tiled OME-TIFFs (deflate) of the same cells and nuclei, as Xenium Explorer reads them, with no alignment beside them |
+| `truth/post_xenium/` | Where each image lies: `registration.json` (each image's `transform`, its pixels to µm, two rows of three; its `deformation`, waves each displacing points along an `axis` by `amplitude_um` × sin(2π `frequency_per_um` · x + `phase`), x a point in µm after the transform; its `parameters`; the H&E's `stains`, the haematoxylin and eosin colours of this section), and `<name>_imagealignment.csv`, each transform without its deformation as Xenium Explorer's matrix |
 
 To score a segmentation against the truth, import `truth/` into the simulated dataset as a
 Xenium Ranger bundle (Segmentation view, **Import a segmentation**) and compare the two.

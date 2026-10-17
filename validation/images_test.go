@@ -17,6 +17,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"testing"
 
@@ -137,6 +138,42 @@ func TestPostXeniumImages(t *testing.T) {
 				t.Errorf("%s: the alignment's pixel size %.4f µm against the metadata's %.4f (agreeing %v, expected %v); the Xenium image's centre on it %v", c.image, placed, im.PixelSize, agrees, c.agrees, on)
 			}
 			im.Close()
+		}
+	})
+
+	// Keypoints as Xenium Explorer writes them, made with each of 10x's matrices at places spread
+	// over the image, fit back to the matrix: 10x's are similarities (one mirrored, one turned half a
+	// turn), and the fit's handedness, scale and turn are theirs.
+	t.Run("the alignments as keypoints", func(t *testing.T) {
+		for _, name := range []string{"Xenium_FFPE_Human_Breast_Cancer_Rep1_he_imagealignment.csv", "Xenium_FFPE_Human_Breast_Cancer_Rep1_if_imagealignment.csv"} {
+			data, err := os.ReadFile(filepath.Join(root, "images", name))
+			if err != nil {
+				t.Fatal(err)
+			}
+			al, err := register.ReadAlignment(data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			m := al.Matrix
+			var kps []register.Keypoint
+			for _, p := range [][2]float64{{500, 700}, {13000, 400}, {7000, 9000}, {1200, 9500}, {12500, 8800}, {6000, 3000}} {
+				x, y := m.Apply(p[0], p[1])
+				kps = append(kps, register.Keypoint{Fixed: register.Point{X: x, Y: y}, Moving: register.Point{X: p[0], Y: p[1]}})
+			}
+			back, err := register.ReadAlignment(register.KeypointsCSV(kps))
+			if err != nil {
+				t.Fatal(err)
+			}
+			f := back.Matrix
+			worst := 0.0
+			for _, d := range []float64{f.A - m.A, f.B - m.B, f.D - m.D, f.E - m.E, (f.C - m.C) / 1e4, (f.F - m.F) / 1e4} {
+				worst = math.Max(worst, math.Abs(d))
+			}
+			t.Logf("%s: a similarity (A = %s, B = %s); its keypoints fitted back within %.2g, residuals at most %.2g pixels", name, map[bool]string{true: "−E", false: "E"}[m.Reflected()], map[bool]string{true: "D", false: "−D"}[m.Reflected()], worst, slices.Max(back.Residuals))
+			similar := (m.Reflected() && m.A == -m.E && m.B == m.D) || (!m.Reflected() && m.A == m.E && m.B == -m.D)
+			if !similar || worst > 1e-9 || back.Kind != "keypoints" || f.Reflected() != m.Reflected() {
+				t.Errorf("%s: %+v fitted as %+v (a similarity: %v)", name, m, f, similar)
+			}
 		}
 	})
 }

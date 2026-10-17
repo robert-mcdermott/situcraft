@@ -66,7 +66,9 @@ Breast cells' labels under two segmentations.
 
 In development for 0.5.0: the pathology bridge, starting with post-Xenium H&E and
 immunofluorescence images drawn on the tissue, read where they lie (pyramidal OME-TIFFs, as Xenium
-Explorer requires) and placed by the alignment Xenium Explorer saves; and bundles of Xenium Onboard
+Explorer requires) and placed by the alignment Xenium Explorer saves or by landmarks placed on both
+images side by side, every alignment kept as a version with its fit's errors in µm; simulated
+post-Xenium images with a known alignment to practise and score on; and bundles of Xenium Onboard
 Analysis 1.0, such as the breast cancer section of Janesick et al. (2023).
 
 ## A look around

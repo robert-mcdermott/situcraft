@@ -18,10 +18,10 @@ import (
 )
 
 // A post-Xenium image added to a dataset: checked first (what it is, the alignment named after it
-// beside it), refused without an alignment, added by a job that records both files where they lie
-// (by SHA-256, never copied), placed by its alignment in µm; its tiles served as the page draws them
-// (an RGB tile's pixels, a channel's two byte planes); added again, the same artifact; moved, it
-// says where it was.
+// beside it), added by a job that records it where it lies (by SHA-256, never copied) and its
+// supplied alignment as its first transform (the file where it lies), placing it in µm; its tiles
+// served as the page draws them (an RGB tile's pixels, a channel's two byte planes); added again,
+// the same artifacts; added without an alignment, not aligned; moved, it says where it was.
 func TestPostXeniumImage(t *testing.T) {
 	f := newRefineFixtureOf(t, false, 80, 60)
 	dir := t.TempDir()
@@ -38,8 +38,6 @@ func TestPostXeniumImage(t *testing.T) {
 	os.WriteFile(heAlign, []byte("2,0,10\n0,-2,140\n0,0,1\n"), 0o644)
 	fl := filepath.Join(dir, "S1_if_image.ome.tif")
 	copyFile(filepath.Join("internal", "slide", "testdata", "if-u16-deflate.ome.tif"), fl)
-	flAlign := filepath.Join(dir, "S1_if_imagealignment.csv")
-	os.WriteFile(flAlign, []byte("1,0,0\n0,1,0\n0,0,1\n"), 0o644)
 
 	// From this computer, as the page asks.
 	local := func(method, target, body string) *httptest.ResponseRecorder {
@@ -63,46 +61,57 @@ func TestPostXeniumImage(t *testing.T) {
 	if rec := f.post("/api/local/0/images", fmt.Sprintf(`{"path":%q,"alignment":%q}`, he, heAlign)); rec.Code != http.StatusForbidden {
 		t.Errorf("from another computer: %d", rec.Code)
 	}
-	if rec := local(http.MethodPost, "/api/local/0/images", fmt.Sprintf(`{"path":%q}`, he)); rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "alignment") {
-		t.Errorf("without an alignment: %d %s", rec.Code, rec.Body)
-	}
-	add := func(image, alignment string) artifacts.Manifest {
+	// add answers the image's artifact and its alignment's ("" when none was supplied).
+	add := func(image, alignment string) (artifacts.Manifest, string) {
 		t.Helper()
 		var started struct{ Job struct{ ID string } }
 		json.NewDecoder(local(http.MethodPost, "/api/local/0/images", fmt.Sprintf(`{"path":%q,"alignment":%q}`, image, alignment)).Body).Decode(&started)
 		j := f.wait(started.Job.ID)
-		var id string
+		var id, tf string
 		for _, e := range j.Events {
 			if m := regexp.MustCompile(`artifact (img-[0-9a-f]+)`).FindStringSubmatch(e.Message); m != nil {
 				id = m[1]
 			}
+			if m := regexp.MustCompile(`artifact (tf-[0-9a-f]+)`).FindStringSubmatch(e.Message); m != nil {
+				tf = m[1]
+			}
 		}
 		m, err := f.a.artifacts.Get(id)
 		if err != nil {
-			t.Fatalf("no image recorded: %v", err)
+			t.Fatalf("no image recorded: %v (%s)", err, j.Error)
 		}
-		return m
+		return m, tf
 	}
-	m := add(he, heAlign)
+	m, tf := add(he, heAlign)
 	byRole := map[string]artifacts.File{}
 	for _, file := range m.Files {
 		byRole[file.Role] = file
 	}
-	if m.Kind != "image" || m.State != artifacts.Complete || len(m.Files) != 3 || byRole["image"].Location != artifacts.InPlace || byRole["image"].Path != he || byRole["alignment"].Path != heAlign || byRole["description"].Location != artifacts.InArtifact {
+	if m.Kind != "image" || m.State != artifacts.Complete || len(m.Files) != 2 || byRole["image"].Location != artifacts.InPlace || byRole["image"].Path != he || byRole["description"].Location != artifacts.InArtifact {
 		t.Fatalf("the artifact: %+v", m)
 	}
 	if _, err := os.Stat(filepath.Join(f.a.artifacts.Dir(), m.ID, filepath.Base(he))); err == nil {
 		t.Error("the image was copied")
 	}
+	// Its supplied alignment, its first transform: the matrix's pixels to µm, the file where it lies.
+	tm, err := f.a.artifacts.Get(tf)
+	if err != nil || tm.Kind != "transform" || tm.State != artifacts.Complete || len(tm.Files) != 2 || tm.Lineage.Parents[0].ID != m.ID {
+		t.Fatalf("the alignment's artifact %s: %+v, %v", tf, tm, err)
+	}
 	var d imageDescription
 	json.NewDecoder(get("/api/images/" + m.ID).Body).Decode(&d)
+	var td transformDescription
+	json.NewDecoder(get("/api/transforms/" + tf).Body).Decode(&td)
 	ps := d.XeniumPixelSize
 	want := [6]float64{2 * ps, 0, 10 * ps, 0, -2 * ps, 140 * ps}
-	got := [6]float64{d.Transform.A, d.Transform.B, d.Transform.C, d.Transform.D, d.Transform.E, d.Transform.F}
+	got := [6]float64{td.Transform.A, td.Transform.B, td.Transform.C, td.Transform.D, td.Transform.E, td.Transform.F}
 	for i := range want {
 		if math.Abs(got[i]-want[i]) > 1e-12 {
 			t.Fatalf("the transform %v, not %v", got, want)
 		}
+	}
+	if td.Method != "matrix" || td.File == nil || td.File.Path != heAlign || td.Source.Image != m.ID || td.Destination.Units != "µm" {
+		t.Errorf("the alignment: %+v", td)
 	}
 	im, err := slide.Open(he)
 	if err != nil {
@@ -114,13 +123,16 @@ func TestPostXeniumImage(t *testing.T) {
 	if tile.Code != http.StatusOK || tile.Body.String() != string(direct) || tile.Header().Get("X-Tile-Width") != "16" || tile.Header().Get("Cache-Control") != "no-store" {
 		t.Errorf("an RGB tile: %d, %d bytes", tile.Code, tile.Body.Len())
 	}
-	if again := add(he, heAlign); again.ID != m.ID {
-		t.Errorf("added again: %s, then %s", m.ID, again.ID)
+	if again, againTF := add(he, heAlign); again.ID != m.ID || againTF != tf {
+		t.Errorf("added again: %s and %s, then %s and %s", m.ID, tf, again.ID, againTF)
 	}
 
-	// The immunofluorescence image: three channels of 16 bits, each tile two byte planes, and the
-	// window each is first shown with.
-	fm := add(fl, flAlign)
+	// The immunofluorescence image, added without an alignment: not aligned. Three channels of 16
+	// bits, each tile two byte planes, and the window each is first shown with.
+	fm, ftf := add(fl, "")
+	if ftf != "" {
+		t.Errorf("an image added without an alignment has one: %s", ftf)
+	}
 	var fd imageDescription
 	json.NewDecoder(get("/api/images/" + fm.ID).Body).Decode(&fd)
 	if fd.Image.Kind != slide.Channels || len(fd.Ranges) != 3 || fd.Ranges[1][1] <= fd.Ranges[1][0] {

@@ -9,6 +9,7 @@ import { addClustering, addEmbedding, clusteringRecord, embeddingRecord } from '
 import { addDataset, compareFingerprint, datasetRecord, findDataset, relocateDataset, removeDataset } from '../lib/datasets.js';
 import { addLabels, labelsRecord, readLabelCells } from '../lib/labels.js';
 import { addImage as withImage, imageRecord } from '../lib/images.js';
+import { addTransform as withTransform, SUPPLIED_ALIGNMENT, transformInUse, transformRecord, useTransform } from '../lib/transforms.js';
 import { addComparison, addExport, addSegmentation, comparisonRecord, exportRecord, removeComparison as withoutComparison, segmentationRecord, segmentationsOf, withInstrumentSegmentation } from '../lib/segmentations.js';
 
 const BUNDLE_KINDS = new Set(['bundle', 'archive']);
@@ -249,8 +250,10 @@ export function createBundles(app) {
     return getJSON(`${item.url}/images/check?${q}`);
   }
 
-  // A post-Xenium image added to a dataset with its alignment (api_images.go): a job reads and
-  // checksums it and records the artifact, then recorded in the project. Resolves with the artifact.
+  // A post-Xenium image added to a dataset (api_images.go): a job reads and checksums it and records
+  // the artifact, and its alignment when one was supplied as its first transform; both recorded in
+  // the project, the alignment placing the image when it is the image's first or new to the
+  // project. Resolves with the image's artifact, its transform's (or null) as its transform.
   const addingImages = new Map(); // job id → { dataset, title }
   async function addImage(item, datasetId, request) {
     const answer = await getJSON(`${item.url}/images`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) });
@@ -261,18 +264,51 @@ export function createBundles(app) {
     try {
       const job = await app.jobs.finished(jobId);
       if (job?.state !== 'complete') throw new Error(`adding the image ${job?.state ?? 'ended'}${job?.error ? `: ${job.error}` : ''}`);
-      const id = (job.events ?? []).map((e) => /artifact (img-[0-9a-f]+)/.exec(e.message)?.[1]).find(Boolean);
+      const found = (pattern) => (job.events ?? []).map((e) => pattern.exec(e.message)?.[1]).find(Boolean);
+      const id = found(/artifact (img-[0-9a-f]+)/);
       if (!id) throw new Error('the job recorded no image');
+      const tf = found(/artifact (tf-[0-9a-f]+)/);
       const manifest = await getJSON(`/api/artifacts/${encodeURIComponent(id)}`);
+      const transform = tf ? await getJSON(`/api/artifacts/${encodeURIComponent(tf)}`) : null;
       const dataset = app.store.project.datasets.find((d) => d.id === datasetId);
       if (!dataset) throw new Error('the dataset is no longer in the project');
-      const next = withImage(app.store.project, imageRecord(dataset, manifest));
+      let next = withImage(app.store.project, imageRecord(dataset, manifest));
+      if (transform) {
+        const isNew = !next.artifacts.some((a) => a.kind === 'transform' && a.id === transform.id);
+        next = withTransform(next, transformRecord(dataset, transform));
+        if (isNew || !transformInUse(next, id)) next = useTransform(next, { transform: transform.id, rationale: SUPPLIED_ALIGNMENT, by: 'SituCraft' });
+      }
       if (next !== app.store.project) app.store.commit(next, `Add ${manifest.name} to ${dataset.name}`);
-      return manifest;
+      return { ...manifest, transform };
     } finally {
       addingImages.delete(jobId);
       notify();
     }
+  }
+
+  // A version of an image's alignment (api_transforms.go): from landmarks ({ landmarks, model,
+  // parent, by, note }) or Xenium Explorer's file ({ alignment }), recorded in the project and, with
+  // use, chosen to place the image (rationale, by). Resolves with { manifest, transform }.
+  async function makeTransform(datasetId, imageId, request, { use = false, rationale = '', by = 'the user' } = {}) {
+    const answer = await getJSON(`/api/images/${encodeURIComponent(imageId)}/transforms`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) });
+    const dataset = app.store.project.datasets.find((d) => d.id === datasetId);
+    if (!dataset) throw new Error('the dataset is no longer in the project');
+    transformDescriptions.set(answer.manifest.id, Promise.resolve(answer.transform));
+    let next = withTransform(app.store.project, transformRecord(dataset, answer.manifest));
+    if (use && transformInUse(next, imageId)?.record.id !== answer.manifest.id) next = useTransform(next, { transform: answer.manifest.id, rationale, by });
+    if (next !== app.store.project) app.store.commit(next, `Align ${next.artifacts.find((a) => a.id === imageId)?.name ?? imageId}: ${answer.manifest.name}`);
+    return answer;
+  }
+
+  // A transform's description (api_transforms.go); kept for the session.
+  const transformDescriptions = new Map();
+  function transformDescription(id) {
+    if (!transformDescriptions.has(id)) {
+      const p = getJSON(`/api/transforms/${encodeURIComponent(id)}`);
+      p.catch(() => transformDescriptions.delete(id));
+      transformDescriptions.set(id, p);
+    }
+    return transformDescriptions.get(id);
   }
 
   // An image's description (api_images.go), with its id, for drawing it; kept for the session.
@@ -888,6 +924,8 @@ export function createBundles(app) {
     addImage,
     addingImages: (datasetId) => [...addingImages.values()].filter((x) => x.dataset === datasetId),
     imageDescription,
+    makeTransform,
+    transformDescription,
     compareSegmentations,
     comparisonDescription,
     removeComparison,

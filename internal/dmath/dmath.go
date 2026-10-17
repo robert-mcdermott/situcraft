@@ -261,3 +261,40 @@ var (
 	efRB = [...]float64{-9.86494292470009928597e-03, -7.99283237680523006574e-01, -1.77579549177547519889e+01, -1.60636384855821916062e+02, -6.37566443368389627722e+02, -1.02509513161107724954e+03, -4.83519191608651397019e+02}
 	efSB = [...]float64{3.03380607434824582924e+01, 3.25792512996573918826e+02, 1.53672958608443695994e+03, 3.19985821950859553908e+03, 2.55305040643316442583e+03, 4.74528541206955367215e+02, -2.24409524465858183362e+01}
 )
+
+// π/2 in two parts, the first with its low 33 bits zero, so that k·pio2Hi is exact for |k| < 2²⁰
+// (Cody and Waite's reduction).
+const (
+	pio2Hi = 1.57079632673412561417e+00
+	pio2Lo = 6.07710050650619224932e-11
+)
+
+// Taylor's coefficients of sin and cos about 0 (±1/n!), to the 17th and 18th powers: on |r| ≤ π/4
+// the next terms are below 1e-19 of the result.
+var (
+	sinTaylor = [...]float64{-1.0 / 6, 1.0 / 120, -1.0 / 5040, 1.0 / 362880, -1.0 / 39916800, 1.0 / 6227020800, -1.0 / 1307674368000, 1.0 / 355687428096000}
+	cosTaylor = [...]float64{-1.0 / 2, 1.0 / 24, -1.0 / 720, 1.0 / 40320, -1.0 / 3628800, 1.0 / 479001600, -1.0 / 87178291200, 1.0 / 20922789888000, -1.0 / 6402373705728000}
+)
+
+// SinCos is the sine and cosine of x (radians), the same on every processor, within a few units in
+// the last place for |x| below 10⁵ (what simulations turn and wave by; NaN beyond 2²⁰·π/2). x is
+// reduced by multiples of π/2 to |r| ≤ π/4, where Taylor's series converge fast.
+func SinCos(x float64) (sin, cos float64) {
+	if math.IsNaN(x) || math.IsInf(x, 0) || math.Abs(x) > 1647099 {
+		return math.NaN(), math.NaN()
+	}
+	k := math.Round(x / (math.Pi / 2))
+	r := (x - mul(k, pio2Hi)) - mul(k, pio2Lo)
+	z := mul(r, r)
+	s := r + mul(mul(r, z), horner(z, sinTaylor[:]))
+	c := 1 + mul(z, horner(z, cosTaylor[:]))
+	switch int64(k) & 3 {
+	case 0:
+		return s, c
+	case 1:
+		return c, -s
+	case 2:
+		return -s, -c
+	}
+	return -c, s
+}

@@ -306,6 +306,18 @@ func (b *Bundle) Inventory() []Item {
 				claimed[f.Path] = true
 			}
 		}
+		var post *Item
+		for _, f := range b.Files {
+			if strings.HasPrefix(f.Path, "post_xenium/") {
+				if post == nil {
+					post = add("post_xenium", "Post-Xenium images, simulated (an H&E and an immunofluorescence image; where each lies is in the truth)", false)
+					post.Format = "OME-TIFF (deflate)"
+				}
+				post.Files = append(post.Files, f.Path)
+				post.Size += f.Size
+				claimed[f.Path] = true
+			}
+		}
 	}
 	other := Item{Role: "other", Description: "Other files"}
 	for _, f := range b.Files {

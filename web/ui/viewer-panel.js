@@ -10,7 +10,7 @@ import { showMenu } from './overlays.js';
 import { categoricalColor, colormapLUT, colormapCSS } from '../lib/colormaps.js';
 import { attributeRange } from '../lib/viewer-data.js';
 import { CERTAINTY_RANGE, LIMITATIONS, NO_PROBABILITY_COLOR, SEVERAL, certaintyCSS, segFillColors, segFills } from '../lib/segview.js';
-import { describeAlignment, describeImage } from '../lib/images.js';
+import { describeImage, describePlacement } from '../lib/images.js';
 
 // Channel colors by Xenium's channel purpose, then in order.
 const PURPOSE_COLORS = [
@@ -109,8 +109,9 @@ function certaintyLegend(label, help) {
     h('div.viewer-legend-range', h('span', `${CERTAINTY_RANGE[0]} or less`), h('span', String(CERTAINTY_RANGE[1]))), help ? h('div.muted', help) : null);
 }
 
-// images: the dataset's post-Xenium images, [{ record (lib/images.js), desc (api_images.go) or
-// error }]; imageActions: { check(path, alignment), add({ path, alignment }) } to add one.
+// images: the dataset's post-Xenium images, [{ record (lib/images.js), transform (the record placing
+// it, or null: not aligned), desc (api_images.go, with the transform's) or error }]; imageActions:
+// { check(path, alignment), add({ path, alignment }), align(imageId) } to add one or align one.
 export function mountViewerPanel(host, { desc, layers, cells, onChange, segmentations = [], drawn = null, clusterings = [], images = [], imageActions = null }) {
   let state = structuredClone(layers);
   state.images ??= [];
@@ -172,11 +173,17 @@ export function mountViewerPanel(host, { desc, layers, cells, onChange, segmenta
   let imageEntries = images;
   function renderImages() {
     clear(imageList);
-    if (!imageEntries.length) imageList.append(h('p.muted.viewer-hint', 'No post-Xenium image yet: add an H&E or immunofluorescence image of this section below, with its alignment.'));
-    for (const { record, desc: idesc, error } of imageEntries) {
+    if (!imageEntries.length) imageList.append(h('p.muted.viewer-hint', 'No post-Xenium image yet: add an H&E or immunofluorescence image of this section below.'));
+    for (const { record, transform, desc: idesc, error } of imageEntries) {
       const layer = state.images.find((l) => l.id === record.id);
+      const alignButton = (label) => imageActions?.align ? h('button.btn.small', { type: 'button', onclick: () => imageActions.align(record.id) }, icon('target'), label) : null;
       if (error || !idesc || !layer) {
         imageList.append(h('div.viewer-channel.off', h('div.row', h('div.name', h('b', record.name), h('span.muted', error ?? 'Reading…')))));
+        continue;
+      }
+      if (!transform) {
+        imageList.append(h('div.viewer-channel.off', h('div.row', h('div.name', h('b', record.name), h('span.muted', describeImage(record)))),
+          h('p.muted.viewer-hint', 'Not aligned yet, so not drawn: place it by landmarks.'), h('div.btn-row', alignButton('Align it…'))));
         continue;
       }
       const eye = h('button.icon-button', {
@@ -193,8 +200,9 @@ export function mountViewerPanel(host, { desc, layers, cells, onChange, segmenta
         emit('images');
       });
       const rows = [h('div.row', eye, h('div.name', h('b', record.name), h('span.muted', describeImage(record)))),
-        h('p.muted.viewer-hint', describeAlignment(record.summary)),
-        h('div.ranges', h('label', 'Opacity', opacity))];
+        h('p.muted.viewer-hint', `Placed by ${transform.name}: ${describePlacement(transform.summary)}.`),
+        h('div.ranges', h('label', 'Opacity', opacity)),
+        h('div.btn-row', alignButton('Alignment…'))];
       if (idesc.image.kind !== 'rgb') {
         const ceiling = 2 ** idesc.image.bits - 1;
         idesc.image.channels.forEach((info, c) => {
@@ -233,8 +241,8 @@ export function mountViewerPanel(host, { desc, layers, cells, onChange, segmenta
     }
   }
 
-  // Adding an image: its path, then its alignment (found beside it when 10x named it), checked
-  // before it is added.
+  // Adding an image: its path, then its alignment (found beside it when 10x named it; without one, the
+  // image is added unaligned, to place by landmarks), checked before it is added.
   let addForm = null;
   if (imageActions) {
     const imagePath = h('input.input', { type: 'text', placeholder: '/data/sample_he_image.ome.tif', 'aria-label': 'The image\'s path', spellcheck: false });
@@ -256,9 +264,9 @@ export function mountViewerPanel(host, { desc, layers, cells, onChange, segmenta
         const im = answer.image;
         const what = im.kind === 'rgb' ? 'An RGB image' : `${im.channels.length} channels (${im.channels.map((c) => c.name).join(', ')})`;
         const a = answer.alignment;
-        found.textContent = `${what}, ${im.width.toLocaleString('en-US')} × ${im.height.toLocaleString('en-US')}, ${im.levels.length} levels, ${im.compression}${im.pixelSize ? `; its metadata says ${im.pixelSize} µm per pixel` : ''}. ${a ? `Its alignment: ${a.kind === 'keypoints' ? `${a.keypoints} keypoints` : 'a transformation matrix'}, scale ${a.scale.toFixed(4)}${a.reflected ? ', mirrored' : ''}.` : 'Name its alignment: the transformation matrix or keypoints Xenium Explorer saves.'}`;
-        checked = a ? `${imagePath.value}|${alignmentPath.value}` : '';
-        add.disabled = !a;
+        found.textContent = `${what}, ${im.width.toLocaleString('en-US')} × ${im.height.toLocaleString('en-US')}, ${im.levels.length} levels, ${im.compression}${im.pixelSize ? `; its metadata says ${im.pixelSize} µm per pixel` : ''}. ${a ? `Its alignment: ${a.kind === 'keypoints' ? `${a.keypoints} keypoints` : 'a transformation matrix'}, scale ${a.scale.toFixed(4)}${a.reflected ? ', mirrored' : ''}.` : 'No alignment beside it: it is added unaligned, to place by landmarks (or name the transformation matrix or keypoints Xenium Explorer saves).'}`;
+        checked = `${imagePath.value}|${alignmentPath.value}`;
+        add.disabled = false;
       } catch (error) {
         found.textContent = error.message;
       }
@@ -283,7 +291,7 @@ export function mountViewerPanel(host, { desc, layers, cells, onChange, segmenta
     });
     addForm = h('details.viewer-add-image', h('summary', 'Add a post-Xenium image'),
       h('label.viewer-slider', 'Image (OME-TIFF)', imagePath),
-      h('label.viewer-slider', 'Alignment (CSV)', alignmentPath),
+      h('label.viewer-slider', 'Alignment (CSV, optional)', alignmentPath),
       h('div.btn-row', checkBtn, add), found);
   }
 

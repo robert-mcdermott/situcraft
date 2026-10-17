@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"situcraft/internal/tiff"
 )
 
 // level reads a whole level of a channel from its tiles: row-major, an RGB pixel's samples
@@ -134,5 +136,69 @@ func TestSiblings(t *testing.T) {
 	}
 	if got := Siblings(filepath.Join(dir, "S2_if_image.ome.tif")); len(got) != 0 {
 		t.Errorf("siblings of an image without them: %v", got)
+	}
+}
+
+// What internal/tiff writes for the simulator's post-Xenium images reads back exactly: an RGB
+// pyramid, its samples together, and 16-bit channels a directory each.
+func TestWrittenImagesReadBack(t *testing.T) {
+	dir := t.TempDir()
+	rgb := &tiff.PlaneRGB{Width: 301, Height: 207, Pix: make([]uint8, 3*301*207)}
+	for i := range rgb.Pix {
+		rgb.Pix[i] = uint8((i*7 + i/903*13) % 251)
+	}
+	ome := func(sizeC int, typ, channels string) string {
+		return `<OME xmlns="http://www.openmicroscopy.org/Schemas/OME/2016-06"><Image ID="Image:0"><Pixels ID="Pixels:0" DimensionOrder="XYCZT" Type="` + typ + `" SizeX="301" SizeY="207" SizeZ="1" SizeC="` + strconv.Itoa(sizeC) + `" SizeT="1" PhysicalSizeX="0.5" PhysicalSizeXUnit="µm" PhysicalSizeY="0.5" PhysicalSizeYUnit="µm">` + channels + `</Pixels></Image></OME>`
+	}
+	he := filepath.Join(dir, "he.ome.tif")
+	if err := tiff.WriteRGBOMETIFF(he, rgb, tiff.WriteOptions{Description: ome(3, "uint8", `<Channel ID="Channel:0:0" SamplesPerPixel="3"/><TiffData IFD="0" PlaneCount="1"/>`), Tile: 64, Levels: 2}); err != nil {
+		t.Fatal(err)
+	}
+	im, err := Open(he)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := rgb
+	for l := range im.Levels {
+		if l > 0 {
+			want = want.Halve()
+		}
+		if got := level(t, im, l, 0); string(got) != string(want.Pix) || im.Kind != RGB || im.PixelSize != 0.5 {
+			t.Fatalf("RGB level %d differs (%s, %v µm)", l, im.Kind, im.PixelSize)
+		}
+	}
+	im.Close()
+
+	planes := make([]*tiff.Plane16, 2)
+	for c := range planes {
+		planes[c] = &tiff.Plane16{Width: 301, Height: 207, Pix: make([]uint16, 301*207)}
+		for i := range planes[c].Pix {
+			planes[c].Pix[i] = uint16((i*7919 + c*40000) % 65536)
+		}
+	}
+	fl := filepath.Join(dir, "if.ome.tif")
+	if err := tiff.WriteChannelsOMETIFF(fl, planes, tiff.WriteOptions{Description: ome(2, "uint16", `<Channel ID="Channel:0:0" Name="DAPI" SamplesPerPixel="1"/><Channel ID="Channel:0:1" Name="Membrane" SamplesPerPixel="1"/><TiffData IFD="0" FirstC="0" PlaneCount="1"/><TiffData IFD="1" FirstC="1" PlaneCount="1"/>`), Tile: 64, Levels: 2}); err != nil {
+		t.Fatal(err)
+	}
+	im, err = Open(fl)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer im.Close()
+	if im.Kind != Channels || len(im.Channels) != 2 || im.Channels[1].Name != "Membrane" || len(im.Levels) != 3 {
+		t.Fatalf("channels: %+v", im.Description)
+	}
+	for c, p := range planes {
+		for l := range im.Levels {
+			if l > 0 {
+				p = p.Halve()
+			}
+			got := level(t, im, l, c)
+			for i, v := range p.Pix {
+				if g := uint16(got[2*i]) | uint16(got[2*i+1])<<8; g != v {
+					t.Fatalf("channel %d level %d pixel %d: %d, written %d", c, l, i, g, v)
+				}
+			}
+		}
 	}
 }

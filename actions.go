@@ -105,12 +105,35 @@ var remoteActions = []remoteAction{
 		"cell":            textArg("A cell to select, by its ID in the segmentation drawn (as cells.parquet names the instrument's)."),
 		"images":          map[string]any{"type": "object", "description": "Post-Xenium images, by name or artifact ID: {visible, opacity (0 to 1), channels: {by name: {visible, color, window, gamma}} (immunofluorescence)}, each optional."},
 	}), long: true},
-	{Name: "add_image", Title: "Add a post-Xenium image", Description: "Adds an H&E or immunofluorescence image of a dataset's section, stained and scanned after the Xenium run, as a job: a pyramidal, tiled OME-TIFF (as Xenium Explorer requires; RGB, or channels of 8 or 16 bits; deflate, LZW, JPEG or JPEG 2000), read where it lies, never copied, and placed by its alignment, the transformation matrix or keypoints Xenium Explorer saves (found beside the image when 10x named it, else named). Recorded as an image artifact with both files' SHA-256; the Viewer draws it under the transcripts and cells. Needs the token (it reads files). Answers what the image is and how its alignment places it.", InputSchema: schema(map[string]any{
+	{Name: "add_image", Title: "Add a post-Xenium image", Description: "Adds an H&E or immunofluorescence image of a dataset's section, stained and scanned after the Xenium run, as a job: a pyramidal, tiled OME-TIFF (as Xenium Explorer requires; RGB, or channels of 8 or 16 bits; deflate, LZW, JPEG or JPEG 2000), read where it lies, never copied, and recorded as an image artifact with its SHA-256. Its alignment, the transformation matrix or keypoints Xenium Explorer saves (found beside the image when 10x named it, else named; null for none), is recorded as the image's first transform and places it; without one the image is not aligned until align_image places it. The Viewer draws an aligned image under the transcripts and cells. Needs the token (it reads files). Answers what the image is and how it is placed.", InputSchema: schema(map[string]any{
 		"dataset":   datasetArg,
 		"path":      textArg("The image: an OME-TIFF on this computer."),
-		"alignment": textArg("Its alignment: <name>_imagealignment.csv (the transformation matrix) or <name>_keypoints.csv (found beside the image if not given)."),
+		"alignment": map[string]any{"type": []string{"string", "null"}, "description": "Its alignment: <name>_imagealignment.csv (the transformation matrix) or <name>_keypoints.csv (found beside the image if not given; null to add it unaligned)."},
 		"name":      textArg("What to call it (from its file's name if not given)."),
 	}, "path"), long: true, readsAt: true},
+	{Name: "align_image", Title: "Align an image by landmarks", Description: "Fits a post-Xenium image's alignment to landmarks, each a point placed on both images, and records it as a version of the image's alignment (a transform artifact: its landmarks, the fit, each landmark's residual and leave-one-out error in µm, who made it, a note and the version it was made from). A similarity (move, turn, one scale and a mirror when that fits better; Umeyama 1991) or an affine transform (also stretched and sheared), by least squares, from three landmarks or more. With use (the default), the version places the image. Answers the fit.", InputSchema: schema(map[string]any{
+		"dataset": datasetArg,
+		"image":   textArg("The image, by name or artifact ID (the dataset's only image if not given)."),
+		"landmarks": map[string]any{"type": "array", "description": "Each landmark: {\"fixed\": [x, y] on the tissue (µm, Xenium's coordinates), \"moving\": [x, y] on the image (its full-resolution pixels, (0, 0) the corner of its first)}.",
+			"items": map[string]any{"type": "object", "properties": map[string]any{"fixed": map[string]any{"type": "array", "items": map[string]any{"type": "number"}}, "moving": map[string]any{"type": "array", "items": map[string]any{"type": "number"}}}}},
+		"model":  textArg("similarity (the default) or affine."),
+		"use":    flagArg("Place the image by it (the default true)."),
+		"parent": textArg("The version it is made from, by name or ID."),
+		"by":     textArg("Who placed the landmarks (the client's name if not given)."),
+		"note":   textArg("A note kept with the version (and the reason, when it is used)."),
+	}, "landmarks"), long: true},
+	{Name: "use_transform", Title: "Place an image by a version of its alignment", Description: "Chooses which version of a post-Xenium image's alignment places it, as a decision recorded with its reason, who and when.", InputSchema: schema(map[string]any{
+		"dataset":   datasetArg,
+		"image":     textArg("The image, by name or artifact ID (the dataset's only image if not given)."),
+		"transform": textArg("The version, by name or artifact ID."),
+		"rationale": textArg("Why it is chosen."),
+		"by":        textArg("Who chooses it (the client's name if not given)."),
+	}, "transform")},
+	{Name: "show_alignment", Title: "Show an image's alignment", Description: "Opens the Alignment view on a post-Xenium image: the Xenium image and the post-Xenium image side by side with the landmarks, their fit and each landmark's residual and leave-one-out error, and the image's versions of its alignment; with transform, that version's landmarks loaded to edit. Answers the landmarks, the fit and the versions.", InputSchema: schema(map[string]any{
+		"dataset":   datasetArg,
+		"image":     textArg("The image, by name or artifact ID (the dataset's only image if not given)."),
+		"transform": textArg("A version whose landmarks to load, by name or ID."),
+	}), long: true},
 	{Name: "select_cell", Title: "Select a cell", Description: "Selects a cell of the segmentation the Viewer draws and shows it in the inspector: its ID, position, areas, segmentation method (or, for another segmentation, the instrument's cell it came from and what its method flags), and its transcripts by gene. With no cell, clears the selection.", InputSchema: schema(map[string]any{
 		"cell":    textArg("The cell's ID in the segmentation drawn (as cells.parquet names the instrument's), or its row from 0 as \"#123\"."),
 		"dataset": datasetArg,
@@ -338,11 +361,14 @@ var remoteActions = []remoteAction{
 		"filters": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Filters to describe, by name (their latest version) or id; the latest version of each if not given; [] for none."},
 		"show":    flagArg("Show the paragraph in the window."),
 	}), long: true},
-	{Name: "export", Title: "Write a file", Description: "Writes a file: the project document (project, JSON), a project archive (archive, .scz: the project, its bundles recorded relative to the archive), or a dataset's methods paragraph with its references (methods, Markdown). Needs the token.", InputSchema: schema(map[string]any{
-		"what":      textArg("project, archive or methods."),
+	{Name: "export", Title: "Write a file", Description: "Writes a file: the project document (project, JSON), a project archive (archive, .scz: the project, its bundles recorded relative to the archive), a dataset's methods paragraph with its references (methods, Markdown), or a post-Xenium image's alignment as Xenium Explorer reads it (alignment: its transformation matrix, the image's pixels to the Xenium image's, or its landmarks as keypoints; CSV). Needs the token.", InputSchema: schema(map[string]any{
+		"what":      textArg("project, archive, methods or alignment."),
 		"path":      textArg("The absolute path of the file to write."),
 		"overwrite": flagArg("Replace the file if it exists."),
 		"dataset":   datasetArg,
+		"image":     textArg("For an alignment: the image, by name or artifact ID."),
+		"transform": textArg("For an alignment: the version, by name or ID (the one in use if not given)."),
+		"format":    textArg("For an alignment: matrix (the default) or keypoints."),
 	}, "what", "path"), long: true, output: true},
 }
 

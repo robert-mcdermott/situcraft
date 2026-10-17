@@ -2032,18 +2032,63 @@ range: 2.8 GB in all. Its bundle is of XOA 1, which SituCraft opens from this wa
      - **XOA 1.0's metrics are not all its data's:** its median transcripts per cell is recorded as
        166, its transcripts give 164; 17,358 cells' counts differ from cells.parquet's. The checks
        say so, as for any bundle.
-2. **Transforms and landmarks (R3 by landmarks, R5).**
-   - **A transform as an artifact,** in versions: its source and destination systems, the
-     landmarks, the fit (similarity or affine), each landmark's residual in µm and the
-     leave-one-out error, who made it and when, its parent version; the one in use chosen.
-   - **Landmarks:** the Xenium image and the post-Xenium image side by side, each pair placed and
-     moved, the fit and its residuals updated as they change; Xenium Explorer's keypoints read
-     and written, the matrix written in its convention.
-   - **Simulated post-Xenium images:** the simulator renders an H&E (haematoxylin in the nuclei,
-     eosin elsewhere, with stain variation) and an IF of the simulated tissue, moved by a known
-     affine and a smooth deformation: a truth for registration.
-   - Validation: known transforms recovered from exact landmarks; residuals and leave-one-out
-     errors by hand; the fixture's keypoints fitted as 10x's matrix.
+2. **Transforms and landmarks (R3 by landmarks, R5): done.**
+   - **A transform as an artifact,** in versions (`api_transforms.go`): kind `transform`, its
+     source and destination systems (the image's pixels, the dataset's µm), method (`matrix`,
+     `keypoints`, `landmarks`), model, transform, landmarks, fit (each landmark's residual and
+     leave-one-out error in µm), who made it, a note and its parent version, named by its
+     description's checksum. An image's supplied alignment is its first version; the image
+     artifact holds the image alone, and an image is added without an alignment. Which version
+     places an image is a decision (`use-transform`), as a segmentation's promotion is; an image
+     with none is listed, not drawn.
+   - **Fits** (`internal/register/fit.go`): a similarity (Umeyama 1991, the better of with and
+     without a reflection) or an affine transform (least squares), from three landmarks; each
+     landmark's residual and leave-one-out error (Stone 1974; a similarity keeps the full fit's
+     handedness). `web/lib/transforms.js` fits the same, bit for bit (a fingerprint of 600 fits).
+   - **The Alignment view** (`web/ui/mode-alignment.js`): the Xenium image and the post-Xenium
+     image side by side, each its own renderer and camera. A click on each places a landmark; from
+     the fourth, the fit predicts the second click's place and the other image goes there;
+     landmarks are dragged to move them; the fit and each landmark's errors update as they change;
+     the fitted image laid over the stains; the images moved together through the fit. Saved as a
+     version, with who and a note, used or not; versions listed, used, edited from (their
+     landmarks loaded, the new version their child), and written as Xenium Explorer's matrix and
+     keypoints. The Viewer offers it beside each image.
+   - **Xenium Explorer's files written:** the matrix (the transform to the Xenium image's pixels)
+     and the keypoints (their fixed positions in its pixels), each number as short as reads back
+     the same.
+   - **Simulated post-Xenium images** (`internal/simulate/postxenium.go`, `situcraft simulate
+     --post-xenium`): an H&E by Beer–Lambert's law (Ruifrok and Johnston's stain colours, varied
+     per section) and a two-channel immunofluorescence image (DAPI, a membrane stain) of the same
+     cells, each placed by a known affine transform (pixel size, aspect, shear, reflection, turn)
+     and a smooth deformation (sine waves, another family than registration's B-splines), written
+     with their truth (`truth/post_xenium/`). Sines are `internal/dmath`'s, the same on every
+     processor. The TIFF writer writes RGB and multi-channel pyramids.
+   - Remote control: `align_image`, `use_transform`, `show_alignment`; `add_image` with no
+     alignment; `export` writes an alignment for Xenium Explorer.
+   - Validation:
+     - **By hand:** a square of four landmarks, one 2 µm off: an affine fit's residuals 0.5 µm and
+       leave-one-out errors 2 µm each; a similarity's 0, 0.71, 0.71, 1 µm and 0, 1.41, 1.41, 2 µm.
+     - **Known transforms recovered** from exact landmarks (200 similarities, turned and reflected,
+       and affine transforms, 3 to 14 landmarks), to 1e-9.
+     - **The fixture:** 10x's two matrices are exact similarities; keypoints made with each,
+       written as Xenium Explorer writes them, fit back within 1e-15.
+     - **Simulated images against their truth:** nuclei found in each image lie a median 0.03 µm
+       (H&E) and 0.07 µm (immunofluorescence) from the true nuclei; twelve landmarks' leave-one-out
+       error is near the fit's true error over the section; the same images on one core.
+     - **In the page** (the viewer suite): landmarks made with 10x's matrix fitted back to it as a
+       version, listed in the Alignment view, written as keypoints; a simulated H&E placed by six
+       landmarks clicked on both images (from the fourth, the image went to within 0.7 to 5.8
+       pixels of the place), the fit within its truth's deformation, drawn where the fit puts it.
+   - Found by slice 2:
+     - **10x's alignments are similarities, exactly:** the fixture's H&E matrix has A = −E and
+       B = D to the last bit, its immunofluorescence matrix A = E and B = −D: fitted from
+       keypoints, as Xenium Explorer fits them.
+     - **Residuals understate the error between landmarks;** the leave-one-out error estimates
+       it: on the simulated H&E, twelve landmarks' residuals 0.16 µm, left out 0.21 µm, the true
+       error 0.31 µm.
+     - **An image not aligned is not drawn:** placed by its metadata's pixel size it would look
+       aligned and be off by the scan's turn and mirror (and, on the fixture's immunofluorescence
+       image, 3.5 times too small).
 3. **Automatic registration (R3).**
    - **Rigid and affine:** the H&E's haematoxylin by colour deconvolution (Ruifrok & Johnston
      2001), or the IF's nuclear channel, against DAPI; each of the eight orientations (rotations by

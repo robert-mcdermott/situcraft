@@ -92,6 +92,13 @@ export async function launch({ width = 1600, height = 1000, scale = 1, args = []
       if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description ?? result.exceptionDetails.text);
       return result.result.value;
     },
+    // A click of the left button at (x, y) in CSS pixels, as a mouse makes it (pointer events and
+    // all).
+    async click(x, y) {
+      for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) {
+        await send('Input.dispatchMouseEvent', { type, x, y, button: type === 'mouseMoved' ? 'none' : 'left', buttons: type === 'mousePressed' ? 1 : 0, clickCount: type === 'mouseMoved' ? 0 : 1 });
+      }
+    },
     async theme(dark) {
       await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: dark ? 'dark' : 'light' }] });
     },

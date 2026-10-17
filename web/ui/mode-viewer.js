@@ -15,7 +15,7 @@ import { fitCamera, scaleBar, screenToWorld, visibleRect, worldToScreen } from '
 import { attachNavigation } from './navigation.js';
 import { readCells, joinSamples, nearestCell } from '../lib/viewer-data.js';
 import { mountViewerPanel, defaultLayers, cellFillColors } from './viewer-panel.js';
-import { imagesOf } from '../lib/images.js';
+import { placedImages } from '../lib/images.js';
 import { defaultImageLayer } from '../lib/overlays.js';
 import { defaultChoice, readSegCells, segmentationChoices } from '../lib/segview.js';
 import { hexColor } from '../render/gl.js';
@@ -184,12 +184,13 @@ export function mountViewer(app, container) {
     // Curated and consensus label sets, drawn as labels at one level.
     const versionFills = () => labelVersions(app.store.project, t.dataset.id, drawnChoice()?.id).filter((v) => v.kind === 'curated' || v.kind === 'consensus').map((v) => ({ id: `labels:${v.id}:0`, labels: v.id, level: 0, label: `${v.kind === 'curated' ? 'Curated' : 'Consensus'} labels: ${v.name}` }));
     const analysisFills = () => [...clusterFills(app.store.project, t.dataset.id, drawnChoice()?.id), ...labelFills(app.store.project, t.dataset.id, drawnChoice()?.id), ...versionFills()];
-    const imageRecords = () => imagesOf(app.store.project, t.dataset.id);
-    const choiceKey = () => `${choices().map((c) => `${c.id}${c.isDefault ? '*' : ''}`).join()}|${analysisFills().map((f) => f.id).join()}|${imageRecords().map((r) => r.id).join()}`;
-    // Adding a post-Xenium image, from the panel.
+    const imageRecords = () => placedImages(app.store.project, t.dataset.id);
+    const choiceKey = () => `${choices().map((c) => `${c.id}${c.isDefault ? '*' : ''}`).join()}|${analysisFills().map((f) => f.id).join()}|${imageRecords().map((r) => `${r.record.id}:${r.transform?.id ?? ''}`).join()}`;
+    // Adding a post-Xenium image, from the panel, or aligning one.
     const imageActions = {
       check: (path, alignment) => app.bundles.checkImage(t.item, path, alignment),
       add: (request) => app.bundles.addImage(t.item, t.dataset.id, request),
+      align: (imageId) => app.showAlignment?.(t.dataset.id, imageId),
     };
 
     function mountPanel(start) {
@@ -215,10 +216,19 @@ export function mountViewer(app, container) {
     mountPanel(layers);
 
     // The dataset's post-Xenium images: their descriptions read, a layer each (kept while the image
-    // stays, a view's as it names them), drawn by the renderer over the stains.
+    // stays, a view's as it names them), drawn by the renderer over the stains, each placed by its
+    // transform in use (an image not aligned is listed, not drawn).
     async function syncImages() {
       const records = imageRecords();
-      const entries = await Promise.all(records.map((record) => app.bundles.imageDescription(record.id).then((d) => ({ record, desc: d }), (error) => ({ record, error: error.message }))));
+      const entries = await Promise.all(records.map(async ({ record, transform }) => {
+        try {
+          const d = await app.bundles.imageDescription(record.id);
+          const tf = transform ? await app.bundles.transformDescription(transform.id) : null;
+          return { record, transform, desc: tf ? { ...d, transform: tf.transform } : d };
+        } catch (error) {
+          return { record, transform, error: error.message };
+        }
+      }));
       if (current && current !== state) return;
       const prev = new Map((state.layers.images ?? []).map((l) => [l.id, l]));
       const imageLayers = entries.filter((e) => e.desc).map((e) => prev.get(e.record.id) ?? defaultImageLayer(e.desc));
@@ -230,7 +240,10 @@ export function mountViewer(app, container) {
     }
     function applyImages() {
       const entries = state.imageEntries ?? [];
-      renderer.setOverlays((state.layers.images ?? []).map((layer) => ({ layer, desc: entries.find((e) => e.record.id === layer.id)?.desc })).filter((o) => o.desc));
+      renderer.setOverlays((state.layers.images ?? []).map((layer) => {
+        const e = entries.find((x) => x.record.id === layer.id);
+        return { layer, desc: e?.transform ? e.desc : null };
+      }).filter((o) => o.desc?.transform));
     }
     state.syncImages = syncImages;
     syncImages();

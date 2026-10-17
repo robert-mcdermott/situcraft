@@ -113,6 +113,8 @@ type writer struct {
 	trueID   []string // true cell ids by true label − 1
 	inst     *segmentation
 	w        written
+	// postXenium are the post-Xenium images written, and where each lies.
+	postXenium []Registration
 }
 
 func writeJSON(path string, v any) error {
@@ -173,6 +175,7 @@ func (wr *writer) writeAll(progress func(float64, string)) error {
 		}},
 		{"Writing the stain", wr.writeImage},
 		{"Writing the truth", wr.writeTruth},
+		{"Rendering the post-Xenium images", wr.writePostXenium},
 		{"Writing the description", wr.writeDescription},
 	}
 	for i, s := range steps {
