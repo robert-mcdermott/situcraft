@@ -901,6 +901,8 @@ td div.studio-problem { padding: 2px 6px; margin-top: 4px; font-size: 11.5px; }
 .align-landmarks tr.warn td:nth-child(5) { color: var(--warn-text); font-weight: 700; }
 .align-landmarks .icon-button { width: 22px; height: 22px; }
 .align-fit { margin: 6px 0; }
+.align-dot { position: absolute; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: #3ddc84; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.7); pointer-events: auto; }
+.align-dot.dropped { background: #ff5c5c; }
 .align-version { padding: 8px 0 8px 10px; border-left: 3px solid transparent; border-bottom: 1px solid var(--line); }
 .align-version.in-use { border-left-color: var(--ok); }
 .align-version .row { display: flex; gap: 8px; align-items: center; justify-content: space-between; }

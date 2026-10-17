@@ -363,11 +363,14 @@ version made again is the same artifact; the time it was made is its manifest's 
 | --- | --- |
 | `format`, `version`, `name` | `"situcraft-transform"`, `1`, what it is called |
 | `source`, `destination` | The coordinate systems it maps between: `name` (`image:<artifact id>`, `global`), `units` (`pixels`, `µm`), and the `image` artifact or the `dataset` (its analysis UUID). An image's pixels are its full-resolution pixels, (0, 0) the corner of its first |
-| `method`, `model` | How it was made (`matrix` or `keypoints`, Xenium Explorer's file; `landmarks`, placed in SituCraft) and what its fit may change (`similarity`: move, turn, one scale and a mirror; `affine`: also a scale along each axis and a shear; a matrix is `affine`) |
+| `method`, `model` | How it was made (`matrix` or `keypoints`, Xenium Explorer's file; `landmarks`, placed in SituCraft; `automatic`, registered by the nuclei) and what its fit may change (`similarity`: move, turn, one scale and a mirror; `affine`: also a scale along each axis and a shear; a matrix is `affine`) |
 | `transform` | The source to the destination, two rows of three: (x, y) → (a·x + b·y + c, d·x + e·y + f) |
 | `landmarks` | Each landmark's `fixed` position (µm) and `moving` position (the image's pixels); Xenium Explorer's keypoints, their fixed positions converted to µm |
 | `fit` | Each landmark's `residuals` (µm from where the fit puts it) and `leaveOneOut` errors (µm from where the fit of the others puts it; absent when too few remain to fit), and their `rms`, `max`, `looRms`, `looMax` |
 | `file` | Xenium Explorer's file it was read from: `path`, `size`, `sha256` |
+| `matches` | An automatic version's local matches: each patch's centre on the Xenium image (`fixed`, µm), where it matched on the image (`moving`, its pixels), the correlation's `quality` (its peak's height over the surface's standard deviation) and whether the fit `kept` it; `fit` is of those kept |
+| `deformation` | A smooth deformation after the transform (an automatic version's, when one was kept): cubic B-splines on a grid of control points, its `origin` (µm), `spacing`, `nx` × `ny` points and each one's displacement `dx`, `dy` (µm, row by row); a point x of the transform is moved to x + the B-splines' sum at x |
+| `registration` | What an automatic registration found: the image's `channel` registered and the Xenium image's (`fixed`), the search's `best` candidate and best few (`candidates`: mirrored or not, pixel size, turn, normalized mutual information, overlap, transform), the mutual information at the finest level refined (`nmi`, `resolution`), the patches' side (`patchUm`) and pixel (`fine`), a deformation's errors (`deformedRms`; each fifth of the matches predicted from the rest, `heldOut`, and by the model alone, `modelHeldOut`), its `smoothness` and `maxDisplacement`, and `warnings` |
 | `xeniumPixelSize`, `parent`, `by`, `note` | The dataset's pixel size; the version it was made from; who made it; a note |
 
 Its summary gives the image, method, model, number of landmarks, the fit's errors, `umPerPixel`,

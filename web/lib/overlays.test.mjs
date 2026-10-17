@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { apply, defaultImageLayer, invert, modelMatrix, overlayBounds, overlayLevel, overlayTileRange, tileGeometry, umPerPixel } from './overlays.js';
+import { apply, defaultImageLayer, invert, modelMatrix, overlayBounds, overlayLevel, overlayTileRange, readInverseField, tileGeometry, umPerPixel } from './overlays.js';
 import { addImage, describeImage, describePlacement, imageRecord, imagesOf, placedImages } from './images.js';
 import { captureView, viewLayers } from './views.js';
 
@@ -93,4 +93,25 @@ test('a saved view keeps its images\' layers, and a view without images is as be
   assert.deepEqual(view.images, withImages.images);
   const back = viewLayers(view, desc, layers);
   assert.deepEqual(back.layers.images, withImages.images);
+});
+
+test('a deformed image\'s inverse field read as the program writes it', () => {
+  const nx = 3;
+  const ny = 2;
+  const buffer = new ArrayBuffer(24 + 8 * nx * ny);
+  const view = new DataView(buffer);
+  [83, 67, 73, 86].forEach((c, i) => view.setUint8(i, c));
+  view.setUint32(4, nx, true);
+  view.setUint32(8, ny, true);
+  view.setFloat32(12, -100, true);
+  view.setFloat32(16, -50, true);
+  view.setFloat32(20, 25, true);
+  for (let k = 0; k < nx * ny; k += 1) {
+    view.setFloat32(24 + 8 * k, k === 4 ? 3 : 0.5, true);
+    view.setFloat32(28 + 8 * k, k === 4 ? -4 : 0, true);
+  }
+  const f = readInverseField(buffer);
+  assert.deepEqual([f.x0, f.y0, f.step, f.nx, f.ny, f.field.length], [-100, -50, 25, 3, 2, 12]);
+  assert.equal(f.max, 5);
+  assert.throws(() => readInverseField(new ArrayBuffer(24)), /not an inverse field/);
 });

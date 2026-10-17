@@ -10,6 +10,7 @@ import { addDataset, compareFingerprint, datasetRecord, findDataset, relocateDat
 import { addLabels, labelsRecord, readLabelCells } from '../lib/labels.js';
 import { addImage as withImage, imageRecord } from '../lib/images.js';
 import { addTransform as withTransform, SUPPLIED_ALIGNMENT, transformInUse, transformRecord, useTransform } from '../lib/transforms.js';
+import { readInverseField } from '../lib/overlays.js';
 import { addComparison, addExport, addSegmentation, comparisonRecord, exportRecord, removeComparison as withoutComparison, segmentationRecord, segmentationsOf, withInstrumentSegmentation } from '../lib/segmentations.js';
 
 const BUNDLE_KINDS = new Set(['bundle', 'archive']);
@@ -298,6 +299,48 @@ export function createBundles(app) {
     if (use && transformInUse(next, imageId)?.record.id !== answer.manifest.id) next = useTransform(next, { transform: answer.manifest.id, rationale, by });
     if (next !== app.store.project) app.store.commit(next, `Align ${next.artifacts.find((a) => a.id === imageId)?.name ?? imageId}: ${answer.manifest.name}`);
     return answer;
+  }
+
+  // An image registered automatically to its dataset's DAPI (api_register.go): a job, its version
+  // recorded in the project and, with use, chosen to place the image. Resolves with the version's
+  // artifact.
+  const aligning = new Map(); // job id → { dataset, image, title }
+  async function registerImage(item, datasetId, imageId, request, { use = false, rationale = '', by = 'the user' } = {}) {
+    const answer = await getJSON(`${item.url}/images/${encodeURIComponent(imageId)}/register`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) });
+    const jobId = answer.job?.id;
+    if (!jobId) throw new Error('no job was started');
+    aligning.set(jobId, { dataset: datasetId, image: imageId, title: answer.job.title });
+    notify();
+    try {
+      const job = await app.jobs.finished(jobId);
+      if (job?.state !== 'complete') throw new Error(`the registration ${job?.state ?? 'ended'}${job?.error ? `: ${job.error}` : ''}`);
+      const id = (job.events ?? []).map((e) => /artifact (tf-[0-9a-f]+)/.exec(e.message)?.[1]).find(Boolean);
+      if (!id) throw new Error('the job recorded no alignment');
+      const manifest = await getJSON(`/api/artifacts/${encodeURIComponent(id)}`);
+      const dataset = app.store.project.datasets.find((d) => d.id === datasetId);
+      if (!dataset) throw new Error('the dataset is no longer in the project');
+      let next = withTransform(app.store.project, transformRecord(dataset, manifest));
+      if (use && transformInUse(next, imageId)?.record.id !== id) next = useTransform(next, { transform: id, rationale, by });
+      if (next !== app.store.project) app.store.commit(next, `Align ${next.artifacts.find((a) => a.id === imageId)?.name ?? imageId} automatically`);
+      return manifest;
+    } finally {
+      aligning.delete(jobId);
+      notify();
+    }
+  }
+
+  // A deformed version's inverse field (api_register.go), read for drawing; kept for the session.
+  const inverseFields = new Map();
+  function inverseField(id) {
+    if (!inverseFields.has(id)) {
+      const p = fetch(`/api/transforms/${encodeURIComponent(id)}/inverse`).then(async (r) => {
+        if (!r.ok) throw new Error(`its deformation: HTTP ${r.status}`);
+        return readInverseField(await r.arrayBuffer());
+      });
+      p.catch(() => inverseFields.delete(id));
+      inverseFields.set(id, p);
+    }
+    return inverseFields.get(id);
   }
 
   // A transform's description (api_transforms.go); kept for the session.
@@ -926,6 +969,9 @@ export function createBundles(app) {
     imageDescription,
     makeTransform,
     transformDescription,
+    registerImage,
+    aligning: (imageId) => [...aligning.values()].filter((x) => x.image === imageId),
+    inverseField,
     compareSegmentations,
     comparisonDescription,
     removeComparison,

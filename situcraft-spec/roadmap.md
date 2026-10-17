@@ -2076,9 +2076,10 @@ range: 2.8 GB in all. Its bundle is of XOA 1, which SituCraft opens from this wa
        (H&E) and 0.07 µm (immunofluorescence) from the true nuclei; twelve landmarks' leave-one-out
        error is near the fit's true error over the section; the same images on one core.
      - **In the page** (the viewer suite): landmarks made with 10x's matrix fitted back to it as a
-       version, listed in the Alignment view, written as keypoints; a simulated H&E placed by six
-       landmarks clicked on both images (from the fourth, the image went to within 0.7 to 5.8
-       pixels of the place), the fit within its truth's deformation, drawn where the fit puts it.
+       version, listed in the Alignment view, written as keypoints; a simulated H&E (320 × 260 µm,
+       deformed by up to 2 µm) placed by six landmarks clicked on both images (from the fourth,
+       the image went to within 1.2 to 13.9 pixels of the place), the fit at most 1.45 µm from its
+       truth, drawn where the fit puts it.
    - Found by slice 2:
      - **10x's alignments are similarities, exactly:** the fixture's H&E matrix has A = −E and
        B = D to the last bit, its immunofluorescence matrix A = E and B = −D: fitted from
@@ -2089,17 +2090,65 @@ range: 2.8 GB in all. Its bundle is of XOA 1, which SituCraft opens from this wa
      - **An image not aligned is not drawn:** placed by its metadata's pixel size it would look
        aligned and be off by the scan's turn and mirror (and, on the fixture's immunofluorescence
        image, 3.5 times too small).
-3. **Automatic registration (R3).**
-   - **Rigid and affine:** the H&E's haematoxylin by colour deconvolution (Ruifrok & Johnston
-     2001), or the IF's nuclear channel, against DAPI; each of the eight orientations (rotations by
-     quarter turns, with and without a reflection) and the translation found by phase correlation
-     (Kuglin & Hines 1975), rotation and scale by its log-polar form (Reddy & Chatterji 1996);
-     refined over a pyramid by maximizing normalized mutual information (Studholme, Hill & Hawkes
-     1999). The same transform for the same images on any computer.
-   - **Non-rigid, optional:** a smooth deformation (B-splines, Rueckert et al. 1999) regularized
-     against folding, from local matches, for sections that stretched or tore.
-   - Validation: known affine and non-rigid transforms recovered on the simulated images; on the
-     fixture, 10x's matrix reproduced within a stated distance in µm, for the H&E and the IF.
+3. **Automatic registration (R3): done.**
+   - **The signals** (`internal/nuclei`): the Xenium image's DAPI read from the bundle's own
+     pyramid, a block at a time (so the derived data need not be built); the image's nuclear
+     signal, an H&E's haematoxylin by colour deconvolution (Ruifrok & Johnston 2001; the glass's
+     light each channel's 99.5th percentile) or an immunofluorescence image's nuclear stain (by
+     its name, or named).
+   - **The search** (`internal/register/auto.go`), both images about 256 pixels across: scales a
+     quarter octave apart, two octaves each way of the metadata's (an image's metadata often gives
+     the Xenium image's), the image as it is and mirrored; for each, the turn and what is left of
+     the scale from the log-polar forms of the magnitude spectra (Reddy & Chatterji 1996), both
+     turns half a turn apart, each with its shift by phase correlation (Kuglin & Hines 1975) and the
+     shifts its wrapping allows; the best by normalized mutual information (Studholme, Hill & Hawkes
+     1999) over at least 30% of the Xenium image.
+   - **Refined** over a pyramid, each level twice as fine to about 4 µm a pixel, by a compass search
+     (Hooke & Jeeves 1961) of the model's parameters maximizing the mutual information.
+   - **Local matches:** patches of 128 pixels (a sixth of the tissue's smaller side, 32 to 160 µm)
+     where the Xenium image has tissue, the image drawn under the transform in each, their shift by
+     phase correlation to a fraction of a pixel (Foroosh, Zerubia & Berthod 2002); the model fitted
+     to them, matches over three robust standard deviations dropped; twice.
+   - **A deformation** (`bspline.go`), when asked: cubic B-splines (Rueckert et al. 1999) on a grid
+     of about eight cells across the tissue, fitted to what the model leaves of the kept matches,
+     their second differences penalized; the smoothness that best predicts each fifth of the
+     matches from the rest, raised until the deformation nowhere folds; kept only when it predicts
+     them clearly better (by 10%) than the model alone, from 25 kept matches.
+   - **Recorded** as a version (`api_register.go`): method `automatic`, its matches, the fit to those
+     kept, the deformation, what the search found; started afresh or from a version. Every
+     operation rounded on its own, every sine and logarithm `dmath`'s: the same images give the same
+     version on any computer (a fingerprint pinned in a test that continuous integration, on another
+     kind of processor, checks).
+   - **The renderer** draws a deformed image by mapping each fragment back: its place on the tissue
+     moved by the deformation's inverse field (a half-float texture), then through the transform's
+     inverse.
+   - **The Alignment view** aligns automatically (the model, a deformation, the nuclear stain, from
+     the version in use or not, used when done) and shows an automatic version's matches on both
+     images. Remote control: `register_image`.
+   - Validation:
+     - **Units:** the FFT against the transform computed directly; shifts found to a tenth of a
+       pixel; turns and scales from the log-polar form; colour deconvolution of colours made from
+       known amounts; mutual information's bounds; B-splines fitted back, never folding.
+     - **Simulated images:** the search finds each image's scale, turn and mirror with its metadata
+       right or 3 times wrong; undeformed, the result 0.13 to 0.16 µm from the truth and no
+       deformation kept; deformed (by up to 2 µm), the affine fit 0.87 µm from the truth and the
+       deformation 0.20 µm.
+     - **The fixture against 10x's alignment,** over the Xenium image every 100 µm, without the
+       images' alignments: the H&E within 0.61 µm root-mean-square (at most 0.91), the
+       immunofluorescence image within 0.68 µm (at most 1.19), its scale found (0.7387 µm) though
+       its metadata says 0.2125; 10 s and 3 s (checked weekly).
+     - **In the page** (the viewer suite): the simulated H&E registered by `register_image` with a
+       deformation (42 matches kept, the deformation kept), at most 0.58 µm from its truth over the
+       section (six clicked landmarks: 1.45 µm), drawn where the program's deformation puts three
+       of its pixels.
+   - Found by slice 3:
+     - **The fixture's immunofluorescence image is deformed against DAPI,** by up to 2.6 µm: a
+       deformation predicts its matches 0.49 µm off, any similarity (10x's among them) 1.05 µm. Its
+       H&E is not, beyond what the matches tell.
+     - **An automatic alignment agrees with 10x's within a micron:** about two of the H&E's pixels;
+       neither is the truth, and checking an alignment in µm is slice 4's.
+     - **A deformation fitted to noisy matches makes an alignment worse** (0.19 to 0.40 µm on an
+       undeformed simulated image): it is kept only when it predicts matches held out better.
 4. **Alignment checked in µm (R4).**
    - The Xenium image and the post-Xenium image as a checkerboard, in flicker and with DAPI's
      edges over the image; each landmark's residual and the leave-one-out error in µm; where the

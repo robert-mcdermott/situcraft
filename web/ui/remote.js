@@ -637,6 +637,35 @@ export function installRemote(app) {
       }
     },
 
+    async register_image(args) {
+      const dataset = resolveDataset(args.dataset);
+      const record = imageRef(dataset, args.image);
+      const item = bundleOf(dataset);
+      const model = args.model === undefined ? 'similarity' : choose(args.model, ['similarity', 'affine'], 'model');
+      const by = args.by ? String(args.by) : author;
+      const note = args.note ? String(args.note) : '';
+      const request = { model, nonrigid: Boolean(args.nonrigid), by, note };
+      if (args.start !== undefined) request.start = transformRef(record, args.start).id;
+      if (args.channel !== undefined) {
+        const desc = await app.bundles.imageDescription(record.id);
+        if (desc.image.kind === 'rgb') throw new ActionError(`${record.name} is RGB: its haematoxylin is registered, it has no channel to name.`);
+        const names = desc.image.channels.map((c) => c.name);
+        request.channel = names.indexOf(choose(String(args.channel), names, 'channel'));
+      }
+      const use = args.use === undefined ? true : Boolean(args.use);
+      try {
+        const m = await app.bundles.registerImage(item, dataset.id, record.id, request, { use, rationale: note || 'Aligned automatically by the nuclei.', by });
+        const rec = project().artifacts.find((a) => a.kind === 'transform' && a.id === m.id);
+        const d = await app.bundles.transformDescription(m.id);
+        return {
+          message: `${m.name}: ${rec ? describeTransform(rec) : ''}. ${use ? `It places ${record.name}.` : 'Saved as a version; use_transform chooses it.'}${d.registration?.warnings?.length ? ` ${d.registration.warnings.join(' ')}` : ''}`,
+          data: { id: m.id, name: m.name, transform: d.transform, model: d.model, deformed: Boolean(d.deformation), fit: d.fit, registration: d.registration, matches: (d.matches ?? []).length, kept: (d.matches ?? []).filter((x) => x.kept).length, placedBy: transformInUse(project(), record.id)?.record.id ?? null },
+        };
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+    },
+
     async use_transform(args) {
       const dataset = resolveDataset(args.dataset);
       const record = imageRef(dataset, args.image);

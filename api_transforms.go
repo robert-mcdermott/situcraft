@@ -47,6 +47,11 @@ type transformDescription struct {
 	Fit       *fitSummary `json:"fit,omitempty"`
 	// File is Xenium Explorer's file it was read from, where it lies.
 	File *imageSource `json:"file,omitempty"`
+	// An automatic registration's (api_register.go): its local matches (those kept fitted, as
+	// landmarks are), a deformation after the transform, and what it found.
+	Matches      []match             `json:"matches,omitempty"`
+	Deformation  *register.BSpline   `json:"deformation,omitempty"`
+	Registration *registrationReport `json:"registration,omitempty"`
 	// XeniumPixelSize is the dataset's pixel size (µm), which Xenium Explorer's files are in.
 	XeniumPixelSize float64 `json:"xeniumPixelSize"`
 	// Parent is the version it was made from.
@@ -66,6 +71,26 @@ type coordinateSystem struct {
 type landmark struct {
 	Fixed  [2]float64 `json:"fixed"`
 	Moving [2]float64 `json:"moving"`
+}
+
+// match is a local match of an automatic registration: a patch's centre on the Xenium image (µm),
+// where it matched on the image (its pixels), how clearly, and whether the fit kept it.
+type match struct {
+	Fixed   [2]float64 `json:"fixed"`
+	Moving  [2]float64 `json:"moving"`
+	Quality float64    `json:"quality"`
+	Kept    bool       `json:"kept"`
+}
+
+// keptMatches are an automatic registration's kept matches, as keypoints.
+func keptMatches(ms []match) []register.Keypoint {
+	var out []register.Keypoint
+	for _, m := range ms {
+		if m.Kept {
+			out = append(out, register.Keypoint{Fixed: register.Point{X: m.Fixed[0], Y: m.Fixed[1]}, Moving: register.Point{X: m.Moving[0], Y: m.Moving[1]}})
+		}
+	}
+	return out
 }
 
 // fitSummary is how well a fit fits, in µm: each landmark's residual and leave-one-out error.
@@ -277,6 +302,13 @@ func keypointsOf(ls []landmark) []register.Keypoint {
 
 func transformName(d transformDescription, file *imageSource) string {
 	switch d.Method {
+	case "automatic":
+		kept := len(keptMatches(d.Matches))
+		name := fmt.Sprintf("Automatic, %s, %d matches", d.Model, kept)
+		if d.Deformation != nil {
+			name += ", deformed"
+		}
+		return name
 	case "matrix":
 		return "Xenium Explorer's transformation matrix (" + filepath.Base(file.Path) + ")"
 	case "keypoints":
@@ -295,6 +327,14 @@ func methodOf(d transformDescription) artifacts.Method {
 		return artifacts.Method{Name: "Aligned by Xenium Explorer's transformation matrix", Version: "1", Citation: explorer}
 	case d.Method == "keypoints":
 		return artifacts.Method{Name: "Aligned by Xenium Explorer's keypoints: a similarity fitted by least squares", Version: "1", Citation: explorer + " " + umeyama + "; " + stone}
+	case d.Method == "automatic":
+		cite := "Ruifrok AC, Johnston DA. Quantification of histochemical staining by color deconvolution. Anal Quant Cytol Histol 2001;23(4):291–299; Kuglin CD, Hines DC. The phase correlation image alignment method. Proc IEEE Conf Cybernetics and Society 1975; Reddy BS, Chatterji BN. An FFT-based technique for translation, rotation, and scale-invariant image registration. IEEE Trans Image Process 1996;5(8):1266–1271; Studholme C, Hill DLG, Hawkes DJ. An overlap invariant entropy measure of 3D medical image alignment. Pattern Recognit 1999;32(1):71–86; Foroosh H, Zerubia J, Berthod M. Extension of phase correlation to subpixel registration. IEEE Trans Image Process 2002;11(3):188–200; " + umeyama
+		name := "Aligned automatically by the nuclei: a " + string(d.Model) + " found by phase correlation, refined by normalized mutual information and fitted to local matches"
+		if d.Deformation != nil {
+			name += ", then a smooth deformation"
+			cite += "; Rueckert D, Sonoda LI, Hayes C, Hill DLG, Leach MO, Hawkes DJ. Nonrigid registration using free-form deformations. IEEE Trans Med Imaging 1999;18(8):712–721"
+		}
+		return artifacts.Method{Name: name, Version: "1", Citation: cite}
 	case d.Model == register.ModelAffine:
 		return artifacts.Method{Name: "Aligned by landmarks: an affine transform fitted by least squares", Version: "1", Citation: stone}
 	}
@@ -324,6 +364,16 @@ func (a *app) recordTransform(im artifacts.Manifest, idesc imageDescription, d t
 		"umPerPixel": t.Scale(), "rotation": t.Rotation(), "reflected": t.Reflected(), "by": d.By, "parent": d.Parent, "imagePixelSize": idesc.Image.PixelSize}
 	if d.Fit != nil {
 		summary["rms"], summary["max"], summary["looRms"], summary["looMax"] = d.Fit.RMS, d.Fit.Max, d.Fit.LooRMS, d.Fit.LooMax
+	}
+	if d.Method == "automatic" {
+		summary["matches"], summary["kept"] = len(d.Matches), len(keptMatches(d.Matches))
+		if r := d.Registration; r != nil {
+			summary["channel"], summary["nmi"], summary["heldOut"], summary["modelHeldOut"], summary["deformedRms"] = r.Channel, r.NMI, r.HeldOut, r.ModelHeldOut, r.DeformedRMS
+		}
+		summary["deformed"] = d.Deformation != nil
+		if d.Deformation != nil {
+			summary["maxDisplacement"] = d.Registration.MaxDisplacement
+		}
 	}
 	sum, _ := json.Marshal(summary)
 	params, _ := json.Marshal(map[string]any{"model": d.Model, "landmarks": len(d.Landmarks), "by": d.By, "note": d.Note})
@@ -376,6 +426,17 @@ func checkTransformArtifact(dir string, m *artifacts.Manifest) []artifacts.Findi
 		fit, err := register.FitKeypoints(d.Model, keypointsOf(d.Landmarks))
 		if err != nil || fit.Transform != d.Transform || d.Fit == nil || fit.RMS != d.Fit.RMS {
 			out = append(out, artifacts.Finding{Severity: "fatal", Code: "transform.fit", Message: "The landmarks do not fit as recorded."})
+		}
+	}
+	if kept := keptMatches(d.Matches); d.Method == "automatic" && len(kept) >= register.MinKeypoints {
+		fit, err := register.FitKeypoints(d.Model, kept)
+		if err != nil || fit.Transform != d.Transform {
+			out = append(out, artifacts.Finding{Severity: "fatal", Code: "transform.fit", Message: "The kept matches do not fit as recorded."})
+		}
+	}
+	if r := d.Registration; r != nil {
+		for _, w := range r.Warnings {
+			out = append(out, artifacts.Finding{Severity: "warning", Code: "transform.registration", Message: w})
 		}
 	}
 	var s struct {
@@ -449,10 +510,13 @@ func xeniumExplorerFile(m artifacts.Manifest, d transformDescription, which, ima
 	case "matrix":
 		return register.MatrixCSV(d.Transform.Then(register.Scaling(1 / ps))), stem + "_imagealignment.csv", nil
 	case "keypoints":
-		if len(d.Landmarks) == 0 {
+		kps := keypointsOf(d.Landmarks)
+		if d.Method == "automatic" {
+			kps = keptMatches(d.Matches)
+		}
+		if len(kps) == 0 {
 			return nil, "", errors.New("this alignment has no landmarks (it is a transformation matrix): write its matrix")
 		}
-		kps := keypointsOf(d.Landmarks)
 		for i := range kps {
 			kps[i].Fixed.X, kps[i].Fixed.Y = kps[i].Fixed.X/ps, kps[i].Fixed.Y/ps
 		}

@@ -94,3 +94,17 @@ export function defaultImageLayer(desc) {
     }),
   };
 }
+
+// A deformed image's inverse field (api_register.go's /inverse): { x0, y0, step, nx, ny, field (each
+// point's displacement back, x then y, µm), max (the largest, µm) }.
+export function readInverseField(buffer) {
+  const view = new DataView(buffer);
+  const magic = String.fromCharCode(...new Uint8Array(buffer, 0, 4));
+  if (magic !== 'SCIV') throw new Error(`not an inverse field (${magic})`);
+  const nx = view.getUint32(4, true);
+  const ny = view.getUint32(8, true);
+  const field = new Float32Array(buffer.slice(24, 24 + 8 * nx * ny));
+  let max = 0;
+  for (let i = 0; i < field.length; i += 2) max = Math.max(max, Math.sqrt(field[i] * field[i] + field[i + 1] * field[i + 1]));
+  return { x0: view.getFloat32(12, true), y0: view.getFloat32(16, true), step: view.getFloat32(20, true), nx, ny, field, max };
+}

@@ -25,12 +25,12 @@
 // each with its cell in that segmentation and, when it gives them, colored by their assignment's
 // probability.
 
-import { createContext, createProgram, arrayBuffer, vertexArray, byteTexture, floatTexture, colorTexture, hexColor } from './gl.js';
+import { createContext, createProgram, arrayBuffer, vertexArray, byteTexture, floatTexture, fieldTexture, colorTexture, hexColor } from './gl.js';
 import { TileCache } from './tiles.js';
 import { densityLevel, gridTileRange, imageLevel, tileRange, tileUm, viewMatrix, visibleRect, screenToWorld } from '../lib/viewport.js';
 import { readPolygonTile, outlineSegments, fillTriangles, pointInRing } from '../lib/polygons.js';
 import { readPoints, readDensity, densityGrid } from '../lib/viewer-data.js';
-import { invert as invertAffine, modelMatrix, overlayLevel, overlayTileRange, tileGeometry } from '../lib/overlays.js';
+import { invert as invertAffine, modelMatrix, overlayLevel, overlayTileRange, tileGeometry, umPerPixel } from '../lib/overlays.js';
 import { probabilityColors, probabilitySlot } from '../lib/segview.js';
 
 const QUAD = new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]);
@@ -73,19 +73,50 @@ void main() {
 }`;
 
 // A post-Xenium image's tile (lib/overlays.js): its corners placed by the image's transform, from
-// its full-resolution pixels to µm, at any scale, rotation or reflection.
+// its full-resolution pixels to µm, at any scale, rotation or reflection; grown by u_margin pixels
+// each way when the image is deformed after its transform, so that the deformation cannot move its
+// pixels beyond what is drawn.
 const OVERLAY_VS = `#version 300 es
 in vec2 a_pos;
 uniform mat3 u_view;
 uniform mat3 u_model;
 uniform vec2 u_origin;
 uniform vec2 u_size;
-uniform vec2 u_texels;
-out vec2 v_tex;
+uniform float u_margin;
+out vec2 v_tile;
+out vec2 v_world;
 void main() {
-  vec3 world = u_model * vec3(u_origin + a_pos * u_size, 1.0);
-  v_tex = a_pos * u_texels;
+  vec2 px = u_origin - u_margin + a_pos * (u_size + 2.0 * u_margin);
+  vec3 world = u_model * vec3(px, 1.0);
+  v_world = world.xy;
+  v_tile = (px - u_origin) / u_size;
   gl_Position = vec4((u_view * world).xy, 0.0, 1.0);
+}`;
+
+// Where in its tile a fragment of an image is (0 to 1 across the tile's texels): as interpolated;
+// or, for an image deformed after its transform, its place on the tissue moved back by the
+// deformation's inverse field (api_register.go: a displacement at each point of a grid), then to
+// the image's pixels by the transform's inverse. A fragment beyond its tile is not drawn.
+const OVERLAY_PLACE = `
+uniform int u_deformed;
+uniform sampler2D u_inv;
+uniform vec3 u_invGrid;
+uniform vec2 u_invSize;
+uniform mat3 u_modelInv;
+uniform vec2 u_originFS;
+uniform vec2 u_sizeFS;
+in vec2 v_tile;
+in vec2 v_world;
+vec2 tilePlace() {
+  vec2 t = v_tile;
+  if (u_deformed == 1) {
+    vec2 g = (v_world - u_invGrid.xy) / u_invGrid.z;
+    vec2 e = texture(u_inv, (g + 0.5) / u_invSize).rg;
+    vec2 px = (u_modelInv * vec3(v_world + e, 1.0)).xy;
+    t = (px - u_originFS) / u_sizeFS;
+  }
+  if (t.x < 0.0 || t.y < 0.0 || t.x >= 1.0 || t.y >= 1.0) discard;
+  return t;
 }`;
 
 // An RGB image (an H&E) in its own colours, over what is beneath at its opacity.
@@ -93,11 +124,35 @@ const RGB_FS = `#version 300 es
 precision highp float;
 uniform sampler2D u_tex;
 uniform vec2 u_texSize;
+uniform vec2 u_texels;
 uniform float u_opacity;
-in vec2 v_tex;
+${OVERLAY_PLACE}
 out vec4 o;
 void main() {
-  o = vec4(texture(u_tex, v_tex / u_texSize).rgb, u_opacity);
+  vec2 t = tilePlace();
+  o = vec4(texture(u_tex, t * u_texels / u_texSize).rgb, u_opacity);
+}`;
+
+// An immunofluorescence image's channel, as the stains are drawn (IMAGE_FS).
+const CHANNEL_FS = `#version 300 es
+precision highp float;
+precision highp usampler2D;
+uniform usampler2D u_tex;
+uniform ivec2 u_dims;
+uniform vec2 u_texels;
+uniform vec2 u_window;
+uniform float u_gamma;
+uniform vec3 u_color;
+${OVERLAY_PLACE}
+out vec4 o;
+void main() {
+  vec2 p = tilePlace() * u_texels;
+  ivec2 t = clamp(ivec2(floor(p)), ivec2(0), u_dims - 1);
+  uint lo = texelFetch(u_tex, t, 0).r;
+  uint hi = texelFetch(u_tex, ivec2(t.x, t.y + u_dims.y), 0).r;
+  float v = float(lo) + 256.0 * float(hi);
+  float n = clamp((v - u_window.x) / max(u_window.y - u_window.x, 1.0), 0.0, 1.0);
+  o = vec4(u_color * pow(n, u_gamma), 1.0);
 }`;
 
 const DENSITY_FS = `#version 300 es
@@ -261,7 +316,7 @@ export class TissueRenderer {
       points: createProgram(gl, POINTS_VS, POINTS_FS),
       shape: createProgram(gl, SHAPE_VS, SHAPE_FS),
       overlayRGB: createProgram(gl, OVERLAY_VS, RGB_FS),
-      overlayChannel: createProgram(gl, OVERLAY_VS, IMAGE_FS),
+      overlayChannel: createProgram(gl, OVERLAY_VS, CHANNEL_FS),
     };
     this.quad = arrayBuffer(gl, QUAD);
     this.quadVAO = {
@@ -277,6 +332,8 @@ export class TissueRenderer {
     // of its kind bound (WebGL refuses a draw otherwise), so a 1×1 one stands in when cells are
     // not filled.
     this.noColors = colorTexture(gl, 1, 1, new Uint8Array([255, 255, 255, 255]));
+    // The deformed images' inverse fields, by field (a lost context loses them).
+    this.fields = new Map();
     const dispose = (value) => value?.dispose?.();
     const onLoad = () => this.request();
     this.caches = {
@@ -345,11 +402,26 @@ export class TissueRenderer {
   }
 
   // The post-Xenium images drawn over the stains, in order: [{ desc (api_images.go's description
-  // with its id), layer: { visible, opacity, channels: [{ visible, color, window, gamma }] } }].
+  // with its id, its transform's rows as transform and, when it is deformed after it, deformation:
+  // { x0, y0, step, nx, ny, field (each point's displacement back, x then y), max (µm) }), layer:
+  // { visible, opacity, channels: [{ visible, color, window, gamma }] } }].
   setOverlays(list) {
     const ids = new Set(list.map((o) => o.desc.id));
     if (this.overlays.some((o) => !ids.has(o.desc.id))) this.caches.overlay.clear();
-    this.overlays = list.map((o) => ({ ...o, inverse: invertAffine(o.desc.transform), model: modelMatrix(o.desc.transform) }));
+    const gl = this.gl;
+    const fields = new Map();
+    this.overlays = list.map((o) => {
+      const inverse = invertAffine(o.desc.transform);
+      const def = o.desc.deformation ?? null;
+      let field = null;
+      if (def) {
+        field = this.fields?.get(def.field) ?? fieldTexture(gl, def.nx, def.ny, def.field);
+        fields.set(def.field, field);
+      }
+      return { ...o, inverse, model: modelMatrix(o.desc.transform), modelInv: inverse ? modelMatrix(inverse) : null, field };
+    });
+    for (const [key, texture] of this.fields ?? []) if (!fields.has(key)) gl.deleteTexture(texture);
+    this.fields = fields;
     this.request();
   }
 
@@ -706,8 +778,9 @@ export class TissueRenderer {
   }
 
   // Each post-Xenium image over the stains: its level for the zoom, its tiles in view (coarser
-  // ones standing in until they load, each pixel drawn once), placed by its transform. An RGB image
-  // is laid over at its opacity; an immunofluorescence image's channels add up as the stains do.
+  // ones standing in until they load, each pixel drawn once), placed by its transform and any
+  // deformation after it. An RGB image is laid over at its opacity; an immunofluorescence image's
+  // channels add up as the stains do.
   drawOverlays(plan, view) {
     if (this.forced) return;
     const gl = this.gl;
@@ -717,11 +790,27 @@ export class TissueRenderer {
       const levels = o.desc.image.levels;
       const rgb = o.desc.image.kind === 'rgb';
       const prog = rgb ? this.programs.overlayRGB : this.programs.overlayChannel;
+      const def = o.desc.deformation;
       gl.useProgram(prog.program);
       gl.uniformMatrix3fv(prog.u.u_view, false, view);
       gl.uniformMatrix3fv(prog.u.u_model, false, o.model);
+      gl.uniformMatrix3fv(prog.u.u_modelInv, false, o.modelInv);
       gl.bindVertexArray(rgb ? this.quadVAO.overlayRGB : this.quadVAO.overlayChannel);
       gl.uniform1i(prog.u.u_tex, 0);
+      gl.uniform1i(prog.u.u_inv, 2);
+      gl.activeTexture(gl.TEXTURE2);
+      gl.bindTexture(gl.TEXTURE_2D, o.field ?? null);
+      gl.uniform1i(prog.u.u_deformed, def && o.field ? 1 : 0);
+      // A deformed image's tiles are found over the view grown by its largest displacement, and
+      // each is drawn grown by as many of its pixels.
+      let rect = plan.rect;
+      let margin = 0;
+      if (def && o.field) {
+        gl.uniform3f(prog.u.u_invGrid, def.x0, def.y0, def.step);
+        gl.uniform2f(prog.u.u_invSize, def.nx, def.ny);
+        rect = { x0: rect.x0 - def.max, y0: rect.y0 - def.max, x1: rect.x1 + def.max, y1: rect.y1 + def.max };
+        margin = def.max / umPerPixel(o.desc.transform) + 2;
+      }
       gl.activeTexture(gl.TEXTURE0);
       gl.enable(gl.BLEND);
       const level = overlayLevel(levels, o.desc.transform, this.camera.scale);
@@ -731,7 +820,7 @@ export class TissueRenderer {
         if (!ch.visible) return;
         const list = [];
         for (let l = level; l <= top; l += 1) {
-          const range = overlayTileRange(levels, l, o.inverse, plan.rect);
+          const range = overlayTileRange(levels, l, o.inverse, rect);
           const tiles = [];
           if (range) {
             for (let ty = range.ty0; ty <= range.ty1; ty += 1) {
@@ -754,12 +843,14 @@ export class TissueRenderer {
           gl.uniform3f(prog.u.u_color, r * layer.opacity, g * layer.opacity, b * layer.opacity);
           gl.uniform2f(prog.u.u_window, ch.window[0], ch.window[1]);
           gl.uniform1f(prog.u.u_gamma, ch.gamma);
-          gl.uniform1i(prog.u.u_raw, 0);
         }
         this.stencilled(list, ({ tile, tx, ty, l }) => {
           const g = tileGeometry(levels, l, tx, ty);
           gl.uniform2f(prog.u.u_origin, g.origin[0], g.origin[1]);
           gl.uniform2f(prog.u.u_size, g.size[0], g.size[1]);
+          gl.uniform2f(prog.u.u_originFS, g.origin[0], g.origin[1]);
+          gl.uniform2f(prog.u.u_sizeFS, g.size[0], g.size[1]);
+          gl.uniform1f(prog.u.u_margin, margin);
           gl.uniform2f(prog.u.u_texels, g.texels[0], g.texels[1]);
           if (rgb) gl.uniform2f(prog.u.u_texSize, tile.width, tile.height);
           else gl.uniform2i(prog.u.u_dims, tile.width, tile.height);
@@ -1151,6 +1242,7 @@ export class TissueRenderer {
     if (this.highlight) this.gl.deleteTexture(this.highlight.texture);
     if (this.qcMap?.lutTexture) this.gl.deleteTexture(this.qcMap.lutTexture);
     this.gl.deleteTexture(this.noColors);
+    for (const texture of this.fields?.values() ?? []) this.gl.deleteTexture(texture);
     this.gl.getExtension('WEBGL_lose_context')?.loseContext();
   }
 }

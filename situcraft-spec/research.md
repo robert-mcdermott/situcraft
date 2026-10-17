@@ -388,6 +388,74 @@ it, a note and its parent version. Which one places an image is a decision with 
 latest names it. An image with none is not drawn on the tissue: a place guessed from its metadata
 would look aligned and not be.
 
+### 2.3 Automatic registration (verified, wave 5, slice 3)
+
+A post-Xenium image is registered to the Xenium image by the nuclei, which both show: DAPI against
+an H&E's haematoxylin (colour deconvolution, Ruifrok & Johnston 2001, with their stain colours and
+the glass's light each channel's 99.5th percentile over the image's smallest level) or an
+immunofluorescence image's nuclear stain (`internal/nuclei`, `internal/register/auto.go`).
+
+1. **The search,** on both images about 256 pixels across. An image's metadata cannot be trusted
+   for its pixel size (the fixture's immunofluorescence image gives the Xenium image's), so scales a
+   quarter octave apart are swept, two octaves each way of what it says (0.5 µm when it says
+   nothing, three octaves each way), the image as it is and mirrored. For each, the log-polar forms
+   of both magnitude spectra, emphasized at high frequencies (Reddy & Chatterji 1996), correlate at
+   the turn and the scale left; the two turns half a turn apart (spectra cannot tell them) each
+   with its shift by phase correlation (Kuglin & Hines 1975) and the shifts a correlation's
+   wrapping allows. The candidate whose images' normalized mutual information (Studholme, Hill &
+   Hawkes 1999) is highest, over at least 30% of the Xenium image, is kept. An image a scale makes
+   over four times the Xenium image's size is not tried.
+2. **Refinement** over a pyramid, each level twice as fine to about 4 µm a pixel: the model's
+   parameters (a shift, a turn, a scale, and for an affine transform an aspect and a shear, about
+   the Xenium image's centre) moved by a compass search (Hooke & Jeeves 1961) maximizing the mutual
+   information, which needs no gradient.
+3. **Local matches:** patches of 128 pixels, a sixth of the tissue's smaller side (32 to 160 µm),
+   where the Xenium image has tissue (at most 200), the image drawn under the transform in each, the
+   shift found by phase correlation with Foroosh, Zerubia and Berthod's (2002) sub-pixel estimate
+   (a parabola's is biased toward whole pixels by up to a fifth of a pixel). A patch is kept when its
+   peak stands six standard deviations above the surface and the shift is within a quarter of the
+   patch. The model is fitted to the matches (as landmarks, §2.2), those over three robust standard
+   deviations (1.4826 × the median residual) dropped until none is; twice.
+4. **A deformation,** when asked (`bspline.go`): cubic B-splines (Rueckert et al. 1999) on a grid of
+   about eight cells across the tissue (no finer than two patches, at most 24 across), fitted to
+   what the model leaves of the kept matches by least squares with a penalty on the control
+   points' second differences. The smoothness is the one of 0.01, 0.1, 1 and 10 that best predicts
+   each fifth of the matches from the rest, raised fourfold until the deformation's Jacobian
+   determinant stays above 0.5. It is kept only when it predicts the matches clearly better
+   (by 10%) than the model alone: fitted to matches' noise, it would make an alignment worse (on an
+   undeformed simulated image, from 0.19 to 0.40 µm from the truth). It needs 25 kept matches:
+   fewer cross-validate too coarsely, and leave it to extrapolate (on a 160 × 120 µm simulated
+   tissue's 13, a deformation was kept that put the section's edge 2.8 µm off).
+
+**The same transform on any computer:** every product rounded on its own (`mul`), the FFT's
+twiddles and every sine, exponential and logarithm `dmath`'s, histograms counted in integers, cores
+sharing only work whose result does not depend on how; a fingerprint of a registration's transform
+and deformation is pinned in a test that continuous integration checks on another kind of
+processor. Under Go's race detector a registration is about fifteen times slower; a small one runs
+there.
+
+**On simulated images** (§3.4a; 360 × 280 µm, the H&E deformed by up to 2 µm, the
+immunofluorescence image not deformed; the metadata's pixel size right or 0.2125 µm):
+
+| Image | Found by the search | The model's fit from the truth (RMS) | With a deformation |
+|---|---|---|---|
+| H&E (0.3638 µm, mirrored, turned 2.5°) | 0.362 µm, mirrored, 2.4° | 0.87 µm | 0.20 µm (kept: 0.30 µm held out against 0.88) |
+| Immunofluorescence (0.65 µm, turned −177°) | 0.652 µm, −177.4° | 0.13–0.16 µm | not kept (held out 0.69–0.73 µm against 0.69–0.73) |
+
+**On the pathology fixture,** without the images' alignments, against 10x's alignment over the
+Xenium image (7.5 × 5.5 mm) every 100 µm:
+
+| Image | Found by the search | Patches kept | From 10x's alignment | Time |
+|---|---|---|---|---|
+| H&E (0.3639 µm, mirrored, turned 0.28°) | 0.3640 µm, mirrored, 0.3° | 140 of 143 | 0.61 µm RMS, at most 0.91 | 10 s |
+| Immunofluorescence (0.7387 µm, turned −179.6°; its metadata 0.2125) | 0.7412 µm, −179.6° | 139 of 140 | 0.68 µm RMS, at most 1.19 | 3 s |
+
+The kept matches lie 0.91 µm (H&E) and 1.04 µm (immunofluorescence) from the similarity fitted to
+them: what a similarity cannot follow plus the matches' error. For the immunofluorescence image a
+deformation (941 µm cells) predicts each fifth of the matches 0.49 µm off against 1.05 µm by the
+similarity: it is deformed against DAPI, by up to 2.6 µm, which no similarity (10x's included)
+follows. The H&E's deformation predicts 0.87 against 0.93 µm and is not kept.
+
 ## 3. Segmentation
 
 ### 3.1 Nucleus expansion (verified, wave 2, slice 3)
@@ -2417,6 +2485,17 @@ Notes:
   2023;14:8353. doi:10.1038/s41467-023-43458-x (the pathology fixture).
 - Umeyama S. Least-squares estimation of transformation parameters between two point patterns.
   *IEEE TPAMI* 1991;13:376–380.
+- Reddy BS, Chatterji BN. An FFT-based technique for translation, rotation, and scale-invariant
+  image registration. *IEEE Trans Image Process* 1996;5(8):1266–1271.
+- Studholme C, Hill DLG, Hawkes DJ. An overlap invariant entropy measure of 3D medical image
+  alignment. *Pattern Recognit* 1999;32(1):71–86.
+- Foroosh H, Zerubia J, Berthod M. Extension of phase correlation to subpixel registration. *IEEE
+  Trans Image Process* 2002;11(3):188–200.
+- Rueckert D, Sonoda LI, Hayes C, Hill DLG, Leach MO, Hawkes DJ. Nonrigid registration using
+  free-form deformations: application to breast MR images. *IEEE Trans Med Imaging*
+  1999;18(8):712–721.
+- Hooke R, Jeeves TA. "Direct search" solution of numerical and statistical problems. *J ACM*
+  1961;8(2):212–229.
 - Stone M. Cross-validatory choice and assessment of statistical predictions. *J R Stat Soc B*
   1974;36(2):111–147 (leave-one-out errors of landmark fits).
 - Ruifrok AC, Johnston DA. Quantification of histochemical staining by color deconvolution.

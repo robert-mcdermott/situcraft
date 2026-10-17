@@ -20,7 +20,9 @@ import (
 	"slices"
 	"sync"
 	"testing"
+	"time"
 
+	"situcraft/internal/nuclei"
 	"situcraft/internal/register"
 	"situcraft/internal/slide"
 	"situcraft/internal/xenium"
@@ -136,6 +138,77 @@ func TestPostXeniumImages(t *testing.T) {
 			t.Logf("%s: %s, scale %.5f (%.4f µm a pixel; its metadata says %.4f), turned %.1f°, mirrored %v; the Xenium image's centre at (%.0f, %.0f) of %d×%d", c.image, al.Kind, al.Matrix.Scale(), placed, im.PixelSize, al.Matrix.Rotation(), al.Matrix.Reflected(), x, y, im.Width, im.Height)
 			if agrees := math.Abs(ratio-1) < 0.002; agrees != c.agrees || !on {
 				t.Errorf("%s: the alignment's pixel size %.4f µm against the metadata's %.4f (agreeing %v, expected %v); the Xenium image's centre on it %v", c.image, placed, im.PixelSize, agrees, c.agrees, on)
+			}
+			im.Close()
+		}
+	})
+
+	// Automatic registration (wave 5, slice 3): each image registered to the bundle's DAPI by its
+	// nuclei, without its alignment, its scale not taken from its metadata, against 10x's alignment:
+	// how far apart the two put the Xenium image's points (over its extent, every 100 µm).
+	t.Run("automatic registration", func(t *testing.T) {
+		b, err := xenium.Open(filepath.Join(root, pathologyBundle), xenium.Options{CacheDir: t.TempDir()})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer b.Close()
+		fixed, pixel, _, closeFixed, err := nuclei.FromBundle(b)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer closeFixed()
+		ext := [2]float64{float64(fixed.Levels()[0][0]) * pixel, float64(fixed.Levels()[0][1]) * pixel}
+		for _, c := range []struct{ image, alignment string }{
+			{"Xenium_FFPE_Human_Breast_Cancer_Rep1_he_image.ome.tif", "Xenium_FFPE_Human_Breast_Cancer_Rep1_he_imagealignment.csv"},
+			{"Xenium_FFPE_Human_Breast_Cancer_Rep1_if_image.ome.tif", "Xenium_FFPE_Human_Breast_Cancer_Rep1_if_imagealignment.csv"},
+		} {
+			data, _ := os.ReadFile(filepath.Join(root, "images", c.alignment))
+			al, err := register.ReadAlignment(data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			tenx := al.Matrix.Then(register.Scaling(pixel))
+			im, err := slide.Open(filepath.Join(root, "images", c.image))
+			if err != nil {
+				t.Fatal(err)
+			}
+			channel := -1
+			if im.Kind == slide.Channels {
+				channel = nuclei.NuclearChannel(im.Description)
+			}
+			moving, what, err := nuclei.FromImage(im, channel, register.HAndE)
+			if err != nil {
+				t.Fatal(err)
+			}
+			started := time.Now()
+			res, err := register.Register(context.Background(), fixed, moving, register.Options{Model: register.ModelSimilarity, NonRigid: true, FixedPixel: pixel, MovingPixel: im.PixelSize, Log: func(f string, a ...any) { t.Logf("  "+f, a...) }})
+			if err != nil {
+				t.Fatalf("%s: %v", c.image, err)
+			}
+			inv, _ := tenx.Invert()
+			var sq, worst float64
+			n := 0
+			for y := 50.0; y < ext[1]; y += 100 {
+				for x := 50.0; x < ext[0]; x += 100 {
+					u, v := inv.Apply(x, y)
+					gx, gy := res.Transform.Apply(u, v)
+					d := math.Hypot(gx-x, gy-y)
+					sq += d * d
+					worst = math.Max(worst, d)
+					n++
+				}
+			}
+			rms := math.Sqrt(sq / float64(n))
+			kept := 0
+			for _, m := range res.Matches {
+				if m.Kept {
+					kept++
+				}
+			}
+			t.Logf("%s (%s), in %s: %d of %d patches kept; %.4f µm a pixel (10x: %.4f), turned %.2f° (10x: %.2f°); from 10x's alignment %.2f µm root-mean-square, at most %.2f µm; warnings %v",
+				c.image, what, time.Since(started).Round(time.Second), kept, len(res.Matches), res.Transform.Scale(), tenx.Scale(), res.Transform.Rotation(), tenx.Rotation(), rms, worst, res.Warnings)
+			if res.Transform.Reflected() != tenx.Reflected() || rms > 5 {
+				t.Errorf("%s: %.2f µm from 10x's alignment (mirrored %v, 10x's %v)", c.image, rms, res.Transform.Reflected(), tenx.Reflected())
 			}
 			im.Close()
 		}

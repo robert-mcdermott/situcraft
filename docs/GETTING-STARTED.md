@@ -679,8 +679,24 @@ To practise, `situcraft simulate --post-xenium <folder>` makes a simulated tissu
 immunofluorescence image of it in `post_xenium/`, each moved by a known transform and a smooth
 deformation; `truth/post_xenium/registration.json` says where each pixel truly lies.
 
-Aligning an image automatically, and checking an alignment in µm over the whole section, arrive
-later in 0.5.0 (see the [roadmap](../situcraft-spec/roadmap.md)).
+### Aligning automatically
+
+**Align automatically** registers the image by its nuclei: an H&E's haematoxylin (separated from
+its eosin by colour), or an immunofluorescence image's nuclear stain (chosen by its name; pick it
+if the name does not say), against the Xenium image's DAPI. It finds the image's scale, turn and
+mirroring whatever its metadata says, refines them, then matches patches over the tissue and fits
+the model to them (a similarity, or an affine transform). It runs as a job; a small section takes
+seconds, a whole one a minute or so.
+
+- **Allow a smooth deformation** for a section that stretched as it was stained: after the model,
+  a smooth warp fitted to the matches, kept only when it predicts matches it was not fitted to
+  better than the model alone. The Viewer draws the image as deformed.
+- **Start from the version in use** to refine an alignment (10x's, or yours) without searching.
+- The result is saved as a version, like one made from landmarks; **Show its matches** draws the
+  patches it matched on both images, in green, and those it dropped, in red.
+
+The same images always give the same alignment, on any computer. Checking an alignment in µm over
+the whole section arrives later in 0.5.0 (see the [roadmap](../situcraft-spec/roadmap.md)).
 
 ## Keyboard
 

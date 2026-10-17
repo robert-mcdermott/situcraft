@@ -19,7 +19,7 @@ import { readCells } from '../lib/viewer-data.js';
 import { defaultLayers } from './viewer-panel.js';
 import { describeImage, describePlacement, imagesOf } from '../lib/images.js';
 import { defaultImageLayer, invert } from '../lib/overlays.js';
-import { describeTransform, fitLandmarks, MIN_LANDMARKS, MODELS, residuals, transformInUse, transformShape, transformsOf, useTransform } from '../lib/transforms.js';
+import { describeTransform, fitLandmarks, MIN_LANDMARKS, MODELS, placePoint, transformInUse, transformShape, transformsOf, useTransform } from '../lib/transforms.js';
 
 // Per image id, for the session: { landmarks, model, parent, selected, dirty, cameras, overlay }.
 const sessions = new Map();
@@ -138,11 +138,12 @@ export function mountAlignment(app, container) {
     const stage = (side, label) => {
       const canvas = h('canvas.viewer-canvas', { tabIndex: 0, 'aria-label': side === 'left' ? `The Xenium image of ${t.dataset.name}: click to place a landmark, drag to pan, scroll to zoom` : `${record.name}: click to place a landmark, drag to pan, scroll to zoom` });
       const marks = h('div.align-marks');
+      const dots = h('div.align-marks');
       const zoomIn = h('button.icon-button', { type: 'button', title: 'Zoom in', 'aria-label': 'Zoom in' }, icon('plus'));
       const zoomOut = h('button.icon-button', { type: 'button', title: 'Zoom out', 'aria-label': 'Zoom out' }, icon('minus'));
       const fit = h('button.icon-button', { type: 'button', title: 'The whole image', 'aria-label': 'Show the whole image' }, icon('expand'));
-      const el = h('div.viewer-stage.align-stage', canvas, marks, h('div.viewer-tools', zoomIn, zoomOut, fit), h('div.align-stage-label', label));
-      return { side, canvas, marks, el, zoomIn, zoomOut, fit };
+      const el = h('div.viewer-stage.align-stage', canvas, dots, marks, h('div.viewer-tools', zoomIn, zoomOut, fit), h('div.align-stage-label', label));
+      return { side, canvas, marks, dots, el, zoomIn, zoomOut, fit };
     };
     const L = stage('left', `Xenium: ${desc.channels.map((c) => c.name).join(', ')} (µm)`);
     const R = stage('right', `${record.name} (its pixels)`);
@@ -270,7 +271,35 @@ export function mountAlignment(app, container) {
       for (const el of s.markEls.splice(st.landmarks.length)) el.remove();
     }
     function placeAll() {
-      for (const s of sides) placeMarks(s);
+      for (const s of sides) {
+        placeMarks(s);
+        placeDots(s);
+      }
+    }
+
+    // An automatic version's local matches, shown as dots on both images: kept, or dropped as
+    // disagreeing with the others.
+    function placeDots(s) {
+      s.dotEls ??= [];
+      const list = st.matches?.list ?? [];
+      const ratio = s.renderer.ratio || 1;
+      const [w, hh] = s.renderer.size();
+      list.forEach((m, i) => {
+        let el = s.dotEls[i];
+        if (!el) {
+          el = h('div.align-dot');
+          s.dotEls[i] = el;
+          s.dots.append(el);
+        }
+        const at = s.side === 'left' ? m.fixed : m.moving;
+        const [x, y] = worldToScreen(s.renderer.camera, w, hh, at[0], at[1]);
+        el.hidden = x < -5 || y < -5 || x > w + 5 || y > hh + 5;
+        el.className = `align-dot${m.kept ? '' : ' dropped'}`;
+        el.style.left = `${x / ratio}px`;
+        el.style.top = `${y / ratio}px`;
+        el.title = `A local match (quality ${m.quality.toFixed(1)})${m.kept ? '' : ', dropped: it disagrees with the others'}`;
+      });
+      for (const el of s.dotEls.splice(list.length)) el.remove();
     }
     function drag(event, s, i) {
       const key = s.side === 'left' ? 'fixed' : 'moving';
@@ -312,6 +341,7 @@ export function mountAlignment(app, container) {
     const lastCam = new Map();
     function afterFrame(s) {
       placeMarks(s);
+      placeDots(s);
       const cam = s.renderer.camera;
       const k = camKey(cam);
       if (lastCam.get(s) === k) return;
@@ -443,6 +473,52 @@ export function mountAlignment(app, container) {
       await readInUse();
     }
 
+    // Shows (or hides) an automatic version's matches.
+    async function showMatches(id) {
+      if (st.matches?.id === id) st.matches = null;
+      else {
+        const d = await app.bundles.transformDescription(id);
+        st.matches = { id, list: d.matches ?? [] };
+      }
+      renderPanel();
+      placeAll();
+    }
+
+    // Aligning automatically: the image's nuclei registered to DAPI by a job, saved as a version.
+    const nuclear = imageDesc.image.kind === 'rgb' ? -1 : Math.max(0, imageDesc.image.channels.findIndex((c) => /dapi|hoechst|nucle/i.test(c.name)));
+    st.auto ??= { model: 'similarity', nonrigid: false, channel: nuclear, start: false, use: !inUse() };
+    function automatic(u) {
+      const a = st.auto;
+      const running = app.bundles.aligning(record.id).length > 0;
+      const model = h('select.input', { 'aria-label': 'What the alignment may change', onchange: (e) => { a.model = e.target.value; } }, ...MODELS.map((m) => h('option', { value: m, selected: m === a.model }, m === 'similarity' ? 'Similarity (move, turn, scale, mirror)' : 'Affine (also stretch and shear)')));
+      const channel = imageDesc.image.kind === 'rgb' ? null : h('select.input', { 'aria-label': 'The image\'s nuclear stain', onchange: (e) => { a.channel = Number(e.target.value); } }, ...imageDesc.image.channels.map((c, i) => h('option', { value: i, selected: i === a.channel }, c.name)));
+      const box = (key, label, disabled = false) => h('label.viewer-toggle', h('input', { type: 'checkbox', checked: Boolean(a[key]) && !disabled, disabled, onchange: (e) => { a[key] = e.target.checked; } }), label);
+      const go = h('button.btn.small.primary', { type: 'button', disabled: running, onclick: async () => {
+        const by = byInput.value.trim() || 'the user';
+        prefs.set('reviewer', byInput.value.trim());
+        const request = { model: a.model, nonrigid: a.nonrigid, by, note: noteInput.value.trim(), ...(a.start && u ? { start: u.record.id } : {}), ...(imageDesc.image.kind === 'rgb' ? {} : { channel: a.channel }) };
+        renderPanel();
+        try {
+          const m = await app.bundles.registerImage(t.item, t.dataset.id, record.id, request, { use: a.use, rationale: noteInput.value.trim() || 'Aligned automatically by the nuclei.', by });
+          toast(`Aligned automatically: ${m.name}${a.use ? '; it places the image' : ''}.`, { kind: 'ok' });
+          await readInUse();
+        } catch (error) {
+          toast(`The image was not aligned automatically: ${error.message}`, { kind: 'error' });
+          renderPanel();
+        }
+      } }, icon('sparkles'), running ? 'Aligning…' : 'Align automatically');
+      return h('section.align-section',
+        h('h3', 'Align automatically'),
+        h('p.muted', `By the nuclei: the ${imageDesc.image.kind === 'rgb' ? 'H&E\'s haematoxylin' : 'image\'s nuclear stain'} against the Xenium image's DAPI. Its scale, turn and mirroring are found whatever its metadata says, then refined over patches of the tissue. Seconds for a small section, a minute or so for a large one.`),
+        h('label.viewer-slider', 'Fit', model),
+        channel ? h('label.viewer-slider', 'Nuclear stain', channel) : null,
+        box('nonrigid', 'Allow a smooth deformation (for a section that stretched); kept only if it predicts the tissue better'),
+        box('start', 'Start from the version in use (no search)', !u),
+        box('use', 'Place the image by it when done'),
+        h('div.btn-row', go),
+        running ? h('p.muted.viewer-hint', 'Aligning: its progress is under Jobs. The result is saved as a version below.') : null);
+    }
+
     const byInput = h('input.input', { type: 'text', value: prefs.get('reviewer', ''), placeholder: 'Your name or initials', 'aria-label': 'Who places the landmarks' });
     const noteInput = h('input.input', { type: 'text', placeholder: 'A note (kept with the version)', 'aria-label': 'A note' });
     function renderPanel() {
@@ -482,7 +558,10 @@ export function mountAlignment(app, container) {
       if (fit) {
         const shape = transformShape(fit.transform);
         const turn = Math.atan2(shape.turn[1], shape.turn[0]) * 180 / Math.PI;
-        const under = u && inUseDesc && u.record.id !== st.parent ? residuals(inUseDesc.transform, complete()) : null;
+        const under = u && inUseDesc && u.record.id !== st.parent ? complete().map((l) => {
+          const [x, y] = placePoint(inUseDesc, l.moving[0], l.moving[1]);
+          return Math.hypot(x - l.fixed[0], y - l.fixed[1]);
+        }) : null;
         const underRms = under ? Math.sqrt(under.reduce((a, r) => a + r * r, 0) / under.length) : null;
         summary = h('div.align-fit',
           h('p', h('b', `${complete().length} landmarks, ${st.model}:`), ` residuals ${fmt(fit.rms)} µm root-mean-square (at most ${fmt(fit.max)})`, fit.leaveOneOut ? `; left out, ${fmt(fit.looRms)} µm (at most ${fmt(fit.looMax)}).` : '; too few to leave one out.'),
@@ -524,11 +603,12 @@ export function mountAlignment(app, container) {
           h('div.btn-row',
             using ? null : h('button.btn.small', { type: 'button', onclick: () => choose(v) }, icon('check'), 'Use'),
             editable ? h('button.btn.small', { type: 'button', onclick: () => loadVersion(v.id) }, icon('edit'), 'Edit from it') : null,
+            v.summary?.method === 'automatic' ? h('button.btn.small', { type: 'button', 'aria-pressed': String(st.matches?.id === v.id), onclick: () => showMatches(v.id) }, icon('dots'), st.matches?.id === v.id ? 'Hide its matches' : 'Show its matches') : null,
             h('a.btn.small.ghost', { href: `/api/transforms/${encodeURIComponent(v.id)}/xenium-explorer/matrix`, download: '', title: 'Its transformation matrix for Xenium Explorer (the image\'s pixels to the Xenium image\'s)' }, icon('download'), 'Matrix'),
             editable ? h('a.btn.small.ghost', { href: `/api/transforms/${encodeURIComponent(v.id)}/xenium-explorer/keypoints`, download: '', title: 'Its landmarks as Xenium Explorer\'s keypoints' }, icon('download'), 'Keypoints') : null));
       });
       const versionSection = h('section.align-section', h('h3', 'Versions'), versions.length ? h('div', ...list) : h('p.muted', 'None yet: a version is saved from landmarks here, or supplied with the image (Xenium Explorer\'s matrix or keypoints).'));
-      panelHost.append(head, landmarks, versionSection);
+      panelHost.append(head, automatic(u), landmarks, versionSection);
     }
 
     readInUse();

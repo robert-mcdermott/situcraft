@@ -49,7 +49,9 @@
 // - transforms and landmarks (wave 5, slice 2): landmarks made with 10x's matrix fitted back to it as
 //   a version, listed in the Alignment view and written as Xenium Explorer's keypoints; a simulated
 //   tissue's H&E added unaligned and placed by six landmarks clicked on both images, within its
-//   truth's deformation, drawn where the fit puts it.
+//   truth's deformation, drawn where the fit puts it;
+// - automatic registration (wave 5, slice 3): the same H&E registered by its nuclei with a
+//   deformation allowed, within its truth's deformation, drawn where the version puts its pixels.
 //
 // It builds the program, starts it on the bundles with an empty cache and library, builds their
 // derived data, and drives the page through window.situcraft (the app, app.js), window.situcraftViewer
@@ -67,6 +69,7 @@ import { inflateSync } from 'node:zlib';
 import { attributeRange, readCells } from '../web/lib/viewer-data.js';
 import { certaintyColor, readSegCells } from '../web/lib/segview.js';
 import { colormapLUT, hexToRgb } from '../web/lib/colormaps.js';
+import { placePoint } from '../web/lib/transforms.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const BUNDLES = ['xenium-lung-2fov', 'xenium-breast-2fov'];
@@ -1199,9 +1202,10 @@ export async function viewerSuite({ check, MissingData, verbose }) {
       const pathology = join(dataRoot, 'xenium-breast-cancer-rep1');
       const sample = 'Xenium_FFPE_Human_Breast_Cancer_Rep1';
       const rowsOf = (t) => (u, v) => [t[0][0] * u + t[0][1] * v + t[0][2], t[1][0] * u + t[1][1] * v + t[1][2]];
-      // The Viewer's colour where an image's pixel (px, py) is placed by t, against the pixel's own.
+      // The Viewer's colour where an image's pixel (px, py) is placed by t (a transform's rows, or a
+      // function placing a point), against the pixel's own.
       const probe = async (dataset, added, t, px, py) => {
-        const [cx, cy] = rowsOf(t)(px + 0.5, py + 0.5);
+        const [cx, cy] = (typeof t === 'function' ? t : rowsOf(t))(px + 0.5, py + 0.5);
         await act('show_tissue', { dataset, center: [cx, cy], um_per_pixel: 0.002, transcripts: false, outlines: false, channels: { DAPI: { visible: false } }, images: { [added.data.name]: { visible: true, opacity: 1 } } });
         const side = added.data.summary.width > 4096 ? 1024 : 512;
         return chrome.eval(`(async () => {
@@ -1260,7 +1264,8 @@ export async function viewerSuite({ check, MissingData, verbose }) {
       // transform and saved for use; the fit within the truth's deformation of it over the section,
       // and the Viewer's colour at three of its pixels the image's where the fit puts them.
       const simDir = join(work, 'sim-pathology');
-      execFileSync(bin, ['simulate', '--preset', 'small', '--post-xenium', '--quiet', simDir]);
+      const simSize = [320, 260];
+      execFileSync(bin, ['simulate', '--preset', 'small', '--width', String(simSize[0]), '--height', String(simSize[1]), '--post-xenium', '--quiet', simDir]);
       await act('new_project', { name: 'Simulated pathology' });
       const simOpened = await act('open_paths', { paths: [simDir], add: true });
       const simAdded = await act('add_image', { dataset: 'sim-pathology', path: join(simDir, 'post_xenium', 'simulated_he_image.ome.tif'), alignment: null });
@@ -1318,7 +1323,7 @@ export async function viewerSuite({ check, MissingData, verbose }) {
         for (let v = 0; v < reg.height; v += 25) {
           for (let u = 0; u < reg.width; u += 25) {
             const [tx, ty] = truth(u, v);
-            if (tx < 0 || ty < 0 || tx > 160 || ty > 120) continue;
+            if (tx < 0 || ty < 0 || tx > simSize[0] || ty > simSize[1]) continue;
             const [fx, fy] = rowsOf(simTF.transform)(u, v);
             simWorst = Math.max(simWorst, Math.hypot(fx - tx, fy - ty));
           }
@@ -1329,8 +1334,33 @@ export async function viewerSuite({ check, MissingData, verbose }) {
       const bound = Math.SQRT2 * reg.parameters.deformation_um * 2;
       check('viewer', 'the Alignment view: an image added without an alignment is placed by six landmarks clicked on both images, fitted as an affine transform within its truth\'s deformation, and drawn where the fit puts it', `${simOpened.message ?? simOpened.error}; ${simAdded.message ?? simAdded.error}; ${simShown?.message ?? ''}; predicted ${predictedOff.map((d) => d.toFixed(1)).join(', ')} pixels off; ${simTF ? `${simTF.name}: residuals ${simTF.fit.rms.toFixed(3)} µm, left out ${simTF.fit.looRms.toFixed(3)} µm; at most ${simWorst.toFixed(3)} µm from the truth over the section` : 'not saved'}; ${JSON.stringify(simProbes)}`,
         simOpened.ok && simAdded.ok && simAdded.data.transform === null && simState?.landmarks.length === 6 && simState.landmarks.every((l, i) => Math.hypot(l.fixed[0] - clicks[i].fixed[0], l.fixed[1] - clicks[i].fixed[1]) < 0.2 && Math.hypot(l.moving[0] - clicks[i].moving[0], l.moving[1] - clicks[i].moving[1]) < 0.5) &&
-          predictedOff.length === 3 && Math.max(...predictedOff) < 15 && simTF?.model === 'affine' && simTF.method === 'landmarks' && simWorst < bound && simProbes.length === 3 && worstOf(simProbes) <= 2,
-        `six landmarks within 0.2 µm and half a pixel of the places clicked; predicted within 15 pixels; the fit within ${bound.toFixed(1)} µm of the truth; the image's colour at three pixels, within 2`);
+          predictedOff.length === 3 && Math.max(...predictedOff) < 30 && simTF?.model === 'affine' && simTF.method === 'landmarks' && simWorst < bound && simProbes.length === 3 && worstOf(simProbes) <= 2,
+        `six landmarks within 0.2 µm and half a pixel of the places clicked; predicted within 30 pixels (the deformation's few µm); the fit within ${bound.toFixed(1)} µm of the truth; the image's colour at three pixels, within 2`);
+
+      // Automatic registration (wave 5, slice 3): the same H&E registered by its nuclei with a
+      // deformation allowed (and, with the matches a section of this size gives, kept), as a job,
+      // the version placing it; within its truth's deformation of the truth, and drawn where the
+      // version (its deformation too) puts three of its pixels.
+      let autoTF = null;
+      const auto = simAdded.ok ? await act('register_image', { dataset: 'sim-pathology', model: 'affine', nonrigid: true, note: 'The viewer suite' }) : null;
+      if (auto?.ok) autoTF = await fetch(`${url}/api/transforms/${auto.data.id}`).then((r) => r.json());
+      let autoWorst = Infinity;
+      const autoProbes = [];
+      if (autoTF) {
+        autoWorst = 0;
+        for (let v = 0; v < reg.height; v += 25) {
+          for (let u = 0; u < reg.width; u += 25) {
+            const [tx, ty] = truth(u, v);
+            if (tx < 0 || ty < 0 || tx > simSize[0] || ty > simSize[1]) continue;
+            const [fx, fy] = placePoint(autoTF, u, v);
+            autoWorst = Math.max(autoWorst, Math.hypot(fx - tx, fy - ty));
+          }
+        }
+        for (const [px, py] of [[300, 250], [420, 330], [210, 390]]) autoProbes.push(await probe('sim-pathology', simAdded, (x, y) => placePoint(autoTF, x, y), px, py));
+      }
+      check('viewer', 'remote control: register_image aligns the simulated H&E by its nuclei, a version placing it, within its truth\'s deformation, drawn where it (and any deformation) puts three of its pixels', `${auto?.message ?? auto?.error ?? 'not run'}; at most ${autoWorst.toFixed(3)} µm from the truth over the section; ${JSON.stringify(autoProbes)}`,
+        Boolean(auto?.ok) && auto.data.placedBy === auto.data.id && autoTF?.method === 'automatic' && auto.data.deformed && auto.data.kept >= 25 && autoWorst < bound && autoProbes.length === 3 && worstOf(autoProbes) <= 2,
+        `placed by it, deformed; within ${bound.toFixed(1)} µm of the truth; the image's colour at three pixels, within 2`);
     }
     check('viewer', 'no uncaught errors in the page', errors.length ? errors.slice(0, 3).join(' | ') : 'none', errors.length === 0, 'none');
   } finally {

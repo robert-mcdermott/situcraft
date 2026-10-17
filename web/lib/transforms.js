@@ -189,6 +189,43 @@ export function fitLandmarks(model, landmarks) {
   return { model, transform, residuals: res, leaveOneOut: loo, rms, max, looRms, looMax };
 }
 
+// A deformation's displacement at a point (µm): internal/register's cubic B-spline over its grid of
+// control points (0 beyond its reach).
+export function deformationAt(b, x, y) {
+  const u = (x - b.origin[0]) / b.spacing;
+  const v = (y - b.origin[1]) / b.spacing;
+  const fi = Math.floor(u);
+  const fj = Math.floor(v);
+  const weights = (t) => {
+    const s = 1 - t;
+    return [(s * s * s) / 6, (3 * t * t * t - 6 * t * t + 4) / 6, (-3 * t * t * t + 3 * t * t + 3 * t + 1) / 6, (t * t * t) / 6];
+  };
+  const wx = weights(u - fi);
+  const wy = weights(v - fj);
+  let dx = 0;
+  let dy = 0;
+  for (let b2 = 0; b2 < 4; b2 += 1) {
+    const j = fj - 1 + b2;
+    if (j < 0 || j >= b.ny) continue;
+    for (let a = 0; a < 4; a += 1) {
+      const i = fi - 1 + a;
+      if (i < 0 || i >= b.nx) continue;
+      const w = wx[a] * wy[b2];
+      dx += w * b.dx[j * b.nx + i];
+      dy += w * b.dy[j * b.nx + i];
+    }
+  }
+  return [dx, dy];
+}
+
+// Where a version (its description: transform and any deformation) places a point of the image.
+export function placePoint(desc, x, y) {
+  const [px, py] = applyRows(desc.transform, x, y);
+  if (!desc.deformation) return [px, py];
+  const [dx, dy] = deformationAt(desc.deformation, px, py);
+  return [px + dx, py + dy];
+}
+
 // What a transform does, in numbers: its scale (µm per pixel, on average over directions), the
 // direction it turns the x axis to (turn: [cos, sin], shown in degrees by the page), whether it
 // mirrors, and for an affine transform how unequal its scales are and its shear.
@@ -273,6 +310,11 @@ export function transformInUse(project, imageId) {
 // How a transform was made and how well it fits, in a line.
 export function describeTransform(record) {
   const s = record.summary ?? {};
+  if (s.method === 'automatic') {
+    const fit = Number.isFinite(s.rms) ? `: the ${s.kept} kept of ${s.matches} local matches ${s.rms.toFixed(2)} µm from the fit root-mean-square, ${s.looRms.toFixed(2)} µm left out` : '';
+    const deformed = s.deformed ? `; deformed (by at most ${s.maxDisplacement.toFixed(1)} µm), each fifth of the matches predicted ${s.heldOut.toFixed(2)} µm off against ${s.modelHeldOut.toFixed(2)} µm by the ${s.model} alone` : '';
+    return `Automatic, by the nuclei (${s.channel ?? 'its nuclear stain'}), ${s.model}${fit}${deformed}`;
+  }
   const how = {
     matrix: 'Xenium Explorer\'s transformation matrix',
     keypoints: `Xenium Explorer's ${s.landmarks} keypoints`,

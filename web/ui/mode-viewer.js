@@ -224,7 +224,8 @@ export function mountViewer(app, container) {
         try {
           const d = await app.bundles.imageDescription(record.id);
           const tf = transform ? await app.bundles.transformDescription(transform.id) : null;
-          return { record, transform, desc: tf ? { ...d, transform: tf.transform } : d };
+          const deformation = tf?.deformation ? await app.bundles.inverseField(transform.id) : null;
+          return { record, transform, desc: tf ? { ...d, transform: tf.transform, ...(deformation ? { deformation } : {}) } : d };
         } catch (error) {
           return { record, transform, error: error.message };
         }

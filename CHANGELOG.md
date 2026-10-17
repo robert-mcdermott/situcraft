@@ -56,6 +56,27 @@ cells and regions reviewed with their provenance.
     on the H&E), and the leave-one-out error of landmarks on them is near their fit's true error;
     in the page, an image placed by six landmarks clicked on both images is drawn where the fit
     puts it.
+- **Automatic registration (wave 5, slice 3).** **Align automatically** in the Alignment view (and
+  `register_image`) aligns an image to the Xenium image by the nuclei, as a job: an H&E's
+  haematoxylin (colour deconvolution) or an immunofluorescence image's nuclear stain against DAPI.
+  - **Its scale, turn and mirroring are found,** whatever its metadata says: a sweep of scales, the
+    image as it is and mirrored, the turn from the log-polar form of its spectrum and the shift by
+    phase correlation, the best by normalized mutual information; then refined by mutual
+    information over a pyramid, and fitted (a similarity or an affine transform) to local matches
+    of patches over the tissue, those that disagree with the rest dropped.
+  - **A smooth deformation,** when asked, for a section that stretched: B-splines fitted to what the
+    model leaves of the matches, as smooth as best predicts matches held out, never folding, and
+    kept only when it predicts them clearly better than the model alone. The Viewer draws a
+    deformed image as it is deformed.
+  - **Each result is a version** of the image's alignment, with its matches (shown on both images),
+    its fit and what the search found, started from scratch or from another version. The same
+    images give the same version on any computer.
+  - **Validated:** on the pathology fixture, without their alignments and with the immunofluorescence
+    image's metadata 3.5 times wrong, the H&E and the immunofluorescence image placed within 0.61 and
+    0.68 µm (root-mean-square) of 10x's alignment over the Xenium image; on simulated images, the
+    scale, turn and mirror found and the result within 0.2 µm of the truth where the image was not
+    deformed, and the deformation brings a deformed one from 0.9 µm to 0.2 µm and is refused where
+    there is none; the page draws a deformed image where the program's deformation puts its pixels.
 
 ## 0.4.0 (2026-10-16)
 

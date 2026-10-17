@@ -53,7 +53,8 @@ see `conventions.md`. For the methods, formats and datasets behind these choices
 │   internal/embed     UMAP maps and their quality                                                       │
 │   internal/label     marker sets and scores, hierarchical labels, references, imports, review         │
 │   internal/linalg    symmetric eigendecomposition (whole, or Lanczos), the same on every processor     │
-│   internal/register  transforms, Xenium Explorer's alignments, fits; image registration (wave 5)      │
+│   internal/register  transforms, Xenium Explorer's alignments, fits; automatic registration           │
+│   internal/nuclei    the nuclear signal registration reads: a bundle's DAPI, an H&E's haematoxylin    │
 │   internal/spatial   graphs and spatial statistics on large tables (later)                            │
 │   internal/jobs      durable background jobs: spec, state, progress, cancellation, logs               │
 │ embed web/ ──────────────────────────────────────────────────────────────────────────────────────┐   │
@@ -440,6 +441,14 @@ version. Which version places an image is a project decision (`web/lib/transform
 segmentation's promotion is; an image with none is listed but not drawn. The renderer draws each
 image's tiles through its transform as a model matrix (any rotation or reflection), finding the
 tiles in view through its inverse. An image's own pixel size is recorded but never places it.
+
+Automatic registration (`internal/register/auto.go`, `api_register.go`) is a job reading both
+images a region of a level at a time through `internal/nuclei`: the Xenium image's DAPI from the
+bundle's own pyramid (the derived data need not be built), the post-Xenium image's nuclear signal
+from its tiles, blocks kept as they are read. Its result is a version like any other, with its
+matches and, when one is kept, a B-spline deformation; the page draws a deformed image by mapping
+each fragment back through the deformation's inverse field (answered by the program as a grid of
+displacements, a half-float texture) and the transform's inverse.
 
 The Alignment view (`web/ui/mode-alignment.js`) is two renderers side by side: the dataset's stains
 in µm, and the post-Xenium image alone, drawn under the identity in its own pixels (a renderer with

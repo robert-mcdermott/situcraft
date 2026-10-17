@@ -122,6 +122,17 @@ var remoteActions = []remoteAction{
 		"by":     textArg("Who placed the landmarks (the client's name if not given)."),
 		"note":   textArg("A note kept with the version (and the reason, when it is used)."),
 	}, "landmarks"), long: true},
+	{Name: "register_image", Title: "Align an image automatically", Description: "Aligns a post-Xenium image to its dataset's Xenium image automatically, by the nuclei (an H&E's haematoxylin by colour deconvolution, an immunofluorescence image's nuclear stain, against DAPI), as a job: its scale, turn and mirroring found whatever its metadata says (phase correlation and its log-polar form), refined by normalized mutual information, then fitted to local matches over the tissue; optionally a smooth deformation after it (B-splines), kept only when it predicts the matches better. Recorded as a version of the image's alignment with its matches, fit and what the search found; with use (the default), it places the image. The same images give the same version on any computer. Answers the fit.", InputSchema: schema(map[string]any{
+		"dataset":  datasetArg,
+		"image":    textArg("The image, by name or artifact ID (the dataset's only image if not given)."),
+		"model":    textArg("similarity (the default) or affine."),
+		"nonrigid": flagArg("Allow a smooth deformation after the model, for a section that stretched."),
+		"channel":  textArg("An immunofluorescence image's nuclear stain, by name (the channel named as one, DAPI or Hoechst, if not given)."),
+		"start":    textArg("A version to start from instead of searching, by name or ID ('in use' for the one placing the image)."),
+		"use":      flagArg("Place the image by it (the default true)."),
+		"by":       textArg("Who asked for it (the client's name if not given)."),
+		"note":     textArg("A note kept with the version (and the reason, when it is used)."),
+	}), long: true},
 	{Name: "use_transform", Title: "Place an image by a version of its alignment", Description: "Chooses which version of a post-Xenium image's alignment places it, as a decision recorded with its reason, who and when.", InputSchema: schema(map[string]any{
 		"dataset":   datasetArg,
 		"image":     textArg("The image, by name or artifact ID (the dataset's only image if not given)."),

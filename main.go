@@ -549,6 +549,7 @@ func (a *app) registerAPI(mux *http.ServeMux) {
 	a.registerImports(mux)
 	a.registerImages(mux)
 	a.registerTransforms(mux)
+	a.registerRegistration(mux)
 	a.registerComparisons(mux)
 	a.registerClusterings(mux)
 	a.registerMaps(mux)

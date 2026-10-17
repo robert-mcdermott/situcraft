@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addTransform, describeTransform, fitLandmarks, transformInUse, transformRecord, transformShape, transformsOf, useTransform } from './transforms.js';
+import { addTransform, deformationAt, describeTransform, fitLandmarks, placePoint, transformInUse, transformRecord, transformShape, transformsOf, useTransform } from './transforms.js';
 
 // The checksum of 300 fits of each model internal/register/fit_test.go computes (FNV-1a of every
 // coefficient's, residual's and leave-one-out error's bits).
@@ -106,4 +106,18 @@ test('an image\'s alignments are versions; the latest decision places it', () =>
   assert.equal(transformsOf(project, 'img-1').length, 2);
   assert.equal(describeTransform(supplied), 'Xenium Explorer\'s transformation matrix');
   assert.throws(() => useTransform(project, { transform: 'tf-z' }), /no such alignment/);
+});
+
+test('a deformation evaluated as the program evaluates it', () => {
+  // A grid of 5 × 4 control points 10 µm apart, from (−10, −10); one moved by (2, −1).
+  const b = { origin: [-10, -10], spacing: 10, nx: 5, ny: 4, dx: new Array(20).fill(0), dy: new Array(20).fill(0) };
+  b.dx[1 * 5 + 2] = 2;
+  b.dy[1 * 5 + 2] = -1;
+  // At the control point itself the cubic B-spline weighs it 4/6 · 4/6.
+  const [dx, dy] = deformationAt(b, 10, 0);
+  assert.ok(Math.abs(dx - 2 * 16 / 36) < 1e-12 && Math.abs(dy + 16 / 36) < 1e-12, `${dx}, ${dy}`);
+  assert.deepEqual(deformationAt(b, 100, 100), [0, 0]);
+  assert.deepEqual(placePoint({ transform: [[2, 0, 1], [0, 2, 0]] }, 3, 4), [7, 8]);
+  const [px, py] = placePoint({ transform: [[1, 0, 0], [0, 1, 0]], deformation: b }, 10, 0);
+  assert.ok(Math.abs(px - 10 - 2 * 16 / 36) < 1e-12 && Math.abs(py + 16 / 36) < 1e-12);
 });
