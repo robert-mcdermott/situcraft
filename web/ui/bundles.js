@@ -6,6 +6,7 @@
 
 import { openPaths } from './storage.js';
 import { addClustering, addEmbedding, clusteringRecord, embeddingRecord } from '../lib/clusterings.js';
+import { addGraph, graphRecord, gridOf, readGraph } from '../lib/graphs.js';
 import { addDataset, compareFingerprint, datasetRecord, findDataset, relocateDataset, removeDataset } from '../lib/datasets.js';
 import { addLabels, labelsRecord, readLabelCells } from '../lib/labels.js';
 import { addImage as withImage, imageRecord } from '../lib/images.js';
@@ -695,6 +696,62 @@ export function createBundles(app) {
     return getJSON(`/api/clusterings/${encodeURIComponent(id)}/markers?top=${top}`);
   }
 
+  // --- Graphs of cells (api_graphs.go) ---
+
+  // Builds a graph of a segmentation's cells: request { segmentation, parameters, cells }
+  // (lib/graphs.js cellsRequest). A job builds it unless it was built already; it is recorded in the
+  // project. Answers its manifest.
+  const graphing = new Map(); // `${dataset}|${segmentation}|${kind}` → { dataset, segmentation, kind, job, promise }
+  function buildGraph(item, datasetId, request) {
+    const key = `${datasetId}|${request.segmentation}|${request.parameters?.kind}`;
+    if (graphing.has(key)) return graphing.get(key).promise;
+    const entry = { dataset: datasetId, segmentation: request.segmentation, kind: request.parameters?.kind, job: null, promise: null };
+    entry.promise = (async () => {
+      try {
+        const answer = await getJSON(`${item.url}/graph`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) });
+        let manifest = answer.artifact;
+        if (!manifest) {
+          entry.job = answer.job?.id ?? null;
+          notify();
+          const job = await app.jobs.finished(entry.job);
+          if (job?.state !== 'complete') throw new Error(`the graph ${job?.state ?? 'ended'}${job?.error ? `: ${job.error}` : ''}`);
+          manifest = await getJSON(`/api/artifacts/${encodeURIComponent(answer.id)}`);
+        }
+        const dataset = app.store.project.datasets.find((d) => d.id === datasetId);
+        if (!dataset) throw new Error('the dataset is no longer in the project');
+        const next = addGraph(app.store.project, graphRecord(dataset, manifest));
+        if (next !== app.store.project) app.store.commit(next, `Build a graph of the cells of ${dataset.name}`);
+        return manifest;
+      } finally {
+        graphing.delete(key);
+        notify();
+      }
+    })();
+    graphing.set(key, entry);
+    notify();
+    return entry.promise;
+  }
+
+  // A graph's description (graph.json) and edges (lib/graphs.js readGraph), with a grid of its cells,
+  // kept for the session.
+  const graphStore = new Map();
+  function graphData(id) {
+    if (!graphStore.has(id)) {
+      const p = (async () => {
+        const [description, response] = await Promise.all([
+          getJSON(`/api/artifacts/${encodeURIComponent(id)}/files/graph.json`),
+          fetch(`/api/graphs/${encodeURIComponent(id)}/edges`),
+        ]);
+        if (!response.ok) throw new Error(`its edges: HTTP ${response.status}`);
+        const graph = readGraph(await response.arrayBuffer());
+        return { description, graph, grid: gridOf(graph) };
+      })();
+      p.catch(() => graphStore.delete(id));
+      graphStore.set(id, p);
+    }
+    return graphStore.get(id);
+  }
+
   // --- Labels from markers (api_labels.go) ---
 
   // The marker sets SituCraft offers for a clustering, with the genes its panel lacks: { genes,
@@ -1017,6 +1074,9 @@ export function createBundles(app) {
     removeComparison,
     clusterCells,
     clusteringData,
+    buildGraph,
+    graphing: (datasetId) => [...graphing.values()].filter((x) => x.dataset === datasetId),
+    graphData,
     clusteringMarkers,
     makeMap,
     mapData,

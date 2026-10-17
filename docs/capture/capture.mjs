@@ -439,6 +439,25 @@ const scenes = {
     await js(`window.situcraftViewer.settled()`);
     await sleep(400);
   },
+  // The Lung example's cells as a graph (wave 6, slice 1): the Spatial view, the Delaunay graph's
+  // definition, and its numbers with histograms of each cell's neighbors and the edges' lengths.
+  async spatial() {
+    await act('open_example', { example: 'lung' });
+    await act('build_graph', { kind: 'delaunay' });
+    await waitFor(`Boolean(document.querySelector('.sp-plots canvas'))`);
+    await scrollTo('.sp-detail', 'start');
+    await sleep(300);
+  },
+  // The graph on the tissue close up (wave 6, slice 1): its edges over the cells, a cell's in
+  // yellow, and the cell's neighbors in the inspector.
+  async graph() {
+    await act('open_example', { example: 'lung' });
+    const built = await act('build_graph', { kind: 'delaunay' });
+    await act('show_tissue', { graph: built.data.id, center: [700, 330], um_per_pixel: 0.22, genes: ['EPCAM', 'CD68'], cell: 'nheihaca-1', channels: { DAPI: { color: '#8c8c8c' } } });
+    await waitFor(`Boolean(document.querySelector('.viewer-neighbor-list li'))`);
+    await js(`window.situcraftViewer.settled()`);
+    await sleep(400);
+  },
   // The Breast example's clusters on the tissue (wave 4, slice 1): the cells filled by cluster,
   // with the legend.
   async clusters() {

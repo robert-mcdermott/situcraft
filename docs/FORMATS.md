@@ -389,6 +389,22 @@ A map of a clustering's cells (from 0.4.0) is an artifact of two files:
 
 The project records each map it uses (kind `embedding`, with its segmentation and clustering).
 
+### Graphs
+
+A graph of a segmentation's cells (from 0.6.0) is an artifact of three files. The binary ones have
+the envelope above; arrays are little-endian.
+
+| File | Magic | Holds |
+| --- | --- | --- |
+| `graph.json` | | `format` (`"situcraft-graph"`), `version`, `method`, `methodVersion`; the `segmentation` (artifact id and name); `parameters`: the `kind` (`delaunay`, `knn`, `radius`, `contact`) and its parameter (`longest`, a Delaunay graph's longest edge, µm, 0 for every edge; `k`; `radius`, µm; `gap`, a contact graph's, µm); `cells`: the segmentation's (`segmentation`), those in the graph (`inGraph`), and how they were chosen: the `checksum` of the cells (the SHA-256 of their count, u32, then a bit a cell, as a QC filter's), the QC `filter` (id, name, checksum), the `regions` (id, name, version), and the cells a review `excluded`, left out; `edges`, each counted once; `degree` (`mean`, `median`, `max`, the `histogram` of cells by degree from 0); `isolated`, cells without a neighbor; `components` (`count`, the `largest`'s cells); `lengths`, the edges' lengths in µm (`min`, `q05`, `q25`, `median`, `q75`, `q95`, `max`, `mean`, and a `histogram` of bins of `step` from 0 to the 99th percentile, larger lengths in the last); in a contact graph, `shared`, the boundaries shared, alike; `duplicates`, cells at the same place as another (Delaunay); `collinear`, every cell on one line (Delaunay) |
+| `cells.bin` | `SCGC` | The cells in the graph (u32 count; u32 indices into the segmentation's cells, increasing), then their centroids (f32 x, then f32 y, µm) |
+| `edges.bin` | `SCGE` | The cells n and the edge ends m (u32, u32: each edge listed from both of its cells), whether it holds shared boundaries (a byte, 1 in a contact graph); each cell's neighbors in compressed rows: the offsets (u32, n + 1), the neighbors (u32 indices among the graph's cells, increasing within a cell, m) and each edge end's length (f32, µm, the distance between the two centroids) and, in a contact graph, the boundary shared (f32, µm: the pixel edges between the two cells in the label raster times the pixel's side) |
+
+A graph is named by its segmentation, the cells' checksum, the method's version and its parameters,
+so the same graph is never built twice. The project records each graph it uses (kind `graph`, with
+its dataset, segmentation, parameters and summary). The Viewer's cells layer names the graph drawn
+(`graph`, an artifact id); saved views keep it.
+
 ### Post-Xenium images
 
 A post-Xenium image (from 0.5.0) is an artifact of one file in its folder, `image.json`, and one in

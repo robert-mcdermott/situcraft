@@ -4,6 +4,7 @@
 // 0.8.0 web/ui/inspector.js.
 
 import { h, icon, relativeTime, formatBytes } from './dom.js';
+import { describeGraph } from '../lib/graphs.js';
 import { promptDialog, toast } from './overlays.js';
 import { removeView, renameView, viewLink } from '../lib/views.js';
 import { promotedSegmentation } from '../lib/segmentations.js';
@@ -203,6 +204,33 @@ export function mountInspector(app) {
       c.method?.citation ? h('p.muted', { style: { margin: '8px 0 0', fontSize: '11.5px' } }, c.method.citation) : null);
   }
 
+  // A graph: its segmentation, definition, the cells it was built over, and what it holds.
+  function graphSection(g) {
+    const { project } = app.store;
+    const seg = project.artifacts.find((a) => a.kind === 'segmentation' && a.id === g.segmentation);
+    const s = g.summary ?? {};
+    const choice = s.choice ?? {};
+    const over = [choice.filter ? `filter ${choice.filter.name}` : '', choice.regions?.length ? `in ${choice.regions.map((r) => r.name).join(', ')}` : '', choice.excluded ? `${choice.excluded.toLocaleString('en-US')} excluded by review left out` : ''].filter(Boolean).join('; ');
+    return h('section.inspector-section',
+      h('h3', icon('graph'), 'Graph'),
+      h('dl.kv',
+        h('dt', 'Segmentation'), h('dd', seg?.name ?? g.segmentation),
+        h('dt', 'Neighbors'), h('dd', describeGraph(g.parameters)),
+        h('dt', 'Cells'), h('dd', (s.cells ?? 0).toLocaleString('en-US'), over ? h('span.muted', ` (${over})`) : null),
+        h('dt', 'Edges'), h('dd', (s.edges ?? 0).toLocaleString('en-US')),
+        h('dt', 'Mean degree'), h('dd', Number.isFinite(s.meanDegree) ? s.meanDegree.toFixed(2) : '—'),
+        h('dt', 'Without one'), h('dd', `${(s.isolated ?? 0).toLocaleString('en-US')} cells`),
+        h('dt', 'Median edge'), h('dd', Number.isFinite(s.medianLength) ? `${s.medianLength.toFixed(1)} µm` : '—'),
+        h('dt', 'Method'), h('dd', `${g.method?.name ?? ''} ${g.method?.version ?? ''}`.trim()),
+        h('dt', 'Artifact'), h('dd.mono', g.id)),
+      g.state === 'complete' ? h('div.btn-row', { style: { marginTop: '8px' } },
+        h('button.btn.small.primary', { type: 'button', onclick: () => app.showGraph(g) }, icon('tissue'), 'Show on the tissue'),
+        h('button.btn.small', { type: 'button', onclick: () => {
+          app.focusItem({ kind: 'graph', id: g.id });
+          app.setMode('spatial');
+        } }, icon('graph'), 'In the Spatial view')) : null);
+  }
+
   // A label set: its clustering, marker set, cells labeled at each level, and parameters.
   function labelsSection(r) {
     const { project } = app.store;
@@ -311,6 +339,10 @@ export function mountInspector(app) {
     if (focus?.kind === 'clustering') {
       const c = app.store.project.artifacts.find((a) => a.kind === 'clustering' && a.id === focus.id);
       if (c) return clusteringSection(c);
+    }
+    if (focus?.kind === 'graph') {
+      const g = app.store.project.artifacts.find((a) => a.kind === 'graph' && a.id === focus.id);
+      if (g) return graphSection(g);
     }
     if (focus?.kind === 'labels') {
       const r = app.store.project.artifacts.find((a) => a.id === focus.id && ['labels', 'curated-labels', 'consensus-labels'].includes(a.kind));

@@ -310,6 +310,26 @@
   "violations": []
  },
  {
+  "scene": "spatial",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "spatial",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "graph",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "graph",
+  "theme": "light",
+  "violations": []
+ },
+ {
   "scene": "clusters",
   "theme": "dark",
   "violations": []

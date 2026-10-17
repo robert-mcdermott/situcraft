@@ -1,6 +1,6 @@
 // Saved views: what the Viewer or the QC view shows of a dataset (where, at what zoom, which
-// channels in which colors and windows, which genes, which layers, which segmentation, which cell,
-// which QC map and filter), kept in the project and reopened exactly. Channels and genes are named, not numbered,
+// channels in which colors and windows, which genes, which layers, which segmentation and graph,
+// which cell, which QC map and filter), kept in the project and reopened exactly. Channels and genes are named, not numbered,
 // so a view survives its derived data being rebuilt. The zoom is in µm per CSS pixel, so a view
 // shows the same tissue on any screen. A deep link names the project and the view.
 
@@ -39,7 +39,8 @@ export function captureView({ name, dataset, mode = 'viewer', state, desc, id = 
       // before it reopen exactly.
       ...(layers.transcripts.colorBy === 'probability' ? { colorBy: 'probability' } : {}),
     },
-    cells: { outlines: layers.cells.outlines, nuclei: layers.cells.nuclei, fill: layers.cells.fill ?? null, opacity: layers.cells.opacity },
+    // The graph drawn, recorded only when there is one, so that views saved before reopen exactly.
+    cells: { outlines: layers.cells.outlines, nuclei: layers.cells.nuclei, fill: layers.cells.fill ?? null, opacity: layers.cells.opacity, ...(layers.cells.graph ? { graph: layers.cells.graph } : {}) },
     cell: state.cell ?? null,
   };
   // The post-Xenium images, by their artifacts' ids: recorded only when there are some, so that

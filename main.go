@@ -555,6 +555,7 @@ func (a *app) registerAPI(mux *http.ServeMux) {
 	a.registerReviews(mux)
 	a.registerComparisons(mux)
 	a.registerClusterings(mux)
+	a.registerGraphs(mux)
 	a.registerMaps(mux)
 	a.registerLabels(mux)
 	a.registerWorkspace(mux)

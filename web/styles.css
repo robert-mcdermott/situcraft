@@ -926,6 +926,7 @@ td div.studio-problem { padding: 2px 6px; margin-top: 4px; font-size: 11.5px; }
 .viewer-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; outline: none; }
 .viewer-canvas:active { cursor: grabbing; }
 .viewer-canvas:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
+.viewer-graph { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .viewer-regions { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: hidden; }
 .viewer-regions .catcher { display: none; }
 .viewer-regions.drawing { pointer-events: all; cursor: crosshair; touch-action: none; }
@@ -1157,6 +1158,18 @@ td div.studio-problem { padding: 2px 6px; margin-top: 4px; font-size: 11.5px; }
 @media (max-width: 860px) { .cm-panes { grid-template-columns: 1fr; height: auto; } .cm-pane { height: 340px; } }
 
 /* --- Dot plot, names, selection (ui/mode-celltypes.js) --- */
+/* The Spatial view (ui/mode-spatial.js). */
+.sp-kinds { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.sp-kind { display: flex; align-items: center; gap: 6px; font-size: 12.5px; cursor: pointer; }
+.sp-help { margin: 2px 0 10px; max-width: 72ch; }
+.sp-regions { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px 4px; margin: 10px 0 0; }
+.sp-regions legend { font-size: 11.5px; font-weight: 600; color: var(--text-2); padding: 0 4px; }
+.sp-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; flex: none; }
+.sp-chosen { margin: 8px 0 10px; }
+.sp-plots { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px 18px; margin: 10px 0; }
+.sp-plot-title { font-size: 11.5px; margin-bottom: 2px; }
+.viewer-neighbor-list li { font-size: 12px; }
+.viewer-neighbor-list .link { font-family: var(--mono); font-size: 11.5px; }
 .ct-dotplot { overflow-x: auto; }
 .ct-dotplot svg { display: block; }
 .ct-dotplot text { font-size: 10.5px; fill: var(--text-2); }

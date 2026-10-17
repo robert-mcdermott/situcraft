@@ -1,0 +1,60 @@
+{
+ "situcraft": {
+  "cells": 7275,
+  "digest": {
+   "delaunay": "71d300a0b93c89b66a3f764ce240aafee27ce175c1fca1cfdbd8048e73cfedaf",
+   "knn": "b4a780232c24ba9649ac148e998748e039446fa5641bafb3f6f342b43b9b98b7",
+   "radius": "afec2bca8edfdfd1db9603d0f58d6fb50106093234849cc6d2e84fdcfae9711e"
+  }
+ },
+ "versions": {
+  "scipy": "1.18.1",
+  "numpy": "2.5.4",
+  "squidpy": "1.8.3",
+  "anndata": "0.13.4"
+ },
+ "kinds": {
+  "delaunay": {
+   "edges": 21678,
+   "reference": 21678,
+   "onlySituCraft": 0,
+   "onlyReference": 0,
+   "explained": 0,
+   "maxLength": 0.0,
+   "squidpy": 21797,
+   "squidpyDiffering": 0,
+   "params": {
+    "kind": "delaunay",
+    "longest": 50
+   }
+  },
+  "knn": {
+   "edges": 24644,
+   "reference": 24644,
+   "onlySituCraft": 0,
+   "onlyReference": 0,
+   "explained": 0,
+   "maxLength": 0.0,
+   "squidpy": 24644,
+   "squidpyDiffering": 0,
+   "params": {
+    "kind": "knn",
+    "k": 6
+   }
+  },
+  "radius": {
+   "edges": 38415,
+   "reference": 38415,
+   "onlySituCraft": 0,
+   "onlyReference": 0,
+   "explained": 0,
+   "maxLength": 0.0,
+   "squidpy": 38415,
+   "squidpyDiffering": 0,
+   "params": {
+    "kind": "radius",
+    "radius": 20
+   }
+  }
+ }
+}

@@ -1040,6 +1040,114 @@ export async function viewerSuite({ check, MissingData, verbose }) {
             'each as asked; the excluded cells those in the region');
         }
 
+        // Cell graphs of the Lung cells (wave 6): each kind built by remote control over the cells a
+        // review did not exclude; a radius graph's edges those of the suite's own exhaustive search
+        // over its cells; a graph of a region's cells over those the suite counts in it; its edges
+        // drawn where the graph puts them, the selected cell's neighbors listed as the graph has
+        // them, and a saved view keeping the graph.
+        {
+          const built = {};
+          for (const [kind, args] of [['delaunay', {}], ['knn', { k: 6 }], ['radius', { radius: 20 }], ['contact', { gap: 1 }]]) built[kind] = await act('build_graph', { dataset: 'xenium-lung-2fov', kind, ...args });
+          const excludedLung = (await act('reviews', { dataset: 'xenium-lung-2fov' })).data?.counts.excluded ?? -1;
+          const graphsOk = Object.values(built).every((b) => b.ok && b.data.cells.inGraph === 11898 - excludedLung && b.data.cells.excluded === excludedLung && b.data.edges > 0);
+          check('viewer', 'remote control: build_graph builds each kind of graph of the Lung cells, those a review excluded left out', Object.values(built).map((b) => b.message ?? b.error).join(' | '),
+            graphsOk && excludedLung > 0 && built.contact.data.shared && built.knn.data.isolated === 0, `${11898 - excludedLung} cells each (${excludedLung} excluded); shared boundaries in the contact graph`);
+          // The radius graph against an exhaustive search over its own cells' centroids.
+          const radius = built.radius.ok ? await chrome.eval(`(async () => {
+            const buf = await (await fetch('/api/graphs/${built.radius.data.id}/edges')).arrayBuffer();
+            const v = new DataView(buf);
+            const n = v.getUint32(0, true), m = v.getUint32(4, true);
+            const x = new Float32Array(buf, 12 + 4 * n, n), y = new Float32Array(buf, 12 + 8 * n, n);
+            const off = new Uint32Array(buf, 12 + 12 * n, n + 1), nb = new Uint32Array(buf, 16 + 16 * n, m);
+            let missing = 0, extra = 0, ends = 0;
+            for (let i = 0; i < n; i += 1) {
+              const mine = new Set(nb.subarray(off[i], off[i + 1]));
+              for (let j = 0; j < n; j += 1) {
+                if (j === i) continue;
+                const dx = x[j] - x[i], dy = y[j] - y[i];
+                const near = Math.sqrt(dx * dx + dy * dy) <= 20;
+                if (near) ends += 1;
+                if (near && !mine.has(j)) missing += 1;
+                if (!near && mine.has(j)) extra += 1;
+              }
+            }
+            return { n, m, ends, missing, extra };
+          })()`) : null;
+          check('viewer', 'a radius graph\'s edges: those of the suite\'s own search over every pair of its cells', JSON.stringify(radius), radius && radius.ends === radius.m && radius.missing === 0 && radius.extra === 0, 'every pair within 20 µm, and no other');
+          // A graph of the cells in the tumor nest.
+          const nest = [[600, 250], [800, 260], [790, 420], [610, 400], [600, 250]];
+          const windingIn = (ring, px, py) => {
+            let w = 0;
+            for (let i = 0; i + 1 < ring.length; i += 1) {
+              const [ax, ay] = ring[i];
+              const [bx, by] = ring[i + 1];
+              const side = (bx - ax) * (py - ay) - (px - ax) * (by - ay);
+              if (ay <= py) {
+                if (by > py && side > 0) w += 1;
+              } else if (by <= py && side < 0) w -= 1;
+            }
+            return w;
+          };
+          await act('show_tissue', { dataset: 'xenium-lung-2fov', segmentation: 'instrument' });
+          const lungCells = await chrome.eval('(() => { const c = window.situcraftViewer.cellsDrawn(); return { x: Array.from(c.x), y: Array.from(c.y) }; })()');
+          const inNest = lungCells.x.reduce((n, x, i) => n + (windingIn(nest, x, lungCells.y[i]) !== 0 ? 1 : 0), 0);
+          const nestGraph = await act('build_graph', { dataset: 'xenium-lung-2fov', kind: 'delaunay', regions: ['Tumor nest'] });
+          check('viewer', 'a graph of a region\'s cells: built over the cells the suite counts in it', `${nestGraph.message ?? nestGraph.error}; the suite counts ${inNest}`,
+            nestGraph.ok && nestGraph.data.cells.inGraph === inNest && nestGraph.data.cells.regions?.[0]?.name === 'Tumor nest', `${inNest} cells`);
+          // Drawn: the Delaunay graph close up; the overlay light at edges' midpoints and clear
+          // between cells; a cell's neighbors in the inspector the graph's.
+          const shownGraph = built.delaunay.ok ? await act('show_tissue', { dataset: 'xenium-lung-2fov', graph: built.delaunay.data.id, center: [700, 330], um_per_pixel: 0.25, genes: [], cell: 'nheihaca-1' }) : null;
+          await chrome.eval('new Promise((r) => setTimeout(r, 500))');
+          const drawnGraph = await chrome.eval(`(async () => {
+            const v = window.situcraftViewer;
+            const g = v.graph()?.graph;
+            if (!g) return null;
+            const canvas = document.querySelector('.viewer-graph');
+            const ctx = canvas.getContext('2d');
+            const cam = v.renderer.camera;
+            const [w, hh] = v.renderer.size();
+            const at = (x, y) => [Math.round((x - cam.cx) * cam.scale + w / 2), Math.round((y - cam.cy) * cam.scale + hh / 2)];
+            let lit = 0, probed = 0;
+            for (let i = 0; i < g.n && probed < 40; i += 1) {
+              const [sx, sy] = at(g.x[i], g.y[i]);
+              if (sx < w * 0.2 || sx > w * 0.8 || sy < hh * 0.2 || sy > hh * 0.8) continue;
+              const j = g.neighbors[g.offsets[i]];
+              // Within a pixel of the midpoint, light: the line's white over its casing (the casing
+              // alone is black).
+              const [mx, my] = at((g.x[i] + g.x[j]) / 2, (g.y[i] + g.y[j]) / 2);
+              const px = ctx.getImageData(mx - 1, my - 1, 3, 3).data;
+              probed += 1;
+              let light = false;
+              for (let k = 0; k < px.length; k += 4) if (px[k + 3] > 200 && px[k] > 150) light = true;
+              if (light) lit += 1;
+            }
+            const d = v.detail();
+            const i = g.indexOf[d.row];
+            const want = [];
+            for (let k = g.offsets[i]; k < g.offsets[i + 1]; k += 1) want.push(g.rows[g.neighbors[k]]);
+            for (let t = 0; t < 50 && !document.querySelector('.viewer-neighbor-list li'); t += 1) await new Promise((r) => setTimeout(r, 100));
+            const listed = [...document.querySelectorAll('.viewer-neighbor-list li')].length;
+            return { lit, probed, shown: v.graphShown(), neighbors: want.length, listed, layers: v.layers().cells.graph };
+          })()`);
+          check('viewer', 'a graph drawn: its edges where the graph puts them, a cell\'s neighbors listed as the graph has them', `${shownGraph?.message ?? shownGraph?.error}; ${JSON.stringify(drawnGraph)}`,
+            shownGraph?.ok && drawnGraph && drawnGraph.probed >= 20 && drawnGraph.lit === drawnGraph.probed && drawnGraph.shown.count > 0 && !drawnGraph.shown.tooMany && drawnGraph.listed === drawnGraph.neighbors && drawnGraph.neighbors > 0, 'every edge probed drawn; the neighbors listed');
+          const graphView = await act('save_view', { name: 'The Delaunay graph close up' });
+          await act('show_tissue', { dataset: 'xenium-lung-2fov', graph: 'none' });
+          // Cleared: no graph, and nothing left on the overlay.
+          const cleared = await chrome.eval(`(() => {
+            const c = document.querySelector('.viewer-graph');
+            const px = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+            let alpha = 0;
+            for (let k = 3; k < px.length; k += 4) alpha += px[k];
+            return window.situcraftViewer.graph() === null && alpha === 0 ? null : { alpha };
+          })()`);
+          const graphReopened = await act('open_view', { view: 'The Delaunay graph close up' });
+          await chrome.eval('new Promise((r) => setTimeout(r, 500))');
+          const reGraph = await chrome.eval('window.situcraftViewer.graph()?.id ?? null');
+          check('viewer', 'a view of a graph reopens exactly, the graph drawn again', `${graphReopened.message ?? graphReopened.error}; cleared ${cleared === null}, drawn again ${reGraph}`,
+            graphView.ok && graphReopened.ok && graphReopened.data.exact === true && cleared === null && reGraph === built.delaunay.data?.id, 'exactly as saved');
+        }
+
         // The projects as 0.2.0, 0.3.0 and 0.4.0 saved them
         // (validation/projects/<version>-lung.situcraft.json): this release's written when asked
         // (SITUCRAFT_WRITE_FIXTURE=1), the places of this run's folders made neutral and given its

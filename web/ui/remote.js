@@ -27,6 +27,7 @@ import { RULES, createCurated, crossTable, curatedSetsOf, saveConsensus } from '
 import { labelSource, labelVersions, refOf } from './label-sources.js';
 import { defaultPair, impactLines, sideOf } from '../lib/impact.js';
 import { remakeOnSegmentation } from './remake.js';
+import { KINDS as GRAPH_KINDS, describeGraph, graphsOf } from '../lib/graphs.js';
 
 export class ActionError extends Error {}
 
@@ -555,6 +556,11 @@ export function installRemote(app) {
       if (args.color_by !== undefined) {
         if (choose(args.color_by, ['gene', 'probability'], 'coloring') === 'probability') view.transcripts.colorBy = 'probability';
         else delete view.transcripts.colorBy;
+      }
+      if (args.graph !== undefined) {
+        const graph = graphRef(dataset, view.segmentation, args.graph);
+        if (graph) view.cells.graph = graph;
+        else delete view.cells.graph;
       }
       if (args.cell !== undefined) view.cell = args.cell ? await cellRef(dataset, args.cell, view.segmentation) : null;
       // Post-Xenium images, by name or artifact id.
@@ -1158,6 +1164,44 @@ export function installRemote(app) {
       return {
         message: `${seg.name} of ${dataset.name}: ${plural(d.clusters.count, 'cluster')} of ${plural(d.cells.analyzed, 'cell')} (resolution ${d.parameters.resolution}, modularity ${d.clusters.modularity.toFixed(4)}); the largest's leading markers ${(d.top[0] ?? []).slice(0, 3).map((m) => m.gene).join(', ')}.`,
         data: { id: manifest.id, segmentation: { id: seg.id, name: seg.name }, parameters: d.parameters, cells: d.cells, genes: d.genes, components: d.pca.components, varianceRatio: d.pca.varianceRatio, ...(d.pca.solver ? { solver: d.pca.solver } : {}), edges: d.graph.edges, ...(d.graph.search ? { search: d.graph.search } : {}), clusters: d.clusters, markers: d.top.map((list) => list.slice(0, 5).map(({ gene, logfc, pctIn, pctOut, padj }) => ({ gene, logfc, pctIn, pctOut, padj }))) },
+      };
+    },
+
+    async build_graph(args) {
+      const dataset = resolveDataset(args.dataset);
+      const seg = segmentationArg(dataset, args.segmentation);
+      const kind = choose(args.kind ?? 'delaunay', GRAPH_KINDS.map((k) => k.id), 'kind of graph');
+      const spec = GRAPH_KINDS.find((k) => k.id === kind).param;
+      const arg = { longest: 'longest', k: 'k', radius: 'radius', gap: 'gap' }[spec.id];
+      const params = args[arg] !== undefined ? { [spec.id]: finite(args[arg], arg) } : {};
+      let cells = 'all';
+      if (args.filter !== undefined) {
+        if (seg.source !== 'instrument') throw new ActionError('A QC filter chooses cells of the instrument\'s segmentation.');
+        const filters = project().artifacts.filter((a) => a.kind === 'filter' && a.dataset === dataset.id);
+        const named = filters.map((f) => `${f.name} v${f.version}`);
+        const ref = String(args.filter);
+        const latest = (name) => filters.filter((f) => f.name === name).sort((a, b) => b.version - a.version)[0];
+        cells = filters.find((f) => f.id === ref)?.id ?? (named.includes(ref) ? filters[named.indexOf(ref)].id : latest(choose(ref, [...new Set(filters.map((f) => f.name))], 'filter'))?.id);
+      }
+      if (args.regions !== undefined && !Array.isArray(args.regions)) throw new ActionError('regions is a list of regions, by name or ID.');
+      const regions = (args.regions ?? []).map((ref) => {
+        const r = regionRef(dataset, ref);
+        if (r.removed) throw new ActionError(`The region ${r.name} was removed.`);
+        return r.id;
+      });
+      await settleMode('spatial');
+      let built;
+      try {
+        built = await app.spatialView.build(dataset, { segmentation: seg.id, kind, params, cells, regions });
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      await frames();
+      const { description: d } = await app.bundles.graphData(built.manifest.id);
+      const over = [d.cells.filter ? `the filter ${d.cells.filter.name}'s cells` : '', d.cells.regions?.length ? `in ${d.cells.regions.map((r) => r.name).join(', ')}` : ''].filter(Boolean).join(', ');
+      return {
+        message: `${describeGraph(d.parameters)} of ${seg.name} of ${dataset.name}${over ? `, ${over}` : ''}: ${plural(d.edges, 'edge')} among ${plural(d.cells.inGraph, 'cell')}${d.cells.excluded ? ` (${plural(d.cells.excluded, 'cell')} a review excluded left out)` : ''}; ${d.degree.mean.toFixed(2)} neighbors a cell on average, ${plural(d.isolated, 'cell')} without one; the median edge ${d.lengths.median.toFixed(1)} µm.`,
+        data: { id: built.manifest.id, name: built.manifest.name, segmentation: { id: seg.id, name: seg.name }, parameters: d.parameters, cells: d.cells, edges: d.edges, degree: { mean: d.degree.mean, median: d.degree.median, max: d.degree.max }, isolated: d.isolated, components: d.components, lengths: { ...d.lengths, histogram: undefined }, ...(d.shared ? { shared: { ...d.shared, histogram: undefined } } : {}), ...(d.duplicates ? { duplicates: d.duplicates } : {}) },
       };
     },
 
@@ -2017,6 +2061,17 @@ export function installRemote(app) {
     const id = text.includes(':') ? text.slice(text.indexOf(':') + 1).trim() : list.at(-1)?.id;
     if (!list.some((c) => c.id === id)) throw new ActionError(list.length ? `No clustering ${id} of the segmentation drawn; its clusterings are ${list.map((c) => c.id).join(', ')}.` : 'The segmentation drawn has no clustering: cluster_cells makes one.');
     return `clusters:${id}`;
+  }
+
+  // A graph of the segmentation a view draws ('instrument' or an artifact's id), by id, or latest
+  // (the last built); none for none (null).
+  function graphRef(dataset, segRef, ref) {
+    if (ref === null || /^none$/i.test(String(ref))) return null;
+    const seg = segRef === 'instrument' ? segmentationChoices(project(), dataset.id).find((c) => c.instrument)?.id : segRef;
+    const list = graphsOf(project(), dataset.id, seg).filter((g) => g.state === 'complete');
+    const id = /^latest$/i.test(String(ref)) ? list.at(-1)?.id : String(ref);
+    if (!list.some((g) => g.id === id)) throw new ActionError(list.length ? `No graph ${ref} of the segmentation drawn; its graphs are ${list.map((g) => `${g.id} (${describeGraph(g.parameters)})`).join(', ')}.` : 'The segmentation drawn has no graph: build_graph builds one.');
+    return id;
   }
 
   // A segmentation by name or id (the default if not given).

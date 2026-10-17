@@ -2600,6 +2600,60 @@ H&E placed by its automatic version, labels imported with a confidence each):
 - **Moderated statistics:** where used, from MaveScape's `limma.js` (Smyth 2004, *Stat Appl Genet
   Mol Biol* 3:3).
 
+### 6.1 Cell graphs (verified, wave 6, slice 1)
+
+A graph joins cells that are neighbors; every spatial statistic of wave 6 is computed on one. Four
+definitions, each with one parameter, over the cells chosen (a cell left out is no one's
+neighbor), distances between centroids in µm:
+
+| Graph | Edge between cells i and j | Parameter (default) | What it does on tissue |
+| --- | --- | --- | --- |
+| Delaunay | i and j share a triangle of the Delaunay triangulation of the centroids | longest edge (50 µm) | Adapts to density; joins across gaps unless capped |
+| k nearest | j among i's k nearest, or i among j's | k (6) | Every cell has ≥ k neighbors; isolated cells reach far |
+| Radius | centroids at most r apart | r (20 µm) | The same distance everywhere; degree follows density |
+| Contact | pixels 4-adjacent in the label raster (after a gap's growth) | gap (0 µm) | Physical contact, as the segmentation drew it |
+
+- **The triangulation** (Lee & Schachter 1980; Bowyer 1981; Watson 1981): points inserted one at a
+  time along a Hilbert curve over their bounding box (2¹⁶ cells a side), each located by a walk
+  from the last (which terminates on a Delaunay triangulation: Edelsbrunner 1990); the triangles
+  whose circumcircles strictly contain it removed and the cavity filled. The hull is closed by
+  ghost triangles sharing a vertex at infinity, whose "circumcircle" is the open half-plane beyond
+  the hull edge with the open edge itself, so points outside the hull insert as others do.
+  Orientation and in-circle tests are exact: computed in floating point with every product rounded
+  on its own, trusted when beyond Shewchuk's error bounds (orientation (3 + 16ε)ε, in-circle
+  (10 + 96ε)ε of the permanent, ε = 2⁻⁵³; Shewchuk 1997, *Discrete Comput Geom* 18:305–363,
+  doi:10.1007/PL00009321), and otherwise in exact rationals. Where four or more points lie on one
+  circle (lattices), the triangulation is not unique; a triangle is replaced only when the new point
+  is strictly inside, so the result is fixed by the points' order on the curve. A million random
+  points triangulate in 1.7 s (Apple M4, one core).
+- **k nearest** from `internal/graph`'s exact grid search (ties by index), joined when either cell is
+  among the other's k (so a graph, not a directed relation; Squidpy's `spatial_neighbors` with
+  `n_neighs` is the same union). **Radius** by a grid of squares of side r, each pair compared
+  exactly; d ≤ r.
+- **Contact:** a pixel edge between two cells' pixels, side by side or one above the other, joins
+  them; their shared boundary is the count of such edges times the pixel's side (a staircase along
+  a slanted boundary, up to √2 and on average 4/π the line's length, the same for every cell). A
+  gap g grows each cell by g/2 into pixels of no cell (each to the nearest cell, the expansion's
+  exact distance transform, §3.1) before counting; every cell of the segmentation is in the raster,
+  so a cell left out of the graph still separates the cells on either side.
+- **Against independent implementations** (`validation/reference/graphs/`): on the instrument's
+  segmentation of both 2-FOV bundles and the standard simulated tissue, SituCraft's Delaunay (to
+  50 µm), 6-nearest and 20 µm graphs have exactly SciPy 1.18.1's edges (Qhull's triangulation;
+  `cKDTree.query` and `query_pairs`), lengths identical in float32, and Squidpy 1.8.3's
+  `spatial_neighbors` (generic coordinates; `delaunay`, `n_neighs`, `radius`) gives SciPy's:
+
+| Data set | Cells | Delaunay ≤ 50 µm (all) | 6 nearest | Within 20 µm | Contact (gap 0) |
+| --- | --- | --- | --- | --- | --- |
+| Lung 2-FOV | 11,898 | 35,472 (35,665) | 40,524 | 133,975 | 32,504 |
+| Breast 2-FOV | 7,275 | 21,678 (21,797) | 24,644 | 38,415 | 13,560 |
+| Simulated (standard) | 2,925 | 8,706 (8,758) | 9,558 | 20,064 | — |
+
+- **Defaults.** Lung's median Delaunay edge is 7.9 µm (95th percentile 14.2), Breast's 11.4. A
+  radius of 20 µm gives 22.5 neighbors a cell in Lung and 10.6 in Breast (30 µm: 49.6 in Lung), so
+  radius graphs mean different things in different tissues; the view states each graph's degrees.
+  The 50 µm cap removes 193 of Lung's 35,665 triangulation edges (0.5%), those across the hull and
+  holes. Contact on Breast's multimodal segmentation leaves 208 cells (2.9%) touching no other.
+
 ## 7. Datasets
 
 | Dataset | Source | Size | License | Use |

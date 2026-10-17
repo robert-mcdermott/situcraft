@@ -817,6 +817,50 @@ record as CSV (a row for each cell or region reviewed) or JSON. **Fill by: Revie
 each cell by its review: excluded gray, a concern vermillion, ambiguous orange, relabeled blue,
 accepted green, commented purple (a palette apart in every color vision).
 
+## Spatial: which cells are neighbors
+
+The **Spatial** view asks how the tissue is organized. Every such question starts from which cells
+count as neighbors: a **graph** joins neighboring cells, by one of four definitions.
+
+- **Delaunay triangulation:** each cell joined to the cells around it, by the triangulation of the
+  cells' centers, however dense the tissue. Across a tear, a hole or the tissue's edge it would join
+  cells far apart, so edges longer than the **longest edge** (50 µm by default) are left out.
+- **Nearest neighbors:** each cell joined to its k nearest (6 by default), and so to any cell of
+  which it is among the k nearest. Every cell has neighbors, but at the tissue's edge, or alone,
+  they may be far.
+- **Within a radius:** cells whose centers are at most the radius apart (20 µm by default). The same
+  distance everywhere, so dense tissue gives cells many neighbors and sparse tissue few or none.
+- **Contact:** cells whose outlines touch in the segmentation, with the boundary they share. A
+  **gap** lets cells that nearly touch count as in contact; a cell between two others still keeps
+  them apart.
+
+Choose the segmentation (the default first) and the cells: all of them, a QC filter's (the
+instrument's segmentation), or only those in regions you drew. Cells a review excluded from
+analyses are always left out, and the view says how many. **Build the graph** builds it as a job;
+it is kept as an artifact with its definition and the cells it was built over, and the same
+definition over the same cells gives the same graph on any computer.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/spatial-dark.webp">
+  <img alt="The Spatial view on the Lung example: the graph's definition (Delaunay triangulation, longest edge 50 µm), the graphs built, and the chosen graph's numbers with histograms of each cell's neighbors and of the edges' lengths" src="images/spatial-light.webp">
+</picture>
+
+Each graph says what it holds: its cells and edges, how many neighbors a cell has, the cells without
+a neighbor (alone, or beyond the radius or the longest edge), how many pieces it falls into, and how
+long its edges are, with histograms. Check these before using a graph: a radius that gives most
+cells dozens of neighbors, or leaves many with none, is the wrong radius for this tissue.
+
+**Show on the tissue** draws the graph's edges over the cells in the Viewer (the Cells section's
+**Graph** chooses among the graphs of the segmentation drawn). Edges are drawn once you zoom in
+far enough to read them. Click a cell: its edges turn yellow, and its inspector lists its
+neighbors, nearest first, with their distances (and, with the cells filled by a label set, their
+labels); click a neighbor to go to it. Saved views keep the graph.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/graph-dark.webp">
+  <img alt="The Viewer close up on the Lung tissue: the Delaunay graph's edges over the cells, a selected cell's edges in yellow, and its inspector listing its neighbors with their distances" src="images/graph-light.webp">
+</picture>
+
 ## Keyboard
 
 | Action | Keys |

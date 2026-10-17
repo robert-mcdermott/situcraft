@@ -1,5 +1,40 @@
 # Changelog
 
+## Unreleased (0.6.0)
+
+Wave 6 of the [roadmap](situcraft-spec/roadmap.md): niches and spatial statistics. How the tissue is
+organized, asked of a segmentation's labeled cells: which cell types are neighbors, how far apart
+they lie, which enter a region, what niches the tissue has and which genes follow space, each result
+with the cells it comes from.
+
+### Added
+
+- **Cell graphs (wave 6, slice 1).** The **Spatial** view builds a graph of which of a
+  segmentation's cells are neighbors, the first step of every spatial question.
+  - **Four definitions:** the Delaunay triangulation of the cells' centers, its edges up to a
+    longest length (50 µm by default); each cell's k nearest (6), an edge when either cell is among
+    the other's k; the cells within a radius (20 µm); and contact, cells whose outlines touch in the
+    segmentation (or lie within a gap), with the boundary they share.
+  - **The cells:** all of a segmentation's, a QC filter's or those in regions; cells a review
+    excluded from analyses are always left out, and the graph records how many.
+  - **Exact:** the triangulation by exact geometric predicates, the same for any points, lattices
+    whose cells lie four on a circle included; every graph the same on any number of threads and on
+    any processor.
+  - **An artifact** of kind `graph`, named by what it is made from (asking again answers it): its
+    cells and edges with their lengths and shared boundaries, and what it holds: the neighbors a
+    cell, cells without one, its pieces, its edges' lengths, with histograms.
+  - **On the tissue:** the Viewer's **Graph** draws the edges over the cells, close up; a cell's
+    inspector lists its neighbors with their distances and labels. Saved views keep the graph. The
+    project tree lists **Graphs**.
+  - **Remote control:** `build_graph`; `show_tissue` takes `graph`.
+  - **Validated:** lattices worked by hand (each kind's degrees and lengths); the triangulation's
+    empty circumcircles and Euler's count of triangles on random, cocircular, collinear and
+    repeated points; radius and k-nearest graphs against an exhaustive search; contact on label
+    rasters drawn by hand; on both development bundles and the standard simulated tissue, the same
+    edges as SciPy 1.18 (Delaunay by Qhull, a k-d tree) and Squidpy 1.8 (`spatial_neighbors`),
+    edge for edge, lengths identical; in the page, a radius graph's edges those of an exhaustive
+    search, a region's graph over its cells, the edges drawn where they lie.
+
 ## 0.5.0 (2026-10-17)
 
 Wave 5 of the [roadmap](situcraft-spec/roadmap.md): the pathology bridge. Post-Xenium H&E and

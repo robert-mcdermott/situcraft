@@ -97,8 +97,8 @@ function plotCanvas({ height = 190, axis = 'x', draw, brushed, label }) {
 
 const M = { left: 46, right: 10, top: 10, bottom: 30 };
 
-// A histogram of values. options: { label, integer, log, keep (filter mask), selection (mask),
-// onBrush(lo, hi) with lo > hi for none }.
+// A histogram of values. options: { label, unit (what is counted: 'cells' by default), integer,
+// log, keep (filter mask), selection (mask), onBrush(lo, hi) with lo > hi for none }.
 export function histogramPlot(values, options) {
   const sorted = finiteSorted(values, options.keep);
   const lo = sorted.length ? sorted[0] : 0;
@@ -146,7 +146,7 @@ export function histogramPlot(values, options) {
           ctx.fillRect(a + 0.5, sy(marked[k]), Math.max(1, b - a - 1), height - M.bottom - sy(marked[k]));
         }
       }
-      axes(ctx, w, height, t, ticks(x0, x1, 5, bins.log).map((v) => [sx(v, w), fmt(v)]), ticks(0, max, 3, false).map((c) => [sy(c), fmt(c)]), options.label, 'cells');
+      axes(ctx, w, height, t, ticks(x0, x1, 5, bins.log).map((v) => [sx(v, w), fmt(v)]), ticks(0, max, 3, false).map((c) => [sy(c), fmt(c)]), options.label, options.unit ?? 'cells');
     },
     brushed: options.onBrush ? (b) => (b ? options.onBrush(invert(b.x0, width), invert(b.x1, width)) : options.onBrush(1, 0)) : null,
   });

@@ -2057,7 +2057,7 @@ range: 2.8 GB in all. Its bundle is of XOA 1, which SituCraft opens from this wa
      and the keypoints (their fixed positions in its pixels), each number as short as reads back
      the same.
    - **Simulated post-Xenium images** (`internal/simulate/postxenium.go`, `situcraft simulate
-     --post-xenium`): an H&E by Beer–Lambert's law (Ruifrok and Johnston's stain colours, varied
+     --post-xenium`): an H&E by Beer–Lambert's law (Ruifrok and Johnston's stain colors, varied
      per section) and a two-channel immunofluorescence image (DAPI, a membrane stain) of the same
      cells, each placed by a known affine transform (pixel size, aspect, shear, reflection, turn)
      and a smooth deformation (sine waves, another family than registration's B-splines), written
@@ -2345,14 +2345,158 @@ range: 2.8 GB in all. Its bundle is of XOA 1, which SituCraft opens from this wa
 
 ## 0.6.0: niches and spatial statistics (wave 6)
 
-Outline.
-- The graph builder (N1); neighborhood enrichment, co-occurrence, distances and Ripley's K/L (N2,
-  N3); infiltration and exclusion (N4); cellular neighborhoods (N5); ROI comparison (N6);
-  spatially variable genes (N7).
-- The structured analysis builder; every result showing its contributing cells (N8).
-- Segmentation sensitivity: any saved analysis re-run against another segmentation (C7).
-- Validation: analytic geometries; reference-library results on the development bundles; seeded
-  permutations reproducible.
+How the tissue is organized, asked of a segmentation's labeled cells: which cell types are
+neighbors more or less often than chance, how far apart they lie, which enter a region and which
+stay at its edge, what recurring neighborhoods (niches) the tissue has, and which genes follow
+space. Every result shows the cells it comes from, and can be made again on another segmentation
+to see whether it holds.
+
+**Where the work runs.** As in wave 4: each analysis runs in the program as a job
+(`internal/spatial`), and its result is an artifact of the segmentation it was made on, named by
+its inputs: the segmentation, the label set and level, the cells (all, a QC filter's or a region's,
+without those a review excluded), the graph and the parameters. Asking again answers it. The page
+builds the question, draws the result and opens its cells on the tissue; the same jobs run headless
+in wave 9.
+
+**What a section's statistics say.** One section is one sample, and its cells are not independent
+replicates. A result is given first as an effect size in its units (observed against expected,
+distances in µm, densities per mm²), then with a permutation z-score and p-value: how unusual the
+arrangement is in this section, given where its cells lie. Benjamini–Hochberg corrects across pairs
+and genes. Inference with the sample as the unit is wave 7's. Permutations are seeded and give the
+same result on any number of threads and on any processor. Areas come from a stated window (a
+region, or the tissue's outline from its cells); edge effects are corrected where a statistic needs
+it and stated where they remain.
+
+**Validation.** Each method is checked first against analytic geometries and point processes
+(lattices; complete spatial randomness, whose K is πr²; clustered processes of known K), then
+against simulated truth (the simulator's domains and cell types), and on the development bundles
+against independent implementations under permissive licenses (SciPy, Squidpy, PySAL's esda,
+astropy, scikit-learn), run by maintainer scripts with pinned versions and their numbers recorded,
+as in waves 3 and 4.
+
+### Wave 6
+
+1. **Cell graphs (N1, V5 neighbors): done.**
+   - **Graphs of a segmentation's cells** (`internal/spatial`; research.md §6.1): by the Delaunay
+     triangulation of the cells' centroids (Bowyer–Watson insertion along a Hilbert curve, the hull
+     closed by ghost triangles; exact predicates, Shewchuk's error bounds with an exact rational
+     fallback), its edges up to a longest length (50 µm); the k nearest (6; `internal/graph`'s
+     exact grid search, an edge when either is among the other's k); a radius (20 µm; a grid of
+     squares of the radius); contact in the label raster (pixel edges shared, side by side or one
+     above the other; with a gap, each cell first grown by half of it into pixels of no cell, by the
+     nucleus expansion's exact distance transform). Built over the cells chosen: all, a QC
+     filter's, those in regions (by centroid, as the regions count them), never those a review
+     excluded. Distances between centroids with each product rounded on its own: the same on every
+     processor (pinned digests) and for any number of workers. Cells at one place are joined to
+     each other and to the first's neighbors; collinear cells, along their line.
+   - **An artifact** of kind `graph` (`api_graphs.go`; `docs/FORMATS.md`): `graph.json` (the
+     definition, the cells and how they were chosen, degrees, isolated cells, components, edge
+     lengths and shared boundaries, with histograms), `cells.bin` (the cells and their centroids),
+     `edges.bin` (compressed rows, each edge from both cells, lengths, shared boundaries); named by
+     the segmentation, the cells' checksum, the method's version and the parameters; checked when
+     recorded (symmetric, each length its centroids' distance, none beyond the limit).
+   - **The Spatial view** (`ui/mode-spatial.js`): the segmentation, the cells (a filter, regions;
+     how many a review excluded), the four definitions with what each means, the graphs built, and
+     a graph's numbers with histograms of its degrees and edge lengths and a note on cells without
+     a neighbor. **Show on the tissue**: the Viewer's **Graph** (the drawn segmentation's graphs)
+     draws the edges on a canvas over the cells once the median edge is 6 CSS pixels long, the
+     selected cell's in yellow; the inspector lists a cell's neighbors, nearest first, with their
+     distances, shared boundaries and labels, each a link to it. Saved views keep the graph; the
+     sidebar lists **Graphs**. Remote control: `build_graph`; `show_tissue` takes `graph`.
+   - Validation:
+     - **By hand:** square and hexagonal lattices (inner cells' degrees 4 and 8 by radius, 4 by
+       Delaunay up to the side, 6 nearest); Delaunay on random points (to 2,000), a 30 × 30 lattice
+       (every square's four corners on one circle), collinear and repeated points: no point inside
+       any triangle's circumcircle (exactly), Euler's count of triangles (2n − h − 2); radius and k
+       nearest against an exhaustive search; contact on rasters drawn by hand, a gap closed and a
+       cell left out still standing between.
+     - **Against SciPy and Squidpy** (`validation/reference/graphs/`, weekly): on both 2-FOV
+       bundles and the standard simulated tissue, the Delaunay (to 50 µm), 6-nearest and 20 µm
+       graphs are SciPy 1.18.1's (Qhull; `cKDTree`) edge for edge, their lengths identical, and
+       Squidpy 1.8.3's `spatial_neighbors` gives SciPy's; Lung: 35,472, 40,524 and 133,975 edges of
+       11,898 cells.
+     - **In the page** (viewer suite): each kind built over the Lung cells by remote control, the
+       18 cells a review excluded left out; the radius graph's edges those of an exhaustive search
+       over every pair of its cells; the tumor nest's graph over the cells the suite counts in it;
+       the edges drawn where the graph puts them; a cell's neighbors listed; a view of the graph
+       reopened exactly.
+   - Found by slice 1:
+     - **A radius is not a tissue's constant:** 20 µm gives a Lung cell 22.5 neighbors on average
+       and a Breast cell 10.6 (30 µm, 49.6 in Lung). The view says how many neighbors a cell has,
+       and the default radius is 20 µm.
+     - **The triangulation joins across gaps:** 193 of Lung's 35,665 Delaunay edges are longer than
+       50 µm, across the hull and holes in the tissue; the longest edge leaves them out.
+     - **Contact depends on the segmentation's gaps:** Breast's multimodal segmentation leaves 208
+       of its 7,275 cells touching none (Lung's expansion, 21); a gap of 1 to 2 µm joins most.
+     - **The whole section's edges are a mesh:** 35,000 edges drawn over the section hide the
+       tissue; they are drawn once the median edge is 6 pixels long.
+2. **Neighborhood enrichment and co-occurrence (N2, N3, N8).**
+   - **Enrichment** (Schapiro et al. 2017; Palla et al. 2022): for each pair of labels, the edges
+     between their cells against the number expected, as a ratio, with a z-score and p-value from
+     seeded permutations of the labels; optionally permuted within regions, so that each
+     compartment keeps its composition.
+   - **Co-occurrence** across distances (Palla et al. 2022): how much likelier a cell of one label
+     is near another label's cells than near any cell. **Contact fractions**, from a contact graph:
+     the share of each label's boundary shared with each label.
+   - **The analysis builder** in the Spatial view: a question, its inputs and its parameters with
+     their help, run as a job; saved analyses listed with their inputs. Results as heat maps and
+     curves, and **every number's cells** (N8): a pair's cells and the edges between them opened
+     on the tissue.
+   - Remote control: `spatial_analysis` (a question and its parameters); `show_tissue` shows an
+     analysis's cells.
+   - Validation: labelings of known enrichment on lattices (a checkerboard's every edge joins its
+     two labels); the permutations' mean against its exact expectation; p-values uniform on
+     randomly labeled cells; on the development bundles, ratios and z-scores against Squidpy's,
+     within their permutation error.
+3. **Distances and Ripley's K and L (N3).**
+   - Each cell's distance to the nearest cell of each label, and the cells of each label within a
+     distance, as distributions by pair of labels, against permutation envelopes.
+   - Ripley's K and Besag's L (Ripley 1977; Besag 1977), of one label or across two, in the window,
+     edge-corrected, with envelopes from permutations of the labels.
+   - Validation: complete spatial randomness (K = πr², L = r) and Thomas processes of known K, in
+     rectangles and irregular windows; edge corrections against astropy's estimator; distances
+     against an exhaustive search.
+4. **Regions measured (N4, N6).**
+   - **Composition and comparison:** each region's cells by label, their densities (per mm² of
+     the region's area within the tissue) and shares, with intervals; regions compared by them, as
+     ratios with intervals; descriptive, since the regions of one section are not samples.
+   - **Infiltration and exclusion:** each cell's signed distance to a region's boundary (inside
+     negative), and each label's density in bands across it, each band's area its denominator:
+     whether a label fills a region, gathers at its margin or stays out.
+   - Validation: band areas of a disk and a square by hand; uniformly placed cells give flat
+     densities; profiles placed by rule recovered; the simulated tissue's domains as regions.
+5. **Cellular neighborhoods (N5).**
+   - Each cell's neighborhood composition (its k nearest or those within a radius, itself
+     included), clustered by k-means with k-means++ seeding (Arthur & Vassilvitskii 2007), as
+     Goltsev et al. (2018) and Schürch et al. (2020) define niches; seeded, with restarts. Each
+     niche's composition against the tissue's, its defining labels and its markers (exploratory),
+     its cells mapped; the agreement between seeds stated.
+   - The simulator's truth gains each cell's domain.
+   - Validation: k-means against exact optima on small sets and scikit-learn's inertia; on
+     simulated tissues, niches against the true domains (the adjusted Rand index).
+6. **Spatially variable genes (N7).**
+   - Moran's I of each gene over a graph (Moran 1950), with its expectation and variance under
+     randomization (Cliff & Ord 1981) and by permutation, Benjamini–Hochberg adjusted; genes
+     ranked; each gene's local Moran's I (Anselin 1995) showing the cells that make it.
+   - Validation: patterns of known I by hand (a checkerboard's is −1); against PySAL's esda on the
+     development bundles; on simulated tissues, the domains' genes against genes without a
+     pattern.
+7. **Analyses across segmentations (C7).**
+   - Any saved analysis made again on another segmentation in one step (its graph and label set
+     made again, as wave 4 makes labels again), and the two read together: each number under
+     each, the change, and which cells' differences make it, through the segmentations'
+     comparison.
+   - Validation: on the simulated tissue, results under the instrument's segmentation and the
+     refinement against those under the true cells.
+8. **Scale.**
+   - Graphs, enrichment, niches and Moran's I on a million cells within stated budgets, measured
+     on generated tissues; the weekly scale test grows to them.
+9. **Examples, documentation, release 0.6.0.**
+   - Worked examples: which cell types are neighbors in the Breast section; immune cells and a
+     tumor region's edge; the simulated tissue's niches against its domains; spatially variable
+     genes; a result made again on another segmentation.
+   - The project fixture `validation/projects/0.6.0-*.situcraft.json`; guide pages; CHANGELOG;
+     release.
 
 ## 0.7.0: samples and cohorts (wave 7)
 
