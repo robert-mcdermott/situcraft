@@ -20,7 +20,7 @@ export const ACTIONS = [
   { id: 'accept', label: 'Accept', help: 'Its label (a region\'s class) is right.' },
   { id: 'relabel', label: 'Relabel', help: 'Its label (a region\'s class) is another: say which, and why.' },
   { id: 'ambiguous', label: 'Ambiguous', help: 'It could be one of several labels; name them if you can.' },
-  { id: 'exclude', label: 'Exclude', help: 'Leave it out of analyses (an artefact, a fold, outside the tissue): say why.' },
+  { id: 'exclude', label: 'Exclude', help: 'Leave it out of analyses (an artifact, a fold, outside the tissue): say why.' },
   { id: 'include', label: 'Include again', help: 'Take back an exclusion.' },
   { id: 'concern', label: 'Segmentation concern', help: 'Its segmentation looks wrong: say how.' },
   { id: 'resolve', label: 'Resolve the concern', help: 'The concern is answered (or was mistaken).' },
@@ -31,7 +31,7 @@ export const CONCERNS = [
   { id: 'merged', label: 'Cells merged', help: 'Two cells or more drawn as one.' },
   { id: 'split', label: 'Cell split', help: 'One cell drawn as several.' },
   { id: 'boundary', label: 'Boundary off', help: 'Its outline misses part of the cell, or takes in another\'s.' },
-  { id: 'not-a-cell', label: 'Not a cell', help: 'Debris, background or an artefact.' },
+  { id: 'not-a-cell', label: 'Not a cell', help: 'Debris, background or an artifact.' },
   { id: 'missed', label: 'Cells missed', help: 'Cells here were not segmented.' },
   { id: 'other', label: 'Other', help: 'Say what in the note.' },
 ];

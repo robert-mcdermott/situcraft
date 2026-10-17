@@ -294,7 +294,7 @@ The data plane built here (readers, codecs, the derived-data cache) carries ever
      tile, counting all transcripts and those of quality 20 or more, and every gene together.
      Level 1's grids count the points; each coarser level's add up the level below's. The levels
      nest, so the index is a complete quadtree aligned with the image's tiles.
-   - **Geometry tiles:** cell and nucleus polygons, per level, each in the tile holding the centre
+   - **Geometry tiles:** cell and nucleus polygons, per level, each in the tile holding the center
      of its bounding box. Level 0 holds the bundle's vertices exactly; each level above holds them
      simplified (Douglas–Peucker) to within half a pixel of that level, keeping at least three.
    - **One binary layout** for all three (`internal/cache/binfile.go`): a header, a table of the
@@ -313,7 +313,7 @@ The data plane built here (readers, codecs, the derived-data cache) carries ever
      was used least recently, never what was used since the program started; zipped bundles'
      unpacked files count. A build first checks the disk has room.
    - **Jobs** (`internal/jobs`, first version): an immutable spec; a state (declared, queued,
-     running, validating, then complete, cancelled, failed or invalid); progress; an append-only
+     running, validating, then complete, canceled, failed or invalid); progress; an append-only
      log; cooperative cancellation; one job at a time and one per key.
      - Jobs live in memory; persisting them comes with the artifact store (wave 2, slice 2).
      - A build job ends by checking what it built: every tile present, the transcripts and polygons
@@ -354,8 +354,8 @@ The data plane built here (readers, codecs, the derived-data cache) carries ever
        - polygons with and without closing vertices;
        - the grid, entry names, the checksum record, locks, eviction and sizes.
      - **Fuzzing:** every reader on damaged files; the polygon simplification.
-     - **Jobs:** states, cancelling queued and running jobs, one job per key, the log, a panic
-       turned into a failure; over HTTP, the event stream and cancelling.
+     - **Jobs:** states, canceling queued and running jobs, one job per key, the log, a panic
+       turned into a failure; over HTTP, the event stream and canceling.
      - **In the window:**
        - add the Breast bundle and watch it build;
        - **Stop** partway: the image is kept and the index "partly built";
@@ -387,7 +387,7 @@ The data plane built here (readers, codecs, the derived-data cache) carries ever
      - **Fills:** cells by an attribute, through a per-cell color texture; rings triangulated by
        ear clipping, with a fan for rings that cross themselves.
      - **The selected cell** is drawn from its full-resolution polygons.
-     - **Tiles** are fetched nearest the centre of the view first, a few at a time; those no
+     - **Tiles** are fetched nearest the center of the view first, a few at a time; those no
        longer wanted are not fetched, and the GPU's copies are kept within a budget.
    - **Program** (`internal/view`, `api_view.go`):
      - `GET /api/local/{i}/view`: what can be shown, with each channel's default window (the 1st
@@ -454,7 +454,7 @@ The data plane built here (readers, codecs, the derived-data cache) carries ever
      - **A sampler must always have a texture of its kind bound:** the outline shader's
        per-cell color lookup, unused for plain outlines, made WebGL refuse the draw while an
        integer image tile was bound. It now has its own texture unit with a placeholder.
-     - **Outlines drawn at whole-tissue zoom only grey the image:** they are drawn once a cell
+     - **Outlines drawn at whole-tissue zoom only gray the image:** they are drawn once a cell
        spans about ten pixels.
      - **XOA 2.0 records each cell's segmentation method only in cells.zarr.zip.**
 6. **QC (Q1, Q2, Q3, Q4, V6): done.** The QC view (`ui/mode-qc.js`) has four parts.
@@ -755,7 +755,7 @@ other tools can be imported.
    - **The method** (`internal/segment/expand`; research.md §3.1):
      - each nucleus grows into a cell of its own by up to the distance, every pixel going to the
        nearest nucleus within it (a Voronoi partition clipped at the distance, Okabe et al. 2000),
-       by exact Euclidean distances between pixel centres (Felzenszwalb and Huttenlocher 2012);
+       by exact Euclidean distances between pixel centers (Felzenszwalb and Huttenlocher 2012);
        ties broken by position;
      - in bands of rows with a margin of the distance, on every core; the same result for any band
        height and number of workers;
@@ -792,7 +792,7 @@ other tools can be imported.
        97.0% within 5% and 99.95% within 10% (at least 96% and 99.5%); 98.28% of gene transcripts
        assigned, the instrument 97.97% (at most 0.5 points more). Every transcript given
        differently is explained, one by one: 2,534 on the rim (4.56–4.98 µm from their nucleus,
-       which the instrument's cells do not reach), 6,182 on boundaries between neighbours (within
+       which the instrument's cells do not reach), 6,182 on boundaries between neighbors (within
        0.34 µm of equidistant), 8 the instrument records off its own mask.
      - **Breast:** 7,312 nuclei grown into cells; the instrument's 7,275 cells accounted for (6,752
        with one nucleus, 255 with none, 268 with several).
@@ -811,7 +811,7 @@ other tools can be imported.
        lies in.
      - **A truncated file read without error,** its last bytes (the zlib checksum) never read: each
        file is now read to its end.
-     - **Nucleus polygons drawn by pixel centres missed their edge pixels** (92.0% of the mask's
+     - **Nucleus polygons drawn by pixel centers missed their edge pixels** (92.0% of the mask's
        pixels): the polygons' vertices lie on the edge pixels' own coordinates (98.56%).
      - **The viewer suite counted jobs for two bundles,** failing on CI, which fetches one.
 4. **Importing segmentations (S10, D6): done.**
@@ -898,7 +898,7 @@ other tools can be imported.
    - Validation:
      - **Hand-drawn fixtures** of each class, every count and measure worked out by hand: a cell
        shifted one pixel (IoU 0.5, the boundary moved 0.5 µm on average), a boundary between
-       neighbours moved (contracted and expanded), a split, a merge, columns become rows, a cell in
+       neighbors moved (contracted and expanded), a split, a merge, columns become rows, a cell in
        one only, a cell without outline, two cells joined by a nucleus. A planted leak of
        transcripts raises the spurious co-expression (the nuclei score 1); the MECR by hand.
      - **The instrument's segmentation and the 5 µm expansion:** on Lung, 11,898 cells one to one,
@@ -910,15 +910,15 @@ other tools can be imported.
      - **In headless Chrome** (67 checks): `compare_segmentations` by remote control, as the
        expansion counted, recorded and shown.
    - Found by slice 5:
-     - **A fifth of either cell was too little to correspond:** neighbours whose shared boundary
+     - **A fifth of either cell was too little to correspond:** neighbors whose shared boundary
        moved one column joined into one "rearranged" difference. Cells now correspond when half of
-       one lies within the other: fragments of a split still do, neighbours do not.
+       one lies within the other: fragments of a split still do, neighbors do not.
      - **The MECR's reference** had a wrong identifier in research.md: it is
        doi:10.1101/2024.01.11.575135.
      - **A segmentation's cost:** the instrument's showed its registration's time; it shows none.
 6. **The comparison workspace (V7, C4, C5): done.**
    - **The Compare view** (`ui/mode-compare.js`): a comparison's two segmentations on the tissue,
-     side by side with one camera, overlaid (B's outlines over A's, each in its colour) or in
+     side by side with one camera, overlaid (B's outlines over A's, each in its color) or in
      turns (flicker); cells filled by the class of their difference, the classes chosen; the
      chosen difference lit in both and described in the inspector; a disagreement map (each 50 µm
      region shaded by its share of disagreeing pixels).
@@ -987,9 +987,9 @@ other tools can be imported.
      segmentation**: the segmentation, the formats, the folder; the exports listed with their
      findings and Xenium Ranger's command (copied with a button).
    - **Errors planted for practice** (`internal/segment/plant`, `api_plant.go`): a copy of the
-     instrument's segmentation with merges of neighbouring cells whose merged cell mixes lineage
+     instrument's segmentation with merges of neighboring cells whose merged cell mixes lineage
      markers, splits across the long axis, missed cells and cells grown 1 µm into their
-     neighbours, each kept apart from the others, seeded; a segmentation artifact with its answer
+     neighbors, each kept apart from the others, seeded; a segmentation artifact with its answer
      key (`planted.json`), simulated, never promoted or exported. The Segmentation view's
      **Practice: find planted errors** plants, compares, and opens the answer key, each error shown
      in the workspace; it is offered on the example datasets, and on others only when the user
@@ -1030,7 +1030,7 @@ other tools can be imported.
      - **A dataset opened by several requests at once** could be closed by one while another read
        it ("damaged cache file"): the Compare view opened first, before any Viewer, asks four
        things at once. One request now opens it while the others wait.
-     - **Grown by 2 µm, Lung's small cells** took more than half of a neighbour and became
+     - **Grown by 2 µm, Lung's small cells** took more than half of a neighbor and became
        rearranged differences: they grow by 1 µm.
      - **Merges chosen by unlike counts alone** mixed lineage markers in 5 of 20: they are chosen
        first among pairs whose merged cell would.
@@ -1091,7 +1091,7 @@ independent reference outputs.
    - **`situcraft simulate`:**
      - presets (`standard`, `small`), the seed, the field's size and a parameter file;
      - written beside the folder and renamed into place; interruptible.
-   - **Labelled simulated:** the validator's support level `simulated` and an INFO finding instead
+   - **Labeled simulated:** the validator's support level `simulated` and an INFO finding instead
      of the version warning; the Data view's badge and notice; the inspector; the dataset list.
      The methods paragraph says that the data were simulated and implies no instrument.
    - Validation:
@@ -1136,7 +1136,7 @@ independent reference outputs.
    - **The equations** are written out in research.md §3.2 (notation, likelihood, priors, every
      conditional, their order, defaults).
    - **The model** (`internal/segment/refine`):
-     - a voxel lattice and the labelling's state: cells, transcripts by voxel, prior cells,
+     - a voxel lattice and the labeling's state: cells, transcripts by voxel, prior cells,
        attributions;
      - the Poisson likelihood with per-gene background, the attributions integrated out or drawn;
      - the gamma–negative-binomial mixture of expression states;
@@ -1172,7 +1172,7 @@ independent reference outputs.
        the rates drawn before the shapes; with 40 the error accumulates and is caught.
 3. **The sampler (S2, S8): done.**
    - **Moves** (`internal/segment/refine`; research.md §3.2, the sampler): Metropolis–Hastings
-     with a label copied from a face neighbour or a background "bubble", the proposal ratio local
+     with a label copied from a face neighbor or a background "bubble", the proposal ratio local
      and exact.
    - **Constraints:** no cell emptied; connectivity by a local simple-point test applied to both
      cells a move touches, so that a move is allowed exactly when its reverse is; a perimeter
@@ -1185,7 +1185,7 @@ independent reference outputs.
    - **Multi-resolution:** stages refined by whole factors; the run starts at the coarsest stage
      that keeps every cell.
    - **The start:** the instrument's cells (masks/1) on the first lattice by majority, each seeded
-     at its nucleus's centre; each transcript over a nucleus has that nucleus's cell as its prior.
+     at its nucleus's center; each transcript over a nucleus has that nucleus's cell as its prior.
    - **Posterior summaries:** each voxel's most frequent label and each transcript's most frequent
      cell with its probability, over the last sweeps; 2D footprints by each column's dominant
      label.
@@ -1281,7 +1281,7 @@ independent reference outputs.
    - **Regions and sections** (`refine.RunArea`): a region's cells refined on its lattice, the
      cells about it held in a 20 µm margin, the rest of the tissue the instrument's; separate
      sections by single linkage, each with a model of its own, one region in memory at a time.
-   - **The preflight** (`refine.Check`): the transcripts modelled and those left out, the cells and
+   - **The preflight** (`refine.Check`): the transcripts modeled and those left out, the cells and
      nuclei, the regions, and estimates of memory (by phase: reading, sampling, writing), disk and
      time. It refuses a run past 85% of the computer's memory (`internal/sysinfo`) or the free
      disk, and warns past half of either.
@@ -1374,7 +1374,7 @@ independent reference outputs.
        Breast's assigned fraction fell from 98.80% to 97.03%, its co-expression from 1.94 to 1.83.
      - **The background is under-estimated:** on the simulated tissue SituCraft's accounts for
        0.68% of transcripts against the truth's 2.46%, from any start. It is the published model's
-       behaviour when cells cover nearly every transcript; slice 7 takes it up (research.md §9).
+       behavior when cells cover nearly every transcript; slice 7 takes it up (research.md §9).
      - **Spurious co-expression does not rank methods by accuracy:** Proseg's is below the truth's
        own on the simulated tissue, while it puts 9.4 points fewer transcripts in their true cells.
      - **Proseg's four-layer default lost 61% of Lung's transcripts to the background** (4% with one
@@ -1444,7 +1444,7 @@ independent reference outputs.
      assignment certainty (its transcripts' mean probability), on one scale from 0.5, a coin's toss,
      drawn brightest, to 1, every sample agreeing, drawn darkest.
    - **Transcripts by their assignment's probability,** close up, on the same scale, so the
-     doubtful ones stand out; those assigned by place in grey.
+     doubtful ones stand out; those assigned by place in gray.
    - **Each refined cell's boundary certainty is recorded** (`certainty.bin`): the mean share of the
      summarized sweeps its pixels were its, which the uncertain-boundary flag already measured.
    - **The inspector** describes the segmentation's cell: the instrument's cell it came from, its
@@ -1475,7 +1475,7 @@ independent reference outputs.
        design, so the refinement and the planted errors are the ones that tell.
 9. **Larger tissues and release (S12, P6): done.**
    - **Patches** (research.md §3.2, large tissues): a region of more than twice
-     `patch_transcripts` (2 million by default) modelled transcripts is cut into equal rectangles
+     `patch_transcripts` (2 million by default) modeled transcripts is cut into equal rectangles
      of about that many, refined one after another, each refining the cells within 40 µm of its
      rectangle and holding the rest, each sampler released when its run ends. They are stitched:
      each pixel and transcript from the patch whose rectangle holds it, each cell's certainty and
@@ -1714,7 +1714,7 @@ same on every processor.
      - **Known truth:** on the standard simulated tissue 97.2% of the cells take their true type,
        1.5% another.
      - **In the app:** the Lung cells labeled by remote control and drawn on the tissue, each cell
-       in its label's color, the unlabeled grey, the 78 not analyzed clear; a cluster selected on
+       in its label's color, the unlabeled gray, the 78 not analyzed clear; a cluster selected on
        the labels' colors exactly its cells (viewer suite); capture scene `labels`, with no
        accessibility violation.
    - Found by slice 3:
@@ -1955,7 +1955,7 @@ same on every processor.
        were made again on another segmentation, it never took them up, and listed no
        segmentation-sensitive cell until one was chosen by hand. It now follows the latest until
        the user chooses.
-     - **A lineage fill leaves most of a tumor section grey:** on Lung, 12% of the cells take a
+     - **A lineage fill leaves most of a tumor section gray:** on Lung, 12% of the cells take a
        lineage; the example fills the cells by class (47%) and names the lineage level.
 
 ## 0.5.0: the pathology bridge (wave 5)
@@ -2001,7 +2001,7 @@ range: 2.8 GB in all. Its bundle is of XOA 1, which SituCraft opens from this wa
    - **The Viewer:** each image a layer over the stains, drawn under its transform at any rotation
      or reflection (a model matrix per image; the tiles in view found through its inverse; the level
      whose pixels match the screen's; coarser tiles standing in), with its opacity; H&E in its
-     colours, IF channels as the stains. Saved views keep the images' layers; the project tree lists
+     colors, IF channels as the stains. Saved views keep the images' layers; the project tree lists
      **Images**. Remote control: `add_image`; `show_tissue` takes `images`.
    - **The fixture** (`validation/sources.json`'s `fixtures`): `validation/fetch.mjs` takes ten
      members of the 9.9 GB archive by HTTP range (each CRC-32 checked) and downloads the two
@@ -2017,7 +2017,7 @@ range: 2.8 GB in all. Its bundle is of XOA 1, which SituCraft opens from this wa
      - **The alignments:** the H&E's scale makes its pixels 0.3639 µm, its metadata 0.3638; the
        IF's 0.7387, its metadata 0.2125 (the Xenium image's); keypoints made from a known
        similarity, reflection and all, fitted back exactly.
-     - **Drawn:** in the Viewer, three of the H&E's pixels each where the matrix puts it, its colour
+     - **Drawn:** in the Viewer, three of the H&E's pixels each where the matrix puts it, its color
        there (the viewer suite).
    - Found by slice 1:
      - **An image's metadata does not place it:** the fixture's IF image says 0.2125 µm a pixel,
@@ -2027,7 +2027,7 @@ range: 2.8 GB in all. Its bundle is of XOA 1, which SituCraft opens from this wa
        the fixture's are mirrored or turned half a turn.
      - **JPEG decoders disagree at stain boundaries:** Go's decoder repeats each chroma sample over
        its 2 × 2 pixels, libjpeg-turbo (which tifffile, OpenSlide and most slide readers use)
-       interpolates them; an H&E's colours differed by up to 74 levels where hues change. SituCraft
+       interpolates them; an H&E's colors differed by up to 74 levels where hues change. SituCraft
        interpolates as libjpeg-turbo does (within 3 of its pixels, rounding).
      - **XOA 1.0's metrics are not all its data's:** its median transcripts per cell is recorded as
        166, its transcripts give 164; 17,358 cells' counts differ from cells.parquet's. The checks
@@ -2093,7 +2093,7 @@ range: 2.8 GB in all. Its bundle is of XOA 1, which SituCraft opens from this wa
 3. **Automatic registration (R3): done.**
    - **The signals** (`internal/nuclei`): the Xenium image's DAPI read from the bundle's own
      pyramid, a block at a time (so the derived data need not be built); the image's nuclear
-     signal, an H&E's haematoxylin by colour deconvolution (Ruifrok & Johnston 2001; the glass's
+     signal, an H&E's hematoxylin by color deconvolution (Ruifrok & Johnston 2001; the glass's
      light each channel's 99.5th percentile) or an immunofluorescence image's nuclear stain (by
      its name, or named).
    - **The search** (`internal/register/auto.go`), both images about 256 pixels across: scales a
@@ -2127,7 +2127,7 @@ range: 2.8 GB in all. Its bundle is of XOA 1, which SituCraft opens from this wa
      images. Remote control: `register_image`.
    - Validation:
      - **Units:** the FFT against the transform computed directly; shifts found to a tenth of a
-       pixel; turns and scales from the log-polar form; colour deconvolution of colours made from
+       pixel; turns and scales from the log-polar form; color deconvolution of colors made from
        known amounts; mutual information's bounds; B-splines fitted back, never folding.
      - **Simulated images:** the search finds each image's scale, turn and mirror with its metadata
        right or 3 times wrong; undeformed, the result 0.13 to 0.16 µm from the truth and no
@@ -2159,9 +2159,9 @@ range: 2.8 GB in all. Its bundle is of XOA 1, which SituCraft opens from this wa
      tissue, on a grid offset by half a patch from the registration's (a version is not checked
      by its own matches), each against the image as the version draws it (its deformation taken
      back pixel by pixel); each patch's error in µm by phase correlation; the median, 90th
-     percentile, most and root-mean-square; a bound of the matches' own error from neighbouring
+     percentile, most and root-mean-square; a bound of the matches' own error from neighboring
      patches' differences. Recorded as an artifact of kind `alignment-check` of the image and the
-     version; shown as a map, each patch a square coloured by its error with an arrow 20 times
+     version; shown as a map, each patch a square colored by its error with an arrow 20 times
      it. Each landmark's residual and leave-one-out error in µm were slice 2's.
    - Remote control: `check_alignment`; `show_alignment` takes `show`, `display`, `opacity`, `cell`,
      `edges`, `outlines` and `map`.
@@ -2179,7 +2179,7 @@ range: 2.8 GB in all. Its bundle is of XOA 1, which SituCraft opens from this wa
        percentile), the automatic one 0.88 and 1.24 µm; of the immunofluorescence image, 10x's 0.85
        and 2.10 µm, the automatic one (with its deformation) 0.48 and 0.72 µm.
    - Found by slice 4:
-     - **A bound of the matches' error cannot be had for free:** neighbouring patches' differences
+     - **A bound of the matches' error cannot be had for free:** neighboring patches' differences
        bound it only where the alignment's error changes little between them (on an alignment off
        by an uncorrected 2 µm deformation over 300 µm, the bound is 0.52 µm though the matches are
        0.15 µm off); it is reported as a bound.
@@ -2201,17 +2201,17 @@ range: 2.8 GB in all. Its bundle is of XOA 1, which SituCraft opens from this wa
      or difference traced back by marching squares between samples where the values cross 0; away
      from the stroke, the region's own points put back.
    - **Kept** in the project (`regions`), each a multipolygon in µm with versions (named, classed with
-     QuPath's classes and colours or any other, reshaped, removed, returned, restored), each with
+     QuPath's classes and colors or any other, reshaped, removed, returned, restored), each with
      who, when, the tool and a note. Each region's cells (by centroid, of the segmentation drawn)
      counted; **Choose its cells** chooses the instrument's cells in it, as the QC view does.
    - **GeoJSON as QuPath writes and reads annotations**, in µm, the Xenium image's pixels, or a
      post-Xenium image's pixels through the version placing it (edges divided every 10 µm where
      it is deformed). Read: a FeatureCollection, an array (QuPath 0.2) or a Feature; polygons and
-     multipolygons of annotations, their names, classes and colours (`color` or 0.2's `colorRGB`);
+     multipolygons of annotations, their names, classes and colors (`color` or 0.2's `colorRGB`);
      detections, cells, points and lines counted and left out.
    - Remote control: `draw_region`, `edit_region`, `regions`, `import_regions`; `export` writes
      `regions`. The program reads a GeoJSON file by its path for remote control
-     (`GET /api/read-geojson`, this computer only).
+     (`GET /api/read-json`, this computer only).
    - Validation:
      - **The brush** (unit tests): a dab 0.45% small (the outline's chords), a stroke 0.13%, a hole
        erased from a slanted quadrilateral 0.41% small with its corners its own; a 10 × 7 mm outline
@@ -2227,11 +2227,11 @@ range: 2.8 GB in all. Its bundle is of XOA 1, which SituCraft opens from this wa
        its pixels back at its corners; a QuPath 0.4 file drawn on the H&E read in its pixels, its
        corners where the version places them and at most 0.18 µm from where the truth puts them, a
        holed square's area its outline's placed a pixel at a time (10,409.5 against 10,409.4 µm²),
-       its colour kept, a detection and a point left out.
+       its color kept, a detection and a point left out.
      - **With QuPath 0.7.0 itself** (run after the slice, before slice 6): five SituCraft regions on
        the simulated H&E (a rectangle, a polygon with a hole, a region cut in two, a brush stroke, a
        class of its own), written in its pixels, are read by QuPath as annotations with their names,
-       classes, colours, hole and two parts, their areas SituCraft's within 1 px² of 60,000; QuPath's
+       classes, colors, hole and two parts, their areas SituCraft's within 1 px² of 60,000; QuPath's
        own export of them read back into SituCraft gives each region's area within 0.002% and the
        same cells. Annotations made in QuPath (an ellipse, a polygon, a square with an elliptical
        hole) and a detection: the detection left out, every vertex back at its pixel (0.0000 px)
@@ -2265,7 +2265,7 @@ range: 2.8 GB in all. Its bundle is of XOA 1, which SituCraft opens from this wa
      confidence, its reviews, the review form), the cells chosen (the Viewer's **Reviews**), a
      region's details, the review queue. **Reviews** counts the cells drawn by state, lists the
      record (each review going to its cell or region) and writes it as CSV (a row a cell) and JSON;
-     **Fill by: Review status** colours each cell by its state (Okabe and Ito's palette).
+     **Fill by: Review status** colors each cell by its state (Okabe and Ito's palette).
    - Remote control: `review`, `reviews`; `export` writes `reviews`; `show_tissue` fills by `review`;
      `curate_labels` records a review.
    - Validation:
@@ -2292,11 +2292,52 @@ range: 2.8 GB in all. Its bundle is of XOA 1, which SituCraft opens from this wa
      - **A cell is judged through an alignment:** a cell relabeled on the H&E was judged where the
        version in use placed it; the record keeps that version, as a later one may place it
        elsewhere.
-7. **Examples, documentation, release 0.5.0.**
-   - Worked examples: an H&E aligned by its matrix, by landmarks and automatically, compared;
-     regions drawn on the H&E and taken to QuPath; a pathologist's review.
-   - The project fixture `validation/projects/0.5.0-*.situcraft.json`; guide pages; CHANGELOG;
-     release.
+7. **Examples, documentation, release 0.5.0: done.**
+   - **The simulated example's images:** made with an H&E and an immunofluorescence image of its
+     section (`situcraft simulate --post-xenium`), Xenium Explorer's matrix and where each image's
+     pixels lie in its truth, and each instrument cell's true cell and type
+     (`truth/instrument_cell_types.csv`). One made by an earlier SituCraft is listed as outdated, with
+     **Make it again** (`open_example` with `remake`): a simulation's run (its UUIDs) no longer
+     depends on its post-Xenium images, so the same run, cells and transcripts.
+   - **Worked examples** (`web/lib/tours.js`; the steps' jobs in `web/ui/tour.js`), on the simulated
+     example:
+     - *Align an H&E three ways* (`align-he`): added with its matrix, placed by six landmarks where
+       the truth places six of its points (deterministic: `lib/dmath.js`'s sine, the Go one's bit
+       for bit), and automatically with a deformation; each checked over the tissue: the matrix
+       0.63 µm off (median) and 1.09 µm (90th percentile), the landmarks 0.58 and 1.19 µm (their
+       fit 0.57 µm, left out 1.00 µm), the automatic version 0.41 and 0.62 µm; against the truth
+       0.69 and 1.12, 0.72 and 1.22, 0.47 and 0.75 µm: the check ranks them as the truth does.
+     - *Regions for QuPath* (`regions-qupath`): the epithelial and immune domains drawn on the H&E
+       (1,043 cells, 440 epithelial-like; 475 cells, 319 immune-like: domains mix their types),
+       written in its pixels and read back, each area within 0.05 µm² and the same cells.
+     - *A pathologist's review* (`pathologist-review`): the review queue (662 of 2,887 labeled cells)
+       decided against the truth for its first twenty (2 mislabeled, against 1.7% of all the labels:
+       18 accepted, 2 relabeled, the curated set's wrong labels 49 to 47), a fold's 43 cells excluded,
+       22 reviews recorded.
+   - **Documentation:** Getting started (the example's images, the worked examples), the README,
+     remote control, FORMATS (the truth's new file, the run's identity), the CHANGELOG; the
+     screenshots taken again, three added (the Alignment view's map of where a version is off,
+     regions on the H&E, a review's record); American spelling in the documentation and the
+     interface.
+   - **Release 0.5.0:** the Lung project as the viewer suite leaves it in 0.5.0, with regions and
+     reviews, kept as `validation/projects/0.5.0-lung.situcraft.json` and reopened by every later
+     release, its regions and reviews as saved.
+   - **Validated** in the viewer suite: each worked example run step by step, each number its card
+     states; the 0.2.0 to 0.5.0 projects reopened, their artifacts made again with the same
+     checksums.
+   - Found by slice 7:
+     - **A simulation's identity depended on its images:** adding post-Xenium images, made after the
+       run, changed its experiment and analysis UUIDs, so an example made again with them was
+       another run. They are now left out of the identity.
+     - **Text written into artifacts is part of them:** respelling the expansion's and the planted
+       errors' descriptions changed those artifacts' checksums, and earlier releases' projects no
+       longer reproduced them; such text stays as it was written.
+     - **A simulated example is not a fixture across releases:** its files name the SituCraft that
+       made them (the TIFFs' software, the Parquet metadata), so its artifacts differ from release
+       to release; the release fixture stays the Lung project, which a download fixes.
+     - **A region's outline faded on cells filled in a like color,** and a class named by the user
+       could be given gray, which reads as QuPath's Ignore*: outlines are drawn over a dark casing,
+       and such classes are never gray.
 
 ## 0.6.0: niches and spatial statistics (wave 6)
 

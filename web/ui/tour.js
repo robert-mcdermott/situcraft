@@ -13,10 +13,20 @@ import { clusteringsOf } from '../lib/clusterings.js';
 import { labelSetsOf } from '../lib/labels.js';
 import { remakeOnSegmentation } from './remake.js';
 import { toast } from './overlays.js';
+import { downloadBlob } from './dom.js';
+import { imagesOf } from '../lib/images.js';
+import { checksOf, transformsOf } from '../lib/transforms.js';
+import { addRegion, polygonOf, rectangle, regionsOf } from '../lib/regions.js';
+import { landmarksFromTruth } from '../lib/simulated-truth.js';
+import { reviewCells, reviewRegion, segmentationFor } from './reviewing.js';
+import { labelSource, refOf } from './label-sources.js';
 
 let active = null;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// The actions of the post-Xenium worked examples (runPostXenium).
+const POST_XENIUM_ACTIONS = new Set(['add-image', 'landmarks', 'register', 'check', 'draw-regions', 'write-regions', 'read-regions', 'import-instrument-types', 'review-queue', 'exclude-fold']);
 
 // The Cell types view's sections a step may bring into view.
 const SECTIONS = { map: '.ct-map-host', selection: '.ct-selection', clusters: '.ct-detail', review: '.rv-section' };
@@ -69,10 +79,42 @@ export function startTour(app, { tour, dataset }) {
     return { folder: `${ds.path.replace(/[\\/]+$/, '')}${sep}truth`, sep };
   };
 
+  // The simulated tissue's post-Xenium images (wave 5): the H&E (or the immunofluorescence image)
+  // added to the dataset, a version of its alignment by how it was made (matrix, landmarks,
+  // automatic), the true types of the instrument's cells, imported as labels, and the reviews the
+  // worked example made.
+  const IMAGE_FILES = { he: 'simulated_he_image', if: 'simulated_if_image' };
+  const imageOf = (key) => imagesOf(app.store.project, dataset).find((r) => r.name.includes(IMAGE_FILES[key])) ?? null;
+  const versionOf = (key, method) => {
+    const img = imageOf(key);
+    return img ? transformsOf(app.store.project, img.id).filter((t) => t.summary?.method === method).at(-1) ?? null : null;
+  };
+  const instrumentTypes = () => {
+    const s = role('instrument');
+    return s ? app.store.project.artifacts.find((a) => a.kind === 'labels' && a.state === 'complete' && a.source && a.segmentation === s.id && /instrument_cell_types/.test(a.name ?? '')) ?? null : null;
+  };
+  const BY = 'the worked example';
+  const reviewedByExample = () => (app.store.project.reviews ?? []).filter((r) => r.dataset === dataset && r.by === BY);
+  // The Viewer's hook, once it shows the dataset.
+  const viewer = async () => {
+    for (let k = 0; k < 400 && !(window.situcraftViewer?.dataset === dataset && window.situcraftViewer.regions); k += 1) await sleep(25);
+    if (window.situcraftViewer?.dataset !== dataset) throw new Error('the Viewer did not open');
+    return window.situcraftViewer;
+  };
+
   // Whether a step's action is done already.
   function done(step) {
     const d = step.do;
     if (!d) return true;
+    if (d.action === 'add-image') return Boolean(imageOf(d.image) && (d.alignment !== 'matrix' || versionOf(d.image, 'matrix')));
+    if (d.action === 'landmarks') return Boolean(versionOf(d.image, 'landmarks'));
+    if (d.action === 'register') return Boolean(versionOf(d.image, 'automatic'));
+    if (d.action === 'check') return d.versions.every((m) => versionOf(d.image, m) && checksOf(app.store.project, versionOf(d.image, m).id).length);
+    if (d.action === 'draw-regions') return d.regions.every((r) => regionsOf(app.store.project, dataset).some((x) => x.name === r.name));
+    if (d.action === 'write-regions' || d.action === 'read-regions') return false;
+    if (d.action === 'import-instrument-types') return Boolean(instrumentTypes());
+    if (d.action === 'review-queue') return reviewedByExample().filter((r) => r.target === 'cells' && (r.action === 'accept' || r.action === 'relabel')).length >= d.first;
+    if (d.action === 'exclude-fold') return reviewedByExample().some((r) => r.target === 'region' && r.region.name === d.region.name && r.action === 'exclude');
     if (d.action === 'expand') return Boolean(role(`expansion-${d.distance}`));
     if (d.action === 'plant') return Boolean(role('planted'));
     if (d.action === 'compare') return Boolean(comparison(d.a, d.b));
@@ -90,6 +132,7 @@ export function startTour(app, { tour, dataset }) {
   async function run(step) {
     const d = step.do;
     const ds = datasetRecord();
+    if (POST_XENIUM_ACTIONS.has(d.action)) return runPostXenium(d, ds);
     if (step.mode === 'celltypes') {
       for (let k = 0; k < 200 && !app.cellTypesView; k += 1) await sleep(25);
       if (!app.cellTypesView) throw new Error('the Cell types view did not open');
@@ -133,6 +176,122 @@ export function startTour(app, { tour, dataset }) {
       return app.segmentationView.compare(ds, a.id, b.id);
     }
     return null;
+  }
+
+  // The post-Xenium images' actions: adding an image (with the matrix beside it, as 10x supplies
+  // one), landmarks where the truth places points of it, automatic alignment, checks, regions drawn,
+  // written in its pixels and read back, the instrument's cells' true types imported, the review
+  // queue decided by them, a fold excluded.
+  async function runPostXenium(d, ds) {
+    const item = itemOf(ds);
+    const { folder, sep } = truthFolder(ds);
+    const base = ds.path.replace(/[\\/]+$/, '');
+    const before = 'do the steps before this one first';
+    if (d.action === 'add-image') {
+      if (imageOf(d.image)) return null;
+      const name = IMAGE_FILES[d.image];
+      return app.bundles.addImage(item, ds.id, { path: `${base}${sep}post_xenium${sep}${name}.ome.tif`, alignment: d.alignment === 'matrix' ? `${folder}${sep}post_xenium${sep}${name}alignment.csv` : null });
+    }
+    const img = imageOf(d.image ?? 'he');
+    if (['landmarks', 'register', 'check', 'write-regions', 'read-regions'].includes(d.action) && !img) throw new Error(`${before}: the image is not added yet`);
+    if (d.action === 'landmarks') {
+      const response = await fetch(`/api/read-json?path=${encodeURIComponent(`${folder}${sep}post_xenium${sep}registration.json`)}`, { cache: 'no-store' });
+      if (!response.ok) throw new Error('the simulation\'s truth (truth/post_xenium/registration.json) could not be read');
+      const truth = (await response.json()).images.find((x) => x.kind === d.image);
+      const landmarks = landmarksFromTruth(truth, d.within, d.count);
+      return app.bundles.makeTransform(ds.id, img.id, { landmarks, model: d.model, by: BY, note: `${landmarks.length} landmarks where the simulation's truth places ${landmarks.length} points of the image` }, { use: false });
+    }
+    if (d.action === 'register') {
+      return app.bundles.registerImage(item, ds.id, img.id, { model: d.model, nonrigid: Boolean(d.nonrigid), by: BY, note: 'Aligned automatically by the nuclei' }, { use: true, rationale: 'Aligned automatically by the nuclei, with a smooth deformation where the section stretched.', by: BY });
+    }
+    if (d.action === 'check') {
+      for (const m of d.versions) {
+        const v = versionOf(d.image, m);
+        if (!v) throw new Error(`${before}: there is no version by ${m} yet`);
+        if (!checksOf(app.store.project, v.id).length) await app.bundles.checkAlignment(item, ds.id, img.id, v.id);
+      }
+      return null;
+    }
+    if (d.action === 'draw-regions') {
+      let next = app.store.project;
+      for (const r of d.regions) {
+        if (regionsOf(next, ds.id).some((x) => x.name === r.name)) continue;
+        const geometry = r.rectangle ? rectangle(...r.rectangle) : polygonOf(r.polygon);
+        next = addRegion(next, { dataset: ds.id, name: r.name, cls: r.cls, geometry, tool: r.rectangle ? 'rectangle' : 'polygon', layer: 'the H&E', by: BY, note: 'Drawn by the worked example' });
+      }
+      app.store.commit(next, 'Draw the worked example\'s regions');
+      return null;
+    }
+    if (d.action === 'write-regions' || d.action === 'read-regions') {
+      const v = await viewer();
+      const doc = await v.regions.exportDocument(img.id, regionsOf(app.store.project, ds.id).filter((r) => r.by === BY && !/\(\d+\)$/.test(r.name)).map((r) => r.id));
+      if (d.action === 'write-regions') {
+        downloadBlob(new Blob([`${JSON.stringify(doc, null, 1)}\n`], { type: 'application/geo+json' }), `${ds.name}-regions-he.geojson`);
+        lastWritten = doc;
+        return null;
+      }
+      return v.regions.importRegions(lastWritten ?? doc, img.id, 'the file written for QuPath', BY);
+    }
+    if (d.action === 'import-instrument-types') {
+      if (instrumentTypes()) return null;
+      const s = role('instrument');
+      return app.bundles.importLabels(item, ds.id, { segmentation: s.id, path: `${folder}${sep}instrument_cell_types.csv`, columns: { idColumn: 'cell_id', column: 'cell_type', confidenceColumn: '', colorColumn: '' } });
+    }
+    if (d.action === 'review-queue') {
+      const labels = labelsOf('instrument');
+      if (!labels) throw new Error(`${before}: the cells are not labeled yet`);
+      if (!instrumentTypes()) await runPostXenium({ action: 'import-instrument-types' }, ds);
+      for (let k = 0; k < 200 && !app.labelReview; k += 1) await sleep(25);
+      await app.labelReview?.makeQueue?.(labels.id, 0, { against: null });
+      const queue = app.labelReview?.queue?.();
+      if (!queue?.queue?.length) throw new Error('the review queue is empty');
+      const [predicted, truth] = await Promise.all([labelSource(app, refOf(labels.id, 0)), labelSource(app, refOf(instrumentTypes().id, 0))]);
+      const seg = segmentationFor(app.store.project, ds.id, null);
+      const done = new Set(reviewedByExample().filter((r) => r.target === 'cells').flatMap((r) => r.cells.map((c) => c.row)));
+      for (const it of queue.queue.slice(0, d.first)) {
+        if (done.has(it.cell)) continue;
+        const has = predicted.names[predicted.label[it.cell]];
+        const is = truth.names[truth.label[it.cell]];
+        await reviewCells({ app, t: { dataset: ds, item }, seg, rows: [it.cell], action: has === is ? 'accept' : 'relabel', labels: { id: labels.id, level: 0 }, label: is,
+          note: has === is ? `Its type, ${is}: it belongs where it is, though few of its neighbors share it` : `Its type is ${is} (the simulation's truth), not ${has}`, by: BY });
+      }
+      return null;
+    }
+    if (d.action === 'exclude-fold') {
+      if (!regionsOf(app.store.project, ds.id).some((x) => x.name === d.region.name)) await runPostXenium({ action: 'draw-regions', regions: [d.region] }, ds);
+      const region = regionsOf(app.store.project, ds.id).find((x) => x.name === d.region.name);
+      const v = await viewer();
+      const seg = segmentationFor(app.store.project, ds.id, v.segmentation());
+      const rows = v.regions.rowsIn(region.id);
+      await reviewRegion({ app, t: { dataset: ds, item }, regionId: region.id, action: 'exclude', note: d.note, by: BY, seg, rows });
+      if (rows.length) await reviewCells({ app, t: { dataset: ds, item }, seg, rows, action: 'exclude', note: `In ${region.name}, excluded: ${d.note}`, by: BY });
+      return null;
+    }
+    return null;
+  }
+  let lastWritten = null;
+
+  // Shows an image's alignment in the Alignment view as a step says: a version by how it was made
+  // (or 'in use'), over the stains, as a checkerboard, with DAPI's edges, and where it is off.
+  async function showAlignment(step) {
+    const a = step.alignment;
+    const img = imageOf(a.image);
+    if (!img) {
+      note.hidden = false;
+      note.textContent = 'The image is not added yet: go back to the step that adds it.';
+      return null;
+    }
+    app.focusItem({ kind: 'dataset', id: dataset });
+    await app.showAlignment(dataset, img.id, {});
+    let hook = null;
+    for (let k = 0; k < 400 && !hook; k += 1) {
+      hook = window.situcraftAlignment?.image === img.id ? window.situcraftAlignment : null;
+      if (!hook) await sleep(25);
+    }
+    if (!hook || active !== controller || tour.steps[index] !== step) return hook;
+    const version = a.show === 'in use' ? 'in-use' : versionOf(a.image, a.show)?.id ?? 'in-use';
+    hook.setView({ show: version, as: a.display ?? 'overlay', ...(a.opacity !== undefined ? { opacity: a.opacity } : {}), ...(a.cell ? { cell: a.cell } : {}), edges: Boolean(a.edges), outlines: false, map: Boolean(a.map) });
+    return hook;
   }
 
   async function advance() {
@@ -205,7 +364,7 @@ export function startTour(app, { tour, dataset }) {
     else await map.setColor({ kind: 'gene', gene: c.color });
     if (c.select?.length) map.selectClusters(c.select.map((k) => k - 1));
     else map.select(null);
-    if (c.review) await app.labelReview?.makeQueue?.(labels?.id ?? null, 0);
+    if (c.review) await app.labelReview?.makeQueue?.(labels?.id ?? null, 0, c.against === 'none' ? { against: null } : {});
     // The map in view unless the step names another section.
     const section = c.section ?? 'map';
     const selector = section === 'labels' ? (labels ? `[data-labels="${CSS.escape(labels.id)}"]` : null) : SECTIONS[section];
@@ -234,8 +393,13 @@ export function startTour(app, { tour, dataset }) {
       close();
       return;
     }
-    card.classList.toggle('aside', Boolean(step.compare || step.mode === 'celltypes'));
-    if (step.compare) {
+    card.classList.toggle('aside', Boolean(step.compare || step.mode === 'celltypes' || step.mode === 'alignment'));
+    if (step.alignment) {
+      controller.shown = showAlignment(step).catch((error) => {
+        note.hidden = false;
+        note.textContent = `The alignment could not be shown: ${error.message}`;
+      });
+    } else if (step.compare) {
       app.focusItem({ kind: 'dataset', id: dataset });
       controller.shown = showComparison(step).catch((error) => {
         note.hidden = false;
@@ -256,7 +420,12 @@ export function startTour(app, { tour, dataset }) {
         view.segmentation = s && s.source !== 'instrument' ? s.id : 'instrument';
       }
       // Cells filled by the segmentation's clustering or its labels (at a level).
+      // The post-Xenium images a step shows, by what they are.
+      if (view && step.images) {
+        view.images = Object.entries(step.images).map(([key, l]) => [imageOf(key), l]).filter(([img]) => img).map(([img, l]) => ({ id: img.id, visible: l.visible, opacity: l.opacity, channels: [] }));
+      }
       const fill = view?.cells.fill ?? '';
+      if (fill === 'true-types') view.cells.fill = instrumentTypes() ? `labels:${instrumentTypes().id}:0` : null;
       if (fill === 'clusters' || /^labels(:\d+)?$/.test(fill)) {
         const r = step.segmentation ?? 'instrument';
         const c = clusteringOf(r);

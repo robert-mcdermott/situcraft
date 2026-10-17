@@ -117,7 +117,7 @@ func open(f *os.File, size int64) (*Image, error) {
 	switch {
 	case first.SamplesPerPixel == 3:
 		if first.PlanarConfig == 2 {
-			return nil, errors.New("its colours are stored as separate planes; SituCraft reads them stored together (as Bio-Formats and tifffile write H&E)")
+			return nil, errors.New("its colors are stored as separate planes; SituCraft reads them stored together (as Bio-Formats and tifffile write H&E)")
 		}
 		if b := first.BitsPerSample[0]; b != 8 {
 			return nil, fmt.Errorf("an RGB image of %d bits per sample; H&E images are 8", b)

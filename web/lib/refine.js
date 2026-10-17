@@ -63,7 +63,7 @@ export function background(s) {
   const controls = s.negativeControls
     ? `measured by ${count(s.negativeControls)} negative-control transcripts`
     : 'with no negative controls in the region to measure them';
-  return `The model's background accounts for ${pct(s.falseDecodeShare + s.ambientShare)} of the modelled transcripts: false decodes ${pct(s.falseDecodeShare)}, ${controls}, and ambient RNA ${pct(s.ambientShare)}, estimated less surely (where cells cover the tissue, ambient RNA of genes they express cannot be told from their own: on simulated tissues this part was found at a quarter to twice the truth). ${pct(s.inBackgroundShare ?? 0, 2)} of transcripts are left in no cell, where the background explains them better than any cell; the rest of the background is counted in the cells.`;
+  return `The model's background accounts for ${pct(s.falseDecodeShare + s.ambientShare)} of the modeled transcripts: false decodes ${pct(s.falseDecodeShare)}, ${controls}, and ambient RNA ${pct(s.ambientShare)}, estimated less surely (where cells cover the tissue, ambient RNA of genes they express cannot be told from their own: on simulated tissues this part was found at a quarter to twice the truth). ${pct(s.inBackgroundShare ?? 0, 2)} of transcripts are left in no cell, where the background explains them better than any cell; the rest of the background is counted in the cells.`;
 }
 
 // The limitations a run flags, as plain statements: [{ key, n, text }] with n cells each.
@@ -78,7 +78,7 @@ export function limitations(s, thresholds = { lowTranscripts: 10, uncertainShare
 }
 
 // What every refinement shares, whatever its cells.
-export const GENERAL_LIMITATION = 'It cannot create cells absent from the instrument\'s segmentation, and where neighbouring cells express the same genes, the boundary between them is uncertain.';
+export const GENERAL_LIMITATION = 'It cannot create cells absent from the instrument\'s segmentation, and where neighboring cells express the same genes, the boundary between them is uncertain.';
 
 const FLAG_TEXT = {
   lowTranscripts: 'few transcripts',

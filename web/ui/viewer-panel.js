@@ -500,7 +500,7 @@ export function mountViewerPanel(host, { desc, layers, cells, onChange, segmenta
   function probabilityLegend() {
     if (!(probable && state.transcripts.colorBy === 'probability' && state.transcripts.visible)) return null;
     return h('div', certaintyLegend('Transcripts by their assignment\'s probability', 'Close up, each transcript is drawn by its probability of the cell (or the background) it is in.'),
-      h('div.viewer-legend-item', h('span.dot', { style: { background: NO_PROBABILITY_COLOR } }), 'Assigned by place (not modelled)'));
+      h('div.viewer-legend-item', h('span.dot', { style: { background: NO_PROBABILITY_COLOR } }), 'Assigned by place (not modeled)'));
   }
 
   return {

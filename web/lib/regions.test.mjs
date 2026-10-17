@@ -116,7 +116,7 @@ test('regions written as QuPath writes annotations, and read back the same', () 
   });
 });
 
-test('QuPath\'s layouts read: 0.2\'s array and packed colours, 0.3\'s objectType, 0.4\'s colours; detections and points left out', () => {
+test('QuPath\'s layouts read: 0.2\'s array and packed colors, 0.3\'s objectType, 0.4\'s colors; detections and points left out', () => {
   const v02 = [{ type: 'Feature', id: 'PathAnnotationObject', geometry: { type: 'Polygon', coordinates: [[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]] }, properties: { classification: { name: 'Stroma', colorRGB: -6895466 }, isLocked: false, measurements: [] } },
     { type: 'Feature', id: 'PathDetectionObject', geometry: { type: 'Polygon', coordinates: [[[1, 1], [2, 1], [2, 2], [1, 1]]] }, properties: { isLocked: false } }];
   const r02 = fromGeoJSON(v02);

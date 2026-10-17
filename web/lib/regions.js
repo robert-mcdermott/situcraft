@@ -25,13 +25,14 @@ export const CLASSES = [
   { name: 'Ignore*', color: [180, 180, 180] },
 ];
 
-// A class's colour: QuPath's for its classes, else one made from the name.
+// A class's color: QuPath's for its classes, else one made from the name (never gray, which reads as
+// Ignore*).
 export function classColor(name) {
   const known = CLASSES.find((c) => c.name === name);
   if (known) return known.color;
   let h = 2166136261;
   for (const ch of String(name ?? '')) h = Math.imul(h ^ ch.charCodeAt(0), 16777619) >>> 0;
-  const palette = [[31, 119, 180], [255, 127, 14], [44, 160, 44], [214, 39, 40], [148, 103, 189], [140, 86, 75], [227, 119, 194], [127, 127, 127], [188, 189, 34], [23, 190, 207]];
+  const palette = [[31, 119, 180], [255, 127, 14], [44, 160, 44], [214, 39, 40], [148, 103, 189], [140, 86, 75], [227, 119, 194], [188, 189, 34], [23, 190, 207]];
   return palette[h % palette.length];
 }
 

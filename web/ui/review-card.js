@@ -85,14 +85,20 @@ export function reviewSections(app, ctx) {
   // would, of a label set it names (its id and level; else the one chosen), and reads it.
   app.labelReview = {
     focusCell: (cell) => showEvidence(cell),
-    makeQueue: (id = null, level = 0) => {
+    // against: null reads against no other segmentation (else the card's choice, or its default).
+    makeQueue: (id = null, level = 0, { against } = {}) => {
       const v = id ? versions.find((x) => x.id === id && x.level === level) : null;
       if (v && versionKey(v) !== rv.set) {
         rv.set = versionKey(v);
         rv.queue = null;
         // Rendered again, the set's defaults (its confidence, the segmentation against) taken.
         ctx.render(true);
-        return app.labelReview.makeQueue();
+        return app.labelReview.makeQueue(null, 0, { against });
+      }
+      if (against === null && (rv.against !== null || !rv.againstChosen)) {
+        rv.against = null;
+        rv.againstChosen = true;
+        rv.queue = null;
       }
       return makeQueue(versions.find((x) => versionKey(x) === rv.set));
     },

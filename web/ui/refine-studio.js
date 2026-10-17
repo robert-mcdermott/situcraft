@@ -206,13 +206,13 @@ export function createStudio(app, hooks) {
       h('h4', 'Transcripts'),
       h('div.seg-form',
         h('label.field', { for: 'studio-min-qv' }, h('span', 'Quality (Q) at least'),
-          number('studio-min-qv', q, { min: 0, max: 40, step: 1, label: 'The quality the modelled transcripts reach', onchange: (v) => {
+          number('studio-min-qv', q, { min: 0, max: 40, step: 1, label: 'The quality the modeled transcripts reach', onchange: (v) => {
             const problem = settingProblem(help, v);
             if (problem) return toast(problem, { kind: 'error' });
             change(t, st, { ...structuredClone(st.spec), min_qv: v });
           } })),
         h('span.muted', help.help)),
-      pre?.rows ? h('p', `${exact(pre.transcripts)} gene transcripts reach quality ${q}, ${percent(pre.transcripts ? pre.overNuclei / pre.transcripts : Number.NaN)} of them over a nucleus${area.mode === 'regions' && pre.estimate?.regions ? `; the ${exact(pre.estimate.transcripts)} in and about the region${pre.estimate.regions === 1 ? '' : 's'} are modelled` : ': all are modelled'}. Of the bundle's ${exact(pre.rows)} rows, ${exact(pre.belowQuality)} gene transcripts below Q${q}, ${exact(pre.controls)} negative controls and other features${pre.outside ? ` and ${exact(pre.outside)} beyond the image` : ''} are not: they keep the cell of the pixel they lie in.`) : null,
+      pre?.rows ? h('p', `${exact(pre.transcripts)} gene transcripts reach quality ${q}, ${percent(pre.transcripts ? pre.overNuclei / pre.transcripts : Number.NaN)} of them over a nucleus${area.mode === 'regions' && pre.estimate?.regions ? `; the ${exact(pre.estimate.transcripts)} in and about the region${pre.estimate.regions === 1 ? '' : 's'} are modeled` : ': all are modeled'}. Of the bundle's ${exact(pre.rows)} rows, ${exact(pre.belowQuality)} gene transcripts below Q${q}, ${exact(pre.controls)} negative controls and other features${pre.outside ? ` and ${exact(pre.outside)} beyond the image` : ''} are not: they keep the cell of the pixel they lie in.`) : null,
       h('h4', 'The cells it starts from'),
       pre?.cells ? h('p', `The instrument's segmentation: ${exact(pre.cells)} cells over ${exact(pre.genes)} genes, ${exact(pre.cellsWithNucleus)} with a nucleus in the section. Each cell starts from its outline, seeded at its nucleus; a transcript over a nucleus is held to that nucleus's cell by the nuclear prior. No cell is created or removed.`) : null,
       findings(pre, ['prior', 'input', 'quality']),
@@ -364,7 +364,7 @@ export function createStudio(app, hooks) {
       h('dl.kv.seg-kv',
         h('dt', 'Preset'), h('dd', preset?.name ?? spec.preset),
         h('dt', 'Covers'), h('dd', areaText(spec.area)),
-        h('dt', 'Transcripts'), h('dd', pre?.rows ? `${exact(e?.transcripts ?? pre.transcripts)} modelled, of quality ${spec.min_qv} or more` : '—'),
+        h('dt', 'Transcripts'), h('dd', pre?.rows ? `${exact(e?.transcripts ?? pre.transcripts)} modeled, of quality ${spec.min_qv} or more` : '—'),
         h('dt', 'Cells'), h('dd', e?.regions ? `${exact(e.cells)} refined${e.cellsHeld ? `, ${exact(e.cellsHeld)} held about them` : ''}, of the instrument's ${exact(pre.cells)}` : '—'),
         h('dt', 'Model'), h('dd', `${o.stages.length > 1 ? `${o.stages.map((s) => `${s.voxel_um} µm`).join(' → ')}, ` : `${last.voxel_um} µm voxels, `}${last.layers} layer${last.layers === 1 ? '' : 's'}; outlines within ${o.sampler.perimeter_factor} times the most compact shape's; nuclear prior ${o.model.nuclear_prior}; ${o.sampler.reposition ? 'molecules may have drifted' : 'no drift'}; ${o.model.components} expression states`),
         h('dt', 'Sampling'), h('dd', `${exact(o.stages.reduce((n, s) => n + s.sweeps, 0))} sweeps, the last ${exact(o.samples)} summarized; seed ${o.seed}${spec.seed_check ? `, then seed ${o.seed + 1} to measure their agreement` : ''}`),

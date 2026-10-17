@@ -41,7 +41,7 @@ func decodeJPEG(ifd *IFD, compressed []byte, width, height int) ([]byte, error) 
 	switch m := img.(type) {
 	case *image.Gray:
 		if samples != 1 {
-			return nil, fmt.Errorf("jpeg: a grey stream for %d samples per pixel", samples)
+			return nil, fmt.Errorf("jpeg: a gray stream for %d samples per pixel", samples)
 		}
 		for y := 0; y < height; y++ {
 			copy(out[y*width:(y+1)*width], m.Pix[y*m.Stride:y*m.Stride+width])

@@ -66,13 +66,14 @@ var remoteActions = []remoteAction{
 		"bundle": textArg("The bundle by its name or path."),
 		"wait":   flagArg("Wait for its derived data to be built (true if not given)."),
 	}, "bundle"), long: true},
-	{Name: "open_example", Title: "Open an example dataset", Description: "Opens an example dataset (xenium-lung-2fov, xenium-breast-2fov: 10x Genomics' Xenium 2-FOV bundles, CC BY 4.0; simulated-standard: a tissue SituCraft simulates on this computer, its truth beside it) in the project, or in a new project when this one has other datasets, and builds its derived data. A 10x Genomics example not on this computer is downloaded only with download: true (280 to 380 MB, checked by checksums); the simulated one is made in seconds.", InputSchema: schema(map[string]any{
+	{Name: "open_example", Title: "Open an example dataset", Description: "Opens an example dataset (xenium-lung-2fov, xenium-breast-2fov: 10x Genomics' Xenium 2-FOV bundles, CC BY 4.0; simulated-standard: a tissue SituCraft simulates on this computer, with an H&E and an immunofluorescence image of the section, its truth beside it) in the project, or in a new project when this one has other datasets, and builds its derived data. A 10x Genomics example not on this computer is downloaded only with download: true (280 to 380 MB, checked by checksums); the simulated one is made in seconds, and one made by an earlier SituCraft (without its images) is made again with remake: true (the same run, cells and transcripts).", InputSchema: schema(map[string]any{
 		"example":  textArg("xenium-lung-2fov, xenium-breast-2fov or simulated-standard (or lung, breast, simulated)."),
 		"download": flagArg("Download it first if it is not on this computer."),
+		"remake":   flagArg("Make the simulated example again if an earlier SituCraft made it."),
 	}, "example"), long: true},
-	{Name: "tour", Title: "Take an example's tour", Description: "Starts the guided tour of an example (opening it as open_example does), or one of its worked examples (name: compare-expansion or refine-compare on the Breast example, planted-errors on the Lung example, score-against-truth on the simulated one: a question answered step by step, some steps running a job first), or goes to one of its steps; run: true does the step's job (expanding, planting, refining, importing the truth, comparing) and goes on to the next; end: true closes it. Returns the step's title and text, and the comparison a step shows.", InputSchema: schema(map[string]any{
+	{Name: "tour", Title: "Take an example's tour", Description: "Starts the guided tour of an example (opening it as open_example does), or one of its worked examples (name: compare-expansion, refine-compare or labels-two-segmentations on the Breast example; planted-errors or cluster-label on the Lung example; score-against-truth, labels-against-truth, align-he, regions-qupath or pathologist-review on the simulated one: a question answered step by step, some steps running a job first), or goes to one of its steps; run: true does the step's job (expanding, planting, refining, importing the truth, comparing, clustering, labeling, adding and aligning the H&E, checking its alignments, drawing regions, reviewing) and goes on to the next; end: true closes it. Returns the step's title and text, and the comparison a step shows.", InputSchema: schema(map[string]any{
 		"example": textArg("xenium-lung-2fov, xenium-breast-2fov or simulated-standard; the tour running if not given."),
-		"name":    textArg("tour (the default; the 10x Genomics examples), or a worked example: compare-expansion, refine-compare, planted-errors, score-against-truth."),
+		"name":    textArg("tour (the default; the 10x Genomics examples), or a worked example: compare-expansion, refine-compare, labels-two-segmentations, planted-errors, cluster-label, score-against-truth, labels-against-truth, align-he, regions-qupath, pathologist-review."),
 		"step":    map[string]any{"type": "integer", "minimum": 1, "description": "The step to show, from 1 (1 if not given)."},
 		"run":     flagArg("Do the step's job, then go on to the next step."),
 		"end":     flagArg("Close the tour."),
@@ -122,7 +123,7 @@ var remoteActions = []remoteAction{
 		"by":     textArg("Who placed the landmarks (the client's name if not given)."),
 		"note":   textArg("A note kept with the version (and the reason, when it is used)."),
 	}, "landmarks"), long: true},
-	{Name: "register_image", Title: "Align an image automatically", Description: "Aligns a post-Xenium image to its dataset's Xenium image automatically, by the nuclei (an H&E's haematoxylin by colour deconvolution, an immunofluorescence image's nuclear stain, against DAPI), as a job: its scale, turn and mirroring found whatever its metadata says (phase correlation and its log-polar form), refined by normalized mutual information, then fitted to local matches over the tissue; optionally a smooth deformation after it (B-splines), kept only when it predicts the matches better. Recorded as a version of the image's alignment with its matches, fit and what the search found; with use (the default), it places the image. The same images give the same version on any computer. Answers the fit.", InputSchema: schema(map[string]any{
+	{Name: "register_image", Title: "Align an image automatically", Description: "Aligns a post-Xenium image to its dataset's Xenium image automatically, by the nuclei (an H&E's hematoxylin by color deconvolution, an immunofluorescence image's nuclear stain, against DAPI), as a job: its scale, turn and mirroring found whatever its metadata says (phase correlation and its log-polar form), refined by normalized mutual information, then fitted to local matches over the tissue; optionally a smooth deformation after it (B-splines), kept only when it predicts the matches better. Recorded as a version of the image's alignment with its matches, fit and what the search found; with use (the default), it places the image. The same images give the same version on any computer. Answers the fit.", InputSchema: schema(map[string]any{
 		"dataset":  datasetArg,
 		"image":    textArg("The image, by name or artifact ID (the dataset's only image if not given)."),
 		"model":    textArg("similarity (the default) or affine."),
@@ -186,7 +187,7 @@ var remoteActions = []remoteAction{
 		"versions": flagArg("Each region's versions too."),
 		"removed":  flagArg("Regions removed too."),
 	}), long: true},
-	{Name: "import_regions", Title: "Read regions from GeoJSON", Description: "Reads regions from a GeoJSON file as QuPath exports annotations (a FeatureCollection or a list of Features; Polygon and MultiPolygon shapes, each one's name and classification, its name and colour; detections, cells, points and lines are left out), its coordinates in µm, the Xenium image's pixels or a post-Xenium image's pixels (as QuPath opened that image, placed through the version of its alignment in use), each added to the project as a region. Needs the token (it reads a file). Answers how many were added and what was left out.", InputSchema: schema(map[string]any{
+	{Name: "import_regions", Title: "Read regions from GeoJSON", Description: "Reads regions from a GeoJSON file as QuPath exports annotations (a FeatureCollection or a list of Features; Polygon and MultiPolygon shapes, each one's name and classification, its name and color; detections, cells, points and lines are left out), its coordinates in µm, the Xenium image's pixels or a post-Xenium image's pixels (as QuPath opened that image, placed through the version of its alignment in use), each added to the project as a region. Needs the token (it reads a file). Answers how many were added and what was left out.", InputSchema: schema(map[string]any{
 		"dataset":     datasetArg,
 		"path":        textArg("The GeoJSON file on this computer."),
 		"coordinates": textArg("What its coordinates are in: um (the default), xenium or a post-Xenium image by name or artifact ID (its pixels)."),
@@ -417,13 +418,13 @@ var remoteActions = []remoteAction{
 		"rationale":    textArg("Why (recorded with the decision)."),
 		"comparison":   textArg("The comparison it rests on (artifact id)."),
 	}, "segmentation", "decision", "rationale"), long: true},
-	{Name: "plant_errors", Title: "Plant errors in a segmentation", Description: "For practice: a copy of a dataset's instrument segmentation with known errors planted in it (neighbouring cells of different lineages merged, large cells split in two, cells missed, cells drawn too wide), simulated and named so (never promoted or exported), made as a job in the Segmentation view and recorded as a segmentation artifact with its answer key (planted.json). Compare it with the instrument's to find them. The same parameters (20 merges, 20 splits, 10 missed, 10 grown by 1 µm, seed 20261014 if not given) answer the same artifact. Answers its summary, and with reveal the answer key.", InputSchema: schema(map[string]any{
+	{Name: "plant_errors", Title: "Plant errors in a segmentation", Description: "For practice: a copy of a dataset's instrument segmentation with known errors planted in it (neighboring cells of different lineages merged, large cells split in two, cells missed, cells drawn too wide), simulated and named so (never promoted or exported), made as a job in the Segmentation view and recorded as a segmentation artifact with its answer key (planted.json). Compare it with the instrument's to find them. The same parameters (20 merges, 20 splits, 10 missed, 10 grown by 1 µm, seed 20261014 if not given) answer the same artifact. Answers its summary, and with reveal the answer key.", InputSchema: schema(map[string]any{
 		"dataset": datasetArg,
-		"merges":  map[string]any{"type": "integer", "minimum": 0, "maximum": 1000, "description": "Neighbouring cells merged (20 if not given)."},
+		"merges":  map[string]any{"type": "integer", "minimum": 0, "maximum": 1000, "description": "Neighboring cells merged (20 if not given)."},
 		"splits":  map[string]any{"type": "integer", "minimum": 0, "maximum": 1000, "description": "Cells split in two (20)."},
 		"missed":  map[string]any{"type": "integer", "minimum": 0, "maximum": 1000, "description": "Cells missed (10)."},
 		"grown":   map[string]any{"type": "integer", "minimum": 0, "maximum": 1000, "description": "Cells drawn too wide (10)."},
-		"grow_um": map[string]any{"type": "number", "minimum": 0, "maximum": 20, "description": "How far a grown cell reaches into its neighbours, µm (1)."},
+		"grow_um": map[string]any{"type": "number", "minimum": 0, "maximum": 20, "description": "How far a grown cell reaches into its neighbors, µm (1)."},
 		"seed":    map[string]any{"type": "integer", "minimum": 0, "description": "The seed choosing the cells (20261014)."},
 		"reveal":  flagArg("Answer the planted errors: each one's kind, cells and place."),
 	}), long: true},
@@ -486,7 +487,7 @@ func refineArgs() map[string]any {
 		"layers":     map[string]any{"type": "integer", "minimum": 1, "maximum": 16, "description": "Voxel layers in depth (1 if not given)."},
 		"regions":    map[string]any{"type": "array", "items": map[string]any{"type": "array", "items": map[string]any{"type": "number"}, "minItems": 4, "maxItems": 4}, "description": "Regions to refine, each [x0, y0, x1, y1] in µm; the rest of the tissue keeps the instrument's cells."},
 		"sections":   flagArg("Refine the tissue's separate sections apart, each with a model of its own."),
-		"min_qv":     map[string]any{"type": "number", "minimum": 0, "maximum": 40, "description": "The quality the modelled transcripts reach (20 if not given)."},
+		"min_qv":     map[string]any{"type": "number", "minimum": 0, "maximum": 40, "description": "The quality the modeled transcripts reach (20 if not given)."},
 		"seed_check": flagArg("Run again with the next seed and report how many transcripts both runs put in the same cell."),
 		"threads":    map[string]any{"type": "integer", "minimum": 1, "description": "Threads to run on (every core if not given); the result does not depend on them."},
 	}

@@ -461,7 +461,7 @@ export function mountSegmentation(app, container) {
   }
 
   // --- Practice: errors planted in the instrument's segmentation ---
-  const KINDS = { merge: ['Merged', 'neighbouring cells of different lineages drawn as one'], split: ['Split', 'a large cell cut in two'], missed: ['Missed', 'a cell left out'], grown: ['Drawn too wide', 'a cell reaching into its neighbours'] };
+  const KINDS = { merge: ['Merged', 'neighboring cells of different lineages drawn as one'], split: ['Split', 'a large cell cut in two'], missed: ['Missed', 'a cell left out'], grown: ['Drawn too wide', 'a cell reaching into its neighbors'] };
 
   // The comparison of the instrument's segmentation (A) with another (B), if made.
   function comparisonOf(t, a, b) {
@@ -507,7 +507,7 @@ export function mountSegmentation(app, container) {
       return h('div.seg-running', h('div', h('b', 'Planting errors'), ' ', message), h('div.progress', bar));
     });
     const body = h('div.seg-card',
-      h('p', 'Practise reviewing a comparison on errors whose answers are known: SituCraft plants them in a copy of the instrument\'s segmentation (neighbouring cells of different lineages merged, large cells split, cells missed, cells drawn too wide), and keeps where it put them. The copy is simulated, named so, and is never promoted or exported.'));
+      h('p', 'Practice reviewing a comparison on errors whose answers are known: SituCraft plants them in a copy of the instrument\'s segmentation (neighboring cells of different lineages merged, large cells split, cells missed, cells drawn too wide), and keeps where it put them. The copy is simulated, named so, and is never promoted or exported.'));
     if (!planted) {
       body.append(h('div.btn-row', h('button.btn.primary', { type: 'button', disabled: !instrument || !t.item || running.length > 0, onclick: () => plant(t) }, icon('sparkles'), 'Plant errors'),
         !instrument ? h('span.muted.seg-note', 'The errors are planted in the instrument\'s segmentation, which is not registered yet.') : null), ...running);
@@ -686,7 +686,7 @@ export function mountSegmentation(app, container) {
     const otherCell = (p.otherCell ?? 0) - (d?.otherCellNoNucleus ?? 0);
     if (d && otherCell > 0) {
       const near = d.otherCellGapUm <= 0.5;
-      differs.push(`${count(otherCell)} pixels are in different cells. SituCraft gives each to the nearest nucleus; none is more than ${um(d.otherCellGapUm)} nearer to it than to the instrument's cell's nuclei${near ? ', so they lie where neighbouring cells meet, almost equally far from both' : ''}.`);
+      differs.push(`${count(otherCell)} pixels are in different cells. SituCraft gives each to the nearest nucleus; none is more than ${um(d.otherCellGapUm)} nearer to it than to the instrument's cell's nuclei${near ? ', so they lie where neighboring cells meet, almost equally far from both' : ''}.`);
     }
     if (d?.otherCellNoNucleus > 0) differs.push(`${count(d.otherCellNoNucleus)} pixels SituCraft gives a cell are in an instrument's cell that holds no nucleus.`);
     if (d?.transcriptsOffMask > 0) differs.push(`${exact(d.transcriptsOffMask)} transcripts given differently are ones the instrument records in a cell other than its own mask holds at their pixel (on a pixel's edge, or outside the mask).`);
@@ -752,7 +752,7 @@ export function mountSegmentation(app, container) {
     const advancedOpen = body.querySelector('details.seg-advanced')?.open;
     if (advancedOpen !== undefined) session.import.open = advancedOpen;
     clear(body).append(
-      h('p.muted.seg-intro', 'A segmentation decides which transcripts belong to which cell, and so every count, cell type and neighbourhood after it. Each is kept as an artifact with how it was made; none is ever changed or deleted.'),
+      h('p.muted.seg-intro', 'A segmentation decides which transcripts belong to which cell, and so every count, cell type and neighborhood after it. Each is kept as an artifact with how it was made; none is ever changed or deleted.'),
       table(t, list, session),
       expansionCard(t, list, session),
       agreementCard(t, list, session),

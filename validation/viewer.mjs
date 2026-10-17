@@ -630,7 +630,7 @@ export async function viewerSuite({ check, MissingData, verbose }) {
           for (let i = 0; i < cells.cluster.length; i += 1) { const w = cells.cluster[i] === 1 ? 1 : 0; size += w; if (st.selected[i] !== w) wrong += 1; }
           return { wrong, size, kind: st.color.kind, legend: document.querySelectorAll('.cm-legend-item').length };
         })()`);
-        check('viewer', 'remote control: label_cells labels the Lung cells from the panel\'s starter set; the tissue shows each cell in its label\'s color, and a cluster selected on the labels\' colors is its cells', labeled.ok && shownLabels.ok && byLabels.ok ? `${labeled.message} ${JSON.stringify(labelFill)} ${JSON.stringify(stillClusters)}` : labeled.message ?? shownLabels.message ?? byLabels.message, labeled.ok && labeled.data.cells.analyzed === 11820 && labelFill?.segCells === 11898 && labelFill.wrong === 0 && labelFill.clear === 78 && labelFill.grey > 0 && labelFill.legend > 2 && stillClusters.kind === 'labels' && stillClusters.wrong === 0 && stillClusters.size > 0 && stillClusters.legend > 2, 'every cell in its label\'s color, the unlabeled grey, the 78 not analyzed clear; the cluster\'s cells exactly');
+        check('viewer', 'remote control: label_cells labels the Lung cells from the panel\'s starter set; the tissue shows each cell in its label\'s color, and a cluster selected on the labels\' colors is its cells', labeled.ok && shownLabels.ok && byLabels.ok ? `${labeled.message} ${JSON.stringify(labelFill)} ${JSON.stringify(stillClusters)}` : labeled.message ?? shownLabels.message ?? byLabels.message, labeled.ok && labeled.data.cells.analyzed === 11820 && labelFill?.segCells === 11898 && labelFill.wrong === 0 && labelFill.clear === 78 && labelFill.grey > 0 && labelFill.legend > 2 && stillClusters.kind === 'labels' && stillClusters.wrong === 0 && stillClusters.size > 0 && stillClusters.legend > 2, 'every cell in its label\'s color, the unlabeled gray, the 78 not analyzed clear; the cluster\'s cells exactly');
         // Imported labels (wave 4, slice 4): a table of three of the Lung cells' labels (their ids
         // as select_cell answers them), each cell taking its row's label and the others none; a
         // table naming a cell the segmentation does not have refused, with how many; the
@@ -894,7 +894,7 @@ export async function viewerSuite({ check, MissingData, verbose }) {
           const app = window.situcraft;
           const r = app.store.project.artifacts.find((a) => a.kind === 'segmentation' && a.method?.name === 'SituCraft transcript-informed segmentation');
           return { files: r ? r.files.map((f) => f.path).sort().join() : '', comparisons: app.store.project.artifacts.filter((a) => a.kind === 'comparison').length, card: Boolean(document.querySelector('.seg-refined')), lines: document.querySelectorAll('.seg-refined .seg-differs li').length,
-            background: (document.querySelector('.seg-refined')?.textContent ?? '').match(/The model's background accounts for [\\d.]+% of the modelled transcripts: false decodes [\\d.]+%, measured by [\\d,]+ negative-control transcripts/)?.[0] ?? '' };
+            background: (document.querySelector('.seg-refined')?.textContent ?? '').match(/The model's background accounts for [\\d.]+% of the modeled transcripts: false decodes [\\d.]+%, measured by [\\d,]+ negative-control transcripts/)?.[0] ?? '' };
         })()`);
         check('viewer', 'the refinement is recorded with its probabilities and diagnostics, its comparison too, and shown with its convergence, background and limitations', JSON.stringify(shownRefined),
           /diagnostics\.json/.test(shownRefined.files) && /probabilities\.bin/.test(shownRefined.files) && shownRefined.comparisons === comparisonsBefore + 1 && shownRefined.card && shownRefined.lines >= 5 && shownRefined.background !== '', 'its 9 files; one more comparison; the card with its convergence, background (the controls measuring the false decodes) and limitations');
@@ -1021,6 +1021,25 @@ export async function viewerSuite({ check, MissingData, verbose }) {
         check('viewer', 'a region holding no nucleus fails, classified, with what to do, in the answer and the studio', `${failed.message ?? failed.error}; the studio: ${failure.replace(/\s+/g, ' ')}`,
           !failed.ok && /holds no cell's nucleus/.test(failed.message ?? failed.error ?? '') && /What to do/.test(failed.message ?? failed.error ?? '') && /What to do/.test(failure), 'refused by the job, with the region\'s remedy');
 
+        // Regions and reviews on the Lung tissue (wave 5), kept in the project this release saves:
+        // a tumor nest drawn and commented on, an edge's artifact excluded with its cells, a cell's
+        // segmentation of concern.
+        {
+          const drawnLung = [
+            await act('draw_region', { dataset: 'xenium-lung-2fov', polygon: [[600, 250], [800, 260], [790, 420], [610, 400]], class: 'Tumor', name: 'Tumor nest', by: 'validation' }),
+            await act('draw_region', { dataset: 'xenium-lung-2fov', rectangle: [430, 120, 510, 180], class: 'Ignore*', name: 'Edge artifact', by: 'validation' }),
+          ];
+          const reviewedLung = [
+            await act('review', { dataset: 'xenium-lung-2fov', action: 'exclude', region: 'Edge artifact', note: 'Folded tissue at the edge', by: 'validation' }),
+            await act('review', { dataset: 'xenium-lung-2fov', action: 'comment', region: 'Tumor nest', note: 'Check against the H&E when it is scanned', by: 'validation' }),
+            await act('review', { dataset: 'xenium-lung-2fov', action: 'concern', cells: ['#100'], concern: 'merged', note: 'Two nuclei in one outline', by: 'validation' }),
+          ];
+          const lungState = await act('reviews', { dataset: 'xenium-lung-2fov' });
+          check('viewer', 'regions and reviews on the Lung tissue: a region drawn and commented on, another excluded with its cells, a cell of concern', `${[...drawnLung, ...reviewedLung].map((x) => x.message ?? x.error).join(' | ')}; ${lungState.message ?? lungState.error}`,
+            [...drawnLung, ...reviewedLung].every((x) => x.ok) && lungState.data?.counts.excluded === reviewedLung[0].data?.review.cells?.length && lungState.data.counts.excluded > 0 && lungState.data.counts.concern === 1,
+            'each as asked; the excluded cells those in the region');
+        }
+
         // The projects as 0.2.0, 0.3.0 and 0.4.0 saved them
         // (validation/projects/<version>-lung.situcraft.json): this release's written when asked
         // (SITUCRAFT_WRITE_FIXTURE=1), the places of this run's folders made neutral and given its
@@ -1033,14 +1052,14 @@ export async function viewerSuite({ check, MissingData, verbose }) {
           const doc = await chrome.eval(`(async () => {
             const app = window.situcraft;
             const { rename, serializeProject } = await import('/lib/project.js');
-            app.store.commit(rename(app.store.project, 'Lung example, as SituCraft 0.4.0 saved it'), 'Rename');
+            app.store.commit(rename(app.store.project, 'Lung example, as SituCraft 0.5.0 saved it'), 'Rename');
             return serializeProject(app.store.project);
           })()`);
           // Its own id: it grew from the 0.1.0 project in this run.
           const neutral = JSON.parse(doc.split(join(dataRoot, 'xenium-lung-2fov')).join('/data/examples/xenium-lung-2fov').split(work).join('/data/work'));
-          writeFileSync(fixtureOf('0.4.0'), `${JSON.stringify({ ...neutral, id: 'p-situcraft-0-4-0-lung' }, null, 1)}\n`);
+          writeFileSync(fixtureOf('0.5.0'), `${JSON.stringify({ ...neutral, id: 'p-situcraft-0-5-0-lung' }, null, 1)}\n`);
         }
-        for (const v of ['0.2.0', '0.3.0', '0.4.0']) {
+        for (const v of ['0.2.0', '0.3.0', '0.4.0', '0.5.0']) {
           if (!existsSync(fixtureOf(v))) continue;
           const text = readFileSync(fixtureOf(v), 'utf8');
           const fixture = JSON.parse(text);
@@ -1082,9 +1101,11 @@ export async function viewerSuite({ check, MissingData, verbose }) {
             const before = (await wait(() => { const l = app.bundles.link(dataset.id); return l && l.state !== 'checking' ? l : null; }))?.state;
             const link = await app.bundles.locate(dataset.id, ${JSON.stringify(join(dataRoot, 'xenium-lung-2fov'))});
             const p = app.store.project;
-            return { before, after: link?.state, segmentations: p.artifacts.filter((a) => a.kind === 'segmentation').length, comparisons: p.artifacts.filter((a) => a.kind === 'comparison').length, decisions: p.decisions.length, exports: exportsOf(p, dataset.id).length, default: promotedSegmentation(p, dataset.id)?.record.id, saved: promotedSegmentation(saved, saved.datasets[0].id)?.record.id };
+            return { before, after: link?.state, segmentations: p.artifacts.filter((a) => a.kind === 'segmentation').length, comparisons: p.artifacts.filter((a) => a.kind === 'comparison').length, decisions: p.decisions.length, exports: exportsOf(p, dataset.id).length, default: promotedSegmentation(p, dataset.id)?.record.id, saved: promotedSegmentation(saved, saved.datasets[0].id)?.record.id, regions: JSON.stringify(p.regions ?? []), reviews: JSON.stringify(p.reviews ?? []) };
           })()`);
-          check('viewer', `${v} Lung project: it opens and finds its moved bundle; its segmentations, comparisons, decisions and exports are there, and its default`, JSON.stringify(reopened), reopened.before === 'missing' && reopened.after === 'ok' && reopened.segmentations === fixture.artifacts.filter((a) => a.kind === 'segmentation').length && reopened.comparisons >= 2 && reopened.decisions === fixture.decisions.length && reopened.exports >= 1 && reopened.default && reopened.default === reopened.saved, 'missing, then ok; all there');
+          // From 0.5.0, its regions and reviews as they were saved.
+          const kept = v < '0.5.0' || (reopened.regions === JSON.stringify(fixture.regions ?? []) && reopened.reviews === JSON.stringify(fixture.reviews ?? []) && (fixture.regions ?? []).length >= 2 && (fixture.reviews ?? []).length >= 3);
+          check('viewer', `${v} Lung project: it opens and finds its moved bundle; its segmentations, comparisons, decisions, exports${v < '0.5.0' ? '' : ', regions and reviews'} are there, and its default`, JSON.stringify({ ...reopened, regions: (fixture.regions ?? []).length, reviews: (fixture.reviews ?? []).length }), reopened.before === 'missing' && reopened.after === 'ok' && reopened.segmentations === fixture.artifacts.filter((a) => a.kind === 'segmentation').length && reopened.comparisons >= 2 && reopened.decisions === fixture.decisions.length && reopened.exports >= 1 && reopened.default && reopened.default === reopened.saved && kept, 'missing, then ok; all there');
         }
 
         // The worked example on the Breast data: the instrument's cells, drawn from stains, against
@@ -1198,6 +1219,110 @@ export async function viewerSuite({ check, MissingData, verbose }) {
           lsim.every((x) => x.ok) && lsim.at(-1).data.step === 11 && simInst?.matched.cells === 2916 && near(simInst.matched.agreement, 0.983, 0.003) && near(simInst.mecr?.a, 0.063, 0.002) && near(simInst.mecr?.b, 0.221, 0.005) && near(simRef?.matched.agreement, 0.9986, 0.002) && near(simRef?.mecr?.b, 0.090, 0.003),
           'the instrument\'s: 98.3% their true type, mixing 0.22 against the truth\'s 0.06; the refinement\'s: 99.9%, mixing 0.09');
         await act('tour', { end: true });
+
+        {
+          // The post-Xenium worked examples (wave 5, slice 7), on the simulated example's H&E, run step
+          // by step in the same project, each number their cards state checked: the H&E placed three
+          // ways and each checked (and against the truth); two regions drawn on it, their cells and true
+          // types, written in its pixels and read back; the review queue's first twenty decided by the
+          // truth and a fold excluded.
+          const card = (name) => (async () => {
+            await act('tour', { example: 'simulated-standard', name });
+            const out = [];
+            for (let k = 0; k < 12; k += 1) {
+              const x = await act('tour', { run: true });
+              out.push(x);
+              if (!x.ok || /finished/.test(x.message ?? '')) break;
+            }
+            return out;
+          })();
+          const close2 = (v, want) => Number.isFinite(v) && Math.abs(v - want) < 0.0051;
+          const alignSteps = await card('align-he');
+          const aligned = await chrome.eval(`(async () => {
+            const app = window.situcraft;
+            const { truePlace } = await import('/lib/simulated-truth.js');
+            const { placePoint } = await import('/lib/transforms.js');
+            const p = app.store.project;
+            const ds = p.datasets.find((x) => x.name === 'simulated-standard');
+            const reg = (await (await fetch('/api/read-json?path=' + encodeURIComponent(ds.path + '/truth/post_xenium/registration.json'))).json()).images.find((x) => x.kind === 'he');
+            const out = {};
+            for (const t of p.artifacts.filter((a) => a.kind === 'transform' && a.dataset === ds.id)) {
+              const check = p.artifacts.find((a) => a.kind === 'alignment-check' && a.transform === t.id)?.summary;
+              const d = await app.bundles.transformDescription(t.id);
+              const desc = { transform: d.transform, deformation: d.deformation ?? null };
+              const errs = [];
+              for (let v = 0; v < reg.height; v += 20) for (let u = 0; u < reg.width; u += 20) {
+                const [tx, ty] = truePlace(reg, u + 0.5, v + 0.5);
+                if (tx < 0 || ty < 0 || tx > 500 || ty > 500) continue;
+                const [x, y] = placePoint(desc, u + 0.5, v + 0.5);
+                errs.push(Math.hypot(x - tx, y - ty));
+              }
+              errs.sort((a, b) => a - b);
+              out[t.summary.method] = { median: check?.median, p90: check?.p90, trueMedian: errs[Math.floor(errs.length / 2)], trueP90: errs[Math.floor(0.9 * errs.length)], fit: d.fit ? { rms: d.fit.rms, looRms: d.fit.looRms } : null };
+            }
+            return { versions: out, inUse: p.decisions.filter((x) => x.kind === 'use-transform').at(-1)?.artifact, auto: p.artifacts.find((a) => a.kind === 'transform' && a.summary?.method === 'automatic')?.id };
+          })()`);
+          const av = aligned.versions;
+          const t2 = (x) => x && [x.median, x.p90, x.trueMedian, x.trueP90].map((v) => v?.toFixed(2)).join('/');
+          check('viewer', 'the worked example Align an H&E three ways: by the matrix, six landmarks and automatically, each checked over the tissue and against the truth, as its card states', `${alignSteps.map((x) => x.ok ? `step ${x.data.step}` : x.message).join('; ')}; matrix ${t2(av.matrix)}, landmarks ${t2(av.landmarks)} (fit ${av.landmarks?.fit?.rms.toFixed(2)}, left out ${av.landmarks?.fit?.looRms.toFixed(2)}), automatic ${t2(av.automatic)} (median/p90 checked, then truly)`,
+            alignSteps.every((x) => x.ok) && /finished/.test(alignSteps.at(-1).message ?? '') && aligned.inUse === aligned.auto
+            && close2(av.matrix?.median, 0.63) && close2(av.matrix?.p90, 1.09) && close2(av.matrix?.trueMedian, 0.69) && close2(av.matrix?.trueP90, 1.12)
+            && close2(av.landmarks?.median, 0.58) && close2(av.landmarks?.p90, 1.19) && close2(av.landmarks?.trueMedian, 0.72) && close2(av.landmarks?.trueP90, 1.22) && close2(av.landmarks?.fit?.rms, 0.57) && close2(av.landmarks?.fit?.looRms, 1.00)
+            && close2(av.automatic?.median, 0.41) && close2(av.automatic?.p90, 0.62) && close2(av.automatic?.trueMedian, 0.47) && close2(av.automatic?.trueP90, 0.75),
+            'matrix 0.63/1.09 checked, 0.69/1.12 truly; landmarks 0.58/1.19, 0.72/1.22 (fit 0.57, left out 1.00); automatic 0.41/0.62, 0.47/0.75; the automatic version in use');
+          await act('tour', { end: true });
+
+          const regionSteps = await card('regions-qupath');
+          const drawn = await chrome.eval(`(async () => {
+            const app = window.situcraft;
+            const v = window.situcraftViewer;
+            const { labelSource, refOf } = await import('/ui/label-sources.js');
+            const types = app.store.project.artifacts.find((a) => a.kind === 'labels' && /instrument_cell_types/.test(a.name ?? ''));
+            const t = types ? await labelSource(app, refOf(types.id, 0)) : null;
+            return v.regions.list().map((r) => {
+              const rows = v.regions.rowsIn(r.id);
+              const c = {};
+              for (const i of rows) if (t) c[t.names[t.label[i]]] = (c[t.names[t.label[i]]] ?? 0) + 1;
+              return { name: r.name, area: r.area, cells: rows.length, types: c };
+            });
+          })()`);
+          const R = (n) => drawn.find((r) => r.name === n);
+          const back = (n) => R(n) && R(`${n} (2)`) && Math.abs(R(n).area - R(`${n} (2)`).area) < 0.05 && R(n).cells === R(`${n} (2)`).cells;
+          check('viewer', 'the worked example Regions for QuPath: two domains drawn on the H&E, their cells and true types, written in its pixels and read back as they were, as its card states', `${regionSteps.map((x) => x.ok ? `step ${x.data.step}` : x.message).join('; ')}; ${JSON.stringify(drawn)}`,
+            regionSteps.every((x) => x.ok) && /finished/.test(regionSteps.at(-1).message ?? '') && R('Epithelial domain')?.cells === 1043 && Math.round(R('Epithelial domain').area) === 105675 && R('Epithelial domain').types['epithelial-like'] === 440
+            && R('Immune domain')?.cells === 475 && Math.round(R('Immune domain').area) === 33650 && R('Immune domain').types['immune-like'] === 319 && back('Epithelial domain') && back('Immune domain'),
+            'the epithelial domain 1,043 cells (440 epithelial-like), the immune 475 (319 immune-like); back within 0.05 µm², the same cells');
+          await act('tour', { end: true });
+
+          const reviewSteps = await card('pathologist-review');
+          const reviewed = await chrome.eval(`(async () => {
+            const app = window.situcraft;
+            const { labelSource, refOf } = await import('/ui/label-sources.js');
+            const p = app.store.project;
+            const ds = p.datasets.find((x) => x.name === 'simulated-standard');
+            const truthSet = p.artifacts.find((a) => a.kind === 'labels' && /instrument_cell_types/.test(a.name ?? ''));
+            const t = await labelSource(app, refOf(truthSet.id, 0));
+            const wrong = async (id) => {
+              const s = await labelSource(app, refOf(id, 0));
+              let n = 0;
+              for (let i = 0; i < s.label.length; i += 1) if (s.label[i] >= 0 && s.names[s.label[i]] !== t.names[t.label[i]]) n += 1;
+              return n;
+            };
+            const records = (p.reviews ?? []).filter((r) => r.dataset === ds.id && r.by === 'the worked example');
+            const accept = records.filter((r) => r.action === 'accept' && r.target === 'cells');
+            const relabel = records.filter((r) => r.action === 'relabel' && r.target === 'cells');
+            const excludedCells = records.filter((r) => r.action === 'exclude' && r.target === 'cells').flatMap((r) => r.cells).length;
+            const curated = p.artifacts.find((a) => a.kind === 'curated-labels' && a.dataset === ds.id && relabel[0] && a.id === relabel[0].edits[0].set);
+            const markers = relabel[0] ? relabel[0].labels.id : null;
+            // Each relabel's new label is the cell's true type; each accept's, its label already.
+            const right = [...accept, ...relabel].every((r) => r.cells.length === 1 && r.next === (r.action === 'accept' ? r.cells[0].label : t.names[t.label[r.cells[0].row]]) && r.images.length === 1);
+            return { records: records.length, accepted: accept.length, relabeled: relabel.length, excludedCells, right, queue: app.labelReview?.queue?.()?.counts?.flagged, before: markers ? await wrong(markers) : null, after: curated ? await wrong(curated.id) : null };
+          })()`);
+          check('viewer', 'the worked example A pathologist\'s review: the queue\'s first twenty decided by the truth (accepted where right, relabeled where not, each recorded with its provenance), a fold\'s cells excluded, as its card states', `${reviewSteps.map((x) => x.ok ? `step ${x.data.step}` : x.message).join('; ')}; ${JSON.stringify(reviewed)}`,
+            reviewSteps.every((x) => x.ok) && /finished/.test(reviewSteps.at(-1).message ?? '') && reviewed.accepted === 18 && reviewed.relabeled === 2 && reviewed.right && reviewed.excludedCells === 43 && reviewed.records === 22 && reviewed.before === 49 && reviewed.after === 47,
+            '18 accepted, 2 relabeled (to their true types), 43 cells excluded, 22 reviews; 49 wrong labels before, 47 after');
+          await act('tour', { end: true });
+        }
       }
 
       // Post-Xenium images (wave 5, slice 1): the pathology fixture's bundle (XOA 1.0.1) opened,
@@ -1233,7 +1358,7 @@ export async function viewerSuite({ check, MissingData, verbose }) {
           for (const [px, py] of [[16342, 14283], [9000, 20000], [24000, 6000]]) probes.push(await probe(sample, added, tenx.summary.transform, px, py));
         }
         check('viewer', 'remote control: add_image adds the pathology fixture\'s H&E with the alignment beside it, and the Viewer draws its pixels where the matrix puts them', `${opened.message ?? opened.error}; ${added.message ?? added.error}; ${JSON.stringify(probes)}`,
-          opened.ok && added.ok && tenx?.summary.method === 'matrix' && tenx.summary.reflected && probes.length === 3 && worstOf(probes) <= 2, 'the image\'s colour at three of its pixels, within 2');
+          opened.ok && added.ok && tenx?.summary.method === 'matrix' && tenx.summary.reflected && probes.length === 3 && worstOf(probes) <= 2, 'the image\'s color at three of its pixels, within 2');
 
         // Transforms and landmarks (wave 5, slice 2): landmarks made with 10x's matrix fit back to
         // it as a similarity (10x's is one), recorded as a version that places the image; the
@@ -1339,7 +1464,7 @@ export async function viewerSuite({ check, MissingData, verbose }) {
       check('viewer', 'the Alignment view: an image added without an alignment is placed by six landmarks clicked on both images, fitted as an affine transform within its truth\'s deformation, and drawn where the fit puts it', `${simOpened.message ?? simOpened.error}; ${simAdded.message ?? simAdded.error}; ${simShown?.message ?? ''}; predicted ${predictedOff.map((d) => d.toFixed(1)).join(', ')} pixels off; ${simTF ? `${simTF.name}: residuals ${simTF.fit.rms.toFixed(3)} µm, left out ${simTF.fit.looRms.toFixed(3)} µm; at most ${simWorst.toFixed(3)} µm from the truth over the section` : 'not saved'}; ${JSON.stringify(simProbes)}`,
         simOpened.ok && simAdded.ok && simAdded.data.transform === null && simState?.landmarks.length === 6 && simState.landmarks.every((l, i) => Math.hypot(l.fixed[0] - clicks[i].fixed[0], l.fixed[1] - clicks[i].fixed[1]) < 0.2 && Math.hypot(l.moving[0] - clicks[i].moving[0], l.moving[1] - clicks[i].moving[1]) < 0.5) &&
           predictedOff.length === 3 && Math.max(...predictedOff) < 30 && simTF?.model === 'affine' && simTF.method === 'landmarks' && simWorst < bound && simProbes.length === 3 && worstOf(simProbes) <= 2,
-        `six landmarks within 0.2 µm and half a pixel of the places clicked; predicted within 30 pixels (the deformation's few µm); the fit within ${bound.toFixed(1)} µm of the truth; the image's colour at three pixels, within 2`);
+        `six landmarks within 0.2 µm and half a pixel of the places clicked; predicted within 30 pixels (the deformation's few µm); the fit within ${bound.toFixed(1)} µm of the truth; the image's color at three pixels, within 2`);
 
       // Automatic registration (wave 5, slice 3): the same H&E registered by its nuclei with a
       // deformation allowed (and, with the matches a section of this size gives, kept), as a job,
@@ -1364,7 +1489,7 @@ export async function viewerSuite({ check, MissingData, verbose }) {
       }
       check('viewer', 'remote control: register_image aligns the simulated H&E by its nuclei, a version placing it, within its truth\'s deformation, drawn where it (and any deformation) puts three of its pixels', `${auto?.message ?? auto?.error ?? 'not run'}; at most ${autoWorst.toFixed(3)} µm from the truth over the section; ${JSON.stringify(autoProbes)}`,
         Boolean(auto?.ok) && auto.data.placedBy === auto.data.id && autoTF?.method === 'automatic' && auto.data.deformed && auto.data.kept >= 25 && autoWorst < bound && autoProbes.length === 3 && worstOf(autoProbes) <= 2,
-        `placed by it, deformed; within ${bound.toFixed(1)} µm of the truth; the image's colour at three pixels, within 2`);
+        `placed by it, deformed; within ${bound.toFixed(1)} µm of the truth; the image's color at three pixels, within 2`);
 
       // Alignment checked in µm (wave 5, slice 4): the six landmarks' version and the automatic one
       // checked by local matches over the tissue; the landmarks' measured errors against the true
@@ -1600,7 +1725,7 @@ export async function viewerSuite({ check, MissingData, verbose }) {
           return shoelace(ring.map(([u, v]) => placePoint(autoTF, u, v)));
         };
         const holedWant = placedArea(600, 100, 900, 400) - placedArea(700, 200, 800, 300);
-        check('viewer', 'annotations as QuPath 0.4 writes them, drawn on the H&E, read in its pixels: placed by its alignment in use (and its deformation), near where the truth puts them; a hole kept; a detection and a point left out', `${fromQuPath.message ?? fromQuPath.error}; the pentagon's corners ${placedOff.toExponential(2)} µm from where the version places them, at most ${truthOff.toFixed(3)} µm from the truth; its colour ${JSON.stringify(qpColor)}; the square ${hg?.[0].length} rings, ${holed ? holed.area.toFixed(1) : '?'} µm² against ${holedWant.toFixed(1)}`,
+        check('viewer', 'annotations as QuPath 0.4 writes them, drawn on the H&E, read in its pixels: placed by its alignment in use (and its deformation), near where the truth puts them; a hole kept; a detection and a point left out', `${fromQuPath.message ?? fromQuPath.error}; the pentagon's corners ${placedOff.toExponential(2)} µm from where the version places them, at most ${truthOff.toFixed(3)} µm from the truth; its color ${JSON.stringify(qpColor)}; the square ${hg?.[0].length} rings, ${holed ? holed.area.toFixed(1) : '?'} µm² against ${holedWant.toFixed(1)}`,
           Boolean(fromQuPath.ok) && imported.length === 2 && JSON.stringify(fromQuPath.data.skipped) === JSON.stringify({ detection: 1, Point: 1 }) && qp?.cls === 'Tumor' && placedOff < 1e-3 && truthOff < bound && JSON.stringify(qpColor) === '[200,0,0]' && hg?.[0].length === 2 && Math.abs(holed.area / holedWant - 1) < 1e-3,
           `corners within 0.001 µm of the version's placing, ${bound.toFixed(1)} µm of the truth; a hole, its area within 0.1% of its outline placed a pixel at a time; skipped: a detection, a point`);
 
@@ -1727,7 +1852,7 @@ export async function viewerSuite({ check, MissingData, verbose }) {
           const fillWrong = want.filter((w, i) => (w ? rgba[4 * i + 3] !== 255 || rgba[4 * i] !== w[0] || rgba[4 * i + 1] !== w[1] || rgba[4 * i + 2] !== w[2] : rgba[4 * i + 3] !== 0)).length;
           check('viewer', 'the review record written as CSV (a row a cell or region) and JSON, read back: the JSON the project\'s record, every CSV row its review\'s and cell\'s; the Review status fill each cell\'s status by the suite\'s reading of the CSV', `${wroteCsv.message ?? wroteCsv.error}; ${wroteJson.message ?? wroteJson.error}; ${csvRows.length} rows (${expectedRows} expected), ${rowMismatch.length} differing; ${doc.reviews.length} reviews in the JSON, ${pageRecords.length} in the project; the fill ${fillWrong} of ${own.n} cells otherwise`,
             wroteCsv.ok && wroteJson.ok && doc.format === 'situcraft-reviews' && JSON.stringify(doc.reviews.filter((r) => !r.derived)) === JSON.stringify(pageRecords) && csvRows.length === expectedRows && rowMismatch.length === 0 && rgba.length === 4 * own.n && fillWrong === 0,
-            'the same, row for row; every cell\'s colour its status');
+            'the same, row for row; every cell\'s color its status');
         }
       }
     }

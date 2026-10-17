@@ -122,7 +122,7 @@ func Plant(ctx context.Context, src, source string, ds Transcripts, dir string, 
 	stats := r.Stats(n)
 	pl := &planter{r: r, n: n, cells: cells, counts: counts, stats: stats, rng: rand.New(rand.NewPCG(p.Seed, 0x5175)),
 		used: make([]bool, n+1), touched: make([]bool, n+1), edits: map[int]map[int]uint32{}}
-	progress(0.05, "Finding neighbouring cells")
+	progress(0.05, "Finding neighboring cells")
 	pl.neighbours()
 	truth := &Truth{Format: "situcraft-planted-errors", Source: source, Params: p}
 	progress(0.15, "Planting the errors")
@@ -734,6 +734,8 @@ func (pl *planter) grow(k int, reach float64) []Error {
 			}
 		}
 		x, y := pl.centre(l)
+		// The note is written into planted.json as earlier releases wrote it, so that it is made again
+		// byte for byte.
 		out = append(out, Error{Kind: Grown, Cells: names, X: x, Y: y, Note: fmt.Sprintf("%d pixels taken, from %d neighbours and the background", gained, len(taken))})
 		pl.errorLabels = append(pl.errorLabels, labels)
 	}

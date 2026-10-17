@@ -53,7 +53,7 @@ func TestRegisterImage(t *testing.T) {
 	var d transformDescription
 	json.NewDecoder(request(t, f.handler, http.MethodGet, "/api/transforms/"+tf, nil, nil).Body).Decode(&d)
 	kept := len(keptMatches(d.Matches))
-	if d.Method != "automatic" || d.Model != "affine" || d.By != "RM" || kept < 12 || d.Fit == nil || len(d.Fit.Residuals) != kept || d.Registration == nil || d.Registration.Best == nil || !strings.Contains(d.Registration.Channel, "haematoxylin") {
+	if d.Method != "automatic" || d.Model != "affine" || d.By != "RM" || kept < 12 || d.Fit == nil || len(d.Fit.Residuals) != kept || d.Registration == nil || d.Registration.Best == nil || !strings.Contains(d.Registration.Channel, "hematoxylin") {
 		t.Fatalf("the version: %s, %s, by %s, %d kept, %+v", d.Method, d.Model, d.By, kept, d.Registration)
 	}
 	regs, err := simulate.ReadRegistrations(f.folder)

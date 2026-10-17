@@ -110,7 +110,7 @@ covers the same tissue in every layer, so the renderer asks for the same tiles o
   transcripts have grids too (every transcript, gene transcripts, gene transcripts in a cell,
   negative controls), from which the QC maps compute per-bin shares. Level 1 counts the points; each coarser level adds up the level below, so every level
   sums exactly to each gene's count. The levels nest: a complete quadtree.
-- **Geometry tiles.** Cell and nucleus polygons are placed by the centre of their bounding box,
+- **Geometry tiles.** Cell and nucleus polygons are placed by the center of their bounding box,
   once per level; level 0 holds the bundle's vertices exactly, each level above them simplified
   to half a pixel of that level.
 - **Files.** One layout for every kind: a header, a table of the tiles' blocks with their counts,
@@ -204,11 +204,11 @@ segmentation's clustering its latest of SituCraft's, its labels that clustering'
 markers) so that a step already done is not done again. A step may show a comparison in the
 workspace as it describes it (the view, the ranking, the classes kept, the difference shown, the
 side panel, the Labels tab), or a clustering in the Cell types view (the map's colors, clusters
-selected, a section in view, the review queue made). The Lung example's practises on
-errors planted in its instrument segmentation (`internal/segment/plant`): neighbouring cells whose
+selected, a section in view, the review queue made). The Lung example's practices on
+errors planted in its instrument segmentation (`internal/segment/plant`): neighboring cells whose
 merged cell would mix markers of two lineages, large cells split across their long axis, cells
-dropped, and cells grown into their neighbours; each error kept apart from the others by its
-neighbours, so that each is one difference; seeded, so the same errors each time; recorded as a
+dropped, and cells grown into their neighbors; each error kept apart from the others by its
+neighbors, so that each is one difference; seeded, so the same errors each time; recorded as a
 segmentation artifact with its answer key, simulated, never promoted and never exported. The
 Segmentation view offers it on the example datasets, and on others only once the user turns
 practice tools on (a preference of the browser, off by default), so that simulated cells stay out
@@ -235,7 +235,7 @@ Segmentation is SituCraft's own code (`internal/segment`), not an external progr
   and connectivity constraints, transcript repositioning, multi-resolution sampling, and
   initialization from nuclei (`research.md` §3). Its parameters are drawn by a partially
   collapsed Gibbs sweep in which every update is an exact draw (a gamma prior on the components'
-  rate parameters, where the publication uses Pólya–Gamma variables). The labelling's moves keep
+  rate parameters, where the publication uses Pólya–Gamma variables). The labeling's moves keep
   detailed balance exactly (constraints that hold both ways); the reported segmentation is the
   posterior's summary over the last sweeps; the default schedule is the one that recovers
   simulated cells best (research.md §3.2). Unlike the published implementation, it is **deterministic for a
@@ -256,7 +256,7 @@ Segmentation is SituCraft's own code (`internal/segment`), not an external progr
     the page, the terminal and remote control say the same.
   - **Regions** hold the cells about them, so a region never cuts a cell. **Sections** are found
     by single linkage, and each gets a model of its own.
-  - **Patches** (`refine.Units`): a region of more than about 4 million modelled transcripts is
+  - **Patches** (`refine.Units`): a region of more than about 4 million modeled transcripts is
     cut into rectangles of about 2 million, run one at a time as regions are (each also refining
     the cells within 40 µm of its rectangle), and stitched by rectangle and by seed, so the
     sampling holds one patch. They depend on the data and settings alone.
@@ -287,7 +287,7 @@ Segmentation is SituCraft's own code (`internal/segment`), not an external progr
 Long computations (indexing, segmentation, comparison, registration, permutation tests) are jobs:
 
 - Each job has an immutable JSON spec and a state (`declared → queued → running → validating →
-  complete`, or `cancelled | failed | invalid | orphaned`).
+  complete`, or `canceled | failed | invalid | orphaned`).
 - A job keeps an append-only event log and its outputs in a temporary directory until it is
   validated and promoted.
 - Jobs run in the host and survive browser refresh. Closing the window while a job runs asks
@@ -344,7 +344,7 @@ The comparison workspace (`ui/mode-compare.js`, `lib/review.js`) draws on it. Ea
 outlines are geometry tiles on the dataset's grid: the instrument's are the dataset's own; any
 other's are tiled once into a cache entry of their own. Two renderers share one camera (side by
 side, or stacked: B transparent over A for the overlay, in turns for the flicker); cells are
-filled by their difference's class through the renderer's per-cell colours; the regions' counts
+filled by their difference's class through the renderer's per-cell colors; the regions' counts
 give the disagreement map, drawn on a 2-D canvas over the tissue. The differences come to the page
 column by column; ranking and the reviewer's rules are pure functions, tested in Node. Decisions
 (promote, keep, reject) are appended to the project with their reason and comparison.
@@ -453,7 +453,7 @@ displacements, a half-float texture) and the transform's inverse.
 An alignment is checked (`internal/register/check.go`, `api_checks.go`) by the same patch matching,
 on a grid offset by half a patch from the registration's, against the image drawn as the version
 places it (each pixel's point taken back through the deformation, warm-started from its
-neighbour's); the check is an artifact of the image and the version. The renderer draws the
+neighbor's); the check is an artifact of the image and the version. The renderer draws the
 visual checks itself: a checkerboard by discarding the image's fragments in every other square of
 the tissue, and the nuclear stain's edges as an iso-line of its windowed value (Sobel's gradient
 over a threshold), from the level drawn only.

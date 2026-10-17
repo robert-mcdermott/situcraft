@@ -622,7 +622,7 @@ export function mountAlignment(app, container) {
       } }, icon('sparkles'), running ? 'Aligning…' : 'Align automatically');
       return h('section.align-section',
         h('h3', 'Align automatically'),
-        h('p.muted', `By the nuclei: the ${imageDesc.image.kind === 'rgb' ? 'H&E\'s haematoxylin' : 'image\'s nuclear stain'} against the Xenium image's DAPI. Its scale, turn and mirroring are found whatever its metadata says, then refined over patches of the tissue. Seconds for a small section, a minute or so for a large one.`),
+        h('p.muted', `By the nuclei: the ${imageDesc.image.kind === 'rgb' ? 'H&E\'s hematoxylin' : 'image\'s nuclear stain'} against the Xenium image's DAPI. Its scale, turn and mirroring are found whatever its metadata says, then refined over patches of the tissue. Seconds for a small section, a minute or so for a large one.`),
         h('label.viewer-slider', 'Fit', model),
         channel ? h('label.viewer-slider', 'Nuclear stain', channel) : null,
         box('nonrigid', 'Allow a smooth deformation (for a section that stretched); kept only if it predicts the tissue better'),

@@ -140,8 +140,8 @@ export const TOURS = { 'xenium-lung-2fov': LUNG, 'xenium-breast-2fov': BREAST };
 const BREAST_COMPARE = {
   id: 'compare-expansion',
   title: 'The instrument\'s cells against a nucleus expansion',
-  question: 'Where does growing each nucleus by 5 µm disagree with the cells the instrument drew from its boundary and interior stains, and which does the evidence favour there?',
-  expect: 'About 3,600 cells the same in both. The expansion splits 263 of the instrument\'s cells and merges 128 pairs, and has no cell where the instrument drew 119 without a nucleus. Its spurious co-expression is higher (about 2.0 against 1.8): its cells take in more of their neighbours\' transcripts.',
+  question: 'Where does growing each nucleus by 5 µm disagree with the cells the instrument drew from its boundary and interior stains, and which does the evidence favor there?',
+  expect: 'About 3,600 cells the same in both. The expansion splits 263 of the instrument\'s cells and merges 128 pairs, and has no cell where the instrument drew 119 without a nucleus. Its spurious co-expression is higher (about 2.0 against 1.8): its cells take in more of their neighbors\' transcripts.',
   steps: [
     {
       mode: 'segmentation',
@@ -177,13 +177,13 @@ const BREAST_COMPARE = {
     {
       mode: 'compare',
       title: 'Transcripts in the wrong cell',
-      text: 'Ranked by contamination: differences whose cell in B expresses more pairs of mutually exclusive markers than in A. The metrics above say the expansion\'s spurious co-expression is higher than the instrument\'s: its cells reach into their neighbours.',
+      text: 'Ranked by contamination: differences whose cell in B expresses more pairs of mutually exclusive markers than in A. The metrics above say the expansion\'s spurious co-expression is higher than the instrument\'s: its cells reach into their neighbors.',
       compare: { a: 'instrument', b: 'expansion-5', view: 'side', map: false, rank: 'contamination', difference: 1, tab: 'queue' },
     },
     {
       mode: 'compare',
       title: 'Decide, with your reason',
-      text: 'Promote, keep for exploration or reject either segmentation, with a reason and this comparison recorded; nothing is deleted. Here the evidence favours the instrument\'s: keep the expansion for exploration, or reject it.',
+      text: 'Promote, keep for exploration or reject either segmentation, with a reason and this comparison recorded; nothing is deleted. Here the evidence favors the instrument\'s: keep the expansion for exploration, or reject it.',
       compare: { a: 'instrument', b: 'expansion-5', tab: 'decide' },
     },
   ],
@@ -194,7 +194,7 @@ const LUNG_PLANTED = {
   title: 'Find the planted errors',
   simulated: true,
   question: 'Can you find a segmentation\'s errors with the comparison workspace, and which ranking finds which kind?',
-  expect: 'SituCraft plants 60 errors in a copy of the instrument\'s segmentation (simulated): 20 merges of neighbouring cells of different lineages, 20 splits, 10 missed cells and 10 cells drawn 1 µm too wide. The comparison lists exactly those as differences, every other cell the same in both; ranked by contamination, the merges come first.',
+  expect: 'SituCraft plants 60 errors in a copy of the instrument\'s segmentation (simulated): 20 merges of neighboring cells of different lineages, 20 splits, 10 missed cells and 10 cells drawn 1 µm too wide. The comparison lists exactly those as differences, every other cell the same in both; ranked by contamination, the merges come first.',
   steps: [
     {
       mode: 'segmentation',
@@ -225,7 +225,7 @@ const LUNG_PLANTED = {
     {
       mode: 'compare',
       title: 'Cells drawn too wide',
-      text: 'Only expanded and contracted cells: a cell drawn too wide takes its neighbours\' pixels and transcripts. The overlay shows how far its outline reaches.',
+      text: 'Only expanded and contracted cells: a cell drawn too wide takes its neighbors\' pixels and transcripts. The overlay shows how far its outline reaches.',
       compare: { a: 'instrument', b: 'planted', view: 'overlay', classes: ['expanded', 'contracted'], rank: 'reassigned', difference: 1, tab: 'queue' },
     },
     {
@@ -272,7 +272,7 @@ const BREAST_REFINE = {
     {
       mode: 'viewer',
       title: 'Doubtful transcripts',
-      text: 'Close up, each transcript is drawn by its probability of being in the cell it is in: the bright ones are those the model is least sure of, most of them where neighbouring cells express the same genes.',
+      text: 'Close up, each transcript is drawn by its probability of being in the cell it is in: the bright ones are those the model is least sure of, most of them where neighboring cells express the same genes.',
       segmentation: 'refined',
       transcripts: { all: true, colorBy: 'probability' },
       camera: { cx: 300, cy: 300, umPerCss: 0.15 },
@@ -302,7 +302,7 @@ const SIMULATED_TRUTH = {
     {
       mode: 'data',
       title: 'A tissue whose cells are known',
-      text: 'SituCraft simulated this tissue on this computer: cells of four types in domains, their nuclei, their transcripts drifted a little, a background, and an instrument that grows each nucleus by 5 µm. Every file is laid out as a Xenium bundle\'s, labelled simulated; its truth is in its truth folder.',
+      text: 'SituCraft simulated this tissue on this computer: cells of four types in domains, their nuclei, their transcripts drifted a little, a background, and an instrument that grows each nucleus by 5 µm. Every file is laid out as a Xenium bundle\'s, labeled simulated; its truth is in its truth folder.',
     },
     {
       mode: 'segmentation',
@@ -395,7 +395,7 @@ const LUNG_CELL_TYPES = {
     {
       mode: 'celltypes',
       title: 'Why so many cells have no label',
-      text: 'The largest cluster, selected, is the tumor: 57% of its cells take no label. They express CD24, CXCL13 and TM4SF4 rather than a normal lung\'s lineage markers, and on a panel built of markers those genes also fill the score\'s control bins, cancelling the epithelial score. The clusters\' markers name what the labels cannot: name such clusters yourself, or label from a reference of the tissue.',
+      text: 'The largest cluster, selected, is the tumor: 57% of its cells take no label. They express CD24, CXCL13 and TM4SF4 rather than a normal lung\'s lineage markers, and on a panel built of markers those genes also fill the score\'s control bins, canceling the epithelial score. The clusters\' markers name what the labels cannot: name such clusters yourself, or label from a reference of the tissue.',
       celltypes: { color: 'labels', select: [1], section: 'clusters' },
     },
     {
@@ -572,7 +572,212 @@ const BREAST_LABELS = {
 };
 
 // The worked examples, by example dataset.
-export const WORKED = { 'xenium-breast-2fov': [BREAST_COMPARE, BREAST_REFINE, BREAST_LABELS], 'xenium-lung-2fov': [LUNG_PLANTED, LUNG_CELL_TYPES], 'simulated-standard': [SIMULATED_TRUTH, SIMULATED_LABELS] };
+// The simulated tissue's H&E (wave 5): its truth says where each of its pixels lies, so each way of
+// placing it can be scored, and each cell's true type, so a reviewer's decisions can be.
+const HE_ON_STAINS = { channels: [{ name: 'DAPI', visible: false }], images: { he: { visible: true, opacity: 1 } }, transcripts: { genes: [] }, cells: { outlines: false } };
+
+const SIMULATED_ALIGN = {
+  id: 'align-he',
+  title: 'Align an H&E three ways',
+  simulated: true,
+  images: true,
+  question: 'The section was stained with H&E and scanned after the run, the image turned, mirrored and slightly stretched. Placed by Xenium Explorer\'s matrix, by six landmarks, or automatically by the nuclei: which places it best, and how do you tell without a truth?',
+  expect: 'Checked over the tissue in µm, the matrix is off by 0.63 µm (median) and 1.09 µm (90th percentile), the six landmarks by 0.58 and 1.19 µm (they fit their own points within 0.57 µm, but are 1.0 µm off where none is), and the automatic version, with its deformation, by 0.41 and 0.62 µm. The simulation\'s truth agrees: truly 0.69 and 1.12 µm, 0.72 and 1.22 µm, 0.47 and 0.75 µm. Without a truth, the check ranks them as the truth does.',
+  steps: [
+    {
+      mode: 'viewer',
+      title: 'The section, and its H&E',
+      text: 'The simulated tissue\'s DAPI. Beside the bundle, as 10x supplies them, an H&E of the same section and the transformation matrix Xenium Explorer saves when an image is aligned by hand: here the simulation\'s own transform, without the stretch of the section.',
+      do: { action: 'add-image', image: 'he', alignment: 'matrix' },
+      label: 'Add the H&E',
+      transcripts: { genes: [] },
+      cells: { outlines: false },
+    },
+    {
+      mode: 'viewer',
+      title: 'Placed by the matrix',
+      text: 'The H&E over the stains as the matrix places it: turned 2.5°, mirrored, 0.36 µm a pixel. Zoomed in, its nuclei lie on the cells\' (outlines on); by eye it looks right.',
+      ...HE_ON_STAINS,
+      cells: { outlines: true },
+      camera: { cx: 250, cy: 250, umPerCss: 0.25 },
+    },
+    {
+      mode: 'alignment',
+      title: 'Six landmarks',
+      text: 'The Alignment view: the Xenium image on the left, the H&E on the right. A landmark is the same point clicked on both; here six, placed where the truth puts six points of the H&E, as a careful hand clicking a nucleus on each would place them. Fitted as an affine transform, each landmark\'s residual and its error left out are listed.',
+      do: { action: 'landmarks', image: 'he', count: 6, within: [40, 40, 460, 460], model: 'affine' },
+      label: 'Place six landmarks',
+      alignment: { image: 'he', show: 'in use' },
+    },
+    {
+      mode: 'alignment',
+      title: 'Automatically, by the nuclei',
+      text: 'The landmarks\' version over the stains. Next, the H&E aligned automatically: its hematoxylin against DAPI, its scale, turn and mirroring found, refined by mutual information, fitted to local matches over the tissue, and a smooth deformation after it when it predicts the matches better.',
+      do: { action: 'register', image: 'he', model: 'affine', nonrigid: true },
+      label: 'Align it automatically',
+      alignment: { image: 'he', show: 'landmarks', display: 'overlay', opacity: 0.7 },
+    },
+    {
+      mode: 'alignment',
+      title: 'Each checked in µm',
+      text: 'The automatic version, DAPI\'s edges in yellow over the H&E\'s nuclei. Each version is now checked where it can be wrong: everywhere between its landmarks or matches, by patches of DAPI over the tissue, each compared with the H&E drawn there.',
+      do: { action: 'check', image: 'he', versions: ['matrix', 'landmarks', 'automatic'] },
+      label: 'Check all three',
+      alignment: { image: 'he', show: 'automatic', display: 'overlay', opacity: 1, edges: true },
+    },
+    {
+      mode: 'alignment',
+      title: 'Where the matrix is off',
+      text: 'Each of the 25 patches colored by how far the matrix draws the H&E from where it belongs (green at 0, yellow at 1 µm, red at 2 µm or more), with an arrow twenty times as long: off by 0.63 µm (median) and 1.09 µm (90th percentile), most where the section stretched. The landmarks\' version is off by 0.58 and 1.19 µm, the automatic one by 0.41 and 0.62 µm; choose one under See and check to see its own map.',
+      alignment: { image: 'he', show: 'matrix', display: 'overlay', opacity: 0.6, map: true },
+    },
+    {
+      mode: 'alignment',
+      title: 'The automatic version, square by square',
+      text: 'A checkerboard of the H&E and the stains in 40 µm squares, the automatic version placing the H&E: nuclei run straight across the squares\' edges. Its deformation follows the stretch no single transform can; it is kept only because it predicts held-out matches better.',
+      alignment: { image: 'he', show: 'automatic', display: 'checkerboard', cell: 40, map: false },
+    },
+    {
+      mode: 'viewer',
+      title: 'The H&E on the tissue',
+      text: 'The automatic version places the H&E in the Viewer now, a decision kept in the project with its reason; every version stays, with its check. Real images have no truth: the check in µm is what tells versions apart.',
+      ...HE_ON_STAINS,
+      cells: { outlines: true },
+      camera: { cx: 380, cy: 380, umPerCss: 0.2 },
+    },
+  ],
+};
+
+const SIMULATED_REGIONS = {
+  id: 'regions-qupath',
+  title: 'Regions for QuPath',
+  simulated: true,
+  images: true,
+  question: 'Draw the epithelial and the immune domains on the H&E, count their cells, and take the regions to QuPath in the H&E\'s own pixels: do they come back as they were?',
+  expect: 'The epithelial domain\'s region holds 1,043 cells over 0.11 mm², 42% of them epithelial-like; the immune domain\'s, 475 cells, 67% immune-like: domains mix their types. Written in the H&E\'s pixels through the automatic alignment and its deformation, then read back, each region keeps its area (within 0.05 µm²) and its cells.',
+  steps: [
+    {
+      mode: 'viewer',
+      title: 'The H&E',
+      text: 'Regions are drawn on the tissue over any layer; to take them to QuPath on the H&E, the H&E must be placed. Added with its matrix (as 10x supplies it), then aligned automatically for the best placement.',
+      do: { action: 'add-image', image: 'he', alignment: 'matrix' },
+      label: 'Add the H&E',
+      transcripts: { genes: [] },
+      cells: { outlines: false },
+    },
+    {
+      mode: 'viewer',
+      title: 'Aligned automatically',
+      text: 'The H&E over the stains. Aligned automatically by its nuclei, with a smooth deformation where the section stretched (the worked example Align an H&E three ways compares it with the matrix).',
+      do: { action: 'register', image: 'he', model: 'affine', nonrigid: true },
+      label: 'Align it automatically',
+      ...HE_ON_STAINS,
+    },
+    {
+      mode: 'viewer',
+      title: 'Two regions',
+      text: 'Drawn on the H&E as a pathologist would draw them with the polygon tool: the epithelial domain on the left, classed Epithelium (a class of its own), and the immune domain at the lower right, classed Immune cells (one of QuPath\'s). The Viewer\'s Regions lists each with its area and the cells whose centers lie in it.',
+      do: { action: 'draw-regions', regions: [{ name: 'Epithelial domain', cls: 'Epithelium', polygon: [[15, 15], [235, 15], [245, 250], [225, 490], [15, 490]] }, { name: 'Immune domain', cls: 'Immune cells', polygon: [[360, 270], [490, 260], [490, 490], [340, 490], [330, 380]] }] },
+      label: 'Draw the two regions',
+      ...HE_ON_STAINS,
+      cells: { outlines: true },
+    },
+    {
+      mode: 'viewer',
+      title: 'What their cells are',
+      text: 'The cells filled by their true types (the simulation\'s, imported as labels of the instrument\'s cells): 440 of the epithelial domain\'s 1,043 cells are epithelial-like, 304 fibroblast-like and 204 immune-like; 319 of the immune domain\'s 475 are immune-like. A region is an area, not a cell type: its cells\' labels say what is in it.',
+      do: { action: 'import-instrument-types' },
+      label: 'Show their true types',
+      cells: { outlines: true, fill: 'true-types', opacity: 0.6 },
+      transcripts: { genes: [] },
+    },
+    {
+      mode: 'viewer',
+      title: 'For QuPath, in the H&E\'s pixels',
+      text: 'The regions written as QuPath reads annotations, in the H&E\'s full-resolution pixels: each point taken back through the deformation and the transform. In QuPath, open simulated_he_image.ome.tif from the example\'s post_xenium folder and import the file: the regions lie on the same nuclei. (Regions, GeoJSON, as QuPath reads and writes it, does the same for any region.)',
+      do: { action: 'write-regions', image: 'he' },
+      label: 'Write them for QuPath',
+      cells: { outlines: true, fill: 'true-types', opacity: 0.6 },
+      transcripts: { genes: [] },
+    },
+    {
+      mode: 'viewer',
+      title: 'And back',
+      text: 'As QuPath\'s annotations come back: the file read in the H&E\'s pixels, each point placed through the alignment in use. Each region comes back (named with (2)) with its area within 0.05 µm² of the original and the same cells. Annotations drawn in QuPath and exported as GeoJSON are read the same way, with Read a file….',
+      do: { action: 'read-regions', image: 'he' },
+      label: 'Read them back',
+      ...HE_ON_STAINS,
+      cells: { outlines: true },
+    },
+  ],
+};
+
+const SIMULATED_REVIEW = {
+  id: 'pathologist-review',
+  title: 'A pathologist\'s review',
+  simulated: true,
+  images: true,
+  question: 'Labels from markers are predictions. Which cells should a pathologist look at first, what do the decisions change, and what does the record keep of each?',
+  expect: 'The queue holds 662 of the 2,887 labeled cells; of its first twenty, 2 are mislabeled (10%, against 1.7% of all the labels). Decided against the truth, 18 are accepted and 2 relabeled, each with its reason, and a fold\'s 43 cells are excluded. The record keeps 22 reviews, each with who, why, the value before and after, the label set, the cell\'s label and its confidence, and the H&E\'s alignment in use.',
+  steps: [
+    {
+      mode: 'celltypes',
+      title: 'Cluster the cells',
+      text: 'The instrument\'s cells clustered with the defaults: 5 clusters of 2,925 cells.',
+      do: { action: 'cluster' },
+      label: 'Cluster the cells',
+    },
+    {
+      mode: 'celltypes',
+      title: 'Label them from the types\' markers',
+      text: 'Each cell takes the simulated type whose markers lead by the margin: 2,887 of the 2,925 take one.',
+      do: { action: 'label', markers: 'simulated' },
+      label: 'Label the cells',
+    },
+    {
+      mode: 'viewer',
+      title: 'The H&E',
+      text: 'A pathologist reviews against the H&E. Added with its matrix; every review records the version of its alignment in use, as a later version may place it elsewhere.',
+      do: { action: 'add-image', image: 'he', alignment: 'matrix' },
+      label: 'Add the H&E',
+      transcripts: { genes: [] },
+      cells: { outlines: false },
+    },
+    {
+      mode: 'celltypes',
+      title: 'The cells to look at first',
+      text: 'The review queue ranks the labeled cells whose label few of their ten nearest cells share while most share another, and those of low confidence: 662 of the 2,887. Of all the labels, 49 (1.7%) are not the cell\'s true type; of the queue\'s first twenty, 2 are (10%): it finds mislabels six times as often as looking at random.',
+      celltypes: { color: 'labels', review: true, section: 'review', against: 'none' },
+    },
+    {
+      mode: 'celltypes',
+      title: 'Decide the first twenty',
+      text: 'Each of the first twenty decided as a reviewer who knows its type would (here, the simulation\'s truth): 18 accepted (mostly immune-like cells among others, where they belong though few of their neighbors share their label) and 2 relabeled, each with its reason. Every decision is a review, recorded with the reviewer, the label before and after, the label set, the cell\'s ID and its label\'s confidence, and the H&E\'s alignment in use; the relabels go to a curated set begun from the markers\' labels, with 47 wrong labels where they had 49.',
+      do: { action: 'review-queue', first: 20 },
+      label: 'Decide them',
+      celltypes: { color: 'labels', review: true, section: 'review', against: 'none' },
+    },
+    {
+      mode: 'viewer',
+      title: 'Leave out a fold',
+      text: 'A fold in the section at the top: drawn as a region of class Ignore* and excluded from analyses, with its reason, and the cells in it with it. An exclusion is taken back by including them again: nothing is deleted.',
+      do: { action: 'exclude-fold', region: { name: 'Fold', cls: 'Ignore*', rectangle: [255, 10, 320, 60] }, note: 'A fold in the section' },
+      label: 'Exclude the fold',
+      ...HE_ON_STAINS,
+      cells: { outlines: true },
+      camera: { cx: 290, cy: 60, umPerCss: 0.3 },
+    },
+    {
+      mode: 'viewer',
+      title: 'The record',
+      text: 'The cells colored by their review: green accepted, blue relabeled, gray excluded (the fold\'s 43 cells). The Viewer\'s Reviews counts them and lists all 22 reviews, each going to its cell or region; Write the record writes them as CSV (a row a cell) or JSON. A cell\'s inspector lists its own reviews.',
+      cells: { outlines: true, fill: 'review', opacity: 0.7 },
+      transcripts: { genes: [] },
+    },
+  ],
+};
+
+export const WORKED = { 'xenium-breast-2fov': [BREAST_COMPARE, BREAST_REFINE, BREAST_LABELS], 'xenium-lung-2fov': [LUNG_PLANTED, LUNG_CELL_TYPES], 'simulated-standard': [SIMULATED_TRUTH, SIMULATED_LABELS, SIMULATED_ALIGN, SIMULATED_REGIONS, SIMULATED_REVIEW] };
 
 export function workedExamples(example) {
   return WORKED[example] ?? [];

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (0.5.0)
+## 0.5.0 (2026-10-17)
 
 Wave 5 of the [roadmap](situcraft-spec/roadmap.md): the pathology bridge. Post-Xenium H&E and
 immunofluorescence images on the tissue, aligned and checked in µm; regions exchanged with QuPath;
@@ -19,11 +19,11 @@ cells and regions reviewed with their provenance.
     pathology fixture's immunofluorescence image, the Xenium image's, 3.5 times too small).
   - **The Viewer** lists each image with how it is placed (scale, turn, mirroring), shows it at its
     opacity at any rotation or reflection, an immunofluorescence image's channels each with a
-    colour, window and gamma as the stains have; saved views keep them. The project tree lists
+    color, window and gamma as the stains have; saved views keep them. The project tree lists
     **Images**. Remote control: `add_image`; `show_tissue` takes `images`.
   - **XOA 1.0 bundles open:** cells numbered rather than named, the count matrix's earlier layout,
     and Parquet files whose footer's row count is wrong (as fastparquet 1.0 wrote them).
-  - **JPEG tiles** in TIFFs, their shared tables and colours as libjpeg-turbo decodes them.
+  - **JPEG tiles** in TIFFs, their shared tables and colors as libjpeg-turbo decodes them.
   - **Validated** on the pathology fixture (the breast cancer section of Janesick et al. 2023, its
     bundle's files and its H&E and immunofluorescence images, 2.8 GB): every level of both images
     the pixels tifffile reads; the XOA 1.0.1 bundle's checks; its H&E drawn where its matrix puts
@@ -43,7 +43,7 @@ cells and regions reviewed with their provenance.
     with its reason. Any version is written as Xenium Explorer's transformation matrix or
     keypoints, to load with the image there.
   - **Simulated post-Xenium images:** `situcraft simulate --post-xenium` also makes an H&E
-    (haematoxylin and eosin by Beer–Lambert's law, their colours varied per section) and an
+    (hematoxylin and eosin by Beer–Lambert's law, their colors varied per section) and an
     immunofluorescence image (DAPI and a membrane stain) of the simulated section, each moved by a
     known transform and a smooth deformation, written as its truth.
   - **Remote control:** `align_image`, `use_transform`, `show_alignment`; `add_image` without an
@@ -58,7 +58,7 @@ cells and regions reviewed with their provenance.
     puts it.
 - **Automatic registration (wave 5, slice 3).** **Align automatically** in the Alignment view (and
   `register_image`) aligns an image to the Xenium image by the nuclei, as a job: an H&E's
-  haematoxylin (colour deconvolution) or an immunofluorescence image's nuclear stain against DAPI.
+  hematoxylin (color deconvolution) or an immunofluorescence image's nuclear stain against DAPI.
   - **Its scale, turn and mirroring are found,** whatever its metadata says: a sweep of scales, the
     image as it is and mirrored, the turn from the log-polar form of its spectrum and the shift by
     phase correlation, the best by normalized mutual information; then refined by mutual
@@ -86,7 +86,7 @@ cells and regions reviewed with their provenance.
     patches of DAPI where there is tissue, between those an automatic alignment matched, each
     against the image as the version draws it; how far it is off in µm (median, 90th percentile,
     most) and a bound of the matches' own error, below which an error may be theirs. **Show where it
-    is off** maps each patch's error as a coloured square with an arrow. Each check is recorded as
+    is off** maps each patch's error as a colored square with an arrow. Each check is recorded as
     an artifact of its version. Remote control: `check_alignment`; `show_alignment` shows a
     version as asked.
   - **Validated:** on a simulated H&E placed by its true transform without its deformation, each
@@ -101,9 +101,9 @@ cells and regions reviewed with their provenance.
     Backspace takes a corner back), freehand, and a brush that paints a region, or paints onto the
     region chosen or erases from it (holes, and parts cut apart). The wheel still zooms and the space
     bar pans while drawing.
-  - **Named and classed,** with QuPath's classes and colours (Tumor, Stroma, Immune cells,
+  - **Named and classed,** with QuPath's classes and colors (Tumor, Stroma, Immune cells,
     Necrosis, Other, Region\*, Ignore\*) or any other; each region's area and cells (those of the
-    segmentation drawn whose centre lies in it); **Choose its cells** chooses them for the QC view,
+    segmentation drawn whose center lies in it); **Choose its cells** chooses them for the QC view,
     the Viewer and the inspector.
   - **Kept as versions** in the project: renamed, reclassed, reshaped, removed and returned, each
     change with who, when and why; any earlier version restored.
@@ -116,12 +116,12 @@ cells and regions reviewed with their provenance.
   - **Remote control:** `draw_region`, `edit_region`, `regions`, `import_regions`; `export` writes a
     dataset's regions as GeoJSON.
   - **Validated:** in the page, each region's cells the same as an independent count (a winding
-    number over the cells' centres); regions drawn by hand where the pointer went; regions written
+    number over the cells' centers); regions drawn by hand where the pointer went; regions written
     in the simulated H&E's pixels through its deformed alignment and read back with the same areas
     (within 0.001%) and cells; annotations laid out as QuPath 0.4 writes them, drawn on that H&E,
     landing within 0.18 µm of where its truth puts them. The brush's area is within 0.5% of the
     exact shape's. With QuPath 0.7.0 itself: regions written for it open there with their names,
-    classes, colours, holes and parts, and come back with the same areas and cells; annotations made
+    classes, colors, holes and parts, and come back with the same areas and cells; annotations made
     in QuPath come back to their own pixels.
 - **Reviews with provenance (wave 5, slice 6).** Cells and regions are reviewed where you look at
   them, and every review is kept.
@@ -139,13 +139,38 @@ cells and regions reviewed with their provenance.
     ones are read as reviews).
   - **The Viewer's Reviews** counts the cells drawn by their review, lists every review, and writes
     the record as CSV (a row for each cell or region reviewed) or JSON; **Fill by: Review status**
-    colours each cell by its review.
+    colors each cell by its review.
   - **Remote control:** `review`, `reviews`; `export` writes reviews; `show_tissue` fills by review.
   - **Validated:** each review's record against the state it changed (a cell relabeled by hand: its
     ID, label, confidence, label set, segmentation and the H&E's alignment in use recorded, the new
     label on that cell and no other; a region excluded with exactly the cells in it; a region
     reclassed); the record written as CSV and JSON and read back row for row; the Review status fill
     every cell's status.
+- **Worked examples of the pathology bridge (wave 5, slice 7),** on the simulated tissue's H&E,
+  each asking a question, saying what to expect, and doing its steps' jobs from its card.
+  - **Align an H&E three ways:** by Xenium Explorer's matrix, six landmarks and automatically, each
+    checked over the tissue in µm (0.63, 0.58 and 0.41 µm off, median) and against the simulation's
+    truth, which ranks them alike: the check tells versions apart where there is no truth.
+  - **Regions for QuPath:** the epithelial and immune domains drawn on the H&E, their cells and true
+    types (domains mix their types), written in the H&E's pixels and read back as they were.
+  - **A pathologist's review:** the review queue's first twenty cells decided as a reviewer who knows
+    their types would (2 of them mislabeled, six times the rate of all the labels), each decision
+    recorded with its provenance; a fold excluded with its cells.
+  - **Remote control:** `tour` runs them; `open_example` makes an outdated simulated example again
+    with `remake`.
+
+### Changed
+
+- **The simulated example has an H&E and an immunofluorescence image** of its section, with Xenium
+  Explorer's matrix and where each image's pixels lie in its truth, and each instrument cell's true
+  cell and type (`truth/instrument_cell_types.csv`). One made by an earlier SituCraft is listed as
+  outdated, with **Make it again**: the same run, cells and transcripts. A simulation's run (its
+  experiment and analysis UUIDs) no longer depends on its post-Xenium images, made after it.
+- **Regions' outlines are drawn over a dark casing,** legible on cells filled in a like color,
+  and a class named by the user is never given gray, which reads as QuPath's Ignore*.
+- **American spelling** in the documentation and the interface (color, gray, center, neighbor,
+  hematoxylin, artifact, labeled, modeled); what earlier releases wrote into their artifacts'
+  files stays as written, so that those are made again byte for byte.
 
 ## 0.4.0 (2026-10-16)
 
@@ -334,7 +359,7 @@ segmentation, validated against simulated truth and independent reference output
 ### Added
 
 - **Simulated tissues (wave 3, slice 1).** `situcraft simulate` makes a tissue whose every cell,
-  nucleus and molecule is known, and writes it as a Xenium output bundle labelled simulated, with
+  nucleus and molecule is known, and writes it as a Xenium output bundle labeled simulated, with
   the truth beside it ([docs/FORMATS.md](docs/FORMATS.md)).
   - **The tissue:**
     - cell types with their own sizes, shapes, densities and expression, in domains of different
@@ -346,7 +371,7 @@ segmentation, validated against simulated truth and independent reference output
     OME-TIFF.
   - **The truth** (`truth/`) imports into the simulated dataset as a Xenium Ranger bundle of the
     same run, so any segmentation is scored against it with the comparison workspace.
-  - **Labelled simulated:** SituCraft marks the bundle simulated in the Data view, the inspector
+  - **Labeled simulated:** SituCraft marks the bundle simulated in the Data view, the inspector
     and the dataset list. Its methods paragraph says that the data were simulated and implies no
     instrument.
   - **Read by other tools as Xenium data:** the counts are also written as the 10x Genomics
@@ -402,7 +427,7 @@ segmentation, validated against simulated truth and independent reference output
   - **The ROI pilot** refines a region twice with different seeds and reports how often the two
     put transcripts in the same cell. On a simulated tissue it matched the whole tissue's run in
     its region.
-  - **A preflight** counts the transcripts modelled and those left out, the cells it starts from,
+  - **A preflight** counts the transcripts modeled and those left out, the cells it starts from,
     and what it covers. It estimates memory, disk and time against what the computer has, and
     refuses a run that would not fit. On the Lung example its estimates were within 5% of the
     memory a whole run took, 10% of the disk and 10% of the time.
@@ -463,7 +488,7 @@ segmentation, validated against simulated truth and independent reference output
   - **A refinement records each cell's boundary certainty** (`certainty.bin`,
     [docs/FORMATS.md](docs/FORMATS.md)).
 
-- **Larger tissues (wave 3, slice 9).** A region of more than about 4 million modelled transcripts
+- **Larger tissues (wave 3, slice 9).** A region of more than about 4 million modeled transcripts
   is refined in patches of about 2 million, one after another, each also refining the cells within
   40 µm of its square, and stitched into one segmentation: each pixel and transcript from the
   patch whose square holds it, each cell counted once. The result is still the same for the same
@@ -644,7 +669,7 @@ by its SHA-256.
     with the project. Remote control gains `compare_segmentations` (25 actions).
 - **The comparison workspace (wave 2, slice 6).** The **Compare** view shows a comparison's two
   segmentations on the tissue:
-  - **side by side** with one camera, **overlaid** in two colours, or in turns (**flicker**); cells
+  - **side by side** with one camera, **overlaid** in two colors, or in turns (**flicker**); cells
     filled by the class of their difference; a **disagreement map** by 50 µm region;
   - **the review queue:** the differences ranked by reassigned transcripts, contamination (markers
     of different lineages in one cell), disagreement or low counts, among the classes and
@@ -684,7 +709,7 @@ by its SHA-256.
     - **Breast:** the instrument's cells, drawn from stains, against a 5 µm nucleus expansion.
     - **Lung:** find the planted errors.
   - **Practice: find planted errors** copies the instrument's segmentation with known errors in
-    it (neighbouring cells of different lineages merged, large cells split, cells missed, cells
+    it (neighboring cells of different lineages merged, large cells split, cells missed, cells
     drawn too wide), recorded as a segmentation, simulated, with its answer key. The answer key
     lists every error and takes you to it in the workspace. It is offered on the example datasets;
     on your own, only once you turn on **Practice tools for every dataset** (the theme button's
@@ -785,7 +810,7 @@ by its SHA-256.
     median difference +0.25%, 97.0% within 5%; 98.28% of gene transcripts assigned (the
     instrument: 97.97%). Every transcript given differently is explained: 2,534 on the
     expansion's rim, 4.56–4.98 µm from their nucleus, which the instrument's cells do not reach;
-    6,182 where neighbouring cells meet, within 0.34 µm of equally near both nuclei; 8 the
+    6,182 where neighboring cells meet, within 0.34 µm of equally near both nuclei; 8 the
     instrument records in a cell other than its own mask's at their pixel.
   - **Breast,** whose cells the instrument drew mostly from stains: 7,312 nuclei grown into cells,
     and the instrument's 7,275 cells accounted for (6,752 holding one nucleus, 255 none, 268

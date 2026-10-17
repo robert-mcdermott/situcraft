@@ -34,12 +34,14 @@ and a simulated tissue is ready to make:
 | --- | --- | --- | --- |
 | Xenium V1 human Lung, 2 FOVs | 278 MB | 284 MB | 11,898 cells, 825,885 transcripts, 289 genes, a DAPI image, nucleus-expansion segmentation |
 | Xenium V1 human Breast, 2 FOVs | 379 MB | 385 MB | 7,275 cells, 1,113,950 transcripts, 280 genes, four stains, multimodal cell segmentation |
-| A simulated tissue with known truth | none: made here in seconds | 34 MB | 3,030 cells of four types, 436,996 transcripts, 120 genes, a DAPI image, nucleus-expansion segmentation, and the truth: every cell's and transcript's |
+| A simulated tissue with known truth | none: made here in seconds | 42 MB | 3,030 cells of four types, 436,996 transcripts, 120 genes, a DAPI image, nucleus-expansion segmentation, an H&E and an immunofluorescence image of the section stained after the run, and the truth: every cell's, transcript's and type, and where each image's pixels lie |
 
 **Download** fetches one from 10x Genomics, checks the archive and every file against recorded
 checksums, keeps only the bundle and deletes the archive. Nothing is downloaded until you ask.
-**Make it** simulates the third with SituCraft's standard settings (`situcraft simulate` makes
-the same tissue, byte for byte); it is labelled simulated wherever it is shown.
+**Make it** simulates the third with SituCraft's standard settings (`situcraft simulate
+--post-xenium` makes the same tissue, byte for byte); it is labeled simulated wherever it is shown.
+One made by an earlier SituCraft, without the H&E, offers **Make it again**: the same run, cells
+and transcripts, with the images.
 When a 10x Genomics example is ready, **Take the tour**: seven steps through the Data view, the Viewer and QC. Use
 **Next** and **Back** on the card at the foot of the window; you can explore at any step, and the
 tour continues from there.
@@ -55,19 +57,24 @@ methods paragraph (section 7) cites it.
 Each example also has **worked examples**: a question answered step by step, saying first what to
 expect. Some steps run a job before going on (the card's button says what it does: expand the
 nuclei, plant errors, refine, import the truth, compare, cluster, label, make the labels again on
-another segmentation), and others open the comparison in the Compare workspace, the clustering in
-the Cell types view, or the Viewer, with the view, the ranking, the colors and the difference the
-step talks about.
+another segmentation, add the H&E, place landmarks, align it automatically, check its alignments,
+draw regions and write them for QuPath, decide the review queue's first cells, exclude a fold), and
+others open the comparison in the Compare workspace, the clustering in the Cell types view, the
+Alignment view, or the Viewer, with the view, the ranking, the colors and the difference the step
+talks about.
 
 | Example | Worked example | The question |
 | --- | --- | --- |
-| Breast | The instrument's cells against a nucleus expansion | Where does growing each nucleus by 5 µm disagree with the cells the instrument drew from its stains, and which does the evidence favour there? |
+| Breast | The instrument's cells against a nucleus expansion | Where does growing each nucleus by 5 µm disagree with the cells the instrument drew from its stains, and which does the evidence favor there? |
 | Breast | Redraw the cells from their transcripts | How does SituCraft's transcript-informed segmentation redraw the instrument's cells, and where is it unsure of itself? |
 | Breast | Labels under two segmentations | How much do the cells' labels depend on the segmentation they were counted in, and which cells does the choice change? |
 | Lung | Find the planted errors (simulated) | Can you find a segmentation's errors with the comparison workspace, and which ranking finds which kind? |
 | Lung | Cluster and label the Lung cells | Which cells are in this section, as their expression groups them and as known markers name them, and how far can each label be trusted? |
 | Simulated | Score segmentations against the truth | When every cell is known, how close do the instrument's nucleus expansion and SituCraft's transcript-informed segmentation come to the true cells? |
 | Simulated | Labels against the truth | When every cell's type is known, how many cells do markers label correctly, and how much of the error is the segmentation's? |
+| Simulated | Align an H&E three ways | The section was stained with H&E and scanned after the run: placed by Xenium Explorer's matrix, by six landmarks, or automatically by the nuclei, which places it best, and how do you tell without a truth? |
+| Simulated | Regions for QuPath | Draw the epithelial and the immune domains on the H&E, count their cells, and take the regions to QuPath in the H&E's own pixels: do they come back as they were? |
+| Simulated | A pathologist's review | Labels from markers are predictions. Which cells should a pathologist look at first, what do the decisions change, and what does the record keep of each? |
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/worked-dark.webp">
@@ -261,7 +268,7 @@ The ROI pilot is the place to start on a new tissue: a region of a few hundred �
 and its two seeds show how much of the result is chance. The result itself is the summary of many
 samples from the model: each transcript in its most probable cell, with that probability kept.
 
-A large tissue (more than about 4 million transcripts modelled) is refined in patches of about 2
+A large tissue (more than about 4 million transcripts modeled) is refined in patches of about 2
 million transcripts each, one after another, each also refining the cells within 40 µm of its
 square, and stitched into one segmentation; the Compute step says how many. The result is the same
 for the same seed whatever the computer. The memory still grows with the tissue, by about 100
@@ -299,7 +306,7 @@ does not read says so, and offers to compare the two segmentations again.
 
 **Open** (beside a comparison, or **Compare** in the views) shows the two on the tissue:
 
-- **Side by side** with one camera, **Overlay** (B's outlines over A's, each in its colour), or
+- **Side by side** with one camera, **Overlay** (B's outlines over A's, each in its color), or
   **Flicker** (A and B in turns). Cells are filled by the class of their difference; the
   **Disagreement map** shades each 50 µm region by the share of its pixels the two give to
   different cells.
@@ -329,13 +336,13 @@ its transcripts counted as every segmentation's are; one whose check finds a fat
 kept as invalid, for review.
 
 **Practice: find planted errors**, on the example datasets, makes a copy of the instrument's
-segmentation with known errors in it: neighbouring cells of different lineages merged, large cells
+segmentation with known errors in it: neighboring cells of different lineages merged, large cells
 split in two, cells missed, and cells drawn too wide. Compare it with the instrument's, review the
 differences in the workspace, then open **The answer key** to see what was planted where (**Show**
 takes you to each). The copy is simulated, named so, and is never promoted or exported. On the Lung
 example, the comparison lists exactly the 60 planted errors, each in its class, and ranked by
 contamination the merges come first: their cells express markers of two lineages together. To
-practise on a dataset of your own, turn on **Practice tools for every dataset** in the menu of the
+practice on a dataset of your own, turn on **Practice tools for every dataset** in the menu of the
 theme button (top right); it is off unless you do.
 
 ### Export a segmentation
@@ -426,7 +433,7 @@ tissue are not independent replicates, so the p-values rank genes rather than te
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/clusters-dark.webp">
-  <img alt="The Breast example in the Viewer, its cells filled by their cluster: tumour nests and stroma in different clusters, with the clusters' legend" src="images/clusters-light.webp">
+  <img alt="The Breast example in the Viewer, its cells filled by their cluster: tumor nests and stroma in different clusters, with the clusters' legend" src="images/clusters-light.webp">
 </picture>
 
 ### The map and the tissue
@@ -451,7 +458,7 @@ A map shows which cells are alike, not how alike: distances between groups, and 
 little. Under the map, SituCraft says how far this one can be trusted, from its trustworthiness and
 how many of each cell's nearest neighbors in expression stay near it on the map.
 
-**Name** clusters in the table (a T-cell cluster, a tumour cluster): names show on the map, the
+**Name** clusters in the table (a T-cell cluster, a tumor cluster): names show on the map, the
 tissue and the legends, and giving several clusters the same name merges them. Each change is a
 new version of the names, kept in the project's history; the clusters keep their numbers. The
 **dot plot** shows each cluster's two leading markers across all clusters: dot size, the share of
@@ -625,7 +632,9 @@ counterparts carry.
 
 A Xenium run leaves the section intact, so it can be stained (H&E) or imaged for proteins
 (immunofluorescence) afterwards. SituCraft draws such an image on the tissue, under the
-transcripts and cells, placed by an alignment to the Xenium image.
+transcripts and cells, placed by an alignment to the Xenium image. To practice, the simulated
+example has both (in its `post_xenium` folder, the matrix in its truth), and its worked examples
+align the H&E, draw regions on it and review cells against it.
 
 In the Viewer, open **Post-Xenium images**, then **Add a post-Xenium image**:
 
@@ -644,8 +653,8 @@ In the Viewer, open **Post-Xenium images**, then **Add a post-Xenium image**:
 
 Each image is listed under **Images** in the project tree and in the Viewer's panel, with the
 version of its alignment that places it (its scale, its turn, whether it is mirrored). Show or
-hide it and set its opacity; an H&E is drawn in its colours over the stains, an
-immunofluorescence image's channels each in a colour, window and gamma as the stains are (its
+hide it and set its opacity; an H&E is drawn in its colors over the stains, an
+immunofluorescence image's channels each in a color, window and gamma as the stains are (its
 nuclear stain off at first: the Xenium image's DAPI is the same nuclei). A saved view keeps each
 image's settings. An image not aligned yet is listed but not drawn.
 
@@ -677,14 +686,14 @@ when, and the version it was made from. **Use** places the image by another (the
 with the decision); **Edit from it** loads its landmarks to change them into a new version;
 **Matrix** and **Keypoints** write it as Xenium Explorer's files, to load with the image there.
 
-To practise, `situcraft simulate --post-xenium <folder>` makes a simulated tissue with an H&E and an
+To practice, `situcraft simulate --post-xenium <folder>` makes a simulated tissue with an H&E and an
 immunofluorescence image of it in `post_xenium/`, each moved by a known transform and a smooth
 deformation; `truth/post_xenium/registration.json` says where each pixel truly lies.
 
 ### Aligning automatically
 
-**Align automatically** registers the image by its nuclei: an H&E's haematoxylin (separated from
-its eosin by colour), or an immunofluorescence image's nuclear stain (chosen by its name; pick it
+**Align automatically** registers the image by its nuclei: an H&E's hematoxylin (separated from
+its eosin by color), or an immunofluorescence image's nuclear stain (chosen by its name; pick it
 if the name does not say), against the Xenium image's DAPI. It finds the image's scale, turn and
 mirroring whatever its metadata says, refines them, then matches patches over the tissue and fits
 the model to them (a similarity, or an affine transform). It runs as a job; a small section takes
@@ -700,6 +709,11 @@ seconds, a whole one a minute or so.
 The same images always give the same alignment, on any computer.
 
 ### Seeing and checking an alignment
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/alignment-dark.webp">
+  <img alt="The Alignment view on the simulated tissue's H&E: on the left the Xenium image with the H&E placed over it by Xenium Explorer's matrix and each checked patch drawn as a square colored by how far off the matrix is there, on the right the H&E itself, and the worked example's card beside them" src="images/alignment-light.webp">
+</picture>
 
 **See and check** shows on the Xenium image (the left) any version of the alignment, the
 landmarks' fit before it is saved, or nothing:
@@ -717,7 +731,7 @@ places it (patches between those an automatic alignment used, so that it is not 
 matches). It reports how far the version is off, in µm (the median, the 90th percentile and the
 most, over how many patches), and a bound of the matches' own error: an error below it may be the
 matches', one well above it is the alignment's. **Show where it is off** draws each patch as a
-square coloured by its error (green at 0, yellow at 1 µm, red at 2 µm or more) with an arrow from
+square colored by its error (green at 0, yellow at 1 µm, red at 2 µm or more) with an arrow from
 where the image belongs to where it is drawn, twenty times as long. Check two versions to compare
 them: 10x's alignment against an automatic one, or one with a deformation against one without.
 
@@ -735,8 +749,13 @@ one), then a tool:
 - **Brush:** paint it, the brush's size in pixels of the screen (zoom in for a fine edge). With a
   region chosen, the brush paints onto it, or with **Erase** takes from it, holes included.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/regions-dark.webp">
+  <img alt="The Viewer on the simulated tissue: two regions drawn over the H&E, the epithelial and the immune domains, over cells filled by their true types, and the Regions section listing each with its class, area and cells" src="images/regions-light.webp">
+</picture>
+
 While a tool is chosen the wheel still zooms, holding the space bar pans, and Esc stops drawing.
-Each region is listed with its class, area and cells: those of the segmentation drawn whose centre
+Each region is listed with its class, area and cells: those of the segmentation drawn whose center
 lies in it. Click one to choose it; double-click to go to it. A region chosen can be renamed,
 reclassed, gone to, removed, and its cells chosen: **Choose its cells** chooses the instrument's
 cells in it, as brushing a plot in the QC view does, and the Viewer, the QC view and the inspector
@@ -757,7 +776,7 @@ QuPath writes and reads annotations, in one of:
 To take regions to QuPath, choose the image you will open there (the H&E, say) and **Write them
 all**; in QuPath, open that image and import the file's objects. To bring QuPath's annotations here,
 export them from QuPath as GeoJSON, choose the image they were drawn on, and **Read a file…**: each
-annotation becomes a region, with its name, class and colour; detections and cells are left out,
+annotation becomes a region, with its name, class and color; detections and cells are left out,
 and how many is reported.
 
 ## Reviewing cells and regions
@@ -787,11 +806,16 @@ Review where you look:
 - **A region:** choose it under **Regions**; **Review it** under its details.
 - **The review queue** of the Cell types view (above).
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/reviews-dark.webp">
+  <img alt="The Viewer after a pathologist's review of the simulated tissue: cells filled by their review status (accepted, relabeled, and a fold's cells excluded) and the Reviews section counting them and listing each review with its reason, reviewer and time" src="images/reviews-light.webp">
+</picture>
+
 The Viewer's **Reviews** counts the cells drawn that are accepted, relabeled, ambiguous, excluded,
 of concern and commented, lists every review (click one to go to its cell or region), and writes the
-record as CSV (a row for each cell or region reviewed) or JSON. **Fill by: Review status** colours
-each cell by its review: excluded grey, a concern vermillion, ambiguous orange, relabeled blue,
-accepted green, commented purple (a palette apart in every colour vision).
+record as CSV (a row for each cell or region reviewed) or JSON. **Fill by: Review status** colors
+each cell by its review: excluded gray, a concern vermillion, ambiguous orange, relabeled blue,
+accepted green, commented purple (a palette apart in every color vision).
 
 ## Keyboard
 

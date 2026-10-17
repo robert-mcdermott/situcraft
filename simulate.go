@@ -41,7 +41,7 @@ func runSimulate(args []string, stdout, stderr io.Writer) int {
 	reference := flags.Int("reference", 0, "also write a single-cell reference of the tissue's types, this many cells of each, as an AnnData object in Zarr beside the bundle (<folder>-reference.zarr), to label its cells from")
 	flags.Usage = func() {
 		fmt.Fprintln(stderr, "Usage: situcraft simulate [flags] <new output folder>")
-		fmt.Fprintln(stderr, "Writes a simulated tissue as a Xenium-shaped output bundle, labelled simulated, with the truth in its truth/ folder.")
+		fmt.Fprintln(stderr, "Writes a simulated tissue as a Xenium-shaped output bundle, labeled simulated, with the truth in its truth/ folder.")
 		flags.PrintDefaults()
 	}
 	folders, err := parseArgs(flags, args)

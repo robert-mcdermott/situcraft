@@ -18,7 +18,7 @@ import { colorVisionFriendly, setColorVisionFriendly } from './lib/colormaps.js'
 import { createProject, isEmptyProject, parseProject, rename, serializeProject } from './lib/project.js';
 import { parseViewLink } from './lib/views.js';
 
-const VERSION = '0.4.0';
+const VERSION = '0.5.0';
 
 const toOpen = { label: 'Open a bundle', icon: 'bundle', run: (app) => app.openPathDialog() };
 
@@ -607,7 +607,7 @@ async function start() {
     const next = !app.practice();
     prefs.set('practice', next);
     store.notify(['project']);
-    toast(next ? 'Practice tools: the Segmentation view offers to plant errors in a copy of any dataset\'s segmentation, simulated, to practise finding them.' : 'Practice tools only for the example datasets.', { timeout: 4000 });
+    toast(next ? 'Practice tools: the Segmentation view offers to plant errors in a copy of any dataset\'s segmentation, simulated, to practice finding them.' : 'Practice tools only for the example datasets.', { timeout: 4000 });
   }
   function setTheme(next) {
     prefs.set('theme', next);

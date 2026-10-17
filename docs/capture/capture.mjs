@@ -307,7 +307,7 @@ const scenes = {
   async cellmap() {
     await act('open_example', { example: 'breast' });
     await act('cluster_cells', {});
-    await act('name_clusters', { names: { 1: 'Tumour', 5: 'Tumour', 3: 'Dividing tumour', 6: 'Macrophages', 7: 'Fibroblasts', 9: 'T cells', 12: 'Endothelium' } });
+    await act('name_clusters', { names: { 1: 'Tumor', 5: 'Tumor', 3: 'Dividing tumor', 6: 'Macrophages', 7: 'Fibroblasts', 9: 'T cells', 12: 'Endothelium' } });
     await act('show_map', { color_by: 'clusters', select: { clusters: [9] } });
     await waitFor(`Boolean(document.querySelector('.ct-composition'))`);
     await scrollTo('.cell-map', 'start');
@@ -346,7 +346,7 @@ const scenes = {
     await js(`document.querySelector('[data-action=review-queue]').click()`);
     await waitFor(`Boolean(document.querySelector('.rv-table tbody tr'))`);
     await js(`document.querySelector('.rv-table tbody tr').click()`);
-    await waitFor(`Boolean(document.querySelector('.rv-evidence .rv-decide'))`);
+    await waitFor(`Boolean(document.querySelector('.rv-evidence .review-form'))`);
     await scrollTo('.rv-evidence', 'start');
     await sleep(300);
   },
@@ -396,6 +396,47 @@ const scenes = {
     if (step?.data?.step !== 7) throw new Error(`the worked example stopped at step ${step?.data?.step}: ${step?.message}`);
     await waitFor(`Boolean(document.querySelector('.cmp-impact-table tbody tr'))`);
     await js(`(async () => { const w = window.situcraft.compareView.current(); for (const r of w.state.renderers) await r.renderer.settled(); })()`);
+    await sleep(400);
+  },
+  // The simulated tissue's H&E aligned three ways, a worked example (wave 5, slice 7): in the
+  // Alignment view, the matrix's version over the stains with where it is off, patch by patch.
+  async alignment() {
+    await act('open_example', { example: 'simulated', remake: true });
+    await act('tour', { example: 'simulated', name: 'align-he' });
+    let step = null;
+    for (let k = 0; k < 5; k += 1) step = await act('tour', { run: true });
+    if (step?.data?.step !== 6) throw new Error(`the worked example stopped at step ${step?.data?.step}: ${step?.message}`);
+    await waitFor(`(window.situcraftAlignment?.errorSquares?.() ?? 0) > 0`);
+    await js(`window.situcraftAlignment.settled()`);
+    await sleep(400);
+  },
+  // Regions drawn on the H&E (wave 5, slice 5): the worked example's two domains over the cells
+  // filled by their true types, and the Viewer's Regions listing them.
+  async regions() {
+    await act('open_example', { example: 'simulated', remake: true });
+    await act('tour', { example: 'simulated', name: 'regions-qupath' });
+    let step = null;
+    for (let k = 0; k < 3; k += 1) step = await act('tour', { run: true });
+    if (step?.data?.step !== 4) throw new Error(`the worked example stopped at step ${step?.data?.step}: ${step?.message}`);
+    await act('tour', { run: true });
+    await act('tour', { step: 4 });
+    await waitFor(`Boolean(window.situcraftViewer?.clusterFill?.())`);
+    await scrollTo('.viewer-regions-section');
+    await js(`window.situcraftViewer.settled()`);
+    await sleep(400);
+  },
+  // A pathologist's review, a worked example (wave 5, slices 6 and 7): the cells filled by their
+  // review status, the fold's excluded, and the Viewer's Reviews counting them and listing the record.
+  async reviews() {
+    await act('open_example', { example: 'simulated', remake: true });
+    await act('tour', { example: 'simulated', name: 'pathologist-review' });
+    let step = null;
+    for (let k = 0; k < 6; k += 1) step = await act('tour', { run: true });
+    if (step?.data?.step !== 7) throw new Error(`the worked example stopped at step ${step?.data?.step}: ${step?.message}`);
+    await act('show_tissue', { dataset: 'simulated-standard', center: [300, 120], um_per_pixel: 0.35 });
+    await waitFor(`Boolean(window.situcraftViewer?.clusterFill?.()?.review)`);
+    await scrollTo('.viewer-reviews-section');
+    await js(`window.situcraftViewer.settled()`);
     await sleep(400);
   },
   // The Breast example's clusters on the tissue (wave 4, slice 1): the cells filled by cluster,

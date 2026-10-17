@@ -89,13 +89,14 @@ export function mountWelcome(app, container) {
           : h('p.muted.example-source', 'Data: ', example.page ? h('a', { href: example.page, target: '_blank', rel: 'noopener noreferrer' }, example.publisher) : example.publisher, ', ',
             example.licenseUrl ? h('a', { href: example.licenseUrl, target: '_blank', rel: 'noopener noreferrer' }, example.license.replace(/\s*\(.*\)$/, '')) : example.license,
             ` · ${formatBytes(example.download)} to download, ${formatBytes(example.size)} on disk`),
+        example.outdated ? h('p.callout.warn', example.outdated) : null,
         actions);
       const worked = workedExamples(example.name);
       if (worked.length) {
         card.insertBefore(h('div.example-worked', h('div.example-worked-title', 'Worked example'), ...worked.map((w) => h('div.example-worked-item',
           h('div', h('b', w.title), w.simulated ? h('span.badge.warn', { style: { marginLeft: '6px' } }, example.generated ? 'simulated tissue' : 'simulated errors') : null),
           h('p.muted', w.question),
-          example.state === 'ready' && !job ? h('button.btn.small', { type: 'button', 'data-worked': w.id, onclick: () => app.examples.tour(example.name, w.id) }, icon('flask'), 'Start') : null))), actions);
+          example.state === 'ready' && !job ? h('button.btn.small', { type: 'button', 'data-worked': w.id, disabled: Boolean(w.images && example.outdated), title: w.images && example.outdated ? 'It needs the H&E: make the example again first' : '', onclick: () => app.examples.tour(example.name, w.id) }, icon('flask'), 'Start') : null))), actions);
       }
       if (job) {
         const bar = h('div');
@@ -106,6 +107,7 @@ export function mountWelcome(app, container) {
       } else if (example.state === 'ready') {
         if (tourFor(example.name)) actions.append(h('button.btn.small.primary', { type: 'button', onclick: () => app.examples.tour(example.name) }, icon('play'), 'Take the tour'));
         actions.append(
+          example.outdated ? h('button.btn.small', { type: 'button', title: `Simulate it again into ${example.path}: the same run, cells and transcripts, with what this SituCraft adds`, onclick: () => app.examples.download(example.name) }, icon('sparkles'), 'Make it again') : null,
           h('button.btn.small', { type: 'button', onclick: () => app.examples.open(example.name) }, icon('bundle'), 'Open'),
           h('button.btn.small', { type: 'button', title: `Delete it from ${example.path}`, onclick: () => app.examples.remove(example.name) }, icon('trash'), 'Remove'));
       } else if (example.generated) {

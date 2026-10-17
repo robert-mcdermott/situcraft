@@ -305,10 +305,10 @@ page draws tiles as they arrive.
 keeps in its JPEGTables tag put before an abbreviated stream. Go's decoder repeats each chroma
 sample over the pixels it covers; libjpeg-turbo, which tifffile, OpenSlide and most slide readers
 decode with, interpolates them by default (its "fancy upsampling": weights 3 and 1 between
-neighbouring samples, in each direction subsampled, rounding with alternating offsets). On a 4:2:0
+neighboring samples, in each direction subsampled, rounding with alternating offsets). On a 4:2:0
 H&E-like image the two differed by up to 74 levels where hues change. SituCraft interpolates
 likewise: within 3 levels of libjpeg-turbo's pixels on tifffile's JPEG files, 99% within 1 (the
-transform's and the colour conversion's rounding).
+transform's and the color conversion's rounding).
 
 **Flat images are refused** (no reduced levels and larger than 4,096 pixels a side), as are images
 stored in strips: Xenium Explorer requires the same, and 10x's conversion guide makes one.
@@ -336,7 +336,7 @@ reflection, the better kept, and each keypoint's residual recorded.
 
 **The matrix maps the image's pixels to the Xenium image's**, verified on the fixture: its scale is
 the image's pixel size over the Xenium image's (H&E: 1.71252 against 0.363788 / 0.2125 = 1.71194;
-a step of one H&E pixel is 0.3639 µm), and the inverse puts the centre of the Xenium image on the
+a step of one H&E pixel is 0.3639 µm), and the inverse puts the center of the Xenium image on the
 H&E at (16,342, 14,283) of 30,786 × 24,241. Drawn so, the H&E's structures lie on the DAPI image's.
 Both of the fixture's alignments change orientation: the H&E's mirrors top to bottom (turned 0.3°),
 the IF's turns −179.6°.
@@ -356,7 +356,7 @@ corner of its first). Two models, fitted by least squares (`internal/register/fi
   (Umeyama 1991, in closed form, with and without a reflection; Xenium Explorer fits its keypoints
   so). Three landmarks at least: two fix a similarity up to its reflection, the third tells it.
 - **An affine transform:** a scale along each axis and a shear as well (scanners' pixels need not
-  be square, and a section may stretch one way). From the normal equations of the centred
+  be square, and a section may stretch one way). From the normal equations of the centered
   positions; three landmarks not on a line at least.
 
 **How well a fit fits** is said two ways, each landmark's:
@@ -391,7 +391,7 @@ would look aligned and not be.
 ### 2.3 Automatic registration (verified, wave 5, slice 3)
 
 A post-Xenium image is registered to the Xenium image by the nuclei, which both show: DAPI against
-an H&E's haematoxylin (colour deconvolution, Ruifrok & Johnston 2001, with their stain colours and
+an H&E's hematoxylin (color deconvolution, Ruifrok & Johnston 2001, with their stain colors and
 the glass's light each channel's 99.5th percentile over the image's smallest level) or an
 immunofluorescence image's nuclear stain (`internal/nuclei`, `internal/register/auto.go`).
 
@@ -407,7 +407,7 @@ immunofluorescence image's nuclear stain (`internal/nuclei`, `internal/register/
    over four times the Xenium image's size is not tried.
 2. **Refinement** over a pyramid, each level twice as fine to about 4 µm a pixel: the model's
    parameters (a shift, a turn, a scale, and for an affine transform an aspect and a shear, about
-   the Xenium image's centre) moved by a compass search (Hooke & Jeeves 1961) maximizing the mutual
+   the Xenium image's center) moved by a compass search (Hooke & Jeeves 1961) maximizing the mutual
    information, which needs no gradient.
 3. **Local matches:** patches of 128 pixels, a sixth of the tissue's smaller side (32 to 160 µm),
    where the Xenium image has tissue (at most 200), the image drawn under the transform in each, the
@@ -467,15 +467,15 @@ their residual shift by phase correlation, with the same sub-pixel estimate (§2
 version draws the image from where it belongs there, in µm.
 
 **The matches' own error.** A patch's error is the alignment's plus the match's. Where the
-alignment's error changes little from a patch to the next, the difference between neighbouring
+alignment's error changes little from a patch to the next, the difference between neighboring
 patches' errors is the matches' alone: the median of their absolute differences, by component,
 over 0.6745 × √2, estimates a component's standard deviation, and √2 times that the 2-D error.
-Where the alignment's error changes between neighbours, that change is counted too, so the estimate
+Where the alignment's error changes between neighbors, that change is counted too, so the estimate
 is a bound: an error well above it is the alignment's.
 
 **Against the truth** (the simulated H&E of §3.4a, 360 × 280 µm, deformed by up to 2 µm; 35
 patches of 60 µm): placed by its true transform without its deformation, it is off at each patch's
-centre by minus the deformation there.
+center by minus the deformation there.
 
 | Placed by | Measured (RMS) | Truly | Each patch from its true error | The errors' mean from the true mean | The bound of the matches' error |
 |---|---|---|---|---|---|
@@ -491,7 +491,7 @@ centre by minus the deformation there.
 | Immunofluorescence | 10x's | 0.85 µm | 2.10 µm | 0.27 µm |
 | Immunofluorescence | automatic, deformed | 0.48 µm | 0.72 µm | 0.29 µm |
 
-The H&E's matches are noisier than the immunofluorescence image's (haematoxylin against DAPI,
+The H&E's matches are noisier than the immunofluorescence image's (hematoxylin against DAPI,
 rather than DAPI against DAPI), so its errors are near its bound. Four patches along the tissue's
 top edge matched weakly (quality 6 to 19, against a median of 51) and report errors of 18 to 51 µm
 in disagreeing directions: false matches where the tissue is sparse. The median and the 90th
@@ -499,7 +499,7 @@ percentile are robust to them; the most is not, and the map shows each match's q
 
 **Seen:** a checkerboard of the image and the stains (the renderer discards the image's fragments
 in every other square of the tissue), flicker, and DAPI's edges: an iso-line of the windowed stain
-at 0.3, where its 3 × 3 neighbourhood crosses the level and Sobel's gradient is over 0.3, from the
+at 0.3, where its 3 × 3 neighborhood crosses the level and Sobel's gradient is over 0.3, from the
 level drawn only (a coarser level standing in would draw its own edges, filling the nuclei).
 
 ### 2.5 Regions (verified, wave 5, slice 5)
@@ -545,7 +545,7 @@ pixel. A Feature's `properties` give its `objectType` (`annotation`, `detection`
 FeatureCollection (or an array), and 0.2 names the object's kind in the Feature's `id`
 (`PathAnnotationObject`, `PathDetectionObject`, `PathCellObject`). SituCraft reads all of these,
 regions from annotations' polygons and multipolygons (others counted and left out), and writes a
-FeatureCollection of annotations with QuPath 0.4's colours. A region is written in µm, the Xenium
+FeatureCollection of annotations with QuPath 0.4's colors. A region is written in µm, the Xenium
 image's pixels, or a post-Xenium image's pixels: each point taken back through the version placing
 the image (back through its deformation by the fixed point *x* = *y* − *d*(*x*), then the
 transform's inverse); read, each point placed by it. Where the version deforms the image, each
@@ -563,19 +563,19 @@ written in µm.
 | Six regions' cells, the page's against the suite's | 48, 50, 23, 13, 66 and 38, each the same; the 66 of one chosen |
 | A hole erased (*r* = 8 µm) and the first version restored | 200.2 µm² of 201.1; version 3 the first's area and cells; three versions in the document |
 | All six written in the H&E's pixels and read back | areas within 0.0008%, the same cells; a rectangle drawn in its pixels back at its corners (0.0000 px) |
-| A QuPath 0.4 file drawn on the H&E, read in its pixels | the corners where the version places them (0 µm), at most 0.18 µm from the truth's; a square with a hole 10,409.5 µm² against its outline placed a pixel at a time, 10,409.4; its colour kept; a detection and a point left out |
+| A QuPath 0.4 file drawn on the H&E, read in its pixels | the corners where the version places them (0 µm), at most 0.18 µm from the truth's; a square with a hole 10,409.5 µm² against its outline placed a pixel at a time, 10,409.4; its color kept; a detection and a point left out |
 
 **With QuPath itself** (0.7.0, by its command line, on the simulated H&E as it opens it: 1,154 ×
 995 pixels, 0.3638 µm a pixel, the same pixel grid as SituCraft's):
 
 | Round trip | Result |
 |---|---|
-| Five SituCraft regions written in the H&E's pixels, imported by QuPath | five annotations, each with its name, class and colour (QuPath's classes and one of SituCraft's own), a hole and a region in two parts kept; areas within 1 px² of SituCraft's (the rectangle drawn in pixels 60,000 px² in both) |
+| Five SituCraft regions written in the H&E's pixels, imported by QuPath | five annotations, each with its name, class and color (QuPath's classes and one of SituCraft's own), a hole and a region in two parts kept; areas within 1 px² of SituCraft's (the rectangle drawn in pixels 60,000 px² in both) |
 | QuPath's export of them, read by SituCraft | each region's area within 0.002% of the original, the same cells |
 | Annotations made in QuPath (an ellipse as its 100-vertex polygon, a quadrilateral, a square with an elliptical hole) and a detection, read by SituCraft and written back in pixels | the detection left out; every vertex within 0.0000 px of QuPath's, the areas the same (the holed square within 0.5 px² of 74,617, the coordinates' rounding) |
 
-QuPath gives a class it does not know a colour of its own (headless, even its usual classes'
-differ from its interface's defaults), so SituCraft keeps the colour a file gives.
+QuPath gives a class it does not know a color of its own (headless, even its usual classes'
+differ from its interface's defaults), so SituCraft keeps the color a file gives.
 
 A region read in a deformed image's pixels is stretched with the image: that square's area is 2.2%
 from its pixel area times the transform's scale squared, so areas are always computed from the
@@ -587,7 +587,7 @@ placed outline.
 
 **The method.** Each nucleus grows into a cell of its own by up to *d* µm (Xenium's default
 5 µm), and no pixel belongs to two cells: a pixel belongs to the nearest nucleus within *d*,
-measured between pixel centres to the nucleus's nearest pixel. That is a Voronoi partition of
+measured between pixel centers to the nucleus's nearest pixel. That is a Voronoi partition of
 the plane by the nuclei, clipped at distance *d* (Okabe et al., *Spatial Tessellations*, 2nd ed.,
 Wiley 2000). Distances are exact: the distance transform of Felzenszwalb and Huttenlocher (2012),
 which also gives each pixel its nearest nucleus pixel. A pixel equally near two nuclei goes to the
@@ -638,8 +638,8 @@ Every difference is one of three kinds, and the test requires each to be:
    (16, 16) pixels along its diagonals, less far than 23.53 pixels in the directions between; no
    pixel of an instrument cell lies more than 23 pixels from its nucleus. SituCraft keeps the
    method's definition, an exact Euclidean distance, and records the difference.
-2. **Boundaries between neighbours** (122,016 pixels, 6,182 transcripts): pixels the two give
-   neighbouring cells, each at most 0.34 µm (1.6 pixels) nearer to SituCraft's cell's nucleus than
+2. **Boundaries between neighbors** (122,016 pixels, 6,182 transcripts): pixels the two give
+   neighboring cells, each at most 0.34 µm (1.6 pixels) nearer to SituCraft's cell's nucleus than
    to the instrument's [0.4 µm]: almost equally far from both, where ties and near-ties are broken
    differently.
 3. **The instrument's records** (8 transcripts): transcripts whose `cell_id` is not the cell the
@@ -661,16 +661,16 @@ Jones DC, Elz AE, Hadadianpour A, Ryu H, Glass DR, Newell EW. Cell simulation as
 segmentation. *Nat Methods* 2025;22(6):1331–1342. doi:10.1038/s41592-025-02697-0.
 
 A cell is a region of space whose molecules are a Poisson process with its own rate for each
-gene, over a background with a rate for each gene everywhere; a segmentation is the labelling of
+gene, over a background with a rate for each gene everywhere; a segmentation is the labeling of
 space that makes the observed molecules most probable, given what cells' expression and sizes are
-like. SituCraft samples labellings from their posterior, as the publication does. The model and
+like. SituCraft samples labelings from their posterior, as the publication does. The model and
 its updates are written out below (notation is SituCraft's), then the sampler.
 
 #### The model (verified, wave 3, slice 2)
 
 **Space.** The region $R$ (a patch of the section, of volume $|R|$ µm³) is a lattice of voxels,
 each of volume $\nu$ (its side in x and y times the section's depth divided by the number of z
-layers). A labelling $\sigma$ gives each voxel $v$ a cell $\sigma(v) \in \{1, \dots, C\}$ or the
+layers). A labeling $\sigma$ gives each voxel $v$ a cell $\sigma(v) \in \{1, \dots, C\}$ or the
 background, $\sigma(v) = 0$. Cell $c$'s volume is $V_c = \nu \, |\{v : \sigma(v) = c\}|$. A run
 can sample in stages of finer voxels, each splitting the last's without changing which cell owns
 a region (the sampler, below).
@@ -679,7 +679,7 @@ a region (the sampler, below).
 gene $g_i$ and lies in voxel $v(i)$; write $\sigma(i) = \sigma(v(i))$. The molecules of gene $g$
 are a Poisson process of intensity $\lambda_{0g} + \lambda_{\sigma(x) g}$ at $x$ (per µm³; the
 second term is absent over the background): the background's rate $\lambda_{0g}$ everywhere and
-cell $c$'s rate $\lambda_{cg}$ within it. The log-likelihood of the labelling and the rates is
+cell $c$'s rate $\lambda_{cg}$ within it. The log-likelihood of the labeling and the rates is
 
 $$\log p(\text{molecules} \mid \sigma, \lambda) = \sum_i \log\bigl(\lambda_{0 g_i} + \lambda_{\sigma(i) g_i}\bigr) - |R| \sum_g \lambda_{0g} - \sum_c V_c \Lambda_c, \qquad \Lambda_c = \sum_g \lambda_{cg},$$
 
@@ -726,21 +726,21 @@ $\log V_c \mid z_c = k \sim \mathcal{N}(m_k, s_k^2)$, with the conjugate normal�
 prior $s_k^2 \sim \mathrm{InvGamma}(a_s, b_s)$, $m_k \mid s_k^2 \sim \mathcal{N}(m_0, s_k^2/\kappa_0)$.
 
 **The nuclear prior.** A transcript over a nucleus in the section has that nucleus's cell as its
-prior cell $q_i$ (otherwise $q_i = 0$). The labelling's prior weighs each such transcript by
+prior cell $q_i$ (otherwise $q_i = 0$). The labeling's prior weighs each such transcript by
 $\rho$ if it lies in $q_i$ and $1 - \rho$ if it does not ($\rho = 0.8$, the publication's).
 
-**The labelling's prior** is
+**The labeling's prior** is
 $p(\sigma \mid z, m, s) \propto I(\sigma) \prod_c \mathrm{LogNormal}(V_c; m_{z_c}, s^2_{z_c}) \prod_{i : q_i \ne 0} \rho^{[\sigma(i) = q_i]} (1 - \rho)^{[\sigma(i) \ne q_i]}$,
 where $I(\sigma)$ is 1 when every cell is connected, within its perimeter bound and non-empty, and
 0 otherwise (slice 3). *The one approximation.* This prior's normalizing constant, a sum over
-every labelling, depends on the volume parameters and the components, and cannot be computed
+every labeling, depends on the volume parameters and the components, and cannot be computed
 (the "doubly intractable" problem: Murray I, Ghahramani Z, MacKay DJC. MCMC for
 doubly-intractable distributions. *UAI* 2006). SituCraft updates the components and the volume
 parameters as though the cells' volumes were independent log-normal draws, which treats that
 constant as fixed. With one volume prior for every component, held fixed (`exact` mode), the
 constant is a constant and the sampler is exact; the tests that check exactness use that mode.
 
-**The updates.** One sweep of the parameters, given the labelling, draws in this order:
+**The updates.** One sweep of the parameters, given the labeling, draws in this order:
 
 1. **Attributions:** each molecule in a cell from the cell with probability
    $\lambda_{\sigma(i) g_i} / (\lambda_{0 g_i} + \lambda_{\sigma(i) g_i})$; the counts $n_{cg}$
@@ -801,7 +801,7 @@ cell is refused.
 | $a_\beta$ | 1 | An exponential prior on each component's rate parameter about the gene's scale |
 | $e_\phi, f_\phi$ | 1, 1 µm³ | Weak: rate parameters are hundreds to thousands of µm³ |
 | $a_0, b_0$ | 1, 1 µm³ | Weak (on $f$ and each $a_g$): the region is of the order of $10^5$–$10^7$ µm³ |
-| $m_0$ | $\log$ of the median initial cell volume | Centres the volume prior on the cells the sampler starts from |
+| $m_0$ | $\log$ of the median initial cell volume | Centers the volume prior on the cells the sampler starts from |
 | $\kappa_0, a_s, b_s$ | 1, 2, 0.25 | A prior mean of 0.25 for $s_k^2$: volumes within a factor of about 1.6 |
 | $\rho$ | 0.8 | The publication's |
 
@@ -826,7 +826,7 @@ cell is refused.
 - **Moves:** in a random walk of 2,000 voxel moves, each move's computed change equals the target
   recomputed afresh (to $10^{-9}$ relative); a move that would empty a cell is refused.
 - **Attributions:** each in proportion to the rates (z test); the counts follow them.
-- **Behaviour:** on counts of 300 cells of three types, the components separate the types
+- **Behavior:** on counts of 300 cells of three types, the components separate the types
   (purity 0.95 or more).
 - **Determinism:** the same parameters on 1 and 8 workers. A pinned checksum of twenty sweeps is
   the same on arm64 and amd64.
@@ -848,15 +848,15 @@ components) takes about 9 ms on ten cores; its cost grows with cells × genes ×
 
 #### The sampler (verified, wave 3, slice 3)
 
-Each sweep draws the attributions and the parameters (above), then the labelling, then the
+Each sweep draws the attributions and the parameters (above), then the labeling, then the
 transcripts' places.
 
-**The labelling's moves** (Metropolis–Hastings). A voxel $v$ is chosen. With probability
+**The labeling's moves** (Metropolis–Hastings). A voxel $v$ is chosen. With probability
 $p_b = 0.05$ the background is proposed for it (a "bubble", which lets gaps open between cells);
-otherwise the label of one of its face neighbours, chosen uniformly. A voxel's neighbours do not
+otherwise the label of one of its face neighbors, chosen uniformly. A voxel's neighbors do not
 change when it moves, so the proposal's probability both ways is local,
 $q(a \to b) \propto p_b [b = 0] + (1 - p_b)\, n_b(v)/n(v)$ ($n_b(v)$ of its $n(v)$ face
-neighbours labelled $b$). The move is accepted with probability
+neighbors labeled $b$). The move is accepted with probability
 $\min\{1, e^{\Delta}\, q(b \to a)/q(a \to b)\}$.
 
 **The constraints,** each holding in both directions, so that a move is allowed exactly when its
@@ -881,12 +881,12 @@ reverse is (which detailed balance needs):
     segmentation studio, below).
   - A cell that starts beyond the bound keeps its own starting ratio as its bound.
 
-**Parallel and deterministic.** The region is cut into square blocks (40 µm, all layers), coloured
+**Parallel and deterministic.** The region is cut into square blocks (40 µm, all layers), colored
 in a 2 × 2 checkerboard and shifted each sweep by an offset drawn from the sweep's stream. In each
-of four phases the blocks of one colour are updated in parallel. Each block proposes as many moves
+of four phases the blocks of one color are updated in parallel. Each block proposes as many moves
 as it has voxels, at voxels chosen uniformly within it, from its own random stream.
 
-Blocks of one colour are a block apart, so a move in one never reads a voxel another changes. A
+Blocks of one color are a block apart, so a move in one never reads a voxel another changes. A
 cell may move in a phase only if its bounding box, grown by one voxel, meets exactly one of the
 phase's blocks. Blocks therefore change disjoint cells, and a phase is the same as its blocks
 updated one after another. A block's moves never change which cells it may move, so each phase
@@ -903,7 +903,7 @@ there. A place outside the region is refused.
 
 **The start.** The run starts from the instrument's cells (`cells.zarr.zip` masks/1):
 - **On the first lattice:** each column takes the label most of its pixels have, and each cell
-  keeps its piece holding its seed, the centre of its largest nucleus (masks/0).
+  keeps its piece holding its seed, the center of its largest nucleus (masks/0).
 - **Prior cells:** each nucleus belongs to the cell holding most of its pixels, and each
   transcript over a nucleus has that cell as its prior.
 - **Small cells:** a cell left without a column takes its seed's column. If a cell still has none
@@ -932,7 +932,7 @@ layer, 600 sweeps, the last 500 summarized; perimeters within 1.6 times the leas
 - Slice 6's comparison on real data revisits both.
 
 **Validation** (`internal/segment/refine`; fixed seeds):
-- **Detailed balance, exactly.** On lattices small enough to list every labelling (3 × 3 in one
+- **Detailed balance, exactly.** On lattices small enough to list every labeling (3 × 3 in one
   layer, 2,136 states reachable; 2 × 2 × 2, 2,314), with the parameters held fixed:
   - every move from every reachable state satisfies $\pi(\sigma)K(\sigma\to\sigma') = \pi(\sigma')K(\sigma'\to\sigma)$
     to $10^{-9}$ (13,712 and 22,592 moves);
@@ -951,7 +951,7 @@ layer, 600 sweeps, the last 500 summarized; perimeters within 1.6 times the leas
 - **Power.** Each test was shown to fail on a deliberate error. Eight errors were tried:
   - connectivity tested for the losing cell only;
   - the proposal ratio left out, or the bubble left out of it;
-  - a step that always copies the first neighbour;
+  - a step that always copies the first neighbor;
   - the perimeter's change computed wrongly;
   - repositioning without the nuclear prior, with one width for both components, or about the
     current place instead of the observed one.
@@ -1004,7 +1004,7 @@ the instrument's segmentation as soon as it is made.
 - **The raster and outlines.** The footprint at the image's resolution; outlines traced from it
   and simplified to half a voxel, so that the voxels' steps are not drawn. With several layers,
   each layer's outlines too (`layers.bin`).
-- **Assignments and probabilities.** Each modelled transcript's most frequent cell and its share
+- **Assignments and probabilities.** Each modeled transcript's most frequent cell and its share
   of the summarized sweeps; the others by the pixel they were observed in.
 - **Counts:** the gene transcripts of quality 20 or more, by assigned cell.
 - **Limitations, per cell** (shown in the Segmentation view and with a difference's cells in the
@@ -1040,7 +1040,7 @@ the instrument's segmentation as soon as it is made.
 
 **Regions and sections.** A refinement covers the whole tissue, its sections apart, or chosen
 regions (rectangles, µm).
-- **A region's cells** are those whose seed (their nucleus's centre) lies in it. They are refined
+- **A region's cells** are those whose seed (their nucleus's center) lies in it. They are refined
   on a lattice covering the region and a margin of 20 µm about it. The cells about it are held
   where the instrument drew them: no move takes a voxel from a held cell or gives it one. So the
   region's edge never cuts a cell, and a refined cell near it keeps its whole extent. The rest of
@@ -1125,13 +1125,13 @@ edges) to the least its area can have.
 **Preflight estimates** (`refine.EstimateCost`). The peak memory is the largest of three phases:
 - reading: a block of each mask (its chunks' rows across), else a row group of the transcripts,
   with the inputs;
-- sampling: the inputs, and the largest region's run (per modelled transcript, voxel, and cell ×
+- sampling: the inputs, and the largest region's run (per modeled transcript, voxel, and cell ×
   gene);
 - writing: a row group again, every row's assignment, and the regions' results.
 
 The phases' terms are scaled by the collector's target. Disk is counted per row (assignment), per
-modelled transcript (probability), per non-zero count, per cell (record, outline, label runs) and
-per sweep (the trace). Time is counted per modelled transcript and per cell × gene × component in
+modeled transcript (probability), per non-zero count, per cell (record, outline, label runs) and
+per sweep (the trace). Time is counted per modeled transcript and per cell × gene × component in
 each sweep.
 
 | Run (100 sweeps; ten cores) | Memory measured (estimated) | Disk | Time |
@@ -1145,7 +1145,7 @@ each sweep.
 | The Lung 2-FOV bundle, Balanced (600 sweeps), whole | 264 MB resident (251) | 4.45 MB (4.0) | 97 s (88) |
 | The large simulated tissue (§3.4), 25 patches | 5.1 GB resident (6.6) | 166 MB (224) | 626 s (about 600) |
 
-- A region's run is dominated by reading the bundle; a small panel's by the transcripts modelled; a
+- A region's run is dominated by reading the bundle; a small panel's by the transcripts modeled; a
   large panel's by the cells × genes. In patches, the memory is the largest patch's run with
   what is held throughout (large tissues, below); the large tissue's estimate is a fifth over
   what it took, on the safe side.
@@ -1315,7 +1315,7 @@ share of the background left in no cell.
 | Ambient RNA only, the rates held at the truth | 2.46% | | | 0.79% | 54.1% | 0.36% | 17.4% | 86.1% | 0.715 |
 
 (The rates are their mean over the summarized sweeps times the region's volume, as shares of the
-modelled transcripts; the expected shares are the simulator's, of quality 20 or more. The last
+modeled transcripts; the expected shares are the simulator's, of quality 20 or more. The last
 three rows are diagnostics, not settings.)
 
 - **The false decodes are measured** within a sixth of the truth at every level, a little low: the
@@ -1355,20 +1355,20 @@ and the share left in no cell.
 
 #### Large tissues (verified, wave 3, slice 9)
 
-A run's memory grows with what it holds of its region: about 130 bytes a modelled transcript, 50
+A run's memory grows with what it holds of its region: about 130 bytes a modeled transcript, 50
 a voxel and 17 a cell × gene (the cost model above). A tissue of tens of millions of transcripts
 cannot be held as one run on a laptop, so a large region is refined in patches, an approach
 after Blampey et al. (2024), *Nat Commun* 15:4981, doi:10.1038/s41467-024-48981-z.
 
 **Patches.**
-- **When:** a region of more than twice `patch_transcripts` modelled transcripts (2 million by
+- **When:** a region of more than twice `patch_transcripts` modeled transcripts (2 million by
   default, so above 4 million) is cut into equal rectangles: $k = \lceil n / \text{target} \rceil$
   of them, $n_x = \operatorname{round}(\sqrt{k\,w/h})$ across and $\lceil k / n_x \rceil$ down, the
   last ending exactly at the region's edges. They depend on the data and the settings only, never
   on the threads or the memory, so a refinement is still the same bytes for the same seed.
 - **Each patch is a run** of the region's kind: it refines the cells whose seeds lie within 40 µm
   of its rectangle (clipped to the region) and holds the cells about them as the instrument drew
-  them. A cell near a seam is refined with its neighbours on both sides, in every patch whose
+  them. A cell near a seam is refined with its neighbors on both sides, in every patch whose
   margin reaches it.
 - **One at a time:** each patch's sampler is released when its run ends, so the sampling holds
   one patch's state.
@@ -1398,7 +1398,7 @@ transcripts, made, refined, opened and drawn, each step in a process of its own,
 | The Viewer with the dataset alone: its descriptor, cells and a region's transcripts | 20 s | 0.19 GB |
 | The Viewer drawing the refinement: its cells and all 2,688 transcript tiles | 38 s | 0.93 GB |
 
-- **The preflight** foresaw 25 patches of 1,219 µm, 49.4 million transcripts modelled (58.3
+- **The preflight** foresaw 25 patches of 1,219 µm, 49.4 million transcripts modeled (58.3
   million with those the patches share) and 6.6 GB; without patches the run would need 10.8 GB.
 - **The refinement** (40 sweeps, the last 20 summarized: the test checks the scale, not the
   chain) refined all 383,159 of the instrument's cells in 25 patches. With 100 sweeps, 50 summarized, it took
@@ -1410,7 +1410,7 @@ transcripts, made, refined, opened and drawn, each step in a process of its own,
   and probability, in 12 ms at worst (2,688 tiles).
 
 **What still grows with the tissue.** Patches bound the sampling; the run still holds every
-modelled transcript's place and prior, each patch's results until the segmentation is written,
+modeled transcript's place and prior, each patch's results until the segmentation is written,
 and every row's assignment and probability as they are written: about 100 bytes a transcript and
 2 a pixel of the image. A computer with 16 GB thus refines about 120 million transcripts at this
 density, and the preflight says so before a run starts. Whole slides beyond that need the inputs
@@ -1451,7 +1451,7 @@ are uncertain.
 
 **What every import becomes.** The same files as SituCraft's own segmentations (§3.1): a label
 raster at the morphology image's resolution (a label image resampled, nearest pixel; else the
-polygons drawn, a pixel belonging to a polygon whose interior holds its centre), each of the
+polygons drawn, a pixel belonging to a polygon whose interior holds its center), each of the
 dataset's transcripts' cell, counts of gene transcripts of quality 20 or more, and outlines (the
 tool's polygons, else traced). Counting the same way for every segmentation keeps comparisons
 fair; a count table the tool wrote is compared with the counts, cell by cell.
@@ -1489,7 +1489,7 @@ fair; a count table the tool wrote is compared with the counts, cell by cell.
   `transcript_id`), or as a Baysor-style table without ids (by position and gene): every
   assignment the instrument's. The polygons drawn agree with `masks/1` on 94.33% of pixels: the
   Xenium polygons pass through their edge pixels' own coordinates (§3.1), half a pixel inside the
-  pixels' areas, so a pixel whose centre lies on the cell's edge is drawn in or out by a hair.
+  pixels' areas, so a pixel whose center lies on the cell's edge is drawn in or out by a hair.
 - The Breast bundle is refused as an import into the Lung run (another experiment).
 
 **Fixtures** (`internal/segment/imports/testdata`), one hand-made scene written by the libraries
@@ -1513,7 +1513,7 @@ own model is flattered (the "inverse crime": Wirgin A. The inverse crime. arXiv:
 2004).
 
 **The tissue.**
-- **Domains.** The Voronoi regions of seeded centres. Each has a mix of the cell types, one
+- **Domains.** The Voronoi regions of seeded centers. Each has a mix of the cell types, one
   dominating it (a share of 0.6, the rest by gamma weights), and a direction its elongated cells
   tend to follow.
 - **Cells** are placed by random sequential adsorption (Feder J. Random sequential adsorption.
@@ -1525,12 +1525,12 @@ own model is flattered (the "inverse crime": Wirgin A. The inverse crime. arXiv:
     refusals in a row.
 - **Shapes.** A cell is an ellipse of its area and elongation. Its radius varies with direction
   by second and third harmonics (σ 0.06 and 0.05). A pixel belongs to the cell whose scaled
-  distance to it is least, below 1. Neighbours meet where their outlines compete, and gaps remain
+  distance to it is least, below 1. Neighbors meet where their outlines compete, and gaps remain
   where none reaches. Each cell keeps its largest 4-connected piece; one under 8 µm² is dropped.
 - **Nuclei.** A smaller, rounder ellipse (the square root of the cell's elongation) near the
-  cell's centre, of the type's share of its radius. A share of cells (4%) have their nucleus
+  cell's center, of the type's share of its radius. A share of cells (4%) have their nucleus
   outside the section; so do nuclei of under 4 µm² within the cell.
-- **Depth.** Each cell spans its type's height, centred anywhere in the section and cut by its
+- **Depth.** Each cell spans its type's height, centered anywhere in the section and cut by its
   faces; its nucleus spans the middle 60%.
 
 **The molecules.**
@@ -1670,7 +1670,7 @@ matching it row for row, and its masks whole (`TestAMosaicIsOneBundle`).
   0.8.0, tifffile 2026.9.20, pyarrow 26.0.0). Both presets are read with no warning about the
   bundle:
   - spatialdata-io's Xenium reader gives the instrument's cells in `cells.parquet`'s order, each
-    labelled as its row + 1, and their gene counts;
+    labeled as its row + 1, and their gene counts;
   - it also gives every transcript, both boundary sets, the labels and the image, each of the
     simulation's size;
   - tifffile reads the OME-TIFF's pixel size, channel and levels;
@@ -1709,25 +1709,28 @@ family than the B-splines registration may fit (wave 5, slice 3): a method is no
 model (the "inverse crime", §3.4).
 
 **What each shows,** each pixel the mean of 2 × 2 points of the section:
-- **The H&E,** by Beer–Lambert's law: each point's optical densities of haematoxylin and eosin
-  (haematoxylin log-normal about 0.85 in a nucleus, 0.05 in cytoplasm, 0.02 between cells; eosin
+- **The H&E,** by Beer–Lambert's law: each point's optical densities of hematoxylin and eosin
+  (hematoxylin log-normal about 0.85 in a nucleus, 0.05 in cytoplasm, 0.02 between cells; eosin
   by the cell's type, 0.18 to 0.40, varied by cell, 0.09 between cells, 0.12 in nuclei), with
   grain, blurred by a 3 × 3 mean; the light through them over the glass's (241, 238, 243), each
-  channel exp(−ln 10 · (h·H + e·E)), with the camera's noise (σ 1.2). The stains' colours are
-  Ruifrok and Johnston's (2001), haematoxylin (0.65, 0.70, 0.29) and eosin (0.07, 0.99, 0.11),
-  each component varied by 4% per section and recorded in the truth, so that colour deconvolution
+  channel exp(−ln 10 · (h·H + e·E)), with the camera's noise (σ 1.2). The stains' colors are
+  Ruifrok and Johnston's (2001), hematoxylin (0.65, 0.70, 0.29) and eosin (0.07, 0.99, 0.11),
+  each component varied by 4% per section and recorded in the truth, so that color deconvolution
   (slice 3) is not handed its vectors.
 - **The immunofluorescence image,** two 16-bit channels: DAPI, each nucleus of its own brightness
   (log-normal about 2,400); and a membrane stain, bright (log-normal about 1,600 per cell) where a
-  point's neighbours 0.6 µm away are another cell's or none's, faint (120) inside cells; blurred,
+  point's neighbors 0.6 µm away are another cell's or none's, faint (120) inside cells; blurred,
   on a background of 110, with noise (σ 9).
 
 Every product is rounded on its own and every sine is `internal/dmath`'s (Taylor's series on a
 reduced turn, within a few units in the last place of Go's): the images are the same on every
-processor and however many cores render them.
+processor and however many cores render them. The page computes the same sine (`web/lib/dmath.js`'s
+`sincos`, the same bits as Go's over 20,000 arguments, fingerprint `52c6523f`), so that where the
+truth places a point of an image (`web/lib/simulated-truth.js`), and the landmarks a worked example
+places by it, are the same on any computer: a version fitted to them is the same artifact.
 
 **Checked against their truth** (the small preset, 160 × 120 µm, 208 nuclei in the section), by
-finding the nuclei in each image (haematoxylin's optical density in red above 0.2; DAPI above
+finding the nuclei in each image (hematoxylin's optical density in red above 0.2; DAPI above
 1,000; 4-connected pieces of 6 µm² or more) and mapping each through the truth onto the true
 nuclei:
 
@@ -1750,8 +1753,8 @@ bundle's; the two rasters share the morphology image's pixels.
 correspond when they share a nucleus of the dataset (a nucleus whose pixels lie mostly in each),
 or when at least half of one lies within the other; cells without area (an import without
 outlines) correspond the same way by their transcripts. A fragment split off a cell lies within
-it, a neighbour whose boundary moved does not: with a lower share (a fifth of either, first
-tried), two neighbours whose shared boundary moved one column became one "rearranged" difference.
+it, a neighbor whose boundary moved does not: with a lower share (a fifth of either, first
+tried), two neighbors whose shared boundary moved one column became one "rearranged" difference.
 Each connected set of corresponding cells is one difference: one cell in each is one-to-one, or
 expanded (B's area over 1.25 times A's) or contracted (under 1/1.25); assignment-only when one has
 no area; one of A to several of B a split, several to one merged, several to several
@@ -1812,13 +1815,13 @@ found of expansions; on Lung, segmented by the instrument the same way, the two 
 ### 4.1 Errors planted for practice (verified, wave 2, slice 7)
 
 The Lung worked example plants errors in the instrument's segmentation (`internal/segment/plant`,
-seed 20261014): 20 merges of neighbouring cells sharing at least 8 pixel edges, each with 30 gene
+seed 20261014): 20 merges of neighboring cells sharing at least 8 pixel edges, each with 30 gene
 transcripts or more, chosen first among the pairs whose merged cell would express two lineage
 markers neither does alone (the comparison's own marker pairs), then among the quarter least alike
 by the cosine of their counts; 20 splits of cells larger than the median with 40 gene transcripts
 or more, cut across their long axis (the pixels' second moments) through the centroid; 10 cells
-with 20 gene transcripts or more dropped; and 10 cells with three neighbours or more grown by
-1 µm into their neighbours' pixels and the background. Each error's cells and their neighbours are
+with 20 gene transcripts or more dropped; and 10 cells with three neighbors or more grown by
+1 µm into their neighbors' pixels and the background. Each error's cells and their neighbors are
 kept from every other error's. The transcripts of changed cells go to the cell holding their pixel
 afterwards; every other transcript keeps its cell.
 
@@ -1826,8 +1829,8 @@ afterwards; every other transcript keeps its cell.
 cells one-to-one; the 20 merges each a merged difference, every merged cell mixing more pairs of
 mutually exclusive markers than its two cells (so ranked by contamination they come first); the
 20 splits each a split; the 10 missed cells each only in the instrument's; the 10 grown cells each
-expanded (7 of their neighbours contracted); no other difference, and no other cell's transcripts
-changed. A first reach of 2 µm made four grown cells take more than half of a neighbour, and so
+expanded (7 of their neighbors contracted); no other difference, and no other cell's transcripts
+changed. A first reach of 2 µm made four grown cells take more than half of a neighbor, and so
 "rearranged" differences: Lung's cells are small (median 48.5 µm²).
 
 ### 4.2 Exports (verified, wave 2, slice 7)
@@ -2416,7 +2419,7 @@ not made again. Two label sets made the same way are paired by default, at their
   two types' markers).
 - **Segmentation-sensitive cells:** a covered cell whose covered counterparts carry another label
   (no label counting as one), with what they carry ("Macrophage"; "split into 2 cells: T cell,
-  Tumour"; "one of 3 cells merged into a cell labeled Fibroblast"). The review queue (§5.5) takes
+  Tumor"; "one of 3 cells merged into a cell labeled Fibroblast"). The review queue (§5.5) takes
   them as a third reason, after the spatially implausible and before the least confident, flagged
   against a label set of another segmentation the dataset's comparisons pair with the reviewed one.
 - **The differences whose labels change,** the most transcripts reassigned first, in the comparison
@@ -2558,7 +2561,7 @@ ambiguous), whether it is excluded, its concern, whether it was commented on. A 
 is of the region (its class reclassed as a version of it); excluding a region can exclude the cells
 of the segmentation drawn whose centroids lie in it, as a review of those cells. The Review status
 fill draws, of a cell's states, the first of: excluded, a concern, ambiguous, relabeled, accepted,
-commented — in Okabe and Ito's palette (§8), apart in every colour vision.
+commented — in Okabe and Ito's palette (§8), apart in every color vision.
 
 **Written.** As CSV, a row a cell (or cluster, or region) reviewed, so that a table of cells can be
 joined by cell ID; and as JSON, the record itself.
@@ -2571,7 +2574,7 @@ H&E placed by its automatic version, labels imported with a confidence each):
 | A cell relabeled by hand in the inspector | its ID, label and confidence (0.75, the table's) recorded, with the label set, the segmentation, reviewer and reason, and the H&E's version in use, shown; the curated set's labels differ from the table's at that cell and no other of 924 |
 | Cells accepted, one ambiguous, one of concern, a region excluded and one reclassed, a comment | as asked; the cells excluded are exactly the 66 in the region; the region's class Necrosis at its version 4; an exclusion without a reason refused |
 | The record as CSV and JSON, read back | 75 rows (one a cell or region), each its review's and its cell's (previous value, confidence); the JSON the project's eight reviews |
-| The Review status fill | each of 924 cells' colour its status by the suite's own reading of the CSV |
+| The Review status fill | each of 924 cells' color its status by the suite's own reading of the CSV |
 
 ## 6. Spatial analysis (wave 6) and cohorts (wave 7)
 
@@ -2657,7 +2660,7 @@ Notes:
 - Stone M. Cross-validatory choice and assessment of statistical predictions. *J R Stat Soc B*
   1974;36(2):111–147 (leave-one-out errors of landmark fits).
 - Ruifrok AC, Johnston DA. Quantification of histochemical staining by color deconvolution.
-  *Anal Quant Cytol Histol* 2001;23(4):291–299 (the stains' colours of the simulated H&E).
+  *Anal Quant Cytol Histol* 2001;23(4):291–299 (the stains' colors of the simulated H&E).
 - Douglas DH, Peucker TK. Algorithms for the reduction of the number of points required to
   represent a digitized line or its caricature. *Cartographica* 1973;10(2):112–122.
   doi:10.3138/FM57-6770-U75U-7727 (polygon simplification in the geometry tiles and segmentation
@@ -2682,7 +2685,7 @@ Notes:
   matrices. *J Open Source Softw* 2024;9(101):4371. doi:10.21105/joss.04371 (tables; the AnnData
   export).
 - Okabe M, Ito K. Color Universal Design (CUD): how to make figures and presentations that are
-  friendly to colorblind people. J*FLY, 2008 (the comparison workspace's two overlay colours).
+  friendly to colorblind people. J*FLY, 2008 (the comparison workspace's two overlay colors).
 - Hartman A, Satija R. Comparative analysis of multiplexed in situ gene expression profiling
   technologies. bioRxiv 2024. doi:10.1101/2024.01.11.575135 (the mutually exclusive
   co-expression rate).

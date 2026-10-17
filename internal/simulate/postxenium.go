@@ -81,7 +81,7 @@ const (
 	PostXeniumFolder = "post_xenium"
 	// RegistrationFile is the truth: where each image lies on the section.
 	RegistrationFile = "truth/post_xenium/registration.json"
-	heImageName      = "simulated_he_image.ome.tif"
+	HEImageName      = "simulated_he_image.ome.tif"
 	ifImageName      = "simulated_if_image.ome.tif"
 )
 
@@ -429,7 +429,7 @@ func (wr *writer) writePostXenium() error {
 	var made []Registration
 	software := "SituCraft simulate " + wr.software
 	if px.HE != nil {
-		r, err := placed(px.HE, "he", heImageName, streamPostXenium+10)
+		r, err := placed(px.HE, "he", HEImageName, streamPostXenium+10)
 		if err != nil {
 			return err
 		}

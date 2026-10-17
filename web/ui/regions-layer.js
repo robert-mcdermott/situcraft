@@ -82,7 +82,10 @@ export function mountRegions({ app, dataset, canvas, renderer, zoomBy, drawnCell
         const chosen = r.id === st.selected;
         const color = colorCSS(r.color);
         const excluded = states.get(r.id)?.excluded;
-        shapes.append(svgEl('path', { d: worldPath(r.geometry), fill: color, 'fill-opacity': excluded ? 0.04 : chosen ? 0.22 : 0.12, stroke: color, 'stroke-width': chosen ? 3 : 1.5, 'stroke-dasharray': chosen ? '6 3' : excluded ? '2 3' : '', 'fill-rule': 'evenodd', 'vector-effect': 'non-scaling-stroke', 'data-region': r.id }));
+        const d = worldPath(r.geometry);
+        // A dark casing under the outline, so that it shows over any fill or image.
+        shapes.append(svgEl('path', { d, fill: 'none', stroke: 'rgba(0, 0, 0, 0.55)', 'stroke-width': chosen ? 5 : 3.5, 'vector-effect': 'non-scaling-stroke' }));
+        shapes.append(svgEl('path', { d, fill: color, 'fill-opacity': excluded ? 0.04 : chosen ? 0.22 : 0.12, stroke: color, 'stroke-width': chosen ? 3 : 2, 'stroke-dasharray': chosen ? '6 3' : excluded ? '2 3' : '', 'fill-rule': 'evenodd', 'vector-effect': 'non-scaling-stroke', 'data-region': r.id }));
         const label = svgEl('text', { fill: color, class: 'region-label' });
         label.textContent = r.name;
         labels.append(label);

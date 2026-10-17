@@ -41,6 +41,28 @@ func TestTheSameBitsAsThePage(t *testing.T) {
 	}
 }
 
+// web/lib/dmath.js's checksum of sin and cos over the same 20,000 values: the page's sincos and
+// SinCos give the same bits.
+func TestSinCosTheSameBitsAsThePage(t *testing.T) {
+	h := uint32(0x811c9dc5)
+	mix := func(v float64) {
+		bits := math.Float64bits(v)
+		for _, word := range []uint32{uint32(bits), uint32(bits >> 32)} {
+			for b := 0; b < 32; b += 8 {
+				h = (h ^ (word>>b)&0xff) * 0x01000193
+			}
+		}
+	}
+	for i := 0; i < 10000; i++ {
+		s, c := SinCos(-2000 + mul(float64(i), 0.4001))
+		mix(s)
+		mix(c)
+	}
+	if got := fmt.Sprintf("%08x", h); got != "52c6523f" {
+		t.Fatalf("sincos fingerprint %s, the page's 52c6523f", got)
+	}
+}
+
 func ulps(a, b float64) uint64 {
 	x, y := math.Float64bits(a), math.Float64bits(b)
 	if x > y {

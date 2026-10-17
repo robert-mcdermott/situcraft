@@ -25,7 +25,7 @@ test('convergence: settled by Geweke\'s diagnostic, stability described, drift s
 
 test('the background: its kinds, the controls that measure the false decodes, and what is left in no cell', () => {
   const text = background({ ...summary, falseDecodeShare: 0.0109, ambientShare: 0.0067, negativeControls: 4993, inBackgroundShare: 0.0034 });
-  assert.match(text, /^The model's background accounts for 1\.8% of the modelled transcripts: false decodes 1\.1%, measured by 4,993 negative-control transcripts, and ambient RNA 0\.7%, estimated less surely /);
+  assert.match(text, /^The model's background accounts for 1\.8% of the modeled transcripts: false decodes 1\.1%, measured by 4,993 negative-control transcripts, and ambient RNA 0\.7%, estimated less surely /);
   assert.match(text, /0\.34% of transcripts are left in no cell/);
   assert.match(background({ ...summary, falseDecodeShare: 0.001, ambientShare: 0.002, negativeControls: 0, inBackgroundShare: 0 }), /with no negative controls in the region to measure them/);
   assert.equal(background(summary), ''); // recorded before the background was measured

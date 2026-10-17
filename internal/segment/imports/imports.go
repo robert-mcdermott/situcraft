@@ -288,12 +288,14 @@ func build(ctx context.Context, ds Dataset, opt Options, src *source, dir string
 			return nil, err
 		}
 		rec.Raster = "the tool's label image, resampled to the morphology image's pixels (nearest)"
+		// As earlier releases recorded it, so that an import is made again byte for byte.
 		src.find("info", "labels.outside", "Labelled pixels outside the dataset's image", outside)
 	case src.polygons != nil:
 		overlap, err := drawCells(ctx, raster, src.polygons)
 		if err != nil {
 			return nil, err
 		}
+		// As earlier releases recorded it, so that an import is made again byte for byte.
 		rec.Raster = "the tool's polygons drawn at the morphology image's resolution: a pixel whose centre lies inside"
 		src.find("info", "polygons.overlap", "Pixels inside two cells' polygons, given to the later", overlap)
 	default:

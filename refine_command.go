@@ -63,7 +63,7 @@ func runRefine(args []string, stdout, stderr io.Writer) int {
 	seed := flags.Uint64("seed", 0, "the random seed (default: the preset's); the same settings and seed give the same segmentation, byte for byte")
 	sweeps := flags.Int("sweeps", 0, "the sweeps of the last stage (default: the preset's)")
 	samples := flags.Int("samples", 0, "the last sweeps summarized (default: the preset's)")
-	minQV := flags.Float64("min-qv", -1, "the quality the modelled transcripts reach (default 20)")
+	minQV := flags.Float64("min-qv", -1, "the quality the modeled transcripts reach (default 20)")
 	var regions regionFlags
 	flags.Var(&regions, "region", "refine a region, x0,y0,x1,y1 in µm (repeat for more); the rest keeps the instrument's cells")
 	sections := flags.Bool("sections", false, "refine the tissue's separate sections apart, each with a model of its own")
@@ -267,7 +267,7 @@ func runRefine(args []string, stdout, stderr io.Writer) int {
 	if math.Abs(s.GewekeZ) > 2 {
 		verdict = "still drifting: more sweeps would make sure"
 	}
-	fmt.Fprintf(stdout, "%d transcripts modelled; Geweke's z %.1f (%s); %.1f%% the same cell over both halves of the last %d sweeps.\n", s.Transcripts, s.GewekeZ, verdict, 100*s.SplitHalf, s.Samples)
+	fmt.Fprintf(stdout, "%d transcripts modeled; Geweke's z %.1f (%s); %.1f%% the same cell over both halves of the last %d sweeps.\n", s.Transcripts, s.GewekeZ, verdict, 100*s.SplitHalf, s.Samples)
 	if s.SeedAgreement != nil {
 		fmt.Fprintf(stdout, "A second seed put %.1f%% of the transcripts in refined cells in the same cell.\n", 100*(*s.SeedAgreement))
 	}
@@ -285,7 +285,7 @@ func presetName(id string) string {
 // printPreflight prints a preflight for people.
 func printPreflight(w io.Writer, p refine.Preflight) {
 	fmt.Fprintf(w, "Preset: %s.\n", presetName(p.Spec.Preset))
-	fmt.Fprintf(w, "Transcripts: %d rows; %d gene transcripts of quality %g or more modelled (%d over a nucleus), %d below it, %d of other features, %d beyond the image.\n",
+	fmt.Fprintf(w, "Transcripts: %d rows; %d gene transcripts of quality %g or more modeled (%d over a nucleus), %d below it, %d of other features, %d beyond the image.\n",
 		p.Rows, p.Transcripts, p.Spec.MinQV, p.OverNuclei, p.LowQuality, p.Controls, p.Outside)
 	fmt.Fprintf(w, "Cells to start from: %d (%d with a nucleus); %d genes.\n", p.Cells, p.Nuclei, p.Genes)
 	for i, r := range p.Regions {

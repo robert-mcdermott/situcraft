@@ -178,7 +178,7 @@ func FromImage(im *slide.Image, channel int, stains register.Stains) (register.P
 			}
 			return out, nil
 		}
-		return p, fmt.Sprintf("haematoxylin, by colour deconvolution (its glass %.0f, %.0f, %.0f)", bg[0], bg[1], bg[2]), nil
+		return p, fmt.Sprintf("hematoxylin, by color deconvolution (its glass %.0f, %.0f, %.0f)", bg[0], bg[1], bg[2]), nil
 	}
 	if channel < 0 || channel >= len(im.Channels) {
 		return nil, "", fmt.Errorf("no channel %d: the image has %d", channel, len(im.Channels))

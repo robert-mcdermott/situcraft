@@ -286,7 +286,7 @@ export function installRemote(app) {
         showing: showing(),
         tour,
         local: app.localItems.map((i) => ({ name: i.name, kind: i.kind, path: i.path })),
-        examples: (app.examples.list() ?? []).map((e) => ({ name: e.name, title: e.title, state: e.state, download: e.download, size: e.size, license: e.license })),
+        examples: (app.examples.list() ?? []).map((e) => ({ name: e.name, title: e.title, state: e.state, download: e.download, size: e.size, license: e.license, ...(e.outdated ? { outdated: e.outdated } : {}) })),
         jobs: app.jobs.list().filter((j) => !['complete', 'cancelled'].includes(j.state)).map((j) => ({ id: j.id, title: j.title, state: j.state, progress: j.progress, message: j.message ?? '', resumable: Boolean(j.resumable) })),
         library: app.library.location,
       };
@@ -369,6 +369,15 @@ export function installRemote(app) {
     async open_example(args) {
       if (!app.examples.list()) await app.examples.refresh();
       let example = resolveExample(args.example);
+      // An example made by an earlier SituCraft, made again when asked (remake).
+      if (example.outdated && args.remake) {
+        await app.examples.download(example.name);
+        await waitFor(() => !app.examples.job(example.name) && !app.examples.list().find((e) => e.name === example.name)?.outdated, 60 * 60000, `${example.title} to be made again`).catch(async (error) => {
+          await app.examples.refresh();
+          throw error;
+        });
+        example = resolveExample(example.name);
+      }
       if (example.state !== 'ready') {
         // A generated example is made here, nothing downloaded.
         if (!args.download && !example.generated) throw new ActionError(`${example.title} is not on this computer: pass download: true to download it from 10x Genomics (${(example.download / 1e6).toFixed(0)} MB).`);
@@ -400,6 +409,7 @@ export function installRemote(app) {
         if (example.state !== 'ready') throw new ActionError(`${example.title} is not on this computer: ${example.generated ? 'open_example makes it' : 'open_example with download: true downloads it'}.`);
         const names = ['tour', ...workedExamples(example.name).map((w) => w.id)];
         const name = args.name === undefined ? 'tour' : choose(args.name, names, 'tour or worked example');
+        if (example.outdated && workedExamples(example.name).find((w) => w.id === name)?.images) throw new ActionError(`${example.outdated} open_example with remake: true makes it again.`);
         card = await app.examples.tour(example.name, name);
         if (!card) throw new ActionError(`${example.title}'s ${name === 'tour' ? 'tour' : `worked example ${name}`} could not start.`);
         const { item, dataset } = await app.examples.inProject(example.name);
@@ -651,7 +661,7 @@ export function installRemote(app) {
       if (args.start !== undefined) request.start = transformRef(record, args.start).id;
       if (args.channel !== undefined) {
         const desc = await app.bundles.imageDescription(record.id);
-        if (desc.image.kind === 'rgb') throw new ActionError(`${record.name} is RGB: its haematoxylin is registered, it has no channel to name.`);
+        if (desc.image.kind === 'rgb') throw new ActionError(`${record.name} is RGB: its hematoxylin is registered, it has no channel to name.`);
         const names = desc.image.channels.map((c) => c.name);
         request.channel = names.indexOf(choose(String(args.channel), names, 'channel'));
       }
@@ -798,7 +808,7 @@ export function installRemote(app) {
       const v = await openIn('viewer', dataset);
       const system = coordinatesRef(dataset, args.coordinates);
       const path = String(args.path ?? '');
-      const response = await fetch(`/api/read-geojson?path=${encodeURIComponent(path)}`, { cache: 'no-store' });
+      const response = await fetch(`/api/read-json?path=${encodeURIComponent(path)}`, { cache: 'no-store' });
       if (!response.ok) throw new ActionError((await response.json().catch(() => ({}))).error ?? `HTTP ${response.status}`);
       const doc = await response.json();
       const source = path.split(/[\\/]/).at(-1);
@@ -1053,7 +1063,7 @@ export function installRemote(app) {
       const p = answer.preflight;
       const e = p.estimate ?? {};
       const size = (n) => (n >= 1e9 ? `${(n / 1e9).toFixed(1)} GB` : `${Math.round(n / 1e6)} MB`);
-      const covers = e.regions ? `refines ${plural(e.cells, 'cell')}${e.cellsHeld ? ` (${e.cellsHeld} held about them)` : ''} in ${p.patches?.length ? `${e.regions.toLocaleString('en-US')} patches` : plural(e.regions, 'region')}, ${plural(e.transcripts, 'transcript')} modelled; needs about ${size(e.peakMemoryBytes)} of memory${p.memoryBytes ? ` (the computer has ${size(p.memoryBytes)})` : ''}, ${size(e.diskBytes)} of disk${p.freeDiskBytes >= 0 ? ` (${size(p.freeDiskBytes)} free)` : ''} and about ${Math.max(1, Math.round(e.seconds))} s on ${e.cores} threads` : 'covers nothing yet';
+      const covers = e.regions ? `refines ${plural(e.cells, 'cell')}${e.cellsHeld ? ` (${e.cellsHeld} held about them)` : ''} in ${p.patches?.length ? `${e.regions.toLocaleString('en-US')} patches` : plural(e.regions, 'region')}, ${plural(e.transcripts, 'transcript')} modeled; needs about ${size(e.peakMemoryBytes)} of memory${p.memoryBytes ? ` (the computer has ${size(p.memoryBytes)})` : ''}, ${size(e.diskBytes)} of disk${p.freeDiskBytes >= 0 ? ` (${size(p.freeDiskBytes)} free)` : ''} and about ${Math.max(1, Math.round(e.seconds))} s on ${e.cores} threads` : 'covers nothing yet';
       const problems = p.problems.map((f) => `${f.message}${f.remedy ? ` ${f.remedy}` : ''}`);
       return {
         message: `${answer.name ?? 'The refinement'} of ${dataset.name} (${p.spec.preset}) ${covers}.${problems.length ? ` Problems: ${problems.join(' ')}` : ' No problems.'}${p.risks.length ? ` Risks: ${p.risks.map((f) => f.message).join(' ')}` : ''}${answer.artifact ? ' It was made already.' : ''}`,
