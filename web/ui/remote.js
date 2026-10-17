@@ -15,13 +15,15 @@ import { workedExamples } from '../lib/tours.js';
 import { describeImage, describePlacement, imagesOf } from '../lib/images.js';
 import { checksOf, describeCheck, describeTransform, transformInUse, transformsOf, useTransform } from '../lib/transforms.js';
 import { addRegion, area, brushGeometry, editRegion, mapGeometry, nextRegionName, polygonOf, rectangle, regionsOf } from '../lib/regions.js';
+import { ACTIONS as REVIEW_ACTIONS, CONCERNS, addReview, cellReviewState, regionReviewState, reviewsCSV, reviewsJSON, reviewsOf, stateCounts } from '../lib/review-record.js';
+import { cellRows, imagesInUse, reviewCells, reviewLine, reviewRegion } from './reviewing.js';
 import { defaultImageLayer } from '../lib/overlays.js';
 import { parseProject, rename, serializeProject } from '../lib/project.js';
 import { removeView, sameView, viewLink } from '../lib/views.js';
 import { SEG_FILLS, defaultChoice, segmentationChoices } from '../lib/segview.js';
 import { clusterName, clusterNames, clusteringsOf, mapsOf, nameClusters } from '../lib/clusterings.js';
 import { composition as labelComposition, labelSetName, labelSetsFor, lowConfidenceDefault, namesFromLabels } from '../lib/labels.js';
-import { RULES, appendEdit, createCurated, crossTable, curatedSetsOf, saveConsensus } from '../lib/curation.js';
+import { RULES, createCurated, crossTable, curatedSetsOf, saveConsensus } from '../lib/curation.js';
 import { labelSource, labelVersions, refOf } from './label-sources.js';
 import { defaultPair, impactLines, sideOf } from '../lib/impact.js';
 import { remakeOnSegmentation } from './remake.js';
@@ -538,7 +540,7 @@ export function installRemote(app) {
       if (args.segmentation !== undefined) view.segmentation = segmentationRef(dataset, args.segmentation);
       if (args.outlines !== undefined) view.cells.outlines = Boolean(args.outlines);
       if (args.nuclei !== undefined) view.cells.nuclei = Boolean(args.nuclei);
-      if (args.fill !== undefined) view.cells.fill = args.fill === null || /^none$/i.test(String(args.fill)) ? null : /^clusters\b/i.test(String(args.fill)) ? clusterFill(dataset, view.segmentation, String(args.fill)) : /^labels\b/i.test(String(args.fill)) ? await labelFill(dataset, view.segmentation, String(args.fill)) : choose(args.fill, view.segmentation === 'instrument' ? FILLS : [...FILLS.filter((f) => f !== 'method'), ...SEGMENTATION_FILLS], 'fill');
+      if (args.fill !== undefined) view.cells.fill = args.fill === null || /^none$/i.test(String(args.fill)) ? null : /^review( status)?$/i.test(String(args.fill)) ? 'review' : /^clusters\b/i.test(String(args.fill)) ? clusterFill(dataset, view.segmentation, String(args.fill)) : /^labels\b/i.test(String(args.fill)) ? await labelFill(dataset, view.segmentation, String(args.fill)) : choose(args.fill, view.segmentation === 'instrument' ? FILLS : [...FILLS.filter((f) => f !== 'method'), ...SEGMENTATION_FILLS], 'fill');
       if (args.opacity !== undefined) view.cells.opacity = Math.min(1, Math.max(0, finite(args.opacity, 'opacity')));
       if (args.color_by !== undefined) {
         if (choose(args.color_by, ['gene', 'probability'], 'coloring') === 'probability') view.transcripts.colorBy = 'probability';
@@ -1516,7 +1518,7 @@ export function installRemote(app) {
     },
 
     async curate_labels(args) {
-      const { dataset, seg, version } = labelVersionArg(args);
+      const { dataset, seg, item, version } = labelVersionArg(args);
       if (version.kind === 'consensus') throw new ActionError('A consensus is made by its rule: curate one of its sets, or a curated set begun from it.');
       if (!args.reason || !String(args.reason).trim()) throw new ActionError('Say why (reason): every edit keeps its reason.');
       let target = version.kind === 'curated' ? project().artifacts.find((a) => a.id === version.id) : curatedSetsOf(project(), dataset.id, seg.id).find((c) => c.base.labels === version.id && c.base.level === version.level);
@@ -1525,32 +1527,113 @@ export function installRemote(app) {
         store.commit(createCurated(project(), { dataset: dataset.id, segmentation: seg.id, base: { labels: version.id, level: version.level, name: version.name }, name, by: 'remote control' }), `Begin the curated label set ${name}`);
         target = curatedSetsOf(project(), dataset.id, seg.id).at(-1);
       }
-      const edit = { reason: String(args.reason), by: args.by ? String(args.by) : 'remote control' };
-      if (Array.isArray(args.clusters)) {
-        const clusterings = clusteringsOf(project(), dataset.id).filter((c) => c.state === 'complete' && c.segmentation === seg.id);
-        const c = clusteringRef(clusterings, args.clustering);
-        if (!c) throw new ActionError('The segmentation has no clustering.');
-        Object.assign(edit, { kind: 'cluster', clustering: c.id, clusters: args.clusters.map((k) => finite(k, 'cluster') - 1), label: String(args.label ?? '') });
-      } else if (Array.isArray(args.cells)) {
-        const cells = args.cells.map((v) => finite(String(v).replace(/^#/, ''), 'cell'));
-        let label = args.label === undefined ? null : String(args.label);
-        if (args.accept) {
-          const src = await labelSource(app, refOf(target.id));
-          const own = [...new Set(cells.map((i) => src.label[i]))];
-          if (own.length !== 1 || own[0] < 0) throw new ActionError('Accept cells of one label at a time (each has a label).');
-          label = src.names[own[0]];
-        }
-        Object.assign(edit, { kind: args.accept ? 'accept' : 'cells', cells, label });
-      } else throw new ActionError('Name cells (their rows, as #123) or clusters (numbers from 1) of a clustering.');
-      let next;
+      // Each edit is a review of the curated set's labels, recorded with its provenance.
+      const by = args.by ? String(args.by) : 'remote control';
+      const reason = String(args.reason);
+      const curatedSet = { id: target.id, level: 0, name: target.name, kind: 'curated' };
+      const segSpec = { id: seg.id, name: seg.name, instrument: seg.source === 'instrument' };
+      let review;
       try {
-        next = appendEdit(project(), target.id, edit);
+        if (Array.isArray(args.clusters)) {
+          const clusterings = clusteringsOf(project(), dataset.id).filter((c) => c.state === 'complete' && c.segmentation === seg.id);
+          const c = clusteringRef(clusterings, args.clustering);
+          if (!c) throw new ActionError('The segmentation has no clustering.');
+          const next = addReview(project(), { action: 'relabel', by, note: reason, dataset: dataset.id, target: 'clusters', segmentation: segSpec, clusters: { clustering: c.id, clusters: args.clusters.map((k) => finite(k, 'cluster') - 1) }, labels: curatedSet, label: String(args.label ?? ''), curated: target.id, images: imagesInUse(project(), dataset.id) });
+          store.commit(next, `Curate ${target.name}`);
+          review = next.reviews.at(-1);
+        } else if (Array.isArray(args.cells)) {
+          const rows = args.cells.map((v) => finite(String(v).replace(/^#/, ''), 'cell'));
+          if (args.accept) {
+            const src = await labelSource(app, refOf(target.id));
+            const own = [...new Set(rows.map((i) => src.label[i]))];
+            if (own.length !== 1 || own[0] < 0) throw new ActionError('Accept cells of one label at a time (each has a label).');
+          }
+          ({ record: review } = await reviewCells({ app, t: { dataset, item }, seg: segSpec, rows, action: args.accept ? 'accept' : 'relabel', labels: curatedSet, label: args.label === undefined ? undefined : String(args.label), note: reason, by }));
+        } else throw new ActionError('Name cells (their rows, as #123) or clusters (numbers from 1) of a clustering.');
       } catch (error) {
-        throw new ActionError(error.message);
+        throw error instanceof ActionError ? error : new ActionError(error.message);
       }
-      store.commit(next, `Curate ${target.name}`);
       const record = project().artifacts.find((a) => a.id === target.id);
-      return { message: `${record.name}: ${record.edits.length} edit${record.edits.length === 1 ? '' : 's'}; the last: ${project().history.at(-1).detail}.`, data: { id: record.id, base: record.base, edits: record.edits.length, last: record.edits.at(-1) } };
+      return { message: `${record.name}: ${record.edits.length} edit${record.edits.length === 1 ? '' : 's'}; the last: ${project().history.at(-1).detail}.`, data: { id: record.id, base: record.base, edits: record.edits.length, last: record.edits.at(-1), review: review.id } };
+    },
+
+    async review(args) {
+      const dataset = resolveDataset(args.dataset);
+      const action = choose(String(args.action ?? ''), REVIEW_ACTIONS.map((a) => a.id), 'review action');
+      const given = ['cells', 'chosen', 'region'].filter((k) => args[k] !== undefined && args[k] !== null && args[k] !== false);
+      if (given.length !== 1) throw new ActionError('Review one of: cells (their IDs, or rows as #123), chosen (the cells chosen) or a region.');
+      const item = bundleOf(dataset);
+      const t = { dataset, item };
+      const by = args.by ? String(args.by) : author;
+      const values = { label: args.label === undefined ? undefined : String(args.label), alternatives: Array.isArray(args.alternatives) ? args.alternatives.map(String) : undefined, concern: args.concern === undefined ? undefined : choose(String(args.concern), CONCERNS.map((c) => c.id), 'concern'), note: args.note === undefined ? (args.reason === undefined ? '' : String(args.reason)) : String(args.note), by };
+      try {
+        if (given[0] === 'region') {
+          const v = await openIn('viewer', dataset);
+          await v.segmentationReady?.();
+          const r = regionRef(dataset, args.region);
+          const seg = segmentationArg(dataset, v.segmentation() ?? 'instrument');
+          const segSpec = { id: seg.id, name: seg.name, instrument: seg.source === 'instrument' };
+          const rows = v.regions.rowsIn(r.id);
+          const { record } = await reviewRegion({ app, t, regionId: r.id, action, ...values, seg: segSpec, rows });
+          let cellsRecord = null;
+          if (action === 'exclude' && args.cells_too !== false && rows.length) ({ record: cellsRecord } = await reviewCells({ app, t, seg: segSpec, rows, action: 'exclude', note: `In ${r.name}, excluded: ${values.note}`, by }));
+          await frames();
+          return { message: `${reviewLine(record)}${cellsRecord ? `; its ${plural(rows.length, 'cell')} excluded too` : ''}.`, data: { review: record, cells: cellsRecord?.id ?? null } };
+        }
+        const seg = segmentationArg(dataset, args.segmentation);
+        const segSpec = { id: seg.id, name: seg.name, instrument: seg.source === 'instrument' };
+        let rows;
+        if (given[0] === 'chosen') {
+          if (app.selection?.dataset !== dataset.id) throw new ActionError(`No cells of ${dataset.name} are chosen: select_cells or regions (choose) chooses them.`);
+          if (!segSpec.instrument) throw new ActionError('The cells chosen are the instrument\'s: review them as its segmentation\'s (segmentation: instrument).');
+          rows = [];
+          for (let i = 0; i < app.selection.mask.length; i += 1) if (app.selection.mask[i]) rows.push(i);
+        } else {
+          if (!Array.isArray(args.cells) || !args.cells.length) throw new ActionError('cells is a list of cell IDs, or rows as "#123".');
+          const named = args.cells.map(String);
+          const ids = named.filter((c) => !/^#\d+$/.test(c));
+          const found = ids.length ? await cellRows(item, segSpec, ids) : [];
+          const missing = ids.filter((_, k) => found[k] < 0);
+          if (missing.length) throw new ActionError(`${seg.name} has no cell ${missing.slice(0, 5).join(', ')}${missing.length > 5 ? ` (and ${missing.length - 5} more)` : ''}.`);
+          const byId = new Map(ids.map((id, k) => [id, found[k]]));
+          rows = named.map((c) => (/^#\d+$/.test(c) ? Number(c.slice(1)) : byId.get(c)));
+        }
+        let labels = null;
+        if (args.labels !== undefined || ['accept', 'relabel', 'ambiguous'].includes(action)) {
+          const { version } = labelVersionArg({ ...args, dataset: dataset.id, segmentation: seg.id });
+          labels = { id: version.id, level: version.level };
+        }
+        const { record, curated } = await reviewCells({ app, t, seg: segSpec, rows, action, labels, ...values });
+        await frames();
+        return { message: `${reviewLine(record)} (${plural(rows.length, 'cell')} of ${seg.name}).`, data: { review: record, curated } };
+      } catch (error) {
+        throw error instanceof ActionError ? error : new ActionError(error.message);
+      }
+    },
+
+    async reviews(args) {
+      const dataset = resolveDataset(args.dataset);
+      let list = reviewsOf(project(), dataset.id);
+      if (args.reviewer !== undefined) list = list.filter((r) => r.by === String(args.reviewer));
+      if (args.action !== undefined) list = list.filter((r) => r.action === choose(String(args.action), REVIEW_ACTIONS.map((a) => a.id), 'review action'));
+      if (args.region !== undefined) {
+        const r = regionRef(dataset, args.region);
+        list = list.filter((x) => x.target === 'region' && x.region.id === r.id);
+      }
+      if (args.cell !== undefined) {
+        const text = String(args.cell);
+        list = list.filter((x) => x.target === 'cells' && x.cells.some((c) => (/^#\d+$/.test(text) ? c.row === Number(text.slice(1)) : c.id === text)));
+      }
+      const seg = segmentationArg(dataset, args.segmentation);
+      const n = seg.summary?.cells ?? Math.max(0, ...reviewsOf(project(), dataset.id).filter((r) => r.target === 'cells' && r.segmentation?.id === seg.id).flatMap((r) => r.cells.map((c) => c.row + 1)));
+      const counts = stateCounts(cellReviewState(reviewsOf(project(), dataset.id), seg.id, n));
+      const regions = Object.fromEntries([...regionReviewState(reviewsOf(project(), dataset.id))].map(([id, st]) => [regionsOf(project(), dataset.id, { removed: true }).find((r) => r.id === id)?.name ?? id, st]));
+      const limit = args.limit === undefined ? 50 : Math.max(1, finite(args.limit, 'limit'));
+      const shown = list.slice(-limit).reverse();
+      return {
+        message: `${dataset.name}: ${plural(list.length, 'review')}${list.length ? ` (the latest: ${reviewLine(list.at(-1))})` : ''}; of ${seg.name}'s cells, ${counts.reviewed} reviewed: ${['accepted', 'relabeled', 'ambiguous', 'excluded', 'concern', 'commented'].map((k) => `${counts[k]} ${k === 'concern' ? 'of concern' : k}`).join(', ')}.`,
+        data: { reviews: shown, total: list.length, counts, regions, segmentation: { id: seg.id, name: seg.name } },
+      };
     },
 
     async consensus_labels(args) {
@@ -1775,7 +1858,15 @@ export function installRemote(app) {
     },
 
     async export(args) {
-      const what = choose(args.what, ['project', 'archive', 'methods', 'alignment', 'regions'], 'kind of file');
+      const what = choose(args.what, ['project', 'archive', 'methods', 'alignment', 'regions', 'reviews'], 'kind of file');
+      if (what === 'reviews') {
+        const dataset = resolveDataset(args.dataset);
+        const format = args.format === undefined ? 'csv' : choose(String(args.format), ['csv', 'json'], 'format');
+        const records = reviewsOf(project(), dataset.id);
+        if (!records.length) throw new ActionError(`${dataset.name} has no review yet: review reviews its cells and regions.`);
+        const file = format === 'csv' ? reviewsCSV(records, { [dataset.id]: dataset.name }) : `${JSON.stringify(reviewsJSON(records, { project: project(), datasets: [dataset], situcraft: app.version }), null, 1)}\n`;
+        return { file, message: `${plural(records.length, 'review')} of ${dataset.name}, as ${format === 'csv' ? 'CSV (a row a cell, cluster or region)' : 'JSON (the record)'}.` };
+      }
       if (what === 'regions') {
         const dataset = resolveDataset(args.dataset);
         const v = await openIn('viewer', dataset);

@@ -584,8 +584,10 @@ marker it expresses; red, a negative marker it expresses), and why not the label
 carry; for labels from a reference, each round's correlations and the genes higher in its label's
 profile and in the next's that the cell expresses; what its counterparts carry under the other
 segmentation; its neighbors' labels in the tissue and in expression; its transcripts and its
-segmentation's flags. **Accept** its label or **Relabel** it, saying why; the decision is added to
-a curated set and the next cell is shown.
+segmentation's flags. **Accept** its label or **Relabel** it, saying why (or mark it ambiguous,
+exclude it, record a segmentation concern, comment); the decision is recorded as a review
+(**Reviewing cells and regions**, below), a relabel added to a curated set, and the next cell is
+shown.
 
 ### Labels under two segmentations
 
@@ -757,6 +759,39 @@ all**; in QuPath, open that image and import the file's objects. To bring QuPath
 export them from QuPath as GeoJSON, choose the image they were drawn on, and **Read a file…**: each
 annotation becomes a region, with its name, class and colour; detections and cells are left out,
 and how many is reported.
+
+## Reviewing cells and regions
+
+A review is a decision about cells or a region, kept with its provenance: who made it, what, the
+value before and after, when, of which segmentation and label set, each cell's label and its
+confidence as you saw them, and which version of each post-Xenium image's alignment was in use (and
+whether the image was shown). Reviews are never changed or removed: taking one back is another.
+
+- **Accept** a label (or a region's class), or **Relabel** it, saying why. Relabeling cells adds to
+  a curated set begun from the label set shown (the Viewer then shows it); relabeling a region
+  reclasses it, as a version of it.
+- **Ambiguous**: it could be one of several labels (name them if you can).
+- **Exclude** it from analyses, saying why (a fold, debris, outside the tissue); **Include again**
+  takes an exclusion back. Excluding a region can exclude the cells in it too.
+- **Segmentation concern**: its segmentation looks wrong (cells merged, a cell split, its boundary
+  off, not a cell, cells missed); **Resolve the concern** when it is answered.
+- **Comment**: a note, changing nothing.
+
+Review where you look:
+
+- **A cell:** click it in the Viewer; its inspector shows its label in the label set filling the
+  cells (fill by a label set to review labels) with its confidence, its reviews, and the review
+  buttons.
+- **Many cells:** choose them (brushing a plot in the QC view, or a region's **Choose its cells**);
+  the Viewer's **Reviews** reviews them together.
+- **A region:** choose it under **Regions**; **Review it** under its details.
+- **The review queue** of the Cell types view (above).
+
+The Viewer's **Reviews** counts the cells drawn that are accepted, relabeled, ambiguous, excluded,
+of concern and commented, lists every review (click one to go to its cell or region), and writes the
+record as CSV (a row for each cell or region reviewed) or JSON. **Fill by: Review status** colours
+each cell by its review: excluded grey, a concern vermillion, ambiguous orange, relabeled blue,
+accepted green, commented purple (a palette apart in every colour vision).
 
 ## Keyboard
 

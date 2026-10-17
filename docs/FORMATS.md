@@ -195,6 +195,7 @@ A project is one JSON document, saved automatically in the library (`<data dir>/
 | `views` | Saved views (below) |
 | `exports` | The exports written from its segmentations (from 0.2.0; absent until the first) |
 | `regions` | The regions drawn on its datasets, each with its versions (from 0.5.0; absent until the first; below) |
+| `reviews` | The reviews of its cells and regions, appended and never changed (from 0.5.0; absent until the first; below) |
 | `history` | Every change, with its time |
 
 A filter's checksum is the SHA-256 of the cell count (32-bit unsigned, little-endian) followed by
@@ -239,6 +240,27 @@ polygons, each a list of rings (its outer ring, then its holes), each ring a lis
 does not repeat its first point. `tool` is how it was made (`rectangle`, `polygon`, `freehand`,
 `brush` or `imported`), `layer` what it was drawn over. No two of a dataset's regions (those not
 removed) have the same name.
+
+`reviews` records each review of a dataset's cells, clusters or regions (from 0.5.0), appended and
+never changed or removed (taking one back is another review):
+
+| Field | Holds |
+| --- | --- |
+| `id`, `time`, `by` | The review's id (`rev-…`), when, and who (the reviewer's name or initials) |
+| `action` | `accept`, `relabel`, `ambiguous`, `exclude`, `include` (an exclusion taken back), `concern` (its segmentation looks wrong), `resolve` (the concern answered) or `comment` |
+| `dataset`, `target` | The dataset, and what was reviewed: `cells`, `clusters` or `region` |
+| `segmentation` | `{id, name}`: the segmentation the cells are of (for a region, the one drawn) |
+| `cells` | Each cell reviewed: `{row, id, label, confidence, previous}`: its row and ID in the segmentation, its label in the set reviewed and that label's confidence (as shown; `null` for none), and its value before (its label, `included` or `excluded`, its concern or `none`) |
+| `clusters` | `{clustering, clusters}`: a clustering's clusters reviewed (numbered from 0) |
+| `region` | `{id, name, version, cls}`: the region and its version and class after the review |
+| `labels` | `{id, level, name, kind}`: the label set reviewed (`markers`, `reference`, `imported`, `curated`) |
+| `previous`, `next` | The value before (`mixed` when the cells' differ) and after: a label or class, `ambiguous`, `excluded`, `included`, a concern or `none` |
+| `alternatives`, `concern`, `note` | The labels an ambiguous one could be; the concern (`merged`, `split`, `boundary`, `not-a-cell`, `missed`, `other`); why, or the comment |
+| `images` | Each post-Xenium image of the dataset: `{image, name, transform, version, shown}`, the version of its alignment placing it and whether it was shown (`null` when not known) |
+| `edits` | Accepting or relabeling cells: the edits appended to the curated set (`{set, index}`), each naming the review back (`review`) |
+
+Relabeling a region appends a version of it with the new class. Curated edits made before 0.5.0
+(or without a review) are read as reviews, their label before, cells' IDs and alignments unknown.
 
 `decisions` records each decision about a dataset's segmentations, appended and never removed:
 `{kind, dataset, artifact, rationale, by, time, comparison}`, the kind `promote-segmentation` (its
@@ -513,6 +535,22 @@ keep it.
 Each job is kept in `<data dir>/jobs/<id>.json`: its kind, title, spec (every effective
 parameter), state, times, number of runs, error and log. A job interrupted by SituCraft stopping is
 `orphaned` when it starts again, to be resumed or discarded.
+
+### Reviews
+
+A dataset's reviews (from 0.5.0) are written from the Viewer's **Reviews** or by `export` (`what:
+"reviews"`):
+
+- **CSV** (`<dataset>-reviews.csv`): a row for each cell, cluster or region a review is of; its
+  columns `review`, `time`, `reviewer`, `action`, `dataset`, `dataset_name`, `segmentation`,
+  `segmentation_name`, `target`, `cell_id`, `cell_row` (from 0), `clustering`, `cluster` (from 1),
+  `region`, `region_name`, `region_version`, `label_set`, `label_set_name`, `label_set_level`,
+  `label` (the cell's, as shown), `confidence`, `previous` (the cell's value before), `new`,
+  `concern`, `alternatives` (separated by `; `), `note`, `images` (each image's alignment version
+  in use, with its artifact and whether it was shown) and `derived` (`yes` for a label edit read as
+  a review). RFC 4180: a field with a comma, a quote or a line break is quoted.
+- **JSON** (`<dataset>-reviews.json`): `{format: "situcraft-reviews", version: 1, written,
+  situcraft, project, datasets, actions, concerns, reviews}`, the reviews as the project keeps them.
 
 ### Project archives (`.scz`)
 

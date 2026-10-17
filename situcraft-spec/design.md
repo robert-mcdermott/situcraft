@@ -484,6 +484,18 @@ large region is painted at the brush's own step, and away from the stroke the re
 are put back: a stroke changes a region only near it. Cells are counted in a region by their centroids, in the page, with the cells table
 drawn. The program only reads a GeoJSON file named by a path, for remote control (`api_regions.go`).
 
+### Reviews
+
+A review is the user's decision, so like a region it is kept in the project document (`reviews`,
+`web/lib/review-record.js`), appended and never changed: the provenance travels with the project,
+and a project archive carries it. Labels stay where they were: accepting or relabeling cells
+appends an edit to a curated label set (wave 4), the edit and the review naming each other, so
+every view of labels (the map, the tissue, label impact) sees a review at once; a curated edit
+without a review (made before) is read as one. Exclusions and concerns are states the reviews
+leave, the latest deciding, not changes to the cells; no analysis leaves excluded cells out yet,
+and one that does will read them from the record. The page has rows, not cell IDs, so the program answers the IDs of rows
+(and rows of IDs) of any segmentation (`api_reviews.go`) when a review is made.
+
 ### Exports
 
 `internal/export` writes a segmentation from SituCraft's segmentation files and the dataset's

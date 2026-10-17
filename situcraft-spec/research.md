@@ -565,6 +565,18 @@ written in µm.
 | All six written in the H&E's pixels and read back | areas within 0.0008%, the same cells; a rectangle drawn in its pixels back at its corners (0.0000 px) |
 | A QuPath 0.4 file drawn on the H&E, read in its pixels | the corners where the version places them (0 µm), at most 0.18 µm from the truth's; a square with a hole 10,409.5 µm² against its outline placed a pixel at a time, 10,409.4; its colour kept; a detection and a point left out |
 
+**With QuPath itself** (0.7.0, by its command line, on the simulated H&E as it opens it: 1,154 ×
+995 pixels, 0.3638 µm a pixel, the same pixel grid as SituCraft's):
+
+| Round trip | Result |
+|---|---|
+| Five SituCraft regions written in the H&E's pixels, imported by QuPath | five annotations, each with its name, class and colour (QuPath's classes and one of SituCraft's own), a hole and a region in two parts kept; areas within 1 px² of SituCraft's (the rectangle drawn in pixels 60,000 px² in both) |
+| QuPath's export of them, read by SituCraft | each region's area within 0.002% of the original, the same cells |
+| Annotations made in QuPath (an ellipse as its 100-vertex polygon, a quadrilateral, a square with an elliptical hole) and a detection, read by SituCraft and written back in pixels | the detection left out; every vertex within 0.0000 px of QuPath's, the areas the same (the holed square within 0.5 px² of 74,617, the coordinates' rounding) |
+
+QuPath gives a class it does not know a colour of its own (headless, even its usual classes'
+differ from its interface's defaults), so SituCraft keeps the colour a file gives.
+
 A region read in a deformed image's pixels is stretched with the image: that square's area is 2.2%
 from its pixel area times the transform's scale squared, so areas are always computed from the
 placed outline.
@@ -2527,6 +2539,39 @@ apart (15) parallel to twelve digits, the 50 components' subspace the same (over
   378,743 cells, the types' shares within a total variation distance of 0.015 of the true cells'.
   The map of every cell shown in headless Chrome in 20 s and colored again in 40 ms, SituCraft
   serving it in 1.9 GB.
+
+### 5.9 The review record (verified, wave 5, slice 6)
+
+A reviewer's decisions are evidence as much as the labels are, so each is kept with what it rested
+on (`web/lib/review-record.js`): who, the action, the value before and after, when, the
+segmentation, the label set reviewed, each cell's ID, its label and that label's confidence as
+shown, and each post-Xenium image's alignment version in use and whether it was shown (a cell
+judged on an H&E is judged through an alignment, which may later be replaced). The record is
+append-only: an exclusion or a concern is taken back by a review of its own (include, resolve), so
+the record says when and by whom it was. Accepting and relabeling cells change labels as wave 4's
+review did, by an edit appended to a curated set (§5.5), the edit naming the review and the review
+the edit: the label review of the Cell types view and remote control's `curate_labels` write the
+same record, and earlier edits are read as reviews.
+
+**States.** Each cell's state is the latest review's of each kind: its label's (accepted, relabeled,
+ambiguous), whether it is excluded, its concern, whether it was commented on. A review of a region
+is of the region (its class reclassed as a version of it); excluding a region can exclude the cells
+of the segmentation drawn whose centroids lie in it, as a review of those cells. The Review status
+fill draws, of a cell's states, the first of: excluded, a concern, ambiguous, relabeled, accepted,
+commented — in Okabe and Ito's palette (§8), apart in every colour vision.
+
+**Written.** As CSV, a row a cell (or cluster, or region) reviewed, so that a table of cells can be
+joined by cell ID; and as JSON, the record itself.
+
+**Validated** (`web/lib/review-record.test.mjs`; the viewer suite, on the simulated tissue with its
+H&E placed by its automatic version, labels imported with a confidence each):
+
+| Check | Result |
+|---|---|
+| A cell relabeled by hand in the inspector | its ID, label and confidence (0.75, the table's) recorded, with the label set, the segmentation, reviewer and reason, and the H&E's version in use, shown; the curated set's labels differ from the table's at that cell and no other of 924 |
+| Cells accepted, one ambiguous, one of concern, a region excluded and one reclassed, a comment | as asked; the cells excluded are exactly the 66 in the region; the region's class Necrosis at its version 4; an exclusion without a reason refused |
+| The record as CSV and JSON, read back | 75 rows (one a cell or region), each its review's and its cell's (previous value, confidence); the JSON the project's eight reviews |
+| The Review status fill | each of 924 cells' colour its status by the suite's own reading of the CSV |
 
 ## 6. Spatial analysis (wave 6) and cohorts (wave 7)
 

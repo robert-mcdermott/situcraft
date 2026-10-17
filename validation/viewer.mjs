@@ -1603,6 +1603,132 @@ export async function viewerSuite({ check, MissingData, verbose }) {
         check('viewer', 'annotations as QuPath 0.4 writes them, drawn on the H&E, read in its pixels: placed by its alignment in use (and its deformation), near where the truth puts them; a hole kept; a detection and a point left out', `${fromQuPath.message ?? fromQuPath.error}; the pentagon's corners ${placedOff.toExponential(2)} µm from where the version places them, at most ${truthOff.toFixed(3)} µm from the truth; its colour ${JSON.stringify(qpColor)}; the square ${hg?.[0].length} rings, ${holed ? holed.area.toFixed(1) : '?'} µm² against ${holedWant.toFixed(1)}`,
           Boolean(fromQuPath.ok) && imported.length === 2 && JSON.stringify(fromQuPath.data.skipped) === JSON.stringify({ detection: 1, Point: 1 }) && qp?.cls === 'Tumor' && placedOff < 1e-3 && truthOff < bound && JSON.stringify(qpColor) === '[200,0,0]' && hg?.[0].length === 2 && Math.abs(holed.area / holedWant - 1) < 1e-3,
           `corners within 0.001 µm of the version's placing, ${bound.toFixed(1)} µm of the truth; a hole, its area within 0.1% of its outline placed a pixel at a time; skipped: a detection, a point`);
+
+        // Reviews (wave 5, slice 6). Labels imported for the simulated tissue's cells, each with a
+        // confidence; a cell relabeled by hand in the Viewer's inspector, with its reason; by a program,
+        // cells accepted, one ambiguous, one of concern, a region excluded with its cells, a region
+        // relabeled, a comment. Each review's record against the state it changed (the label each
+        // relabeled cell now carries in the curated set and no other cell's; the label and confidence the
+        // table gave; the cells excluded those in the region; the version of the H&E's alignment in use;
+        // the region's new class); the Review status fill against the suite's own reading of the
+        // record; the record written as CSV and JSON and read back, row for row.
+        {
+          const simId = await chrome.eval(`window.situcraft.store.project.datasets.find((d) => d.name === 'sim-pathology').id`);
+          const itemUrl = await chrome.eval(`window.situcraft.bundles.link('${simId}').item.url`);
+          const own = await chrome.eval('(() => { const c = window.situcraftViewer.cells; return { n: c.n, x: Array.from(c.x) }; })()');
+          const ids = (await fetch(`${url}${itemUrl}/cells/lookup`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rows: [...Array(own.n).keys()] }) }).then((r) => r.json())).ids;
+          const typeOf = (i) => (own.x[i] < simSize[0] / 2 ? 'Epithelial' : 'Immune');
+          const confOf = (i) => ((i * 37) % 100) / 100;
+          const labelsFile = join(work, 'sim-labels.csv');
+          writeFileSync(labelsFile, `cell_id,cell_type,confidence\n${ids.map((id, i) => `${id},${typeOf(i)},${confOf(i)}`).join('\n')}\n`);
+          const imported = await act('import_labels', { dataset: 'sim-pathology', path: labelsFile });
+          await act('show_tissue', { dataset: 'sim-pathology', whole: true, transcripts: false, fill: 'labels', images: { [simAdded.data.name]: { visible: true, opacity: 1 } } });
+          // By hand: the cell nearest the middle, relabeled in the inspector.
+          const r1 = await chrome.eval(`(() => { const c = window.situcraftViewer.cells; let best = -1, d = Infinity; for (let i = 0; i < c.n; i += 1) { const e = (c.x[i] - ${simSize[0] / 2 - 30}) ** 2 + (c.y[i] - ${simSize[1] / 2}) ** 2; if (e < d) { d = e; best = i; } } return best; })()`);
+          const other = typeOf(r1) === 'Epithelial' ? 'Immune' : 'Epithelial';
+          await act('select_cell', { dataset: 'sim-pathology', cell: `#${r1}` });
+          const byHand = await chrome.eval(`(async () => {
+            let form = null;
+            for (let k = 0; k < 100 && !form; k += 1) { form = document.querySelector('.viewer-cell .review-form'); if (!form) await new Promise((r) => setTimeout(r, 100)); }
+            if (!form) return { error: 'no review form' };
+            form.querySelector('.review-by input').value = 'validation';
+            form.querySelector('[data-review="relabel"]').click();
+            await new Promise((r) => setTimeout(r, 50));
+            form.querySelector('[data-review-label]').value = '${other}';
+            form.querySelector('[data-review-note]').value = 'Its markers say otherwise';
+            form.querySelector('[data-review-go]').click();
+            for (let k = 0; k < 100 && !(window.situcraft.store.project.reviews ?? []).length; k += 1) await new Promise((r) => setTimeout(r, 100));
+            const p = window.situcraft.store.project;
+            return { review: p.reviews?.at(-1) ?? null, fill: window.situcraftViewer.layers().cells.fill, layerShown: window.situcraftViewer.layers().images?.find((l) => l.id === '${simAdded.data.id}')?.visible ?? null };
+          })()`);
+          const rec = byHand.review;
+          const curatedId = rec?.edits?.[0]?.set;
+          const curatedLabels = curatedId ? await chrome.eval(`(async () => { const { labelSource, refOf } = await import('/ui/label-sources.js'); const src = await labelSource(window.situcraft, refOf('${curatedId}')); return Array.from(src.label, (k) => (k >= 0 ? src.names[k] : null)); })()`) : [];
+          const changed = curatedLabels.map((l, i) => (l !== typeOf(i) ? i : -1)).filter((i) => i >= 0);
+          const handOk = rec && rec.action === 'relabel' && rec.by === 'validation' && rec.cells.length === 1 && rec.cells[0].row === r1 && rec.cells[0].id === ids[r1] && rec.cells[0].label === typeOf(r1)
+            && Math.abs(rec.cells[0].confidence - confOf(r1)) < 1e-6 && rec.previous === typeOf(r1) && rec.next === other && rec.note === 'Its markers say otherwise' && rec.labels?.kind === 'imported'
+            && rec.segmentation?.name && rec.images.length === 1 && rec.images[0].transform === auto.data.id && rec.images[0].shown === byHand.layerShown && changed.length === 1 && changed[0] === r1 && byHand.fill === `labels:${curatedId}:0`;
+          check('viewer', 'a cell relabeled by hand in the Viewer\'s inspector: its review records who, why, its label and confidence as the table gave them, the label set, the segmentation and the H&E\'s version in use; the curated set begun carries the new label for that cell and no other, and the Viewer shows it', `${imported.message ?? imported.error}; cell ${ids[r1]} (#${r1}): ${rec ? `${rec.previous} → ${rec.next}, confidence ${rec.cells[0].confidence} (the table's ${confOf(r1)}), images ${JSON.stringify(rec.images)}` : JSON.stringify(byHand)}; ${changed.length} cell${changed.length === 1 ? '' : 's'} changed; the fill ${byHand.fill}`,
+            Boolean(imported.ok && handOk), 'the record its state; one cell changed, the one relabeled');
+
+          // By a program, of cells apart from each other and from the region excluded.
+          const regionRows = await chrome.eval(`window.situcraftViewer.regions.rowsIn('${inPixels.data.id}')`);
+          const free = [...Array(own.n).keys()].filter((i) => i !== r1 && !regionRows.includes(i));
+          const epithelial = free.filter((i) => typeOf(i) === 'Epithelial').slice(0, 3);
+          const [ambiguousRow, concernRow] = free.filter((i) => typeOf(i) === 'Immune').slice(0, 2);
+          const steps = [];
+          steps.push(await act('review', { dataset: 'sim-pathology', action: 'accept', cells: epithelial.map((i) => ids[i]), labels: curatedId, by: 'validation' }));
+          steps.push(await act('review', { dataset: 'sim-pathology', action: 'ambiguous', cells: [`#${ambiguousRow}`], alternatives: ['Epithelial', 'Immune'], note: 'Mixed markers', by: 'validation' }));
+          steps.push(await act('review', { dataset: 'sim-pathology', action: 'concern', cells: [ids[concernRow]], concern: 'split', note: 'One nucleus, two outlines', by: 'validation' }));
+          steps.push(await act('review', { dataset: 'sim-pathology', action: 'exclude', region: inPixels.data.name, note: 'Out of focus', by: 'validation' }));
+          steps.push(await act('review', { dataset: 'sim-pathology', action: 'relabel', region: inUm.data.name, label: 'Necrosis', note: 'Necrotic on the H&E', by: 'validation' }));
+          steps.push(await act('review', { dataset: 'sim-pathology', action: 'comment', region: rect.name, note: 'Check against the IF', by: 'validation' }));
+          const refused = await act('review', { dataset: 'sim-pathology', action: 'exclude', cells: ['#3'], by: 'validation' });
+          const pageState = await chrome.eval('window.situcraftViewer.reviewState()');
+          const excludedOk = JSON.stringify([...pageState.excluded].sort((a, b) => a - b)) === JSON.stringify([...regionRows].sort((a, b) => a - b));
+          const relabeledRegion = (await act('regions', { dataset: 'sim-pathology' })).data?.regions.find((r) => r.id === inUm.data.id);
+          const acceptRec = steps[0].data?.review;
+          const acceptLabels = acceptRec ? await chrome.eval(`(async () => { const { labelSource, refOf } = await import('/ui/label-sources.js'); const src = await labelSource(window.situcraft, refOf('${curatedId}')); return { labels: [${epithelial.join(',')}].map((i) => src.names[src.label[i]]), edited: [${epithelial.join(',')}].map((i) => src.edited[i]) }; })()`) : null;
+          check('viewer', 'remote control: review accepts cells (an accept edit each, their labels as they were), marks one ambiguous and one of concern, excludes a region with its cells (those in it exactly), relabels a region (a version of it with the new class), comments on another, and refuses an exclusion without a reason', `${steps.map((x) => x.message ?? x.error).join(' | ')}; refused: ${refused.message ?? refused.error}; excluded ${pageState.excluded.length} cells, the region holds ${regionRows.length}; ${JSON.stringify(pageState.counts)}; ${inUm.data.name} now ${relabeledRegion?.class} (version ${relabeledRegion?.version}); accepted ${JSON.stringify(acceptLabels)}`,
+            steps.every((x) => x.ok) && !refused.ok && /Say why it is left out/.test(refused.error ?? refused.message ?? '') && excludedOk && regionRows.length > 0 && pageState.counts.ambiguous === 1 && pageState.counts.concern === 1 && pageState.counts.accepted === 3 && pageState.counts.relabeled === 1
+            && relabeledRegion?.class === 'Necrosis' && relabeledRegion.version === 4 && steps[4].data.review.previous === 'Stroma' && steps[4].data.review.next === 'Necrosis' && acceptLabels?.labels.every((l) => l === 'Epithelial') && acceptLabels.edited.every((e) => e >= 0) && acceptRec.edits.length === 1,
+            'each as asked; the cells excluded those in the region; the region reclassed; the reason required');
+
+          // The record written and read back; the Review status fill against the suite's own reading.
+          const csvFile = join(work, 'reviews.csv');
+          const jsonFile = join(work, 'reviews.json');
+          const wroteCsv = await act('export', { what: 'reviews', dataset: 'sim-pathology', path: csvFile });
+          const wroteJson = await act('export', { what: 'reviews', dataset: 'sim-pathology', format: 'json', path: jsonFile });
+          const parseCsv = (text) => {
+            const rows = [];
+            let row = [];
+            let field = '';
+            let quoted = false;
+            for (let i = 0; i < text.length; i += 1) {
+              const ch = text[i];
+              if (quoted) {
+                if (ch === '"' && text[i + 1] === '"') { field += '"'; i += 1; } else if (ch === '"') quoted = false; else field += ch;
+              } else if (ch === '"') quoted = true;
+              else if (ch === ',') { row.push(field); field = ''; } else if (ch === '\n') { row.push(field); rows.push(row); row = []; field = ''; } else field += ch;
+            }
+            const [head, ...body] = rows;
+            return body.map((r) => Object.fromEntries(head.map((name, k) => [name, r[k]])));
+          };
+          const csvRows = wroteCsv.ok ? parseCsv(readFileSync(csvFile, 'utf8')) : [];
+          const doc = wroteJson.ok ? JSON.parse(readFileSync(jsonFile, 'utf8')) : { reviews: [] };
+          const pageRecords = await chrome.eval(`window.situcraft.store.project.reviews.filter((r) => r.dataset === '${simId}')`);
+          const expectedRows = doc.reviews.reduce((n, r) => n + (r.target === 'cells' ? r.cells.length : r.target === 'clusters' ? r.clusters.clusters.length : 1), 0);
+          const rowMismatch = csvRows.filter((row) => {
+            const r = doc.reviews.find((x) => x.id === row.review);
+            if (!r || r.action !== row.action || r.by !== row.reviewer || r.note !== row.note || String(r.next ?? '') !== row.new) return true;
+            if (r.target !== 'cells') return row.region !== (r.region?.id ?? '');
+            const c = r.cells.find((x) => String(x.row) === row.cell_row);
+            return !c || (c.id ?? '') !== row.cell_id || String(c.previous ?? '') !== row.previous || (c.confidence === null ? row.confidence !== '' : Math.abs(Number(row.confidence) - c.confidence) > 1e-9);
+          });
+          // Each cell's status by the suite's reading of the CSV: the latest of its reviews deciding,
+          // excluded first, then a concern, ambiguous, relabeled, accepted, commented.
+          const status = Array.from({ length: own.n }, () => ({ label: '', excluded: false, concern: false, commented: false }));
+          for (const row of [...csvRows].sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : 0))) {
+            if (row.target !== 'cells' || row.segmentation !== pageState.segmentation.id) continue;
+            const st = status[Number(row.cell_row)];
+            if (row.action === 'accept') st.label = 'accepted';
+            else if (row.action === 'relabel') st.label = 'relabeled';
+            else if (row.action === 'ambiguous') st.label = 'ambiguous';
+            else if (row.action === 'exclude') st.excluded = true;
+            else if (row.action === 'include') st.excluded = false;
+            else if (row.action === 'concern') st.concern = true;
+            else if (row.action === 'resolve') st.concern = false;
+            else if (row.action === 'comment') st.commented = true;
+          }
+          const palette = { excluded: [140, 140, 140], concern: [213, 94, 0], ambiguous: [230, 159, 0], relabeled: [0, 114, 178], accepted: [0, 158, 115], commented: [204, 121, 167] };
+          const want = status.map((st) => (st.excluded ? palette.excluded : st.concern ? palette.concern : st.label ? palette[st.label] : st.commented ? palette.commented : null));
+          await act('show_tissue', { dataset: 'sim-pathology', fill: 'review' });
+          const rgba = await chrome.eval(`(async () => { for (let k = 0; k < 50 && !window.situcraftViewer.clusterFill()?.review; k += 1) await new Promise((r) => setTimeout(r, 100)); return Array.from(window.situcraftViewer.fillColors() ?? []); })()`);
+          const fillWrong = want.filter((w, i) => (w ? rgba[4 * i + 3] !== 255 || rgba[4 * i] !== w[0] || rgba[4 * i + 1] !== w[1] || rgba[4 * i + 2] !== w[2] : rgba[4 * i + 3] !== 0)).length;
+          check('viewer', 'the review record written as CSV (a row a cell or region) and JSON, read back: the JSON the project\'s record, every CSV row its review\'s and cell\'s; the Review status fill each cell\'s status by the suite\'s reading of the CSV', `${wroteCsv.message ?? wroteCsv.error}; ${wroteJson.message ?? wroteJson.error}; ${csvRows.length} rows (${expectedRows} expected), ${rowMismatch.length} differing; ${doc.reviews.length} reviews in the JSON, ${pageRecords.length} in the project; the fill ${fillWrong} of ${own.n} cells otherwise`,
+            wroteCsv.ok && wroteJson.ok && doc.format === 'situcraft-reviews' && JSON.stringify(doc.reviews.filter((r) => !r.derived)) === JSON.stringify(pageRecords) && csvRows.length === expectedRows && rowMismatch.length === 0 && rgba.length === 4 * own.n && fillWrong === 0,
+            'the same, row for row; every cell\'s colour its status');
+        }
       }
     }
     check('viewer', 'no uncaught errors in the page', errors.length ? errors.slice(0, 3).join(' | ') : 'none', errors.length === 0, 'none');

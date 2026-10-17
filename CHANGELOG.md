@@ -120,7 +120,32 @@ cells and regions reviewed with their provenance.
     in the simulated H&E's pixels through its deformed alignment and read back with the same areas
     (within 0.001%) and cells; annotations laid out as QuPath 0.4 writes them, drawn on that H&E,
     landing within 0.18 µm of where its truth puts them. The brush's area is within 0.5% of the
-    exact shape's.
+    exact shape's. With QuPath 0.7.0 itself: regions written for it open there with their names,
+    classes, colours, holes and parts, and come back with the same areas and cells; annotations made
+    in QuPath come back to their own pixels.
+- **Reviews with provenance (wave 5, slice 6).** Cells and regions are reviewed where you look at
+  them, and every review is kept.
+  - **Actions:** accept a label (or a region's class), relabel it (saying why), mark it ambiguous
+    (with the labels it could be), exclude it from analyses (saying why) or include it again, record a
+    segmentation concern (cells merged, a cell split, its boundary off, not a cell, cells missed) or
+    resolve it, comment.
+  - **Provenance:** each review records who, what, the value before and after, when, the
+    segmentation, the label set reviewed, each cell's ID, its label and that label's confidence as
+    shown, and the version of each post-Xenium image's alignment in use. Reviews are appended, never
+    changed: taking one back is another review.
+  - **Where:** a cell's inspector in the Viewer, the cells chosen (from the QC view or a region), a
+    region's details (excluding a region can exclude its cells), and the Cell types view's review
+    queue, whose decisions join the same record (relabels still go to a curated label set; earlier
+    ones are read as reviews).
+  - **The Viewer's Reviews** counts the cells drawn by their review, lists every review, and writes
+    the record as CSV (a row for each cell or region reviewed) or JSON; **Fill by: Review status**
+    colours each cell by its review.
+  - **Remote control:** `review`, `reviews`; `export` writes reviews; `show_tissue` fills by review.
+  - **Validated:** each review's record against the state it changed (a cell relabeled by hand: its
+    ID, label, confidence, label set, segmentation and the H&E's alignment in use recorded, the new
+    label on that cell and no other; a region excluded with exactly the cells in it; a region
+    reclassed); the record written as CSV and JSON and read back row for row; the Review status fill
+    every cell's status.
 
 ## 0.4.0 (2026-10-16)
 

@@ -14,6 +14,8 @@ import { prefs } from './storage.js';
 import { worldToScreen, screenToWorld } from '../lib/viewport.js';
 import { addRegion, area, bounds, brushGeometry, CLASSES, cellsIn, colorCSS, editRegion, fromGeoJSON, nextRegionName, polygonOf, rectangle, regionsOf, toGeoJSON, uniqueRegionName } from '../lib/regions.js';
 import { placePoint, transformShape, unplacePoint } from '../lib/transforms.js';
+import { regionReviewState, reviewsOf } from '../lib/review-record.js';
+import { regionState, reviewCells, reviewForm, reviewLine, reviewRegion, reviewsOfRegion } from './reviewing.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
 const svgEl = (tag, attrs = {}) => {
@@ -31,8 +33,9 @@ const TOOLS = [
 
 // options: { app, dataset, canvas, renderer, zoomBy(factor, sx, sy) (device pixels), drawnCells() (the
 // cells table drawn), ownCells (the dataset's), images() (the Viewer's image entries), pixelSize (the
-// Xenium image's, µm) }.
-export function mountRegions({ app, dataset, canvas, renderer, zoomBy, drawnCells, ownCells, images, pixelSize }) {
+// Xenium image's, µm), item (the dataset's bundle), segOf() (the segmentation drawn, as reviews name
+// it), shown(imageId), reviewed() (after a review) }.
+export function mountRegions({ app, dataset, canvas, renderer, zoomBy, drawnCells, ownCells, images, pixelSize, item, segOf, shown, reviewed = () => {} }) {
   const svg = svgEl('svg', { class: 'viewer-regions' });
   // The regions' shapes in µm, moved by one transform each frame (their strokes not scaled); their
   // labels, placed each frame; what is being drawn.
@@ -68,7 +71,8 @@ export function mountRegions({ app, dataset, canvas, renderer, zoomBy, drawnCell
   const worldPath = (geometry) => geometry.map((poly) => poly.map((ring) => `M${ring.map(([x, y]) => `${x.toFixed(3)},${y.toFixed(3)}`).join('L')}Z`).join('')).join('');
   function place() {
     const list = regions();
-    const key = `${st.selected}|${list.map((r) => `${r.id}:${r.version}`).join()}`;
+    const states = regionReviewState(reviewsOf(app.store.project, dataset.id));
+    const key = `${st.selected}|${list.map((r) => `${r.id}:${r.version}:${states.get(r.id)?.excluded ? 'x' : ''}`).join()}`;
     if (key !== drawnKey) {
       drawnKey = key;
       clear(shapes);
@@ -77,7 +81,8 @@ export function mountRegions({ app, dataset, canvas, renderer, zoomBy, drawnCell
       for (const r of list) {
         const chosen = r.id === st.selected;
         const color = colorCSS(r.color);
-        shapes.append(svgEl('path', { d: worldPath(r.geometry), fill: color, 'fill-opacity': chosen ? 0.22 : 0.12, stroke: color, 'stroke-width': chosen ? 3 : 1.5, 'stroke-dasharray': chosen ? '6 3' : '', 'fill-rule': 'evenodd', 'vector-effect': 'non-scaling-stroke', 'data-region': r.id }));
+        const excluded = states.get(r.id)?.excluded;
+        shapes.append(svgEl('path', { d: worldPath(r.geometry), fill: color, 'fill-opacity': excluded ? 0.04 : chosen ? 0.22 : 0.12, stroke: color, 'stroke-width': chosen ? 3 : 1.5, 'stroke-dasharray': chosen ? '6 3' : excluded ? '2 3' : '', 'fill-rule': 'evenodd', 'vector-effect': 'non-scaling-stroke', 'data-region': r.id }));
         const label = svgEl('text', { fill: color, class: 'region-label' });
         label.textContent = r.name;
         labels.append(label);
@@ -374,13 +379,16 @@ export function mountRegions({ app, dataset, canvas, renderer, zoomBy, drawnCell
       h('label.viewer-toggle', h('input', { type: 'checkbox', checked: st.erase, onchange: (e) => { st.erase = e.target.checked; } }), 'Erase'),
       h('label.viewer-toggle', h('input', { type: 'checkbox', checked: st.into, onchange: (e) => { st.into = e.target.checked; } }), 'Onto (or from) the region chosen')) : null;
     const hint = st.tool ? h('p.muted.viewer-hint', `${TOOLS.find((x) => x[0] === st.tool)[3]}. The wheel zooms; hold the space bar to pan; Escape stops drawing.`) : null;
+    const states = regionReviewState(reviewsOf(app.store.project, dataset.id));
     const rows = list.map((r) => {
       const n = countOf(r);
       const chosen = r.id === st.selected;
+      const rs = states.get(r.id);
+      const badge = rs ? [rs.excluded ? 'excluded' : '', rs.concern ? 'concern' : '', rs.status].filter(Boolean).join(', ') : '';
       return h(`div.viewer-region${chosen ? '.chosen' : ''}`,
         h('div.row', { onclick: () => choose(r.id), ondblclick: () => { st.selected = r.id; place(); renderSection(); zoomTo(r); } },
           h('span.dot', { style: { background: colorCSS(r.color) } }),
-          h('div.name', h('b', r.name), h('span.muted', `${r.cls} · ${formatArea(area(r.geometry))}${n === null ? '' : ` · ${formatCount(n)} cells`}`))),
+          h('div.name', h('b', r.name, badge ? h('span.badge.review-badge', badge) : null), h('span.muted', `${r.cls} · ${formatArea(area(r.geometry))}${n === null ? '' : ` · ${formatCount(n)} cells`}`))),
         chosen ? h('div.viewer-region-detail',
           h('p.muted', `Version ${r.version}, ${r.tool}, by ${r.by}, ${new Date(r.time).toLocaleString()}${r.note ? `: ${r.note}` : ''}. Drawn on ${r.versions[0].layer || 'the tissue'}.`),
           h('div.btn-row',
@@ -389,6 +397,7 @@ export function mountRegions({ app, dataset, canvas, renderer, zoomBy, drawnCell
             h('button.btn.small', { type: 'button', onclick: () => { const k = chooseCells(r); toast(`Chose the ${formatCount(k)} cells in ${r.name}: the Viewer, the QC view and the inspector show them.`, { kind: 'ok' }); } }, icon('check'), 'Choose its cells'),
             h('button.btn.small', { type: 'button', onclick: () => zoomTo(r) }, icon('expand'), 'Go to it'),
             h('button.btn.small.ghost', { type: 'button', onclick: () => remove(r) }, icon('trash'), 'Remove')),
+          reviewBlock(r),
           r.versions.length > 1 ? h('details', h('summary', `Its ${r.versions.length} versions`), h('ol.viewer-region-versions', ...r.versions.map((v, k) => h('li', `${v.removed ? 'Removed' : `${v.name} (${v.cls}, ${formatArea(area(v.geometry))})`}, by ${v.by}, ${new Date(v.time).toLocaleString()}${v.note ? `: ${v.note}` : ''} `,
             k < r.versions.length - 1 && !v.removed ? h('button.btn.small.ghost', { type: 'button', onclick: () => restore(r, v, k) }, 'Restore') : null)))) : null) : null);
     });
@@ -418,6 +427,28 @@ export function mountRegions({ app, dataset, canvas, renderer, zoomBy, drawnCell
         h('p.muted.viewer-hint', 'An image\'s pixels are as QuPath opens that image: draw on the H&E in QuPath, export its annotations as GeoJSON, and read them here in its pixels; written in them, regions open on the H&E in QuPath.')));
   }
   const formatArea = (a) => (a >= 1e6 ? `${(a / 1e6).toFixed(2)} mm²` : `${Math.round(a).toLocaleString('en-US')} µm²`);
+
+  // A region's review: its reviews, and the review form (relabeling it reclasses it; excluding it
+  // may exclude the cells of the segmentation drawn in it too).
+  function reviewBlock(r) {
+    const past = reviewsOfRegion(app.store.project, dataset.id, r.id);
+    const cells = drawnCells();
+    const seg = segOf();
+    const inside = cells && seg ? [...cellsIn(r.geometry, cells)] : [];
+    const classes = [...new Set([...CLASSES.map((c) => c.name), ...regions().map((x) => x.cls)])];
+    return h('details.review-region', h('summary', past.length ? `Its ${past.length} review${past.length === 1 ? '' : 's'}; review it` : 'Review it'),
+      past.length ? h('ul.inspector-list.review-past', ...past.slice(0, 6).map((x) => h('li', reviewLine(x)))) : null,
+      reviewForm({
+        kind: 'region', names: classes, current: r.cls, canAccept: true, state: regionState(app.store.project, dataset.id, r.id),
+        excludeAlso: inside.length ? `And its ${formatCount(inside.length)} cells (of ${seg.name.toLowerCase()})` : null,
+        submit: async (action, v) => {
+          await reviewRegion({ app, t: { dataset, item }, regionId: r.id, action, ...v, seg, rows: inside, shown });
+          if (action === 'exclude' && v.also && inside.length) await reviewCells({ app, t: { dataset, item }, seg, rows: inside, action: 'exclude', note: `In ${r.name}, excluded: ${v.note}`, by: v.by, shown });
+          toast(`${r.name}: ${action === 'relabel' ? `relabeled ${v.label}` : action}${action === 'exclude' && v.also && inside.length ? `, with its ${formatCount(inside.length)} cells` : ''}.`, { kind: 'ok' });
+          reviewed();
+        },
+      }));
+  }
 
   async function rename(r) {
     const name = await promptDialog({ title: `Rename ${r.name}`, label: 'Its name', value: r.name, confirm: 'Rename' });
@@ -464,8 +495,22 @@ export function mountRegions({ app, dataset, canvas, renderer, zoomBy, drawnCell
       setClass: (cls) => { st.cls = cls; renderSection(); },
       setBrush: (radius, erase = false, into = true) => { Object.assign(st, { brush: radius, erase, into }); renderSection(); },
       choose: (id) => { st.selected = id; place(); renderSection(); },
+      goTo: (id) => {
+        const r = regions().find((x) => x.id === id);
+        if (!r) return;
+        st.selected = id;
+        place();
+        renderSection();
+        zoomTo(r);
+      },
       chosen: () => st.selected,
       list: () => regions().map((r) => ({ id: r.id, name: r.name, cls: r.cls, version: r.version, area: area(r.geometry), cells: countOf(r) })),
+      // The rows of the segmentation drawn whose centroids lie in a region.
+      rowsIn: (id) => {
+        const r = regions().find((x) => x.id === id);
+        const cells = drawnCells();
+        return r && cells ? [...cellsIn(r.geometry, cells)] : [];
+      },
       cellsOf: (id) => {
         const r = regions().find((x) => x.id === id);
         return r ? countOf(r) : null;

@@ -8,7 +8,8 @@
 
 import { h, icon, clear, formatCount, relativeTime } from './dom.js';
 import { toast } from './overlays.js';
-import { RULES, appendEdit, checkRule, createCurated, crossTable, curatedSetsOf, nearestCells, saveConsensus, tally } from '../lib/curation.js';
+import { RULES, checkRule, createCurated, crossTable, curatedSetsOf, nearestCells, saveConsensus, tally } from '../lib/curation.js';
+import { cellsState, reviewCells, reviewForm, reviewLine, reviewsOfCell } from './reviewing.js';
 import { labelSource, labelVersions, refOf } from './label-sources.js';
 import { lowConfidenceDefault } from '../lib/labels.js';
 import { originOf, sideOf } from '../lib/impact.js';
@@ -474,11 +475,12 @@ export function reviewSections(app, ctx) {
         h('dt', 'Area'), h('dd', `${fixed(detail.area, 1)} µm²${detail.nucleusArea ? `, nucleus ${fixed(detail.nucleusArea, 1)} µm²` : ''}`),
         h('dt', 'Its segmentation'), h('dd', flags.length ? flags.join('; ') : 'no flag', Number.isFinite(detail.boundaryCertainty) ? h('span.muted', `; boundary certainty ${fixed(detail.boundaryCertainty)}`) : null)));
     }
-    // Its review.
-    const target = curatedFor(v, false);
-    const edits = target ? target.edits.map((e, n) => [e, n]).filter(([e]) => e.cells?.includes(cell) || (e.kind === 'cluster' && ev.index >= 0 && e.clustering === clustering.id && e.clusters.includes(ev.cluster))) : [];
+    // Its reviews (of the cell, or of its cluster), the latest first.
+    const past = reviewsOfCell(app.store.project, t.dataset.id, seg.id, cell);
+    const ofCluster = ev.index >= 0 ? curatedSetsOf(app.store.project, t.dataset.id, seg.id).flatMap((c) => c.edits.filter((e) => e.kind === 'cluster' && e.clustering === clustering.id && e.clusters.includes(ev.cluster))) : [];
     parts.push(h('div.section-title', 'Its review'),
-      edits.length ? h('ul.inspector-list', ...edits.map(([e]) => h('li', `${e.kind === 'accept' ? `accepted "${e.label}"` : `relabeled "${e.label}"${e.kind === 'cluster' ? ' with its cluster' : ''}`}: ${e.reason} (${e.by}, ${relativeTime(e.time)})`))) : h('p.muted.seg-note', 'Not reviewed yet.'),
+      past.length ? h('ul.inspector-list', ...past.map((r) => h('li', reviewLine(r)))) : h('p.muted.seg-note', 'Not reviewed yet.'),
+      ofCluster.length ? h('ul.inspector-list', ...ofCluster.map((e) => h('li', `Its cluster relabeled "${e.label}": ${e.reason} (${e.by}, ${relativeTime(e.time)})`))) : null,
       decide(cell, v, shown, own));
     return parts;
   }
@@ -488,35 +490,21 @@ export function reviewSections(app, ctx) {
     return counts.slice(0, 3).map((c) => `${src.names[c.label]} ${c.count}`).join(', ') + ` of ${of}`;
   }
 
-  // Accept or relabel, with a reason; then the next cell in the queue.
+  // The review form (lib/review-record.js: every review recorded with its provenance; accepting and
+  // relabeling append to the curated set begun from the set reviewed); then the next cell in the
+  // queue.
   function decide(cell, v, shown, own) {
-    const names = shown.names;
-    const choose = h('select.input', { id: 'rv-relabel', 'aria-label': 'The cell\'s label' }, ...names.map((n, k) => h('option', { value: n, selected: k === own }, n)), h('option', { value: '' }, 'A new label…'));
-    const fresh = h('input.input', { type: 'text', id: 'rv-new', placeholder: 'The new label', hidden: true, 'aria-label': 'A new label' });
-    choose.addEventListener('change', () => {
-      fresh.hidden = choose.value !== '';
-    });
-    const why = h('input.input', { type: 'text', id: 'rv-why', placeholder: 'Why (kept with the decision)', 'aria-label': 'Why' });
-    const by = h('input.input', { type: 'text', id: 'rv-by', value: st.reviewer ?? '', placeholder: 'Your name or initials', 'aria-label': 'Reviewer' });
-    by.addEventListener('change', () => {
-      st.reviewer = by.value.trim();
-    });
-    const commit = (kind) => {
-      const reviewer = by.value.trim() || 'the user';
-      st.reviewer = by.value.trim();
-      const label = kind === 'accept' ? names[own] : (choose.value || fresh.value.trim());
-      const reason = why.value.trim() || (kind === 'accept' ? 'Accepted on review' : '');
-      try {
-        if (kind === 'accept' && own < 0) throw new Error('The cell has no label to accept: relabel it.');
-        const target = curatedFor(v, true);
-        const next = appendEdit(app.store.project, target.id, { kind: kind === 'accept' ? 'accept' : 'cells', cells: [cell], label, reason, by: reviewer });
-        app.store.commit(next, `${kind === 'accept' ? 'Accept' : 'Relabel'} cell #${cell} in ${target.name}`);
-        if (v.kind !== 'curated') {
-          rv.set = `${target.id}:0`;
-        }
+    const segSpec = { id: seg.id, name: seg.name, instrument: seg.source === 'instrument' };
+    const n = shown.label.length;
+    return reviewForm({
+      names: shown.names, current: own >= 0 ? shown.names[own] : null, state: cellsState(app.store.project, t.dataset.id, seg.id, [cell], n),
+      canLabel: v.kind !== 'consensus', labelHint: 'A consensus is made by its rule: review one of its sets, or a curated set begun from it.',
+      submit: async (action, values) => {
+        const { curated } = await reviewCells({ app, t, seg: segSpec, rows: [cell], action, labels: { id: v.id, level: v.level }, ...values, shown: () => null });
+        if (curated && v.kind !== 'curated') rv.set = `${curated}:0`;
         // The next in the queue.
         const q = rv.queue;
-        if (q) {
+        if (q && action !== 'comment') {
           const at = q.queue.findIndex((it) => it.cell === cell);
           if (at >= 0) q.queue.splice(at, 1);
           q.counts.reviewed += 1;
@@ -526,21 +514,8 @@ export function reviewSections(app, ctx) {
           return;
         }
         ctx.render(true);
-      } catch (error) {
-        toast(error.message, { kind: 'error' });
-      }
-    };
-    return h('div.rv-decide',
-      h('div.seg-import-grid', h('label.field', { for: 'rv-relabel' }, h('span', 'Label'), choose), fresh, h('label.field', { for: 'rv-why' }, h('span', 'Why'), why), h('label.field', { for: 'rv-by' }, h('span', 'Reviewer'), by)),
-      h('div.btn-row',
-        h('button.btn.small.primary', { type: 'button', 'data-action': 'accept-label', disabled: own < 0, onclick: () => commit('accept') }, icon('check'), own >= 0 ? `Accept "${names[own]}"` : 'Accept'),
-        h('button.btn.small', { type: 'button', 'data-action': 'relabel', onclick: () => {
-          if (!why.value.trim()) {
-            toast('Say why the cell is relabeled: the reason is kept with the decision.', { kind: 'error' });
-            why.focus();
-            return;
-          }
-          commit('relabel');
-        } }, icon('edit'), 'Relabel')));
+        setTimeout(() => app.labelReview?.focusCell(cell), 0);
+      },
+    });
   }
 }

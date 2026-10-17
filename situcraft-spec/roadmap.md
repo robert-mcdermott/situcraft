@@ -2228,9 +2228,14 @@ range: 2.8 GB in all. Its bundle is of XOA 1, which SituCraft opens from this wa
        corners where the version places them and at most 0.18 µm from where the truth puts them, a
        holed square's area its outline's placed a pixel at a time (10,409.5 against 10,409.4 µm²),
        its colour kept, a detection and a point left out.
-     - **QuPath itself** was not run: the layouts are those its documentation describes (0.2's array
-       and packed colours, 0.4's FeatureCollection and colours). A round trip with QuPath by its
-       interface is a maintainer's check before release (`validation/README.md`).
+     - **With QuPath 0.7.0 itself** (run after the slice, before slice 6): five SituCraft regions on
+       the simulated H&E (a rectangle, a polygon with a hole, a region cut in two, a brush stroke, a
+       class of its own), written in its pixels, are read by QuPath as annotations with their names,
+       classes, colours, hole and two parts, their areas SituCraft's within 1 px² of 60,000; QuPath's
+       own export of them read back into SituCraft gives each region's area within 0.002% and the
+       same cells. Annotations made in QuPath (an ellipse, a polygon, a square with an elliptical
+       hole) and a detection: the detection left out, every vertex back at its pixel (0.0000 px)
+       after being placed in µm through the deformed version and written again.
    - Found by slice 5:
      - **Outlines at the midpoints between samples are biased:** a disc traced so at an eighth of its
        radius came out 3% large; with the samples' signed distances, interpolated, 0.45% small (the
@@ -2245,12 +2250,48 @@ range: 2.8 GB in all. Its bundle is of XOA 1, which SituCraft opens from this wa
      - **Regions are found by name,** so names repeated (a file read twice) made remote control's
        choices ambiguous: no two of a dataset's regions share a name, and a name read again is
        numbered.
-6. **Review with provenance (R7, R8).**
-   - Accept, relabel, ambiguous, exclude, segmentation concern and comment, on cells and on
-     regions; each with the reviewer, the action, the previous and new value, the time, the
-     segmentation, the label set, the transform in use and the confidence. The label review of
-     wave 4 joins the same record; reviews exported.
-   - Validation: a review's record against the state it changed; exports read back.
+6. **Review with provenance (R7, R8): done.**
+   - **The record** (`web/lib/review-record.js`): the project's `reviews`, appended and never
+     changed. Each review: who, the action (accept, relabel, ambiguous, exclude and include again,
+     a segmentation concern and its resolution, comment), the value before and after, when, the
+     segmentation, the label set reviewed, each cell's ID (the program answers rows' IDs,
+     `api_reviews.go`), its label and that label's confidence as shown, and each post-Xenium image's
+     alignment version in use and whether it was shown; of cells, clusters or a region.
+   - **Labels** change as in wave 4, by edits appended to a curated set (begun from the set reviewed),
+     each edit and its review naming each other: the Cell types view's review queue and
+     `curate_labels` write the same record, and earlier curated edits are read as reviews. A region
+     relabeled is reclassed as a version of it; excluded, it may take its cells with it.
+   - **Where:** a cell's inspector in the Viewer (its label in the set filling the cells, its
+     confidence, its reviews, the review form), the cells chosen (the Viewer's **Reviews**), a
+     region's details, the review queue. **Reviews** counts the cells drawn by state, lists the
+     record (each review going to its cell or region) and writes it as CSV (a row a cell) and JSON;
+     **Fill by: Review status** colours each cell by its state (Okabe and Ito's palette).
+   - Remote control: `review`, `reviews`; `export` writes `reviews`; `show_tissue` fills by `review`;
+     `curate_labels` records a review.
+   - Validation:
+     - **Unit tests** (`web/lib/review-record.test.mjs`): a relabel's record and the curated labels it
+       leaves; accepting cells of two labels; what each action needs; states by the latest review,
+       exclusions and concerns taken back; a region reclassed; earlier edits read as reviews; the
+       record as CSV (quotes, commas, line breaks) and JSON, read back.
+     - **In the page** (the viewer suite, the simulated tissue with labels imported, each with a
+       confidence, its H&E placed by its automatic version): a cell relabeled by hand in the
+       inspector recorded with its ID, its label and confidence as the table gave them (0.75), the
+       label set, the segmentation, the reviewer and reason, and the H&E's version in use (shown);
+       the curated set begun carries the new label for that cell and no other of 924, and the Viewer
+       shows it. By remote control: three cells accepted (one edit, their labels as they were), one
+       ambiguous, one of concern, a region excluded with its 66 cells (the cells excluded exactly
+       those in it), a region reclassed (Stroma to Necrosis, its version 4), a comment; an exclusion
+       without a reason refused. The record written as CSV (75 rows, one per cell or region, each its
+       review's) and JSON (the project's eight reviews), read back; the Review status fill each of
+       924 cells' status as the suite reads it from the CSV.
+   - Found by slice 6:
+     - **A review needs cell IDs, the page has rows:** rows change when a segmentation is made again,
+       IDs do not, so the program answers them when a review is made.
+     - **Exclusions are recorded, not yet applied:** no analysis leaves excluded cells out yet; the
+       clustering, labels and niches that should will read them from the record (wave 6).
+     - **A cell is judged through an alignment:** a cell relabeled on the H&E was judged where the
+       version in use placed it; the record keeps that version, as a later one may place it
+       elsewhere.
 7. **Examples, documentation, release 0.5.0.**
    - Worked examples: an H&E aligned by its matrix, by landmarks and automatically, compared;
      regions drawn on the H&E and taken to QuPath; a pathologist's review.

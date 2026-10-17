@@ -72,7 +72,9 @@ stretched), every alignment kept as a version with its fit's errors in µm and c
 section (a checkerboard, flicker, DAPI's edges, and where it is off, measured); regions drawn on
 the tissue over any layer (a rectangle, a polygon, freehand or a brush), named and classed, their
 cells counted and chosen, kept as versions and exchanged with QuPath as GeoJSON in an image's
-pixels; simulated post-Xenium images with a known alignment to practise and score on; and bundles
+pixels; cells and regions reviewed (accepted, relabeled, ambiguous, excluded, a segmentation
+concern, a comment), each review kept with who, why, the value before and after, the label set,
+the label's confidence and the alignment in use, and written as CSV or JSON; simulated post-Xenium images with a known alignment to practise and score on; and bundles
 of Xenium Onboard Analysis 1.0, such as the breast cancer section of Janesick et al. (2023).
 
 ## A look around
