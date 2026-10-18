@@ -1,0 +1,40 @@
+{
+ "situcraft": {
+  "cells": 7163,
+  "labels": 15,
+  "digest": "91ad723e7e73a255dc6870c83727303517066dcccd71624627db6a71cb21acdd"
+ },
+ "versions": {
+  "squidpy": "1.8.3",
+  "anndata": "0.13.4",
+  "numpy": "2.5.4",
+  "scipy": "1.18.1"
+ },
+ "enrichment": {
+  "delaunay": {
+   "edges": 21343,
+   "pairs": 225,
+   "countsDiffering": 0,
+   "zCompared": 225,
+   "zBeyond": 0,
+   "zCorrelation": 0.9996258774332437,
+   "zMaxDifference": 2.296139074168181
+  },
+  "radius": {
+   "edges": 37143,
+   "pairs": 225,
+   "countsDiffering": 0,
+   "zCompared": 225,
+   "zBeyond": 0,
+   "zCorrelation": 0.9993659282599823,
+   "zMaxDifference": 3.5214450153533647
+  }
+ },
+ "cooccurrence": {
+  "distances": 15,
+  "compared": 3375,
+  "maxDifference": 7.105427357601002e-15,
+  "maxDifferenceFloat32": 5.02203465408968e-05,
+  "pairsPlacedOtherwiseInFloat32": 1
+ }
+}

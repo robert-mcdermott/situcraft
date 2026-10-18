@@ -861,6 +861,47 @@ labels); click a neighbor to go to it. Saved views keep the graph.
   <img alt="The Viewer close up on the Lung tissue: the Delaunay graph's edges over the cells, a selected cell's edges in yellow, and its inspector listing its neighbors with their distances" src="images/graph-light.webp">
 </picture>
 
+### Which cell types are neighbors
+
+Under **Questions**, ask a question of a label set's cells (the Cell types view labels them; any
+label set of the segmentation and any of its levels can be asked).
+
+**Neighborhood enrichment** counts, for each pair of labels, the neighbors between their cells in a
+graph you built, and compares the count with the number expected if the labels were dealt to the
+same cells at random. The expectation is computed exactly; the permutations (1,000 by default,
+seeded) say how far from it chance alone strays.
+
+- **The ratio** of found to expected is the size of the effect: 2× means twice the neighbors chance
+  gives. The heat map colors each pair by it, red for more, blue for fewer, and marks the pairs
+  whose adjusted p-value is below 0.05.
+- **z and the p-value** say how unusual the count is in this section. The p-value is the share of
+  permutations at least as far from the expectation (never below one over the permutations plus
+  one: with many labels, use more permutations), adjusted over the pairs by Benjamini and Hochberg's
+  procedure.
+- **Deal the labels within regions** to ask whether two types are neighbors beyond what the regions'
+  make-up explains: a tumor region full of tumor cells makes tumor cells each other's neighbors, and
+  dealing within it keeps that.
+- With a **contact** graph, neighbors can be counted by the **boundary** the cells share; the
+  contact fractions then give each label's boundary by the label it touches.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/enrichment-dark.webp">
+  <img alt="The Spatial view's answer on the Lung example: a heat map of the four classes' pairs, colored by the ratio of neighbors found to expected, and tables of the pairs most and least often neighbors with their counts, expectations, ratios, z-scores and adjusted p-values" src="images/enrichment-light.webp">
+</picture>
+
+Click a square, or a row of the tables, for the pair's numbers in words; **Show these cells on the
+tissue** opens the Viewer with the cells filled by their labels, the pair's cells (those with a
+neighbor of the other label) highlighted, and the edges between them drawn in color over the graph.
+
+**Co-occurrence across distances** asks, from one label's cells, how much likelier each label's
+cells are within a distance (10 to 150 µm by default) than any cell is: above 1, found that near
+more often than their share. It counts the pairs within each distance as Squidpy does, or, to read
+each distance on its own, the pairs since the distance before. It is descriptive, without a test.
+Choose a label and a distance to show those cells on the tissue.
+
+A section's cells are not independent replicates: these numbers describe this section. Comparing
+conditions needs samples, compared as samples (a later release).
+
 ## Keyboard
 
 | Action | Keys |

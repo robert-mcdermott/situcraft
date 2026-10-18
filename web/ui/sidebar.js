@@ -1,5 +1,5 @@
 // The project tree: what the project holds, by kind (datasets, segmentations, comparisons,
-// clusterings, label sets, marker sets, graphs, filters, saved views), and what was handed to SituCraft on
+// clusterings, label sets, marker sets, graphs, spatial analyses, filters, saved views), and what was handed to SituCraft on
 // this computer but is not in the project yet.
 // Selecting an item focuses it (store.ui.focus): the inspector describes it, and the views that
 // use it open on it. Adapted from MaveScape 0.8.0 web/ui/sidebar.js.
@@ -128,6 +128,14 @@ const SECTIONS = [
     empty: 'Which cells are neighbors: each graph of a segmentation\'s cells kept with its definition and the cells it was built over.',
   },
   {
+    kind: 'spatial', title: 'Spatial analyses', icon: 'graph',
+    items: (project) => project.artifacts.filter((a) => a.kind === 'spatial'),
+    label: (a) => `${a.question === 'enrichment' ? 'Enrichment' : 'Co-occurrence'} · ${a.summary?.labels?.name ?? 'labels'}`,
+    itemIcon: (a) => (a.state === 'complete' ? 'graph' : 'warning'),
+    meta: (a) => (a.state !== 'complete' ? a.state : a.question === 'enrichment' ? `${a.summary?.significant ?? 0} pairs` : `${a.summary?.distances ?? '?'} distances`),
+    empty: 'Questions asked of a label set\'s cells (which types are neighbors, at what distances), each answer kept with its inputs.',
+  },
+  {
     kind: 'filter', title: 'Filters', icon: 'filter',
     items: (project) => project.artifacts.filter((a) => a.kind === 'filter'),
     label: (a) => `${a.name} · v${a.version}`,
@@ -170,7 +178,7 @@ export function mountSidebar(app) {
             // A filter is edited and compared in the QC view; a saved view opens.
             if (section.kind === 'filter') app.setMode('qc');
             if (section.kind === 'clustering') app.setMode('celltypes');
-            if (section.kind === 'graph') app.setMode('spatial');
+            if (section.kind === 'graph' || section.kind === 'spatial') app.setMode('spatial');
             // An image is shown on its dataset's tissue; one not aligned yet, in the Alignment view.
             if (section.kind === 'image') {
               if (transformInUse(app.store.project, item.id)) {

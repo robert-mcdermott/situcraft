@@ -173,6 +173,8 @@ export function mountViewer(app, container) {
     renderer.setLayers(layers);
     // The graph's line in the legend: how many of its edges the view shows.
     const graphLegend = h('div.viewer-legend-graph');
+    // A spatial analysis's cells shown (ui/mode-spatial.js): their line in the legend.
+    const focusLegend = h('div.viewer-legend-focus');
     graphLayer = mountGraphLayer({ canvas, renderer, onCount: (shown) => describeGraphShown(shown) });
     const state = {
       dataset: t.dataset, item: t.item, desc, cells, renderer, layers, selectedRow: -1, detail: null,
@@ -395,6 +397,12 @@ export function mountViewer(app, container) {
         describeGraphShown(graphLayer.shown());
         legend.append(graphLegend);
       }
+      if (state.focus) {
+        clear(focusLegend).append(h('div.viewer-legend-item', h('span.dot', { style: { background: '#ff4fd8' } }), h('b', state.focus.title)),
+          h('div.muted', state.focus.text),
+          h('button.link', { type: 'button', onclick: () => setFocus(null) }, 'Clear'));
+        legend.append(focusLegend);
+      }
       legend.hidden = !legend.childNodes.length;
     }
 
@@ -427,9 +435,18 @@ export function mountViewer(app, container) {
         state.graph = { id, ...data };
         graphLayer.set(data);
         graphLayer.select(state.selectedRow);
+        graphLayer.emphasize(state.focus?.emphasis ?? null);
         updateLegend();
         if (state.detail) app.inspector.setSection('viewer-cell', () => (state.seg ? segCellSection(state.detail) : cellSection(state.detail)));
       }).catch((error) => toast(`The graph could not be drawn: ${error.message}`, { kind: 'error', timeout: 10000 }));
+    }
+    // Shows a spatial analysis's cells: { title, text, mask (over the drawn segmentation's cells),
+    // emphasis (the graph's edges to draw in color: { test(i, j), color }) }, or none.
+    function setFocus(focus) {
+      state.focus = focus ?? null;
+      state.showChosen?.();
+      graphLayer?.emphasize(state.focus?.emphasis ?? null);
+      updateLegend();
     }
     function setGraph(id) {
       state.layers = { ...state.layers, cells: { ...state.layers.cells, graph: id ?? null } };
@@ -490,6 +507,8 @@ export function mountViewer(app, container) {
         state.detail = null;
         state.selectedRow = -1;
         app.inspector.setSection('viewer-cell', null);
+        // A spatial analysis's cells were of the segmentation drawn before.
+        state.focus = null;
         applyGraph();
         mountPanel(state.layers);
         applyFill();
@@ -833,6 +852,10 @@ export function mountViewer(app, container) {
 
     // Cells chosen in the QC view are the instrument's: they show while its cells are drawn.
     state.showChosen = () => {
+      if (state.focus) {
+        renderer.setHighlight(state.focus.mask, '#ff4fd8', 0.6);
+        return;
+      }
       const chosen = app.selection?.dataset === t.dataset.id && !state.seg ? app.selection : null;
       renderer.setHighlight(chosen?.mask ?? null, '#ff4fd8', 0.6);
     };
@@ -845,7 +868,8 @@ export function mountViewer(app, container) {
     if (asked) app.pendingSegmentation = null;
     drawSegmentation(asked ? asked.segmentation : layers.cells.segmentation).then(() => {
       if (asked?.fill !== undefined) setFill(asked.fill);
-      if (asked?.graph !== undefined) setGraph(asked.graph);
+      const drawnGraph = asked?.graph !== undefined ? setGraph(asked.graph) : Promise.resolve();
+      if (asked?.focus) drawnGraph.then(() => setFocus(asked.focus));
       if (!asked && session?.selected >= 0) selectRow(session.selected);
     });
 
@@ -910,7 +934,8 @@ export function mountViewer(app, container) {
         app.pendingSegmentation = null;
         drawSegmentation(asked.segmentation).then(() => {
           if (asked.fill !== undefined) setFill(asked.fill);
-          if (asked.graph !== undefined) setGraph(asked.graph);
+          const drawn = asked.graph !== undefined ? setGraph(asked.graph) : Promise.resolve();
+          if (asked.focus) drawn.then(() => setFocus(asked.focus));
         });
       }
       const view = app.pendingView;
@@ -949,6 +974,8 @@ export function mountViewer(app, container) {
       graph: () => state.graph,
       setGraph: (id) => setGraph(id),
       graphShown: () => graphLayer.shown(),
+      // A spatial analysis's cells shown: { title, cells (how many) } or null.
+      focus: () => (state.focus ? { title: state.focus.title, cells: state.focus.mask.reduce((n, v) => n + (v ? 1 : 0), 0) } : null),
       setCells: (patch) => {
         state.layers = { ...state.layers, cells: { ...state.layers.cells, ...patch } };
         renderer.setLayers(state.layers);

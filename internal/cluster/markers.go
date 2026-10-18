@@ -5,6 +5,7 @@ import (
 	"sort"
 
 	"situcraft/internal/dmath"
+	"situcraft/internal/stats"
 )
 
 // Markers are each cluster's statistics for every gene against the rest of the cells analyzed,
@@ -147,19 +148,5 @@ func (m *matrix) markers(cluster []int32, count, workers int) *Markers {
 
 func expm1(x float64) float64 { return dmath.Exp(x) - 1 }
 
-// bh adjusts p-values by Benjamini and Hochberg's procedure: p₍ᵢ₎·m/i, made monotone from the
-// largest down and capped at 1 (ties ordered by position).
-func bh(p, adj []float64) {
-	m := len(p)
-	order := make([]int, m)
-	for i := range order {
-		order[i] = i
-	}
-	sort.SliceStable(order, func(a, b int) bool { return p[order[a]] < p[order[b]] })
-	least := 1.0
-	for r := m - 1; r >= 0; r-- {
-		v := mul(p[order[r]], float64(m)) / float64(r+1)
-		least = math.Min(least, v)
-		adj[order[r]] = least
-	}
-}
+// bh adjusts p-values by Benjamini and Hochberg's procedure (internal/stats).
+func bh(p, adj []float64) { stats.BenjaminiHochberg(p, adj) }

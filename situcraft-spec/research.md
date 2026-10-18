@@ -2654,6 +2654,51 @@ neighbor), distances between centroids in µm:
   The 50 µm cap removes 193 of Lung's 35,665 triangulation edges (0.5%), those across the hull and
   holes. Contact on Breast's multimodal segmentation leaves 208 cells (2.9%) touching no other.
 
+### 6.2 Neighborhood enrichment and co-occurrence (verified, wave 6, slice 2)
+
+**Neighborhood enrichment** (Schapiro et al. 2017; Palla et al. 2022). In a graph of N labeled cells
+(unlabeled cells keep their places and count for no pair), with n_A cells of label A:
+
+- **Found:** the directed count C[A][B] = Σ over cells c of A of the neighbors of c labeled B (an
+  edge within A counts twice), as Squidpy's `nhood_enrichment` counts; or each neighbor weighted by
+  the boundary the two cells share (a contact graph). Each label's row, divided by its sum, is the
+  share of its neighbors (or boundary: the contact fractions) of each label.
+- **Expected,** exactly, under dealing the labels again to the same labeled cells (within each
+  stratum s, a region, when strata are given): each edge between strata s and t adds its weight times
+  P(A at one end, B at the other) + P(B, A), with P = n_As·n_Bt / (N_s·N_t) for s ≠ t and
+  n_As·(n_Bs − [A = B]) / (N_s·(N_s − 1)) within a stratum (dealing without replacement).
+- **Spread:** n permutations (1,000), each a Fisher–Yates deal within each stratum from its own
+  seeded stream; z = (C − mean) / sd (sd with n − 1); the two-sided p = (1 + #{|C* − E| ≥ |C − E|})
+  / (1 + n), never below 1 / (n + 1); Benjamini–Hochberg (1995) over the unordered pairs both of
+  whose labels some cell has.
+- **What it says:** the ratio C / E is the effect's size. z and p rest on the null that the labels
+  are exchangeable among these cells' places: they say how unusual an arrangement is in this section,
+  not that it holds in other sections, and they grow with the section's size. Dealing within regions
+  removes what the regions' composition alone explains. Cells are not replicates: comparing
+  conditions is wave 7's, with samples as the unit.
+
+**Co-occurrence** (Palla et al. 2022): at distance d, over the pairs of labeled cells within d
+(Squidpy 1.8's definition; or since the previous distance, as an option), counted both ways,
+ratio[A][B] = P(B | A) / P(B) = C[A][B]·T / (r_A·r_B), T the total and r the rows. Distances are
+compared in float64 (sqrt of the squared differences of float32 coordinates); Squidpy 1.8.3's
+`co_occurrence` computes in float32.
+
+**Against Squidpy 1.8.3** (`validation/reference/spatial/`), on the instrument's segmentation,
+every analyzed cell labeled by SituCraft's clusters (the defaults), its Delaunay (≤ 50 µm) and 20 µm
+graphs given to Squidpy as its adjacency, 1,000 permutations each:
+
+| Data set | Cells | Labels | Counts differing | z within error (correlation, Delaunay / 20 µm) | Co-occurrence, float64 (float32: pairs placed otherwise) |
+| --- | --- | --- | --- | --- | --- |
+| Lung 2-FOV | 11,820 | 29 | 0 of 841 | all (0.99977 / 0.99983) | 1.8 × 10⁻¹⁵ (3) |
+| Breast 2-FOV | 7,163 | 15 | 0 of 225 | all (0.99963 / 0.99937) | 7.1 × 10⁻¹⁵ (1) |
+| Simulated (standard) | 2,925 | 5 | 0 of 25 | all (0.99950 / 0.99958) | 4.4 × 10⁻¹⁶ (0) |
+
+Two independent estimates of z from n permutations differ by about sqrt(2·(1 + z²/2) / n); "within
+error" is within five of these. On Lung's classes (the panel's starter set, its first level; 5,555
+labeled cells): stromal–stromal 3.99× (z 18.3), endothelial–stromal 2.71× (z 14.3),
+endothelial–endothelial 3.13× (z 12.3); epithelial–endothelial 0.78× (z −7.6), epithelial–stromal
+0.79× (z −7.5), epithelial–immune 0.89× (z −3.2).
+
 ## 7. Datasets
 
 | Dataset | Source | Size | License | Use |

@@ -2430,24 +2430,64 @@ as in waves 3 and 4.
        of its 7,275 cells touching none (Lung's expansion, 21); a gap of 1 to 2 µm joins most.
      - **The whole section's edges are a mesh:** 35,000 edges drawn over the section hide the
        tissue; they are drawn once the median edge is 6 pixels long.
-2. **Neighborhood enrichment and co-occurrence (N2, N3, N8).**
-   - **Enrichment** (Schapiro et al. 2017; Palla et al. 2022): for each pair of labels, the edges
-     between their cells against the number expected, as a ratio, with a z-score and p-value from
-     seeded permutations of the labels; optionally permuted within regions, so that each
-     compartment keeps its composition.
-   - **Co-occurrence** across distances (Palla et al. 2022): how much likelier a cell of one label
-     is near another label's cells than near any cell. **Contact fractions**, from a contact graph:
-     the share of each label's boundary shared with each label.
-   - **The analysis builder** in the Spatial view: a question, its inputs and its parameters with
-     their help, run as a job; saved analyses listed with their inputs. Results as heat maps and
-     curves, and **every number's cells** (N8): a pair's cells and the edges between them opened
-     on the tissue.
-   - Remote control: `spatial_analysis` (a question and its parameters); `show_tissue` shows an
-     analysis's cells.
-   - Validation: labelings of known enrichment on lattices (a checkerboard's every edge joins its
-     two labels); the permutations' mean against its exact expectation; p-values uniform on
-     randomly labeled cells; on the development bundles, ratios and z-scores against Squidpy's,
-     within their permutation error.
+2. **Neighborhood enrichment and co-occurrence (N2, N3 in part, N8 in part): done.**
+   - **Enrichment** (`internal/spatial/enrichment.go`; research.md §6.2): for each pair of labels,
+     the directed counts (each label's cells' neighbors of the other, an edge within a label counting
+     from both ends, as Squidpy's) or, in a contact graph, the boundaries shared; the expectation
+     exact, edge by edge, under dealing the labeled cells' labels again within their strata (the
+     unlabeled keep their places); z from the permutations' mean and standard deviation; a
+     two-sided p-value, the share of permutations at least as far from the expectation ((1 + k) /
+     (1 + n)); Benjamini–Hochberg over the unordered pairs that can be tested (a label no cell has
+     makes a pair untestable: no p). Permutations each from their own seeded stream, summed in
+     fixed blocks about the expectation: the same results on any number of workers, in memory of
+     the labels squared.
+   - **Co-occurrence** (`cooccurrence.go`): at each distance, P(B | A) / P(B) over the pairs of
+     labeled cells within it (as Squidpy 1.8 counts them) or since the distance before; counts
+     exact integers.
+   - **An artifact** of kind `spatial` (`api_spatial.go`; `docs/FORMATS.md`): `analysis.json` (the
+     question, the segmentation, the graph or the cells chosen, the label set and level with its
+     labels' names and colors, the regions, the parameters, the results) and `cells.bin` (the cells,
+     their labels and regions). The page sends each cell's label as the set it shows has it (from
+     markers, a reference, imported, curated or consensus), only the labels some cell has.
+   - **The Spatial view's Questions:** a label set (any level), enrichment over a graph (its
+     permutations, seed, regions to deal within, edges or boundary) or co-occurrence (the cells,
+     distances, within or between); the answers listed; an enrichment's heat map (log₂ ratio,
+     RdBu, the significant marked), its pairs most and least often neighbors, each label's
+     neighbors by label (the contact fractions by boundary); a co-occurrence's curves from one
+     label. **Show these cells on the tissue** (`ui/spatial-cells.js`): the Viewer fills the cells
+     by the labels, highlights the pair's cells and draws the edges between them in color over the
+     graph, the others faint; or a label's cells near another's. The sidebar lists **Spatial
+     analyses**. Remote control: `spatial_analysis`; `show_tissue` takes `cells_of`.
+   - Validation:
+     - **By hand:** a checkerboard (every edge between its labels: ratio 2, z beyond 20, p the
+       smallest); the permutations' mean within 4.5 standard errors of the exact expectation
+       (20,000 permutations, with and without three strata); p-values of randomly labeled cells
+       uniform (300 replicates, KS p 0.35); strata each holding one label give no variation;
+       boundary weights summed by hand; co-occurrence within and between, worked by hand, and
+       against an exhaustive count of every pair.
+     - **Against Squidpy** (`validation/reference/spatial/`, weekly): on both 2-FOV bundles and the
+       standard simulated tissue, labeled by SituCraft's clusters (29, 15 and 5), on the Delaunay and
+       20 µm graphs: every count Squidpy 1.8.3's `nhood_enrichment`, every z-score within five of
+       the two tools' combined permutation error (correlations 0.9994 to 0.9998); every
+       co-occurrence ratio its routine's in float64 within 10⁻¹⁴.
+     - **In the page** (viewer suite): on the Lung classes, every count the suite's own from the
+       graph's edges, the expectation its formula's; a pair's cells shown as the suite counts them;
+       a co-occurrence ratio from the suite's count of every pair.
+   - Found by slice 2:
+     - **Squidpy's co-occurrence counts the pairs within each distance,** not between distances
+       (version 1.8.3's routine), and in float32: on the real bundles 3 and 1 pairs within its
+       rounding of a distance are counted otherwise. SituCraft counts within by default, in float64,
+       with between as an option.
+     - **Squidpy's k-nearest neighborhoods are one-directional;** its enrichment counts each cell's
+       own neighbors. The comparison uses the Delaunay and radius graphs, symmetric in both tools.
+     - **A label set's levels share one list of labels:** asked at the class level, Lung's 27 names
+       made 368 untestable pairs of 378, and adjusting over them raised every adjusted p to 0.063,
+       z-scores of 18 included. Only the labels some cell has are sent, and untestable pairs are no
+       test.
+     - **Permutation p-values stop at 1 / (n + 1):** with many labels, 1,000 permutations may not
+       reach significance after adjustment; the guide says to use more.
+     - **Lung's classes:** stromal and endothelial cells neighbor their own kind 4.0× and 3.1× as
+       often as chance, and each other 2.7×; epithelium is 0.78× as often beside either.
 3. **Distances and Ripley's K and L (N3).**
    - Each cell's distance to the nearest cell of each label, and the cells of each label within a
      distance, as distributions by pair of labels, against permutation envelopes.

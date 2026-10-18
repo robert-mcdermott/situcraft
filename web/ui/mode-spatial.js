@@ -4,7 +4,9 @@
 // contact in the segmentation. A graph is built over the cells chosen (all, a QC filter's, those in
 // regions, never those a review excluded), as a job, and kept as an artifact with its definition;
 // the view shows what it holds (degrees, edge lengths, cells without a neighbor) and draws it on
-// the tissue.
+// the tissue. Questions are asked of a label set's cells (internal/spatial, api_spatial.go):
+// neighborhood enrichment over a graph, and co-occurrence across distances; each answer is kept as
+// an artifact, and every number opens the cells it comes from on the tissue.
 
 import { h, icon, clear, formatCount, relativeTime } from './dom.js';
 import { toast } from './overlays.js';
@@ -16,6 +18,10 @@ import { cellsIn, regionsOf } from '../lib/regions.js';
 import { cellReviewState, reviewsOf } from '../lib/review-record.js';
 import { DEFAULTS, KINDS, cellsRequest, checkGraphParams, chooseCells, describeGraph, graphParams, graphsOf } from '../lib/graphs.js';
 import { histogramPlot } from './qc-plots.js';
+import { labelSource, labelVersions, refOf } from './label-sources.js';
+import { COOCCURRENCE_DEFAULTS, ENRICHMENT_DEFAULTS, QUESTIONS, analysesOf, checkAnalysisParams, distancesTo, labelsRequest, rankPairs, strataRequest } from '../lib/spatial.js';
+import { cooccurrenceChart, enrichmentHeatmap, pairName, pairsTable, pvalue, sharesTable, times } from './spatial-results.js';
+import { showAnalysisCells } from './spatial-cells.js';
 
 const exact = (v) => (Number.isFinite(v) ? v.toLocaleString('en-US') : '—');
 const fixed = (v, digits = 1) => (Number.isFinite(v) ? v.toFixed(digits) : '—');
@@ -37,16 +43,24 @@ export function mountSpatial(app, container) {
   function target() {
     const { project, ui } = app.store;
     const focusedGraph = ui.focus?.kind === 'graph' ? project.artifacts.find((a) => a.kind === 'graph' && a.id === ui.focus.id) : null;
+    const focusedAnalysis = ui.focus?.kind === 'spatial' ? project.artifacts.find((a) => a.kind === 'spatial' && a.id === ui.focus.id) : null;
     const seg = ui.focus?.kind === 'segmentation' ? project.artifacts.find((a) => a.kind === 'segmentation' && a.id === ui.focus.id) : null;
-    const id = focusedGraph?.dataset ?? (ui.focus?.kind === 'dataset' ? ui.focus.id : seg?.dataset) ?? project.datasets[0]?.id;
+    const id = focusedGraph?.dataset ?? focusedAnalysis?.dataset ?? (ui.focus?.kind === 'dataset' ? ui.focus.id : seg?.dataset) ?? project.datasets[0]?.id;
     const dataset = project.datasets.find((d) => d.id === id) ?? project.datasets[0];
     if (!dataset) return null;
     const link = app.bundles.link(dataset.id);
-    return { dataset, item: link?.item ?? app.bundles.itemByPath(dataset.path), focusedGraph: focusedGraph?.dataset === dataset.id ? focusedGraph : null, focusedSegmentation: seg?.dataset === dataset.id ? seg.id : null };
+    return { dataset, item: link?.item ?? app.bundles.itemByPath(dataset.path), focusedGraph: focusedGraph?.dataset === dataset.id ? focusedGraph : null, focusedAnalysis: focusedAnalysis?.dataset === dataset.id ? focusedAnalysis : null, focusedSegmentation: seg?.dataset === dataset.id ? seg.id : null };
   }
 
   function sessionOf(dataset) {
-    if (!sessions.has(dataset.id)) sessions.set(dataset.id, { segmentation: '', cells: 'all', regions: new Set(), kind: 'delaunay', params: structuredClone(DEFAULTS), shown: null, chosen: null });
+    if (!sessions.has(dataset.id)) {
+      sessions.set(dataset.id, {
+        segmentation: '', cells: 'all', regions: new Set(), kind: 'delaunay', params: structuredClone(DEFAULTS), shown: null, chosen: null,
+        // The question being asked, the answer shown, and its pair, or its label and distance.
+        q: { question: 'enrichment', labels: '', graph: '', ...ENRICHMENT_DEFAULTS, within: new Set(), cells: 'all', regions: new Set(), farthest: 150, step: 10, pairs: COOCCURRENCE_DEFAULTS.pairs },
+        analysis: null, pair: null, from: 0, to: null, at: null,
+      });
+    }
     return sessions.get(dataset.id);
   }
 
@@ -304,11 +318,263 @@ export function mountSpatial(app, container) {
       h('div.btn-row', h('button.btn.small.primary', { type: 'button', onclick: () => app.showGraph(g) }, icon('tissue'), 'Show on the tissue'))];
   }
 
+  // --- Questions: asked of a label set's cells ---
+  const labelKey = (v) => `${v.id}|${v.level}`;
+
+  async function ask(t, seg, session) {
+    const q = session.q;
+    const project = app.store.project;
+    const v = labelVersions(project, t.dataset.id, seg.id).find((x) => labelKey(x) === q.labels);
+    if (!v) throw new Error('choose a label set (the Cell types view labels the cells)');
+    const src = await labelSource(app, refOf(v.id, v.level));
+    const labels = labelsRequest(src);
+    let request;
+    if (q.question === 'enrichment') {
+      const parameters = { permutations: q.permutations, seed: q.seed, weight: q.weight };
+      const problem = checkAnalysisParams('enrichment', parameters);
+      if (problem) throw new Error(problem);
+      const graph = graphsOf(project, t.dataset.id, seg.id).find((g) => g.id === q.graph && g.state === 'complete');
+      if (!graph) throw new Error('choose a graph of the segmentation (build one above)');
+      request = { question: 'enrichment', segmentation: seg.id, graph: graph.id, labels, parameters };
+      const within = regionsOf(project, t.dataset.id).filter((r) => q.within.has(r.id));
+      if (within.length) {
+        const cells = await cellsOf(t, seg);
+        request.strata = strataRequest(cells.n, within.map((r) => ({ id: r.id, name: r.name, version: r.version, rows: cellsIn(r.geometry, cells) })));
+      }
+    } else {
+      const parameters = { distances: distancesTo(q.farthest, q.step), pairs: q.pairs };
+      const problem = checkAnalysisParams('cooccurrence', parameters);
+      if (problem) throw new Error(problem);
+      const chosen = await chosenCells(t, seg, { cells: q.cells, regions: q.regions });
+      if (chosen.count < 2) throw new Error('fewer than two cells are chosen');
+      request = { question: 'cooccurrence', segmentation: seg.id, cells: chosen.request, labels, parameters };
+    }
+    const manifest = await app.bundles.runAnalysis(t.item, t.dataset.id, request);
+    session.analysis = manifest.id;
+    session.pair = null;
+    session.to = null;
+    session.at = null;
+    render(true);
+    return manifest;
+  }
+
+  function questionCard(t, seg, session) {
+    const q = session.q;
+    const project = app.store.project;
+    const versions = labelVersions(project, t.dataset.id, seg.id);
+    if (!versions.some((v) => labelKey(v) === q.labels)) q.labels = versions[0] ? labelKey(versions[0]) : '';
+    const graphs = graphsOf(project, t.dataset.id, seg.id).filter((g) => g.state === 'complete');
+    if (!graphs.some((g) => g.id === q.graph)) q.graph = graphs.at(-1)?.id ?? '';
+    const graph = graphs.find((g) => g.id === q.graph);
+    if (graph?.parameters?.kind !== 'contact') q.weight = 'edges';
+    const regions = regionsOf(project, t.dataset.id);
+    const question = QUESTIONS.find((x) => x.id === q.question) ?? QUESTIONS[0];
+    const field = (id, label, input, hint = null) => h('label.field', { for: id, title: hint ?? '' }, h('span', label), input);
+    const number = (id, key, attrs) => {
+      const input = h('input.input', { type: 'number', id, value: String(q[key]), ...attrs });
+      input.addEventListener('change', () => {
+        q[key] = Number(input.value);
+      });
+      return input;
+    };
+    const select = (id, options, key, after = () => {}) => {
+      const el = h('select.input', { id }, ...options.map(([value, text]) => h('option', { value }, text)));
+      el.value = q[key];
+      el.addEventListener('change', () => {
+        q[key] = el.value;
+        after();
+      });
+      return el;
+    };
+    const regionBoxes = (set, legend) => (regions.length ? h('fieldset.sp-regions', h('legend', legend),
+      ...regions.map((r) => {
+        const box = h('input', { type: 'checkbox', checked: set.has(r.id) });
+        box.addEventListener('change', () => {
+          if (box.checked) set.add(r.id);
+          else set.delete(r.id);
+        });
+        return h('label.viewer-toggle', box, h('span.sp-swatch', { style: { background: `rgb(${r.color.join(', ')})` } }), `${r.name} `, h('span.muted', r.cls));
+      })) : null);
+    const picker = h('div.sp-kinds', { role: 'radiogroup', 'aria-label': 'Question' }, ...QUESTIONS.map((x) => {
+      const radio = h('input', { type: 'radio', name: 'sp-question', value: x.id, checked: x.id === question.id });
+      radio.addEventListener('change', () => {
+        q.question = x.id;
+        render(true);
+      });
+      return h('label.sp-kind', radio, x.label);
+    }));
+    const inputs = question.id === 'enrichment'
+      ? [h('div.seg-import-grid',
+        field('sp-q-graph', 'Graph', select('sp-q-graph', graphs.map((g) => [g.id, `${describeGraph(g.parameters)}${g.summary?.choice?.regions?.length ? `, in ${g.summary.choice.regions.map((r) => r.name).join(', ')}` : ''}`]), 'graph', () => render(true))),
+        field('sp-q-permutations', 'Permutations', number('sp-q-permutations', 'permutations', { min: 100, max: 100000, step: 100 }), 'How many times the labels are dealt again at random: more give steadier z-scores and smaller p-values (the smallest is 1 / (permutations + 1)).'),
+        field('sp-q-seed', 'Seed', number('sp-q-seed', 'seed', { min: 0, step: 1 }), 'The same seed deals the labels the same way, on any computer.'),
+        graph?.parameters?.kind === 'contact' ? field('sp-q-weight', 'Count neighbors by', select('sp-q-weight', [['edges', 'cells in contact'], ['boundary', 'boundary shared (µm)']], 'weight')) : null),
+      regionBoxes(q.within, 'Deal the labels within each of these regions (the cells in none, among themselves)')]
+      : [h('div.seg-import-grid',
+        field('sp-q-cells', 'Cells', select('sp-q-cells', [['all', 'All cells'], ...(seg.source === 'instrument' ? filtersOf(t).map((f) => [f.id, `QC filter ${f.name} v${f.version}`]) : [])], 'cells')),
+        field('sp-q-farthest', 'Up to (µm)', number('sp-q-farthest', 'farthest', { min: 1, max: 1000, step: 10 })),
+        field('sp-q-step', 'Every (µm)', number('sp-q-step', 'step', { min: 1, max: 500, step: 1 })),
+        field('sp-q-pairs', 'Pairs at each distance', select('sp-q-pairs', [['within', 'within it (as Squidpy)'], ['between', 'since the distance before']], 'pairs'))),
+      regionBoxes(q.regions, 'Only the cells in')];
+    const go = h('button.btn.primary', { type: 'button', disabled: !t.item || !versions.length || (question.id === 'enrichment' && !graphs.length), 'data-action': 'ask', onclick: async () => {
+      try {
+        const m = await ask(t, seg, session);
+        toast(`${m.name}: done.`, { kind: 'ok' });
+      } catch (error) {
+        toast(`The question: ${error.message}`, { kind: 'error', timeout: 12000 });
+      }
+    } }, icon('play'), 'Ask');
+    const missing = !versions.length ? 'Label the cells first: the Cell types view clusters and labels them, or imports labels.' : question.id === 'enrichment' && !graphs.length ? 'Build a graph above first: enrichment counts neighbors in it.' : null;
+    return h('section.seg-section',
+      h('div.section-title', 'Questions'),
+      h('div.seg-card',
+        h('div.field', h('span', 'Ask'), picker),
+        h('p.muted.seg-note.sp-help', question.help),
+        h('div.seg-import-grid', field('sp-q-labels', 'Labels', select('sp-q-labels', versions.map((v) => [labelKey(v), v.name]), 'labels'))),
+        ...inputs,
+        h('div.seg-form', go, missing ? h('span.muted', missing) : null),
+        ...progress(app.bundles.analyzing(t.dataset.id), (e) => (e.question === 'enrichment' ? 'Neighborhood enrichment' : 'Co-occurrence')),
+        h('p.muted.seg-cite', 'Methods: neighborhood enrichment by permutation of the labels (Schapiro et al. 2017; Palla et al. 2022), its expectation exact, its p-values adjusted by Benjamini and Hochberg (1995); co-occurrence as Palla et al. (2022). A section\'s cells are not replicates: these describe this section, and the sample is the unit of any comparison between samples.')));
+  }
+
+  function analysisListCard(t, seg, session) {
+    const list = analysesOf(app.store.project, t.dataset.id, seg.id).filter((a) => a.state === 'complete');
+    if (!list.some((a) => a.id === session.analysis)) session.analysis = list.at(-1)?.id ?? null;
+    if (!list.length) return null;
+    const choose = (a) => {
+      session.analysis = a.id;
+      session.pair = null;
+      session.to = null;
+      session.at = null;
+      render(true);
+    };
+    const rows = list.map((a) => {
+      const s = a.summary ?? {};
+      const over = a.question === 'enrichment' ? describeGraph(s.graph?.parameters) : `${s.distances ?? '?'} distances`;
+      const what = a.question === 'enrichment' ? `${s.significant ?? 0} pairs differ` : '';
+      return h(`tr${session.analysis === a.id ? '.selected' : ''}`, { tabIndex: 0, style: { cursor: 'pointer' }, 'data-analysis': a.id, onclick: () => choose(a), onkeydown: (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          choose(a);
+        }
+      } },
+      h('td', a.question === 'enrichment' ? 'Enrichment' : 'Co-occurrence'),
+      h('td', s.labels?.name ?? '—'),
+      h('td', over, s.strata?.length ? h('span.muted', `, within ${s.strata.map((r) => r.name).join(', ')}`) : null),
+      h('td.r', exact(s.labeled)),
+      h('td', what),
+      h('td.muted', relativeTime(a.created)));
+    });
+    return h('section.seg-section',
+      h('div.section-title', `Answers about ${seg.name}`),
+      h('div.table-wrap', h('table.data-table.seg-table',
+        h('thead', h('tr', h('th', 'Question'), h('th', 'Labels'), h('th', 'Over'), h('th.r', 'Labeled cells'), h('th', ''), h('th', 'Made'))),
+        h('tbody', ...rows))));
+  }
+
+  function analysisCard(t, seg, session) {
+    const record = app.store.project.artifacts.find((a) => a.kind === 'spatial' && a.id === session.analysis);
+    if (!record) return null;
+    const host = h('section.seg-section.sp-answer', h('div.section-title', 'The answer'), h('p.muted.seg-note', 'Reading the answer…'));
+    const mine = generation;
+    app.bundles.analysisData(record.id).then((data) => {
+      if (mine !== generation) return;
+      clear(host).append(h('div.section-title', 'The answer'), ...(data.analysis.question === 'enrichment' ? enrichmentAnswer(t, seg, session, record, data) : cooccurrenceAnswer(t, seg, session, record, data)));
+    }).catch((error) => {
+      if (mine !== generation) return;
+      clear(host).append(h('div.section-title', 'The answer'), h('p.muted.seg-note', `The answer could not be read: ${error.message}`));
+    });
+    return host;
+  }
+
+  const fillOf = (a) => `labels:${a.labels.id}:${a.labels.level}`;
+
+  function enrichmentAnswer(t, seg, session, record, { analysis, cells }) {
+    const e = analysis.enrichment;
+    const names = analysis.labels.names;
+    const p = analysis.parameters;
+    const pick = (a, b) => {
+      session.pair = [a, b];
+      render(true);
+    };
+    const kv = h('dl.kv.seg-kv',
+      h('dt', 'Labels'), h('dd', analysis.labels.name, h('span.muted', ` (${names.length})`)),
+      h('dt', 'Graph'), h('dd', analysis.graph.name),
+      h('dt', 'Cells'), h('dd', `${exact(analysis.cells.labeled)} labeled of ${exact(analysis.cells.analyzed)} in the graph`, h('span.muted', `; ${exact(e.edges)} edges between labeled cells`)),
+      h('dt', 'Null'), h('dd', `the labels dealt again ${exact(p.permutations)} times (seed ${p.seed})${analysis.strata ? `, within ${analysis.strata.regions.map((r) => r.name).join(', ')} and the rest` : ''}`),
+      p.weight === 'boundary' ? [h('dt', 'Counted by'), h('dd', 'the boundary each pair of cells shares (µm)')] : null,
+      h('dt', 'Artifact'), h('dd.mono', record.id));
+    const parts = [kv, enrichmentHeatmap(analysis, { onPick: pick, chosen: session.pair }), pairsTable(analysis, { onPick: pick }), sharesTable(analysis)];
+    if (session.pair) {
+      const [a, b] = session.pair;
+      const pair = rankPairs(analysis).find((x) => x.a === a && x.b === b);
+      const edges = a === b ? pair.count / 2 : pair.count;
+      const panel = h('div.seg-card.sp-pair',
+        h('b', pairName(names, a, b)),
+        h('p', `${exact(Math.round(edges * 100) / 100)} ${p.weight === 'boundary' ? 'µm of boundary shared' : a === b ? 'edges between cells of this label' : 'edges between their cells'}, against ${exact(Math.round(a === b ? pair.expected / 2 : pair.expected))} expected if the labels were dealt at random: ${times(pair.ratio)} as many; z ${Number.isFinite(pair.z) ? pair.z.toFixed(1) : '—'}, adjusted p ${pvalue(pair.padj)}.`),
+        h('div.btn-row', h('button.btn.small.primary', { type: 'button', 'data-action': 'show-pair', onclick: () => showPair(t, seg, record, analysis, cells, a, b) }, icon('tissue'), 'Show these cells on the tissue')));
+      parts.push(panel);
+    }
+    parts.push(h('p.muted.seg-note', 'Found: each cell\'s neighbors of the other label, summed (an edge within one label counts from both ends). Expected: exactly, if the labels were dealt to the same cells at random. The ratio is the effect\'s size; z and the p-value say how unusual it is in this section, whose cells are not replicates.'));
+    return parts;
+  }
+
+  function showPair(t, seg, record, analysis, cells, a, b) {
+    return showAnalysisCells(app, { dataset: t.dataset.id, item: t.item, segmentation: seg, analysis, cells, a, b }).catch((error) => toast(`The cells: ${error.message}`, { kind: 'error' }));
+  }
+
+  function cooccurrenceAnswer(t, seg, session, record, { analysis, cells }) {
+    const co = analysis.cooccurrence;
+    const names = analysis.labels.names;
+    const K = names.length;
+    if (session.from >= K) session.from = 0;
+    if (session.at === null || session.at >= co.distances.length) session.at = 0;
+    const fromPick = h('select.input', { id: 'sp-from' }, ...names.map((n, k) => h('option', { value: String(k) }, n)));
+    fromPick.value = String(session.from);
+    fromPick.addEventListener('change', () => {
+      session.from = Number(fromPick.value);
+      render(true);
+    });
+    const atPick = h('select.input', { id: 'sp-at' }, ...co.distances.map((d, k) => h('option', { value: String(k) }, co.pairs === 'between' ? `${k ? co.distances[k - 1] : 0} to ${d} µm` : `within ${d} µm`)));
+    atPick.value = String(session.at);
+    atPick.addEventListener('change', () => {
+      session.at = Number(atPick.value);
+      render(true);
+    });
+    const kv = h('dl.kv.seg-kv',
+      h('dt', 'Labels'), h('dd', analysis.labels.name, h('span.muted', ` (${K})`)),
+      h('dt', 'Cells'), h('dd', `${exact(analysis.cells.labeled)} labeled of ${exact(analysis.cells.analyzed)}`, analysis.cells.regions?.length ? h('span.muted', ` in ${analysis.cells.regions.map((r) => r.name).join(', ')}`) : null),
+      h('dt', 'Distances'), h('dd', `${co.distances[0]} to ${co.distances.at(-1)} µm, the pairs ${co.pairs === 'between' ? 'since the distance before' : 'within each'}`),
+      h('dt', 'Artifact'), h('dd.mono', record.id));
+    const chart = cooccurrenceChart(analysis, { from: session.from, chosen: session.to, onPick: (b) => {
+      session.to = b;
+      render(true);
+    } });
+    const parts = [kv, h('div.seg-import-grid', h('label.field', { for: 'sp-from' }, h('span', 'From the cells of'), fromPick), h('label.field', { for: 'sp-at' }, h('span', 'At'), atPick)), chart];
+    if (session.to !== null && session.to < K) {
+      const a = session.from;
+      const b = session.to;
+      const k = session.at;
+      const ratio = co.ratio[k][a * K + b];
+      const panel = h('div.seg-card.sp-pair',
+        h('b', `${names[b]} near ${names[a]}`),
+        h('p', `${co.pairs === 'between' ? `Between ${k ? co.distances[k - 1] : 0} and ${co.distances[k]} µm` : `Within ${co.distances[k]} µm`} of a ${names[a]} cell, a cell is ${names[b]} ${times(ratio)} as often as cells are ${names[b]} at that distance from any cell (${formatCount(co.count[k][a * K + b])} pairs).`),
+        h('div.btn-row', h('button.btn.small.primary', { type: 'button', 'data-action': 'show-near', onclick: () => showNear(t, seg, analysis, cells, a, b, k) }, icon('tissue'), 'Show these cells on the tissue')));
+      parts.push(panel);
+    }
+    parts.push(h('p.muted.seg-note', 'Click a curve or a label to choose it. Descriptive: there is no test, and the comparison is between labels within this section.'));
+    return parts;
+  }
+
+  function showNear(t, seg, analysis, cells, a, b, k) {
+    return showAnalysisCells(app, { dataset: t.dataset.id, item: t.item, segmentation: seg, analysis, cells, a, b, k }).catch((error) => toast(`The cells: ${error.message}`, { kind: 'error' }));
+  }
+
   // --- Render ---
   let shape = '';
   function render(force = false) {
     const t = target();
-    const key = JSON.stringify([t?.dataset.id, app.store.project.artifacts.filter((a) => ['graph', 'segmentation', 'filter'].includes(a.kind)).map((a) => `${a.id}${a.state}`), (app.store.project.regions ?? []).map((r) => `${r.id}:${r.versions.length}`), (app.store.project.reviews ?? []).length, app.bundles.graphing(t?.dataset.id ?? '').map((e) => e.job)]);
+    const key = JSON.stringify([t?.dataset.id, app.store.project.artifacts.filter((a) => ['graph', 'segmentation', 'filter', 'spatial', 'labels', 'curated-labels', 'consensus-labels'].includes(a.kind)).map((a) => `${a.id}${a.state}${a.edits?.length ?? ''}`), (app.store.project.regions ?? []).map((r) => `${r.id}:${r.versions.length}`), (app.store.project.reviews ?? []).length, app.bundles.graphing(t?.dataset.id ?? '').map((e) => e.job), app.bundles.analyzing(t?.dataset.id ?? '').map((e) => e.job)]);
     if (!force && key === shape) return;
     shape = key;
     generation += 1;
@@ -327,6 +593,13 @@ export function mountSpatial(app, container) {
     if (t.focusedGraph) {
       session.segmentation = t.focusedGraph.segmentation;
       session.shown = t.focusedGraph.id;
+    } else if (t.focusedAnalysis) {
+      session.segmentation = t.focusedAnalysis.segmentation;
+      if (session.analysis !== t.focusedAnalysis.id) {
+        session.analysis = t.focusedAnalysis.id;
+        session.pair = null;
+        session.to = null;
+      }
     } else if (t.focusedSegmentation && segs.some((s) => s.id === t.focusedSegmentation)) session.segmentation = t.focusedSegmentation;
     if (!segs.some((s) => s.id === session.segmentation)) session.segmentation = segs[0]?.id ?? '';
     if (!segs.length) {
@@ -337,6 +610,9 @@ export function mountSpatial(app, container) {
     body.append(formCard(t, segs, session));
     const list = listCard(t, seg, session);
     if (list) body.append(list, detailCard(t, session));
+    body.append(questionCard(t, seg, session));
+    const answers = analysisListCard(t, seg, session);
+    if (answers) body.append(answers, analysisCard(t, seg, session));
   }
 
   function updateLive() {
@@ -376,6 +652,25 @@ export function mountSpatial(app, container) {
       session.shown = manifest.id;
       render(true);
       return { manifest, chosen: { count: chosen.count, excluded: chosen.excluded, checksum: chosen.request.checksum } };
+    },
+    // Asks a question as the form would ({ segmentation, question, labels: a label set's id and level
+    // as "id|level", graph, permutations, seed, weight, within: region ids, cells, regions, farthest,
+    // step, pairs }); answers its manifest.
+    ask: async (dataset, args) => {
+      const t0 = target();
+      if (!t0 || t0.dataset.id !== dataset.id) app.focusItem({ kind: 'dataset', id: dataset.id });
+      const t = target();
+      if (!t.item) throw new Error(`${dataset.name}'s bundle was not found where the project records it.`);
+      const seg = segmentationList(t).find((x) => x.id === args.segmentation);
+      if (!seg) throw new Error(`No complete segmentation ${args.segmentation} of ${dataset.name}.`);
+      const session = sessionOf(dataset);
+      session.segmentation = seg.id;
+      const q = session.q;
+      Object.assign(q, { ...ENRICHMENT_DEFAULTS, farthest: 150, step: 10, pairs: COOCCURRENCE_DEFAULTS.pairs, cells: 'all' });
+      for (const k of ['question', 'labels', 'graph', 'permutations', 'seed', 'weight', 'cells', 'farthest', 'step', 'pairs']) if (args[k] !== undefined) q[k] = args[k];
+      q.within = new Set(args.within ?? []);
+      q.regions = new Set(args.regions ?? []);
+      return ask(t, seg, session);
     },
   };
   return {

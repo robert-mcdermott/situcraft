@@ -81,10 +81,12 @@ alignment in use, and written as CSV or JSON. The simulated example now has an H
 immunofluorescence image with their truth, and worked examples that align the H&E three ways and
 score each, take regions to QuPath and back, and review the cells a queue ranks first.
 
-In development for 0.6.0: niches and spatial statistics, starting with graphs of which cells are
-neighbors (the Delaunay triangulation of their centers, their nearest neighbors, a radius, or
-contact in the segmentation), built over the cells chosen and drawn on the tissue, edge for edge
-those SciPy and Squidpy build.
+In development for 0.6.0: niches and spatial statistics. Graphs of which cells are neighbors (the
+Delaunay triangulation of their centers, their nearest neighbors, a radius, or contact in the
+segmentation), edge for edge those SciPy and Squidpy build; which cell types are neighbors more or
+less often than chance (neighborhood enrichment, its expectation exact, its significance by
+permutation, within regions if asked) and at what distances (co-occurrence), Squidpy's numbers on
+the same cells; and every number's cells shown on the tissue.
 
 ## A look around
 

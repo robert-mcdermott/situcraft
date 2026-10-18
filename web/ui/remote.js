@@ -28,6 +28,8 @@ import { labelSource, labelVersions, refOf } from './label-sources.js';
 import { defaultPair, impactLines, sideOf } from '../lib/impact.js';
 import { remakeOnSegmentation } from './remake.js';
 import { KINDS as GRAPH_KINDS, describeGraph, graphsOf } from '../lib/graphs.js';
+import { analysesOf, rankPairs } from '../lib/spatial.js';
+import { showAnalysisCells } from './spatial-cells.js';
 
 export class ActionError extends Error {}
 
@@ -600,6 +602,11 @@ export function installRemote(app) {
       }
       const shownNow = await apply(view, dataset);
       if (view.cell) await waitFor(() => shownNow.detail()?.row === view.cell.row, 30000, 'the cell to be read');
+      // A spatial analysis's cells: its pair's, or a label's near another's.
+      if (args.cells_of !== undefined) {
+        const shownCells = await analysisCells(dataset, args.cells_of);
+        await waitFor(() => window.situcraftViewer?.focus?.()?.title === shownCells.title, 30000, 'the cells to be shown');
+      }
       const now = showing();
       return { message: `${dataset.name} in the Viewer${now.camera ? ` at (${now.camera.cx.toFixed(0)}, ${now.camera.cy.toFixed(0)}) µm, ${now.camera.umPerCss.toPrecision(3)} µm per pixel` : ''}${now.transcripts.genes.length ? `, ${now.transcripts.genes.join(', ')}` : ''}${missing.length ? `. Not in this dataset: ${missing.join(', ')}` : ''}.`, data: { showing: now, missing } };
     },
@@ -1202,6 +1209,62 @@ export function installRemote(app) {
       return {
         message: `${describeGraph(d.parameters)} of ${seg.name} of ${dataset.name}${over ? `, ${over}` : ''}: ${plural(d.edges, 'edge')} among ${plural(d.cells.inGraph, 'cell')}${d.cells.excluded ? ` (${plural(d.cells.excluded, 'cell')} a review excluded left out)` : ''}; ${d.degree.mean.toFixed(2)} neighbors a cell on average, ${plural(d.isolated, 'cell')} without one; the median edge ${d.lengths.median.toFixed(1)} µm.`,
         data: { id: built.manifest.id, name: built.manifest.name, segmentation: { id: seg.id, name: seg.name }, parameters: d.parameters, cells: d.cells, edges: d.edges, degree: { mean: d.degree.mean, median: d.degree.median, max: d.degree.max }, isolated: d.isolated, components: d.components, lengths: { ...d.lengths, histogram: undefined }, ...(d.shared ? { shared: { ...d.shared, histogram: undefined } } : {}), ...(d.duplicates ? { duplicates: d.duplicates } : {}) },
+      };
+    },
+
+    async spatial_analysis(args) {
+      const { dataset, seg, version } = labelVersionArg(args);
+      const question = choose(args.question ?? 'enrichment', ['enrichment', 'cooccurrence'], 'question');
+      let graph;
+      if (question === 'enrichment') {
+        const list = graphsOf(project(), dataset.id, seg.id).filter((g) => g.state === 'complete');
+        if (!list.length) throw new ActionError(`${seg.name} has no graph: build_graph builds one.`);
+        graph = args.graph === undefined || /^latest$/i.test(String(args.graph)) ? list.at(-1).id : String(args.graph);
+        if (!list.some((g) => g.id === graph)) throw new ActionError(`No graph ${graph} of ${seg.name}; its graphs are ${list.map((g) => `${g.id} (${describeGraph(g.parameters)})`).join(', ')}.`);
+      }
+      const regionIds = (key) => {
+        if (args[key] === undefined) return [];
+        if (!Array.isArray(args[key])) throw new ActionError(`${key} is a list of regions, by name or ID.`);
+        return args[key].map((ref) => regionRef(dataset, ref).id);
+      };
+      let cells = 'all';
+      if (args.filter !== undefined) {
+        if (seg.source !== 'instrument') throw new ActionError('A QC filter chooses cells of the instrument\'s segmentation.');
+        const filters = project().artifacts.filter((a) => a.kind === 'filter' && a.dataset === dataset.id);
+        const named = filters.map((f) => `${f.name} v${f.version}`);
+        const ref = String(args.filter);
+        const latest = (name) => filters.filter((f) => f.name === name).sort((a, b) => b.version - a.version)[0];
+        cells = filters.find((f) => f.id === ref)?.id ?? (named.includes(ref) ? filters[named.indexOf(ref)].id : latest(choose(ref, [...new Set(filters.map((f) => f.name))], 'filter'))?.id);
+      }
+      const ask = { segmentation: seg.id, question, labels: `${version.id}|${version.level}`, graph, within: regionIds('within'), regions: regionIds('regions'), cells };
+      for (const [arg, key] of [['permutations', 'permutations'], ['seed', 'seed'], ['up_to', 'farthest'], ['every', 'step']]) if (args[arg] !== undefined) ask[key] = finite(args[arg], arg);
+      if (args.weight !== undefined) ask.weight = choose(args.weight, ['edges', 'boundary'], 'weight');
+      if (args.pairs !== undefined) ask.pairs = choose(args.pairs, ['within', 'between'], 'pairs');
+      await settleMode('spatial');
+      let manifest;
+      try {
+        manifest = await app.spatialView.ask(dataset, ask);
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      await frames();
+      const { analysis: a } = await app.bundles.analysisData(manifest.id);
+      const names = a.labels.names;
+      if (question === 'enrichment') {
+        const pairs = rankPairs(a).map((p) => ({ a: names[p.a], b: names[p.b], count: p.count, expected: p.expected, ratio: p.ratio, z: Number.isFinite(p.z) ? p.z : null, p: p.p, padj: p.padj }));
+        const sig = pairs.filter((p) => p.padj < 0.05 && p.z !== null);
+        const line = (p) => `${p.a} – ${p.b} ${p.ratio.toFixed(2)}× (z ${p.z.toFixed(1)})`;
+        const up = sig.filter((p) => p.z > 0).slice(0, 3).map(line);
+        const down = sig.filter((p) => p.z < 0).reverse().slice(0, 3).map(line);
+        return {
+          message: `${manifest.name}: ${plural(sig.length, 'pair')} of ${plural(pairs.length, 'pair')} neighbors more or less often than at random (adjusted p below 0.05)${up.length ? `; most: ${up.join(', ')}` : ''}${down.length ? `; least: ${down.join(', ')}` : ''}.`,
+          data: { id: manifest.id, name: manifest.name, labels: names, graph: a.graph, cells: a.cells, edges: a.enrichment.edges, parameters: a.parameters, strata: a.strata?.regions ?? null, pairs },
+        };
+      }
+      const co = a.cooccurrence;
+      return {
+        message: `${manifest.name}: ${names.length} labels at ${co.distances.length} distances, ${co.distances[0]} to ${co.distances.at(-1)} µm, the pairs ${co.pairs === 'between' ? 'since the distance before' : 'within each'}.`,
+        data: { id: manifest.id, name: manifest.name, labels: names, cells: a.cells, distances: co.distances, pairs: co.pairs, ratio: co.ratio, count: co.count },
       };
     },
 
@@ -2072,6 +2135,30 @@ export function installRemote(app) {
     const id = /^latest$/i.test(String(ref)) ? list.at(-1)?.id : String(ref);
     if (!list.some((g) => g.id === id)) throw new ActionError(list.length ? `No graph ${ref} of the segmentation drawn; its graphs are ${list.map((g) => `${g.id} (${describeGraph(g.parameters)})`).join(', ')}.` : 'The segmentation drawn has no graph: build_graph builds one.');
     return id;
+  }
+
+  // Shows a spatial analysis's cells (spec: { analysis: an id or latest, a, b: labels by name, and a
+  // co-occurrence's distance in µm }); answers what is shown.
+  async function analysisCells(dataset, spec) {
+    if (typeof spec !== 'object' || spec === null) throw new ActionError('cells_of is {"analysis", "a", "b", "distance"}.');
+    const list = analysesOf(project(), dataset.id).filter((x) => x.state === 'complete');
+    if (!list.length) throw new ActionError(`${dataset.name} has no spatial analysis: spatial_analysis makes one.`);
+    const record = spec.analysis === undefined || /^latest$/i.test(String(spec.analysis)) ? list.at(-1) : list.find((x) => x.id === String(spec.analysis));
+    if (!record) throw new ActionError(`No analysis ${spec.analysis} of ${dataset.name}; its analyses are ${list.map((x) => x.id).join(', ')}.`);
+    const data = await app.bundles.analysisData(record.id);
+    const names = data.analysis.labels.names;
+    const a = names.indexOf(choose(spec.a, names, 'label'));
+    const b = names.indexOf(choose(spec.b ?? spec.a, names, 'label'));
+    let k = 0;
+    if (data.analysis.question === 'cooccurrence') {
+      const ds = data.analysis.cooccurrence.distances;
+      const d = spec.distance === undefined ? ds[0] : finite(spec.distance, 'distance');
+      k = ds.indexOf(d);
+      if (k < 0) throw new ActionError(`The analysis is at ${ds.join(', ')} µm.`);
+    }
+    const segmentation = project().artifacts.find((x) => x.kind === 'segmentation' && x.id === record.segmentation);
+    const item = app.bundles.link(dataset.id)?.item ?? app.bundles.itemByPath(dataset.path);
+    return showAnalysisCells(app, { dataset: dataset.id, item, segmentation, analysis: data.analysis, cells: data.cells, a, b, k });
   }
 
   // A segmentation by name or id (the default if not given).

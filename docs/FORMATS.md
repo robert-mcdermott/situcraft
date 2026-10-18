@@ -405,6 +405,20 @@ so the same graph is never built twice. The project records each graph it uses (
 its dataset, segmentation, parameters and summary). The Viewer's cells layer names the graph drawn
 (`graph`, an artifact id); saved views keep it.
 
+### Spatial analyses
+
+A spatial analysis of a segmentation's labeled cells (from 0.6.0) is an artifact of two files:
+
+| File | Magic | Holds |
+| --- | --- | --- |
+| `analysis.json` | | `format` (`"situcraft-spatial-analysis"`), `version`, `method`, `methodVersion`; the `question` (`enrichment`, `cooccurrence`); the `segmentation` (artifact id and name); for an enrichment, the `graph` (id, name, parameters); `cells`: the segmentation's (`segmentation`), those `analyzed` (the graph's, or those chosen, with how, as a graph records them) and of them `labeled`; `labels`: the set's `id`, `kind` (`labels`, `curated`, `consensus`), `name` and `level`, the `names` and `colors` of the labels some cell has (in the set's order), and the `checksum` of each cell's label as sent; for an enrichment within regions, the `strata` (the `regions`, each id, name and version, and the checksum of each cell's region); the `parameters` (an enrichment's `permutations`, `seed` and `weight`, `edges` or `boundary`; a co-occurrence's `distances` in µm and `pairs`, `within` or `between`); and the results. An enrichment's (`enrichment`), K × K matrices, row-major, `[a·K + b]`: the `cells` of each label, the `edges` between labeled cells, the `strata`, the directed `count` (each label's cells' neighbors of the other label, an edge within a label counting from both ends; or the boundary shared, µm), the exact `expected` count, the permutations' `mean` and `sd`, `z`, the two-sided `p` and the Benjamini–Hochberg adjusted `padj` (`null` for a pair with a label no cell has). A co-occurrence's (`cooccurrence`): its `distances` and `pairs`, the `cells` of each label, and at each distance the ordered pair `count` and the `ratio`, K × K (`null` where a label has no pair) |
+| `cells.bin` | `SCSA` | The cells analyzed (u32 count; u32 indices into the segmentation's cells, increasing), each one's label (i32 into `labels.names`, −1 for none) and region (i32: 0 in none of the strata's regions, k in the kth) |
+
+An analysis is named by its question, segmentation, graph (or the cells' checksum), the labels'
+checksum and names, the regions' checksum, the method's version and its parameters, so asking again
+answers it. The project records each analysis it uses (kind `spatial`, with its dataset,
+segmentation, graph, question, parameters and summary: the pairs most enriched and most depleted).
+
 ### Post-Xenium images
 
 A post-Xenium image (from 0.5.0) is an artifact of one file in its folder, `image.json`, and one in

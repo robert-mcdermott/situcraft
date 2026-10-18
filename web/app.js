@@ -386,10 +386,10 @@ async function start() {
 
   // Shows a segmentation on its dataset's tissue: the Viewer draws it (wave 3, slice 8), keeping
   // where it was and what else it showed.
-  app.showOnTissue = (datasetId, segmentationId, fill = undefined, { graph = undefined } = {}) => {
+  app.showOnTissue = (datasetId, segmentationId, fill = undefined, { graph = undefined, focus = undefined } = {}) => {
     if (!store.project.datasets.some((d) => d.id === datasetId)) return;
     const record = store.project.artifacts.find((a) => a.kind === 'segmentation' && a.id === segmentationId && a.dataset === datasetId);
-    app.pendingSegmentation = { dataset: datasetId, segmentation: !record || record.source === 'instrument' ? null : record.id, fill, graph };
+    app.pendingSegmentation = { dataset: datasetId, segmentation: !record || record.source === 'instrument' ? null : record.id, fill, graph, focus };
     app.focusItem({ kind: 'dataset', id: datasetId });
     if (store.ui.mode === 'viewer') store.notify(['view-pending']);
     else app.setMode('viewer');
@@ -399,6 +399,9 @@ async function start() {
   app.showLabels = (labels, level = 0) => app.showOnTissue(labels.dataset, labels.segmentation, `labels:${labels.id}:${level}`);
   // A graph's edges on the tissue, over its segmentation's cells.
   app.showGraph = (graph) => app.showOnTissue(graph.dataset, graph.segmentation, undefined, { graph: graph.id });
+  // A spatial analysis's cells on the tissue (ui/mode-spatial.js): the cells filled by its labels,
+  // its graph drawn, and the cells and edges a number comes from shown.
+  app.showSpatial = ({ dataset, segmentation, fill, graph = undefined, focus }) => app.showOnTissue(dataset, segmentation, fill, { graph, focus });
 
   // A deep link (#project=…&view=…) opens its project from the library and shows the view.
   async function openLink(hash) {

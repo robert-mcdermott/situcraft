@@ -1148,6 +1148,122 @@ export async function viewerSuite({ check, MissingData, verbose }) {
             graphView.ok && graphReopened.ok && graphReopened.data.exact === true && cleared === null && reGraph === built.delaunay.data?.id, 'exactly as saved');
         }
 
+        // Neighborhood enrichment and co-occurrence of the Lung cells' classes (wave 6, slice 2), each
+        // number against the suite's own: the counts from the graph's edges and the cells' labels, the
+        // expectation from its formula, a pair's cells shown, and a co-occurrence ratio from every pair
+        // of cells.
+        {
+          const graph = await act('build_graph', { dataset: 'xenium-lung-2fov', segmentation: 'instrument', kind: 'delaunay' });
+          // The instrument's cells labeled from the panel's markers (earlier in the suite).
+          const labelsId = graph.ok ? await chrome.eval(`window.situcraft.store.project.artifacts.find((a) => a.kind === 'labels' && a.segmentation === ${JSON.stringify(graph.data.segmentation.id)} && !a.source && !a.reference && a.state === 'complete')?.id ?? null`) : null;
+          const markers = { ok: Boolean(labelsId), data: { id: labelsId }, message: 'no label set from markers of the instrument\'s cells' };
+          const asked = markers.ok && graph.ok ? await act('spatial_analysis', { dataset: 'xenium-lung-2fov', segmentation: 'instrument', question: 'enrichment', labels: markers.data.id, level: 1, graph: graph.data.id, permutations: 1000 }) : null;
+          const own = asked?.ok ? await chrome.eval(`(async () => {
+            const a = await (await fetch('/api/artifacts/${asked.data.id}/files/analysis.json')).json();
+            const cb = await (await fetch('/api/analyses/${asked.data.id}/cells')).arrayBuffer();
+            const n = new DataView(cb).getUint32(0, true);
+            const label = new Int32Array(cb, 4 + 4 * n, n);
+            const gb = await (await fetch('/api/graphs/${graph.data.id}/edges')).arrayBuffer();
+            const gv = new DataView(gb);
+            const gn = gv.getUint32(0, true), m = gv.getUint32(4, true);
+            const off = new Uint32Array(gb, 12 + 12 * gn, gn + 1), nb = new Uint32Array(gb, 16 + 16 * gn, m);
+            const K = a.labels.names.length;
+            // The directed counts: each cell's neighbors by label; the edges between labeled cells.
+            const count = new Float64Array(K * K);
+            const cells = new Float64Array(K);
+            let N = 0, E = 0;
+            for (let i = 0; i < gn; i += 1) {
+              if (label[i] < 0) continue;
+              cells[label[i]] += 1;
+              N += 1;
+              for (let k = off[i]; k < off[i + 1]; k += 1) {
+                const j = nb[k];
+                if (label[j] < 0) continue;
+                count[label[i] * K + label[j]] += 1;
+                if (j > i) E += 1;
+              }
+            }
+            // The expectation: each edge's ends take A and B with chance n_A·(n_B − [A = B]) / (N·(N − 1)),
+            // in either order.
+            let countOff = 0, expOff = 0;
+            for (let x = 0; x < K; x += 1) {
+              for (let y = 0; y < K; y += 1) {
+                const q = x * K + y;
+                if (count[q] !== a.enrichment.count[q]) countOff += 1;
+                const e = 2 * E * cells[x] * (cells[y] - (x === y ? 1 : 0)) / (N * (N - 1));
+                expOff = Math.max(expOff, Math.abs(e - a.enrichment.expected[q]) / Math.max(1, e));
+              }
+            }
+            return { K, N, E, edges: a.enrichment.edges, countOff, expOff };
+          })()`) : null;
+          check('viewer', 'neighborhood enrichment by remote control: every count the suite\'s own (the graph\'s edges by the cells\' labels), the expectation its formula\'s', `${asked?.message ?? asked?.error ?? markers.message}; ${JSON.stringify(own)}`,
+            asked?.ok && own && own.countOff === 0 && own.expOff < 1e-9 && own.E === own.edges && asked.data.pairs.length === own.K * (own.K + 1) / 2 && asked.data.pairs.some((p) => p.padj < 0.05), 'the same counts; the expectation within 10⁻⁹');
+          // A pair's cells on the tissue: those with a neighbor of the other label, as the suite counts them.
+          const top = asked?.ok ? asked.data.pairs.find((p) => p.a !== p.b && p.padj < 0.05) : null;
+          const shownPair = top ? await act('show_tissue', { dataset: 'xenium-lung-2fov', cells_of: { analysis: asked.data.id, a: top.a, b: top.b } }) : null;
+          const pairCount = top ? await chrome.eval(`(async () => {
+            const a = await (await fetch('/api/artifacts/${asked.data.id}/files/analysis.json')).json();
+            const cb = await (await fetch('/api/analyses/${asked.data.id}/cells')).arrayBuffer();
+            const n = new DataView(cb).getUint32(0, true);
+            const label = new Int32Array(cb, 4 + 4 * n, n);
+            const gb = await (await fetch('/api/graphs/${graph.data.id}/edges')).arrayBuffer();
+            const gn = new DataView(gb).getUint32(0, true), m = new DataView(gb).getUint32(4, true);
+            const off = new Uint32Array(gb, 12 + 12 * gn, gn + 1), nb = new Uint32Array(gb, 16 + 16 * gn, m);
+            const A = a.labels.names.indexOf(${JSON.stringify(top.a)}), B = a.labels.names.indexOf(${JSON.stringify(top.b)});
+            let cells = 0;
+            for (let i = 0; i < gn; i += 1) {
+              let touches = false;
+              for (let k = off[i]; k < off[i + 1]; k += 1) {
+                const j = nb[k];
+                if ((label[i] === A && label[j] === B) || (label[i] === B && label[j] === A)) touches = true;
+              }
+              if (touches) cells += 1;
+            }
+            return { suite: cells, shown: window.situcraftViewer.focus(), graph: window.situcraftViewer.graph()?.id };
+          })()`) : null;
+          check('viewer', 'a pair\'s cells shown on the tissue: those with a neighbor of the other label, its graph drawn', `${shownPair?.message ?? shownPair?.error}; ${JSON.stringify(pairCount)}`,
+            shownPair?.ok && pairCount && pairCount.shown?.cells === pairCount.suite && pairCount.suite > 0 && pairCount.graph === graph.data.id, `${pairCount?.suite} cells`);
+          // Co-occurrence: one pair's ratio at one distance from every pair of cells.
+          const co = markers.ok ? await act('spatial_analysis', { dataset: 'xenium-lung-2fov', segmentation: 'instrument', question: 'cooccurrence', labels: markers.data.id, level: 1, up_to: 60, every: 20 }) : null;
+          const coOwn = co?.ok ? await chrome.eval(`(async () => {
+            const a = await (await fetch('/api/artifacts/${co.data.id}/files/analysis.json')).json();
+            const cb = await (await fetch('/api/analyses/${co.data.id}/cells')).arrayBuffer();
+            const n = new DataView(cb).getUint32(0, true);
+            const rows = new Uint32Array(cb, 4, n), label = new Int32Array(cb, 4 + 4 * n, n);
+            // The segmentation's centroids, as the graph of the same cells holds them.
+            const gb = await (await fetch('/api/graphs/${graph.data.id}/edges')).arrayBuffer();
+            const gn = new DataView(gb).getUint32(0, true);
+            const grows = new Uint32Array(gb, 12, gn), gx = new Float32Array(gb, 12 + 4 * gn, gn), gy = new Float32Array(gb, 12 + 8 * gn, gn);
+            const t = { x: new Float64Array(a.cells.segmentation), y: new Float64Array(a.cells.segmentation) };
+            for (let i = 0; i < gn; i += 1) {
+              t.x[grows[i]] = gx[i];
+              t.y[grows[i]] = gy[i];
+            }
+            const K = a.labels.names.length, d = 40, k = a.cooccurrence.distances.indexOf(d);
+            const count = new Float64Array(K * K);
+            const idx = [];
+            for (let i = 0; i < n; i += 1) if (label[i] >= 0) idx.push(i);
+            for (let p = 0; p < idx.length; p += 1) {
+              const i = idx[p];
+              for (let q = p + 1; q < idx.length; q += 1) {
+                const j = idx[q];
+                const dx = t.x[rows[j]] - t.x[rows[i]], dy = t.y[rows[j]] - t.y[rows[i]];
+                if (Math.sqrt(dx * dx + dy * dy) <= d) {
+                  count[label[i] * K + label[j]] += 1;
+                  count[label[j] * K + label[i]] += 1;
+                }
+              }
+            }
+            const row = (x) => count.slice(x * K, (x + 1) * K).reduce((s, v) => s + v, 0);
+            const total = count.reduce((s, v) => s + v, 0);
+            let worst = 0;
+            for (let x = 0; x < K; x += 1) for (let y = 0; y < K; y += 1) if (row(x) > 0 && row(y) > 0) worst = Math.max(worst, Math.abs(count[x * K + y] * total / (row(x) * row(y)) - a.cooccurrence.ratio[k][x * K + y]));
+            return { K, k, worst };
+          })()`) : null;
+          check('viewer', 'co-occurrence by remote control: within 40 µm, every ratio from the suite\'s own count of every pair of cells', `${co?.message ?? co?.error}; ${JSON.stringify(coOwn)}`,
+            co?.ok && coOwn && coOwn.k === 1 && coOwn.worst < 1e-9, 'within 10⁻⁹');
+        }
+
         // The projects as 0.2.0, 0.3.0 and 0.4.0 saved them
         // (validation/projects/<version>-lung.situcraft.json): this release's written when asked
         // (SITUCRAFT_WRITE_FIXTURE=1), the places of this run's folders made neutral and given its

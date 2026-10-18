@@ -85,7 +85,7 @@ var remoteActions = []remoteAction{
 		"kind": textArg("dataset, filter, view or local; found by name among all of them if not given."),
 		"name": textArg("Its name."),
 	})},
-	{Name: "show_tissue", Title: "Show the tissue", Description: "Shows a dataset in the Viewer as asked, everything else as the Viewer shows it now: where (a center in µm and µm per screen pixel, or a width in µm; the whole section with whole: true), the stains (by name: visible, color, brightness window, gamma), the transcripts of genes by name (up to 16) or all of them, their minimum quality and point size, which of the dataset's segmentations is drawn, the cell and nucleus outlines, a cell fill and its opacity, a graph of the cells, the transcripts colored by gene or by their assignment's probability, and a cell to select. Returns what it shows, as a saved view records it, and what the dataset lacks.", InputSchema: schema(map[string]any{
+	{Name: "show_tissue", Title: "Show the tissue", Description: "Shows a dataset in the Viewer as asked, everything else as the Viewer shows it now: where (a center in µm and µm per screen pixel, or a width in µm; the whole section with whole: true), the stains (by name: visible, color, brightness window, gamma), the transcripts of genes by name (up to 16) or all of them, their minimum quality and point size, which of the dataset's segmentations is drawn, the cell and nucleus outlines, a cell fill and its opacity, a graph of the cells, a spatial analysis's cells, the transcripts colored by gene or by their assignment's probability, and a cell to select. Returns what it shows, as a saved view records it, and what the dataset lacks.", InputSchema: schema(map[string]any{
 		"dataset":         datasetArg,
 		"center":          map[string]any{"type": "array", "items": map[string]any{"type": "number"}, "minItems": 2, "maxItems": 2, "description": "The center, [x, y] in µm."},
 		"um_per_pixel":    numberArg("The zoom: µm per screen (CSS) pixel."),
@@ -106,6 +106,7 @@ var remoteActions = []remoteAction{
 		"cell":            textArg("A cell to select, by its ID in the segmentation drawn (as cells.parquet names the instrument's)."),
 		"images":          map[string]any{"type": "object", "description": "Post-Xenium images, by name or artifact ID: {visible, opacity (0 to 1), channels: {by name: {visible, color, window, gamma}} (immunofluorescence)}, each optional."},
 		"graph":           textArg("A graph of the segmentation drawn, its edges drawn over the cells when zoomed in: by artifact ID, latest for the last built, none for none."),
+		"cells_of":        map[string]any{"type": "object", "description": "A spatial analysis's cells: {analysis (its ID, or latest), a, b (labels by name), distance (a co-occurrence's, µm)}: an enrichment's pair, their cells neighboring each other and the edges between them; a co-occurrence's label b near a. The cells filled by the analysis's labels."},
 	}), long: true},
 	{Name: "add_image", Title: "Add a post-Xenium image", Description: "Adds an H&E or immunofluorescence image of a dataset's section, stained and scanned after the Xenium run, as a job: a pyramidal, tiled OME-TIFF (as Xenium Explorer requires; RGB, or channels of 8 or 16 bits; deflate, LZW, JPEG or JPEG 2000), read where it lies, never copied, and recorded as an image artifact with its SHA-256. Its alignment, the transformation matrix or keypoints Xenium Explorer saves (found beside the image when 10x named it, else named; null for none), is recorded as the image's first transform and places it; without one the image is not aligned until align_image places it. The Viewer draws an aligned image under the transcripts and cells. Needs the token (it reads files). Answers what the image is and how it is placed.", InputSchema: schema(map[string]any{
 		"dataset":   datasetArg,
@@ -280,6 +281,23 @@ var remoteActions = []remoteAction{
 		"gap":          numberArg("A contact graph's gap closed, µm (0: touching)."),
 		"filter":       textArg("A QC filter choosing the cells (the instrument's segmentation only), by name (its latest version), \"name vN\" or id."),
 		"regions":      map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Only the cells in these regions, by name or ID."},
+	}), long: true},
+	{Name: "spatial_analysis", Title: "Ask how the cells are arranged", Description: "Asks a question of a label set's cells, as a job, in the Spatial view. Neighborhood enrichment: for each pair of labels, the neighbors between their cells in a graph against the number expected if the labels were dealt to the same cells at random (exactly), as a ratio, with a z-score and two-sided p-value from seeded permutations of the labels (within regions, optionally, keeping each one's composition), Benjamini–Hochberg adjusted. Co-occurrence: at each distance, how much likelier each label's cells are within it (or since the distance before) of another label's than of any cell. A section's cells are not replicates: these describe this section. Recorded as an analysis artifact; asking again answers it. Answers the pairs, most enriched first, or the ratios at each distance.", InputSchema: schema(map[string]any{
+		"dataset":      datasetArg,
+		"segmentation": textArg("The segmentation, by name or artifact id (the default if not given)."),
+		"question":     textArg("enrichment (the default) or cooccurrence."),
+		"labels":       textArg("A label set of the segmentation, by id (the latest if not given)."),
+		"level":        textArg("The label set's level, by number from 1 or name."),
+		"graph":        textArg("Enrichment: a graph of the segmentation, by id (the latest built if not given)."),
+		"permutations": numberArg("Enrichment: how many times the labels are dealt again (1,000)."),
+		"seed":         numberArg("Enrichment: the permutations' seed (20250)."),
+		"weight":       textArg("Enrichment: edges (the default) or boundary (a contact graph's shared boundary)."),
+		"within":       map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Enrichment: deal the labels within each of these regions (names or IDs)."},
+		"filter":       textArg("Co-occurrence: a QC filter choosing the cells (the instrument's segmentation only)."),
+		"regions":      map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Co-occurrence: only the cells in these regions."},
+		"up_to":        numberArg("Co-occurrence: the farthest distance, µm (150)."),
+		"every":        numberArg("Co-occurrence: the step between distances, µm (10)."),
+		"pairs":        textArg("Co-occurrence: within (each distance, as Squidpy; the default) or between (since the distance before)."),
 	}), long: true},
 	{Name: "show_map", Title: "Show the map", Description: "Shows a clustering in the Cell types view, with its map (UMAP; made first if it has none) beside the tissue, linked: the cells colored by a clustering's clusters, a gene's expression, their gene transcripts, area or how faithfully the map keeps their neighbors, and a selection of cells (by cluster, or inside a polygon on the map or the tissue) drawn on both. Answers the map's trustworthiness, the selection's size and its composition by cluster.", InputSchema: schema(map[string]any{
 		"dataset":    datasetArg,

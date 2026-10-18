@@ -1168,7 +1168,33 @@ td div.studio-problem { padding: 2px 6px; margin-top: 4px; font-size: 11.5px; }
 .sp-chosen { margin: 8px 0 10px; }
 .sp-plots { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px 18px; margin: 10px 0; }
 .sp-plot-title { font-size: 11.5px; margin-bottom: 2px; }
+.sp-heatmap-wrap { overflow-x: auto; margin: 10px 0; }
+.sp-heatmap { display: block; }
+.sp-heatmap .sp-axis, .sp-chart .sp-axis { font-size: 10.5px; fill: var(--text-2); }
+.sp-heatmap .sp-square { cursor: pointer; }
+.sp-heatmap .sp-square:hover { stroke: var(--text); stroke-width: 1; }
+.sp-heatmap .sp-significant { fill: rgba(0, 0, 0, 0.55); }
+.sp-heatmap .sp-chosen-square { fill: none; stroke: var(--accent); stroke-width: 2; }
+.sp-scale { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--text-2); margin-top: 6px; flex-wrap: wrap; }
+.sp-scale-bar { width: 160px; height: 10px; border-radius: 2px; border: 1px solid var(--line); }
+.sp-pair-tables { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px 18px; }
+.sp-pairs td:first-child { white-space: nowrap; }
+.sp-pair { margin: 10px 0; }
+.sp-shares { margin: 10px 0; }
+.sp-shares summary { cursor: pointer; font-size: 12.5px; color: var(--text-2); }
+.sp-shares th[scope="row"] { text-align: left; font-weight: 600; white-space: nowrap; }
+.sp-pair p { margin: 6px 0; }
+.sp-chart-wrap { margin: 8px 0; }
+.sp-chart { width: 100%; max-width: 640px; height: auto; display: block; }
+.sp-chart .sp-grid { stroke: var(--line); }
+.sp-chart .sp-one { stroke: var(--text-3); stroke-dasharray: 4 3; }
+.sp-chart .sp-line { fill: none; stroke-width: 1.6; cursor: pointer; }
+.sp-chart .sp-line.chosen { stroke-width: 3.2; }
+.sp-legend { display: flex; flex-wrap: wrap; gap: 4px 6px; margin-top: 6px; }
+.sp-legend-item { display: inline-flex; align-items: center; gap: 5px; font: inherit; font-size: 12px; padding: 2px 6px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--text); cursor: pointer; }
+.sp-legend-item.chosen { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .viewer-neighbor-list li { font-size: 12px; }
+.viewer-legend-focus { display: flex; flex-direction: column; gap: 2px; }
 .viewer-neighbor-list .link { font-family: var(--mono); font-size: 11.5px; }
 .ct-dotplot { overflow-x: auto; }
 .ct-dotplot svg { display: block; }

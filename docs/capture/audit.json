@@ -330,6 +330,16 @@
   "violations": []
  },
  {
+  "scene": "enrichment",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "enrichment",
+  "theme": "light",
+  "violations": []
+ },
+ {
   "scene": "clusters",
   "theme": "dark",
   "violations": []

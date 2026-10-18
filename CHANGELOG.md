@@ -34,6 +34,32 @@ with the cells it comes from.
     edges as SciPy 1.18 (Delaunay by Qhull, a k-d tree) and Squidpy 1.8 (`spatial_neighbors`),
     edge for edge, lengths identical; in the page, a radius graph's edges those of an exhaustive
     search, a region's graph over its cells, the edges drawn where they lie.
+- **Which cell types are neighbors (wave 6, slice 2).** The Spatial view's **Questions** ask a
+  label set's cells (any set, any level) how they are arranged; each answer is an artifact of kind
+  `spatial`, named by what it is asked of.
+  - **Neighborhood enrichment** over a graph: for each pair of labels, the neighbors between their
+    cells against the number expected if the labels were dealt to the same cells at random, the
+    expectation exact; z-scores and two-sided p-values from seeded permutations (1,000 by default),
+    adjusted by Benjamini and Hochberg's procedure over the pairs that can be tested. Optionally
+    dealt within regions, so that each keeps its composition; in a contact graph, counted by the
+    boundary shared, with the contact fractions. Shown as a heat map of the ratio (red more, blue
+    fewer, the significant marked), tables of the pairs most and least often neighbors, and each
+    label's neighbors by label.
+  - **Co-occurrence across distances:** from one label's cells, how much likelier each label's are
+    within a distance (or since the distance before) than any cell's, as curves.
+  - **Every number's cells** on the tissue: a pair's cells with a neighbor of the other label
+    highlighted, the edges between them drawn in color over the graph; a label's cells near
+    another's.
+  - **Remote control:** `spatial_analysis`; `show_tissue` takes `cells_of`. The project tree lists
+    **Spatial analyses**.
+  - **Validated:** a checkerboard's enrichment, the permutations' mean against the exact
+    expectation (with and without regions), uniform p-values on randomly labeled cells, regions
+    that fix every label; co-occurrence worked by hand and against an exhaustive count; on both
+    development bundles and the standard simulated tissue, labeled by their clusters, every count
+    Squidpy 1.8.3's, every z-score within the two tools' permutation error (correlation above
+    0.999), and every co-occurrence ratio Squidpy's routine's in float64 (to 10⁻¹⁴; its float32
+    places 3 pairs of Lung and 1 of Breast on the other side of a distance); in the page, the
+    counts, expectation, a pair's cells and a co-occurrence ratio against the suite's own.
 
 ## 0.5.0 (2026-10-17)
 

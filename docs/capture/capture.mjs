@@ -458,6 +458,21 @@ const scenes = {
     await js(`window.situcraftViewer.settled()`);
     await sleep(400);
   },
+  // Which cell types are neighbors (wave 6, slice 2): the Lung example's classes' neighborhood
+  // enrichment over its Delaunay graph, the heat map and the pairs most and least often neighbors,
+  // one pair chosen.
+  async enrichment() {
+    await act('open_example', { example: 'lung' });
+    await act('cluster_cells', {});
+    const markers = await act('label_cells', { markers: 'lung' });
+    await act('build_graph', { kind: 'delaunay' });
+    await act('spatial_analysis', { question: 'enrichment', labels: markers.data.id, level: 1 });
+    await waitFor(`Boolean(document.querySelector('.sp-heatmap'))`);
+    await js(`document.querySelector('.sp-square[data-pair="2,3"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))`);
+    await waitFor(`Boolean(document.querySelector('.sp-pair'))`);
+    await scrollTo('.sp-answer', 'start');
+    await sleep(300);
+  },
   // The Breast example's clusters on the tissue (wave 4, slice 1): the cells filled by cluster,
   // with the legend.
   async clusters() {

@@ -231,6 +231,33 @@ export function mountInspector(app) {
         } }, icon('graph'), 'In the Spatial view')) : null);
   }
 
+  // A spatial analysis: its question, labels, what it is of, and what it found.
+  function analysisSection(r) {
+    const { project } = app.store;
+    const seg = project.artifacts.find((a) => a.kind === 'segmentation' && a.id === r.segmentation);
+    const s = r.summary ?? {};
+    const pair = (p) => `${p.a} – ${p.b} ${p.ratio.toFixed(2)}×`;
+    return h('section.inspector-section',
+      h('h3', icon('graph'), r.question === 'enrichment' ? 'Neighborhood enrichment' : 'Co-occurrence'),
+      h('dl.kv',
+        h('dt', 'Segmentation'), h('dd', seg?.name ?? r.segmentation),
+        h('dt', 'Labels'), h('dd', `${s.labels?.name ?? '—'} (${s.labels?.count ?? '?'})`),
+        r.question === 'enrichment' ? [h('dt', 'Graph'), h('dd', describeGraph(s.graph?.parameters))] : [h('dt', 'Distances'), h('dd', String(s.distances ?? '—'))],
+        h('dt', 'Cells'), h('dd', `${(s.labeled ?? 0).toLocaleString('en-US')} labeled of ${(s.cells ?? 0).toLocaleString('en-US')}`),
+        s.strata?.length ? [h('dt', 'Dealt within'), h('dd', s.strata.map((x) => x.name).join(', '))] : null,
+        r.question === 'enrichment' ? [h('dt', 'Pairs that differ'), h('dd', String(s.significant ?? 0))] : null,
+        s.enriched?.length ? [h('dt', 'Most'), h('dd', s.enriched.map(pair).join('; '))] : null,
+        s.depleted?.length ? [h('dt', 'Least'), h('dd', s.depleted.map(pair).join('; '))] : null,
+        h('dt', 'Method'), h('dd', `${r.method?.name ?? ''} ${r.method?.version ?? ''}`.trim()),
+        h('dt', 'Artifact'), h('dd.mono', r.id)),
+      h('div.btn-row', { style: { marginTop: '8px' } },
+        h('button.btn.small', { type: 'button', onclick: () => {
+          app.focusItem({ kind: 'spatial', id: r.id });
+          app.setMode('spatial');
+        } }, icon('graph'), 'In the Spatial view')),
+      r.method?.citation ? h('p.muted', { style: { margin: '8px 0 0', fontSize: '11.5px' } }, r.method.citation) : null);
+  }
+
   // A label set: its clustering, marker set, cells labeled at each level, and parameters.
   function labelsSection(r) {
     const { project } = app.store;
@@ -339,6 +366,10 @@ export function mountInspector(app) {
     if (focus?.kind === 'clustering') {
       const c = app.store.project.artifacts.find((a) => a.kind === 'clustering' && a.id === focus.id);
       if (c) return clusteringSection(c);
+    }
+    if (focus?.kind === 'spatial') {
+      const r = app.store.project.artifacts.find((a) => a.kind === 'spatial' && a.id === focus.id);
+      if (r) return analysisSection(r);
     }
     if (focus?.kind === 'graph') {
       const g = app.store.project.artifacts.find((a) => a.kind === 'graph' && a.id === focus.id);
