@@ -60,6 +60,31 @@ with the cells it comes from.
     0.999), and every co-occurrence ratio Squidpy's routine's in float64 (to 10⁻¹⁴; its float32
     places 3 pairs of Lung and 1 of Breast on the other side of a distance); in the page, the
     counts, expectation, a pair's cells and a co-occurrence ratio against the suite's own.
+- **How far apart, and at what scale (wave 6, slice 3).** Two more questions in the Spatial view.
+  - **Nearest distances:** each label's cells' distance to the nearest cell of each label, up to a
+    reach (100 µm); each pair's median against the labels dealt again to the same cells (z,
+    two-sided p, Benjamini–Hochberg), and the distribution of the distances with chance's
+    envelope. A heat map, red where nearer than chance, and tables of the nearest and farthest.
+  - **Ripley's K and L,** of each label and across each pair, in a window (the tissue, its cells'
+    footprint with narrow gaps closed and holes kept, or a drawn region), with Ripley's isotropic
+    edge correction computed exactly for any polygon; shown as L(r) − r against the envelope of the
+    labels dealt at random, with a global test over the radii; tables of the labels that gather and
+    those that keep apart.
+  - **Effect sizes first:** among the significant pairs, tables and summaries rank by the size of
+    the effect (a ratio, or µm), not by z.
+  - **Remote control:** `spatial_analysis` asks both (`distances`, `ripley`, with `reach`,
+    `window`, `closing`, `correction`); `show_tissue`'s `cells_of` shows the cells within a
+    distance of each other.
+  - **Validated:** a window's area, inside, edge distance and circle shares by hand and against
+    Ripley's closed form for rectangles (2,000 cases, to 10⁻⁹); K of complete spatial randomness
+    within 0.6% of πr² in a square and an L-shaped window (without a correction, 8% to 13% short at
+    100 µm); a Thomas process's K within 6%; nearest distances against an exhaustive search; labels
+    kept apart, drawn together and dealt at random; on both development bundles and the standard
+    simulated tissue, nearest distances SciPy's k-d tree's exactly, K without a correction
+    astropy's exactly, and the isotropic correction the same estimator computed independently to
+    10⁻⁸ (astropy's variant, weighing each pair by one circle, a median of 0.6% apart); in the page,
+    a pair's median nearest distance, K in a region and the cells within a radius against the
+    suite's own.
 
 ## 0.5.0 (2026-10-17)
 

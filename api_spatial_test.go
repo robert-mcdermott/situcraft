@@ -136,6 +136,25 @@ func TestSpatialAnalyses(t *testing.T) {
 	if s.Question != "cooccurrence" || s.Distances != 3 {
 		t.Errorf("the co-occurrence: %+v", s)
 	}
+	// Nearest distances, and Ripley's K in the tissue and in a region.
+	dist, _ := run(fmt.Sprintf(`{"question":"distances","segmentation":%q,"cells":%s,"labels":%s,"parameters":{"permutations":49,"reach":40,"step":5}}`, seg.ID, chosenCells(keep, ""), labelsJSON))
+	dm, _ := f.a.artifacts.Get(dist)
+	json.Unmarshal(dm.Summary, &s)
+	if s.Question != "distances" {
+		t.Errorf("nearest distances: %+v", s)
+	}
+	tissue, _ := run(fmt.Sprintf(`{"question":"ripley","segmentation":%q,"cells":%s,"labels":%s,"window":{"kind":"tissue","closing":5},"parameters":{"radii":[5,10,15],"permutations":19}}`, seg.ID, chosenCells(keep, ""), labelsJSON))
+	tm, _ := f.a.artifacts.Get(tissue)
+	json.Unmarshal(tm.Summary, &s)
+	if s.Question != "ripley" || s.Window == nil || s.Window.Kind != "tissue" || !(s.Window.Area > 1000) || s.Window.Closing != 5 {
+		t.Errorf("Ripley's K in the tissue: %+v %+v", s, s.Window)
+	}
+	region, _ := run(fmt.Sprintf(`{"question":"ripley","segmentation":%q,"cells":%s,"labels":%s,"window":{"kind":"region","region":{"id":"reg-2","name":"Box","version":1},"geometry":[[[[0,0],[60,0],[60,50],[0,50]]]]},"parameters":{"radii":[5,10],"permutations":19}}`, seg.ID, chosenCells(keep, ""), labelsJSON))
+	rm, _ := f.a.artifacts.Get(region)
+	json.Unmarshal(rm.Summary, &s)
+	if s.Window == nil || s.Window.Kind != "region" || s.Window.Area != 3000 || s.Window.Region.Name != "Box" {
+		t.Errorf("Ripley's K in a region: %+v", s.Window)
+	}
 	bad := func(sumOf string) string {
 		return fmt.Sprintf(`{"id":"lab-x","kind":"labels","name":"By turns","level":0,"names":["A","B","C"],"codes":%q,"checksum":%q}`, codes, sumOf)
 	}
@@ -149,6 +168,11 @@ func TestSpatialAnalyses(t *testing.T) {
 		{fmt.Sprintf(`{"question":"enrichment","segmentation":%q,"graph":%q,"labels":%s}`, seg.ID, g.ID, bad(strings.Repeat("0", 64))), "checksum"},
 		{fmt.Sprintf(`{"question":"enrichment","segmentation":%q,"graph":%q,"labels":{"names":["A"],"codes":%q,"checksum":%q}}`, seg.ID, g.ID, short, shortSum), "the segmentation has"},
 		{fmt.Sprintf(`{"question":"enrichment","segmentation":%q,"graph":"gra-0000000000","labels":%s}`, seg.ID, labelsJSON), "No such graph"},
+		{fmt.Sprintf(`{"question":"ripley","segmentation":%q,"cells":%s,"labels":%s,"window":{"kind":"hull"}}`, seg.ID, chosenCells(keep, ""), labelsJSON), "no window"},
+		{fmt.Sprintf(`{"question":"ripley","segmentation":%q,"cells":%s,"labels":%s,"window":{"kind":"region","region":{"id":"r","name":"r","version":1},"geometry":[[[[0,0],[1,1]]]]}}`, seg.ID, chosenCells(keep, ""), labelsJSON), "fewer than three"},
+		{fmt.Sprintf(`{"question":"ripley","segmentation":%q,"cells":%s,"labels":%s,"parameters":{"correction":"translation"}}`, seg.ID, chosenCells(keep, ""), labelsJSON), "isotropic or none"},
+		{fmt.Sprintf(`{"question":"distances","segmentation":%q,"cells":%s,"labels":%s,"window":{"kind":"tissue"}}`, seg.ID, chosenCells(keep, ""), labelsJSON), "Only Ripley"},
+		{fmt.Sprintf(`{"question":"distances","segmentation":%q,"cells":%s,"labels":%s,"parameters":{"reach":0}}`, seg.ID, chosenCells(keep, ""), labelsJSON), "reach"},
 	} {
 		if rec := f.post("/api/local/0/spatial", c.body); rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), c.want) {
 			t.Errorf("%s: %d %s", c.want, rec.Code, rec.Body)

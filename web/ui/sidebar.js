@@ -130,9 +130,9 @@ const SECTIONS = [
   {
     kind: 'spatial', title: 'Spatial analyses', icon: 'graph',
     items: (project) => project.artifacts.filter((a) => a.kind === 'spatial'),
-    label: (a) => `${a.question === 'enrichment' ? 'Enrichment' : 'Co-occurrence'} · ${a.summary?.labels?.name ?? 'labels'}`,
+    label: (a) => `${{ enrichment: 'Enrichment', cooccurrence: 'Co-occurrence', distances: 'Nearest distances', ripley: 'Ripley\'s K' }[a.question] ?? a.question} · ${a.summary?.labels?.name ?? 'labels'}`,
     itemIcon: (a) => (a.state === 'complete' ? 'graph' : 'warning'),
-    meta: (a) => (a.state !== 'complete' ? a.state : a.question === 'enrichment' ? `${a.summary?.significant ?? 0} pairs` : `${a.summary?.distances ?? '?'} distances`),
+    meta: (a) => (a.state !== 'complete' ? a.state : a.question === 'cooccurrence' ? `${a.summary?.distances ?? '?'} distances` : `${a.summary?.significant ?? 0} pairs`),
     empty: 'Questions asked of a label set\'s cells (which types are neighbors, at what distances), each answer kept with its inputs.',
   },
   {

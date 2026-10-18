@@ -1214,7 +1214,7 @@ export function installRemote(app) {
 
     async spatial_analysis(args) {
       const { dataset, seg, version } = labelVersionArg(args);
-      const question = choose(args.question ?? 'enrichment', ['enrichment', 'cooccurrence'], 'question');
+      const question = choose(args.question ?? 'enrichment', ['enrichment', 'cooccurrence', 'distances', 'ripley'], 'question');
       let graph;
       if (question === 'enrichment') {
         const list = graphsOf(project(), dataset.id, seg.id).filter((g) => g.state === 'complete');
@@ -1237,7 +1237,12 @@ export function installRemote(app) {
         cells = filters.find((f) => f.id === ref)?.id ?? (named.includes(ref) ? filters[named.indexOf(ref)].id : latest(choose(ref, [...new Set(filters.map((f) => f.name))], 'filter'))?.id);
       }
       const ask = { segmentation: seg.id, question, labels: `${version.id}|${version.level}`, graph, within: regionIds('within'), regions: regionIds('regions'), cells };
-      for (const [arg, key] of [['permutations', 'permutations'], ['seed', 'seed'], ['up_to', 'farthest'], ['every', 'step']]) if (args[arg] !== undefined) ask[key] = finite(args[arg], arg);
+      const keys = question === 'distances' ? [['permutations', 'dPermutations'], ['seed', 'seed'], ['reach', 'reach'], ['every', 'dStep']]
+        : question === 'ripley' ? [['permutations', 'dPermutations'], ['seed', 'seed'], ['up_to', 'upTo'], ['every', 'every'], ['closing', 'closing']]
+          : [['permutations', 'permutations'], ['seed', 'seed'], ['up_to', 'farthest'], ['every', 'step']];
+      for (const [arg, key] of keys) if (args[arg] !== undefined) ask[key] = finite(args[arg], arg);
+      if (args.correction !== undefined) ask.correction = choose(args.correction, ['isotropic', 'none'], 'correction');
+      if (args.window !== undefined) ask.window = /^(the )?tissue$/i.test(String(args.window)) ? 'tissue' : regionRef(dataset, args.window).id;
       if (args.weight !== undefined) ask.weight = choose(args.weight, ['edges', 'boundary'], 'weight');
       if (args.pairs !== undefined) ask.pairs = choose(args.pairs, ['within', 'between'], 'pairs');
       await settleMode('spatial');
@@ -1252,13 +1257,40 @@ export function installRemote(app) {
       const names = a.labels.names;
       if (question === 'enrichment') {
         const pairs = rankPairs(a).map((p) => ({ a: names[p.a], b: names[p.b], count: p.count, expected: p.expected, ratio: p.ratio, z: Number.isFinite(p.z) ? p.z : null, p: p.p, padj: p.padj }));
-        const sig = pairs.filter((p) => p.padj < 0.05 && p.z !== null);
+        // Among the significant, the strongest effects first.
+        const sig = pairs.filter((p) => p.padj < 0.05 && p.z !== null).sort((x, y) => y.ratio - x.ratio);
         const line = (p) => `${p.a} – ${p.b} ${p.ratio.toFixed(2)}× (z ${p.z.toFixed(1)})`;
         const up = sig.filter((p) => p.z > 0).slice(0, 3).map(line);
         const down = sig.filter((p) => p.z < 0).reverse().slice(0, 3).map(line);
         return {
           message: `${manifest.name}: ${plural(sig.length, 'pair')} of ${plural(pairs.length, 'pair')} neighbors more or less often than at random (adjusted p below 0.05)${up.length ? `; most: ${up.join(', ')}` : ''}${down.length ? `; least: ${down.join(', ')}` : ''}.`,
           data: { id: manifest.id, name: manifest.name, labels: names, graph: a.graph, cells: a.cells, edges: a.enrichment.edges, parameters: a.parameters, strata: a.strata?.regions ?? null, pairs },
+        };
+      }
+      if (question === 'distances') {
+        const r = a.nearest;
+        const K = names.length;
+        const pairs = [];
+        for (let q = 0; q < K * K; q += 1) pairs.push({ from: names[Math.floor(q / K)], to: names[q % K], median: r.median[q], mean: r.mean[q], chance: r.permMean[q], z: r.z[q], p: r.p[q], padj: r.padj[q], beyond: r.beyond[q] });
+        const sig = pairs.filter((x) => x.padj < 0.05 && x.z !== null).sort((x, y) => x.median / x.chance - y.median / y.chance);
+        const line = (x) => `${x.from} → ${x.to} ${x.median.toFixed(1)} µm (chance ${x.chance.toFixed(1)})`;
+        const near = sig.filter((x) => x.z < 0).slice(0, 3).map(line);
+        const far = sig.filter((x) => x.z > 0).reverse().slice(0, 3).map(line);
+        return {
+          message: `${manifest.name}: ${plural(sig.length, 'pair')} of ${plural(pairs.length, 'pair')} nearer or farther than at random (adjusted p below 0.05)${near.length ? `; nearest: ${near.join(', ')}` : ''}${far.length ? `; farthest: ${far.join(', ')}` : ''}.`,
+          data: { id: manifest.id, name: manifest.name, labels: names, cells: a.cells, reach: r.reach, parameters: a.parameters, pairs },
+        };
+      }
+      if (question === 'ripley') {
+        const r = a.ripley;
+        const K = names.length;
+        const R = r.radii.length;
+        const curves = [];
+        for (let q = 0; q < K * K; q += 1) curves.push({ from: names[Math.floor(q / K)], to: names[q % K], l: r.l.slice(q * R, (q + 1) * R), mean: r.mean.slice(q * R, (q + 1) * R), lo: r.lo.slice(q * R, (q + 1) * R), hi: r.hi.slice(q * R, (q + 1) * R), p: r.p[q], padj: r.padj[q] });
+        const sig = curves.filter((c) => c.padj < 0.05);
+        return {
+          message: `${manifest.name}: in ${a.window.kind === 'region' ? `the region ${a.window.region.name}` : 'the tissue'} (${Math.round(a.window.area).toLocaleString('en-US')} µm²), radii ${r.radii[0]} to ${r.radii.at(-1)} µm; ${plural(sig.length, 'curve')} of ${plural(curves.length, 'curve')} leave the envelope of the labels dealt at random (adjusted p below 0.05)${r.outside ? `; ${plural(r.outside, 'cell')} outside the window left out` : ''}.`,
+          data: { id: manifest.id, name: manifest.name, labels: names, window: a.window, radii: r.radii, correction: r.correction, cells: r.cells, outside: r.outside, curves },
         };
       }
       const co = a.cooccurrence;
@@ -2150,8 +2182,8 @@ export function installRemote(app) {
     const a = names.indexOf(choose(spec.a, names, 'label'));
     const b = names.indexOf(choose(spec.b ?? spec.a, names, 'label'));
     let k = 0;
-    if (data.analysis.question === 'cooccurrence') {
-      const ds = data.analysis.cooccurrence.distances;
+    if (data.analysis.question !== 'enrichment') {
+      const ds = data.analysis.cooccurrence?.distances ?? data.analysis.nearest?.distances ?? data.analysis.ripley.radii;
       const d = spec.distance === undefined ? ds[0] : finite(spec.distance, 'distance');
       k = ds.indexOf(d);
       if (k < 0) throw new ActionError(`The analysis is at ${ds.join(', ')} µm.`);

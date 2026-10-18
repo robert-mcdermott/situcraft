@@ -340,6 +340,16 @@
   "violations": []
  },
  {
+  "scene": "ripley",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "ripley",
+  "theme": "light",
+  "violations": []
+ },
+ {
   "scene": "clusters",
   "theme": "dark",
   "violations": []

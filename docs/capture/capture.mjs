@@ -473,6 +473,23 @@ const scenes = {
     await scrollTo('.sp-answer', 'start');
     await sleep(300);
   },
+  // At what scale (wave 6, slice 3): Ripley's L of the Lung classes in the tissue, the stromal cells'
+  // curve above the envelope of the labels dealt at random.
+  async ripley() {
+    await act('open_example', { example: 'lung' });
+    await act('cluster_cells', {});
+    const markers = await act('label_cells', { markers: 'lung' });
+    await act('spatial_analysis', { question: 'ripley', labels: markers.data.id, level: 1 });
+    await waitFor(`Boolean(document.querySelector('.sp-answer .sp-chart'))`);
+    // Each choice draws the answer again, so the second select is found after the first is drawn.
+    for (const id of ['sp-from', 'sp-to']) {
+      await waitFor(`Boolean(document.getElementById('${id}'))`);
+      await js(`(() => { const el = document.getElementById('${id}'); el.value = String([...el.options].findIndex((o) => o.text === 'Stromal')); el.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+      await waitFor(`document.getElementById('${id}')?.selectedOptions[0]?.text === 'Stromal'`);
+    }
+    await scrollTo('.sp-answer .sp-pair-tables', 'start');
+    await sleep(300);
+  },
   // The Breast example's clusters on the tissue (wave 4, slice 1): the cells filled by cluster,
   // with the legend.
   async clusters() {

@@ -1,5 +1,6 @@
 """SituCraft's neighborhood enrichment and co-occurrence against Squidpy's (wave 6, slice 2;
-research.md §6.2).
+research.md §6.2), and its nearest distances and Ripley's K against SciPy's k-d tree and astropy's
+estimator (slice 3; §6.3).
 
 Reads <data>/spatial/<set>/ as SITUCRAFT_WRITE_REFERENCE=1 go test ./validation/ -run ReferenceSpatial
 wrote it: the cells analyzed (their centroids and labels, SituCraft's clusters), the Delaunay and
@@ -17,6 +18,15 @@ are left out. Squidpy's co_occurrence computes in float32 (its coordinates, dist
 thresholds), SituCraft in float64 from float32 coordinates, so pairs within float32's rounding of a
 distance may be counted at one and not the other: the pairs so placed are counted, and Squidpy's
 own routine is run again on float64 coordinates, which must agree exactly.
+
+Nearest distances: each label's cells' distance to the nearest cell of each label (another of its
+own), at most the reach, by a k-d tree: the medians and means must agree (SituCraft keeps distances
+in float32). Ripley's K of each label alone in the rectangle of the middle half of the cells' extent:
+astropy's RipleysKEstimator without a correction ("none") must agree exactly; its isotropic
+correction ("ripley") weighs each pair by the circle about its first point only, counted both ways,
+where SituCraft weighs each direction by its own cell's circle, so the two differ a little (most for
+labels of few cells). The same estimator as SituCraft's is computed here too, every pair in both
+directions with Ripley's closed form for a rectangle (Ripley 1977), and must agree exactly.
 
 Usage: compare.py <data> <set> <out.json>
 """
@@ -111,6 +121,73 @@ def main():
     flipped = sum(int(np.sum((d64 <= t) != (d32sq <= np.float32(t) ** 2))) for t in distances)
     result["cooccurrence"] = {"distances": len(distances), "compared": compared, "maxDifference": largest64, "maxDifferenceFloat32": largest32, "pairsPlacedOtherwiseInFloat32": flipped}
     print(f"{set_name} co-occurrence: {len(distances)} distances, {compared} ratios compared; Squidpy's routine in float64: largest difference {largest64:.3g}; its float32 API: {largest32:.3g}, {flipped} pairs placed otherwise by float32's rounding")
+    # Nearest distances by a k-d tree.
+    from scipy.spatial import cKDTree
+    nearest = ours["nearest"]
+    reach = nearest["reach"]
+    worst = 0.0
+    for b in range(K):
+        idx = np.nonzero(label == b)[0]
+        if len(idx) == 0:
+            continue
+        tree = cKDTree(xy[idx])
+        d, j = tree.query(xy, k=min(2, len(idx)))
+        if d.ndim == 1:
+            d, j = d[:, None], j[:, None]
+        for a in range(K):
+            cells = np.nonzero(label == a)[0]
+            vals = []
+            for c in cells:
+                # The nearest that is not the cell itself.
+                k = 1 if idx[j[c, 0]] == c and d.shape[1] > 1 else 0
+                v = d[c, k] if not (idx[j[c, 0]] == c and d.shape[1] == 1) else np.inf
+                vals.append(min(float(np.float32(v)), reach))
+            q = a * K + b
+            worst = max(worst, abs(np.median(vals) - nearest["median"][q]), abs(np.mean(vals) - nearest["mean"][q]))
+    result["nearest"] = {"pairs": int(K * K), "maxDifference": worst}
+    print(f"{set_name} nearest distances: {K * K} pairs, largest difference from SciPy's {worst:.2g} µm")
+
+    # Ripley's K of each label alone in the rectangle, against astropy.
+    from astropy.stats import RipleysKEstimator
+    rp = ours["ripley"]
+    x0, y0, x1, y1 = rp["rectangle"]
+    inside = (xy[:, 0] > x0) & (xy[:, 0] < x1) & (xy[:, 1] > y0) & (xy[:, 1] < y1)
+    est = RipleysKEstimator(area=(x1 - x0) * (y1 - y0), x_min=x0, y_min=y0, x_max=x1, y_max=y1)
+    radii = np.array(rp["radii"])
+    def isotropic(pts):
+        """K of points in the rectangle, each ordered pair weighted by its first point's circle."""
+        n = len(pts)
+        h = np.minimum(pts[:, 0] - x0, x1 - pts[:, 0])
+        v = np.minimum(pts[:, 1] - y0, y1 - pts[:, 1])
+        d = np.hypot(pts[:, None, 0] - pts[None, :, 0], pts[:, None, 1] - pts[None, :, 1])
+        np.fill_diagonal(d, np.inf)
+        hh, vv = h[:, None] * np.ones((1, n)), v[:, None] * np.ones((1, n))
+        with np.errstate(invalid="ignore", divide="ignore"):
+            near = d <= np.hypot(hh, vv)
+            w1 = 1 - (np.arccos(np.minimum(hh, d) / d) + np.arccos(np.minimum(vv, d) / d)) / np.pi
+            w2 = 0.75 - (np.arccos(np.minimum(hh / d, 1)) + np.arccos(np.minimum(vv / d, 1))) / (2 * np.pi)
+            share = np.where(near, w1, w2)
+        area = (x1 - x0) * (y1 - y0)
+        return np.array([area * np.sum((d <= r) / share) / (n * (n - 1)) for r in radii])
+
+    rel_none, rel_iso, rel_exact = [], [], []
+    for a in range(K):
+        pts = xy[inside & (label == a)]
+        if len(pts) < 10:
+            continue
+        none = est(pts, radii, mode="none")
+        iso = est(pts, radii, mode="ripley")
+        exact = isotropic(pts)
+        for k in range(len(radii)):
+            if none[k] > 0:
+                rel_none.append(abs(rp["none"][a][k] / none[k] - 1))
+            if iso[k] > 0:
+                rel_iso.append(abs(rp["isotropic"][a][k] / iso[k] - 1))
+            if exact[k] > 0:
+                rel_exact.append(abs(rp["isotropic"][a][k] / exact[k] - 1))
+    result["ripley"] = {"labels": int(sum(1 for a in range(K) if np.sum(inside & (label == a)) >= 10)), "maxRelativeNone": max(rel_none, default=0.0), "maxRelativeExact": max(rel_exact, default=0.0), "maxRelativeIsotropic": max(rel_iso, default=0.0), "medianRelativeIsotropic": float(np.median(rel_iso)) if rel_iso else 0.0}
+    result["versions"]["astropy"] = version("astropy")
+    print(f"{set_name} Ripley's K: {result['ripley']['labels']} labels; none within {result['ripley']['maxRelativeNone']:.2g} of astropy's; isotropic within {result['ripley']['maxRelativeExact']:.2g} of the same estimator by Ripley's formula, and within {result['ripley']['maxRelativeIsotropic']:.3f} of astropy's (median {result['ripley']['medianRelativeIsotropic']:.4f})")
     out.write_text(json.dumps(result, indent=1) + "\n")
 
 

@@ -2699,6 +2699,56 @@ labeled cells): stromal–stromal 3.99× (z 18.3), endothelial–stromal 2.71× 
 endothelial–endothelial 3.13× (z 12.3); epithelial–endothelial 0.78× (z −7.6), epithelial–stromal
 0.79× (z −7.5), epithelial–immune 0.89× (z −3.2).
 
+### 6.3 Nearest distances and Ripley's K and L (verified, wave 6, slice 3)
+
+**The null.** Cells are not points of a Poisson process: they cannot overlap, and tissue is neither
+uniform nor whole (airways, vessels, tears). Complete spatial randomness, K = πr² (L = r), is shown
+as a reference line only; every comparison is with random labeling, the labels dealt again to the
+same cells, which keeps the cells' places, the tissue's shape and every edge effect.
+
+**Windows.** A window is a set of boundary segments and the area they enclose by the even–odd rule:
+a drawn region's polygons (holes and several parts allowed), or the tissue, its cells' pixels from the
+segmentation's label raster on a grid of about 1 µm (the raster's pixels grouped), closed by a radius
+ρ (10 µm): dilated to the pixels within ρ of a cell's pixel, then eroded to those farther than ρ from
+every pixel the dilation left out, both by the exact Euclidean distance transform (§3.1). Gaps
+narrower than 2ρ are tissue; wider ones, and the space beyond the section, are not. Lung 2-FOV:
+687,212 µm².
+
+**Ripley's K** (Ripley 1977; L = √(K/π), Besag 1977) of labels A and B in window W:
+K_AB(r) = |W| / (n_A (n_B − [A = B])) Σ_{i ∈ A} Σ_{j ∈ B, j ≠ i} w_ij 1[d_ij ≤ r], with Ripley's
+isotropic weight w_ij = 1 / (the share of the circle about i of radius d_ij inside W), computed
+exactly: the circle cut where it crosses the boundary's segments, each arc in or out by its
+midpoint (1 when d_ij is within i's distance to the edge). For a rectangle and circles reaching two
+of its sides this is Ripley's closed form, 1 − (acos(min(h, r)/r) + acos(min(v, r)/r))/π, or
+3/4 − (acos(h/r) + acos(v/r))/(2π) past the corner; SituCraft's shares agree with it to 10⁻⁹. Random
+labeling's envelope: the pointwise 2.5% and 97.5% of 199 permutations' L; the global test: the
+maximum over r of |L − mean L*|, its p (1 + k)/(1 + n) (Diggle 2003; Baddeley et al. 2014).
+
+| Check | Result |
+| --- | --- |
+| CSR, 30 × 1,000 points, isotropic correction, r = 25–100 µm | K / πr² 0.997–1.006 (square), 1.000–1.006 (L-shaped window) |
+| CSR, no correction, r = 100 µm | K / πr² 0.918 (square), 0.870 (L) |
+| Thomas process (κ = 20 mm⁻², μ = 50, σ = 20 µm), 20 patterns | K within 6% of πr² + (1 − exp(−r²/4σ²))/κ at r = 20–80 µm |
+| astropy 8.0.2 `RipleysKEstimator`, each label in the middle rectangle | "none" exactly (0 and 3 × 10⁻¹⁶ relative); "ripley" a median 0.45–0.61% apart (max 1.5%, 4.0%, 10.3% on the simulated, Lung and Breast sets) |
+| The same isotropic estimator by Ripley's formula (NumPy, every ordered pair) | to 7.9 × 10⁻¹⁰, 2.5 × 10⁻⁹, 1.5 × 10⁻⁸ relative (SituCraft keeps the weights in float32) |
+
+astropy's "ripley" mode weighs a pair by the circle about its first point only and counts it both
+ways (and counts d < r), so it is a different estimator, apart mostly for labels of few cells.
+
+**Nearest distances.** Each cell's distance to the nearest cell of each label (another of its own,
+for its label), up to a reach (100 µm; farther counts as the reach), kept in float32; each ordered
+pair's median and mean, and the share within each step's distance (cross-type G, Diggle 2003);
+against random labeling, z of the median and its two-sided p, Benjamini–Hochberg over the ordered
+pairs, and the distribution's pointwise 2.5–97.5% envelope. Every pair's median and mean are SciPy's
+`cKDTree` query's exactly on the three reference sets. Each cell's neighbors within the reach are
+found and sorted once (Lung: about 370 a cell); each permutation takes, for each cell, the first
+neighbor of each label.
+
+**Lung's classes** (5,555 labeled cells): stromal cells' nearest stromal cell at a median 15.3 µm
+(chance 20.0), endothelial cells' nearest endothelial 17.8 µm (20.9); epithelial cells' nearest
+stromal 24.4 µm (19.9); in the tissue window, stromal cells' L 11.4 µm above chance's mean at 60 µm,
+stromal cells' L around epithelial cells 3.6 µm below it at 100 µm.
+
 ## 7. Datasets
 
 | Dataset | Source | Size | License | Use |

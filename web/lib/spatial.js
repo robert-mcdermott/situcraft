@@ -15,12 +15,24 @@ export const QUESTIONS = [
     id: 'cooccurrence', label: 'Co-occurrence across distances',
     help: 'How much likelier a label\'s cells are within a distance of another label\'s cells than of any cell, at distances from close neighbors to the scale of tissue domains (as Squidpy computes it). Above 1, found that near more often than their share; below 1, less. Descriptive: it has no test.',
   },
+  {
+    id: 'distances', label: 'Nearest distances',
+    help: 'How far each label\'s cells are from the nearest cell of each label, against the labels dealt again to the same cells: a median shorter than chance gives says the two lie nearer each other than their numbers explain; longer, that they keep apart. With the distribution of the distances and its envelope.',
+  },
+  {
+    id: 'ripley', label: 'Ripley\'s K and L',
+    help: 'How many cells of a label lie within each distance of a cell of the same or another label, in a window (the tissue, or a region), corrected for the window\'s edge (Ripley\'s isotropic correction), as L, a distance (L = r for points scattered at random). Compared with the labels dealt again to the same cells: L above its envelope means the cells gather, or the two labels draw together, at that scale; below, they spread out or keep apart.',
+  },
 ];
 
 export const ENRICHMENT_DEFAULTS = { permutations: 1000, seed: 20250, weight: 'edges' };
 
 // Distances of 10 to 150 µm, the pairs within each.
 export const COOCCURRENCE_DEFAULTS = { distances: Array.from({ length: 15 }, (_, i) => 10 * (i + 1)), pairs: 'within' };
+
+// Nearest distances to 100 µm, their distribution every 2.5 µm; Ripley's K to 100 µm every 5.
+export const DISTANCES_DEFAULTS = { permutations: 199, seed: 20250, reach: 100, step: 2.5 };
+export const RIPLEY_DEFAULTS = { radii: Array.from({ length: 20 }, (_, i) => 5 * (i + 1)), correction: 'isotropic', permutations: 199, seed: 20250 };
 
 // What is wrong with an enrichment's or a co-occurrence's parameters, as the program would say it,
 // or null.
@@ -37,6 +49,21 @@ export function checkAnalysisParams(question, p) {
     if (d.some((v, i) => !Number.isFinite(v) || v <= 0 || (i > 0 && v <= d[i - 1]))) return 'The distances increase from more than 0 µm.';
     if (d.at(-1) > 1000) return 'A co-occurrence reaches at most 1,000 µm.';
     if (!['within', 'between'].includes(p.pairs)) return 'Pairs are counted within each distance or between distances.';
+    return null;
+  }
+  if (question === 'distances') {
+    if (!Number.isInteger(p.permutations) || p.permutations < 19 || p.permutations > 9999) return 'Permutations are a whole number from 19 to 9,999.';
+    if (!(p.reach > 0 && p.reach <= 1000)) return 'The reach is more than 0 and at most 1,000 µm.';
+    if (!(p.step > 0) || p.reach / p.step > 200) return 'The step is more than 0 µm and at least the reach over 200.';
+    return null;
+  }
+  if (question === 'ripley') {
+    const r = p.radii ?? [];
+    if (r.length < 1 || r.length > 200) return 'Ripley\'s K is at 1 to 200 radii.';
+    if (r.some((v, i) => !Number.isFinite(v) || v <= 0 || (i > 0 && v <= r[i - 1]))) return 'The radii increase from more than 0 µm.';
+    if (r.at(-1) > 500) return 'Ripley\'s K reaches at most 500 µm.';
+    if (!['isotropic', 'none'].includes(p.correction)) return 'The edge correction is isotropic or none.';
+    if (!Number.isInteger(p.permutations) || p.permutations < 19 || p.permutations > 9999) return 'Permutations are a whole number from 19 to 9,999.';
     return null;
   }
   return `No question ${question}.`;

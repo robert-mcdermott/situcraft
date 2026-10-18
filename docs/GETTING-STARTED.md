@@ -899,6 +899,36 @@ more often than their share. It counts the pairs within each distance as Squidpy
 each distance on its own, the pairs since the distance before. It is descriptive, without a test.
 Choose a label and a distance to show those cells on the tissue.
 
+### How far apart, and at what scale
+
+**Nearest distances** measures, for each label's cells, the distance to the nearest cell of each
+label (another of their own, for a label with itself), searched up to a reach (100 µm). The median
+is compared with the median when the labels are dealt again to the same cells: a shorter median
+says the two lie nearer each other than their numbers explain, a longer one that they keep apart.
+The heat map is red where nearer, blue where farther; it is not symmetric, since a rare label lies
+near a common one more surely than the other way. Choose a pair for the distribution of its
+distances (the share of cells whose nearest lies within each distance) against chance's envelope.
+
+**Ripley's K and L** count how many cells of a label lie within each distance r of a cell of the
+same or another label, in a **window**: the tissue (its cells' footprint, with gaps narrower than
+twice the closing radius filled; holes such as airways and the space beyond the section left out)
+or a region you drew. Cells near the window's edge have fewer neighbors inside it; Ripley's
+isotropic correction counts each pair as if the circle through it lay wholly inside. L = √(K/π)
+is a distance, equal to r for points scattered at random, so the curve shows L(r) − r. That line is
+a reference only: cells cannot overlap and tissue is not uniform. The comparison is with the labels
+dealt again to the same cells, as a band (the permutations' 2.5% to 97.5%), and a global test over
+the radii. Above the band, a label's cells gather (or two labels draw together) at that scale;
+below it, they spread out (or keep apart). Keep the radii below about a quarter of the window's
+width.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/ripley-dark.webp">
+  <img alt="The Spatial view's answer of Ripley's K for the Lung example's classes in the tissue: tables of the labels that gather and keep apart, and the stromal cells' L(r) − r above the band of the labels dealt at random" src="images/ripley-light.webp">
+</picture>
+
+Choose a distance, and **Show these cells on the tissue** highlights the cells within it of each
+other.
+
 A section's cells are not independent replicates: these numbers describe this section. Comparing
 conditions needs samples, compared as samples (a later release).
 

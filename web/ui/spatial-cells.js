@@ -1,7 +1,7 @@
 // The cells a spatial analysis's number comes from, shown on the tissue (app.showSpatial): an
 // enrichment's pair, its cells with a neighbor of the other label and the edges between them drawn
-// in color over the graph; a co-occurrence's label near another, the cells of each that near. Used
-// by the Spatial view and by remote control.
+// in color over the graph; a co-occurrence's, nearest distances' or Ripley's label near another, the
+// cells of each that near. Used by the Spatial view and by remote control.
 
 import { formatCount } from './dom.js';
 import { readCells } from '../lib/viewer-data.js';
@@ -32,7 +32,9 @@ export async function showAnalysisCells(app, { dataset, item, segmentation, anal
       mask, emphasis: { test: (i, j) => (label[i] === a && label[j] === b) || (label[i] === b && label[j] === a), color: '#ff4fd8' },
     };
   } else {
-    const co = analysis.cooccurrence;
+    // A label's cells near another's: within a co-occurrence's distance (or since the one before),
+    // within a nearest distance, or within one of Ripley's radii.
+    const co = analysis.cooccurrence ?? { distances: analysis.nearest?.distances ?? analysis.ripley.radii, pairs: 'within' };
     const url = segmentation.source === 'instrument' ? `${item.url}/cells` : `${item.url}/segmentations/${encodeURIComponent(segmentation.id)}/cells`;
     const response = await fetch(url);
     if (!response.ok) throw new Error(`its cells: HTTP ${response.status}`);
@@ -44,7 +46,8 @@ export async function showAnalysisCells(app, { dataset, item, segmentation, anal
     const dmin = co.pairs === 'between' && k > 0 ? co.distances[k - 1] : -Infinity;
     const near = nearCells(x, y, cells.label, a, b, d, dmin);
     for (let i = 0; i < cells.n; i += 1) if (near.cells[i]) mask[cells.rows[i]] = 1;
-    focus = { title: `${names[b]} near ${names[a]}`, text: `${formatCount(near.b)} ${names[b]} cells ${dmin > 0 ? `${dmin} to ${d}` : `within ${d}`} µm of ${formatCount(near.a)} ${names[a]} cells`, mask };
+    const within = dmin > 0 ? `${dmin} to ${d}` : `within ${d}`;
+    focus = { title: `${names[b]} near ${names[a]}`, text: a === b ? `${formatCount(near.a)} ${names[a]} cells with another ${within} µm` : `${formatCount(near.b)} ${names[b]} cells ${within} µm of ${formatCount(near.a)} ${names[a]} cells`, mask };
   }
   app.showSpatial({ dataset, segmentation: segmentation.id, fill, graph, focus });
   return { title: focus.title, text: focus.text, cells: mask.reduce((n, v) => n + v, 0) };

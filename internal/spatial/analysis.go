@@ -28,6 +28,8 @@ import (
 const (
 	QuestionEnrichment   = "enrichment"
 	QuestionCooccurrence = "cooccurrence"
+	QuestionDistances    = "distances"
+	QuestionRipley       = "ripley"
 )
 
 // AnalysisVersion names this version of the analyses, as artifacts record it.
@@ -130,6 +132,54 @@ type CooccurrenceResult struct {
 	Ratio     []Nums    `json:"ratio"`
 }
 
+// NearestResult is nearest distances' numbers in analysis.json: by pair, K × K row-major, and
+// distributions at Distances, (K × K) × D.
+type NearestResult struct {
+	Reach     float64   `json:"reach"`
+	Distances []float64 `json:"distances"`
+	Cells     []int     `json:"cells"`
+	Beyond    []int     `json:"beyond"`
+	Median    Nums      `json:"median"`
+	Mean      Nums      `json:"mean"`
+	PermMean  Nums      `json:"permMean"`
+	PermSD    Nums      `json:"permSd"`
+	Z         Nums      `json:"z"`
+	P         Nums      `json:"p"`
+	PAdj      Nums      `json:"padj"`
+	CDF       Nums      `json:"cdf"`
+	MeanCDF   Nums      `json:"meanCdf"`
+	Lo        Nums      `json:"lo"`
+	Hi        Nums      `json:"hi"`
+}
+
+// RipleyResult is Ripley's K's numbers in analysis.json: curves (K × K) × R over Radii; tests K × K.
+type RipleyResult struct {
+	Radii      []float64 `json:"radii"`
+	Correction string    `json:"correction"`
+	Area       float64   `json:"area"`
+	Cells      []int     `json:"cells"`
+	Pairs      int       `json:"pairs"`
+	Outside    int       `json:"outside"`
+	K          Nums      `json:"k"`
+	L          Nums      `json:"l"`
+	Mean       Nums      `json:"mean"`
+	Lo         Nums      `json:"lo"`
+	Hi         Nums      `json:"hi"`
+	P          Nums      `json:"p"`
+	PAdj       Nums      `json:"padj"`
+}
+
+// WindowRef says what window Ripley's K was in: the tissue (its cells' pixels on a grid, closed by
+// a radius) or a region; its area and boundary.
+type WindowRef struct {
+	Kind     string  `json:"kind"`
+	Region   *Region `json:"region,omitempty"`
+	Closing  float64 `json:"closing,omitempty"`
+	Grid     float64 `json:"grid,omitempty"`
+	Area     float64 `json:"area"`
+	Segments int     `json:"segments"`
+}
+
 // Analysis is analysis.json.
 type Analysis struct {
 	Format        string          `json:"format"`
@@ -146,6 +196,9 @@ type Analysis struct {
 	// One of these, as the question asks.
 	Enrichment   *EnrichmentResult   `json:"enrichment,omitempty"`
 	Cooccurrence *CooccurrenceResult `json:"cooccurrence,omitempty"`
+	Nearest      *NearestResult      `json:"nearest,omitempty"`
+	Ripley       *RipleyResult       `json:"ripley,omitempty"`
+	Window       *WindowRef          `json:"window,omitempty"`
 }
 
 // AnalyzedCells are the cells an analysis is of: of the segmentation's, those in its graph (or chosen,
@@ -259,13 +312,33 @@ type AnalysisSummary struct {
 	Cells   int      `json:"cells"`
 	Labeled int      `json:"labeled"`
 	Strata  []Region `json:"strata,omitempty"`
-	// Enrichment: the pairs most enriched and most depleted (adjusted p below 0.05), up to three
-	// each; and the pairs significant.
+	// Enrichment: the pairs most enriched and most depleted by their ratio, among those whose
+	// adjusted p is below 0.05, up to three each; and the pairs significant.
 	Enriched    []Pair `json:"enriched,omitempty"`
 	Depleted    []Pair `json:"depleted,omitempty"`
 	Significant int    `json:"significant,omitempty"`
 	// Co-occurrence: its distances.
 	Distances int `json:"distances,omitempty"`
+	// Nearest distances: the pairs nearer and farther than chance by their ratio (the median over the
+	// permutations'), among those whose adjusted p is below 0.05, up to three each.
+	Nearer  []Pair `json:"nearer,omitempty"`
+	Farther []Pair `json:"farther,omitempty"`
+	// Ripley's K: the pairs above and below their envelope by the global test, up to three each.
+	Above []Curve `json:"above,omitempty"`
+	Below []Curve `json:"below,omitempty"`
+	// The window, for Ripley's K.
+	Window *WindowRef `json:"window,omitempty"`
+}
+
+// Curve is one pair's Ripley curve, for a summary: where it strays farthest from the permutations'
+// mean (radius, µm; L and the mean there) and its test.
+type Curve struct {
+	A      string  `json:"a"`
+	B      string  `json:"b"`
+	Radius float64 `json:"radius"`
+	L      float64 `json:"l"`
+	Mean   float64 `json:"mean"`
+	PAdj   float64 `json:"padj"`
 }
 
 // CheckAnalysis checks an analysis's files before it is recorded and fills the manifest's summary:
@@ -321,7 +394,101 @@ func CheckAnalysis(dir string, m *artifacts.Manifest) []artifacts.Finding {
 	if a.Strata != nil {
 		s.Strata = a.Strata.Regions
 	}
+	probability := func(name string, p, padj Nums, cells []int) bool {
+		for q := range p {
+			untested := len(cells) != K || cells[q/K] == 0 || cells[q%K]-btoi(q/K == q%K) <= 0
+			if untested && !(math.IsNaN(p[q]) && math.IsNaN(padj[q])) || !untested && (!(p[q] > 0 && p[q] <= 1) || !(padj[q] >= p[q]*(1-1e-12) && padj[q] <= 1)) {
+				fatal("spatial.results", "The %s of pair %d are out of range.", name, q)
+				return false
+			}
+		}
+		return true
+	}
 	switch a.Question {
+	case QuestionDistances:
+		r := a.Nearest
+		if r == nil {
+			fatal("spatial.results", "Nearest distances without their results.")
+			return out
+		}
+		D := len(r.Distances)
+		for _, v := range []Nums{r.Median, r.Mean, r.PermMean, r.PermSD, r.Z, r.P, r.PAdj} {
+			if !square("results", v) {
+				return out
+			}
+		}
+		if len(r.CDF) != K*K*D || len(r.Lo) != K*K*D || len(r.Hi) != K*K*D || len(r.MeanCDF) != K*K*D || len(r.Beyond) != K*K {
+			fatal("spatial.sizes", "The distributions are not %d × %d × %d.", K, K, D)
+			return out
+		}
+		if !probability("p-values", r.P, r.PAdj, r.Cells) {
+			return out
+		}
+		var pairs []Pair
+		for q := range r.P {
+			if r.PAdj[q] < 0.05 && r.PermMean[q] > 0 && !math.IsNaN(r.Z[q]) {
+				pairs = append(pairs, Pair{A: a.Labels.Names[q/K], B: a.Labels.Names[q%K], Ratio: r.Median[q] / r.PermMean[q], Z: r.Z[q], PAdj: r.PAdj[q]})
+			}
+		}
+		// The strongest effects first: the ratio of medians, among the significant.
+		s.Significant = len(pairs)
+		sort.SliceStable(pairs, func(i, j int) bool { return pairs[i].Ratio < pairs[j].Ratio })
+		for _, p := range pairs {
+			if p.Z < 0 && len(s.Nearer) < 3 {
+				s.Nearer = append(s.Nearer, p)
+			}
+		}
+		for i := len(pairs) - 1; i >= 0 && len(s.Farther) < 3; i-- {
+			if pairs[i].Z > 0 {
+				s.Farther = append(s.Farther, pairs[i])
+			}
+		}
+	case QuestionRipley:
+		r := a.Ripley
+		if r == nil || a.Window == nil {
+			fatal("spatial.results", "Ripley's K without its window or results.")
+			return out
+		}
+		R := len(r.Radii)
+		for _, v := range []Nums{r.K, r.L, r.Mean, r.Lo, r.Hi} {
+			if len(v) != K*K*R {
+				fatal("spatial.sizes", "Ripley's curves are not %d × %d × %d.", K, K, R)
+				return out
+			}
+		}
+		if !square("p-values", r.P) || !square("adjusted p-values", r.PAdj) || !probability("p-values", r.P, r.PAdj, r.Cells) {
+			return out
+		}
+		var curves []Curve
+		var sign []float64
+		for q := range r.P {
+			if !(r.PAdj[q] < 0.05) {
+				continue
+			}
+			best, at := -1.0, 0
+			for k := 0; k < R; k++ {
+				if d := math.Abs(r.L[q*R+k] - r.Mean[q*R+k]); d > best {
+					best, at = d, k
+				}
+			}
+			curves = append(curves, Curve{A: a.Labels.Names[q/K], B: a.Labels.Names[q%K], Radius: r.Radii[at], L: r.L[q*R+at], Mean: r.Mean[q*R+at], PAdj: r.PAdj[q]})
+			sign = append(sign, r.L[q*R+at]-r.Mean[q*R+at])
+		}
+		s.Significant = len(curves)
+		order := make([]int, len(curves))
+		for i := range order {
+			order[i] = i
+		}
+		sort.SliceStable(order, func(i, j int) bool { return math.Abs(sign[order[i]]) > math.Abs(sign[order[j]]) })
+		for _, i := range order {
+			if sign[i] > 0 && len(s.Above) < 3 {
+				s.Above = append(s.Above, curves[i])
+			}
+			if sign[i] < 0 && len(s.Below) < 3 {
+				s.Below = append(s.Below, curves[i])
+			}
+		}
+		s.Window = a.Window
 	case QuestionEnrichment:
 		e := a.Enrichment
 		if e == nil || a.Graph == nil {
@@ -353,8 +520,9 @@ func CheckAnalysis(dir string, m *artifacts.Manifest) []artifacts.Finding {
 				}
 			}
 		}
+		// The strongest effects first: the ratio, among the significant.
 		s.Significant = len(pairs)
-		sort.SliceStable(pairs, func(i, j int) bool { return pairs[i].Z > pairs[j].Z })
+		sort.SliceStable(pairs, func(i, j int) bool { return pairs[i].Ratio > pairs[j].Ratio })
 		for _, p := range pairs {
 			if p.Z > 0 && len(s.Enriched) < 3 {
 				s.Enriched = append(s.Enriched, p)

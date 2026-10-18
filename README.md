@@ -86,7 +86,9 @@ Delaunay triangulation of their centers, their nearest neighbors, a radius, or c
 segmentation), edge for edge those SciPy and Squidpy build; which cell types are neighbors more or
 less often than chance (neighborhood enrichment, its expectation exact, its significance by
 permutation, within regions if asked) and at what distances (co-occurrence), Squidpy's numbers on
-the same cells; and every number's cells shown on the tissue.
+the same cells; how far each type lies from the nearest of each other, and at what scale cells
+gather or keep apart (Ripley's K and L in the tissue or a region, edge-corrected), each against the
+labels dealt at random; and every number's cells shown on the tissue.
 
 ## A look around
 

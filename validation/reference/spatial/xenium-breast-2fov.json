@@ -2,13 +2,14 @@
  "situcraft": {
   "cells": 7163,
   "labels": 15,
-  "digest": "91ad723e7e73a255dc6870c83727303517066dcccd71624627db6a71cb21acdd"
+  "digest": "69752337e8b1aca27678b2efa7cf1f650d755d72029298d193864bf46c006caf"
  },
  "versions": {
   "squidpy": "1.8.3",
   "anndata": "0.13.4",
   "numpy": "2.5.4",
-  "scipy": "1.18.1"
+  "scipy": "1.18.1",
+  "astropy": "8.0.2"
  },
  "enrichment": {
   "delaunay": {
@@ -36,5 +37,16 @@
   "maxDifference": 7.105427357601002e-15,
   "maxDifferenceFloat32": 5.02203465408968e-05,
   "pairsPlacedOtherwiseInFloat32": 1
+ },
+ "nearest": {
+  "pairs": 225,
+  "maxDifference": 0.0
+ },
+ "ripley": {
+  "labels": 13,
+  "maxRelativeNone": 0.0,
+  "maxRelativeExact": 1.495421420028009e-08,
+  "maxRelativeIsotropic": 0.1034637672093689,
+  "medianRelativeIsotropic": 0.0061150352581959
  }
 }

@@ -134,12 +134,12 @@ Status: **planned (wave N)** until built. Then **done**, **partial** (the gap no
 | --- | --- | --- |
 | N1 | Graphs by radius, kNN, Delaunay, boundary contact, restricted to ROIs; units and parameters kept | done (wave 6, slice 1: Delaunay with a longest edge, k nearest, radius and contact with a gap, over all cells, a QC filter's or those in regions, never cells a review excluded; artifacts with their definition and the cells' checksum; SciPy's and Squidpy's edges exactly on the development bundles) |
 | N2 | Neighborhood enrichment by seeded permutation | done (wave 6, slice 2: directed counts over any graph, the expectation exact, z and two-sided p from seeded permutations within regions or not, Benjamini–Hochberg; Squidpy's counts exactly and its z-scores within permutation error) |
-| N3 | Co-occurrence, nearest-neighbor and all-neighbor distances, contact fractions, Ripley's K/L | partial (wave 6, slice 2: co-occurrence within or between distances, Squidpy's exactly in float64; contact fractions from a contact graph weighed by boundary; distances and Ripley's K/L in slice 3) |
+| N3 | Co-occurrence, nearest-neighbor and all-neighbor distances, contact fractions, Ripley's K/L | done (wave 6, slice 2: co-occurrence within or between distances, Squidpy's exactly in float64; contact fractions from a contact graph weighed by boundary; slice 3: nearest distances by label with their distributions and envelopes, SciPy's exactly; Ripley's K and L of each label and pair in the tissue or a region, the isotropic correction exact for polygons, random labeling's envelope and a global test) |
 | N4 | Infiltration and exclusion relative to region boundaries | planned (wave 6) |
 | N5 | Cellular neighborhoods (niches) from neighborhood composition, mapped, with their defining cell types and markers | planned (wave 6) |
 | N6 | ROI comparison with area and cell-count denominators | planned (wave 6) |
 | N7 | Spatially variable genes (Moran's I) | planned (wave 6) |
-| N8 | Every result can show its contributing cells in the tissue | partial (wave 6, slice 2: an enrichment's pair, its cells and the edges between them; a co-occurrence's label near another; the later analyses' as they are built) |
+| N8 | Every result can show its contributing cells in the tissue | partial (wave 6, slice 2: an enrichment's pair, its cells and the edges between them; a co-occurrence's label near another; slice 3: the cells of two labels within a distance of each other; the later analyses' as they are built) |
 | N9 | Ligand–receptor analysis, if added: hypothesis-generating, requiring expression and proximity evidence | parked |
 
 ## Cohorts

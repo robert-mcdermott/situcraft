@@ -32,6 +32,7 @@ The order follows the siblings' principle:
 | Development data | 10x Xenium V1 human Breast 2-FOV (primary) and Lung 2-FOV (CI and nucleus-expansion validation), both CC BY 4.0, ~700 MB extracted, never in the repository; simulations for ground truth and scale |
 | CI | Once per commit; releases check CI's result on the tagged files instead of testing again; large data and reference regeneration weekly or by hand (`design.md`) |
 | Default port | 8840 (8840–8859) |
+| Product site | From wave 6, slice 9: built by `docs/site/build.mjs` (carried from MaveScape) from page sources in the repository, every link, anchor and screenshot checked; published on GitHub Pages from a `gh-pages` branch holding only the built site, checked out beside the repository as `../situcraft-site` |
 
 ## In every wave, from wave 2
 
@@ -40,13 +41,13 @@ The order follows the siblings' principle:
   license, what to expect, the view it opens and its guided steps, and the validation suite
   checks it.
 - **Documentation.**
-  - The slice that builds a feature also writes its guide page, its tutorial on an example, and
-    the capture scenes for its screenshots.
+  - The slice that builds a feature also writes its guide page (on the product site from wave 6,
+    slice 9), its tutorial on an example, and the capture scenes for its screenshots.
   - `docs/FORMATS.md` grows with every file format read or written.
   - The README is the front page, laid out as the siblings' are. A slice adds or amends a
     Highlights bullet or a table row there. What each release brought goes in `CHANGELOG.md`.
-- **Release.** Screenshots re-captured, the site built and checked, binaries drafted by the
-  release workflow.
+- **Release.** Screenshots re-captured, the product site built and checked (from wave 6, slice 9)
+  and published after the release is out, binaries drafted by the release workflow.
 - **Projects that keep opening.** Every release saves a project (an example with its artifacts,
   decisions and saved views) as a fixture under `validation/projects/`. Every later version must
   open each fixture and reproduce its artifacts' recorded checksums, or say why not.
@@ -2488,14 +2489,68 @@ as in waves 3 and 4.
        reach significance after adjustment; the guide says to use more.
      - **Lung's classes:** stromal and endothelial cells neighbor their own kind 4.0× and 3.1× as
        often as chance, and each other 2.7×; epithelium is 0.78× as often beside either.
-3. **Distances and Ripley's K and L (N3).**
-   - Each cell's distance to the nearest cell of each label, and the cells of each label within a
-     distance, as distributions by pair of labels, against permutation envelopes.
-   - Ripley's K and Besag's L (Ripley 1977; Besag 1977), of one label or across two, in the window,
-     edge-corrected, with envelopes from permutations of the labels.
-   - Validation: complete spatial randomness (K = πr², L = r) and Thomas processes of known K, in
-     rectangles and irregular windows; edge corrections against astropy's estimator; distances
-     against an exhaustive search.
+3. **Distances and Ripley's K and L (N3): done.**
+   - **Windows** (`internal/spatial/window.go`): a set of boundary segments and the area they enclose
+     (even–odd), indexed by a grid; inside, the distance to the edge, and the share of a circle
+     inside (the circle cut at its crossings, each arc by its midpoint). A drawn region's polygons,
+     or the tissue: its cells' pixels on a grid of about a µm (from the label raster), closed by a
+     radius (10 µm; dilated, then eroded, by the exact distance transform), the boundary its pixel
+     edges merged along rows and columns.
+   - **Ripley's K and L** (`ripley.go`; Ripley 1977, Besag 1977): K_AB(r) = |W| Σ w_ij 1[d ≤ r] /
+     (n_A (n_B − [A = B])), each direction weighted by its own cell's circle (isotropic) or not;
+     the pairs within the farthest radius, their distances and weights found once, since the cells
+     do not move; random labeling's envelope (2.5% to 97.5% of 199 permutations) and a global test,
+     the maximum absolute deviation from the permutations' mean (Diggle 2003; Baddeley et al.
+     2014), Benjamini–Hochberg over the pairs. Up to 60 labels.
+   - **Nearest distances** (`nearest.go`): each cell's neighbors within the reach (100 µm) sorted
+     once; each deal's nearest of each label the first of it; each pair's median and mean, the
+     distribution at each step, against random labeling (z, two-sided p, Benjamini–Hochberg; the
+     distribution's envelope).
+   - **The questions** `distances` and `ripley` (`api_spatial.go`; the window recorded with the
+     analysis); the Spatial view's forms, a heat map of nearest distances (red nearer), the
+     distribution and L(r) − r with their envelopes, tables of the strongest; **Show these cells**
+     for the cells within a distance of each other. Among the significant, every table and summary
+     ranks by the effect's size. Remote control: `spatial_analysis` (`distances`, `ripley`);
+     `show_tissue`'s `cells_of` at a distance.
+   - Validation:
+     - **By hand:** a rectangle's and a holed square's area, inside and edge distance; circle shares
+       near an edge (2/3) and a corner (5/12); 2,000 circles against Ripley's closed form for a
+       rectangle (to 10⁻⁹); a tissue window keeping a 40 µm gap and closing a 3 µm one.
+     - **Point processes:** complete spatial randomness, 30 patterns of 1,000 points: K / πr²
+       within 0.6% at 25 to 100 µm in a square and an L-shaped window with the isotropic correction
+       (0.92 and 0.87 at 100 µm without); a Thomas process (κ 20 mm⁻², 50 offspring, σ 20 µm, 20
+       patterns): K within 6% of πr² + (1 − e^(−r²/4σ²))/κ; random labels inside their envelope,
+       labels apart below it (p the smallest); the same on any number of workers.
+     - **Nearest distances:** each pair's median, mean and cells beyond the reach against an
+       exhaustive search; labels apart farther (z > 5), drawn together nearer (z < −5), random
+       labels neither.
+     - **Against SciPy and astropy** (`validation/reference/spatial/`, weekly): on both 2-FOV
+       bundles and the simulated tissue, labeled by their clusters, every pair's median and mean
+       nearest distance SciPy's k-d tree's; each label's K in the middle rectangle without a
+       correction astropy 8.0.2's exactly, and with the isotropic correction the same estimator
+       computed independently by Ripley's formula to 1.5 × 10⁻⁸ (astropy's own variant a median
+       0.6% apart).
+     - **In the page** (viewer suite): a Lung pair's median nearest distance, the epithelial cells'
+       K in the tumor nest without a correction (its area by the shoelace, its pairs counted), and
+       the stromal cells within 30 µm of each other shown, each against the suite's own.
+   - Found by slice 3:
+     - **Complete spatial randomness is no null for cells:** they cannot overlap and tissue is not
+       uniform, so L(r) − r is far from 0 for any label at small r; the null is random labeling, and
+       the line L = r a reference only.
+     - **astropy's isotropic correction weighs each pair by one of its circles,** counted both
+       ways, where the estimator weighs each direction by its own; the two differ by up to 10% for
+       labels of a few dozen cells. The estimator is checked against an independent computation of
+       itself, and astropy's figures kept for context.
+     - **Ranking by z put small effects first:** in Lung, epithelial cells' nearest epithelial cell
+       at 0.96× chance (z −9.7) led the list, z growing with the cells' number; the strongest
+       effects now lead.
+     - **The tissue has holes:** with gaps of up to 20 µm closed, Lung's window is 687,212 µm², its
+       airspaces left out.
+     - **Neighbors within the reach dominate memory:** about 370 a cell within 100 µm in Lung; a
+       million cells needs them streamed (slice 8).
+     - **Lung's classes:** stromal cells gather (L 11.4 µm above chance's mean at 60 µm) and keep
+       apart from epithelium; a stromal cell's nearest stromal cell is 15.3 µm away, against 20.0
+       by chance.
 4. **Regions measured (N4, N6).**
    - **Composition and comparison:** each region's cells by label, their densities (per mm² of
      the region's area within the tissue) and shares, with intervals; regions compared by them, as
@@ -2531,12 +2586,33 @@ as in waves 3 and 4.
 8. **Scale.**
    - Graphs, enrichment, niches and Moran's I on a million cells within stated budgets, measured
      on generated tissues; the weekly scale test grows to them.
-9. **Examples, documentation, release 0.6.0.**
+9. **The product site.**
+   - **A professional website for SituCraft,** as MaveScape and CytoWeave have: `docs/site/` with
+     `build.mjs` (carried from MaveScape, with its origin noted), its assets (a style sheet in both
+     themes, a script, a link-preview image) and its pages: **Home** (what SituCraft is and for
+     whom, the screenshots in the reader's theme, the highlights of each wave, how to install),
+     **Install**, **Science** (each method with its citation, and what it was validated against,
+     with the numbers), and the **user guide**, a page a subject: starting out and the examples,
+     opening and checking a bundle, the Viewer and QC, segmentations (expansion, refinement and
+     the studio, imports, comparing and deciding, exports), cell types (clusters, the map, labels
+     and their review), the pathology bridge (images, alignment, regions, reviews), spatial
+     analysis, remote control, the record and troubleshooting. `docs/GETTING-STARTED.md` moves
+     into the guide (the Markdown kept as a pointer to it); `FORMATS.md` and `REMOTE-CONTROL.md`
+     stay in the repository as references, linked from the site.
+   - **Screenshots** with `<shot>`: each figure the capture scenes' light and dark pictures, the
+     page showing the one of its theme.
+   - **Published** with `--publish` into `../situcraft-site`, a checkout (or worktree) of the
+     `gh-pages` branch, which holds only the built site; `docs/site/README.md` says how to build,
+     preview, publish, and make the branch the first time.
+   - Validation: the build checks every local link, anchor and screenshot, and fails on any broken
+     one; it runs in CI with the browser modules; the pages pass axe-core (WCAG 2.1 A and AA) in
+     both themes and read well at a phone's width.
+10. **Examples, documentation, release 0.6.0.**
    - Worked examples: which cell types are neighbors in the Breast section; immune cells and a
      tumor region's edge; the simulated tissue's niches against its domains; spatially variable
      genes; a result made again on another segmentation.
-   - The project fixture `validation/projects/0.6.0-*.situcraft.json`; guide pages; CHANGELOG;
-     release.
+   - The project fixture `validation/projects/0.6.0-*.situcraft.json`; the guide's pages for the
+     wave; CHANGELOG; release, and the product site published for it.
 
 ## 0.7.0: samples and cohorts (wave 7)
 

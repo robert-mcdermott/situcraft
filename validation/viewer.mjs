@@ -1264,6 +1264,105 @@ export async function viewerSuite({ check, MissingData, verbose }) {
             co?.ok && coOwn && coOwn.k === 1 && coOwn.worst < 1e-9, 'within 10⁻⁹');
         }
 
+        // Nearest distances and Ripley's K of the Lung classes (wave 6, slice 3), against the suite's
+        // own: one pair's median nearest distance by an exhaustive search; K without a correction in
+        // the tumor nest from its own count of pairs and the polygon's area; and the cells shown
+        // within a radius.
+        {
+          const graph = await act('build_graph', { dataset: 'xenium-lung-2fov', segmentation: 'instrument', kind: 'delaunay' });
+          const labelsId = graph.ok ? await chrome.eval(`window.situcraft.store.project.artifacts.find((a) => a.kind === 'labels' && a.segmentation === ${JSON.stringify(graph.data.segmentation.id)} && !a.source && !a.reference && a.state === 'complete')?.id ?? null`) : null;
+          const dist = labelsId ? await act('spatial_analysis', { dataset: 'xenium-lung-2fov', segmentation: 'instrument', question: 'distances', labels: labelsId, level: 1, permutations: 49 }) : null;
+          const ripley = labelsId ? await act('spatial_analysis', { dataset: 'xenium-lung-2fov', segmentation: 'instrument', question: 'ripley', labels: labelsId, level: 1, window: 'Tumor nest', correction: 'none', up_to: 40, every: 10, permutations: 19 }) : null;
+          const own = dist?.ok && ripley?.ok ? await chrome.eval(`(async () => {
+            const read = async (id) => {
+              const a = await (await fetch('/api/artifacts/' + id + '/files/analysis.json')).json();
+              const cb = await (await fetch('/api/analyses/' + id + '/cells')).arrayBuffer();
+              const n = new DataView(cb).getUint32(0, true);
+              return { a, rows: new Uint32Array(cb, 4, n), label: new Int32Array(cb, 4 + 4 * n, n) };
+            };
+            // The segmentation's centroids, as the graph of all the cells holds them.
+            const gb = await (await fetch('/api/graphs/${graph.data.id}/edges')).arrayBuffer();
+            const gn = new DataView(gb).getUint32(0, true);
+            const grows = new Uint32Array(gb, 12, gn), gx = new Float32Array(gb, 12 + 4 * gn, gn), gy = new Float32Array(gb, 12 + 8 * gn, gn);
+            const X = new Map(), Y = new Map();
+            for (let i = 0; i < gn; i += 1) {
+              X.set(grows[i], gx[i]);
+              Y.set(grows[i], gy[i]);
+            }
+            const d = await read(${JSON.stringify(dist?.data?.id)});
+            const K = d.a.labels.names.length, A = d.a.labels.names.indexOf('Stromal'), B = d.a.labels.names.indexOf('Endothelial');
+            const reach = d.a.nearest.reach;
+            const near = [];
+            for (let i = 0; i < d.rows.length; i += 1) {
+              if (d.label[i] !== A) continue;
+              let best = Infinity;
+              for (let j = 0; j < d.rows.length; j += 1) {
+                if (j === i || d.label[j] !== B) continue;
+                const dx = X.get(d.rows[j]) - X.get(d.rows[i]), dy = Y.get(d.rows[j]) - Y.get(d.rows[i]);
+                best = Math.min(best, Math.fround(Math.sqrt(dx * dx + dy * dy)));
+              }
+              near.push(Math.min(best, reach));
+            }
+            near.sort((u, v) => u - v);
+            const m = near.length;
+            const median = m % 2 ? near[(m - 1) / 2] : (near[m / 2 - 1] + near[m / 2]) / 2;
+            // Ripley's K without a correction in the tumor nest: its area by the shoelace, its cells by
+            // a winding number, and the pairs within each radius.
+            const r = await read(${JSON.stringify(ripley?.data?.id)});
+            const nest = [[600, 250], [800, 260], [790, 420], [610, 400]];
+            let area = 0;
+            for (let k = 0; k < 4; k += 1) area += nest[k][0] * nest[(k + 1) % 4][1] - nest[(k + 1) % 4][0] * nest[k][1];
+            area = Math.abs(area) / 2;
+            const inside = (px, py) => {
+              let w = 0;
+              for (let k = 0; k < 4; k += 1) {
+                const [ax, ay] = nest[k], [bx, by] = nest[(k + 1) % 4];
+                const side = (bx - ax) * (py - ay) - (px - ax) * (by - ay);
+                if (ay <= py) {
+                  if (by > py && side > 0) w += 1;
+                } else if (by <= py && side < 0) w -= 1;
+              }
+              return w !== 0;
+            };
+            const R = r.a.ripley.radii.length, E = r.a.labels.names.indexOf('Epithelial');
+            const pts = [];
+            for (let i = 0; i < r.rows.length; i += 1) if (r.label[i] === E && inside(X.get(r.rows[i]), Y.get(r.rows[i]))) pts.push([X.get(r.rows[i]), Y.get(r.rows[i])]);
+            let worst = 0;
+            r.a.ripley.radii.forEach((rad, k) => {
+              let pairs = 0;
+              for (let i = 0; i < pts.length; i += 1) for (let j = i + 1; j < pts.length; j += 1) if (Math.sqrt((pts[j][0] - pts[i][0]) ** 2 + (pts[j][1] - pts[i][1]) ** 2) <= rad) pairs += 2;
+              const k0 = area * pairs / (pts.length * (pts.length - 1));
+              worst = Math.max(worst, Math.abs(r.a.ripley.k[(E * r.a.labels.names.length + E) * R + k] / k0 - 1));
+            });
+            return { median, recorded: d.a.nearest.median[A * K + B], cells: pts.length, recordedCells: r.a.ripley.cells[E], area, recordedArea: r.a.window.area, worst };
+          })()`) : null;
+          check('viewer', 'nearest distances and Ripley\'s K by remote control: a pair\'s median nearest distance the suite\'s exhaustive search\'s; K in the tumor nest, without a correction, from the suite\'s own count of pairs and the polygon\'s area', `${dist?.message ?? dist?.error}; ${ripley?.message ?? ripley?.error}; ${JSON.stringify(own)}`,
+            dist?.ok && ripley?.ok && own && Math.abs(own.median - own.recorded) < 1e-6 && own.cells === own.recordedCells && Math.abs(own.area - own.recordedArea) < 1e-6 && own.worst < 1e-9, 'the same median, cells, area and K');
+          // The cells within a radius shown: stromal cells with another within 30 µm, as the suite counts them.
+          const shownNear = dist?.ok ? await act('show_tissue', { dataset: 'xenium-lung-2fov', cells_of: { analysis: ripley.data.id, a: 'Stromal', b: 'Stromal', distance: 30 } }) : null;
+          const nearCount = shownNear?.ok ? await chrome.eval(`(async () => {
+            const a = await (await fetch('/api/artifacts/${ripley.data.id}/files/analysis.json')).json();
+            const cb = await (await fetch('/api/analyses/${ripley.data.id}/cells')).arrayBuffer();
+            const n = new DataView(cb).getUint32(0, true);
+            const rows = new Uint32Array(cb, 4, n), label = new Int32Array(cb, 4 + 4 * n, n);
+            const t = window.situcraftViewer.cellsDrawn();
+            const S = a.labels.names.indexOf('Stromal');
+            let cells = 0;
+            for (let i = 0; i < n; i += 1) {
+              if (label[i] !== S) continue;
+              for (let j = 0; j < n; j += 1) {
+                if (j !== i && label[j] === S && Math.sqrt((t.x[rows[j]] - t.x[rows[i]]) ** 2 + (t.y[rows[j]] - t.y[rows[i]]) ** 2) <= 30) {
+                  cells += 1;
+                  break;
+                }
+              }
+            }
+            return { suite: cells, shown: window.situcraftViewer.focus() };
+          })()`) : null;
+          check('viewer', 'the cells within a radius shown on the tissue: stromal cells with another within 30 µm, as the suite counts them', `${shownNear?.message ?? shownNear?.error}; ${JSON.stringify(nearCount)}`,
+            shownNear?.ok && nearCount && nearCount.suite > 0 && nearCount.shown?.cells === nearCount.suite, `${nearCount?.suite} cells`);
+        }
+
         // The projects as 0.2.0, 0.3.0 and 0.4.0 saved them
         // (validation/projects/<version>-lung.situcraft.json): this release's written when asked
         // (SITUCRAFT_WRITE_FIXTURE=1), the places of this run's folders made neutral and given its

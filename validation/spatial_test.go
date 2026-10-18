@@ -1,8 +1,10 @@
 package validation
 
 // Neighborhood enrichment and co-occurrence (wave 6, slice 2; research.md §6.2) against Squidpy's,
-// on the instrument's segmentation of both 2-FOV bundles and the standard simulated tissue, its
-// cells labeled by SituCraft's clustering (the defaults) and every one of them analyzed.
+// and nearest distances and Ripley's K (slice 3; §6.3) against SciPy's k-d tree and astropy's
+// estimator, on the instrument's segmentation of both 2-FOV bundles and the standard simulated
+// tissue, its cells labeled by SituCraft's clustering (the defaults) and every one of them analyzed;
+// Ripley's K in the rectangle of the middle half of the cells' extent.
 // SITUCRAFT_WRITE_REFERENCE=1 writes the cells, the Delaunay and 20 µm graphs and SituCraft's
 // results into <data>/spatial/<set>/; validation/reference/spatial/compare.sh runs Squidpy's
 // nhood_enrichment on the same graphs (1,000 permutations) and co_occurrence at the same distances,
@@ -48,6 +50,21 @@ type spatialNumbers struct {
 	} `json:"enrichment"`
 	// Co-occurrence: against Squidpy's routine on float64 coordinates, and its float32 API, with the
 	// pairs float32's rounding places on the other side of a distance.
+	// Nearest distances: each pair's median and mean against SciPy's k-d tree (µm).
+	Nearest struct {
+		Pairs         int     `json:"pairs"`
+		MaxDifference float64 `json:"maxDifference"`
+	} `json:"nearest"`
+	// Ripley's K of each label in the rectangle: without a correction against astropy's "none"
+	// (relative difference), with the isotropic correction against its "ripley" (which weighs a
+	// pair by its first cell's circle alone, both ways).
+	Ripley struct {
+		Labels          int     `json:"labels"`
+		MaxNone         float64 `json:"maxRelativeNone"`
+		MaxExact        float64 `json:"maxRelativeExact"`
+		MaxIsotropic    float64 `json:"maxRelativeIsotropic"`
+		MedianIsotropic float64 `json:"medianRelativeIsotropic"`
+	} `json:"ripley"`
 	Cooccurrence struct {
 		Distances            int     `json:"distances"`
 		Compared             int     `json:"compared"`
@@ -60,7 +77,15 @@ type spatialNumbers struct {
 // spatialOfSet labels a set's instrument cells by SituCraft's clustering and computes, over the
 // cells analyzed, the enrichment on the Delaunay and 20 µm graphs and the co-occurrence within the
 // default distances.
-func spatialOfSet(t *testing.T, bundleDir string) (graphs map[string]*spatial.Graph, label []int32, results map[string]*spatial.Enrichment, co *spatial.Cooccurrence) {
+// spatialExtras are a set's nearest distances and Ripley's K in the middle rectangle.
+type spatialExtras struct {
+	nearest   *spatial.Nearest
+	rectangle [4]float64
+	isotropic *spatial.Ripley
+	none      *spatial.Ripley
+}
+
+func spatialOfSet(t *testing.T, bundleDir string) (graphs map[string]*spatial.Graph, label []int32, results map[string]*spatial.Enrichment, co *spatial.Cooccurrence, extra spatialExtras) {
 	t.Helper()
 	ctx := context.Background()
 	b, err := xenium.Open(bundleDir, xenium.Options{CacheDir: t.TempDir()})
@@ -123,11 +148,36 @@ func spatialOfSet(t *testing.T, bundleDir string) (graphs map[string]*spatial.Gr
 	if err != nil {
 		t.Fatal(err)
 	}
-	return graphs, label, results, co
+	np := spatial.DefaultNearest()
+	np.Permutations = 19
+	if extra.nearest, err = spatial.NearestDistances(ctx, g.X, g.Y, label, K, np, runtime.NumCPU(), nil); err != nil {
+		t.Fatal(err)
+	}
+	x0, y0, x1, y1 := math.Inf(1), math.Inf(1), math.Inf(-1), math.Inf(-1)
+	for i := range g.X {
+		x0, x1 = math.Min(x0, float64(g.X[i])), math.Max(x1, float64(g.X[i]))
+		y0, y1 = math.Min(y0, float64(g.Y[i])), math.Max(y1, float64(g.Y[i]))
+	}
+	w, h := x1-x0, y1-y0
+	extra.rectangle = [4]float64{x0 + w/4, y0 + h/4, x1 - w/4, y1 - h/4}
+	rx0, ry0, rx1, ry1 := extra.rectangle[0], extra.rectangle[1], extra.rectangle[2], extra.rectangle[3]
+	win, err := spatial.PolygonWindow([][][][2]float64{{{{rx0, ry0}, {rx1, ry0}, {rx1, ry1}, {rx0, ry1}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rp := spatial.RipleyParams{Radii: []float64{10, 20, 30, 40, 50}, Correction: "isotropic", Permutations: 19, Seed: 1}
+	if extra.isotropic, err = spatial.Ripleys(ctx, g.X, g.Y, label, K, win, rp, runtime.NumCPU(), nil); err != nil {
+		t.Fatal(err)
+	}
+	rp.Correction = "none"
+	if extra.none, err = spatial.Ripleys(ctx, g.X, g.Y, label, K, win, rp, runtime.NumCPU(), nil); err != nil {
+		t.Fatal(err)
+	}
+	return graphs, label, results, co, extra
 }
 
 // spatialDigest is the SHA-256 of the results' numbers, as JSON.
-func spatialDigest(results map[string]*spatial.Enrichment, co *spatial.Cooccurrence) string {
+func spatialDigest(results map[string]*spatial.Enrichment, co *spatial.Cooccurrence, extra spatialExtras) string {
 	h := sha256.New()
 	for _, kind := range []string{spatial.Delaunay, spatial.Radius} {
 		e := results[kind]
@@ -138,6 +188,10 @@ func spatialDigest(results map[string]*spatial.Enrichment, co *spatial.Cooccurre
 	}
 	for _, r := range co.Ratio {
 		raw, _ := json.Marshal(spatial.Nums(r))
+		h.Write(raw)
+	}
+	for _, v := range []spatial.Nums{extra.nearest.Median, extra.nearest.Mean, extra.isotropic.KObs, extra.none.KObs} {
+		raw, _ := json.Marshal(v)
 		h.Write(raw)
 	}
 	return hex.EncodeToString(h.Sum(nil))
@@ -155,8 +209,8 @@ func TestReferenceSpatial(t *testing.T) {
 			} else if bundle(t, set) == "" {
 				return
 			}
-			graphs, label, results, co := spatialOfSet(t, dir)
-			digest := spatialDigest(results, co)
+			graphs, label, results, co, extra := spatialOfSet(t, dir)
+			digest := spatialDigest(results, co, extra)
 			K := results[spatial.Delaunay].K
 			n := len(label)
 			if writeReference() {
@@ -195,7 +249,16 @@ func TestReferenceSpatial(t *testing.T) {
 				for i, r := range co.Ratio {
 					ratios[i] = r
 				}
-				info, _ := json.MarshalIndent(map[string]any{"cells": n, "labels": K, "digest": digest, "permutations": spatial.DefaultEnrichment().Permutations, "enrichment": enrichment, "cooccurrence": map[string]any{"distances": co.Distances, "pairs": co.Pairs, "ratio": ratios}}, "", " ")
+				// Ripley's K of each label alone (its diagonal), at each radius.
+				R := len(extra.isotropic.Radii)
+				iso, none := make([]spatial.Nums, K), make([]spatial.Nums, K)
+				for a := 0; a < K; a++ {
+					q := (a*K + a) * R
+					iso[a], none[a] = extra.isotropic.KObs[q:q+R], extra.none.KObs[q:q+R]
+				}
+				info, _ := json.MarshalIndent(map[string]any{"cells": n, "labels": K, "digest": digest, "permutations": spatial.DefaultEnrichment().Permutations, "enrichment": enrichment, "cooccurrence": map[string]any{"distances": co.Distances, "pairs": co.Pairs, "ratio": ratios},
+					"nearest": map[string]any{"reach": extra.nearest.Reach, "median": spatial.Nums(extra.nearest.Median), "mean": spatial.Nums(extra.nearest.Mean)},
+					"ripley":  map[string]any{"rectangle": extra.rectangle, "radii": extra.isotropic.Radii, "area": extra.isotropic.Area, "isotropic": iso, "none": none}}, "", " ")
 				if err := os.WriteFile(filepath.Join(out, "situcraft.json"), append(info, '\n'), 0o644); err != nil {
 					t.Fatal(err)
 				}
@@ -219,6 +282,11 @@ func TestReferenceSpatial(t *testing.T) {
 				if e.Edges != graphs[kind].Edges() || e.Pairs != K*K || e.CountsDiffering != 0 || e.ZBeyond > 0 || !(e.ZCorrelation > 0.999) {
 					t.Errorf("%s: the enrichment differs from Squidpy's beyond its permutations' error", kind)
 				}
+			}
+			nd, rk := num.Nearest, num.Ripley
+			t.Logf("nearest distances: %d pairs, the largest difference from SciPy's %.2g µm; Ripley's K of %d labels: without a correction within %.2g of astropy's; isotropic within %.2g of the same estimator by Ripley's formula, and %.3f of astropy's (median %.4f)", nd.Pairs, nd.MaxDifference, rk.Labels, rk.MaxNone, rk.MaxExact, rk.MaxIsotropic, rk.MedianIsotropic)
+			if nd.Pairs != K*K || !(nd.MaxDifference < 1e-4) || rk.Labels == 0 || !(rk.MaxNone < 1e-9) || !(rk.MaxExact < 1e-6) || !(rk.MedianIsotropic < 0.02) {
+				t.Errorf("nearest distances or Ripley's K differ from the references beyond their conventions")
 			}
 			c := num.Cooccurrence
 			t.Logf("co-occurrence: %d distances, %d ratios compared; Squidpy's routine in float64, the largest difference %.3g; its float32 API %.3g, %d pairs placed otherwise by float32's rounding", c.Distances, c.Compared, c.MaxDifference, c.MaxDifferenceFloat32, c.PlacedOtherwise)

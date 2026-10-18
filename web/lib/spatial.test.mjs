@@ -33,6 +33,10 @@ test('parameters checked as the program checks them; distances every step', () =
   assert.equal(checkAnalysisParams('cooccurrence', { distances: [10, 20], pairs: 'between' }), null);
   assert.match(checkAnalysisParams('cooccurrence', { distances: [20, 10], pairs: 'within' }), /increase/);
   assert.match(checkAnalysisParams('niches', {}), /No question/);
+  assert.equal(checkAnalysisParams('distances', { permutations: 199, reach: 100, step: 2.5 }), null);
+  assert.match(checkAnalysisParams('distances', { permutations: 199, reach: 100, step: 0.1 }), /reach over 200/);
+  assert.equal(checkAnalysisParams('ripley', { radii: [5, 10], correction: 'isotropic', permutations: 199 }), null);
+  assert.match(checkAnalysisParams('ripley', { radii: [5, 10], correction: 'translation', permutations: 199 }), /isotropic or none/);
   assert.deepEqual(distancesTo(50, 10), [10, 20, 30, 40, 50]);
   assert.deepEqual(distancesTo(0.3, 0.1), [0.1, 0.2, 0.3]);
 });
