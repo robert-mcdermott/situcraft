@@ -2,7 +2,8 @@
 // the questions and their parameters as the program checks them, the requests (each cell's label and
 // region as the program reads them), the records in the project, the results read, an enrichment's
 // pairs ranked, and the cells each number comes from (a pair's cells and the edges between them; a
-// label's cells near another's; a label's cells in a region, or in bands across a region's edge).
+// label's cells near another's; a label's cells in a region, or in bands across a region's edge;
+// a niche's cells).
 
 import { sha256 } from './sha256.js';
 
@@ -31,6 +32,10 @@ export const QUESTIONS = [
     id: 'boundary', label: 'Across a region\'s edge',
     help: 'Each label\'s density in bands of distance from a region\'s edge, from deep inside to well outside, each band\'s own tissue its denominator: whether a label fills the region, gathers at its margin or stays out. The core (inside, beyond the margin), the margin (within it of the edge, either side) and around (outside, beyond the margin, to the reach) are compared as ratios with intervals, as a tumor\'s core and invasive margin are measured.',
   },
+  {
+    id: 'niches', label: 'Cellular neighborhoods',
+    help: 'Kinds of place in the tissue: each cell\'s neighborhood (its nearest labeled cells, or those within a radius) described by its labels\' shares, and the cells grouped by them (k-means), as niches. A niche is a kind of place, not a kind of cell: an unlabeled cell has the niche of the labeled cells around it. Each niche\'s make-up against the tissue\'s, the labels that define it and its leading genes; the niches found again from other seeds say how stable they are.',
+  },
 ];
 
 export const ENRICHMENT_DEFAULTS = { permutations: 1000, seed: 20250, weight: 'edges' };
@@ -45,6 +50,9 @@ export const RIPLEY_DEFAULTS = { radii: Array.from({ length: 20 }, (_, i) => 5 *
 // 95% intervals; bands every 10 µm to 100 µm either side of an edge, a margin of 20 µm.
 export const REGIONS_DEFAULTS = { level: 0.95 };
 export const BOUNDARY_DEFAULTS = { reach: 100, step: 10, margin: 20, level: 0.95 };
+
+// Each cell's 10 nearest labeled cells, 6 niches, the best of 10 starts, 4 further seeds.
+export const NICHES_DEFAULTS = { neighbors: 10, radius: 0, niches: 6, starts: 10, seeds: 4, seed: 20250 };
 
 // The most regions compared at once (internal/spatial MaxRegions), and the mark of a cell outside
 // the tissue window in a comparison's strata.
@@ -92,7 +100,37 @@ export function checkAnalysisParams(question, p) {
     if (!(p.margin > 0 && p.margin < p.reach)) return 'The margin is more than 0 and less than the reach.';
     return level(p.level);
   }
+  if (question === 'niches') {
+    if ((p.neighbors > 0) === (p.radius > 0)) return 'A niche\'s window is the nearest neighbors or a radius, one of them.';
+    if (p.neighbors > 0 && !(Number.isInteger(p.neighbors) && p.neighbors >= 2 && p.neighbors <= 200)) return 'A window is of 2 to 200 nearest labeled cells.';
+    if (p.radius > 500) return 'A window\'s radius is at most 500 µm.';
+    if (!Number.isInteger(p.niches) || p.niches < 2 || p.niches > 30) return '2 to 30 niches.';
+    if (!Number.isInteger(p.starts) || p.starts < 1 || p.starts > 100) return 'k-means\'s starts are 1 to 100.';
+    if (!Number.isInteger(p.seeds) || p.seeds < 0 || p.seeds > 20) return '0 to 20 further seeds.';
+    return null;
+  }
   return `No question ${question}.`;
+}
+
+// Niches' names: each one's number and the labels that define it, with their shares of its
+// neighborhoods ("6 · Stromal 39% + Endothelial 13%"): a niche is named by what it holds more of
+// than the tissue, which need not be most of it.
+export function nicheNames(niches, labelNames) {
+  const K = labelNames.length;
+  return niches.defining.map((ks, v) => `${v + 1} · ${ks.map((k) => `${labelNames[k]} ${Math.round(100 * (niches.composition[v * K + k] ?? 0))}%`).join(' + ')}`);
+}
+
+// A niche's cells (stratum: each cell's niche + 1, 0 for none), and their count.
+export function nicheCells(stratum, v) {
+  const cells = new Uint8Array(stratum.length);
+  let count = 0;
+  for (let i = 0; i < stratum.length; i += 1) {
+    if (stratum[i] === v + 1) {
+      cells[i] = 1;
+      count += 1;
+    }
+  }
+  return { cells, count };
 }
 
 // Regions compared's rows: the regions' names, then the tissue in none of them (as a heading; in a

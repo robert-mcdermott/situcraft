@@ -360,6 +360,26 @@
   "violations": []
  },
  {
+  "scene": "niches",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "niches",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "niches-tissue",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "niches-tissue",
+  "theme": "light",
+  "violations": []
+ },
+ {
   "scene": "edge",
   "theme": "dark",
   "violations": []

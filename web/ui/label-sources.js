@@ -1,18 +1,21 @@
 // Any label set's labels per segmentation cell, for the map, the tissue, the Viewer and the review:
-// a set from markers or imported (its artifact, at a level), a curated set (its base with its edits)
-// or a consensus set (its members by its rule). Answers { kind, id, name, names, colors, label
+// a set from markers or imported (its artifact, at a level), a curated set (its base with its edits),
+// a consensus set (its members by its rule), or a spatial analysis's niches (each cell's niche, the
+// kind of place it is in). Answers { kind, id, name, names, colors, label
 // (Int32Array over the segmentation's cells, −1 for none), analyzed (Uint8Array: the cells the set
 // covers), confidence (Float32Array, NaN for none, or null), segCells, record }.
 
 import { categoricalColor } from '../lib/colormaps.js';
 import { applyCurated, consensusOf } from '../lib/curation.js';
 import { labelSetName, oneLevel } from '../lib/labels.js';
+import { nicheNames } from '../lib/spatial.js';
 
 // A set's reference from its id: 'lab-…' a program's label set (at a level), 'cur-…' curated,
-// 'con-…' consensus.
+// 'con-…' consensus, 'spa-…' a spatial analysis's niches.
 export function refOf(id, level = 0) {
   if (String(id).startsWith('cur-')) return { kind: 'curated', id };
   if (String(id).startsWith('con-')) return { kind: 'consensus', id };
+  if (String(id).startsWith('spa-')) return { kind: 'niches', id };
   return { kind: 'labels', id, level };
 }
 
@@ -37,6 +40,20 @@ export async function labelSource(app, ref, seen = new Set()) {
     const record = project.artifacts.find((a) => a.kind === 'labels' && a.id === ref.id) ?? null;
     const name = record ? (oneLevel(record) ? labelSetName(record) : `${labelSetName(record)}: ${String(d.levels[level]).toLowerCase()}`) : ref.id;
     return { kind: 'labels', id: ref.id, level, name, names: d.sets.map((s) => s.name), colors: d.sets.map((s, k) => s.color || categoricalColor(k)), label, analyzed, confidence, segCells: cells.segCells, record, description: d };
+  }
+  if (ref.kind === 'niches') {
+    const { analysis, cells } = await app.bundles.analysisData(ref.id);
+    if (!analysis.niches) throw new Error(`the analysis ${ref.id} is not of niches`);
+    const segCells = analysis.cells.segmentation;
+    const label = new Int32Array(segCells).fill(-1);
+    const analyzed = new Uint8Array(segCells);
+    for (let i = 0; i < cells.n; i += 1) {
+      analyzed[cells.rows[i]] = 1;
+      label[cells.rows[i]] = cells.stratum[i] - 1;
+    }
+    const record = project.artifacts.find((a) => a.kind === 'spatial' && a.id === ref.id) ?? null;
+    const names = nicheNames(analysis.niches, analysis.labels.names);
+    return { kind: 'niches', id: ref.id, level: 0, name: `Niches of ${analysis.labels.name}`, names, colors: names.map((_, k) => categoricalColor(k)), label, analyzed, confidence: null, segCells, record, analysis };
   }
   if (ref.kind === 'curated') {
     const record = project.artifacts.find((a) => a.kind === 'curated-labels' && a.id === ref.id);
@@ -86,13 +103,18 @@ export function perCell(src, unlabeled) {
 }
 
 // The label sets of a segmentation the page can draw, each { id, name, kind }: the program's
-// (every level of a set from markers), the curated and the consensus.
-export function labelVersions(project, datasetId, segmentationId) {
+// (every level of a set from markers), the curated and the consensus; and, asked for, its niches.
+export function labelVersions(project, datasetId, segmentationId, { niches = false } = {}) {
   const out = [];
   for (const r of project.artifacts.filter((a) => a.kind === 'labels' && a.dataset === datasetId && a.segmentation === segmentationId && a.state === 'complete')) {
     (r.summary?.levels ?? ['']).forEach((level, l) => out.push({ id: r.id, level: l, kind: r.source ? 'imported' : r.reference ? 'reference' : 'markers', name: oneLevel(r) ? labelSetName(r) : `${labelSetName(r)}: ${String(level).toLowerCase()}` }));
   }
   for (const r of project.artifacts.filter((a) => a.kind === 'curated-labels' && a.dataset === datasetId && a.segmentation === segmentationId)) out.push({ id: r.id, level: 0, kind: 'curated', name: r.name });
   for (const r of project.artifacts.filter((a) => a.kind === 'consensus-labels' && a.dataset === datasetId && a.segmentation === segmentationId)) out.push({ id: r.id, level: 0, kind: 'consensus', name: r.name });
+  if (niches) {
+    for (const r of project.artifacts.filter((a) => a.kind === 'spatial' && a.question === 'niches' && a.dataset === datasetId && a.segmentation === segmentationId && a.state === 'complete')) {
+      out.push({ id: r.id, level: 0, kind: 'niches', name: `Niches of ${r.summary?.labels?.name ?? 'labels'} (${r.summary?.niches?.length ?? '?'})` });
+    }
+  }
   return out;
 }

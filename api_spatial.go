@@ -4,7 +4,8 @@ package main
 // as artifacts of kind "spatial": neighborhood enrichment over a graph; and, over the cells chosen,
 // co-occurrence across distances, nearest distances by label, Ripley's K in a window (the tissue,
 // from the segmentation's cells, or a region), regions compared, and a profile across a region's
-// edge (both within the tissue window, the regions' polygons sent with them). The page sends each
+// edge (both within the tissue window, the regions' polygons sent with them), and cellular
+// neighborhoods (niches, each with its leading genes from the segmentation's counts). The page sends each
 // cell's label as the label set it shows has it (any kind: from markers, imported, curated,
 // consensus), and, to deal the labels within regions, each cell's region; an analysis is named by
 // what it is made from, so asking again answers it.
@@ -19,12 +20,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"runtime"
 	"strconv"
 	"strings"
 
 	"situcraft/internal/artifacts"
+	"situcraft/internal/cluster"
 	"situcraft/internal/jobs"
 	"situcraft/internal/segment"
 	"situcraft/internal/spatial"
@@ -211,8 +214,27 @@ func checkedParameters(question string, raw json.RawMessage) (json.RawMessage, e
 			return nil, err
 		}
 		v = p
+	case spatial.QuestionNiches:
+		p := spatial.DefaultNiches()
+		if len(raw) > 0 {
+			// A request's window replaces the default's: neighbors or a radius.
+			var given map[string]json.RawMessage
+			if err := json.Unmarshal(raw, &given); err != nil {
+				return nil, err
+			}
+			if _, ok := given["radius"]; ok {
+				p.Neighbors = 0
+			}
+			if err := json.Unmarshal(raw, &p); err != nil {
+				return nil, err
+			}
+		}
+		if err := p.Check(); err != nil {
+			return nil, err
+		}
+		v = p
 	default:
-		return nil, fmt.Errorf("no question %q (enrichment, cooccurrence, distances, ripley, regions or boundary)", question)
+		return nil, fmt.Errorf("no question %q (enrichment, cooccurrence, distances, ripley, regions, boundary or niches)", question)
 	}
 	return json.Marshal(v)
 }
@@ -243,7 +265,7 @@ func spatialID(r spatialRequest, params json.RawMessage) string {
 
 func (a *app) registerSpatial(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/spatial/defaults", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, map[string]any{"enrichment": spatial.DefaultEnrichment(), "cooccurrence": spatial.DefaultCooccurrence(), "distances": spatial.DefaultNearest(), "ripley": spatial.DefaultRipley(), "regions": spatial.DefaultRegions(), "boundary": spatial.DefaultBoundary(), "method": spatial.AnalysisVersion, "citation": spatialCitation})
+		writeJSON(w, map[string]any{"enrichment": spatial.DefaultEnrichment(), "cooccurrence": spatial.DefaultCooccurrence(), "distances": spatial.DefaultNearest(), "ripley": spatial.DefaultRipley(), "regions": spatial.DefaultRegions(), "boundary": spatial.DefaultBoundary(), "niches": spatial.DefaultNiches(), "method": spatial.AnalysisVersion, "citation": spatialCitation})
 	})
 	mux.HandleFunc("POST /api/local/{index}/spatial", a.startSpatial)
 	mux.HandleFunc("GET /api/analyses/{id}/cells", a.spatialCells)
@@ -382,7 +404,7 @@ func (a *app) startSpatial(w http.ResponseWriter, r *http.Request) {
 	}
 	body.Parameters = params
 	spec := spatialSpec{Bundle: path, spatialRequest: body}
-	what := map[string]string{spatial.QuestionEnrichment: "Neighborhood enrichment", spatial.QuestionCooccurrence: "Co-occurrence", spatial.QuestionDistances: "Nearest distances", spatial.QuestionRipley: "Ripley's K", spatial.QuestionRegions: "Regions compared", spatial.QuestionBoundary: "A profile across an edge"}[body.Question]
+	what := map[string]string{spatial.QuestionEnrichment: "Neighborhood enrichment", spatial.QuestionCooccurrence: "Co-occurrence", spatial.QuestionDistances: "Nearest distances", spatial.QuestionRipley: "Ripley's K", spatial.QuestionRegions: "Regions compared", spatial.QuestionBoundary: "A profile across an edge", spatial.QuestionNiches: "Niches"}[body.Question]
 	job, _, err := a.jobs.Submit("spatial", what+" of "+sm.Name+" of "+name, "spatial\x00"+id, spec, a.spatialJob(spec, id))
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, err.Error())
@@ -558,6 +580,55 @@ func (a *app) spatialJob(spec spatialSpec, id string) jobs.Func {
 				}
 				out.Ripley = &spatial.RipleyResult{Radii: rk.Radii, Correction: p.Correction, Area: rk.Area, Cells: rk.Cells, Pairs: rk.Pairs, Outside: rk.Outside, K: rk.KObs, L: rk.L, Mean: rk.Mean, Lo: rk.Lo, Hi: rk.Hi, P: rk.P, PAdj: rk.PAdj}
 				name = fmt.Sprintf("Ripley's K of %s in %s", spec.Labels.Name, sm.Name)
+			case spatial.QuestionNiches:
+				var p spatial.NicheParams
+				if err := json.Unmarshal(spec.Parameters, &p); err != nil {
+					return err
+				}
+				window := fmt.Sprintf("each cell's %d nearest labeled cells", p.Neighbors)
+				if p.Radius > 0 {
+					window = fmt.Sprintf("the labeled cells within %g µm of each cell", p.Radius)
+				}
+				r.Log("info", "Niches of %s in %s: windows of %s, %d niches, the best of %d k-means starts (seed %d), %d further seeds.", spec.Labels.Name, sm.Name, window, p.Niches, p.Starts, p.Seed, p.Seeds)
+				nc, err := spatial.FindNiches(ctx, x, y, cells.Label, K, p, runtime.NumCPU(), func(f float64) { r.Progress(0.05+0.7*f, "Finding the niches") })
+				if err != nil {
+					return err
+				}
+				var rows []uint32
+				var groups []int32
+				for i := range cells.Rows {
+					cells.Stratum[i] = nc.Assign[i] + 1
+					if nc.Assign[i] >= 0 {
+						rows, groups = append(rows, cells.Rows[i]), append(groups, nc.Assign[i])
+					}
+				}
+				res := &spatial.NichesResult{Niches: nc.Count, Windows: nc.Windows, Cells: nc.Cells, Composition: nc.Composition, Counts: nc.Counts, Tissue: nc.Tissue, Inertia: nc.Inertia, Inertias: nc.Inertias, Agreement: nc.Agreement, Markers: make([][]cluster.Marker, nc.Count)}
+				for v := 0; v < nc.Count; v++ {
+					res.Defining = append(res.Defining, spatial.DefiningLabels(nc.Composition[v*K:(v+1)*K], nc.Tissue))
+				}
+				// Each niche's leading genes against the other niches' cells.
+				r.Progress(0.8, "Each niche's genes")
+				counts, err := segment.ReadCounts(dir)
+				if err != nil {
+					return err
+				}
+				if mr, err := cluster.FromLabels(counts, rows, groups, cluster.Source{Tool: "SituCraft", Name: "niches"}, runtime.NumCPU()); err != nil {
+					r.Log("warn", "The niches' genes were not found: %v.", err)
+				} else {
+					res.MarkerCells = len(mr.Cells)
+					for v := 0; v < nc.Count; v++ {
+						res.Markers[v] = cluster.TopMarkers(mr.Markers, mr.Genes, v, 10)
+					}
+				}
+				if len(nc.Agreement) > 0 {
+					lo := 1.0
+					for _, v := range nc.Agreement {
+						lo = math.Min(lo, v)
+					}
+					r.Log("info", "The niches from %d further seeds agree with these at an adjusted Rand index of %.3f at least.", len(nc.Agreement), lo)
+				}
+				out.Niches = res
+				name = fmt.Sprintf("Niches of %s in %s", spec.Labels.Name, sm.Name)
 			case spatial.QuestionRegions, spatial.QuestionBoundary:
 				win, ref, err := a.spatialWindowOf(ctx, dir, spec.Window, r)
 				if err != nil {

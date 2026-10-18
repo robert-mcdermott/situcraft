@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addAnalysis, analysesOf, analysisRecord, bandCells, bandsOf, BOUNDARY_DEFAULTS, checkAnalysisParams, codesRequest, distancesTo, divergingColor, labelsRequest, nearCells, OUTSIDE_TISSUE, pairCells, rankPairs, readAnalyzed, regionCells, REGIONS_DEFAULTS, rowNames, strataRequest, zoneBands } from './spatial.js';
+import { addAnalysis, analysesOf, analysisRecord, bandCells, bandsOf, BOUNDARY_DEFAULTS, checkAnalysisParams, codesRequest, distancesTo, divergingColor, labelsRequest, nearCells, OUTSIDE_TISSUE, pairCells, NICHES_DEFAULTS, nicheCells, nicheNames, rankPairs, readAnalyzed, regionCells, REGIONS_DEFAULTS, rowNames, strataRequest, zoneBands } from './spatial.js';
 import { sha256 } from './sha256.js';
 import { createProject } from './project.js';
 
@@ -32,7 +32,7 @@ test('parameters checked as the program checks them; distances every step', () =
   assert.match(checkAnalysisParams('enrichment', { permutations: 1000, seed: 1, weight: 'area' }), /boundary/);
   assert.equal(checkAnalysisParams('cooccurrence', { distances: [10, 20], pairs: 'between' }), null);
   assert.match(checkAnalysisParams('cooccurrence', { distances: [20, 10], pairs: 'within' }), /increase/);
-  assert.match(checkAnalysisParams('niches', {}), /No question/);
+  assert.match(checkAnalysisParams('hotspots', {}), /No question/);
   assert.equal(checkAnalysisParams('distances', { permutations: 199, reach: 100, step: 2.5 }), null);
   assert.match(checkAnalysisParams('distances', { permutations: 199, reach: 100, step: 0.1 }), /reach over 200/);
   assert.equal(checkAnalysisParams('ripley', { radii: [5, 10], correction: 'isotropic', permutations: 199 }), null);
@@ -120,4 +120,14 @@ test('regions compared and a profile across an edge: parameters, rows, bands, zo
   const lab = Int32Array.from([0, 0, 0, 1, 0, -1]);
   assert.deepEqual([...bandCells(bands, lab, 2, 5, 0).cells], [0, 0, 1, 0, 1, 0]);
   assert.equal(bandCells(bands, lab, 0, 7, -1).count, 4);
+});
+
+test('niches: parameters, names and cells', () => {
+  assert.equal(checkAnalysisParams('niches', NICHES_DEFAULTS), null);
+  assert.equal(checkAnalysisParams('niches', { ...NICHES_DEFAULTS, neighbors: 0, radius: 30 }), null);
+  assert.match(checkAnalysisParams('niches', { ...NICHES_DEFAULTS, radius: 30 }), /one of them/);
+  assert.match(checkAnalysisParams('niches', { ...NICHES_DEFAULTS, niches: 1 }), /2 to 30/);
+  assert.deepEqual(nicheNames({ defining: [[2, 0], [1]], composition: [0.3, 0.1, 0.6, 0.1, 0.85, 0.05] }, ['Stromal', 'Immune', 'Tumor']), ['1 · Tumor 60% + Stromal 30%', '2 · Immune 85%']);
+  const nc = nicheCells(Int32Array.from([0, 1, 2, 1]), 0);
+  assert.deepEqual([[...nc.cells], nc.count], [[0, 1, 0, 1], 2]);
 });

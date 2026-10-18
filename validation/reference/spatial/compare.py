@@ -1,7 +1,7 @@
 """SituCraft's neighborhood enrichment and co-occurrence against Squidpy's (wave 6, slice 2;
-research.md §6.2), and its nearest distances and Ripley's K against SciPy's k-d tree and astropy's
-estimator (slice 3; §6.3). regions.py adds its regions compared and profile across an edge (slice
-4; §6.4).
+research.md §6.2), its nearest distances and Ripley's K against SciPy's k-d tree and astropy's
+estimator (slice 3; §6.3), and its niches' k-means against scikit-learn's (slice 5; §6.5).
+regions.py adds its regions compared and profile across an edge (slice 4; §6.4).
 
 Reads <data>/spatial/<set>/ as SITUCRAFT_WRITE_REFERENCE=1 go test ./validation/ -run ReferenceSpatial
 wrote it: the cells analyzed (their centroids and labels, SituCraft's clusters), the Delaunay and
@@ -29,6 +29,12 @@ where SituCraft weighs each direction by its own cell's circle, so the two diffe
 labels of few cells). The same estimator as SituCraft's is computed here too, every pair in both
 directions with Ripley's closed form for a rectangle (Ripley 1977), and must agree exactly.
 
+Niches: each cell's window composition (its 10 nearest labeled cells' labels) as SituCraft wrote
+it, clustered by scikit-learn's KMeans (k-means++ seeding, Lloyd's iterations) into as many niches
+from as many starts, from each of five seeds, the least inertia kept. SituCraft's inertia must be
+within 1% of it (k-means finds local optima; neither is the optimum for sure), and the two sets of
+niches alike by the adjusted Rand index.
+
 Usage: compare.py <data> <set> <out.json>
 """
 
@@ -44,6 +50,8 @@ import numpy as np
 import pandas as pd
 import scipy.sparse as sp
 import squidpy as sq
+from sklearn.cluster import KMeans
+from sklearn.metrics import adjusted_rand_score
 
 
 def main():
@@ -189,6 +197,27 @@ def main():
     result["ripley"] = {"labels": int(sum(1 for a in range(K) if np.sum(inside & (label == a)) >= 10)), "maxRelativeNone": max(rel_none, default=0.0), "maxRelativeExact": max(rel_exact, default=0.0), "maxRelativeIsotropic": max(rel_iso, default=0.0), "medianRelativeIsotropic": float(np.median(rel_iso)) if rel_iso else 0.0}
     result["versions"]["astropy"] = version("astropy")
     print(f"{set_name} Ripley's K: {result['ripley']['labels']} labels; none within {result['ripley']['maxRelativeNone']:.2g} of astropy's; isotropic within {result['ripley']['maxRelativeExact']:.2g} of the same estimator by Ripley's formula, and within {result['ripley']['maxRelativeIsotropic']:.3f} of astropy's (median {result['ripley']['medianRelativeIsotropic']:.4f})")
+
+    # Niches: scikit-learn's k-means on the same windows.
+    nc = ours["niches"]
+    comp = np.loadtxt(folder / "niches.csv", delimiter=",", skiprows=1, ndmin=2)
+    best = None
+    for seed in range(5):
+        km = KMeans(n_clusters=nc["niches"], init="k-means++", n_init=nc["starts"], random_state=seed, algorithm="lloyd").fit(comp)
+        if best is None or km.inertia_ < best.inertia_:
+            best = km
+    assign = np.array(nc["assign"])
+    result["niches"] = {
+        "niches": nc["niches"],
+        "cells": int(len(assign)),
+        "inertia": nc["inertia"],
+        "sklearnInertia": float(best.inertia_),
+        "relativeInertia": float(nc["inertia"] / best.inertia_ - 1),
+        "adjustedRand": float(adjusted_rand_score(assign, best.labels_)),
+    }
+    result["versions"]["scikit-learn"] = version("scikit-learn")
+    r = result["niches"]
+    print(f"{set_name} niches: {r['niches']} of {r['cells']} cells; inertia {r['inertia']:.4f} against scikit-learn's {r['sklearnInertia']:.4f} ({r['relativeInertia']:+.2g}); adjusted Rand index {r['adjustedRand']:.3f}")
 
     out.write_text(json.dumps(result, indent=1) + "\n")
 

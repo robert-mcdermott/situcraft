@@ -35,6 +35,7 @@ type domain struct {
 // cell is one true cell.
 type cell struct {
 	typ          int
+	domain       int     // the domain that chose its type
 	x, y         float64 // centre, µm
 	a, b         float64 // semi-axes, µm (a along u)
 	ux, uy       float64 // the long axis
@@ -101,7 +102,10 @@ func (t *tissue) makeDomains(s *random.Stream) {
 	}
 }
 
-func (t *tissue) domainAt(x, y float64) *domain {
+func (t *tissue) domainAt(x, y float64) *domain { return &t.domains[t.domainOf(x, y)] }
+
+// domainOf is the domain whose center is nearest (x, y) (the first, on a tie).
+func (t *tissue) domainOf(x, y float64) int {
 	best, bestD := 0, math.Inf(1)
 	for i, d := range t.domains {
 		dx, dy := x-d.x, y-d.y
@@ -109,7 +113,7 @@ func (t *tissue) domainAt(x, y float64) *domain {
 			best, bestD = i, dd
 		}
 	}
-	return &t.domains[best]
+	return best
 }
 
 // placeCells throws darts until the cells' areas reach the fill.
@@ -125,7 +129,8 @@ func (t *tissue) placeCells(s *random.Stream) {
 	misses := 0
 	for placed < target && misses < 2000 {
 		x, y := mul(s.Float64(), p.WidthUm), mul(s.Float64(), p.HeightUm)
-		d := t.domainAt(x, y)
+		di := t.domainOf(x, y)
+		d := &t.domains[di]
 		k := pick(s, d.mix)
 		ty := p.Types[k]
 		area := s.LogNormal(dmath.Log(ty.AreaUm2), ty.AreaSpread)
@@ -136,7 +141,7 @@ func (t *tissue) placeCells(s *random.Stream) {
 		}
 		misses = 0
 		e := 1 + mul(s.Float64(), ty.Elongation-1)
-		c := cell{typ: k, x: x, y: y, a: mul(r, math.Sqrt(e)), b: r / math.Sqrt(e)}
+		c := cell{typ: k, domain: di, x: x, y: y, a: mul(r, math.Sqrt(e)), b: r / math.Sqrt(e)}
 		// Elongated cells half follow their domain's direction.
 		nx, ny := unit(s)
 		c.ux, c.uy = d.dx+mul(0.8, nx), d.dy+mul(0.8, ny)

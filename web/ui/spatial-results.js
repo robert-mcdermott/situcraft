@@ -4,11 +4,13 @@
 // curves, one label's ratio to each label's over the distances; nearest distances' distribution and
 // Ripley's L, each with its envelope from the permutations; regions compared, their densities and
 // shares with intervals and two rows' ratios as a forest plot; a label's profile across a region's
-// edge, and each label's core, margin and surroundings compared. Each pair, label or region can be
-// chosen, and its cells shown on the tissue.
+// edge, and each label's core, margin and surroundings compared; niches, their make-up against the
+// tissue's as a heat map, and each one's defining labels and leading genes. Each pair, label,
+// region or niche can be chosen, and its cells shown on the tissue.
 
 import { h, formatCount } from './dom.js';
-import { divergingColor, rankPairs, rowNames } from '../lib/spatial.js';
+import { divergingColor, nicheNames, rankPairs, rowNames } from '../lib/spatial.js';
+import { categoricalColor } from '../lib/colormaps.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
 function svg(tag, attrs = {}, ...children) {
@@ -545,4 +547,58 @@ export function readingsTable(analysis, { onPick, chosen = null }) {
     h('tbody', ...order.map((k) => h(`tr${chosen === k ? '.selected' : ''}`, pickable({ 'data-label': k }, () => onPick(k)),
       h('th', { scope: 'row' }, h('span.sp-swatch', { style: { background: analysis.labels.colors?.[k] ?? 'var(--text-3)' } }), names[k]),
       zone(0, k), zone(1, k), zone(2, k), cmp(k, 0), cmp(k, 1), cmp(k, 2), h('td', reading(k) || h('span.muted', '—')))))));
+}
+
+// --- Niches ---
+
+// Niches' make-up: a row for each niche, a column for each label, each square its share of the
+// niche's windows over its share of the tissue's labeled cells (log₂: red above, blue below, clamped
+// at ±2); onPick(v) when a niche is chosen.
+export function nicheHeatmap(analysis, { onPick, chosen = null }) {
+  const r = analysis.niches;
+  const names = analysis.labels.names;
+  const K = names.length;
+  const rows = nicheNames(r, names);
+  const cell = Math.max(14, Math.min(36, Math.floor(480 / K)));
+  const left = Math.min(230, 14 + 6.2 * Math.max(...rows.map((n) => n.length)));
+  const top = Math.min(150, 12 + 6.2 * Math.max(...names.map((n) => n.length)));
+  const W = left + K * cell + 8;
+  const H = top + r.niches * cell + 8;
+  const root = svg('svg', { class: 'sp-heatmap', width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Each niche\'s share of each label over the tissue\'s' });
+  names.forEach((name, k) => {
+    root.append(svg('text', { x: 0, y: 0, transform: `translate(${left + k * cell + cell / 2 + 3.5}, ${top - 6}) rotate(-60)`, class: 'sp-axis' }, document.createTextNode(name)));
+  });
+  rows.forEach((name, v) => {
+    const label = svg('text', { x: left - 8, y: top + v * cell + cell / 2 + 3.5, 'text-anchor': 'end', class: `sp-axis${chosen === v ? ' chosen' : ''}`, 'data-niche': v }, document.createTextNode(name));
+    label.addEventListener('click', () => onPick(v));
+    root.append(label);
+    for (let k = 0; k < K; k += 1) {
+      const share = r.composition[v * K + k] ?? NaN;
+      const ratio = share / r.tissue[k];
+      const sq = svg('rect', { x: left + k * cell, y: top + v * cell, width: cell - 1, height: cell - 1, fill: Number.isFinite(ratio) ? divergingColor(ratio > 0 ? log2(ratio) : -Infinity) : 'transparent', class: 'sp-square', 'data-niche': v });
+      sq.append(svg('title', {}, document.createTextNode(`${name}: ${names[k]} ${(100 * share).toFixed(1)}% of its windows, ${(100 * r.tissue[k]).toFixed(1)}% of the tissue's labeled cells (${times(ratio)})`)));
+      sq.addEventListener('click', () => onPick(v));
+      root.append(sq);
+    }
+    root.append(svg('rect', { x: 2, y: top + v * cell + (cell - 10) / 2, width: 10, height: 10, rx: 2, fill: categoricalColor(v) }));
+  });
+  if (chosen !== null) root.append(svg('rect', { x: left - 1, y: top + chosen * cell - 1, width: K * cell + 1, height: cell + 1, class: 'sp-chosen-square' }));
+  return h('div.sp-heatmap-wrap', root, h('div.sp-scale', 'less than in the tissue', h('span.sp-scale-bar', { style: { background: `linear-gradient(90deg, ${[-2, -1, 0, 1, 2].map((v) => divergingColor(v)).join(', ')})` } }), 'more (¼× to 4×)'));
+}
+
+// Niches as a table: each one's cells, its defining labels (their share of its windows, and how many
+// times the tissue's) and its leading genes; onPick(v).
+export function nichesTable(analysis, { onPick, chosen = null }) {
+  const r = analysis.niches;
+  const names = analysis.labels.names;
+  const K = names.length;
+  const rows = nicheNames(r, names);
+  const total = r.cells.reduce((a, b) => a + b, 0);
+  return h('div.table-wrap', h('table.data-table.seg-table.sp-niches',
+    h('thead', h('tr', h('th', 'Niche'), h('th.r', 'Cells'), h('th', 'Defined by'), h('th', 'Leading genes (exploratory)'))),
+    h('tbody', ...rows.map((name, v) => h(`tr${chosen === v ? '.selected' : ''}`, pickable({ 'data-niche': v }, () => onPick(v)),
+      h('th', { scope: 'row' }, h('span.sp-swatch', { style: { background: categoricalColor(v) } }), name),
+      h('td.r', formatCount(r.cells[v]), h('div.muted.sp-sub', percent(r.cells[v] / total))),
+      h('td', r.defining[v].map((k) => `${names[k]} ${percent(r.composition[v * K + k])} (${times(r.composition[v * K + k] / r.tissue[k])})`).join(', ')),
+      h('td', (r.markers[v] ?? []).slice(0, 5).map((m) => m.gene).join(', ') || h('span.muted', '—')))))));
 }

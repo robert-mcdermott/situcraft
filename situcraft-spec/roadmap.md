@@ -2617,15 +2617,53 @@ as in waves 3 and 4.
      - **Lung's vessel stroma** (a region drawn by its stromal and endothelial cells): stromal and
        endothelial cells 2.9 times as dense as in the rest of the tissue, epithelial cells 0.45
        times; across its edge the endothelial cells fill it and the epithelial cells stay out.
-5. **Cellular neighborhoods (N5).**
-   - Each cell's neighborhood composition (its k nearest or those within a radius, itself
-     included), clustered by k-means with k-means++ seeding (Arthur & Vassilvitskii 2007), as
-     Goltsev et al. (2018) and Schürch et al. (2020) define niches; seeded, with restarts. Each
-     niche's composition against the tissue's, its defining labels and its markers (exploratory),
-     its cells mapped; the agreement between seeds stated.
-   - The simulator's truth gains each cell's domain.
-   - Validation: k-means against exact optima on small sets and scikit-learn's inertia; on
-     simulated tissues, niches against the true domains (the adjusted Rand index).
+5. **Cellular neighborhoods (N5): done.**
+   - **k-means** (`internal/cluster/kmeans.go`): k-means++ seeding (Arthur & Vassilvitskii 2007),
+     Lloyd's iterations to convergence (Lloyd 1982), an empty cluster taking the point farthest from
+     its center, the best of several starts each from its own seeded stream; sums in fixed chunks,
+     the same on any number of workers.
+   - **Niches** (`internal/spatial/niches.go`): each cell's window, its k nearest labeled cells
+     (10; itself among them when labeled) or those within a radius, by its labels' shares; the
+     windows clustered into niches (6, the best of 10 starts), numbered by size, as Goltsev et al.
+     (2018) and Schürch et al. (2020) define cellular neighborhoods; the niches found again from 4
+     further seeds and compared by the adjusted Rand index. Each niche's make-up against the
+     tissue's, its defining labels (at least 1.5 times their share in the tissue and 5% of its
+     windows), and its leading genes against the other niches' cells (the clusterings' markers,
+     exploratory).
+   - **The question** `niches` (`api_spatial.go`; each cell's niche in `cells.bin`): a heat map
+     of the niches' make-up, a table of each one's cells, defining labels and genes, the seeds'
+     agreement; **Show the niches on the tissue**, and a niche's cells. **Niches are a label set**
+     (`ui/label-sources.js`): the Viewer fills cells by niche, and the other questions can be asked
+     of them. Remote control: `spatial_analysis` (`niches`); `show_tissue`'s `fill: niches` and
+     `cells_of` with a niche.
+   - **The simulator's truth** gives each cell its domain (`truth/cells.parquet`, `domain`; a
+     mosaic's numbered across its tiles); nothing else it makes changes.
+   - Validation:
+     - **By hand:** k-means against every partition of 9 points into 2 and 3 clusters (the optimum,
+       12 sets); separated clusters found exactly (adjusted Rand index 1), the same on one worker
+       and on eight; each cell's window, nearest and within a radius, against every labeled cell;
+       three stripes of different composition found as three niches (0.98), every seed agreeing.
+     - **Against scikit-learn** (`validation/reference/spatial/`, weekly): on both 2-FOV bundles and
+       the simulated tissue, labeled by their clusters, the windows' k-means within 0.2% of
+       scikit-learn 1.9.1's inertia (the best of 10 starts from 5 seeds), the niches alike at an
+       adjusted Rand index of 0.89, 0.98 and 0.94.
+     - **Against the true domains** (weekly): the simulated tissue's true cells, by their true types:
+       its 6 domains are of 4 kinds (by the type leading them); 4 niches of each cell's 30 nearest
+       find the kinds at 0.92, every seed agreeing; 6 niches of the 10 nearest find the domains at
+       0.45, and the seeds agree at 0.66 to 0.93, saying so.
+     - **In the page** (viewer suite): each niche's make-up the mean of its cells' windows by the
+       suite's own search, every cell nearest its own niche's center, the cells filled by niche as
+       many as the analysis holds, and a niche's cells shown.
+   - Found by slice 5:
+     - **Same-type domains are one kind of place:** two simulated domains led by one type differ only
+       in their minor types; no window of 10 tells them apart. The seeds' disagreement is what
+       shows too many niches.
+     - **A niche is named by what it holds more of:** in Lung, where 83% of the labeled cells are
+       epithelial, every niche is mostly epithelium; a niche named "Endothelial" alone read as a
+       vessel. Names carry the defining labels' shares ("4 · Endothelial 25%").
+     - **Lung's classes:** six niches, epithelium (44% of the cells), endothelium at 12% and 25%,
+       stroma at 17%, immune cells at 22%, and stroma with endothelium (39%, 13%); their genes those
+       of their cells (VWF and PLVAP; AIF1 and CD68; PDGFRB and COL8A1).
 6. **Spatially variable genes (N7).**
    - Moran's I of each gene over a graph (Moran 1950), with its expectation and variance under
      randomization (Cliff & Ord 1981) and by permutation, Benjamini–Hochberg adjusted; genes

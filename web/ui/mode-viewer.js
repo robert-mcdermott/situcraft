@@ -200,7 +200,7 @@ export function mountViewer(app, container) {
     const drawnChoice = () => state.seg?.choice ?? choices().find((c) => c.instrument) ?? null;
     // What the panel lists: the segmentations, and the drawn one's clusterings.
     // Curated and consensus label sets, drawn as labels at one level.
-    const versionFills = () => labelVersions(app.store.project, t.dataset.id, drawnChoice()?.id).filter((v) => v.kind === 'curated' || v.kind === 'consensus').map((v) => ({ id: `labels:${v.id}:0`, labels: v.id, level: 0, label: `${v.kind === 'curated' ? 'Curated' : 'Consensus'} labels: ${v.name}` }));
+    const versionFills = () => labelVersions(app.store.project, t.dataset.id, drawnChoice()?.id, { niches: true }).filter((v) => ['curated', 'consensus', 'niches'].includes(v.kind)).map((v) => ({ id: `labels:${v.id}:0`, labels: v.id, level: 0, label: v.kind === 'niches' ? v.name : `${v.kind === 'curated' ? 'Curated' : 'Consensus'} labels: ${v.name}`, help: v.kind === 'niches' ? 'Each cell by the kind of place it is in: its neighborhood\'s make-up (the Spatial view\'s cellular neighborhoods)' : undefined }));
     const analysisFills = () => [...clusterFills(app.store.project, t.dataset.id, drawnChoice()?.id), ...labelFills(app.store.project, t.dataset.id, drawnChoice()?.id), ...versionFills(), { id: 'review', label: 'Review status', help: 'Each cell by its review: excluded, a segmentation concern, ambiguous, relabeled, accepted or commented' }];
     const imageRecords = () => placedImages(app.store.project, t.dataset.id);
     // The drawn segmentation's graphs (lib/graphs.js), as the panel lists them.

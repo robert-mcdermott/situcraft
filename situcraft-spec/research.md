@@ -2802,6 +2802,38 @@ dense as in the rest of the tissue, epithelial 0.45× (0.35 to 0.57); across its
 endothelial cells fill it (the core over around 2.78×, 1.15 to 7.66) and the epithelial cells stay
 out (0.45×, 0.29 to 0.67).
 
+### 6.5 Cellular neighborhoods (verified, wave 6, slice 5)
+
+**Niches** (Goltsev et al. 2018; Schürch et al. 2020): each cell's window, its 10 nearest labeled
+cells (itself among them when labeled; ties by index) or the labeled cells within a radius, is
+described by its labels' shares; the windows are clustered by k-means, each start seeded by
+k-means++ (Arthur and Vassilvitskii 2007: a first center at random, each next with probability
+proportional to its squared distance to the nearest chosen) and run by Lloyd's iterations (Lloyd
+1982) until no window changes niche; the least inertia of 10 starts is kept. A niche is a kind of
+place: unlabeled cells take the niche of the labeled cells around them. k-means finds local optima,
+so the niches are found again from 4 further seeds and compared by the adjusted Rand index (Hubert
+and Arabie 1985); each niche's genes are its cells' against the other niches' cells (the clusterings'
+Wilcoxon markers), exploratory.
+
+| Check | Result |
+| --- | --- |
+| Every partition of 9 points into 2 and 3 clusters (12 sets) | k-means's best of 20 starts the optimum each time |
+| Four separated clusters, 12,000 points | found exactly; the same on one worker and on eight |
+| Windows, nearest 10 and within 25 µm, 1,500 cells | each one's composition the exhaustive search's |
+| scikit-learn 1.9.1's KMeans (k-means++, 10 starts, 5 seeds), the same windows, 6 niches | SituCraft's inertia +0.17%, +0.004%, +0.14% (Lung, Breast, simulated); niches alike at 0.888, 0.980, 0.938 |
+| The simulated tissue's 6 domains (4 kinds, by the leading type), its true cells by type | 4 niches of 30 nearest: the kinds at 0.918, every seed agreeing; 6 niches of 10 nearest: the domains at 0.446, the seeds at 0.66–0.93 |
+
+scikit-learn's seeding tries several candidates for each center and keeps the best (greedy
+k-means++), which accounts for its slightly lower inertia. Domains led by the same type differ only
+in their minor types (Gamma-drawn shares of the other 40%), which a window of 10 cells cannot
+resolve: asked for as many niches as domains, k-means splits kinds of domain differently from each
+seed, and the agreement says so.
+
+**Lung** (5,555 labeled cells by class, 6 niches): epithelium (95% of its windows; 44% of the
+cells), endothelial niches at 12% and 25% (the tissue 6%; VWF, PLVAP), stroma at 17% (PDGFRB),
+immune cells at 22% (the tissue 4%; AIF1, CD68), and stroma with endothelium (39% and 13%; COL8A1,
+PDGFRA); the other seeds agree at 0.58 to 0.99.
+
 ## 7. Datasets
 
 | Dataset | Source | Size | License | Use |

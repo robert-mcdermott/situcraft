@@ -106,6 +106,24 @@ with the cells it comes from.
     (to 2 × 10⁻⁷ and 4 × 10⁻⁶) and every count its; the simulated tissue's own domains, as regions,
     each found denser in its dominant type; in the page, the counts in a region and in each band and
     the cells at a margin against the suite's own.
+- **Cellular neighborhoods (wave 6, slice 5).** A question in the Spatial view, and a label set.
+  - **Niches:** each cell's neighborhood (its 10 nearest labeled cells, or those within a radius)
+    by its labels' shares, the cells grouped by k-means with k-means++ seeding, the best of 10
+    starts, into niches numbered by size; each niche's make-up against the tissue's (a heat map),
+    its defining labels and its leading genes; the niches found again from 4 other seeds and their
+    agreement stated (the adjusted Rand index).
+  - **Niches as labels:** the Viewer fills cells by niche, and every other question can be asked
+    of niches.
+  - **Remote control:** `spatial_analysis` asks `niches` (`neighbors` or `radius`, `niches`,
+    `starts`, `seeds`); `show_tissue` takes `fill: niches` and `cells_of` with a niche.
+  - **The simulator's truth** gives each cell its domain (`truth/cells.parquet`'s `domain`).
+  - **Validated:** k-means against every partition of small sets (the optimum each time),
+    separated clusters found exactly, the same on any number of workers; each window against an
+    exhaustive search; stripes of three compositions found (adjusted Rand index 0.98); on both
+    development bundles and the simulated tissue, k-means within 0.2% of scikit-learn's inertia and
+    its niches alike (0.89 to 0.98); the simulated tissue's kinds of domain found from its true
+    cells (0.92), and too many niches flagged by the seeds' disagreement; in the page, each niche's
+    make-up and every cell's niche against the suite's own search, and the niches on the tissue.
 
 ## 0.5.0 (2026-10-17)
 

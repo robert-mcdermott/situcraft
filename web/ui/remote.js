@@ -28,7 +28,7 @@ import { labelSource, labelVersions, refOf } from './label-sources.js';
 import { defaultPair, impactLines, sideOf } from '../lib/impact.js';
 import { remakeOnSegmentation } from './remake.js';
 import { KINDS as GRAPH_KINDS, describeGraph, graphsOf } from '../lib/graphs.js';
-import { analysesOf, bandsOf, rankPairs, rowNames, zoneBands } from '../lib/spatial.js';
+import { analysesOf, bandsOf, nicheNames, rankPairs, rowNames, zoneBands } from '../lib/spatial.js';
 import { ratioText } from './spatial-results.js';
 import { showAnalysisCells } from './spatial-cells.js';
 
@@ -554,7 +554,7 @@ export function installRemote(app) {
       if (args.segmentation !== undefined) view.segmentation = segmentationRef(dataset, args.segmentation);
       if (args.outlines !== undefined) view.cells.outlines = Boolean(args.outlines);
       if (args.nuclei !== undefined) view.cells.nuclei = Boolean(args.nuclei);
-      if (args.fill !== undefined) view.cells.fill = args.fill === null || /^none$/i.test(String(args.fill)) ? null : /^review( status)?$/i.test(String(args.fill)) ? 'review' : /^clusters\b/i.test(String(args.fill)) ? clusterFill(dataset, view.segmentation, String(args.fill)) : /^labels\b/i.test(String(args.fill)) ? await labelFill(dataset, view.segmentation, String(args.fill)) : choose(args.fill, view.segmentation === 'instrument' ? FILLS : [...FILLS.filter((f) => f !== 'method'), ...SEGMENTATION_FILLS], 'fill');
+      if (args.fill !== undefined) view.cells.fill = args.fill === null || /^none$/i.test(String(args.fill)) ? null : /^review( status)?$/i.test(String(args.fill)) ? 'review' : /^clusters\b/i.test(String(args.fill)) ? clusterFill(dataset, view.segmentation, String(args.fill)) : /^(labels|niches)\b/i.test(String(args.fill)) ? await labelFill(dataset, view.segmentation, String(args.fill)) : choose(args.fill, view.segmentation === 'instrument' ? FILLS : [...FILLS.filter((f) => f !== 'method'), ...SEGMENTATION_FILLS], 'fill');
       if (args.opacity !== undefined) view.cells.opacity = Math.min(1, Math.max(0, finite(args.opacity, 'opacity')));
       if (args.color_by !== undefined) {
         if (choose(args.color_by, ['gene', 'probability'], 'coloring') === 'probability') view.transcripts.colorBy = 'probability';
@@ -1214,8 +1214,8 @@ export function installRemote(app) {
     },
 
     async spatial_analysis(args) {
-      const { dataset, seg, version } = labelVersionArg(args);
-      const question = choose(args.question ?? 'enrichment', ['enrichment', 'cooccurrence', 'distances', 'ripley', 'regions', 'boundary'], 'question');
+      const { dataset, seg, version } = labelVersionArg(args, { niches: true });
+      const question = choose(args.question ?? 'enrichment', ['enrichment', 'cooccurrence', 'distances', 'ripley', 'regions', 'boundary', 'niches'], 'question');
       let graph;
       if (question === 'enrichment') {
         const list = graphsOf(project(), dataset.id, seg.id).filter((g) => g.state === 'complete');
@@ -1253,9 +1253,14 @@ export function installRemote(app) {
         : question === 'ripley' ? [['permutations', 'dPermutations'], ['seed', 'seed'], ['up_to', 'upTo'], ['every', 'every'], ['closing', 'closing']]
           : question === 'regions' ? [['closing', 'closing']]
             : question === 'boundary' ? [['reach', 'bReach'], ['every', 'bStep'], ['margin', 'margin'], ['closing', 'closing']]
-              : [['permutations', 'permutations'], ['seed', 'seed'], ['up_to', 'farthest'], ['every', 'step']];
+              : question === 'niches' ? [['neighbors', 'neighbors'], ['radius', 'nRadius'], ['niches', 'niches'], ['starts', 'starts'], ['seeds', 'seeds'], ['seed', 'seed']]
+                : [['permutations', 'permutations'], ['seed', 'seed'], ['up_to', 'farthest'], ['every', 'step']];
       for (const [arg, key] of keys) if (args[arg] !== undefined) ask[key] = finite(args[arg], arg);
       if (args.correction !== undefined) ask.correction = choose(args.correction, ['isotropic', 'none'], 'correction');
+      if (question === 'niches' && args.radius !== undefined) {
+        if (args.neighbors !== undefined) throw new ActionError('A niche\'s neighborhood is its nearest neighbors or a radius: give one.');
+        ask.windowBy = 'radius';
+      }
       if (args.window !== undefined) ask.window = /^(the )?tissue$/i.test(String(args.window)) ? 'tissue' : regionRef(dataset, args.window).id;
       if (args.weight !== undefined) ask.weight = choose(args.weight, ['edges', 'boundary'], 'weight');
       if (args.pairs !== undefined) ask.pairs = choose(args.pairs, ['within', 'between'], 'pairs');
@@ -1293,6 +1298,21 @@ export function installRemote(app) {
         return {
           message: `${manifest.name}: ${plural(sig.length, 'pair')} of ${plural(pairs.length, 'pair')} nearer or farther than at random (adjusted p below 0.05)${near.length ? `; nearest: ${near.join(', ')}` : ''}${far.length ? `; farthest: ${far.join(', ')}` : ''}.`,
           data: { id: manifest.id, name: manifest.name, labels: names, cells: a.cells, reach: r.reach, parameters: a.parameters, pairs },
+        };
+      }
+      if (question === 'niches') {
+        const r = a.niches;
+        const K = names.length;
+        const niches = nicheNames(r, names).map((name, v) => ({
+          name, cells: r.cells[v], defining: r.defining[v].map((k) => names[k]),
+          composition: Object.fromEntries(names.map((label, k) => [label, r.composition[v * K + k]])),
+          counts: Object.fromEntries(names.map((label, k) => [label, r.counts[v * K + k]])),
+          genes: (r.markers[v] ?? []).map((m) => ({ gene: m.gene, logfc: m.logfc, score: m.score, padj: m.padj, pctIn: m.pctIn, pctOut: m.pctOut })),
+        }));
+        const agreement = r.agreement?.length ? `; from ${plural(r.agreement.length, 'other seed')}, an adjusted Rand index of ${Math.min(...r.agreement).toFixed(2)} to ${Math.max(...r.agreement).toFixed(2)}` : '';
+        return {
+          message: `${manifest.name}: ${plural(r.niches, 'niche')} of ${plural(r.windows, 'cell')}: ${niches.map((x) => `${x.name} (${x.cells.toLocaleString('en-US')})`).join(', ')}${agreement}.`,
+          data: { id: manifest.id, name: manifest.name, labels: names, tissue: Object.fromEntries(names.map((label, k) => [label, r.tissue[k]])), windows: r.windows, inertia: r.inertia, agreement: r.agreement, parameters: a.parameters, niches },
         };
       }
       if (question === 'regions') {
@@ -2228,8 +2248,9 @@ export function installRemote(app) {
 
   // Shows a spatial analysis's cells (spec: { analysis: an id or latest, a, b: labels by name, and a
   // co-occurrence's distance in µm; for regions compared, a and the region (a row's name); across an
-  // edge, a (any label if not given) and the zone: core, margin, around or all }); answers what is
-  // shown.
+  // edge, a (any label if not given) and the zone: core, margin, around or all; for niches, the
+  // niche (its number from 1, or name; all of them, filled by niche, if not given) }); answers what
+  // is shown.
   async function analysisCells(dataset, spec) {
     if (typeof spec !== 'object' || spec === null) throw new ActionError('cells_of is {"analysis", "a", "b", "distance"}, {"analysis", "a", "region"} or {"analysis", "a", "zone"}.');
     const list = analysesOf(project(), dataset.id).filter((x) => x.state === 'complete');
@@ -2240,6 +2261,16 @@ export function installRemote(app) {
     const names = data.analysis.labels.names;
     const segmentationOf = () => project().artifacts.find((x) => x.kind === 'segmentation' && x.id === record.segmentation);
     const itemOf = () => app.bundles.link(dataset.id)?.item ?? app.bundles.itemByPath(dataset.path);
+    if (data.analysis.question === 'niches') {
+      const niches = nicheNames(data.analysis.niches, names);
+      let niche = -1;
+      if (spec.niche !== undefined) {
+        const text = String(spec.niche);
+        niche = /^\d+$/.test(text) ? Number(text) - 1 : niches.indexOf(choose(text, niches, 'niche'));
+        if (!(niche >= 0 && niche < niches.length)) throw new ActionError(`The niches are 1 to ${niches.length}.`);
+      }
+      return showAnalysisCells(app, { dataset: dataset.id, item: itemOf(), segmentation: segmentationOf(), analysis: data.analysis, cells: data.cells, id: record.id, niche });
+    }
     if (data.analysis.question === 'regions') {
       const rows = rowNames(data.analysis.regions);
       const row = rows.indexOf(choose(spec.region ?? rows[0], rows, 'region'));
@@ -2283,16 +2314,17 @@ export function installRemote(app) {
 
   // A label version of a segmentation (labels: a label set's id, a curated or consensus set's; the
   // latest if not given; level: a name or number from 1).
-  function labelVersionArg(args) {
+  function labelVersionArg(args, { niches = false } = {}) {
     const dataset = resolveDataset(args.dataset);
     const seg = segmentationArg(dataset, args.segmentation);
     const link = app.bundles.link(dataset.id);
     const item = link?.item ?? app.bundles.itemByPath(dataset.path);
     if (!item) throw new ActionError(`${dataset.name}'s bundle was not found where the project records it.`);
-    const versions = labelVersions(project(), dataset.id, seg.id);
+    const versions = labelVersions(project(), dataset.id, seg.id, { niches });
     if (!versions.length) throw new ActionError(`${seg.name} has no labels: label_cells or import_labels makes them.`);
     const ref = args.labels === undefined ? null : String(args.labels);
-    const of = ref ? versions.filter((v) => v.id === ref) : versions.filter((v) => v.id === versions.filter((x) => x.kind !== 'consensus').at(-1)?.id);
+    // The latest set, a consensus or niches only when named.
+    const of = ref ? versions.filter((v) => v.id === ref) : versions.filter((v) => v.id === versions.filter((x) => x.kind !== 'consensus' && x.kind !== 'niches').at(-1)?.id);
     if (!of.length) throw new ActionError(`No label set ${ref} of ${seg.name}; its sets are ${[...new Set(versions.map((v) => `${v.id} (${v.name})`))].join(', ')}.`);
     let version = of[0];
     if (args.level !== undefined && of.length > 1) {
@@ -2361,9 +2393,15 @@ export function installRemote(app) {
   // 'labels:<id>[:<level>]'.
   async function labelFill(dataset, segRef, text) {
     const seg = segRef === 'instrument' ? segmentationChoices(project(), dataset.id).find((c) => c.instrument)?.id : segRef;
-    const version = /^labels:((cur|con)-[\w-]+)/i.exec(text)?.[1];
+    // Niches: the latest of the segmentation drawn, or an analysis's by its id.
+    const niches = project().artifacts.filter((a) => a.kind === 'spatial' && a.question === 'niches' && a.dataset === dataset.id && a.segmentation === seg && a.state === 'complete');
+    if (/^niches$/i.test(text.trim())) {
+      if (!niches.length) throw new ActionError('The segmentation drawn has no niches: spatial_analysis with the question niches finds them.');
+      return `labels:${niches.at(-1).id}:0`;
+    }
+    const version = /^labels:((cur|con|spa)-[\w-]+)/i.exec(text)?.[1];
     if (version) {
-      if (!project().artifacts.some((a) => a.id === version && a.segmentation === seg)) throw new ActionError(`No curated or consensus label set ${version} of the segmentation drawn.`);
+      if (version.startsWith('spa-') ? !niches.some((a) => a.id === version) : !project().artifacts.some((a) => a.id === version && a.segmentation === seg)) throw new ActionError(`No curated or consensus label set, or niches, ${version} of the segmentation drawn.`);
       return `labels:${version}:0`;
     }
     const sets = project().artifacts.filter((a) => a.kind === 'labels' && a.dataset === dataset.id && a.segmentation === seg && a.state === 'complete');

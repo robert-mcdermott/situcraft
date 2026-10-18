@@ -190,6 +190,12 @@ func (m *mosaic) add(wr *writer, i, j int) error {
 		return func(c map[string]*parquet.Values) {
 			m.renumber(c["cell_id"], ids)
 			m.shift(c, "x_centroid", "y_centroid")
+			// The truth's domains, each tile's its own: numbered across the mosaic.
+			if d := c["domain"]; d != nil {
+				for r := range d.Int32 {
+					d.Int32[r] += int32((j*m.across + i) * m.p.Domains)
+				}
+			}
 		}
 	}
 	boundaries := func(ids map[string][]byte, base int) func(c map[string]*parquet.Values) {

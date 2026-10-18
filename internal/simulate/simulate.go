@@ -241,7 +241,7 @@ func (wr *writer) description() any {
 		"software":  "SituCraft " + wr.software,
 		"about": "Every cell, nucleus and molecule in this bundle is simulated. The files are laid out as a Xenium output bundle " +
 			"so that any tool reading Xenium data can read them; no instrument made them. The instrument's segmentation is a " +
-			"simulated nucleus expansion; the true segmentation, every molecule's true cell and place, and each cell's type are in truth/." +
+			"simulated nucleus expansion; the true segmentation, every molecule's true cell and place, and each cell's type and domain are in truth/." +
 			postXeniumAbout(wr.postXenium),
 		"truth":      "truth",
 		"parameters": wr.t.p,

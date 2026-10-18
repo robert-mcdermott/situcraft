@@ -21,6 +21,7 @@ import (
 	"sort"
 
 	"situcraft/internal/artifacts"
+	"situcraft/internal/cluster"
 	"situcraft/internal/segment"
 )
 
@@ -32,6 +33,7 @@ const (
 	QuestionRipley       = "ripley"
 	QuestionRegions      = "regions"
 	QuestionBoundary     = "boundary"
+	QuestionNiches       = "niches"
 )
 
 // AnalysisVersion names this version of the analyses, as artifacts record it.
@@ -229,6 +231,55 @@ type BoundaryResult struct {
 	Outside     int       `json:"outside"`
 }
 
+// NichesResult is cellular neighborhoods in analysis.json, the niches numbered by size: by niche,
+// its cells and, N × K, the mean composition of its cells' windows and its labeled cells by label;
+// each label's share of the labeled cells; the niches' defining labels (those at least 1.5 times
+// their share in the tissue and 5% of the windows, by how much, up to three; else the commonest);
+// the cells with a window, k-means's inertia and each start's; the agreement (adjusted Rand
+// index) with each further seed's niches; and each niche's leading genes against the other
+// niches' cells (exploratory), from the cells with a gene transcript.
+type NichesResult struct {
+	Niches      int                `json:"niches"`
+	Windows     int                `json:"windows"`
+	Cells       []int              `json:"cells"`
+	Composition Nums               `json:"composition"`
+	Counts      []int              `json:"counts"`
+	Tissue      Nums               `json:"tissue"`
+	Defining    [][]int            `json:"defining"`
+	Inertia     float64            `json:"inertia"`
+	Inertias    Nums               `json:"inertias"`
+	Agreement   Nums               `json:"agreement"`
+	Markers     [][]cluster.Marker `json:"markers"`
+	MarkerCells int                `json:"markerCells"`
+}
+
+// DefiningLabels are a niche's defining labels: those whose share of its windows is at least 1.5
+// times their share in the tissue and at least 5%, by that ratio, up to three; else the commonest.
+func DefiningLabels(composition, tissue []float64) []int {
+	var out []int
+	for k := range composition {
+		if tissue[k] > 0 && composition[k] >= 0.05 && composition[k] >= 1.5*tissue[k] {
+			out = append(out, k)
+		}
+	}
+	sort.SliceStable(out, func(a, b int) bool {
+		return composition[out[a]]/tissue[out[a]] > composition[out[b]]/tissue[out[b]]
+	})
+	if len(out) > 3 {
+		out = out[:3]
+	}
+	if len(out) == 0 {
+		best := 0
+		for k := range composition {
+			if composition[k] > composition[best] {
+				best = k
+			}
+		}
+		out = []int{best}
+	}
+	return out
+}
+
 // WindowRef says what window Ripley's K was in: the tissue (its cells' pixels on a grid, closed by
 // a radius) or a region; its area and boundary.
 type WindowRef struct {
@@ -260,6 +311,7 @@ type Analysis struct {
 	Ripley       *RipleyResult       `json:"ripley,omitempty"`
 	Regions      *RegionsResult      `json:"regions,omitempty"`
 	Boundary     *BoundaryResult     `json:"boundary,omitempty"`
+	Niches       *NichesResult       `json:"niches,omitempty"`
 	Window       *WindowRef          `json:"window,omitempty"`
 }
 
@@ -275,7 +327,8 @@ type AnalyzedCells struct {
 // Analyzed are cells.bin: rows of the segmentation, labels and strata. A stratum is, for an
 // enrichment, the region the labels were dealt within (0 none); for regions compared, the regions
 // holding the cell (bit k for the kth; OutsideTissue outside the tissue window); across a region's
-// edge, the cell's band + 1 (0 outside the tissue window); for the other questions, 0.
+// edge, the cell's band + 1 (0 outside the tissue window); for niches, the cell's niche + 1 (0 for
+// a cell without a labeled cell in its window); for the other questions, 0.
 type Analyzed struct {
 	Rows    []uint32
 	Label   []int32
@@ -404,6 +457,18 @@ type AnalysisSummary struct {
 	Fill   []string `json:"fill,omitempty"`
 	Avoid  []string `json:"avoid,omitempty"`
 	Gather []string `json:"gather,omitempty"`
+	// Niches: each one's cells, defining labels and leading genes; the least and mean agreement
+	// with the further seeds' niches.
+	Niches       []NicheSummary `json:"niches,omitempty"`
+	AgreementMin *float64       `json:"agreementMin,omitempty"`
+	AgreementAvg *float64       `json:"agreementMean,omitempty"`
+}
+
+// NicheSummary is one niche, for a summary.
+type NicheSummary struct {
+	Cells    int      `json:"cells"`
+	Defining []string `json:"defining"`
+	Genes    []string `json:"genes"`
 }
 
 // RegionLabel is a label's density in a region over the tissue in none of the regions, for a
@@ -754,6 +819,72 @@ func CheckAnalysis(dir string, m *artifacts.Manifest) []artifacts.Finding {
 			}
 		}
 		s.Window = a.Window
+	case QuestionNiches:
+		r := a.Niches
+		if r == nil {
+			fatal("spatial.results", "Niches without their results.")
+			return out
+		}
+		N := r.Niches
+		if N < 2 || len(r.Cells) != N || len(r.Composition) != N*K || len(r.Counts) != N*K || len(r.Tissue) != K || len(r.Defining) != N || len(r.Markers) != N {
+			fatal("spatial.sizes", "The niches' results are not for %d niches of %d labels.", N, K)
+			return out
+		}
+		in := make([]int, N)
+		labeledIn := make([]int, N*K)
+		windows := 0
+		for i := 0; i < n; i++ {
+			v := c.Stratum[i]
+			if v > int32(N) {
+				fatal("spatial.labels", "Cell %d is in niche %d of %d.", i, v, N)
+				return out
+			}
+			if v > 0 {
+				windows++
+				in[v-1]++
+				if c.Label[i] >= 0 {
+					labeledIn[int(v-1)*K+int(c.Label[i])]++
+				}
+			}
+		}
+		if windows != r.Windows {
+			fatal("spatial.results", "%d cells have a niche; the results say %d.", windows, r.Windows)
+			return out
+		}
+		for v := 0; v < N; v++ {
+			sum := 0.0
+			for k := 0; k < K; k++ {
+				sum += r.Composition[v*K+k]
+				if labeledIn[v*K+k] != r.Counts[v*K+k] {
+					fatal("spatial.results", "Niche %d holds %d cells of label %d; the results say %d.", v, labeledIn[v*K+k], k, r.Counts[v*K+k])
+					return out
+				}
+			}
+			if in[v] != r.Cells[v] || math.Abs(sum-1) > 1e-6 || v > 0 && r.Cells[v] > r.Cells[v-1] {
+				fatal("spatial.results", "Niche %d: %d cells (the results say %d), its composition summing to %g.", v, in[v], r.Cells[v], sum)
+				return out
+			}
+			ns := NicheSummary{Cells: r.Cells[v]}
+			for _, k := range r.Defining[v] {
+				if k < 0 || k >= K {
+					fatal("spatial.results", "Niche %d's defining label %d.", v, k)
+					return out
+				}
+				ns.Defining = append(ns.Defining, a.Labels.Names[k])
+			}
+			for _, m := range r.Markers[v][:min(3, len(r.Markers[v]))] {
+				ns.Genes = append(ns.Genes, m.Gene)
+			}
+			s.Niches = append(s.Niches, ns)
+		}
+		if len(r.Agreement) > 0 {
+			lo, sum := math.Inf(1), 0.0
+			for _, v := range r.Agreement {
+				lo, sum = math.Min(lo, v), sum+v
+			}
+			avg := sum / float64(len(r.Agreement))
+			s.AgreementMin, s.AgreementAvg = &lo, &avg
+		}
 	case QuestionEnrichment:
 		e := a.Enrichment
 		if e == nil || a.Graph == nil {

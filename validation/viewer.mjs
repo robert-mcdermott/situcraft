@@ -1442,6 +1442,66 @@ export async function viewerSuite({ check, MissingData, verbose }) {
           const marginShown = shownMargin?.ok ? await chrome.eval('window.situcraftViewer.focus()') : null;
           check('viewer', 'the cells at a region\'s margin shown on the tissue: epithelial cells within 10 µm of the tumor nest\'s edge, as the suite counts them', `${shownMargin?.message ?? shownMargin?.error}; ${JSON.stringify(marginShown)}`,
             shownMargin?.ok && regionsOwn && regionsOwn.margin > 0 && marginShown?.cells === regionsOwn.margin, `${regionsOwn?.margin} cells`);
+
+          // Niches (wave 6, slice 5), against the suite's own: each cell's 10 nearest labeled cells
+          // by an exhaustive search, each niche's make-up the mean of its cells' windows, every cell
+          // nearest its own niche's center (k-means's fixed point); then the cells filled by niche,
+          // and one niche's cells shown.
+          const niches = labelsId ? await act('spatial_analysis', { dataset: 'xenium-lung-2fov', segmentation: 'instrument', question: 'niches', labels: labelsId, level: 1, niches: 5, seeds: 2 }) : null;
+          const nichesOwn = niches?.ok ? await chrome.eval(`(async () => {
+            const a = await (await fetch('/api/artifacts/${niches.data.id}/files/analysis.json')).json();
+            const cb = await (await fetch('/api/analyses/${niches.data.id}/cells')).arrayBuffer();
+            const n = new DataView(cb).getUint32(0, true);
+            const rows = new Uint32Array(cb, 4, n), label = new Int32Array(cb, 4 + 4 * n, n), stratum = new Int32Array(cb, 4 + 8 * n, n);
+            const gb = await (await fetch('/api/graphs/${graph?.data?.id}/edges')).arrayBuffer();
+            const gn = new DataView(gb).getUint32(0, true);
+            const grows = new Uint32Array(gb, 12, gn), gx = new Float32Array(gb, 12 + 4 * gn, gn), gy = new Float32Array(gb, 12 + 8 * gn, gn);
+            const X = [], Y = [];
+            for (let i = 0; i < gn; i += 1) {
+              X[grows[i]] = gx[i];
+              Y[grows[i]] = gy[i];
+            }
+            const K = a.labels.names.length, N = a.niches.niches;
+            const labeled = [];
+            for (let i = 0; i < n; i += 1) if (label[i] >= 0) labeled.push(i);
+            const sums = new Float64Array(N * K), size = new Array(N).fill(0);
+            const comp = new Float64Array(n * K);
+            for (let i = 0; i < n; i += 1) {
+              const px = X[rows[i]], py = Y[rows[i]];
+              const near = labeled.map((j) => [(X[rows[j]] - px) ** 2 + (Y[rows[j]] - py) ** 2, j]).sort((u, v) => u[0] - v[0] || u[1] - v[1]).slice(0, 10);
+              for (const [, j] of near) comp[i * K + label[j]] += 1 / near.length;
+              const v = stratum[i] - 1;
+              if (v < 0) continue;
+              size[v] += 1;
+              for (let k = 0; k < K; k += 1) sums[v * K + k] += comp[i * K + k];
+            }
+            let worst = 0;
+            for (let v = 0; v < N; v += 1) for (let k = 0; k < K; k += 1) worst = Math.max(worst, Math.abs(sums[v * K + k] / size[v] - a.niches.composition[v * K + k]));
+            // Each cell nearest its own niche's center.
+            let elsewhere = 0;
+            for (let i = 0; i < n; i += 1) {
+              let best = -1, bd = Infinity;
+              for (let v = 0; v < N; v += 1) {
+                let d = 0;
+                for (let k = 0; k < K; k += 1) d += (comp[i * K + k] - a.niches.composition[v * K + k]) ** 2;
+                if (d < bd - 1e-12) [best, bd] = [v, d];
+              }
+              if (best !== stratum[i] - 1) elsewhere += 1;
+            }
+            return { niches: N, sizes: size, recorded: a.niches.cells, worst, elsewhere };
+          })()`) : null;
+          check('viewer', 'niches by remote control: each niche\'s make-up the mean of its cells\' windows by the suite\'s own search of the 10 nearest labeled cells, every cell nearest its own niche\'s center', `${niches?.message ?? niches?.error}; ${JSON.stringify(nichesOwn)}`,
+            niches?.ok && nichesOwn && nichesOwn.niches === 5 && JSON.stringify(nichesOwn.sizes) === JSON.stringify(nichesOwn.recorded) && nichesOwn.worst < 1e-9 && nichesOwn.elsewhere === 0, 'the same make-up, each cell in its nearest niche');
+          const filled = niches?.ok ? await act('show_tissue', { dataset: 'xenium-lung-2fov', fill: 'niches' }) : null;
+          const fillShown = filled?.ok ? await chrome.eval(`(async () => {
+            for (let k = 0; k < 100 && !/^Niches/.test(window.situcraftViewer?.clusterFill?.()?.name ?? ''); k += 1) await new Promise((r) => setTimeout(r, 100));
+            const f = window.situcraftViewer?.clusterFill?.();
+            return f ? { name: f.name, counts: f.sets.map((_, k) => f.counts.get(k) ?? 0) } : null;
+          })()`) : null;
+          const oneNiche = filled?.ok ? await act('show_tissue', { dataset: 'xenium-lung-2fov', cells_of: { analysis: niches.data.id, niche: 2 } }) : null;
+          const oneShown = oneNiche?.ok ? await chrome.eval('window.situcraftViewer.focus()') : null;
+          check('viewer', 'niches on the tissue: the cells filled by their niche, as many in each as the analysis holds, and one niche\'s cells shown', `${filled?.message ?? filled?.error}; ${JSON.stringify(fillShown)}; ${oneNiche?.message ?? oneNiche?.error}; ${JSON.stringify(oneShown)}`,
+            filled?.ok && nichesOwn && JSON.stringify(fillShown?.counts) === JSON.stringify(nichesOwn.recorded) && oneShown?.cells === nichesOwn.recorded[1], 'the niches\' cells');
         }
 
         // The projects as 0.2.0, 0.3.0 and 0.4.0 saved them

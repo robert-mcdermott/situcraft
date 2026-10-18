@@ -964,8 +964,41 @@ drawn hollow.
 margin or around.
 
 The intervals treat cells as placed independently. Cells cluster, so the true uncertainty is
-wider. A section's cells are not independent replicates: these numbers describe this section.
-Comparing conditions needs samples, compared as samples (a later release).
+wider.
+
+### Cellular neighborhoods
+
+**Niches** are kinds of place in the tissue. Each cell's neighborhood (its 10 nearest labeled
+cells, itself among them when it is labeled, or the labeled cells within a radius) is described by
+its labels' shares, and the cells are grouped by these by k-means into niches. A niche is a kind of
+place, not a kind of cell: an unlabeled cell has the niche of the labeled cells around it. Niches
+are numbered by size and named by the labels they hold more of than the tissue does, with their
+shares: "4 · Endothelial 25%" is a place where a quarter of the cells are endothelial, against 6%
+in the tissue, though most are still epithelial.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/niches-dark.webp">
+  <img alt="The Spatial view's answer of six niches of the Lung example's classes: a heat map of each niche's share of each class against the tissue's, a table of each niche's cells, defining classes and leading genes, and the stromal and endothelial niche chosen with its genes" src="images/niches-light.webp">
+</picture>
+
+The heat map shows each niche's make-up against the tissue's, red where a label is commoner in it.
+Each niche's leading genes are those of its cells against the other niches' cells; they are much
+the genes of the cells that define it, and exploratory. k-means finds a good answer from where it
+starts, not always the best: the niches are found again from other seeds and compared with the
+adjusted Rand index. Agreement near 1 says the niches are stable; low agreement says there are more
+niches than the tissue holds kinds of place (try fewer, or larger neighborhoods).
+
+**Show the niches on the tissue** fills every cell by its niche. Niches are a label set too: the
+Viewer's fill lists them, and the other questions can be asked of them (which niches neighbor
+which, or fill a region).
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/niches-tissue-dark.webp">
+  <img alt="The Viewer showing the Lung example's cells filled by their niche, the legend naming the six niches with their cells" src="images/niches-tissue-light.webp">
+</picture>
+
+A section's cells are not independent replicates: these numbers describe this section. Comparing
+conditions needs samples, compared as samples (a later release).
 
 ## Keyboard
 

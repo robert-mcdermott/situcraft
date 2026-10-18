@@ -2,7 +2,7 @@
  "situcraft": {
   "cells": 7163,
   "labels": 15,
-  "digest": "df5ec83b8f57cc4c03ab5dcc744520631a08a2f1e17c4be0dba6670295a34277"
+  "digest": "ec4b1ae9b45bb742c5919ba3435360249e035eacb14bcf6d4453d3adec8c942e"
  },
  "versions": {
   "squidpy": "1.8.3",
@@ -10,6 +10,7 @@
   "numpy": "2.5.4",
   "scipy": "1.18.1",
   "astropy": "8.0.2",
+  "scikit-learn": "1.9.1",
   "shapely": "2.2.0"
  },
  "enrichment": {
@@ -49,6 +50,14 @@
   "maxRelativeExact": 1.495421420028009e-08,
   "maxRelativeIsotropic": 0.1034637672093689,
   "medianRelativeIsotropic": 0.0061150352581959
+ },
+ "niches": {
+  "niches": 6,
+  "cells": 7163,
+  "inertia": 685.3624544498052,
+  "sklearnInertia": 685.3337251683829,
+  "relativeInertia": 4.192013374981762e-05,
+  "adjustedRand": 0.980204329102261
  },
  "regions": {
   "rows": 3,

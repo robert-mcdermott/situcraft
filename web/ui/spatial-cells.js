@@ -2,26 +2,39 @@
 // enrichment's pair, its cells with a neighbor of the other label and the edges between them drawn
 // in color over the graph; a co-occurrence's, nearest distances' or Ripley's label near another, the
 // cells of each that near; a label's cells in a region compared, or in bands across a region's
-// edge. Used by the Spatial view and by remote control.
+// edge; the cells filled by their niches, one niche's shown. Used by the Spatial view and by remote
+// control.
 
 import { formatCount } from './dom.js';
 import { readCells } from '../lib/viewer-data.js';
 import { readSegCells } from '../lib/segview.js';
-import { bandCells, nearCells, pairCells, regionCells, rowNames } from '../lib/spatial.js';
+import { bandCells, nearCells, nicheCells, nicheNames, pairCells, regionCells, rowNames } from '../lib/spatial.js';
 
 const pairName = (names, a, b) => `${names[a]} – ${names[b]}`;
 
 // Shows them: { dataset (id), item (its bundle), segmentation (the record), analysis (analysis.json),
 // cells (its cells), a, b (label indices), k (a co-occurrence's distance); for regions compared, a
 // (the label) and row; across an edge, a (the label, −1 any) and bands ({ from, to }: band indices)
-// with where they are in words }. Answers what is shown: { title, text, cells }.
-export async function showAnalysisCells(app, { dataset, item, segmentation, analysis, cells, a, b, k = 0, row = 0, bands = null, where = '' }) {
+// with where they are in words; for niches, id (the analysis's) and niche (−1 for none chosen) }.
+// Answers what is shown: { title, text, cells }.
+export async function showAnalysisCells(app, { dataset, item, segmentation, analysis, cells, a, b, k = 0, row = 0, bands = null, where = '', id = null, niche = -1 }) {
   const names = analysis.labels.names;
   const mask = new Uint8Array(analysis.cells.segmentation);
-  const fill = `labels:${analysis.labels.id}:${analysis.labels.level}`;
+  let fill = `labels:${analysis.labels.id}:${analysis.labels.level}`;
   let focus;
   let graph;
-  if (analysis.question === 'regions') {
+  if (analysis.question === 'niches') {
+    // The cells filled by their niches (the niches as a label set: ui/label-sources.js).
+    fill = `labels:${id}:0`;
+    if (niche < 0) {
+      app.showSpatial({ dataset, segmentation: segmentation.id, fill });
+      return { title: `Niches of ${analysis.labels.name}`, text: `${analysis.niches.niches} niches`, cells: analysis.niches.windows };
+    }
+    const nc = nicheCells(cells.stratum, niche);
+    for (let i = 0; i < cells.n; i += 1) if (nc.cells[i]) mask[cells.rows[i]] = 1;
+    const name = nicheNames(analysis.niches, names)[niche];
+    focus = { title: `Niche ${name}`, text: `${nc.count.toLocaleString('en-US')} cells in niche ${name}`, mask };
+  } else if (analysis.question === 'regions') {
     const rows = rowNames(analysis.regions, true);
     const rc = regionCells(cells.stratum, cells.label, rows.length, row, a);
     for (let i = 0; i < cells.n; i += 1) if (rc.cells[i]) mask[cells.rows[i]] = 1;

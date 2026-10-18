@@ -504,6 +504,31 @@ const scenes = {
     await scrollTo('.sp-answer .sp-regions-table', 'start');
     await sleep(300);
   },
+  // Cellular neighborhoods (wave 6, slice 5): the Lung classes' six niches, their make-up against the
+  // tissue's as a heat map, and each one's defining labels and leading genes, one niche chosen.
+  async niches() {
+    await act('open_example', { example: 'lung' });
+    await act('cluster_cells', {});
+    const markers = await act('label_cells', { markers: 'lung' });
+    await act('spatial_analysis', { question: 'niches', labels: markers.data.id, level: 1 });
+    await waitFor(`Boolean(document.querySelector('.sp-answer .sp-niches'))`);
+    await js(`document.querySelector('.sp-niches tr[data-niche="5"]')?.click()`);
+    await waitFor(`Boolean(document.querySelector('.sp-answer .sp-pair'))`);
+    await scrollTo('.sp-answer .sp-heatmap-wrap', 'start');
+    await sleep(300);
+  },
+  // The niches on the tissue (wave 6, slice 5): the Lung cells filled by their niche, the legend
+  // naming each one.
+  async 'niches-tissue'() {
+    await act('open_example', { example: 'lung' });
+    await act('cluster_cells', {});
+    const markers = await act('label_cells', { markers: 'lung' });
+    await act('spatial_analysis', { question: 'niches', labels: markers.data.id, level: 1 });
+    await act('show_tissue', { dataset: 'xenium-lung-2fov', fill: 'niches', opacity: 0.85, transcripts: false, whole: true, channels: { DAPI: { color: '#8c8c8c' } } });
+    await waitFor(`Boolean(window.situcraftViewer?.clusterFill?.())`);
+    await js(`window.situcraftViewer.settled()`);
+    await sleep(400);
+  },
   // Across a region's edge (wave 6, slice 4): the epithelial cells' profile across the vessel
   // stroma's edge, sparse inside and dense outside, with each class's reading.
   async edge() {

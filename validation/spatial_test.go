@@ -2,8 +2,9 @@ package validation
 
 // Neighborhood enrichment and co-occurrence (wave 6, slice 2; research.md §6.2) against Squidpy's,
 // nearest distances and Ripley's K (slice 3; §6.3) against SciPy's k-d tree and astropy's
-// estimator, and regions compared and a profile across a region's edge (slice 4; §6.4) against
-// Shapely's buffers and distances, on the instrument's segmentation of both 2-FOV bundles and the
+// estimator, regions compared and a profile across a region's edge (slice 4; §6.4) against
+// Shapely's buffers and distances, and niches (slice 5; §6.5) against scikit-learn's k-means, on the
+// instrument's segmentation of both 2-FOV bundles and the
 // standard simulated tissue, its cells labeled by SituCraft's clustering (the defaults) and every
 // one of them analyzed; Ripley's K, and the regions, in the rectangle of the middle half of the
 // cells' extent as the window.
@@ -80,6 +81,16 @@ type spatialNumbers struct {
 		CountsDiffering int     `json:"countsDiffering"`
 		BandsDiffering  int     `json:"bandCountsDiffering"`
 	} `json:"regions"`
+	// Niches: SituCraft's k-means of the cells' neighborhoods against scikit-learn's, from as many
+	// starts, on the same compositions: the inertias, and the niches' adjusted Rand index.
+	Niches struct {
+		Niches          int     `json:"niches"`
+		Cells           int     `json:"cells"`
+		Inertia         float64 `json:"inertia"`
+		SklearnInertia  float64 `json:"sklearnInertia"`
+		RelativeInertia float64 `json:"relativeInertia"`
+		AdjustedRand    float64 `json:"adjustedRand"`
+	} `json:"niches"`
 	Cooccurrence struct {
 		Distances            int     `json:"distances"`
 		Compared             int     `json:"compared"`
@@ -101,6 +112,7 @@ type spatialExtras struct {
 	polygons    [2][][2]float64
 	composition *spatial.Composition
 	boundary    *spatial.Boundary
+	niches      *spatial.Niches
 }
 
 // referenceRegions are two regions in the rectangle (x0, y0, x1, y1): an irregular heptagon about
@@ -221,6 +233,11 @@ func spatialOfSet(t *testing.T, bundleDir string) (graphs map[string]*spatial.Gr
 	if extra.boundary, err = spatial.AcrossEdge(ctx, g.X, g.Y, label, K, win, regions[0], spatial.DefaultBoundary(), runtime.NumCPU()); err != nil {
 		t.Fatal(err)
 	}
+	nicheParams := spatial.DefaultNiches()
+	nicheParams.Seeds = 0
+	if extra.niches, err = spatial.FindNiches(ctx, g.X, g.Y, label, K, nicheParams, runtime.NumCPU(), nil); err != nil {
+		t.Fatal(err)
+	}
 	return graphs, label, results, co, extra
 }
 
@@ -242,10 +259,12 @@ func spatialDigest(results map[string]*spatial.Enrichment, co *spatial.Cooccurre
 		raw, _ := json.Marshal(v)
 		h.Write(raw)
 	}
-	for _, v := range [][]int{extra.composition.Count, extra.boundary.Count} {
+	for _, v := range [][]int{extra.composition.Count, extra.boundary.Count, extra.niches.Cells} {
 		raw, _ := json.Marshal(v)
 		h.Write(raw)
 	}
+	raw, _ := json.Marshal(map[string]any{"assign": extra.niches.Assign, "inertia": extra.niches.Inertia, "composition": spatial.Nums(extra.niches.Composition)})
+	h.Write(raw)
 	return hex.EncodeToString(h.Sum(nil))
 }
 
@@ -312,7 +331,29 @@ func TestReferenceSpatial(t *testing.T) {
 					"nearest": map[string]any{"reach": extra.nearest.Reach, "median": spatial.Nums(extra.nearest.Median), "mean": spatial.Nums(extra.nearest.Mean)},
 					"ripley":  map[string]any{"rectangle": extra.rectangle, "radii": extra.isotropic.Radii, "area": extra.isotropic.Area, "isotropic": iso, "none": none},
 					"regions": map[string]any{"rectangle": extra.rectangle, "polygons": extra.polygons, "area": extra.composition.Area, "count": extra.composition.Count, "outside": extra.composition.Outside,
-						"edges": extra.boundary.Edges, "bandArea": extra.boundary.Area, "bandCount": extra.boundary.Count}}, "", " ")
+						"edges": extra.boundary.Edges, "bandArea": extra.boundary.Area, "bandCount": extra.boundary.Count},
+					"niches": map[string]any{"niches": extra.niches.Count, "starts": spatial.DefaultNiches().Starts, "inertia": extra.niches.Inertia, "assign": extra.niches.Assign}}, "", " ")
+				// The niches' windows: each cell's composition, a row a cell, in the cells' order.
+				var nb strings.Builder
+				for k := 0; k < K; k++ {
+					if k > 0 {
+						nb.WriteByte(',')
+					}
+					fmt.Fprintf(&nb, "label%d", k)
+				}
+				nb.WriteByte('\n')
+				for i := 0; i < n; i++ {
+					for k := 0; k < K; k++ {
+						if k > 0 {
+							nb.WriteByte(',')
+						}
+						nb.WriteString(strconv.FormatFloat(extra.niches.Composed[i*K+k], 'g', -1, 64))
+					}
+					nb.WriteByte('\n')
+				}
+				if err := os.WriteFile(filepath.Join(out, "niches.csv"), []byte(nb.String()), 0o644); err != nil {
+					t.Fatal(err)
+				}
 				if err := os.WriteFile(filepath.Join(out, "situcraft.json"), append(info, '\n'), 0o644); err != nil {
 					t.Fatal(err)
 				}
@@ -346,6 +387,11 @@ func TestReferenceSpatial(t *testing.T) {
 			t.Logf("regions compared: %d rows, the tissue's areas within %.2g of Shapely's, %d counts differing; across an edge: %d bands, their areas within %.2g (at most %.2g µm² apart), %d counts differing", rg.Rows, rg.MaxArea, rg.CountsDiffering, rg.Bands, rg.MaxBandArea, rg.MaxBandAreaDiff, rg.BandsDiffering)
 			if rg.Rows != 3 || rg.Bands != len(extra.boundary.Area) || !(rg.MaxArea < 1e-6) || !(rg.MaxBandArea < 2e-5) || !(rg.MaxBandAreaDiff < 0.05) || rg.CountsDiffering != 0 || rg.BandsDiffering != 0 {
 				t.Errorf("regions compared or the profile across an edge differ from Shapely's areas and counts")
+			}
+			nn := num.Niches
+			t.Logf("niches: %d of %d cells; SituCraft's inertia %.4f, scikit-learn's %.4f (%+.2g), their niches' adjusted Rand index %.3f", nn.Niches, nn.Cells, nn.Inertia, nn.SklearnInertia, nn.RelativeInertia, nn.AdjustedRand)
+			if nn.Niches != extra.niches.Count || nn.Cells != n || math.Abs(nn.Inertia-extra.niches.Inertia) > 1e-9*nn.Inertia || !(nn.RelativeInertia < 0.01) || !(nn.AdjustedRand > 0.8) {
+				t.Errorf("the niches' k-means is worse than scikit-learn's, or finds other niches")
 			}
 			c := num.Cooccurrence
 			t.Logf("co-occurrence: %d distances, %d ratios compared; Squidpy's routine in float64, the largest difference %.3g; its float32 API %.3g, %d pairs placed otherwise by float32's rounding", c.Distances, c.Compared, c.MaxDifference, c.MaxDifferenceFloat32, c.PlacedOtherwise)
@@ -484,4 +530,67 @@ func polygonGap(a, b [][2]float64) float64 {
 		}
 	}
 	return best
+}
+
+// Niches against the standard simulated tissue's true domains (wave 6, slice 5; research.md §6.5):
+// its true cells, labeled by their true types, each with the domain the simulator drew its type
+// from (truth/cells.parquet). Domains led by the same type differ only in their minor types, so
+// what composition can tell apart are the kinds of domain, by their dominant type: niches as many
+// as the kinds, from each cell's 30 nearest cells, find them (adjusted Rand index above 0.85), every
+// seed agreeing; niches as many as the domains, from the default 10 nearest, split kinds of domain
+// by chance, and the seeds say so, agreeing less.
+func TestNichesFindDomains(t *testing.T) {
+	if testing.Short() || os.Getenv("SITUCRAFT_REQUIRE_DATA") == "" {
+		t.Skip("set SITUCRAFT_REQUIRE_DATA=1 to analyze the standard simulated tissue")
+	}
+	dir := simulatedStandard(t)
+	tab, err := label.ReadTable(filepath.Join(dir, "truth", "cells.parquet"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	types, xs, ys, domains := tab.Column("cell_type"), tab.Column("x_centroid"), tab.Column("y_centroid"), tab.Column("domain")
+	if types == nil || xs == nil || ys == nil || domains == nil {
+		t.Fatal("the truth's cells name no type, centroid or domain")
+	}
+	ds, err := simulate.Domains(simulate.Presets["standard"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	index := map[string]int32{}
+	n := types.Len()
+	x, y, lab, domain, kind := make([]float32, n), make([]float32, n), make([]int32, n), make([]int32, n), make([]int32, n)
+	kinds := map[int]bool{}
+	for i := 0; i < n; i++ {
+		k, ok := index[types.String(i)]
+		if !ok {
+			k = int32(len(index))
+			index[types.String(i)] = k
+		}
+		x[i], y[i], lab[i], domain[i] = float32(xs.Numbers[i]), float32(ys.Numbers[i]), k, int32(domains.Numbers[i])
+		kind[i] = int32(ds[domain[i]].Dominant)
+		kinds[ds[domain[i]].Dominant] = true
+	}
+	find := func(neighbors, niches int) *spatial.Niches {
+		p := spatial.DefaultNiches()
+		p.Neighbors, p.Niches = neighbors, niches
+		nc, err := spatial.FindNiches(context.Background(), x, y, lab, len(index), p, runtime.NumCPU(), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return nc
+	}
+	least := func(v []float64) float64 {
+		lo := 1.0
+		for _, a := range v {
+			lo = math.Min(lo, a)
+		}
+		return lo
+	}
+	byKind := find(30, len(kinds))
+	byDomain := find(10, len(ds))
+	t.Logf("%d true cells, %d domains of %d kinds: %d niches of each cell's 30 nearest find the kinds at an adjusted Rand index of %.3f (the domains %.3f), the seeds agreeing at %.3f or more; %d niches of the 10 nearest find the domains at %.3f, the seeds agreeing at %.3f or more",
+		n, len(ds), len(kinds), len(kinds), cluster.AdjustedRand(byKind.Assign, kind), cluster.AdjustedRand(byKind.Assign, domain), least(byKind.Agreement), len(ds), cluster.AdjustedRand(byDomain.Assign, domain), least(byDomain.Agreement))
+	if !(cluster.AdjustedRand(byKind.Assign, kind) > 0.85) || !(least(byKind.Agreement) > 0.95) || !(least(byDomain.Agreement) < least(byKind.Agreement)) {
+		t.Errorf("the niches do not find the kinds of domain, or the seeds' agreement does not show too many niches")
+	}
 }

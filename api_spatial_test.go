@@ -191,12 +191,27 @@ func TestSpatialAnalyses(t *testing.T) {
 	if s.Question != "boundary" || s.Edge == nil || s.Edge.Name != "Box" || s.Window == nil || s.Window.Closing != 10 {
 		t.Errorf("across the edge: %+v", s)
 	}
+	// Niches: each cell's 5 nearest labeled cells, two niches, numbered by size; or a radius.
+	nicheID, _ := run(fmt.Sprintf(`{"question":"niches","segmentation":%q,"cells":%s,"labels":%s,"parameters":{"neighbors":5,"niches":2,"starts":3,"seeds":2}}`, seg.ID, chosenCells(keep, ""), labelsJSON))
+	nm, _ := f.a.artifacts.Get(nicheID)
+	s = spatial.AnalysisSummary{}
+	json.Unmarshal(nm.Summary, &s)
+	if s.Question != "niches" || len(s.Niches) != 2 || s.AgreementMin == nil || s.Niches[0].Cells < s.Niches[1].Cells || len(s.Niches[0].Defining) == 0 {
+		t.Errorf("niches: %+v", s)
+	}
+	byRadius, _ := run(fmt.Sprintf(`{"question":"niches","segmentation":%q,"cells":%s,"labels":%s,"parameters":{"radius":15,"niches":2,"starts":2,"seeds":0}}`, seg.ID, chosenCells(keep, ""), labelsJSON))
+	rd, _ := f.a.artifacts.Get(byRadius)
+	var np spatial.NicheParams
+	json.Unmarshal(rd.Lineage.Parameters, &np)
+	if np.Radius != 15 || np.Neighbors != 0 {
+		t.Errorf("niches by a radius: %s", rd.Lineage.Parameters)
+	}
 	bad := func(sumOf string) string {
 		return fmt.Sprintf(`{"id":"lab-x","kind":"labels","name":"By turns","level":0,"names":["A","B","C"],"codes":%q,"checksum":%q}`, codes, sumOf)
 	}
 	short, shortSum := codesOf(labels[:10])
 	for _, c := range []struct{ body, want string }{
-		{fmt.Sprintf(`{"question":"niches","segmentation":%q,"graph":%q,"labels":%s}`, seg.ID, g.ID, labelsJSON), "no question"},
+		{fmt.Sprintf(`{"question":"hotspots","segmentation":%q,"graph":%q,"labels":%s}`, seg.ID, g.ID, labelsJSON), "no question"},
 		{fmt.Sprintf(`{"question":"enrichment","segmentation":%q,"labels":%s}`, seg.ID, labelsJSON), "is of a graph"},
 		{fmt.Sprintf(`{"question":"enrichment","segmentation":%q,"graph":%q,"labels":%s,"parameters":{"weight":"boundary"}}`, seg.ID, g.ID, labelsJSON), "contact graph"},
 		{fmt.Sprintf(`{"question":"enrichment","segmentation":%q,"graph":%q,"labels":%s,"parameters":{"permutations":5}}`, seg.ID, g.ID, labelsJSON), "100 to 100,000"},
@@ -209,6 +224,8 @@ func TestSpatialAnalyses(t *testing.T) {
 		{fmt.Sprintf(`{"question":"ripley","segmentation":%q,"cells":%s,"labels":%s,"parameters":{"correction":"translation"}}`, seg.ID, chosenCells(keep, ""), labelsJSON), "isotropic or none"},
 		{fmt.Sprintf(`{"question":"distances","segmentation":%q,"cells":%s,"labels":%s,"window":{"kind":"tissue"}}`, seg.ID, chosenCells(keep, ""), labelsJSON), "Only Ripley"},
 		{fmt.Sprintf(`{"question":"distances","segmentation":%q,"cells":%s,"labels":%s,"parameters":{"reach":0}}`, seg.ID, chosenCells(keep, ""), labelsJSON), "reach"},
+		{fmt.Sprintf(`{"question":"niches","segmentation":%q,"cells":%s,"labels":%s,"parameters":{"neighbors":5,"radius":10}}`, seg.ID, chosenCells(keep, ""), labelsJSON), "one of them"},
+		{fmt.Sprintf(`{"question":"niches","segmentation":%q,"cells":%s,"labels":%s,"parameters":{"niches":1}}`, seg.ID, chosenCells(keep, ""), labelsJSON), "2 to 30 niches"},
 		{fmt.Sprintf(`{"question":"regions","segmentation":%q,"cells":%s,"labels":%s}`, seg.ID, chosenCells(keep, ""), labelsJSON), "1 to 20 regions"},
 		{fmt.Sprintf(`{"question":"boundary","segmentation":%q,"cells":%s,"labels":%s,"regions":%s}`, seg.ID, chosenCells(keep, ""), labelsJSON, twoRegions), "of one region"},
 		{fmt.Sprintf(`{"question":"distances","segmentation":%q,"cells":%s,"labels":%s,"regions":%s}`, seg.ID, chosenCells(keep, ""), labelsJSON, twoRegions), "Only regions compared"},
