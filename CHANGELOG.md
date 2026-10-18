@@ -85,6 +85,27 @@ with the cells it comes from.
     10⁻⁸ (astropy's variant, weighing each pair by one circle, a median of 0.6% apart); in the page,
     a pair's median nearest distance, K in a region and the cells within a radius against the
     suite's own.
+- **Regions measured (wave 6, slice 4).** Two questions asked of drawn regions.
+  - **Regions compared:** each region's cells by label per mm² of the tissue within it (its glass
+    and holes not counted) and per labeled cell, with Garwood's and Wilson's intervals; the tissue
+    in none of the regions a row of its own; any two rows compared as ratios with exact conditional
+    and Koopman's intervals, shown as a forest plot.
+  - **Across a region's edge:** each label's density in bands of distance from the edge (every
+    10 µm, 100 µm inside to 100 µm outside), each band's own tissue its denominator; the core, the
+    margin and around compared, saying which labels fill the region, stay out or gather at its
+    margin; a label's profile across the edge.
+  - **Areas exact:** the tissue within each region or band found by squares split until uniform,
+    those crossed by an edge at the finest size split along it, to about 10⁻⁶.
+  - **Remote control:** `spatial_analysis` asks both (`regions`, `boundary`, with `region` and
+    `margin`); `show_tissue`'s `cells_of` shows a label's cells in a region or a zone.
+  - **Validated:** band areas of a square, a 64-sided polygon and a square in a pixel tissue
+    against their exact formulas (to 10⁻⁵, most to 10⁻⁷); uniformly placed cells' densities within
+    their intervals as often as they claim; labels placed by rule read as filling, staying out and
+    gathering at the margin; the intervals against SciPy's and statsmodels' (to 10⁻⁹); on both
+    development bundles and the standard simulated tissue, every region's and band's area Shapely's
+    (to 2 × 10⁻⁷ and 4 × 10⁻⁶) and every count its; the simulated tissue's own domains, as regions,
+    each found denser in its dominant type; in the page, the counts in a region and in each band and
+    the cells at a margin against the suite's own.
 
 ## 0.5.0 (2026-10-17)
 

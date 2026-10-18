@@ -2,10 +2,12 @@ package main
 
 // Spatial analyses of a segmentation's labeled cells (internal/spatial), made by a job and recorded
 // as artifacts of kind "spatial": neighborhood enrichment over a graph; and, over the cells chosen,
-// co-occurrence across distances, nearest distances by label, and Ripley's K in a window (the tissue,
-// from the segmentation's cells, or a region). The page sends each cell's label as the label set it shows has
-// it (any kind: from markers, imported, curated, consensus), and, to deal the labels within regions,
-// each cell's region; an analysis is named by what it is made from, so asking again answers it.
+// co-occurrence across distances, nearest distances by label, Ripley's K in a window (the tissue,
+// from the segmentation's cells, or a region), regions compared, and a profile across a region's
+// edge (both within the tissue window, the regions' polygons sent with them). The page sends each
+// cell's label as the label set it shows has it (any kind: from markers, imported, curated,
+// consensus), and, to deal the labels within regions, each cell's region; an analysis is named by
+// what it is made from, so asking again answers it.
 
 import (
 	"bytes"
@@ -109,6 +111,13 @@ func (w *spatialWindow) check() error {
 	return nil
 }
 
+// spatialRegion is a region compared, or whose edge is crossed: which version of which region, and
+// its polygons as the page holds them (µm).
+type spatialRegion struct {
+	Region   spatial.Region   `json:"region"`
+	Geometry [][][][2]float64 `json:"geometry"`
+}
+
 // spatialStrata are each cell's stratum: 0 in none of the regions, k in the kth.
 type spatialStrata struct {
 	cellCodes
@@ -123,6 +132,7 @@ type spatialRequest struct {
 	Labels       *spatialLabels  `json:"labels"`
 	Strata       *spatialStrata  `json:"strata,omitempty"`
 	Window       *spatialWindow  `json:"window,omitempty"`
+	Regions      []spatialRegion `json:"regions,omitempty"`
 	Parameters   json.RawMessage `json:"parameters,omitempty"`
 }
 
@@ -179,8 +189,30 @@ func checkedParameters(question string, raw json.RawMessage) (json.RawMessage, e
 			return nil, err
 		}
 		v = p
+	case spatial.QuestionRegions:
+		p := spatial.DefaultRegions()
+		if len(raw) > 0 {
+			if err := json.Unmarshal(raw, &p); err != nil {
+				return nil, err
+			}
+		}
+		if err := p.Check(); err != nil {
+			return nil, err
+		}
+		v = p
+	case spatial.QuestionBoundary:
+		p := spatial.DefaultBoundary()
+		if len(raw) > 0 {
+			if err := json.Unmarshal(raw, &p); err != nil {
+				return nil, err
+			}
+		}
+		if err := p.Check(); err != nil {
+			return nil, err
+		}
+		v = p
 	default:
-		return nil, fmt.Errorf("no question %q (enrichment, cooccurrence, distances or ripley)", question)
+		return nil, fmt.Errorf("no question %q (enrichment, cooccurrence, distances, ripley, regions or boundary)", question)
 	}
 	return json.Marshal(v)
 }
@@ -200,13 +232,18 @@ func spatialID(r spatialRequest, params json.RawMessage) string {
 		raw, _ := json.Marshal(r.Window)
 		window = string(raw)
 	}
-	h := sha256.Sum256([]byte(strings.Join([]string{r.Question, r.Segmentation, of, r.Labels.Checksum, strings.Join(r.Labels.Names, "\x1f"), strata, window, spatial.AnalysisVersion, string(params)}, "\n")))
+	regions := ""
+	if len(r.Regions) > 0 {
+		raw, _ := json.Marshal(r.Regions)
+		regions = string(raw)
+	}
+	h := sha256.Sum256([]byte(strings.Join([]string{r.Question, r.Segmentation, of, r.Labels.Checksum, strings.Join(r.Labels.Names, "\x1f"), strata, window, regions, spatial.AnalysisVersion, string(params)}, "\n")))
 	return "spa-" + hex.EncodeToString(h[:10])
 }
 
 func (a *app) registerSpatial(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/spatial/defaults", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, map[string]any{"enrichment": spatial.DefaultEnrichment(), "cooccurrence": spatial.DefaultCooccurrence(), "method": spatial.AnalysisVersion, "citation": spatialCitation})
+		writeJSON(w, map[string]any{"enrichment": spatial.DefaultEnrichment(), "cooccurrence": spatial.DefaultCooccurrence(), "distances": spatial.DefaultNearest(), "ripley": spatial.DefaultRipley(), "regions": spatial.DefaultRegions(), "boundary": spatial.DefaultBoundary(), "method": spatial.AnalysisVersion, "citation": spatialCitation})
 	})
 	mux.HandleFunc("POST /api/local/{index}/spatial", a.startSpatial)
 	mux.HandleFunc("GET /api/analyses/{id}/cells", a.spatialCells)
@@ -236,23 +273,53 @@ func (a *app) startSpatial(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "An enrichment is of a graph; the other questions, of the cells chosen.")
 		return
 	}
-	if body.Question == spatial.QuestionRipley {
+	switch body.Question {
+	case spatial.QuestionRipley, spatial.QuestionRegions, spatial.QuestionBoundary:
 		if body.Window == nil {
 			body.Window = &spatialWindow{}
 		}
 		if err := body.Window.check(); err != nil {
-			writeError(w, http.StatusBadRequest, "Ripley's K's window: "+err.Error()+".")
+			writeError(w, http.StatusBadRequest, "The window: "+err.Error()+".")
 			return
 		}
 		if body.Window.Kind == "region" {
+			if body.Question != spatial.QuestionRipley {
+				writeError(w, http.StatusBadRequest, "Regions are compared, and an edge crossed, within the tissue: their window is the tissue.")
+				return
+			}
 			if _, err := spatial.PolygonWindow(body.Window.Geometry); err != nil {
 				writeError(w, http.StatusBadRequest, "Ripley's K's window: "+err.Error()+".")
 				return
 			}
 		}
-	} else if body.Window != nil {
-		writeError(w, http.StatusBadRequest, "Only Ripley's K has a window.")
+	default:
+		if body.Window != nil {
+			writeError(w, http.StatusBadRequest, "Only Ripley's K, regions compared and a profile across an edge have a window.")
+			return
+		}
+	}
+	switch {
+	case body.Question == spatial.QuestionRegions && (len(body.Regions) < 1 || len(body.Regions) > spatial.MaxRegions):
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("Regions compared are 1 to %d regions.", spatial.MaxRegions))
 		return
+	case body.Question == spatial.QuestionBoundary && len(body.Regions) != 1:
+		writeError(w, http.StatusBadRequest, "A profile across an edge is of one region.")
+		return
+	case body.Question != spatial.QuestionRegions && body.Question != spatial.QuestionBoundary && len(body.Regions) > 0:
+		writeError(w, http.StatusBadRequest, "Only regions compared and a profile across an edge take regions.")
+		return
+	}
+	seen := map[string]bool{}
+	for _, sr := range body.Regions {
+		if sr.Region.ID == "" || sr.Region.Name == "" || seen[sr.Region.ID] {
+			writeError(w, http.StatusBadRequest, "Each region needs its id and name, once.")
+			return
+		}
+		seen[sr.Region.ID] = true
+		if _, err := spatial.PolygonWindow(sr.Geometry); err != nil {
+			writeError(w, http.StatusBadRequest, "The region "+sr.Region.Name+": "+err.Error()+".")
+			return
+		}
 	}
 	if body.Strata != nil && body.Question != spatial.QuestionEnrichment {
 		writeError(w, http.StatusBadRequest, "Only an enrichment deals its labels within regions.")
@@ -315,7 +382,7 @@ func (a *app) startSpatial(w http.ResponseWriter, r *http.Request) {
 	}
 	body.Parameters = params
 	spec := spatialSpec{Bundle: path, spatialRequest: body}
-	what := map[string]string{spatial.QuestionEnrichment: "Neighborhood enrichment", spatial.QuestionCooccurrence: "Co-occurrence", spatial.QuestionDistances: "Nearest distances", spatial.QuestionRipley: "Ripley's K"}[body.Question]
+	what := map[string]string{spatial.QuestionEnrichment: "Neighborhood enrichment", spatial.QuestionCooccurrence: "Co-occurrence", spatial.QuestionDistances: "Nearest distances", spatial.QuestionRipley: "Ripley's K", spatial.QuestionRegions: "Regions compared", spatial.QuestionBoundary: "A profile across an edge"}[body.Question]
 	job, _, err := a.jobs.Submit("spatial", what+" of "+sm.Name+" of "+name, "spatial\x00"+id, spec, a.spatialJob(spec, id))
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, err.Error())
@@ -491,6 +558,59 @@ func (a *app) spatialJob(spec spatialSpec, id string) jobs.Func {
 				}
 				out.Ripley = &spatial.RipleyResult{Radii: rk.Radii, Correction: p.Correction, Area: rk.Area, Cells: rk.Cells, Pairs: rk.Pairs, Outside: rk.Outside, K: rk.KObs, L: rk.L, Mean: rk.Mean, Lo: rk.Lo, Hi: rk.Hi, P: rk.P, PAdj: rk.PAdj}
 				name = fmt.Sprintf("Ripley's K of %s in %s", spec.Labels.Name, sm.Name)
+			case spatial.QuestionRegions, spatial.QuestionBoundary:
+				win, ref, err := a.spatialWindowOf(ctx, dir, spec.Window, r)
+				if err != nil {
+					return err
+				}
+				out.Window = ref
+				var regions []*spatial.Window
+				var refs []spatial.Region
+				var names []string
+				for _, sr := range spec.Regions {
+					rw, err := spatial.PolygonWindow(sr.Geometry)
+					if err != nil {
+						return fmt.Errorf("the region %s: %w", sr.Region.Name, err)
+					}
+					regions, refs, names = append(regions, rw), append(refs, sr.Region), append(names, sr.Region.Name)
+				}
+				outside := 0
+				if spec.Question == spatial.QuestionRegions {
+					var p spatial.RegionsParams
+					if err := json.Unmarshal(spec.Parameters, &p); err != nil {
+						return err
+					}
+					r.Log("info", "Regions compared (%s) by %s in %s; the tissue %s µm².", strings.Join(names, ", "), spec.Labels.Name, sm.Name, strconv.FormatFloat(ref.Area, 'f', 0, 64))
+					r.Progress(0.1, "Measuring the tissue within each region")
+					c, err := spatial.Compose(ctx, x, y, cells.Label, K, win, regions, p, runtime.NumCPU())
+					if err != nil {
+						return err
+					}
+					copy(cells.Stratum, c.Membership)
+					outside = c.Outside
+					out.Regions = &spatial.RegionsResult{Regions: refs, Area: c.Area, Labeled: c.Labeled, All: c.All, Count: c.Count, Density: c.Density, DensityLo: c.DensityLo, DensityHi: c.DensityHi, Share: c.Share, ShareLo: c.ShareLo, ShareHi: c.ShareHi,
+						DensityRatio: c.DensityRatio, DensityRatioLo: c.DensityRatioLo, DensityRatioHi: c.DensityRatioHi, ShareRatio: c.ShareRatio, ShareRatioLo: c.ShareRatioLo, ShareRatioHi: c.ShareRatioHi, Outside: c.Outside}
+					name = fmt.Sprintf("Regions compared (%s) by %s in %s", strings.Join(names, ", "), spec.Labels.Name, sm.Name)
+				} else {
+					var p spatial.BoundaryParams
+					if err := json.Unmarshal(spec.Parameters, &p); err != nil {
+						return err
+					}
+					r.Log("info", "Across the edge of %s by %s in %s: bands of %g µm to %g µm either side, a margin of %g µm; the tissue %s µm².", names[0], spec.Labels.Name, sm.Name, p.Step, p.Reach, p.Margin, strconv.FormatFloat(ref.Area, 'f', 0, 64))
+					r.Progress(0.1, "Measuring the tissue in each band")
+					b, err := spatial.AcrossEdge(ctx, x, y, cells.Label, K, win, regions[0], p, runtime.NumCPU())
+					if err != nil {
+						return err
+					}
+					copy(cells.Stratum, b.Band)
+					outside = b.Outside
+					out.Boundary = &spatial.BoundaryResult{Region: refs[0], Edges: b.Edges, Area: b.Area, Labeled: b.Labeled, All: b.All, Count: b.Count, Density: b.Density, DensityLo: b.DensityLo, DensityHi: b.DensityHi, Share: b.Share, ShareLo: b.ShareLo, ShareHi: b.ShareHi,
+						ZoneArea: b.ZoneArea, ZoneLabeled: b.ZoneLabeled, ZoneCount: b.ZoneCount, ZoneDensity: b.ZoneDensity, ZoneLo: b.ZoneLo, ZoneHi: b.ZoneHi, Ratio: b.Ratio, RatioLo: b.RatioLo, RatioHi: b.RatioHi, Inside: b.Inside, AtMargin: b.AtMargin, Outside: b.Outside}
+					name = fmt.Sprintf("Across the edge of %s, %s in %s", names[0], spec.Labels.Name, sm.Name)
+				}
+				if outside > 0 {
+					r.Log("warn", "%d labeled cells lie outside the tissue window and are left out.", outside)
+				}
 			}
 		}
 		out.Cells.Analyzed = len(cells.Rows)
@@ -578,8 +698,8 @@ func (a *app) spatialCells(w http.ResponseWriter, r *http.Request) {
 	w.Write(buf.Bytes())
 }
 
-// spatialWindowOf makes Ripley's K's window: the tissue from the segmentation's label raster, or a
-// region's polygons; with what the artifact records of it.
+// spatialWindowOf makes an analysis's window: the tissue from the segmentation's label raster, or
+// (Ripley's K) a region's polygons; with what the artifact records of it.
 func (a *app) spatialWindowOf(ctx context.Context, segDir string, w *spatialWindow, r *jobs.Run) (*spatial.Window, *spatial.WindowRef, error) {
 	if w.Kind == "region" {
 		win, err := spatial.PolygonWindow(w.Geometry)

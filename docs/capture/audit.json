@@ -350,6 +350,26 @@
   "violations": []
  },
  {
+  "scene": "compared",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "compared",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "edge",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "edge",
+  "theme": "light",
+  "violations": []
+ },
+ {
   "scene": "clusters",
   "theme": "dark",
   "violations": []

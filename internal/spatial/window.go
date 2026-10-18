@@ -33,6 +33,12 @@ type Window struct {
 	cells          [][]int32 // the segments touching each square
 	mark           []uint32  // per query, segments seen (one query at a time per window copy)
 	stamp          uint32
+	// The tissue window's pixels, when it is one: inside or not, pw × ph of side pg µm, pixel
+	// (pm, pm) at the origin; and their counts summed from the top left (made by areas).
+	pixels     []bool
+	pw, ph, pm int
+	pg         float64
+	sat        []int32
 }
 
 // newWindow indexes segments.
@@ -110,6 +116,10 @@ func (w *Window) Contains(x, y float64) bool {
 	if math.IsNaN(x) || math.IsNaN(y) {
 		return false
 	}
+	if w.pixels != nil {
+		px, py := int(math.Floor(x/w.pg))+w.pm, int(math.Floor(y/w.pg))+w.pm
+		return px >= 0 && py >= 0 && px < w.pw && py < w.ph && w.pixels[py*w.pw+px]
+	}
 	inside := false
 	xEnd := w.x0 + float64(w.across)*w.side
 	if x > xEnd || y < w.y0 || y > w.y0+float64(w.down)*w.side {
@@ -131,8 +141,21 @@ func (w *Window) Contains(x, y float64) bool {
 }
 
 // Distance is the distance from (x, y) to the boundary, found ring by ring of squares.
-func (w *Window) Distance(x, y float64) float64 {
+func (w *Window) Distance(x, y float64) float64 { return w.DistanceWithin(x, y, math.Inf(1)) }
+
+// DistanceWithin is the distance from (x, y) to the boundary when it is at most limit; farther, it
+// is some distance above limit (+Inf when no segment was looked at).
+func (w *Window) DistanceWithin(x, y, limit float64) float64 {
+	d, _, _ := w.NearestWithin(x, y, limit)
+	return d
+}
+
+// NearestWithin is DistanceWithin with the boundary's point nearest (x, y) (NaN when no segment was
+// looked at).
+func (w *Window) NearestWithin(x, y, limit float64) (d, nx, ny float64) {
+	// Squared distances compared, the root taken once (the same as the least root).
 	best := math.Inf(1)
+	nx, ny = math.NaN(), math.NaN()
 	cx, cy := w.square(x, y)
 	for ring := 0; ; ring++ {
 		w.stamp++
@@ -150,14 +173,17 @@ func (w *Window) Distance(x, y float64) float64 {
 				for _, k := range w.cells[r*w.across+c] {
 					if w.mark[k] != w.stamp {
 						w.mark[k] = w.stamp
-						best = math.Min(best, math.Sqrt(segmentDistance2(x, y, w.ax[k], w.ay[k], w.bx[k], w.by[k])))
+						if d2, px, py := segmentNearest(x, y, w.ax[k], w.ay[k], w.bx[k], w.by[k]); d2 < best {
+							best, nx, ny = d2, px, py
+						}
 					}
 				}
 			}
 		}
 		// Every square of the next ring lies at least this far.
-		if best <= float64(ring)*w.side || !any && ring > max(w.across, w.down) {
-			return best
+		reach := float64(ring) * w.side
+		if best <= mul(reach, reach) || reach > limit || !any && ring > max(w.across, w.down) {
+			return math.Sqrt(best), nx, ny
 		}
 	}
 }
@@ -170,14 +196,22 @@ func abs(v int) int {
 }
 
 func segmentDistance2(px, py, ax, ay, bx, by float64) float64 {
+	d2, _, _ := segmentNearest(px, py, ax, ay, bx, by)
+	return d2
+}
+
+// segmentNearest is the squared distance from p to the segment ab, and the segment's point nearest
+// p.
+func segmentNearest(px, py, ax, ay, bx, by float64) (d2, nx, ny float64) {
 	dx, dy := bx-ax, by-ay
 	l2 := mul(dx, dx) + mul(dy, dy)
 	t := 0.0
 	if l2 > 0 {
 		t = math.Max(0, math.Min(1, (mul(px-ax, dx)+mul(py-ay, dy))/l2))
 	}
-	ex, ey := px-(ax+t*dx), py-(ay+t*dy)
-	return mul(ex, ex) + mul(ey, ey)
+	nx, ny = ax+t*dx, ay+t*dy
+	ex, ey := px-nx, py-ny
+	return mul(ex, ex) + mul(ey, ey), nx, ny
 }
 
 // ArcInside is the share of the circle of radius r about (x, y) inside the window: the circle cut
@@ -382,5 +416,9 @@ func TissueWindow(ctx context.Context, mask *segment.Raster, grid, closing float
 		}
 	}
 	w, err := newWindow(ax, ay, bx, by, float64(pixels)*g*g)
-	return w, g, err
+	if err != nil {
+		return nil, 0, err
+	}
+	w.pixels, w.pw, w.ph, w.pm, w.pg = in, W, H, m, g
+	return w, g, nil
 }

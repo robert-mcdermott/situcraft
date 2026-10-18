@@ -2,7 +2,7 @@
 // the questions and their parameters as the program checks them, the requests (each cell's label and
 // region as the program reads them), the records in the project, the results read, an enrichment's
 // pairs ranked, and the cells each number comes from (a pair's cells and the edges between them; a
-// label's cells near another's).
+// label's cells near another's; a label's cells in a region, or in bands across a region's edge).
 
 import { sha256 } from './sha256.js';
 
@@ -23,6 +23,14 @@ export const QUESTIONS = [
     id: 'ripley', label: 'Ripley\'s K and L',
     help: 'How many cells of a label lie within each distance of a cell of the same or another label, in a window (the tissue, or a region), corrected for the window\'s edge (Ripley\'s isotropic correction), as L, a distance (L = r for points scattered at random). Compared with the labels dealt again to the same cells: L above its envelope means the cells gather, or the two labels draw together, at that scale; below, they spread out or keep apart.',
   },
+  {
+    id: 'regions', label: 'Regions compared',
+    help: 'Each region\'s cells by label, two ways: per mm² of the tissue within the region (a density: the region\'s empty glass and holes not counted) and per labeled cell in it (a share), each with a 95% interval; the tissue in none of the regions is a row of its own. Two rows compared as ratios with intervals. The intervals treat cells as placed independently, and the regions of one section are not samples: these describe this section.',
+  },
+  {
+    id: 'boundary', label: 'Across a region\'s edge',
+    help: 'Each label\'s density in bands of distance from a region\'s edge, from deep inside to well outside, each band\'s own tissue its denominator: whether a label fills the region, gathers at its margin or stays out. The core (inside, beyond the margin), the margin (within it of the edge, either side) and around (outside, beyond the margin, to the reach) are compared as ratios with intervals, as a tumor\'s core and invasive margin are measured.',
+  },
 ];
 
 export const ENRICHMENT_DEFAULTS = { permutations: 1000, seed: 20250, weight: 'edges' };
@@ -33,6 +41,15 @@ export const COOCCURRENCE_DEFAULTS = { distances: Array.from({ length: 15 }, (_,
 // Nearest distances to 100 µm, their distribution every 2.5 µm; Ripley's K to 100 µm every 5.
 export const DISTANCES_DEFAULTS = { permutations: 199, seed: 20250, reach: 100, step: 2.5 };
 export const RIPLEY_DEFAULTS = { radii: Array.from({ length: 20 }, (_, i) => 5 * (i + 1)), correction: 'isotropic', permutations: 199, seed: 20250 };
+
+// 95% intervals; bands every 10 µm to 100 µm either side of an edge, a margin of 20 µm.
+export const REGIONS_DEFAULTS = { level: 0.95 };
+export const BOUNDARY_DEFAULTS = { reach: 100, step: 10, margin: 20, level: 0.95 };
+
+// The most regions compared at once (internal/spatial MaxRegions), and the mark of a cell outside
+// the tissue window in a comparison's strata.
+export const MAX_REGIONS = 20;
+export const OUTSIDE_TISSUE = 1 << 30;
 
 // What is wrong with an enrichment's or a co-occurrence's parameters, as the program would say it,
 // or null.
@@ -66,7 +83,72 @@ export function checkAnalysisParams(question, p) {
     if (!Number.isInteger(p.permutations) || p.permutations < 19 || p.permutations > 9999) return 'Permutations are a whole number from 19 to 9,999.';
     return null;
   }
+  const level = (v) => (v >= 0.5 && v <= 0.999 ? null : 'The intervals\' level is 0.5 to 0.999.');
+  if (question === 'regions') return level(p.level);
+  if (question === 'boundary') {
+    if (!(p.reach > 0 && p.reach <= 1000)) return 'The bands reach more than 0 and at most 1,000 µm.';
+    const steps = p.reach / p.step;
+    if (!(p.step > 0) || steps > 100 || Math.abs(steps - Math.round(steps)) > 1e-9) return 'The bands\' step divides the reach into at most 100.';
+    if (!(p.margin > 0 && p.margin < p.reach)) return 'The margin is more than 0 and less than the reach.';
+    return level(p.level);
+  }
   return `No question ${question}.`;
+}
+
+// Regions compared's rows: the regions' names, then the tissue in none of them (as a heading; in a
+// sentence, rowNames(regions, true)).
+export function rowNames(regions, inSentence = false) {
+  const rest = regions.regions.length === 1 ? 'the rest of the tissue' : 'the tissue in none of them';
+  return [...regions.regions.map((r) => r.name), inSentence ? rest : rest[0].toUpperCase() + rest.slice(1)];
+}
+
+// The cells of label k in row r of regions compared (R rows, the last the tissue in none), by each
+// cell's regions (stratum): a Uint8Array over the cells analyzed, and their count.
+export function regionCells(stratum, label, R, r, k) {
+  const cells = new Uint8Array(label.length);
+  let count = 0;
+  for (let i = 0; i < label.length; i += 1) {
+    const m = stratum[i];
+    if (label[i] !== k || m === OUTSIDE_TISSUE) continue;
+    if (r === R - 1 ? m === 0 : (m & (1 << r)) !== 0) {
+      cells[i] = 1;
+      count += 1;
+    }
+  }
+  return { cells, count };
+}
+
+// The cells of label k (−1 any label) in bands from to to (indices, both kept) across a region's
+// edge, by each cell's band + 1 (stratum; 0 outside the tissue).
+export function bandCells(stratum, label, from, to, k) {
+  const cells = new Uint8Array(label.length);
+  let count = 0;
+  for (let i = 0; i < label.length; i += 1) {
+    const b = stratum[i] - 1;
+    if (b < from || b > to || (k >= 0 ? label[i] !== k : label[i] < 0)) continue;
+    cells[i] = 1;
+    count += 1;
+  }
+  return { cells, count };
+}
+
+// The bands of a profile across an edge, as { from, to } µm (−Infinity below the first edge,
+// +Infinity from the last).
+export function bandsOf(edges) {
+  return Array.from({ length: edges.length + 1 }, (_, b) => ({ from: b === 0 ? -Infinity : edges[b - 1], to: b === edges.length ? Infinity : edges[b] }));
+}
+
+// The bands making a zone of a profile: the core (inside beyond the margin), the margin (within it
+// either side) or around (outside beyond it, to the reach), as band indices { from, to } when the
+// zone's edges are bands' edges.
+export function zoneBands(edges, margin, zone) {
+  const at = (v) => edges.findIndex((e) => Math.abs(e - v) < 1e-9);
+  const lo = at(-margin);
+  const hi = at(margin);
+  if (lo < 0 || hi < 0) return null;
+  if (zone === 'core') return { from: 0, to: lo };
+  if (zone === 'margin') return { from: lo + 1, to: hi };
+  return { from: hi + 1, to: edges.length - 1 };
 }
 
 // Distances every step up to the farthest: [step, 2·step, …].

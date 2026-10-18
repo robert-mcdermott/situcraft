@@ -5,8 +5,9 @@
 // regions, never those a review excluded), as a job, and kept as an artifact with its definition;
 // the view shows what it holds (degrees, edge lengths, cells without a neighbor) and draws it on
 // the tissue. Questions are asked of a label set's cells (internal/spatial, api_spatial.go):
-// neighborhood enrichment over a graph, and co-occurrence across distances; each answer is kept as
-// an artifact, and every number opens the cells it comes from on the tissue.
+// neighborhood enrichment over a graph, co-occurrence across distances, nearest distances, Ripley's
+// K, regions compared and a profile across a region's edge; each answer is kept as an artifact, and
+// every number opens the cells it comes from on the tissue.
 
 import { h, icon, clear, formatCount, relativeTime } from './dom.js';
 import { toast } from './overlays.js';
@@ -19,8 +20,8 @@ import { cellReviewState, reviewsOf } from '../lib/review-record.js';
 import { DEFAULTS, KINDS, cellsRequest, checkGraphParams, chooseCells, describeGraph, graphParams, graphsOf } from '../lib/graphs.js';
 import { histogramPlot } from './qc-plots.js';
 import { labelSource, labelVersions, refOf } from './label-sources.js';
-import { COOCCURRENCE_DEFAULTS, DISTANCES_DEFAULTS, ENRICHMENT_DEFAULTS, QUESTIONS, RIPLEY_DEFAULTS, analysesOf, checkAnalysisParams, distancesTo, labelsRequest, rankPairs, strataRequest } from '../lib/spatial.js';
-import { cooccurrenceChart, distancesChart, distancesHeatmap, distancesTable, enrichmentHeatmap, pairName, pairsTable, pvalue, ripleyChart, ripleyTable, sharesTable, times } from './spatial-results.js';
+import { BOUNDARY_DEFAULTS, COOCCURRENCE_DEFAULTS, DISTANCES_DEFAULTS, ENRICHMENT_DEFAULTS, MAX_REGIONS, QUESTIONS, REGIONS_DEFAULTS, RIPLEY_DEFAULTS, analysesOf, bandsOf, checkAnalysisParams, distancesTo, labelsRequest, rankPairs, rowNames, strataRequest, zoneBands } from '../lib/spatial.js';
+import { cooccurrenceChart, distancesChart, distancesHeatmap, distancesTable, enrichmentHeatmap, pairName, pairsTable, profileChart, pvalue, ratioForest, ratioText, readingsTable, regionsTable, ripleyChart, ripleyTable, sharesTable, times } from './spatial-results.js';
 import { showAnalysisCells } from './spatial-cells.js';
 
 const exact = (v) => (Number.isFinite(v) ? v.toLocaleString('en-US') : '—');
@@ -62,8 +63,12 @@ export function mountSpatial(app, container) {
           // Nearest distances and Ripley's K.
           dPermutations: DISTANCES_DEFAULTS.permutations, reach: DISTANCES_DEFAULTS.reach, dStep: DISTANCES_DEFAULTS.step,
           upTo: 100, every: 5, correction: RIPLEY_DEFAULTS.correction, window: 'tissue', closing: 10,
+          // Regions compared, and a profile across a region's edge.
+          compare: new Set(), edge: '', bReach: BOUNDARY_DEFAULTS.reach, bStep: BOUNDARY_DEFAULTS.step, margin: BOUNDARY_DEFAULTS.margin,
         },
         analysis: null, pair: null, from: 0, to: null, at: null,
+        // Regions compared's two rows, a label chosen, densities or shares, and a profile's zone.
+        rows: null, label: null, measure: 'density', zone: 'margin',
       });
     }
     return sessions.get(dataset.id);
@@ -347,14 +352,27 @@ export function mountSpatial(app, container) {
         request.strata = strataRequest(cells.n, within.map((r) => ({ id: r.id, name: r.name, version: r.version, rows: cellsIn(r.geometry, cells) })));
       }
     } else {
+      const measured = q.question === 'regions' || q.question === 'boundary';
       const parameters = q.question === 'cooccurrence' ? { distances: distancesTo(q.farthest, q.step), pairs: q.pairs }
         : q.question === 'distances' ? { permutations: q.dPermutations, seed: q.seed, reach: q.reach, step: q.dStep }
-          : { radii: distancesTo(q.upTo, q.every), correction: q.correction, permutations: q.dPermutations, seed: q.seed };
+          : q.question === 'regions' ? { ...REGIONS_DEFAULTS }
+            : q.question === 'boundary' ? { reach: q.bReach, step: q.bStep, margin: q.margin, level: BOUNDARY_DEFAULTS.level }
+              : { radii: distancesTo(q.upTo, q.every), correction: q.correction, permutations: q.dPermutations, seed: q.seed };
       const problem = checkAnalysisParams(q.question, parameters);
       if (problem) throw new Error(problem);
-      const chosen = await chosenCells(t, seg, { cells: q.cells, regions: q.regions });
+      // Regions compared and a profile across an edge are of all the cells chosen, in and out of
+      // the regions.
+      const chosen = await chosenCells(t, seg, { cells: q.cells, regions: measured ? new Set() : q.regions });
       if (chosen.count < 2) throw new Error('fewer than two cells are chosen');
       request = { question: q.question, segmentation: seg.id, cells: chosen.request, labels, parameters };
+      if (measured) {
+        const all = regionsOf(project, t.dataset.id);
+        const picked = q.question === 'regions' ? all.filter((r) => q.compare.has(r.id)) : all.filter((r) => r.id === q.edge);
+        if (!picked.length) throw new Error(q.question === 'regions' ? 'choose the regions to compare' : 'choose the region whose edge to cross');
+        if (picked.length > MAX_REGIONS) throw new Error(`compare at most ${MAX_REGIONS} regions at once`);
+        request.window = { kind: 'tissue', closing: q.closing };
+        request.regions = picked.map((r) => ({ region: { id: r.id, name: r.name, version: r.version }, geometry: r.geometry }));
+      }
       if (q.question === 'ripley') {
         if (q.window === 'tissue') request.window = { kind: 'tissue', closing: q.closing };
         else {
@@ -369,6 +387,8 @@ export function mountSpatial(app, container) {
     session.pair = null;
     session.to = null;
     session.at = null;
+    session.rows = null;
+    session.label = null;
     render(true);
     return manifest;
   }
@@ -446,7 +466,24 @@ export function mountSpatial(app, container) {
           field('sp-q-seed', 'Seed', number('sp-q-seed', 'seed', { min: 0, step: 1 })),
         ])),
       regionBoxes(q.regions, 'Only the cells in')];
-    const go = h('button.btn.primary', { type: 'button', disabled: !t.item || !versions.length || (question.id === 'enrichment' && !graphs.length), 'data-action': 'ask', onclick: async () => {
+    const closing = field('sp-q-closing', 'Tissue closing (µm)', number('sp-q-closing', 'closing', { min: 0, max: 100, step: 1 }), 'The tissue is its cells\' footprint with gaps narrower than twice this filled; its area within each region, or band, is the density\'s denominator, so a region\'s empty glass and holes are not counted.');
+    const cellsField = field('sp-q-cells', 'Cells', select('sp-q-cells', [['all', 'All cells'], ...(seg.source === 'instrument' ? filtersOf(t).map((f) => [f.id, `QC filter ${f.name} v${f.version}`]) : [])], 'cells'));
+    if (question.id === 'regions') {
+      for (const id of [...q.compare]) if (!regions.some((r) => r.id === id)) q.compare.delete(id);
+      // None chosen yet: the dataset's regions, as many as can be compared at once.
+      if (!q.compare.size) for (const r of regions.slice(0, MAX_REGIONS)) q.compare.add(r.id);
+      inputs.splice(0, inputs.length, h('div.seg-import-grid', cellsField, closing), regionBoxes(q.compare, 'Compare these regions (and the tissue in none of them)'));
+    } else if (question.id === 'boundary') {
+      if (!regions.some((r) => r.id === q.edge)) q.edge = regions[0]?.id ?? '';
+      inputs.splice(0, inputs.length, h('div.seg-import-grid',
+        cellsField,
+        field('sp-q-edge', 'Across the edge of', select('sp-q-edge', regions.map((r) => [r.id, r.name]), 'edge')),
+        field('sp-q-breach', 'Bands to (µm)', number('sp-q-breach', 'bReach', { min: 10, max: 1000, step: 10 }), 'How far inside and outside the edge the bands reach; cells deeper or farther are counted in a band of their own.'),
+        field('sp-q-bstep', 'Every (µm)', number('sp-q-bstep', 'bStep', { min: 1, max: 100, step: 1 }), 'Each band\'s width: it divides the reach.'),
+        field('sp-q-margin', 'Margin (µm)', number('sp-q-margin', 'margin', { min: 1, max: 500, step: 5 }), 'The margin is within this of the edge on either side; the core is inside beyond it, around is outside beyond it to the reach.'),
+        closing));
+    }
+    const go = h('button.btn.primary', { type: 'button', disabled: !t.item || !versions.length || (question.id === 'enrichment' && !graphs.length) || ((question.id === 'regions' || question.id === 'boundary') && !regions.length), 'data-action': 'ask', onclick: async () => {
       try {
         const m = await ask(t, seg, session);
         toast(`${m.name}: done.`, { kind: 'ok' });
@@ -454,7 +491,8 @@ export function mountSpatial(app, container) {
         toast(`The question: ${error.message}`, { kind: 'error', timeout: 12000 });
       }
     } }, icon('play'), 'Ask');
-    const missing = !versions.length ? 'Label the cells first: the Cell types view clusters and labels them, or imports labels.' : question.id === 'enrichment' && !graphs.length ? 'Build a graph above first: enrichment counts neighbors in it.' : null;
+    const needsRegions = (question.id === 'regions' || question.id === 'boundary') && !regions.length;
+    const missing = !versions.length ? 'Label the cells first: the Cell types view clusters and labels them, or imports labels.' : question.id === 'enrichment' && !graphs.length ? 'Build a graph above first: enrichment counts neighbors in it.' : needsRegions ? 'Draw a region on the tissue first (the Viewer\'s region tools), or read regions from a file.' : null;
     return h('section.seg-section',
       h('div.section-title', 'Questions'),
       h('div.seg-card',
@@ -464,7 +502,7 @@ export function mountSpatial(app, container) {
         ...inputs,
         h('div.seg-form', go, missing ? h('span.muted', missing) : null),
         ...progress(app.bundles.analyzing(t.dataset.id), (e) => QUESTIONS.find((x) => x.id === e.question)?.label ?? 'The question'),
-        h('p.muted.seg-cite', 'Methods: neighborhood enrichment by permutation of the labels (Schapiro et al. 2017; Palla et al. 2022), its expectation exact, its p-values adjusted by Benjamini and Hochberg (1995); co-occurrence as Palla et al. (2022); nearest distances and Ripley\'s K and L (Ripley 1977; Besag 1977) with the isotropic edge correction, against the labels dealt at random, with envelopes and a global test (Diggle 2003; Baddeley et al. 2014). A section\'s cells are not replicates: these describe this section, and the sample is the unit of any comparison between samples.')));
+        h('p.muted.seg-cite', 'Methods: neighborhood enrichment by permutation of the labels (Schapiro et al. 2017; Palla et al. 2022), its expectation exact, its p-values adjusted by Benjamini and Hochberg (1995); co-occurrence as Palla et al. (2022); nearest distances and Ripley\'s K and L (Ripley 1977; Besag 1977) with the isotropic edge correction, against the labels dealt at random, with envelopes and a global test (Diggle 2003; Baddeley et al. 2014); densities and shares with Garwood\'s (1936) and Wilson\'s (1927) intervals, their ratios with exact conditional (Ederer and Mantel 1974) and Koopman\'s (1984) intervals; a tumor\'s core and margin as Galon et al. (2006) measure them. A section\'s cells are not replicates: these describe this section, and the sample is the unit of any comparison between samples.')));
   }
 
   function analysisListCard(t, seg, session) {
@@ -476,19 +514,22 @@ export function mountSpatial(app, container) {
       session.pair = null;
       session.to = null;
       session.at = null;
+      session.rows = null;
+      session.label = null;
       render(true);
     };
     const rows = list.map((a) => {
       const s = a.summary ?? {};
-      const over = a.question === 'enrichment' ? describeGraph(s.graph?.parameters) : a.question === 'cooccurrence' ? `${s.distances ?? '?'} distances` : a.question === 'ripley' ? `${s.window?.kind === 'region' ? `the region ${s.window.region?.name}` : 'the tissue'}` : 'the cells';
-      const what = a.question === 'cooccurrence' ? '' : `${s.significant ?? 0} pairs differ`;
+      const over = a.question === 'enrichment' ? describeGraph(s.graph?.parameters) : a.question === 'cooccurrence' ? `${s.distances ?? '?'} distances` : a.question === 'ripley' ? `${s.window?.kind === 'region' ? `the region ${s.window.region?.name}` : 'the tissue'}`
+        : a.question === 'regions' ? (s.rows ?? []).map((r) => r.name).join(', ') : a.question === 'boundary' ? `the edge of ${s.edge?.name ?? '?'}` : 'the cells';
+      const what = a.question === 'cooccurrence' ? '' : a.question === 'regions' ? `${s.significant ?? 0} densities differ` : a.question === 'boundary' ? `${s.significant ?? 0} labels differ` : `${s.significant ?? 0} pairs differ`;
       return h(`tr${session.analysis === a.id ? '.selected' : ''}`, { tabIndex: 0, style: { cursor: 'pointer' }, 'data-analysis': a.id, onclick: () => choose(a), onkeydown: (event) => {
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault();
           choose(a);
         }
       } },
-      h('td', { enrichment: 'Enrichment', cooccurrence: 'Co-occurrence', distances: 'Nearest distances', ripley: 'Ripley\'s K' }[a.question] ?? a.question),
+      h('td', { enrichment: 'Enrichment', cooccurrence: 'Co-occurrence', distances: 'Nearest distances', ripley: 'Ripley\'s K', regions: 'Regions compared', boundary: 'Across an edge' }[a.question] ?? a.question),
       h('td', s.labels?.name ?? '—'),
       h('td', over, s.strata?.length ? h('span.muted', `, within ${s.strata.map((r) => r.name).join(', ')}`) : null),
       h('td.r', exact(s.labeled)),
@@ -509,7 +550,7 @@ export function mountSpatial(app, container) {
     const mine = generation;
     app.bundles.analysisData(record.id).then((data) => {
       if (mine !== generation) return;
-      const answer = { enrichment: enrichmentAnswer, cooccurrence: cooccurrenceAnswer, distances: distancesAnswer, ripley: ripleyAnswer }[data.analysis.question];
+      const answer = { enrichment: enrichmentAnswer, cooccurrence: cooccurrenceAnswer, distances: distancesAnswer, ripley: ripleyAnswer, regions: regionsAnswer, boundary: boundaryAnswer }[data.analysis.question];
       clear(host).append(h('div.section-title', 'The answer'), ...answer(t, seg, session, record, data));
     }).catch((error) => {
       if (mine !== generation) return;
@@ -679,6 +720,134 @@ export function mountSpatial(app, container) {
     return parts;
   }
 
+  // Densities (per mm² of tissue) or shares (of the labeled cells): a radio pair.
+  function measurePick(session) {
+    return h('div.sp-kinds', { role: 'radiogroup', 'aria-label': 'Measure' }, ...[['density', 'Cells per mm² of tissue'], ['share', 'Share of the labeled cells']].map(([id, text]) => {
+      const radio = h('input', { type: 'radio', name: 'sp-measure', value: id, checked: session.measure === id });
+      radio.addEventListener('change', () => {
+        session.measure = id;
+        render(true);
+      });
+      return h('label.sp-kind', radio, text);
+    }));
+  }
+
+  const windowText = (w) => `the tissue, gaps narrower than ${2 * w.closing} µm filled; ${exact(Math.round(w.area))} µm²`;
+  const levelText = (p) => `${Math.round(100 * (p.level ?? 0.95))}%, as if the cells were placed independently (clustered cells make the true uncertainty wider)`;
+
+  function regionsAnswer(t, seg, session, record, { analysis, cells }) {
+    const r = analysis.regions;
+    const names = analysis.labels.names;
+    const K = names.length;
+    const rows = rowNames(r);
+    const said = rowNames(r, true);
+    const R = rows.length;
+    if (!session.rows || session.rows[0] >= R || session.rows[1] >= R || session.rows[0] === session.rows[1]) session.rows = [0, R - 1];
+    if (session.label === null || session.label >= K) session.label = 0;
+    const pickLabel = (k) => {
+      session.label = k;
+      render(true);
+    };
+    const kv = h('dl.kv.seg-kv',
+      h('dt', 'Labels'), h('dd', analysis.labels.name, h('span.muted', ` (${K})`)),
+      h('dt', 'Regions'), h('dd', r.regions.map((x) => `${x.name} (v${x.version})`).join(', ')),
+      h('dt', 'Window'), h('dd', windowText(analysis.window)),
+      h('dt', 'Cells'), h('dd', `${exact(analysis.cells.labeled)} labeled of ${exact(analysis.cells.analyzed)}`, r.outside ? h('span.muted', `; ${exact(r.outside)} outside the tissue window left out`) : null),
+      h('dt', 'Intervals'), h('dd', levelText(analysis.parameters)),
+      h('dt', 'Artifact'), h('dd.mono', record.id));
+    const rowPick = (id, i, label) => {
+      const el = h('select.input', { id }, ...rows.map((n, k) => h('option', { value: String(k) }, n)));
+      el.value = String(session.rows[i]);
+      el.addEventListener('change', () => {
+        const next = [...session.rows];
+        next[i] = Number(el.value);
+        if (next[0] === next[1]) next[1 - i] = session.rows[i];
+        session.rows = next;
+        render(true);
+      });
+      return h('label.field', { for: id }, h('span', label), el);
+    };
+    const [a, b] = session.rows;
+    const k = session.label;
+    const q = (a * R + b) * K + k;
+    const share = session.measure === 'share';
+    const parts = [kv, measurePick(session), regionsTable(analysis, { measure: session.measure, onPick: pickLabel, chosen: k }),
+      h('div.section-title', 'Two compared'),
+      h('div.seg-import-grid', rowPick('sp-row-a', 0, 'The cells in'), rowPick('sp-row-b', 1, 'Over those in')),
+      ratioForest(analysis, { r: a, s: b, measure: session.measure, onPick: pickLabel, chosen: k })];
+    const value = (row) => {
+      const at = row * K + k;
+      return share ? `${(100 * (r.share[at] ?? NaN)).toFixed(1)}% of its labeled cells` : `${exact(Math.round(r.density[at] ?? NaN))} a mm²`;
+    };
+    const v = share ? [r.shareRatio[q], r.shareRatioLo[q], r.shareRatioHi[q]] : [r.densityRatio[q], r.densityRatioLo[q], r.densityRatioHi[q]];
+    const lo = v[1] ?? NaN;
+    const hi = v[2] ?? (Number.isFinite(lo) ? Infinity : NaN);
+    const ratio = v[0] ?? (lo > 0 ? Infinity : NaN);
+    const rowSelect = h('select.input', { id: 'sp-show-row', 'aria-label': 'The cells to show: those in this row' }, ...said.map((n, i) => h('option', { value: String(i) }, `in ${n}`)));
+    rowSelect.value = String(a);
+    parts.push(h('div.seg-card.sp-pair',
+      h('b', `${names[k]}: ${said[a]} over ${said[b]}`),
+      h('p', `${exact(r.count[a * K + k])} ${names[k]} cells in ${said[a]}, ${value(a)}; ${exact(r.count[b * K + k])} in ${said[b]}, ${value(b)}. ${share ? 'The share' : 'The density'}, ${said[a]} over ${said[b]}: ${ratioText(ratio, lo, hi)}, ${lo > 1 ? 'higher' : hi < 1 ? 'lower' : 'not shown to differ'}.`),
+      h('div.btn-row', rowSelect, h('button.btn.small.primary', { type: 'button', 'data-action': 'show-region', onclick: () => showAnalysisCells(app, { dataset: t.dataset.id, item: t.item, segmentation: seg, analysis, cells, a: k, row: Number(rowSelect.value) }).catch((error) => toast(`The cells: ${error.message}`, { kind: 'error' })) }, icon('tissue'), 'Show these cells on the tissue'))));
+    parts.push(h('p.muted.seg-note', `Densities are cells per mm² of the tissue within each region (its empty glass and holes not counted); shares, of the region's labeled cells. Filled points in the comparison: intervals clear of 1. ${r.regions.length > 1 ? 'Regions that overlap share cells, so their rows are not independent. ' : ''}A section's regions are not samples: these describe this section.`));
+    return parts;
+  }
+
+  function boundaryAnswer(t, seg, session, record, { analysis, cells }) {
+    const b = analysis.boundary;
+    const names = analysis.labels.names;
+    const K = names.length;
+    const p = analysis.parameters;
+    if (session.label === null || session.label >= K) session.label = 0;
+    const k = session.label;
+    const pickLabel = (x) => {
+      session.label = x;
+      render(true);
+    };
+    const kv = h('dl.kv.seg-kv',
+      h('dt', 'Labels'), h('dd', analysis.labels.name, h('span.muted', ` (${K})`)),
+      h('dt', 'Edge'), h('dd', `of ${b.region.name} (v${b.region.version})`),
+      h('dt', 'Bands'), h('dd', `every ${p.step} µm to ${p.reach} µm inside and outside, the deeper and the farther a band each; the margin ${p.margin} µm either side`),
+      h('dt', 'Window'), h('dd', windowText(analysis.window)),
+      h('dt', 'Cells'), h('dd', `${exact(analysis.cells.labeled)} labeled of ${exact(analysis.cells.analyzed)}`, b.outside ? h('span.muted', `; ${exact(b.outside)} outside the tissue window left out`) : null),
+      h('dt', 'Intervals'), h('dd', levelText(p)),
+      h('dt', 'Artifact'), h('dd.mono', record.id));
+    const bands = bandsOf(b.edges);
+    const zones = ['core', 'margin', 'around'].map((z) => [z, zoneBands(b.edges, p.margin, z)]).filter(([, r]) => r);
+    if (!zones.some(([z]) => z === session.zone)) session.zone = zones[0]?.[0] ?? 'all';
+    const zonePick = h('select.input', { id: 'sp-zone', 'aria-label': 'Where to show the cells' },
+      ...zones.map(([z]) => h('option', { value: z }, { core: 'in the core', margin: 'at the margin', around: 'around' }[z])), h('option', { value: 'all' }, 'in every band'));
+    zonePick.value = session.zone;
+    zonePick.addEventListener('change', () => {
+      session.zone = zonePick.value;
+    });
+    const zoneText = { core: `the core (inside, beyond ${p.margin} µm)`, margin: `the margin (within ${p.margin} µm of the edge)`, around: `around (outside, ${p.margin} to ${p.reach} µm)` };
+    const C = 3;
+    const ri = (c) => {
+      const lo = b.ratioLo[k * C + c] ?? NaN;
+      return ratioText(b.ratio[k * C + c] ?? (lo > 0 ? Infinity : NaN), lo, b.ratioHi[k * C + c] ?? (Number.isFinite(lo) ? Infinity : NaN));
+    };
+    const reading = [b.inside[k] > 0 ? 'Denser in the core than around: it fills the region' : b.inside[k] < 0 ? 'Sparser in the core than around: it stays out' : 'Not shown denser or sparser in the core than around', b.atMargin[k] ? 'denser at the margin than in both: it gathers there' : null].filter(Boolean).join('; ');
+    const parts = [kv, readingsTable(analysis, { onPick: pickLabel, chosen: k }),
+      h('div.seg-import-grid', h('label.field', { for: 'sp-profile-label' }, h('span', 'Profile of'), (() => {
+        const el = h('select.input', { id: 'sp-profile-label' }, ...names.map((n, x) => h('option', { value: String(x) }, n)));
+        el.value = String(k);
+        el.addEventListener('change', () => pickLabel(Number(el.value)));
+        return el;
+      })())),
+      measurePick(session),
+      profileChart(analysis, k, { measure: session.measure }),
+      h('div.seg-card.sp-pair',
+        h('b', `${names[k]} across the edge of ${b.region.name}`),
+        h('p', `The core over around ${ri(0)}; the margin over the core ${ri(1)} and over around ${ri(2)}. ${reading}.`),
+        h('div.btn-row', zonePick, h('button.btn.small.primary', { type: 'button', 'data-action': 'show-band', onclick: () => {
+          const range = session.zone === 'all' ? { from: 0, to: bands.length - 1 } : zoneBands(b.edges, p.margin, session.zone);
+          showAnalysisCells(app, { dataset: t.dataset.id, item: t.item, segmentation: seg, analysis, cells, a: k, bands: range, where: session.zone === 'all' ? 'in every band' : zoneText[session.zone] }).catch((error) => toast(`The cells: ${error.message}`, { kind: 'error' }));
+        } }, icon('tissue'), 'Show these cells on the tissue'))),
+      h('p.muted.seg-note', 'Each band\'s density is its cells over its own area of tissue, so a band that runs off the tissue, or into a hole, is not diluted. The core, margin and around are compared by their densities\' ratios: a label fills the region when the core\'s interval lies above around\'s, stays out when below, and gathers at the margin when the margin is denser than both.')];
+    return parts;
+  }
+
   function showNear(t, seg, analysis, cells, a, b, k) {
     return showAnalysisCells(app, { dataset: t.dataset.id, item: t.item, segmentation: seg, analysis, cells, a, b, k }).catch((error) => toast(`The cells: ${error.message}`, { kind: 'error' }));
   }
@@ -768,7 +937,8 @@ export function mountSpatial(app, container) {
     },
     // Asks a question as the form would ({ segmentation, question, labels: a label set's id and level
     // as "id|level", graph, permutations, seed, weight, within: region ids, cells, regions, farthest,
-    // step, pairs }); answers its manifest.
+    // step, pairs, dPermutations, reach, dStep, upTo, every, correction, window, closing, compare:
+    // region ids, edge: a region's id, bReach, bStep, margin }); answers its manifest.
     ask: async (dataset, args) => {
       const t0 = target();
       if (!t0 || t0.dataset.id !== dataset.id) app.focusItem({ kind: 'dataset', id: dataset.id });
@@ -782,10 +952,12 @@ export function mountSpatial(app, container) {
       Object.assign(q, {
         ...ENRICHMENT_DEFAULTS, farthest: 150, step: 10, pairs: COOCCURRENCE_DEFAULTS.pairs, cells: 'all',
         dPermutations: DISTANCES_DEFAULTS.permutations, reach: DISTANCES_DEFAULTS.reach, dStep: DISTANCES_DEFAULTS.step, upTo: 100, every: 5, correction: RIPLEY_DEFAULTS.correction, window: 'tissue', closing: 10,
+        edge: '', bReach: BOUNDARY_DEFAULTS.reach, bStep: BOUNDARY_DEFAULTS.step, margin: BOUNDARY_DEFAULTS.margin,
       });
-      for (const k of ['question', 'labels', 'graph', 'permutations', 'seed', 'weight', 'cells', 'farthest', 'step', 'pairs', 'dPermutations', 'reach', 'dStep', 'upTo', 'every', 'correction', 'window', 'closing']) if (args[k] !== undefined) q[k] = args[k];
+      for (const k of ['question', 'labels', 'graph', 'permutations', 'seed', 'weight', 'cells', 'farthest', 'step', 'pairs', 'dPermutations', 'reach', 'dStep', 'upTo', 'every', 'correction', 'window', 'closing', 'edge', 'bReach', 'bStep', 'margin']) if (args[k] !== undefined) q[k] = args[k];
       q.within = new Set(args.within ?? []);
       q.regions = new Set(args.regions ?? []);
+      q.compare = new Set(args.compare ?? []);
       return ask(t, seg, session);
     },
   };

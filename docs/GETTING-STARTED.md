@@ -929,8 +929,43 @@ width.
 Choose a distance, and **Show these cells on the tissue** highlights the cells within it of each
 other.
 
-A section's cells are not independent replicates: these numbers describe this section. Comparing
-conditions needs samples, compared as samples (a later release).
+### Regions measured
+
+Two questions are asked of regions you drew (or read from QuPath).
+
+**Regions compared** counts each region's cells by label, two ways: per mm² of the tissue within the
+region (a density) and per labeled cell in it (a share). The tissue is the window Ripley's K uses,
+so a region drawn loosely over the edge of the section, or around an airway, is not diluted by the
+glass inside it. The tissue in none of the regions is a row of its own. Each number has a 95%
+interval (Garwood's for a count, Wilson's for a share). Choose two rows to compare them, as each
+label's ratio with its interval (a forest plot, filled where the interval is clear of 1).
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/compared-dark.webp">
+  <img alt="The Spatial view's answer of two stromal regions compared on the Lung example: each class's density in each region and in the tissue in none of them, with intervals, and the first region over the rest as a forest plot, the stromal and endothelial cells denser and the epithelial cells sparser" src="images/compared-light.webp">
+</picture>
+
+**Across a region's edge** measures each label's density in bands of distance from a region's
+edge, every 10 µm from 100 µm inside to 100 µm outside (the deeper and the farther a band each),
+each band's own area of tissue its denominator. Three zones, as a tumor's core and invasive margin
+are measured: the core (inside, beyond the margin), the margin (within 20 µm of the edge, either
+side) and around (outside, beyond the margin, to the reach). A label **fills the region** when its
+density in the core is above its density around (the interval of their ratio clear of 1), **stays
+out** when below, and **gathers at the margin** when the margin is denser than both. The profile
+shows a label's density band by band; a band with little tissue (deep inside a small region) is
+drawn hollow.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/edge-dark.webp">
+  <img alt="The Spatial view's answer across the edge of a stromal region of the Lung example: each class's density in the core, at the margin and around with their ratios and readings, and the epithelial cells' profile across the edge, sparse inside and dense outside" src="images/edge-light.webp">
+</picture>
+
+**Show these cells on the tissue** highlights a label's cells in a region, or in the core, at the
+margin or around.
+
+The intervals treat cells as placed independently. Cells cluster, so the true uncertainty is
+wider. A section's cells are not independent replicates: these numbers describe this section.
+Comparing conditions needs samples, compared as samples (a later release).
 
 ## Keyboard
 

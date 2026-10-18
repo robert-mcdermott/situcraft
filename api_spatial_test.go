@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -155,6 +156,41 @@ func TestSpatialAnalyses(t *testing.T) {
 	if s.Window == nil || s.Window.Kind != "region" || s.Window.Area != 3000 || s.Window.Region.Name != "Box" {
 		t.Errorf("Ripley's K in a region: %+v", s.Window)
 	}
+	// Regions compared, two overlapping, and a profile across one's edge, in the tissue.
+	twoRegions := `[{"region":{"id":"reg-2","name":"Box","version":1},"geometry":[[[[0,0],[60,0],[60,50],[0,50]]]]},{"region":{"id":"reg-3","name":"Strip","version":2},"geometry":[[[[40,0],[90,0],[90,30],[40,30]]]]}]`
+	compared, _ := run(fmt.Sprintf(`{"question":"regions","segmentation":%q,"cells":%s,"labels":%s,"window":{"kind":"tissue","closing":5},"regions":%s}`, seg.ID, chosenCells(keep, ""), labelsJSON, twoRegions))
+	pm, _ := f.a.artifacts.Get(compared)
+	s = spatial.AnalysisSummary{}
+	json.Unmarshal(pm.Summary, &s)
+	if s.Question != "regions" || len(s.Rows) != 2 || s.Rows[1].Name != "Strip" || s.Window == nil || s.Window.Kind != "tissue" {
+		t.Errorf("regions compared: %+v", s)
+	}
+	described, _ := f.a.artifacts.Path(compared, spatial.FileAnalysis)
+	an, err := spatial.ReadAnalysis(filepath.Dir(described))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rr := an.Regions; rr == nil || len(rr.Area) != 3 || !(rr.Area[0] > 0 && rr.Area[0] <= 3000) || rr.Labeled[0]+rr.Labeled[2] > n {
+		t.Errorf("regions compared: %+v", an.Regions)
+	}
+	raw = request(t, f.handler, http.MethodGet, "/api/analyses/"+compared+"/cells", nil, nil).Body.Bytes()
+	if len(raw) != 4+12*n {
+		t.Fatalf("the regions' cells: %d bytes", len(raw))
+	}
+	masks := map[int32]int{}
+	for i := 0; i < n; i++ {
+		masks[int32(binary.LittleEndian.Uint32(raw[4+8*n+4*i:]))]++
+	}
+	if masks[3] == 0 || masks[1] == 0 || masks[0] == 0 {
+		t.Errorf("the cells' regions: %v (both, only the box, neither)", masks)
+	}
+	edge, _ := run(fmt.Sprintf(`{"question":"boundary","segmentation":%q,"cells":%s,"labels":%s,"regions":[{"region":{"id":"reg-2","name":"Box","version":1},"geometry":[[[[0,0],[60,0],[60,50],[0,50]]]]}],"parameters":{"reach":20,"step":5,"margin":5}}`, seg.ID, chosenCells(keep, ""), labelsJSON))
+	em, _ := f.a.artifacts.Get(edge)
+	s = spatial.AnalysisSummary{}
+	json.Unmarshal(em.Summary, &s)
+	if s.Question != "boundary" || s.Edge == nil || s.Edge.Name != "Box" || s.Window == nil || s.Window.Closing != 10 {
+		t.Errorf("across the edge: %+v", s)
+	}
 	bad := func(sumOf string) string {
 		return fmt.Sprintf(`{"id":"lab-x","kind":"labels","name":"By turns","level":0,"names":["A","B","C"],"codes":%q,"checksum":%q}`, codes, sumOf)
 	}
@@ -173,6 +209,12 @@ func TestSpatialAnalyses(t *testing.T) {
 		{fmt.Sprintf(`{"question":"ripley","segmentation":%q,"cells":%s,"labels":%s,"parameters":{"correction":"translation"}}`, seg.ID, chosenCells(keep, ""), labelsJSON), "isotropic or none"},
 		{fmt.Sprintf(`{"question":"distances","segmentation":%q,"cells":%s,"labels":%s,"window":{"kind":"tissue"}}`, seg.ID, chosenCells(keep, ""), labelsJSON), "Only Ripley"},
 		{fmt.Sprintf(`{"question":"distances","segmentation":%q,"cells":%s,"labels":%s,"parameters":{"reach":0}}`, seg.ID, chosenCells(keep, ""), labelsJSON), "reach"},
+		{fmt.Sprintf(`{"question":"regions","segmentation":%q,"cells":%s,"labels":%s}`, seg.ID, chosenCells(keep, ""), labelsJSON), "1 to 20 regions"},
+		{fmt.Sprintf(`{"question":"boundary","segmentation":%q,"cells":%s,"labels":%s,"regions":%s}`, seg.ID, chosenCells(keep, ""), labelsJSON, twoRegions), "of one region"},
+		{fmt.Sprintf(`{"question":"distances","segmentation":%q,"cells":%s,"labels":%s,"regions":%s}`, seg.ID, chosenCells(keep, ""), labelsJSON, twoRegions), "Only regions compared"},
+		{fmt.Sprintf(`{"question":"regions","segmentation":%q,"cells":%s,"labels":%s,"regions":%s,"window":{"kind":"region","region":{"id":"r","name":"r","version":1},"geometry":[[[[0,0],[9,0],[9,9]]]]}}`, seg.ID, chosenCells(keep, ""), labelsJSON, twoRegions), "within the tissue"},
+		{fmt.Sprintf(`{"question":"regions","segmentation":%q,"cells":%s,"labels":%s,"regions":[{"region":{"id":"r","name":"r","version":1},"geometry":[[[[0,0],[9,0],[9,9]]]]},{"region":{"id":"r","name":"r","version":1},"geometry":[[[[0,0],[9,0],[9,9]]]]}]}`, seg.ID, chosenCells(keep, ""), labelsJSON), "once"},
+		{fmt.Sprintf(`{"question":"boundary","segmentation":%q,"cells":%s,"labels":%s,"regions":[{"region":{"id":"r","name":"r","version":1},"geometry":[[[[0,0],[9,0],[9,9]]]]}],"parameters":{"margin":100}}`, seg.ID, chosenCells(keep, ""), labelsJSON), "margin"},
 	} {
 		if rec := f.post("/api/local/0/spatial", c.body); rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), c.want) {
 			t.Errorf("%s: %d %s", c.want, rec.Code, rec.Body)

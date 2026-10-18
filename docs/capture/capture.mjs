@@ -490,6 +490,32 @@ const scenes = {
     await scrollTo('.sp-answer .sp-pair-tables', 'start');
     await sleep(300);
   },
+  // Regions compared (wave 6, slice 4): two stromal regions of the Lung example drawn by their
+  // stromal and endothelial cells, and each class's density in them and in the rest of the tissue,
+  // the first region over the rest as a forest plot.
+  async compared() {
+    await act('open_example', { example: 'lung' });
+    await act('cluster_cells', {});
+    const markers = await act('label_cells', { markers: 'lung' });
+    await act('draw_region', { dataset: 'xenium-lung-2fov', polygon: [[260, 0], [420, 0], [440, 80], [400, 170], [300, 170], [255, 100]], class: 'Stroma', name: 'Vessel stroma', by: 'docs/capture' });
+    await act('draw_region', { dataset: 'xenium-lung-2fov', polygon: [[60, 470], [200, 460], [250, 560], [240, 700], [120, 760], [0, 720], [0, 640]], class: 'Stroma', name: 'Lower stroma', by: 'docs/capture' });
+    await act('spatial_analysis', { question: 'regions', labels: markers.data.id, level: 1, regions: ['Vessel stroma', 'Lower stroma'] });
+    await waitFor(`Boolean(document.querySelector('.sp-answer .sp-forest'))`);
+    await scrollTo('.sp-answer .sp-regions-table', 'start');
+    await sleep(300);
+  },
+  // Across a region's edge (wave 6, slice 4): the epithelial cells' profile across the vessel
+  // stroma's edge, sparse inside and dense outside, with each class's reading.
+  async edge() {
+    await act('open_example', { example: 'lung' });
+    await act('cluster_cells', {});
+    const markers = await act('label_cells', { markers: 'lung' });
+    await act('draw_region', { dataset: 'xenium-lung-2fov', polygon: [[260, 0], [420, 0], [440, 80], [400, 170], [300, 170], [255, 100]], class: 'Stroma', name: 'Vessel stroma', by: 'docs/capture' });
+    await act('spatial_analysis', { question: 'boundary', labels: markers.data.id, level: 1, region: 'Vessel stroma' });
+    await waitFor(`Boolean(document.querySelector('.sp-answer .sp-profile'))`);
+    await scrollTo('.sp-answer .sp-readings', 'start');
+    await sleep(300);
+  },
   // The Breast example's clusters on the tissue (wave 4, slice 1): the cells filled by cluster,
   // with the legend.
   async clusters() {

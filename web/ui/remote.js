@@ -28,7 +28,8 @@ import { labelSource, labelVersions, refOf } from './label-sources.js';
 import { defaultPair, impactLines, sideOf } from '../lib/impact.js';
 import { remakeOnSegmentation } from './remake.js';
 import { KINDS as GRAPH_KINDS, describeGraph, graphsOf } from '../lib/graphs.js';
-import { analysesOf, rankPairs } from '../lib/spatial.js';
+import { analysesOf, bandsOf, rankPairs, rowNames, zoneBands } from '../lib/spatial.js';
+import { ratioText } from './spatial-results.js';
 import { showAnalysisCells } from './spatial-cells.js';
 
 export class ActionError extends Error {}
@@ -1214,7 +1215,7 @@ export function installRemote(app) {
 
     async spatial_analysis(args) {
       const { dataset, seg, version } = labelVersionArg(args);
-      const question = choose(args.question ?? 'enrichment', ['enrichment', 'cooccurrence', 'distances', 'ripley'], 'question');
+      const question = choose(args.question ?? 'enrichment', ['enrichment', 'cooccurrence', 'distances', 'ripley', 'regions', 'boundary'], 'question');
       let graph;
       if (question === 'enrichment') {
         const list = graphsOf(project(), dataset.id, seg.id).filter((g) => g.state === 'complete');
@@ -1237,9 +1238,22 @@ export function installRemote(app) {
         cells = filters.find((f) => f.id === ref)?.id ?? (named.includes(ref) ? filters[named.indexOf(ref)].id : latest(choose(ref, [...new Set(filters.map((f) => f.name))], 'filter'))?.id);
       }
       const ask = { segmentation: seg.id, question, labels: `${version.id}|${version.level}`, graph, within: regionIds('within'), regions: regionIds('regions'), cells };
+      // Regions compared are the regions named; a profile crosses one region's edge.
+      if (question === 'regions') {
+        ask.compare = ask.regions;
+        ask.regions = [];
+        if (!ask.compare.length) throw new ActionError('regions names the regions to compare, by name or ID.');
+      }
+      if (question === 'boundary') {
+        if (args.region === undefined) throw new ActionError('region names the region whose edge to cross, by name or ID.');
+        ask.edge = regionRef(dataset, args.region).id;
+        ask.regions = [];
+      }
       const keys = question === 'distances' ? [['permutations', 'dPermutations'], ['seed', 'seed'], ['reach', 'reach'], ['every', 'dStep']]
         : question === 'ripley' ? [['permutations', 'dPermutations'], ['seed', 'seed'], ['up_to', 'upTo'], ['every', 'every'], ['closing', 'closing']]
-          : [['permutations', 'permutations'], ['seed', 'seed'], ['up_to', 'farthest'], ['every', 'step']];
+          : question === 'regions' ? [['closing', 'closing']]
+            : question === 'boundary' ? [['reach', 'bReach'], ['every', 'bStep'], ['margin', 'margin'], ['closing', 'closing']]
+              : [['permutations', 'permutations'], ['seed', 'seed'], ['up_to', 'farthest'], ['every', 'step']];
       for (const [arg, key] of keys) if (args[arg] !== undefined) ask[key] = finite(args[arg], arg);
       if (args.correction !== undefined) ask.correction = choose(args.correction, ['isotropic', 'none'], 'correction');
       if (args.window !== undefined) ask.window = /^(the )?tissue$/i.test(String(args.window)) ? 'tissue' : regionRef(dataset, args.window).id;
@@ -1279,6 +1293,49 @@ export function installRemote(app) {
         return {
           message: `${manifest.name}: ${plural(sig.length, 'pair')} of ${plural(pairs.length, 'pair')} nearer or farther than at random (adjusted p below 0.05)${near.length ? `; nearest: ${near.join(', ')}` : ''}${far.length ? `; farthest: ${far.join(', ')}` : ''}.`,
           data: { id: manifest.id, name: manifest.name, labels: names, cells: a.cells, reach: r.reach, parameters: a.parameters, pairs },
+        };
+      }
+      if (question === 'regions') {
+        const r = a.regions;
+        const K = names.length;
+        const rows = rowNames(r);
+        const said = rowNames(r, true);
+        const R = rows.length;
+        const at = (v, q) => v[q] ?? null;
+        const table = rows.map((name, row) => ({ name, area: r.area[row], labeled: r.labeled[row], cells: r.all[row],
+          labels: names.map((label, k) => ({ label, count: r.count[row * K + k], density: at(r.density, row * K + k), densityLo: at(r.densityLo, row * K + k), densityHi: at(r.densityHi, row * K + k), share: at(r.share, row * K + k), shareLo: at(r.shareLo, row * K + k), shareHi: at(r.shareHi, row * K + k) })) }));
+        // Each region over the tissue in none of them.
+        const vsRest = [];
+        for (let row = 0; row < R - 1; row += 1) {
+          for (let k = 0; k < K; k += 1) {
+            const q = (row * R + R - 1) * K + k;
+            vsRest.push({ region: rows[row], label: names[k], densityRatio: at(r.densityRatio, q), densityLo: at(r.densityRatioLo, q), densityHi: at(r.densityRatioHi, q), shareRatio: at(r.shareRatio, q), shareLo: at(r.shareRatioLo, q), shareHi: at(r.shareRatioHi, q) });
+          }
+        }
+        const differ = vsRest.filter((x) => x.densityLo > 1 || (x.densityHi !== null && x.densityHi < 1));
+        const line = (x) => `${x.label} in ${x.region} ${ratioText(x.densityRatio ?? (x.densityLo > 0 ? Infinity : NaN), x.densityLo, x.densityHi ?? Infinity)}`;
+        const denser = differ.filter((x) => x.densityLo > 1).sort((x, y) => (y.densityRatio ?? Infinity) - (x.densityRatio ?? Infinity)).slice(0, 3).map(line);
+        const sparser = differ.filter((x) => x.densityHi < 1).sort((x, y) => x.densityRatio - y.densityRatio).slice(0, 3).map(line);
+        return {
+          message: `${manifest.name}: in the tissue (${Math.round(a.window.area).toLocaleString('en-US')} µm²), ${differ.length.toLocaleString('en-US')} of ${vsRest.length.toLocaleString('en-US')} densities (a label in a region) differ from ${said[R - 1]}'s (intervals clear of 1)${denser.length ? `; denser: ${denser.join(', ')}` : ''}${sparser.length ? `; sparser: ${sparser.join(', ')}` : ''}${r.outside ? `; ${plural(r.outside, 'cell')} outside the tissue window left out` : ''}.`,
+          data: { id: manifest.id, name: manifest.name, labels: names, window: a.window, regions: r.regions, rows: table, vsRest, outside: r.outside, parameters: a.parameters },
+        };
+      }
+      if (question === 'boundary') {
+        const b = a.boundary;
+        const K = names.length;
+        const at = (v, q) => v[q] ?? null;
+        const bands = bandsOf(b.edges).map((band, i) => ({ from: Number.isFinite(band.from) ? band.from : null, to: Number.isFinite(band.to) ? band.to : null, area: b.area[i], labeled: b.labeled[i], cells: b.all[i],
+          density: names.map((_, k) => at(b.density, i * K + k)), share: names.map((_, k) => at(b.share, i * K + k)) }));
+        const ratioOf = (k, c) => ({ ratio: at(b.ratio, k * 3 + c), lo: at(b.ratioLo, k * 3 + c), hi: at(b.ratioHi, k * 3 + c) });
+        const readings = names.map((label, k) => ({ label, core: at(b.zoneDensity, k), margin: at(b.zoneDensity, K + k), around: at(b.zoneDensity, 2 * K + k), coreOverAround: ratioOf(k, 0), marginOverCore: ratioOf(k, 1), marginOverAround: ratioOf(k, 2), inside: b.inside[k], atMargin: b.atMargin[k] }));
+        const fill = readings.filter((x) => x.inside > 0).map((x) => x.label);
+        const avoid = readings.filter((x) => x.inside < 0).map((x) => x.label);
+        const gather = readings.filter((x) => x.atMargin).map((x) => x.label);
+        const p = a.parameters;
+        return {
+          message: `${manifest.name}: bands every ${p.step} µm to ${p.reach} µm either side of the edge, the margin ${p.margin} µm; ${fill.length ? `denser in the core than around: ${fill.join(', ')}` : 'none denser in the core than around'}; ${avoid.length ? `sparser: ${avoid.join(', ')}` : 'none sparser'}; ${gather.length ? `gathered at the margin: ${gather.join(', ')}` : 'none gathered at the margin'}${b.outside ? `; ${plural(b.outside, 'cell')} outside the tissue window left out` : ''}.`,
+          data: { id: manifest.id, name: manifest.name, labels: names, window: a.window, region: b.region, edges: b.edges, zoneArea: b.zoneArea, bands, readings, outside: b.outside, parameters: p },
         };
       }
       if (question === 'ripley') {
@@ -2170,15 +2227,35 @@ export function installRemote(app) {
   }
 
   // Shows a spatial analysis's cells (spec: { analysis: an id or latest, a, b: labels by name, and a
-  // co-occurrence's distance in µm }); answers what is shown.
+  // co-occurrence's distance in µm; for regions compared, a and the region (a row's name); across an
+  // edge, a (any label if not given) and the zone: core, margin, around or all }); answers what is
+  // shown.
   async function analysisCells(dataset, spec) {
-    if (typeof spec !== 'object' || spec === null) throw new ActionError('cells_of is {"analysis", "a", "b", "distance"}.');
+    if (typeof spec !== 'object' || spec === null) throw new ActionError('cells_of is {"analysis", "a", "b", "distance"}, {"analysis", "a", "region"} or {"analysis", "a", "zone"}.');
     const list = analysesOf(project(), dataset.id).filter((x) => x.state === 'complete');
     if (!list.length) throw new ActionError(`${dataset.name} has no spatial analysis: spatial_analysis makes one.`);
     const record = spec.analysis === undefined || /^latest$/i.test(String(spec.analysis)) ? list.at(-1) : list.find((x) => x.id === String(spec.analysis));
     if (!record) throw new ActionError(`No analysis ${spec.analysis} of ${dataset.name}; its analyses are ${list.map((x) => x.id).join(', ')}.`);
     const data = await app.bundles.analysisData(record.id);
     const names = data.analysis.labels.names;
+    const segmentationOf = () => project().artifacts.find((x) => x.kind === 'segmentation' && x.id === record.segmentation);
+    const itemOf = () => app.bundles.link(dataset.id)?.item ?? app.bundles.itemByPath(dataset.path);
+    if (data.analysis.question === 'regions') {
+      const rows = rowNames(data.analysis.regions);
+      const row = rows.indexOf(choose(spec.region ?? rows[0], rows, 'region'));
+      const label = names.indexOf(choose(spec.a, names, 'label'));
+      return showAnalysisCells(app, { dataset: dataset.id, item: itemOf(), segmentation: segmentationOf(), analysis: data.analysis, cells: data.cells, a: label, row });
+    }
+    if (data.analysis.question === 'boundary') {
+      const b = data.analysis.boundary;
+      const p = data.analysis.parameters;
+      const zone = choose(spec.zone ?? 'margin', ['core', 'margin', 'around', 'all'], 'zone');
+      const range = zone === 'all' ? { from: 0, to: b.edges.length } : zoneBands(b.edges, p.margin, zone);
+      if (!range) throw new ActionError(`The margin of ${p.margin} µm is not a band's edge (every ${p.step} µm): show all the bands.`);
+      const label = spec.a === undefined ? -1 : names.indexOf(choose(spec.a, names, 'label'));
+      const where = { core: `in the core (inside, beyond ${p.margin} µm)`, margin: `at the margin (within ${p.margin} µm of the edge)`, around: `around (outside, ${p.margin} to ${p.reach} µm)`, all: 'in every band' }[zone];
+      return showAnalysisCells(app, { dataset: dataset.id, item: itemOf(), segmentation: segmentationOf(), analysis: data.analysis, cells: data.cells, a: label, bands: range, where });
+    }
     const a = names.indexOf(choose(spec.a, names, 'label'));
     const b = names.indexOf(choose(spec.b ?? spec.a, names, 'label'));
     let k = 0;

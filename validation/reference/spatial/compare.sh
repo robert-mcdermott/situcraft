@@ -1,7 +1,7 @@
 #!/bin/sh
-# SituCraft's neighborhood enrichment, co-occurrence, nearest distances and Ripley's K of the
-# reference data sets against Squidpy's, SciPy's and astropy's (wave 6, slices 2 and 3; research.md
-# §6.2, §6.3). Run by the maintainer after
+# SituCraft's neighborhood enrichment, co-occurrence, nearest distances, Ripley's K, regions compared
+# and profile across an edge of the reference data sets against Squidpy's, SciPy's, astropy's and
+# Shapely's (wave 6, slices 2 to 4; research.md §6.2 to §6.4). Run by the maintainer after
 #
 #   SITUCRAFT_WRITE_REFERENCE=1 go test ./validation/ -run ReferenceSpatial -v
 #
@@ -18,4 +18,6 @@ for set in $sets; do
   uv run -q --python 3.12 \
     --with 'squidpy==1.8.3' --with 'anndata==0.13.4' --with 'numpy==2.5.4' --with 'scipy==1.18.1' --with 'scikit-learn==1.9.1' --with 'pandas==3.0.6' --with 'astropy==8.0.2' \
     python -I "$here/validation/reference/spatial/compare.py" "$data" "$set" "$here/validation/reference/spatial/$set.json"
+  uv run -q --python 3.12 --with 'numpy==2.5.4' --with 'shapely==2.2.0' \
+    python -I "$here/validation/reference/spatial/regions.py" "$data" "$set" "$here/validation/reference/spatial/$set.json"
 done

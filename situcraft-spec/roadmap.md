@@ -2551,15 +2551,72 @@ as in waves 3 and 4.
      - **Lung's classes:** stromal cells gather (L 11.4 µm above chance's mean at 60 µm) and keep
        apart from epithelium; a stromal cell's nearest stromal cell is 15.3 µm away, against 20.0
        by chance.
-4. **Regions measured (N4, N6).**
-   - **Composition and comparison:** each region's cells by label, their densities (per mm² of
-     the region's area within the tissue) and shares, with intervals; regions compared by them, as
-     ratios with intervals; descriptive, since the regions of one section are not samples.
-   - **Infiltration and exclusion:** each cell's signed distance to a region's boundary (inside
-     negative), and each label's density in bands across it, each band's area its denominator:
-     whether a label fills a region, gathers at its margin or stays out.
-   - Validation: band areas of a disk and a square by hand; uniformly placed cells give flat
-     densities; profiles placed by rule recovered; the simulated tissue's domains as regions.
+4. **Regions measured (N4, N6): done.**
+   - **Areas within the tissue** (`internal/spatial/areas.go`): the tissue window cut into squares,
+     each split in four until uniform (wholly in or out of each region, within one band: known from
+     the signed distance at its center, which moves no faster than the point); a square crossed by
+     one edge at the finest size (a sixteenth of the tissue's grid) split along it, the signed
+     distance taken as linear from the boundary's nearest point; the tissue's pixels counted by
+     summed counts. Areas to about 10⁻⁶ (10⁻⁷ along straight edges), the same on any number of
+     workers.
+   - **Intervals** (`internal/stats/intervals.go`): Garwood's for a count, Wilson's and Clopper and
+     Pearson's for a proportion, the exact conditional interval for a ratio of rates (Ederer and
+     Mantel 1974) and Koopman's score interval for a ratio of proportions.
+   - **Regions compared** (`composition.go`): each region's cells by label, per mm² of the tissue
+     within it and per labeled cell, the tissue in none of them a row of its own; every ordered pair
+     of rows as ratios with intervals. Up to 20 regions, overlapping or not.
+   - **Across a region's edge** (`boundary.go`): each cell's signed distance to the edge (inside
+     negative); each label's density and share in bands of it (every 10 µm to 100 µm either side,
+     the deeper and the farther a band each), each band's tissue its denominator; the core, the
+     margin (20 µm either side) and around, as a tumor's core and invasive margin are measured
+     (Galon et al. 2006), compared by the ratios of their densities: a label fills the region,
+     stays out or gathers at its margin when the intervals say so.
+   - **The questions** `regions` and `boundary` (`api_spatial.go`; the regions' versions and
+     polygons, and the tissue window, recorded with the analysis; each cell's regions or band in
+     `cells.bin`); the Spatial view's forms, a table of densities or shares with intervals, two rows
+     as a forest plot, the readings of each label, and a label's profile across the edge (bands with
+     little tissue hollow); **Show these cells** for a label's cells in a region or a zone. Remote
+     control: `spatial_analysis` (`regions`, `boundary`); `show_tissue`'s `cells_of` with a region
+     or a zone.
+   - `simulate.Domains`: the simulator's domains (each the Voronoi cell of its seeded center within
+     the field) from its layout stream, without laying out the cells.
+   - Validation:
+     - **By hand:** band areas of a square and a 64-sided polygon in a drawn tissue, in one whose
+       edges miss the grid, and in a pixel raster's, against A + Pd + πd² outward and similar
+       polygons inward (to 10⁻⁵; along straight edges 10⁻⁷); regions' areas with a hole and a region
+       reaching past the tissue, exactly; counts, densities, shares and membership on a grid of
+       cells.
+     - **Statistics:** every interval against SciPy 1.18.1's and statsmodels 0.15.0's (to 10⁻⁹);
+       Garwood's holding a Poisson mean at least 95% of the time and Koopman's the ratio about 95%;
+       uniformly placed cells' densities within their intervals as often as they claim, in bands
+       and in regions; labels placed by rule across a 64-gon's edge read as they were placed (one
+       everywhere, neither; one inside, filling; one only within 10 µm of the edge, gathering at the
+       margin; one outside, staying out), every band's counts those of the cells' distances by every
+       segment.
+     - **Against Shapely** (`validation/reference/spatial/regions.py`, weekly): on both 2-FOV
+       bundles and the simulated tissue, two regions in the middle rectangle (a heptagon, and a box
+       reaching past the rectangle): every row's area Shapely 2.2.0's to 2 × 10⁻⁷, every band's to
+       4 × 10⁻⁶ (Shapely's buffers' arcs of 1,024 segments a quarter circle), every count its.
+     - **The simulated tissue's domains as regions** (weekly): each domain's dominant type the
+       largest share of its true cells and 2.0 to 8.6 times as dense as in the other domains (its
+       interval clear of 1), filling its domain where no domain of the same type lies around it;
+       each domain's counts by every edge of its polygon.
+     - **In the page** (viewer suite): each label's cells in the tumor nest and in the rest of the
+       tissue by a winding number, each band's by the suite's own signed distance, and the
+       epithelial cells shown at the nest's margin, against the suite's own.
+   - Found by slice 4:
+     - **Placing squares by their centers aliases:** along an edge at an angle to the grid the
+       error is first order in the square's size (2 × 10⁻⁴ of a band at the finest size); splitting
+       the crossed squares along the edge brought it to 10⁻⁷.
+     - **A band with little tissue misleads:** deep inside a small region a band of 98 µm² holding
+       one epithelial cell reads 10,000 cells a mm²; such bands are drawn hollow and kept out of the
+       chart's scale (the table keeps them).
+     - **"Around" is local:** a simulated domain next to another of its type is no denser than its
+       surroundings, though 2.0 times as dense as the rest of the tissue; regions compared answers
+       the second question, a profile across the edge the first.
+     - **Lung's vessel stroma** (a region drawn by its stromal and endothelial cells): stromal and
+       endothelial cells 2.9 times as dense as in the rest of the tissue, epithelial cells 0.45
+       times; across its edge the endothelial cells fill it and the epithelial cells stay out.
 5. **Cellular neighborhoods (N5).**
    - Each cell's neighborhood composition (its k nearest or those within a radius, itself
      included), clustered by k-means with k-means++ seeding (Arthur & Vassilvitskii 2007), as

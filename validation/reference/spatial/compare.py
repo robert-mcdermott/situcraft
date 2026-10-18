@@ -1,6 +1,7 @@
 """SituCraft's neighborhood enrichment and co-occurrence against Squidpy's (wave 6, slice 2;
 research.md §6.2), and its nearest distances and Ripley's K against SciPy's k-d tree and astropy's
-estimator (slice 3; §6.3).
+estimator (slice 3; §6.3). regions.py adds its regions compared and profile across an edge (slice
+4; §6.4).
 
 Reads <data>/spatial/<set>/ as SITUCRAFT_WRITE_REFERENCE=1 go test ./validation/ -run ReferenceSpatial
 wrote it: the cells analyzed (their centroids and labels, SituCraft's clusters), the Delaunay and
@@ -188,6 +189,7 @@ def main():
     result["ripley"] = {"labels": int(sum(1 for a in range(K) if np.sum(inside & (label == a)) >= 10)), "maxRelativeNone": max(rel_none, default=0.0), "maxRelativeExact": max(rel_exact, default=0.0), "maxRelativeIsotropic": max(rel_iso, default=0.0), "medianRelativeIsotropic": float(np.median(rel_iso)) if rel_iso else 0.0}
     result["versions"]["astropy"] = version("astropy")
     print(f"{set_name} Ripley's K: {result['ripley']['labels']} labels; none within {result['ripley']['maxRelativeNone']:.2g} of astropy's; isotropic within {result['ripley']['maxRelativeExact']:.2g} of the same estimator by Ripley's formula, and within {result['ripley']['maxRelativeIsotropic']:.3f} of astropy's (median {result['ripley']['medianRelativeIsotropic']:.4f})")
+
     out.write_text(json.dumps(result, indent=1) + "\n")
 
 

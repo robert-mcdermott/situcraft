@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addAnalysis, analysesOf, analysisRecord, checkAnalysisParams, codesRequest, distancesTo, divergingColor, labelsRequest, nearCells, pairCells, rankPairs, readAnalyzed, strataRequest } from './spatial.js';
+import { addAnalysis, analysesOf, analysisRecord, bandCells, bandsOf, BOUNDARY_DEFAULTS, checkAnalysisParams, codesRequest, distancesTo, divergingColor, labelsRequest, nearCells, OUTSIDE_TISSUE, pairCells, rankPairs, readAnalyzed, regionCells, REGIONS_DEFAULTS, rowNames, strataRequest, zoneBands } from './spatial.js';
 import { sha256 } from './sha256.js';
 import { createProject } from './project.js';
 
@@ -93,4 +93,31 @@ test('an analysis recorded once, its cells read, a diverging color', () => {
   assert.equal(divergingColor(5), 'rgb(103, 0, 31)');
   assert.equal(divergingColor(-5), 'rgb(5, 48, 97)');
   assert.equal(divergingColor(-Infinity), 'rgb(5, 48, 97)');
+});
+
+test('regions compared and a profile across an edge: parameters, rows, bands, zones and their cells', () => {
+  assert.equal(checkAnalysisParams('regions', REGIONS_DEFAULTS), null);
+  assert.match(checkAnalysisParams('regions', { level: 1 }), /0.5 to 0.999/);
+  assert.equal(checkAnalysisParams('boundary', BOUNDARY_DEFAULTS), null);
+  assert.match(checkAnalysisParams('boundary', { ...BOUNDARY_DEFAULTS, step: 7 }), /divides the reach/);
+  assert.match(checkAnalysisParams('boundary', { ...BOUNDARY_DEFAULTS, margin: 100 }), /less than the reach/);
+  assert.deepEqual(rowNames({ regions: [{ name: 'Tumor' }] }), ['Tumor', 'The rest of the tissue']);
+  assert.deepEqual(rowNames({ regions: [{ name: 'A' }, { name: 'B' }] }), ['A', 'B', 'The tissue in none of them']);
+  // Cells in A (bit 0), in A and B, in neither, outside the tissue; labels 0 and 1.
+  const stratum = Int32Array.from([1, 3, 0, OUTSIDE_TISSUE, 2, 0]);
+  const label = Int32Array.from([0, 0, 0, 0, 1, -1]);
+  assert.deepEqual([...regionCells(stratum, label, 3, 0, 0).cells], [1, 1, 0, 0, 0, 0]);
+  assert.equal(regionCells(stratum, label, 3, 1, 1).count, 1);
+  assert.deepEqual([...regionCells(stratum, label, 3, 2, 0).cells], [0, 0, 1, 0, 0, 0]);
+  const edges = [-30, -20, -10, 0, 10, 20, 30];
+  assert.deepEqual(bandsOf([-10, 0, 10]).map((b) => [b.from, b.to]), [[-Infinity, -10], [-10, 0], [0, 10], [10, Infinity]]);
+  assert.deepEqual(zoneBands(edges, 20, 'core'), { from: 0, to: 1 });
+  assert.deepEqual(zoneBands(edges, 20, 'margin'), { from: 2, to: 5 });
+  assert.deepEqual(zoneBands(edges, 20, 'around'), { from: 6, to: 6 });
+  assert.equal(zoneBands(edges, 15, 'core'), null);
+  // Cells by band + 1: outside the tissue, the deepest band, the margin's.
+  const bands = Int32Array.from([0, 1, 3, 4, 6, 8]);
+  const lab = Int32Array.from([0, 0, 0, 1, 0, -1]);
+  assert.deepEqual([...bandCells(bands, lab, 2, 5, 0).cells], [0, 0, 1, 0, 1, 0]);
+  assert.equal(bandCells(bands, lab, 0, 7, -1).count, 4);
 });

@@ -30,6 +30,8 @@ const (
 	QuestionCooccurrence = "cooccurrence"
 	QuestionDistances    = "distances"
 	QuestionRipley       = "ripley"
+	QuestionRegions      = "regions"
+	QuestionBoundary     = "boundary"
 )
 
 // AnalysisVersion names this version of the analyses, as artifacts record it.
@@ -169,6 +171,64 @@ type RipleyResult struct {
 	PAdj       Nums      `json:"padj"`
 }
 
+// RegionsResult is regions compared in analysis.json: rows the regions, then the tissue in none of
+// them (R rows); by row and label, R × K row-major; ratios by ordered pair of rows and label,
+// R × R × K, the first row's over the second's. Densities are cells per mm² of the tissue within
+// the row; an upper limit beyond any finite ratio is written as null, as is a ratio with no cell
+// in either row.
+type RegionsResult struct {
+	Regions        []Region `json:"regions"`
+	Area           Nums     `json:"area"`
+	Labeled        []int    `json:"labeled"`
+	All            []int    `json:"all"`
+	Count          []int    `json:"count"`
+	Density        Nums     `json:"density"`
+	DensityLo      Nums     `json:"densityLo"`
+	DensityHi      Nums     `json:"densityHi"`
+	Share          Nums     `json:"share"`
+	ShareLo        Nums     `json:"shareLo"`
+	ShareHi        Nums     `json:"shareHi"`
+	DensityRatio   Nums     `json:"densityRatio"`
+	DensityRatioLo Nums     `json:"densityRatioLo"`
+	DensityRatioHi Nums     `json:"densityRatioHi"`
+	ShareRatio     Nums     `json:"shareRatio"`
+	ShareRatioLo   Nums     `json:"shareRatioLo"`
+	ShareRatioHi   Nums     `json:"shareRatioHi"`
+	Outside        int      `json:"outside"`
+}
+
+// BoundaryResult is the profile across a region's edge in analysis.json: by band (below the first
+// edge, between each pair, from the last on: B = edges + 1) and label, B × K; by zone (the core,
+// the margin, around) and label, 3 × K; the zones compared by label, K × 3 (the core over around,
+// the margin over the core, the margin over around); each label's reading: inside +1 denser in the
+// core than around, −1 sparser, 0 neither shown; atMargin, denser at the margin than in both.
+type BoundaryResult struct {
+	Region      Region    `json:"region"`
+	Edges       []float64 `json:"edges"`
+	Area        Nums      `json:"area"`
+	Labeled     []int     `json:"labeled"`
+	All         []int     `json:"all"`
+	Count       []int     `json:"count"`
+	Density     Nums      `json:"density"`
+	DensityLo   Nums      `json:"densityLo"`
+	DensityHi   Nums      `json:"densityHi"`
+	Share       Nums      `json:"share"`
+	ShareLo     Nums      `json:"shareLo"`
+	ShareHi     Nums      `json:"shareHi"`
+	ZoneArea    Nums      `json:"zoneArea"`
+	ZoneLabeled []int     `json:"zoneLabeled"`
+	ZoneCount   []int     `json:"zoneCount"`
+	ZoneDensity Nums      `json:"zoneDensity"`
+	ZoneLo      Nums      `json:"zoneLo"`
+	ZoneHi      Nums      `json:"zoneHi"`
+	Ratio       Nums      `json:"ratio"`
+	RatioLo     Nums      `json:"ratioLo"`
+	RatioHi     Nums      `json:"ratioHi"`
+	Inside      []int     `json:"inside"`
+	AtMargin    []bool    `json:"atMargin"`
+	Outside     int       `json:"outside"`
+}
+
 // WindowRef says what window Ripley's K was in: the tissue (its cells' pixels on a grid, closed by
 // a radius) or a region; its area and boundary.
 type WindowRef struct {
@@ -198,6 +258,8 @@ type Analysis struct {
 	Cooccurrence *CooccurrenceResult `json:"cooccurrence,omitempty"`
 	Nearest      *NearestResult      `json:"nearest,omitempty"`
 	Ripley       *RipleyResult       `json:"ripley,omitempty"`
+	Regions      *RegionsResult      `json:"regions,omitempty"`
+	Boundary     *BoundaryResult     `json:"boundary,omitempty"`
 	Window       *WindowRef          `json:"window,omitempty"`
 }
 
@@ -210,7 +272,10 @@ type AnalyzedCells struct {
 	Choice
 }
 
-// Analyzed are cells.bin: rows of the segmentation, labels and strata.
+// Analyzed are cells.bin: rows of the segmentation, labels and strata. A stratum is, for an
+// enrichment, the region the labels were dealt within (0 none); for regions compared, the regions
+// holding the cell (bit k for the kth; OutsideTissue outside the tissue window); across a region's
+// edge, the cell's band + 1 (0 outside the tissue window); for the other questions, 0.
 type Analyzed struct {
 	Rows    []uint32
 	Label   []int32
@@ -326,8 +391,50 @@ type AnalysisSummary struct {
 	// Ripley's K: the pairs above and below their envelope by the global test, up to three each.
 	Above []Curve `json:"above,omitempty"`
 	Below []Curve `json:"below,omitempty"`
-	// The window, for Ripley's K.
+	// The window, for Ripley's K, regions compared and across a region's edge.
 	Window *WindowRef `json:"window,omitempty"`
+	// Regions compared: the regions; each region's labels denser and sparser than in the tissue in
+	// none of them (their intervals clear of 1), by the ratio, up to three each.
+	Rows    []Region      `json:"rows,omitempty"`
+	Denser  []RegionLabel `json:"denser,omitempty"`
+	Sparser []RegionLabel `json:"sparser,omitempty"`
+	// Across a region's edge: the region, and the labels denser inside than around, sparser, and
+	// gathered at its margin.
+	Edge   *Region  `json:"edge,omitempty"`
+	Fill   []string `json:"fill,omitempty"`
+	Avoid  []string `json:"avoid,omitempty"`
+	Gather []string `json:"gather,omitempty"`
+}
+
+// RegionLabel is a label's density in a region over the tissue in none of the regions, for a
+// summary.
+type RegionLabel struct {
+	Region string `json:"region"`
+	Label  string `json:"label"`
+	Ratio  Num    `json:"ratio"`
+	Lo     Num    `json:"lo"`
+	Hi     Num    `json:"hi"`
+}
+
+// Num is a number written to JSON as null when it is NaN or infinite.
+type Num float64
+
+func (v Num) MarshalJSON() ([]byte, error) {
+	if f := float64(v); !math.IsNaN(f) && !math.IsInf(f, 0) {
+		return json.Marshal(f)
+	}
+	return []byte("null"), nil
+}
+
+func (v *Num) UnmarshalJSON(b []byte) error {
+	if string(b) == "null" {
+		*v = Num(math.NaN())
+		return nil
+	}
+	var f float64
+	err := json.Unmarshal(b, &f)
+	*v = Num(f)
+	return err
 }
 
 // Curve is one pair's Ripley curve, for a summary: where it strays farthest from the permutations'
@@ -489,6 +596,164 @@ func CheckAnalysis(dir string, m *artifacts.Manifest) []artifacts.Finding {
 			}
 		}
 		s.Window = a.Window
+	case QuestionRegions:
+		r := a.Regions
+		if r == nil || a.Window == nil {
+			fatal("spatial.results", "Regions compared without their window or results.")
+			return out
+		}
+		R := len(r.Regions) + 1
+		if len(r.Regions) < 1 || len(r.Area) != R || len(r.Labeled) != R || len(r.All) != R || len(r.Count) != R*K {
+			fatal("spatial.sizes", "The regions' rows are not %d.", R)
+			return out
+		}
+		for _, v := range []Nums{r.Density, r.DensityLo, r.DensityHi, r.Share, r.ShareLo, r.ShareHi} {
+			if len(v) != R*K {
+				fatal("spatial.sizes", "The regions' numbers are not %d × %d.", R, K)
+				return out
+			}
+		}
+		for _, v := range []Nums{r.DensityRatio, r.DensityRatioLo, r.DensityRatioHi, r.ShareRatio, r.ShareRatioLo, r.ShareRatioHi} {
+			if len(v) != R*R*K {
+				fatal("spatial.sizes", "The regions' ratios are not %d × %d × %d.", R, R, K)
+				return out
+			}
+		}
+		// Each row's cells: its labeled ones counted by label, those of the cells.bin holding it.
+		labeledIn := make([]int, R)
+		for i := 0; i < n; i++ {
+			m := c.Stratum[i]
+			if m == OutsideTissue || c.Label[i] < 0 {
+				continue
+			}
+			if m == 0 {
+				labeledIn[R-1]++
+			}
+			for k := 0; k < R-1; k++ {
+				if m&(1<<k) != 0 {
+					labeledIn[k]++
+				}
+			}
+		}
+		for row := 0; row < R; row++ {
+			sum := 0
+			for k := 0; k < K; k++ {
+				sum += r.Count[row*K+k]
+				if !inRange(r.Share[row*K+k], r.ShareLo[row*K+k], r.ShareHi[row*K+k]) || !inRange(r.Density[row*K+k], r.DensityLo[row*K+k], r.DensityHi[row*K+k]) {
+					fatal("spatial.results", "Row %d, label %d: a number beyond its interval.", row, k)
+					return out
+				}
+			}
+			if sum != r.Labeled[row] || labeledIn[row] != r.Labeled[row] || !(r.Area[row] >= 0) {
+				fatal("spatial.results", "Row %d counts %d labeled cells by label and %d in cells.bin; the results say %d.", row, sum, labeledIn[row], r.Labeled[row])
+				return out
+			}
+		}
+		for q := range r.DensityRatio {
+			if !inRange(r.DensityRatio[q], r.DensityRatioLo[q], r.DensityRatioHi[q]) || !inRange(r.ShareRatio[q], r.ShareRatioLo[q], r.ShareRatioHi[q]) {
+				fatal("spatial.results", "Ratio %d lies beyond its interval.", q)
+				return out
+			}
+		}
+		s.Rows = r.Regions
+		var denser []RegionLabel
+		for row := 0; row < R-1; row++ {
+			for k := 0; k < K; k++ {
+				q := (row*R+R-1)*K + k
+				if r.DensityRatioLo[q] > 1 || r.DensityRatioHi[q] < 1 {
+					// A ratio written as null with its lower limit above 1 has no cell of the label
+					// elsewhere: infinite.
+					ratio := r.DensityRatio[q]
+					if math.IsNaN(ratio) && r.DensityRatioLo[q] > 1 {
+						ratio = math.Inf(1)
+					}
+					denser = append(denser, RegionLabel{Region: r.Regions[row].Name, Label: a.Labels.Names[k], Ratio: Num(ratio), Lo: Num(r.DensityRatioLo[q]), Hi: Num(r.DensityRatioHi[q])})
+				}
+			}
+		}
+		s.Significant = len(denser)
+		sort.SliceStable(denser, func(i, j int) bool { return finite(float64(denser[i].Ratio)) > finite(float64(denser[j].Ratio)) })
+		for _, d := range denser {
+			if d.Lo > 1 && len(s.Denser) < 3 {
+				s.Denser = append(s.Denser, d)
+			}
+		}
+		for i := len(denser) - 1; i >= 0 && len(s.Sparser) < 3; i-- {
+			if denser[i].Hi < 1 {
+				s.Sparser = append(s.Sparser, denser[i])
+			}
+		}
+		s.Window = a.Window
+	case QuestionBoundary:
+		b := a.Boundary
+		if b == nil || a.Window == nil {
+			fatal("spatial.results", "A profile across an edge without its window or results.")
+			return out
+		}
+		B := len(b.Edges) + 1
+		if len(b.Edges) < 2 || !sort.Float64sAreSorted(b.Edges) || len(b.Area) != B || len(b.Labeled) != B || len(b.All) != B || len(b.Count) != B*K {
+			fatal("spatial.sizes", "The bands are not %d.", B)
+			return out
+		}
+		for _, v := range []Nums{b.Density, b.DensityLo, b.DensityHi, b.Share, b.ShareLo, b.ShareHi} {
+			if len(v) != B*K {
+				fatal("spatial.sizes", "The bands' numbers are not %d × %d.", B, K)
+				return out
+			}
+		}
+		if len(b.ZoneArea) != Zones || len(b.ZoneLabeled) != Zones || len(b.ZoneCount) != Zones*K || len(b.ZoneDensity) != Zones*K || len(b.ZoneLo) != Zones*K || len(b.ZoneHi) != Zones*K ||
+			len(b.Ratio) != K*Comparisons || len(b.RatioLo) != K*Comparisons || len(b.RatioHi) != K*Comparisons || len(b.Inside) != K || len(b.AtMargin) != K {
+			fatal("spatial.sizes", "The zones' numbers are not for %d labels.", K)
+			return out
+		}
+		inBand := make([]int, B)
+		for i := 0; i < n; i++ {
+			if c.Stratum[i] > int32(B) {
+				fatal("spatial.labels", "Cell %d is in band %d of %d.", i, c.Stratum[i], B)
+				return out
+			}
+			if c.Stratum[i] > 0 && c.Label[i] >= 0 {
+				inBand[c.Stratum[i]-1]++
+			}
+		}
+		for band := 0; band < B; band++ {
+			sum := 0
+			for k := 0; k < K; k++ {
+				q := band*K + k
+				sum += b.Count[q]
+				if !inRange(b.Density[q], b.DensityLo[q], b.DensityHi[q]) || !inRange(b.Share[q], b.ShareLo[q], b.ShareHi[q]) {
+					fatal("spatial.results", "Band %d, label %d: a number beyond its interval.", band, k)
+					return out
+				}
+			}
+			if sum != b.Labeled[band] || inBand[band] != b.Labeled[band] || !(b.Area[band] >= 0) {
+				fatal("spatial.results", "Band %d counts %d labeled cells by label and %d in cells.bin; the results say %d.", band, sum, inBand[band], b.Labeled[band])
+				return out
+			}
+		}
+		for q := range b.Ratio {
+			if !inRange(b.Ratio[q], b.RatioLo[q], b.RatioHi[q]) {
+				fatal("spatial.results", "Zone ratio %d lies beyond its interval.", q)
+				return out
+			}
+		}
+		region := b.Region
+		s.Edge = &region
+		for k := 0; k < K; k++ {
+			switch {
+			case b.Inside[k] > 0:
+				s.Fill = append(s.Fill, a.Labels.Names[k])
+			case b.Inside[k] < 0:
+				s.Avoid = append(s.Avoid, a.Labels.Names[k])
+			}
+			if b.AtMargin[k] {
+				s.Gather = append(s.Gather, a.Labels.Names[k])
+			}
+			if b.Inside[k] != 0 || b.AtMargin[k] {
+				s.Significant++
+			}
+		}
+		s.Window = a.Window
 	case QuestionEnrichment:
 		e := a.Enrichment
 		if e == nil || a.Graph == nil {
@@ -551,4 +816,22 @@ func CheckAnalysis(dir string, m *artifacts.Manifest) []artifacts.Finding {
 	}
 	m.Summary, _ = json.Marshal(s)
 	return out
+}
+
+// inRange says whether v lies within [lo, hi], each NaN when not known (an unknown upper limit is
+// beyond any finite one); a NaN v is in range.
+func inRange(v, lo, hi float64) bool {
+	if math.IsNaN(v) {
+		return true
+	}
+	tol := 1e-9 * math.Max(1, math.Abs(v))
+	return (math.IsNaN(lo) || lo <= v+tol) && (math.IsNaN(hi) || v <= hi+tol)
+}
+
+// finite is v, or the largest float for +Inf, for ordering.
+func finite(v float64) float64 {
+	if math.IsInf(v, 1) {
+		return math.MaxFloat64
+	}
+	return v
 }

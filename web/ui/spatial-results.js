@@ -2,11 +2,13 @@
 // (an enrichment's ratio of neighbors found to expected; nearest distances' median against chance's),
 // on a diverging scale with the significant marked, and tables of the strongest; a co-occurrence's
 // curves, one label's ratio to each label's over the distances; nearest distances' distribution and
-// Ripley's L, each with its envelope from the permutations. Each pair, or each label at a distance,
-// can be chosen, and its cells shown on the tissue.
+// Ripley's L, each with its envelope from the permutations; regions compared, their densities and
+// shares with intervals and two rows' ratios as a forest plot; a label's profile across a region's
+// edge, and each label's core, margin and surroundings compared. Each pair, label or region can be
+// chosen, and its cells shown on the tissue.
 
 import { h, formatCount } from './dom.js';
-import { divergingColor, rankPairs } from '../lib/spatial.js';
+import { divergingColor, rankPairs, rowNames } from '../lib/spatial.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
 function svg(tag, attrs = {}, ...children) {
@@ -178,7 +180,7 @@ function envelopeChart({ x, y, lo, hi, mean, ref = null, xLabel, yLabel, color, 
   root.append(svg('path', { d: path(mean), class: 'sp-mean' }));
   root.append(svg('path', { d: path(y), stroke: color ?? 'var(--accent)', class: 'sp-line chosen' }));
   // The key's lines drawn as the chart draws them, so a dashed line and a dotted one tell apart.
-  const swatch = (cls) => svg('svg', { class: 'sp-swatch', viewBox: '0 0 22 8', 'aria-hidden': 'true' }, svg('line', { x1: 1, x2: 21, y1: 4, y2: 4, class: cls }));
+  const swatch = (cls) => svg('svg', { class: 'sp-keyline', viewBox: '0 0 22 8', 'aria-hidden': 'true' }, svg('line', { x1: 1, x2: 21, y1: 4, y2: 4, class: cls }));
   return h('div.sp-chart-wrap', root, h('div.sp-scale', h('span.sp-key.observed', { style: { background: color ?? 'var(--accent)' } }), 'this section',
     h('span.sp-key.band'), 'chance: the permutations\' 2.5% to 97.5%', swatch('sp-mean'), 'their mean', ref ? [swatch('sp-one'), 'points at random'] : null));
 }
@@ -340,4 +342,207 @@ export function cooccurrenceChart(analysis, { from, chosen = null, onPick }) {
   const legend = h('div.sp-legend', ...names.map((name, b) => h(`button.sp-legend-item${chosen === b ? '.chosen' : ''}`, { type: 'button', onclick: () => onPick(b) },
     h('span.sp-swatch', { style: { background: analysis.labels.colors?.[b] ?? 'var(--text-2)' } }), name)));
   return h('div.sp-chart-wrap', root, legend);
+}
+
+// --- Regions compared and profiles across an edge ---
+
+// A number and its interval as analysis.json writes them: null for NaN, and for an upper limit (or
+// a ratio, its lower limit above 0) beyond any finite one.
+function interval(v, lo, hi) {
+  const L = lo ?? NaN;
+  const H = hi ?? (Number.isFinite(L) ? Infinity : NaN);
+  const V = v ?? (L > 0 ? Infinity : NaN);
+  return [V, L, H];
+}
+
+const density = (v) => (!Number.isFinite(v) ? (v === Infinity ? '∞' : '—') : v >= 10 ? Math.round(v).toLocaleString('en-US') : v.toFixed(1));
+const percent = (v) => (!Number.isFinite(v) ? '—' : `${(100 * v).toFixed(v < 0.1 ? 1 : 0)}%`);
+const ratio = (v) => (v === Infinity ? '∞' : !Number.isFinite(v) ? '—' : v >= 10 ? v.toFixed(0) : v.toFixed(2));
+export const ratioText = (v, lo, hi) => (Number.isFinite(lo) ? `${ratio(v)}× (${ratio(lo)} to ${ratio(hi)})` : '—');
+
+const pickable = (attrs, onPick) => ({ ...attrs, tabIndex: 0, style: { cursor: 'pointer' }, onclick: onPick, onkeydown: (event) => {
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+    onPick();
+  }
+} });
+
+// Regions compared: a row for each label, a column for each region (and the tissue in none), each
+// the label's density (cells per mm² of tissue) or share of the labeled cells, with its interval;
+// onPick(k) when a label is chosen.
+export function regionsTable(analysis, { measure = 'density', onPick, chosen = null }) {
+  const r = analysis.regions;
+  const names = analysis.labels.names;
+  const K = names.length;
+  const rows = rowNames(r);
+  const value = (row, k) => {
+    const q = row * K + k;
+    return measure === 'density' ? interval(r.density[q], r.densityLo[q], r.densityHi[q]) : interval(r.share[q], r.shareLo[q], r.shareHi[q]);
+  };
+  const show = measure === 'density' ? density : percent;
+  return h('div.table-wrap', h('table.data-table.seg-table.sp-regions-table',
+    h('thead', h('tr', h('th', 'Label'), ...rows.map((name, row) => h('th.r', name, h('div.muted.sp-sub', `${(r.area[row] / 1e6).toFixed(3)} mm² · ${formatCount(r.labeled[row])} cells`))))),
+    h('tbody', ...names.map((name, k) => h(`tr${chosen === k ? '.selected' : ''}`, pickable({ 'data-label': k }, () => onPick(k)),
+      h('th', { scope: 'row' }, h('span.sp-swatch', { style: { background: analysis.labels.colors?.[k] ?? 'var(--text-3)' } }), name),
+      ...rows.map((_, row) => {
+        const [v, lo, hi] = value(row, k);
+        return h('td.r', show(v), h('div.muted.sp-sub', Number.isFinite(lo) ? `${show(lo)} to ${show(hi)}` : ''));
+      }))))));
+}
+
+// Two rows of regions compared, the first's over the second's, for each label: the ratio and its
+// interval on a log scale, 1 marked; onPick(k).
+export function ratioForest(analysis, { r: a, s: b, measure = 'density', onPick, chosen = null }) {
+  const reg = analysis.regions;
+  const names = analysis.labels.names;
+  const K = names.length;
+  const R = reg.area.length;
+  const items = names.map((_, k) => {
+    const q = (a * R + b) * K + k;
+    return measure === 'density' ? interval(reg.densityRatio[q], reg.densityRatioLo[q], reg.densityRatioHi[q]) : interval(reg.shareRatio[q], reg.shareRatioLo[q], reg.shareRatioHi[q]);
+  });
+  let lo = 0.5;
+  let hi = 2;
+  for (const [v, l, u] of items) {
+    for (const x of [v, l, u]) {
+      if (Number.isFinite(x) && x > 0) {
+        lo = Math.min(lo, x);
+        hi = Math.max(hi, x);
+      }
+    }
+  }
+  lo = Math.max(lo, 1 / 64);
+  hi = Math.min(hi, 64);
+  const longest = Math.max(...names.map((n) => n.length));
+  const M = { left: Math.min(170, 14 + 6.2 * longest), right: 16, top: 8, bottom: 30 };
+  const row = 20;
+  const W = 560;
+  const H = M.top + M.bottom + row * K;
+  const sx = (v) => M.left + (log2(Math.max(lo, Math.min(hi, v))) - log2(lo)) / (log2(hi) - log2(lo)) * (W - M.left - M.right);
+  const rows = rowNames(reg, true);
+  const root = svg('svg', { class: 'sp-chart sp-forest', viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': `Each label's ${measure === 'density' ? 'density' : 'share'} in ${rows[a]} over ${rows[b]}, with its interval` });
+  for (let e = Math.ceil(log2(lo)); e <= Math.floor(log2(hi)); e += 1) {
+    const x = sx(2 ** e);
+    root.append(svg('line', { x1: x, x2: x, y1: M.top, y2: H - M.bottom, class: e === 0 ? 'sp-one' : 'sp-grid' }));
+    root.append(svg('text', { x, y: H - M.bottom + 16, 'text-anchor': 'middle', class: 'sp-axis' }, document.createTextNode(e >= 0 ? `${2 ** e}×` : `1/${2 ** -e}`)));
+  }
+  items.forEach(([v, l, u], k) => {
+    const y = M.top + row * k + row / 2;
+    const label = svg('text', { x: M.left - 8, y: y + 3.5, 'text-anchor': 'end', class: `sp-axis${chosen === k ? ' chosen' : ''}` }, document.createTextNode(names[k]));
+    label.addEventListener('click', () => onPick(k));
+    root.append(label);
+    if (!Number.isFinite(l)) return;
+    const color = analysis.labels.colors?.[k] ?? 'var(--text-2)';
+    const clear = l > 1 || u < 1;
+    const x0 = sx(Math.max(l, lo));
+    const x1 = u === Infinity ? W - M.right : sx(u);
+    const g = svg('g', { class: `sp-whisker${clear ? ' clear' : ''}${chosen === k ? ' chosen' : ''}`, 'data-label': k });
+    g.append(svg('line', { x1: x0, x2: x1, y1: y, y2: y, stroke: color }));
+    if (u === Infinity) g.append(svg('path', { d: `M${x1 - 6},${y - 4}L${x1},${y}L${x1 - 6},${y + 4}`, stroke: color, fill: 'none' }));
+    if (Number.isFinite(v) && v > 0) g.append(svg('circle', { cx: sx(v), cy: y, r: clear ? 4.5 : 3.5, fill: clear ? color : 'var(--bg)', stroke: color }));
+    g.append(svg('title', {}, document.createTextNode(`${names[k]}: ${ratioText(v, l, u)}`)));
+    g.addEventListener('click', () => onPick(k));
+    root.append(g);
+  });
+  root.append(svg('text', { x: (M.left + W - M.right) / 2, y: H - 4, 'text-anchor': 'middle', class: 'sp-axis' }, document.createTextNode(`${rows[a]} over ${rows[b]} (log scale)`)));
+  return h('div.sp-chart-wrap', root);
+}
+
+// The middle of each band of a profile within the reach (the deepest and farthest left out).
+function bandMiddles(edges) {
+  return edges.slice(1).map((e, i) => (edges[i] + e) / 2);
+}
+
+// A label's profile across a region's edge: its density (or share) in each band within the reach,
+// with the intervals as a band, its level over all those bands dashed, the edge and the margin
+// marked.
+export function profileChart(analysis, k, { measure = 'density' } = {}) {
+  const b = analysis.boundary;
+  const names = analysis.labels.names;
+  const K = names.length;
+  const margin = analysis.parameters.margin;
+  const x = bandMiddles(b.edges);
+  const pick = (v) => x.map((_, i) => v[(i + 1) * K + k] ?? NaN);
+  const y = measure === 'density' ? pick(b.density) : pick(b.share);
+  const lo = measure === 'density' ? pick(b.densityLo) : pick(b.shareLo);
+  const hi = measure === 'density' ? pick(b.densityHi) : pick(b.shareHi);
+  // The label's level over the bands within the reach.
+  let count = 0;
+  let base = 0;
+  for (let i = 1; i < b.edges.length; i += 1) {
+    count += b.count[i * K + k];
+    base += measure === 'density' ? b.area[i] / 1e6 : b.labeled[i];
+  }
+  const level = base > 0 ? count / base : NaN;
+  const W = 560;
+  const H = 260;
+  const M = { left: 56, right: 12, top: 10, bottom: 34 };
+  // A band with little tissue (under a quarter of the bands' median: deep inside a small region,
+  // or mostly off the tissue) is drawn hollow, apart from the line and the scale; intervals reaching
+  // above the scale are cut at the top.
+  const areas = x.map((_, i) => b.area[i + 1]).filter((a) => a > 0).sort((p, q) => p - q);
+  const typical = areas.length ? areas[Math.floor(areas.length / 2)] : 0;
+  const thin = x.map((_, i) => !(b.area[i + 1] >= 0.25 * typical));
+  const vals = [...y.filter((_, i) => !thin[i]), level].filter(Number.isFinite);
+  const ymax = (vals.length ? Math.max(...vals) : 0) * 1.3 || 1;
+  const top = (v) => Math.min(ymax, v);
+  const x0 = b.edges[0];
+  const x1 = b.edges.at(-1);
+  const sx = (v) => M.left + (v - x0) / (x1 - x0) * (W - M.left - M.right);
+  const sy = (v) => M.top + (1 - v / ymax) * (H - M.top - M.bottom);
+  const root = svg('svg', { class: 'sp-chart sp-profile', viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': `${names[k]} cells ${measure === 'density' ? 'per mm²' : 'as a share of the labeled cells'} by distance from the edge of ${b.region.name}, inside negative` });
+  root.append(svg('rect', { x: sx(-margin), y: M.top, width: sx(margin) - sx(-margin), height: H - M.top - M.bottom, class: 'sp-margin' }));
+  const step = ymax / 4;
+  const mag = 10 ** Math.floor(Math.log10(step || 1));
+  const tick = [1, 2, 5, 10].map((m) => m * mag).find((t) => t >= step) ?? 10 * mag;
+  for (let v = 0; v <= ymax; v += tick) {
+    root.append(svg('line', { x1: M.left, x2: W - M.right, y1: sy(v), y2: sy(v), class: 'sp-grid' }));
+    root.append(svg('text', { x: M.left - 6, y: sy(v) + 3.5, 'text-anchor': 'end', class: 'sp-axis' }, document.createTextNode(measure === 'density' ? (Math.round(v * 100) / 100).toLocaleString('en-US') : `${Math.round(100 * v)}%`)));
+  }
+  // Labels at a round multiple of the step, at most about ten of them, 0 among them.
+  const bandStep = analysis.parameters.step;
+  const every = [1, 2, 5, 10, 20, 50, 100].map((m) => m * bandStep).find((c) => (x1 - x0) / c <= 10) ?? x1 - x0;
+  for (const e of b.edges) {
+    if (Math.abs(e / every - Math.round(e / every)) < 1e-9) root.append(svg('text', { x: sx(e), y: H - M.bottom + 16, 'text-anchor': 'middle', class: 'sp-axis' }, document.createTextNode(String(e))));
+  }
+  root.append(svg('line', { x1: sx(0), x2: sx(0), y1: M.top, y2: H - M.bottom, class: 'sp-edge' }));
+  root.append(svg('text', { x: sx(0) + 4, y: M.top + 11, class: 'sp-axis' }, document.createTextNode('edge')));
+  root.append(svg('text', { x: (M.left + W - M.right) / 2, y: H - 4, 'text-anchor': 'middle', class: 'sp-axis' }, document.createTextNode('distance from the edge (µm): inside < 0 < outside')));
+  root.append(svg('text', { x: 0, y: 0, transform: `translate(12, ${(M.top + H - M.bottom) / 2}) rotate(-90)`, 'text-anchor': 'middle', class: 'sp-axis' }, document.createTextNode(measure === 'density' ? 'cells per mm²' : 'share of the labeled cells')));
+  const band = x.map((v, i) => [sx(v), top(lo[i]), top(hi[i])]).filter(([, a, c], i) => !thin[i] && Number.isFinite(a) && Number.isFinite(c));
+  if (band.length) root.append(svg('path', { d: `${band.map(([px, a], i) => `${i ? 'L' : 'M'}${px.toFixed(1)},${sy(a).toFixed(1)}`).join('')}${band.slice().reverse().map(([px, , c]) => `L${px.toFixed(1)},${sy(c).toFixed(1)}`).join('')}Z`, class: 'sp-envelope' }));
+  if (Number.isFinite(level)) root.append(svg('line', { x1: M.left, x2: W - M.right, y1: sy(level), y2: sy(level), class: 'sp-mean' }));
+  const color = analysis.labels.colors?.[k] ?? 'var(--accent)';
+  const pts = x.map((v, i) => [sx(v), y[i], thin[i]]).filter(([, v]) => Number.isFinite(v));
+  const solid = pts.filter(([, , t]) => !t);
+  root.append(svg('path', { d: solid.map(([px, v], i) => `${i ? 'L' : 'M'}${px.toFixed(1)},${sy(v).toFixed(1)}`).join(''), stroke: color, class: 'sp-line chosen' }));
+  for (const [px, v, t] of pts) {
+    const dot = svg('circle', { cx: px, cy: sy(top(v)), r: 3, fill: t ? 'var(--bg)' : color, stroke: color });
+    if (t) dot.append(svg('title', {}, document.createTextNode('little tissue in this band')));
+    root.append(dot);
+  }
+  const swatch = (cls) => svg('svg', { class: 'sp-keyline', viewBox: '0 0 22 8', 'aria-hidden': 'true' }, svg('line', { x1: 1, x2: 21, y1: 4, y2: 4, class: cls }));
+  return h('div.sp-chart-wrap', root, h('div.sp-scale', h('span.sp-key.observed', { style: { background: color } }), `${names[k]}, each band`,
+    h('span.sp-key.band'), `its ${Math.round(100 * (analysis.parameters.level ?? 0.95))}% interval`, swatch('sp-mean'), `over all ${b.edges.length - 1} bands`, h('span.sp-key.margin-key'), `the margin (${margin} µm either side)`, thin.some(Boolean) ? [h('span.sp-key.hollow', { style: { borderColor: color } }), 'a band with little tissue'] : null));
+}
+
+// Each label's core, margin and surroundings across a region's edge: their densities, the core over
+// around and the margin over each, and what they say; onPick(k).
+export function readingsTable(analysis, { onPick, chosen = null }) {
+  const b = analysis.boundary;
+  const names = analysis.labels.names;
+  const K = names.length;
+  const C = 3;
+  const reading = (k) => [b.inside[k] > 0 ? 'fills the region' : b.inside[k] < 0 ? 'stays out' : null, b.atMargin[k] ? 'gathers at the margin' : null].filter(Boolean).join('; ');
+  const order = names.map((_, k) => k).sort((p, q) => Number(Boolean(reading(q))) - Number(Boolean(reading(p))) || (interval(b.ratio[q * C], b.ratioLo[q * C], b.ratioHi[q * C])[0] || 0) - (interval(b.ratio[p * C], b.ratioLo[p * C], b.ratioHi[p * C])[0] || 0));
+  const zone = (z, k) => {
+    const [v] = interval(b.zoneDensity[z * K + k], b.zoneLo[z * K + k], b.zoneHi[z * K + k]);
+    return h('td.r', density(v));
+  };
+  const cmp = (k, c) => h('td.r', ratioText(...interval(b.ratio[k * C + c], b.ratioLo[k * C + c], b.ratioHi[k * C + c])));
+  return h('div.table-wrap', h('table.data-table.seg-table.sp-readings',
+    h('thead', h('tr', h('th', 'Label'), h('th.r', 'Core'), h('th.r', 'Margin'), h('th.r', 'Around'), h('th.r', 'Core over around'), h('th.r', 'Margin over core'), h('th.r', 'Margin over around'), h('th', 'Reading'))),
+    h('tbody', ...order.map((k) => h(`tr${chosen === k ? '.selected' : ''}`, pickable({ 'data-label': k }, () => onPick(k)),
+      h('th', { scope: 'row' }, h('span.sp-swatch', { style: { background: analysis.labels.colors?.[k] ?? 'var(--text-3)' } }), names[k]),
+      zone(0, k), zone(1, k), zone(2, k), cmp(k, 0), cmp(k, 1), cmp(k, 2), h('td', reading(k) || h('span.muted', '—')))))));
 }

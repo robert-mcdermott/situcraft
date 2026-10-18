@@ -88,7 +88,9 @@ less often than chance (neighborhood enrichment, its expectation exact, its sign
 permutation, within regions if asked) and at what distances (co-occurrence), Squidpy's numbers on
 the same cells; how far each type lies from the nearest of each other, and at what scale cells
 gather or keep apart (Ripley's K and L in the tissue or a region, edge-corrected), each against the
-labels dealt at random; and every number's cells shown on the tissue.
+labels dealt at random; each region's cells per mm² of its tissue and per labeled cell, regions
+compared with intervals, and which types fill a region, stay out of it or gather at its margin; and
+every number's cells shown on the tissue.
 
 ## A look around
 

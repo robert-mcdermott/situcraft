@@ -2749,6 +2749,59 @@ neighbor of each label.
 stromal 24.4 µm (19.9); in the tissue window, stromal cells' L 11.4 µm above chance's mean at 60 µm,
 stromal cells' L around epithelial cells 3.6 µm below it at 100 µm.
 
+### 6.4 Regions measured: composition and the edge (verified, wave 6, slice 4)
+
+**Denominators.** A region's cells are counted two ways: per mm² of the tissue within it (a
+density) and per labeled cell in it (a share). The tissue is the window of §6.3 (the cells'
+pixels on a grid of about 1 µm, gaps narrower than 20 µm closed), so a region drawn over the
+section's edge, or around an airway, is not diluted by the glass inside it. The tissue in none of
+the regions is a row of its own: a region against the rest of the section.
+
+**Areas.** The area of the tissue within a region, or within a band of signed distance from its
+edge, is found by squares split in four until uniform. A square is wholly on one side of an edge
+when the signed distance at its center exceeds its half-diagonal (the signed distance changes no
+faster than the point moves); a square still crossed at the finest size (a sixteenth of the
+tissue's grid, about 0.07 µm) is split along the edge, the signed distance taken as linear (its
+gradient away from the boundary's nearest point), and the tissue's own pixels are counted by summed
+counts. Placing the finest squares by their centers instead errs to first order in their size where
+an edge runs at an angle to the grid (2 × 10⁻⁴ of a band); the split leaves only the edge's bending
+within a square, about 10⁻⁶ of a band at a corner and 10⁻⁷ along straight edges.
+
+**Intervals.** A density's is Garwood's (1936), the gamma quantiles Γ⁻¹(α/2; k) and
+Γ⁻¹(1 − α/2; k + 1) over the area; a share's, Wilson's score interval (1927). Two rows' densities of
+a label are compared by their ratio with the exact interval conditional on the counts' sum (the
+first count binomial among both, Clopper and Pearson's interval, its odds scaled by the areas;
+Ederer and Mantel 1974); their shares, by the ratio with Koopman's score interval (1984), the ratios
+whose Pearson chi-square at the proportions most likely under them is within the critical value.
+Every interval treats cells as placed independently: cells cluster, so the true uncertainty is
+wider, and a section's regions are not samples. They describe the section.
+
+**Across an edge.** Each cell's signed distance to the region's edge (inside negative); each label's
+density and share in bands of it (10 µm wide to 100 µm either side, the deeper and the farther a
+band each), each band's own tissue its denominator. Three zones, as a tumor's core and invasive
+margin are measured (Galon et al. 2006): the core, inside beyond the margin (20 µm); the margin,
+within it of the edge on either side; around, outside beyond it to the reach. A label fills the
+region when the core's density over around's has an interval above 1, stays out when below, and
+gathers at the margin when the margin's over both the core's and around's is above 1.
+
+| Check | Result |
+| --- | --- |
+| Band areas of a square, a 64-sided polygon and a square in a pixel tissue, against A + Pd + πd² outward and similar polygons inward | to 1.4–2.4 × 10⁻⁷; in a drawn tissue whose edges miss the grid, 3.9 × 10⁻⁶ (the inner square's corners) |
+| Garwood, Wilson, Clopper–Pearson, the conditional rate ratio and Koopman's interval against SciPy 1.18.1 and statsmodels 0.15.0 | to 10⁻⁹ |
+| Coverage: Poisson means 0.7, 4 and 30; a ratio of proportions 0.12 / 0.08 (n 150, 200) | Garwood's at least 95%; Koopman's 95% ± 1.5% |
+| Shapely 2.2.0: two regions in the middle rectangle of the simulated tissue and both 2-FOV bundles | every row's area to 2 × 10⁻⁷, every band's to 4 × 10⁻⁶ (at most 0.008 µm²), every count the same |
+| The standard simulated tissue's six domains as regions, its true cells by their true types | each dominant type the largest share of its domain (40–75%) and 1.96–8.63× as dense as in the others, intervals clear of 1; filling its domain where no domain of its type lies within the reach |
+
+A domain beside another of its own type is no denser than its surroundings (1.26×) though twice
+as dense as the rest of the tissue: "around" is local, and the two questions answer different
+things.
+
+**Lung** (5,555 labeled cells, the classes), a region drawn by its stromal and endothelial cells
+(21,498 µm² of tissue): stromal cells 2.90× (1.93 to 4.19) and endothelial 2.88× (1.90 to 4.23) as
+dense as in the rest of the tissue, epithelial 0.45× (0.35 to 0.57); across its edge the
+endothelial cells fill it (the core over around 2.78×, 1.15 to 7.66) and the epithelial cells stay
+out (0.45×, 0.29 to 0.67).
+
 ## 7. Datasets
 
 | Dataset | Source | Size | License | Use |

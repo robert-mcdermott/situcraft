@@ -1,10 +1,12 @@
 package validation
 
 // Neighborhood enrichment and co-occurrence (wave 6, slice 2; research.md §6.2) against Squidpy's,
-// and nearest distances and Ripley's K (slice 3; §6.3) against SciPy's k-d tree and astropy's
-// estimator, on the instrument's segmentation of both 2-FOV bundles and the standard simulated
-// tissue, its cells labeled by SituCraft's clustering (the defaults) and every one of them analyzed;
-// Ripley's K in the rectangle of the middle half of the cells' extent.
+// nearest distances and Ripley's K (slice 3; §6.3) against SciPy's k-d tree and astropy's
+// estimator, and regions compared and a profile across a region's edge (slice 4; §6.4) against
+// Shapely's buffers and distances, on the instrument's segmentation of both 2-FOV bundles and the
+// standard simulated tissue, its cells labeled by SituCraft's clustering (the defaults) and every
+// one of them analyzed; Ripley's K, and the regions, in the rectangle of the middle half of the
+// cells' extent as the window.
 // SITUCRAFT_WRITE_REFERENCE=1 writes the cells, the Delaunay and 20 µm graphs and SituCraft's
 // results into <data>/spatial/<set>/; validation/reference/spatial/compare.sh runs Squidpy's
 // nhood_enrichment on the same graphs (1,000 permutations) and co_occurrence at the same distances,
@@ -26,8 +28,10 @@ import (
 	"testing"
 
 	"situcraft/internal/cluster"
+	"situcraft/internal/label"
 	"situcraft/internal/segment"
 	"situcraft/internal/segment/imports"
+	"situcraft/internal/simulate"
 	"situcraft/internal/spatial"
 	"situcraft/internal/xenium"
 )
@@ -65,6 +69,17 @@ type spatialNumbers struct {
 		MaxIsotropic    float64 `json:"maxRelativeIsotropic"`
 		MedianIsotropic float64 `json:"medianRelativeIsotropic"`
 	} `json:"ripley"`
+	// Regions compared and a profile across an edge in the rectangle: the areas against Shapely's
+	// (relative difference), the cells counted in each row and band against its.
+	Regions struct {
+		Rows            int     `json:"rows"`
+		Bands           int     `json:"bands"`
+		MaxArea         float64 `json:"maxRelativeArea"`
+		MaxBandArea     float64 `json:"maxRelativeBandArea"`
+		MaxBandAreaDiff float64 `json:"maxBandAreaDifference"`
+		CountsDiffering int     `json:"countsDiffering"`
+		BandsDiffering  int     `json:"bandCountsDiffering"`
+	} `json:"regions"`
 	Cooccurrence struct {
 		Distances            int     `json:"distances"`
 		Compared             int     `json:"compared"`
@@ -79,10 +94,28 @@ type spatialNumbers struct {
 // default distances.
 // spatialExtras are a set's nearest distances and Ripley's K in the middle rectangle.
 type spatialExtras struct {
-	nearest   *spatial.Nearest
-	rectangle [4]float64
-	isotropic *spatial.Ripley
-	none      *spatial.Ripley
+	nearest     *spatial.Nearest
+	rectangle   [4]float64
+	isotropic   *spatial.Ripley
+	none        *spatial.Ripley
+	polygons    [2][][2]float64
+	composition *spatial.Composition
+	boundary    *spatial.Boundary
+}
+
+// referenceRegions are two regions in the rectangle (x0, y0, x1, y1): an irregular heptagon about
+// its middle, and a box over the heptagon's right side reaching past the rectangle's edge.
+func referenceRegions(r [4]float64) [2][][2]float64 {
+	cx, cy := (r[0]+r[2])/2, (r[1]+r[3])/2
+	s := math.Min(r[2]-r[0], r[3]-r[1]) / 2
+	var hept [][2]float64
+	for k := 0; k < 7; k++ {
+		a := 2 * math.Pi * float64(k) / 7
+		rad := s * (0.35 + 0.1*float64(k%3))
+		hept = append(hept, [2]float64{cx + rad*math.Cos(a), cy + rad*math.Sin(a)})
+	}
+	box := [][2]float64{{cx, cy - s/2}, {r[2] + 20, cy - s/2}, {r[2] + 20, cy + s/3}, {cx, cy + s/3}}
+	return [2][][2]float64{hept, box}
 }
 
 func spatialOfSet(t *testing.T, bundleDir string) (graphs map[string]*spatial.Graph, label []int32, results map[string]*spatial.Enrichment, co *spatial.Cooccurrence, extra spatialExtras) {
@@ -173,6 +206,21 @@ func spatialOfSet(t *testing.T, bundleDir string) (graphs map[string]*spatial.Gr
 	if extra.none, err = spatial.Ripleys(ctx, g.X, g.Y, label, K, win, rp, runtime.NumCPU(), nil); err != nil {
 		t.Fatal(err)
 	}
+	extra.polygons = referenceRegions(extra.rectangle)
+	var regions []*spatial.Window
+	for _, poly := range extra.polygons {
+		w, err := spatial.PolygonWindow([][][][2]float64{{poly}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		regions = append(regions, w)
+	}
+	if extra.composition, err = spatial.Compose(ctx, g.X, g.Y, label, K, win, regions, spatial.DefaultRegions(), runtime.NumCPU()); err != nil {
+		t.Fatal(err)
+	}
+	if extra.boundary, err = spatial.AcrossEdge(ctx, g.X, g.Y, label, K, win, regions[0], spatial.DefaultBoundary(), runtime.NumCPU()); err != nil {
+		t.Fatal(err)
+	}
 	return graphs, label, results, co, extra
 }
 
@@ -190,7 +238,11 @@ func spatialDigest(results map[string]*spatial.Enrichment, co *spatial.Cooccurre
 		raw, _ := json.Marshal(spatial.Nums(r))
 		h.Write(raw)
 	}
-	for _, v := range []spatial.Nums{extra.nearest.Median, extra.nearest.Mean, extra.isotropic.KObs, extra.none.KObs} {
+	for _, v := range []spatial.Nums{extra.nearest.Median, extra.nearest.Mean, extra.isotropic.KObs, extra.none.KObs, extra.composition.Area, extra.boundary.Area, extra.boundary.Density} {
+		raw, _ := json.Marshal(v)
+		h.Write(raw)
+	}
+	for _, v := range [][]int{extra.composition.Count, extra.boundary.Count} {
 		raw, _ := json.Marshal(v)
 		h.Write(raw)
 	}
@@ -258,7 +310,9 @@ func TestReferenceSpatial(t *testing.T) {
 				}
 				info, _ := json.MarshalIndent(map[string]any{"cells": n, "labels": K, "digest": digest, "permutations": spatial.DefaultEnrichment().Permutations, "enrichment": enrichment, "cooccurrence": map[string]any{"distances": co.Distances, "pairs": co.Pairs, "ratio": ratios},
 					"nearest": map[string]any{"reach": extra.nearest.Reach, "median": spatial.Nums(extra.nearest.Median), "mean": spatial.Nums(extra.nearest.Mean)},
-					"ripley":  map[string]any{"rectangle": extra.rectangle, "radii": extra.isotropic.Radii, "area": extra.isotropic.Area, "isotropic": iso, "none": none}}, "", " ")
+					"ripley":  map[string]any{"rectangle": extra.rectangle, "radii": extra.isotropic.Radii, "area": extra.isotropic.Area, "isotropic": iso, "none": none},
+					"regions": map[string]any{"rectangle": extra.rectangle, "polygons": extra.polygons, "area": extra.composition.Area, "count": extra.composition.Count, "outside": extra.composition.Outside,
+						"edges": extra.boundary.Edges, "bandArea": extra.boundary.Area, "bandCount": extra.boundary.Count}}, "", " ")
 				if err := os.WriteFile(filepath.Join(out, "situcraft.json"), append(info, '\n'), 0o644); err != nil {
 					t.Fatal(err)
 				}
@@ -288,6 +342,11 @@ func TestReferenceSpatial(t *testing.T) {
 			if nd.Pairs != K*K || !(nd.MaxDifference < 1e-4) || rk.Labels == 0 || !(rk.MaxNone < 1e-9) || !(rk.MaxExact < 1e-6) || !(rk.MedianIsotropic < 0.02) {
 				t.Errorf("nearest distances or Ripley's K differ from the references beyond their conventions")
 			}
+			rg := num.Regions
+			t.Logf("regions compared: %d rows, the tissue's areas within %.2g of Shapely's, %d counts differing; across an edge: %d bands, their areas within %.2g (at most %.2g µm² apart), %d counts differing", rg.Rows, rg.MaxArea, rg.CountsDiffering, rg.Bands, rg.MaxBandArea, rg.MaxBandAreaDiff, rg.BandsDiffering)
+			if rg.Rows != 3 || rg.Bands != len(extra.boundary.Area) || !(rg.MaxArea < 1e-6) || !(rg.MaxBandArea < 2e-5) || !(rg.MaxBandAreaDiff < 0.05) || rg.CountsDiffering != 0 || rg.BandsDiffering != 0 {
+				t.Errorf("regions compared or the profile across an edge differ from Shapely's areas and counts")
+			}
 			c := num.Cooccurrence
 			t.Logf("co-occurrence: %d distances, %d ratios compared; Squidpy's routine in float64, the largest difference %.3g; its float32 API %.3g, %d pairs placed otherwise by float32's rounding", c.Distances, c.Compared, c.MaxDifference, c.MaxDifferenceFloat32, c.PlacedOtherwise)
 			if c.Distances != len(co.Distances) || c.Compared == 0 || !(c.MaxDifference < 1e-9) || math.IsNaN(c.MaxDifference) || c.MaxDifferenceFloat32 > 1e-9 && c.PlacedOtherwise == 0 {
@@ -295,4 +354,134 @@ func TestReferenceSpatial(t *testing.T) {
 			}
 		})
 	}
+}
+
+// The standard simulated tissue's domains as regions (wave 6, slice 4; research.md §6.4): its true
+// cells, labeled by their true types, compared across the domains the simulator laid out (each the
+// Voronoi cell of its seeded center), and profiled across each domain's edge, in the whole field.
+// Each domain's dominant type has the largest share of its cells and is denser there than in the
+// other domains, its interval clear of 1; across the domain's edge it fills the domain, unless a
+// domain of the same type lies within the bands' reach (then what is around is much the same).
+// Each domain's cells are counted again by every edge of its polygon.
+func TestDomainsAsRegions(t *testing.T) {
+	if testing.Short() || os.Getenv("SITUCRAFT_REQUIRE_DATA") == "" {
+		t.Skip("set SITUCRAFT_REQUIRE_DATA=1 to analyze the standard simulated tissue")
+	}
+	dir := simulatedStandard(t)
+	b, err := xenium.Open(dir, xenium.Options{CacheDir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := b.ReadSmall(xenium.SimulationFile)
+	b.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var f struct {
+		Parameters simulate.Params `json:"parameters"`
+	}
+	if err := json.Unmarshal(raw, &f); err != nil {
+		t.Fatal(err)
+	}
+	p := f.Parameters
+	domains, err := simulate.Domains(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tab, err := label.ReadTable(filepath.Join(dir, "truth", "cells.parquet"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	types, xs, ys := tab.Column("cell_type"), tab.Column("x_centroid"), tab.Column("y_centroid")
+	if types == nil || xs == nil || ys == nil {
+		t.Fatal("the truth's cells name no type or centroid")
+	}
+	names := make([]string, len(p.Types))
+	index := map[string]int32{}
+	for k, ty := range p.Types {
+		names[k] = ty.Name
+		index[ty.Name] = int32(k)
+	}
+	n := types.Len()
+	x, y, lab := make([]float32, n), make([]float32, n), make([]int32, n)
+	for i := 0; i < n; i++ {
+		k, ok := index[types.String(i)]
+		if !ok {
+			t.Fatalf("a true cell of type %q, not one of the simulation's", types.String(i))
+		}
+		x[i], y[i], lab[i] = float32(xs.Numbers[i]), float32(ys.Numbers[i]), k
+	}
+	field, err := spatial.PolygonWindow([][][][2]float64{{{{0, 0}, {p.WidthUm, 0}, {p.WidthUm, p.HeightUm}, {0, p.HeightUm}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	K := len(names)
+	for d, dm := range domains {
+		region, err := spatial.PolygonWindow([][][][2]float64{{dm.Polygon}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		c, err := spatial.Compose(ctx, x, y, lab, K, field, []*spatial.Window{region}, spatial.DefaultRegions(), runtime.NumCPU())
+		if err != nil {
+			t.Fatal(err)
+		}
+		// The domain's cells by every edge of its polygon.
+		count := make([]int, K)
+		for i := range x {
+			in := false
+			for j, q := range dm.Polygon {
+				r := dm.Polygon[(j+1)%len(dm.Polygon)]
+				if (q[1] <= float64(y[i])) != (r[1] <= float64(y[i])) && q[0]+(float64(y[i])-q[1])/(r[1]-q[1])*(r[0]-q[0]) > float64(x[i]) {
+					in = !in
+				}
+			}
+			if in {
+				count[lab[i]]++
+			}
+		}
+		for k := range count {
+			if count[k] != c.Count[k] {
+				t.Errorf("domain %d, %s: %d cells, by its polygon's edges %d", d, names[k], c.Count[k], count[k])
+			}
+		}
+		k := dm.Dominant
+		q := (0*c.R+1)*K + k
+		largest := true
+		for j := 0; j < K; j++ {
+			if c.Share[j] > c.Share[k] {
+				largest = false
+			}
+		}
+		e, err := spatial.AcrossEdge(ctx, x, y, lab, K, field, region, spatial.DefaultBoundary(), runtime.NumCPU())
+		if err != nil {
+			t.Fatal(err)
+		}
+		alike := ""
+		for o, other := range domains {
+			if o != d && other.Dominant == k && polygonGap(dm.Polygon, other.Polygon) <= spatial.DefaultBoundary().Reach {
+				alike = fmt.Sprintf("; domain %d, also %s, lies within the reach", o, names[k])
+			}
+		}
+		t.Logf("domain %d (%s dominant, %.0f%% of its mix): %.0f%% of its %d cells; %.2f× (%.2f to %.2f) as dense as in the other domains; the core over around %.2f×%s", d, names[k], 100*dm.Mix[k], 100*c.Share[k], c.Labeled[0], c.DensityRatio[q], c.DensityRatioLo[q], c.DensityRatioHi[q], e.Ratio[k*spatial.Comparisons+spatial.CoreOverAround], alike)
+		if !largest || !(c.DensityRatioLo[q] > 1) || alike == "" && e.Inside[k] != 1 {
+			t.Errorf("domain %d: its dominant type %s is not found filling it", d, names[k])
+		}
+	}
+}
+
+// polygonGap is the least distance between two polygons' outlines (0 where they touch).
+func polygonGap(a, b [][2]float64) float64 {
+	best := math.Inf(1)
+	for _, pair := range [][2][][2]float64{{a, b}, {b, a}} {
+		for _, p := range pair[0] {
+			for j, q := range pair[1] {
+				r := pair[1][(j+1)%len(pair[1])]
+				dx, dy := r[0]-q[0], r[1]-q[1]
+				u := math.Max(0, math.Min(1, ((p[0]-q[0])*dx+(p[1]-q[1])*dy)/(dx*dx+dy*dy)))
+				best = math.Min(best, math.Hypot(p[0]-q[0]-u*dx, p[1]-q[1]-u*dy))
+			}
+		}
+	}
+	return best
 }

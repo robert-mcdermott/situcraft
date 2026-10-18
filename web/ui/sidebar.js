@@ -130,10 +130,10 @@ const SECTIONS = [
   {
     kind: 'spatial', title: 'Spatial analyses', icon: 'graph',
     items: (project) => project.artifacts.filter((a) => a.kind === 'spatial'),
-    label: (a) => `${{ enrichment: 'Enrichment', cooccurrence: 'Co-occurrence', distances: 'Nearest distances', ripley: 'Ripley\'s K' }[a.question] ?? a.question} · ${a.summary?.labels?.name ?? 'labels'}`,
+    label: (a) => `${{ enrichment: 'Enrichment', cooccurrence: 'Co-occurrence', distances: 'Nearest distances', ripley: 'Ripley\'s K', regions: 'Regions compared', boundary: 'Across an edge' }[a.question] ?? a.question} · ${a.summary?.labels?.name ?? 'labels'}`,
     itemIcon: (a) => (a.state === 'complete' ? 'graph' : 'warning'),
-    meta: (a) => (a.state !== 'complete' ? a.state : a.question === 'cooccurrence' ? `${a.summary?.distances ?? '?'} distances` : `${a.summary?.significant ?? 0} pairs`),
-    empty: 'Questions asked of a label set\'s cells (which types are neighbors, at what distances), each answer kept with its inputs.',
+    meta: (a) => (a.state !== 'complete' ? a.state : a.question === 'cooccurrence' ? `${a.summary?.distances ?? '?'} distances` : a.question === 'regions' ? `${a.summary?.significant ?? 0} differ` : a.question === 'boundary' ? `${a.summary?.significant ?? 0} labels` : `${a.summary?.significant ?? 0} pairs`),
+    empty: 'Questions asked of a label set\'s cells (which types are neighbors, at what distances, in which regions), each answer kept with its inputs.',
   },
   {
     kind: 'filter', title: 'Filters', icon: 'filter',

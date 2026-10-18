@@ -1361,6 +1361,87 @@ export async function viewerSuite({ check, MissingData, verbose }) {
           })()`) : null;
           check('viewer', 'the cells within a radius shown on the tissue: stromal cells with another within 30 µm, as the suite counts them', `${shownNear?.message ?? shownNear?.error}; ${JSON.stringify(nearCount)}`,
             shownNear?.ok && nearCount && nearCount.suite > 0 && nearCount.shown?.cells === nearCount.suite, `${nearCount?.suite} cells`);
+
+          // Regions compared and a profile across an edge (wave 6, slice 4), against the suite's own:
+          // each label's cells in the tumor nest and in the rest of the tissue by a winding number,
+          // and each band's by the suite's own signed distance to the nest's outline; the cells shown
+          // at its margin.
+          const compared = labelsId ? await act('spatial_analysis', { dataset: 'xenium-lung-2fov', segmentation: 'instrument', question: 'regions', labels: labelsId, level: 1, regions: ['Tumor nest'] }) : null;
+          const edge = labelsId ? await act('spatial_analysis', { dataset: 'xenium-lung-2fov', segmentation: 'instrument', question: 'boundary', labels: labelsId, level: 1, region: 'Tumor nest', reach: 40, every: 10, margin: 10 }) : null;
+          const regionsOwn = compared?.ok && edge?.ok ? await chrome.eval(`(async () => {
+            const read = async (id) => {
+              const a = await (await fetch('/api/artifacts/' + id + '/files/analysis.json')).json();
+              const cb = await (await fetch('/api/analyses/' + id + '/cells')).arrayBuffer();
+              const n = new DataView(cb).getUint32(0, true);
+              return { a, n, rows: new Uint32Array(cb, 4, n), label: new Int32Array(cb, 4 + 4 * n, n), stratum: new Int32Array(cb, 4 + 8 * n, n) };
+            };
+            // The segmentation's centroids, as the graph of all the cells holds them (the Spatial view
+            // is shown, not the Viewer).
+            const gb = await (await fetch('/api/graphs/${graph?.data?.id}/edges')).arrayBuffer();
+            const gn = new DataView(gb).getUint32(0, true);
+            const grows = new Uint32Array(gb, 12, gn), gx = new Float32Array(gb, 12 + 4 * gn, gn), gy = new Float32Array(gb, 12 + 8 * gn, gn);
+            const t = { x: [], y: [] };
+            for (let i = 0; i < gn; i += 1) {
+              t.x[grows[i]] = gx[i];
+              t.y[grows[i]] = gy[i];
+            }
+            const nest = [[600, 250], [800, 260], [790, 420], [610, 400]];
+            const inside = (px, py) => {
+              let w = 0;
+              for (let k = 0; k < 4; k += 1) {
+                const [ax, ay] = nest[k], [bx, by] = nest[(k + 1) % 4];
+                const side = (bx - ax) * (py - ay) - (px - ax) * (by - ay);
+                if (ay <= py) {
+                  if (by > py && side > 0) w += 1;
+                } else if (by <= py && side < 0) w -= 1;
+              }
+              return w !== 0;
+            };
+            const signed = (px, py) => {
+              let best = Infinity;
+              for (let k = 0; k < 4; k += 1) {
+                const [ax, ay] = nest[k], [bx, by] = nest[(k + 1) % 4];
+                const dx = bx - ax, dy = by - ay;
+                const u = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)));
+                const ex = px - (ax + u * dx), ey = py - (ay + u * dy);
+                best = Math.min(best, Math.sqrt(ex * ex + ey * ey));
+              }
+              return inside(px, py) ? -best : best;
+            };
+            const c = await read(${JSON.stringify(compared?.data?.id)});
+            const K = c.a.labels.names.length;
+            const count = new Array(2 * K).fill(0);
+            let membership = 0;
+            for (let i = 0; i < c.n; i += 1) {
+              if (c.stratum[i] === (1 << 30)) continue;
+              const inNest = inside(t.x[c.rows[i]], t.y[c.rows[i]]);
+              if ((c.stratum[i] === 1) !== inNest) membership += 1;
+              if (c.label[i] >= 0) count[(inNest ? 0 : 1) * K + c.label[i]] += 1;
+            }
+            const regionsDiffer = count.filter((v, q) => v !== c.a.regions.count[q]).length;
+            const e = await read(${JSON.stringify(edge?.data?.id)});
+            const edges = e.a.boundary.edges;
+            const bands = new Array((edges.length + 1) * K).fill(0);
+            let bandOf = 0;
+            let margin = 0;
+            const E = e.a.labels.names.indexOf('Epithelial');
+            for (let i = 0; i < e.n; i += 1) {
+              if (e.stratum[i] === 0) continue;
+              const s = signed(t.x[e.rows[i]], t.y[e.rows[i]]);
+              const b = edges.filter((v) => v <= s).length;
+              if (e.stratum[i] - 1 !== b) bandOf += 1;
+              if (e.label[i] >= 0) bands[b * K + e.label[i]] += 1;
+              if (e.label[i] === E && s >= -10 && s < 10) margin += 1;
+            }
+            const bandsDiffer = bands.filter((v, q) => v !== e.a.boundary.count[q]).length;
+            return { regionsDiffer, membership, bandsDiffer, bandOf, inNest: count.slice(0, K).reduce((a, v) => a + v, 0), margin };
+          })()`) : null;
+          check('viewer', 'regions compared and a profile across an edge by remote control: each label\'s cells in the tumor nest and the rest, and in each band across its edge, as the suite counts them', `${compared?.message ?? compared?.error}; ${edge?.message ?? edge?.error}; ${JSON.stringify(regionsOwn)}`,
+            compared?.ok && edge?.ok && regionsOwn && regionsOwn.inNest > 0 && regionsOwn.regionsDiffer === 0 && regionsOwn.membership === 0 && regionsOwn.bandsDiffer === 0 && regionsOwn.bandOf === 0, 'the same counts');
+          const shownMargin = edge?.ok ? await act('show_tissue', { dataset: 'xenium-lung-2fov', cells_of: { analysis: edge.data.id, a: 'Epithelial', zone: 'margin' } }) : null;
+          const marginShown = shownMargin?.ok ? await chrome.eval('window.situcraftViewer.focus()') : null;
+          check('viewer', 'the cells at a region\'s margin shown on the tissue: epithelial cells within 10 µm of the tumor nest\'s edge, as the suite counts them', `${shownMargin?.message ?? shownMargin?.error}; ${JSON.stringify(marginShown)}`,
+            shownMargin?.ok && regionsOwn && regionsOwn.margin > 0 && marginShown?.cells === regionsOwn.margin, `${regionsOwn?.margin} cells`);
         }
 
         // The projects as 0.2.0, 0.3.0 and 0.4.0 saved them
