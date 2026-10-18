@@ -272,7 +272,7 @@ A large tissue (more than about 4 million transcripts modeled) is refined in pat
 million transcripts each, one after another, each also refining the cells within 40 µm of its
 square, and stitched into one segmentation; the Compute step says how many. The result is the same
 for the same seed whatever the computer. The memory still grows with the tissue, by about 100
-bytes a transcript: a tissue of 55 million transcripts needed 5 to 6 GB.
+bytes a transcript: a tissue of 55 million transcripts needed 5 to 7.4 GB.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/import-dark.webp">

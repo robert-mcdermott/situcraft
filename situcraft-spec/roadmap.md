@@ -2851,6 +2851,12 @@ Outline.
 - The refinement's inputs and results streamed by patch, so that its memory no longer grows with
   the tissue: in 0.3.0 the sampling holds one patch, but the run still holds about 100 bytes a
   transcript (wave 3, slice 9).
+- The refinement's peak held to its estimate: on the large simulated tissue its measured peak
+  varies from run to run with the garbage collector's timing (5.1 to 6.2 GB over three runs, 7.4
+  GB in a fourth, against an estimate of 6.6 GB), so the weekly scale test's check, within a tenth
+  over the estimate, fails now and then. The peak bounded (a memory limit from the estimate; each
+  patch's buffers let go before the results are written) or the estimate made to cover the
+  measured spread, over several runs.
 - CosMx and MERSCOPE readers (D11).
 - XOA 3.x/4.x and Xenium Prime 5K coverage completed.
 

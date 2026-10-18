@@ -18,7 +18,8 @@ tissue-level spatial analysis one reproducible workflow:
 - export open formats with complete provenance.
 
 SituCraft runs as one self-contained program on macOS, Linux and Windows. It opens as a desktop
-window, needs no other software, and keeps your data on your computer.
+window, needs no other software, and keeps your data on your computer. 16 GB of memory is
+recommended for whole sections; 8 GB is enough for the examples ([what it needs](docs/INSTALLING.md#what-it-needs)).
 
 **Status:** 0.5.0. SituCraft opens a Xenium output bundle (folder or zip), reads every byte of it
 with its own readers, validates it (fatal problems, warnings and notes, and 22 of the run's

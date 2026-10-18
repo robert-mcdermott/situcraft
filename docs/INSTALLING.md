@@ -4,6 +4,24 @@ SituCraft is one executable. The browser application is inside it, so nothing
 else needs to be installed. Example data are downloaded only when you ask for
 them, never with the program.
 
+## What it needs
+
+A 64-bit computer running macOS, Linux or Windows, and a Chromium-family
+browser for its window (otherwise it opens in the default browser).
+
+**Memory: 16 GB is recommended for whole sections; 8 GB is enough for the
+examples and smaller sections.** What takes memory, as measured:
+
+| Work | Memory at its peak |
+| --- | --- |
+| Opening, viewing and checking the examples (2 fields of view) | under 1 GB |
+| Refining a segmentation | about 100 bytes a transcript: under 0.3 GB for an example, 5 to 7.4 GB for 55 million transcripts |
+| Clustering, mapping and labeling 380,000 cells | 4.3 GB |
+| Spatial analyses of a million cells | under 2 GB; nearest distances and Ripley's K 3 to 4 GB |
+
+Before a refinement starts, the segmentation studio estimates its memory, disk
+and time against the computer's, and refuses a run that would not fit.
+
 ## Release files
 
 | Operating system | Architecture | Release file |
