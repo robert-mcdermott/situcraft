@@ -181,17 +181,18 @@ func sorted(v []float64) []float64 {
 }
 
 // quantile of sorted values, interpolated linearly between order statistics (Hyndman and Fan's
-// type 7, as NumPy's default).
+// type 7, as NumPy's default). Each product is rounded on its own, so that it is the same on every
+// processor: fused with the subtraction below, h's product gives another fraction.
 func quantile(s []float64, q float64) float64 {
 	if len(s) == 0 {
 		return 0
 	}
-	h := q * float64(len(s)-1)
+	h := mul(q, float64(len(s)-1))
 	lo := int(math.Floor(h))
 	if lo+1 >= len(s) {
 		return s[len(s)-1]
 	}
-	return s[lo] + (h-float64(lo))*(s[lo+1]-s[lo])
+	return s[lo] + mul(h-float64(lo), s[lo+1]-s[lo])
 }
 
 // distribution summarizes values, its histogram's step a round number giving at most 60 bins to

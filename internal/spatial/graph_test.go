@@ -258,7 +258,7 @@ func digestOf(t *testing.T, g *Graph, p Params) string {
 
 // pinnedGraphs are the four kinds' files on the cells below, the same on every processor: a change
 // here is a change to the graphs, which must be deliberate.
-var pinnedGraphs = map[string]string{Delaunay: "c7629d3c9b0250d1", KNN: "d7ccb129beda8b2c", Radius: "ba4fbb14b086bc54", Contact: "5404b7edc7ce0a63"}
+var pinnedGraphs = map[string]string{Delaunay: "c7629d3c9b0250d1", KNN: "3d0c10bafa94d904", Radius: "c45a17d3bb903381", Contact: "54c8d69c8bdce87a"}
 
 // Every kind's files are the same on one worker and on eight, and pass their check.
 func TestGraphsAreTheSameOnAnyWorkers(t *testing.T) {

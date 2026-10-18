@@ -2857,8 +2857,9 @@ as in waves 3 and 4.
      release line, releases and count of worked examples.
    - **Release 0.6.0:** the Lung project as the viewer suite leaves it in 0.6.0, with its graphs
      and spatial analyses, kept as `validation/projects/0.6.0-lung.situcraft.json` and reopened by
-     every later release, each graph and analysis made again with the same summary. The product
-     site built for it.
+     every later release, each graph and analysis made again with the same summary (but those of
+     a drawn region: each run draws its regions anew, with ids of their own, which name the
+     analyses of them). The product site built for it.
    - **Validated** in the viewer suite: each worked example run step by step, each number its card
      states from the answers' files and the graphs' edges; the 0.2.0 to 0.6.0 projects reopened,
      their artifacts made again.
@@ -2873,6 +2874,13 @@ as in waves 3 and 4.
        the instrument's counts every transcript in the same cell or in none in both (95.45% for the
        Lung 3 µm expansion); a comparison counts the gene transcripts of quality 20 or more whose
        cell changed (4.59%). A card says which it reads.
+     - **A graph's description differed between processors:** on arm64 the compiler fused the
+       product placing a percentile among the sorted lengths (0.95 times n − 1) with the
+       subtraction giving its fraction, so 0.75 became 0.74999…, and a graph's percentiles
+       differed in their last digit from those made on Intel and AMD processors; the pinned
+       digests had failed in CI since slice 1. Each product there is now rounded on its own, the
+       same on every processor, and checked on an amd64 build of SituCraft against the release
+       fixture written on arm64.
 
 ## 0.7.0: samples and cohorts (wave 7)
 

@@ -217,7 +217,8 @@ with the cells it comes from.
   - **Validated:** in the page, each example run step by step and every number its card states
     checked against the answers' files and the graphs' edges; the project saved by 0.6.0
     (`validation/projects/0.6.0-lung.situcraft.json`) opens, and every artifact it records is made
-    again as it was, its graphs and analyses among them.
+    again as it was, its graphs and analyses among them (but those of a drawn region, which each
+    run draws anew).
 
 ### Fixed
 

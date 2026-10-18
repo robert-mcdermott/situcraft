@@ -1669,7 +1669,7 @@ export async function viewerSuite({ check, MissingData, verbose }) {
         // this build with the same files' checksums (a comparison by its differences: its
         // comparison.json records the jobs' times; a clustering, a map, a label set from markers, a
         // graph and a spatial analysis, whose records keep no checksums, by their summaries, which
-        // hold their numbers exactly).
+        // hold their numbers exactly; those of a drawn region left out).
         const fixtureOf = (v) => join(root, 'validation', 'projects', `${v}-lung.situcraft.json`);
         if (process.env.SITUCRAFT_WRITE_FIXTURE) {
           const doc = await chrome.eval(`(async () => {
@@ -1691,7 +1691,11 @@ export async function viewerSuite({ check, MissingData, verbose }) {
           // Labels imported or from a reference read a file this run wrote, and the instrument's
           // clusters and map are the bundle's.
           const cellTypes = (a) => (a.kind === 'clustering' && !a.summary?.source) || (a.kind === 'embedding' && !a.summary?.source) || (a.kind === 'labels' && !a.source && !a.reference);
-          const spatial = (a) => (a.kind === 'graph' || a.kind === 'spatial') && a.state === 'complete';
+          // A graph or analysis of a drawn region is not made again: each run draws its regions anew,
+          // each with an id of its own, which names the analyses of it and is in the graphs' records.
+          const regionIds = (fixture.regions ?? []).map((r) => r.id);
+          const ofRegion = (a) => regionIds.some((id) => JSON.stringify(a).includes(id));
+          const spatial = (a) => (a.kind === 'graph' || a.kind === 'spatial') && a.state === 'complete' && !ofRegion(a);
           const made = fixture.artifacts.filter((a) => (a.kind === 'segmentation' && a.source !== 'instrument' && a.method?.name !== 'SituCraft export') || a.kind === 'comparison' || cellTypes(a) || spatial(a));
           const differing = [];
           for (const a of made) {
@@ -1712,7 +1716,7 @@ export async function viewerSuite({ check, MissingData, verbose }) {
             for (const f of a.files) if (sums.get(f.path) !== f.sha256) differing.push(`${a.name}: ${f.path}`);
           }
           const kinds = [...new Set(made.map((a) => a.kind))].join(', ');
-          check('viewer', `${v} Lung project: every artifact SituCraft made is made again with the same checksums`, `${made.length} artifacts (${kinds})${differing.length ? `; ${differing.slice(0, 4).join('; ')}` : ', all the same'}`, made.length >= 5 && differing.length === 0 && (v < '0.4.0' || made.filter(cellTypes).length >= 5) && (v < '0.6.0' || made.filter((a) => a.kind === 'spatial').length >= 8), 'all the same');
+          check('viewer', `${v} Lung project: every artifact SituCraft made is made again with the same checksums`, `${made.length} artifacts (${kinds})${differing.length ? `; ${differing.slice(0, 4).join('; ')}` : ', all the same'}`, made.length >= 5 && differing.length === 0 && (v < '0.4.0' || made.filter(cellTypes).length >= 5) && (v < '0.6.0' || (made.filter((a) => a.kind === 'graph').length >= 5 && made.filter((a) => a.kind === 'spatial').length >= 6)), 'all the same');
           const reopened = await chrome.eval(`(async () => {
             const app = window.situcraft;
             const { promotedSegmentation, exportsOf } = await import('/lib/segmentations.js');

@@ -4,7 +4,7 @@
  "id": "p-situcraft-0-6-0-lung",
  "name": "Lung example, as SituCraft 0.6.0 saved it",
  "created": "2026-10-14T18:31:18.778Z",
- "modified": "2026-10-18T20:28:59.511Z",
+ "modified": "2026-10-18T21:33:20.413Z",
  "datasets": [
   {
    "id": "d-0ab2d717f6c64c09",
@@ -213,8 +213,8 @@
    "dataset": "d-0ab2d717f6c64c09",
    "source": "instrument",
    "state": "complete",
-   "created": "2026-10-18T20:26:58.296915Z",
-   "registered": "2026-10-18T20:27:18.682Z",
+   "created": "2026-10-18T21:31:14.805994Z",
+   "registered": "2026-10-18T21:31:35.810Z",
    "method": {
     "name": "Xenium cell segmentation (Xenium Onboard Analysis)",
     "version": "xenium-2.0.0.10",
@@ -235,11 +235,11 @@
     {
      "name": "situcraft",
      "version": "0.6.0",
-     "commit": "9bd65c06e5990d492b6582097307ad09e917134b-dirty"
+     "commit": "094eb94ef0ff10bea6bfbc7b648b8147b2ab9851-dirty"
     }
    ],
    "job": {
-    "id": "jmvea0pc5-3",
+    "id": "jmvecbd0x-3",
     "kind": "segmentation"
    },
    "parents": [
@@ -325,12 +325,12 @@
   },
   {
    "kind": "filter",
-   "id": "f-22a5c84b29e04e22",
+   "id": "f-71f2aaf0e9664640",
    "name": "By remote control",
    "version": 1,
    "parent": null,
    "dataset": "d-0ab2d717f6c64c09",
-   "created": "2026-10-18T20:27:25.612Z",
+   "created": "2026-10-18T21:31:42.751Z",
    "conditions": [
     {
      "attribute": "transcripts",
@@ -356,8 +356,8 @@
    "dataset": "d-0ab2d717f6c64c09",
    "segmentation": "seg-2fec30e8d6bb2310839d",
    "state": "complete",
-   "created": "2026-10-18T20:27:27.216668Z",
-   "registered": "2026-10-18T20:27:27.381Z",
+   "created": "2026-10-18T21:31:44.348276Z",
+   "registered": "2026-10-18T21:31:44.509Z",
    "method": {
     "name": "SituCraft clustering",
     "version": "1",
@@ -374,11 +374,11 @@
     {
      "name": "situcraft",
      "version": "0.6.0",
-     "commit": "9bd65c06e5990d492b6582097307ad09e917134b-dirty"
+     "commit": "094eb94ef0ff10bea6bfbc7b648b8147b2ab9851-dirty"
     }
    ],
    "job": {
-    "id": "jmvea1apt-5",
+    "id": "jmvecbywk-5",
     "kind": "clustering"
    },
    "summary": {
@@ -434,8 +434,8 @@
    "segmentation": "seg-2fec30e8d6bb2310839d",
    "clustering": "clu-8b3e720f09c5d17b9e7b",
    "state": "complete",
-   "created": "2026-10-18T20:27:34.01146Z",
-   "registered": "2026-10-18T20:27:34.216Z",
+   "created": "2026-10-18T21:31:51.336568Z",
+   "registered": "2026-10-18T21:31:51.540Z",
    "method": {
     "name": "SituCraft UMAP",
     "version": "1",
@@ -897,7 +897,7 @@
     "starter": "lung"
    },
    "by": "remote control",
-   "created": "2026-10-18T20:27:34.403Z"
+   "created": "2026-10-18T21:31:51.728Z"
   },
   {
    "kind": "labels",
@@ -914,8 +914,8 @@
    "source": null,
    "reference": null,
    "state": "complete",
-   "created": "2026-10-18T20:27:34.453961Z",
-   "registered": "2026-10-18T20:27:34.626Z",
+   "created": "2026-10-18T21:31:51.781046Z",
+   "registered": "2026-10-18T21:31:51.954Z",
    "method": {
     "name": "SituCraft labels from markers",
     "version": "1",
@@ -938,11 +938,11 @@
     {
      "name": "situcraft",
      "version": "0.6.0",
-     "commit": "9bd65c06e5990d492b6582097307ad09e917134b-dirty"
+     "commit": "094eb94ef0ff10bea6bfbc7b648b8147b2ab9851-dirty"
     }
    ],
    "job": {
-    "id": "jmvea1hg6-7",
+    "id": "jmvecc5s5-7",
     "kind": "labels"
    },
    "summary": {
@@ -994,8 +994,8 @@
    },
    "reference": null,
    "state": "complete",
-   "created": "2026-10-18T20:27:35.249277Z",
-   "registered": "2026-10-18T20:27:35.452Z",
+   "created": "2026-10-18T21:31:52.571717Z",
+   "registered": "2026-10-18T21:31:52.778Z",
    "method": {
     "name": "Imported labels",
     "version": "1",
@@ -1014,11 +1014,11 @@
     {
      "name": "situcraft",
      "version": "0.6.0",
-     "commit": "9bd65c06e5990d492b6582097307ad09e917134b-dirty"
+     "commit": "094eb94ef0ff10bea6bfbc7b648b8147b2ab9851-dirty"
     }
    ],
    "job": {
-    "id": "jmvea1i2x-8",
+    "id": "jmvecc6es-8",
     "kind": "label-import"
    },
    "summary": {
@@ -1070,8 +1070,8 @@
    },
    "reference": null,
    "state": "complete",
-   "created": "2026-10-18T20:27:35.777262Z",
-   "registered": "2026-10-18T20:27:35.878Z",
+   "created": "2026-10-18T21:31:53.124104Z",
+   "registered": "2026-10-18T21:31:53.227Z",
    "method": {
     "name": "Imported labels",
     "version": "1",
@@ -1092,11 +1092,11 @@
     {
      "name": "situcraft",
      "version": "0.6.0",
-     "commit": "9bd65c06e5990d492b6582097307ad09e917134b-dirty"
+     "commit": "094eb94ef0ff10bea6bfbc7b648b8147b2ab9851-dirty"
     }
    ],
    "job": {
-    "id": "jmvea1iex-9",
+    "id": "jmvecc6ri-9",
     "kind": "label-import"
    },
    "summary": {
@@ -1130,7 +1130,7 @@
   },
   {
    "kind": "curated-labels",
-   "id": "cur-mvea1im9-1",
+   "id": "cur-mvecc6yo-1",
    "dataset": "d-0ab2d717f6c64c09",
    "segmentation": "seg-2fec30e8d6bb2310839d",
    "base": {
@@ -1148,16 +1148,16 @@
      "label": "Reviewed: doublet",
      "reason": "two nuclei in one outline",
      "by": "validation",
-     "review": "rev-mvea1imq-1",
-     "time": "2026-10-18T20:27:35.954Z"
+     "review": "rev-mvecc6z6-1",
+     "time": "2026-10-18T21:31:53.298Z"
     }
    ],
    "by": "remote control",
-   "created": "2026-10-18T20:27:35.937Z"
+   "created": "2026-10-18T21:31:53.280Z"
   },
   {
    "kind": "consensus-labels",
-   "id": "con-mvea1is5-1",
+   "id": "con-mvecc74f-1",
    "dataset": "d-0ab2d717f6c64c09",
    "segmentation": "seg-2fec30e8d6bb2310839d",
    "name": "Agreed",
@@ -1173,7 +1173,7 @@
     {
      "ref": {
       "kind": "curated",
-      "id": "cur-mvea1im9-1"
+      "id": "cur-mvecc6yo-1"
      },
      "name": "Labels by Human lung (Xenium Human Lung panel): class, curated"
     }
@@ -1187,7 +1187,7 @@
     "min": 2
    },
    "by": "remote control",
-   "created": "2026-10-18T20:27:36.149Z"
+   "created": "2026-10-18T21:31:53.487Z"
   },
   {
    "kind": "labels",
@@ -1208,8 +1208,8 @@
     "sha256": "3895a2e3f3286f47657cc5ed408810f59035cc1c74f26979ddbc511f526eb5cf"
    },
    "state": "complete",
-   "created": "2026-10-18T20:27:36.252084Z",
-   "registered": "2026-10-18T20:27:36.442Z",
+   "created": "2026-10-18T21:31:53.578803Z",
+   "registered": "2026-10-18T21:31:53.772Z",
    "method": {
     "name": "SituCraft labels from a reference",
     "version": "1",
@@ -1224,11 +1224,11 @@
     {
      "name": "situcraft",
      "version": "0.6.0",
-     "commit": "9bd65c06e5990d492b6582097307ad09e917134b-dirty"
+     "commit": "094eb94ef0ff10bea6bfbc7b648b8147b2ab9851-dirty"
     }
    ],
    "job": {
-    "id": "jmvea1iun-10",
+    "id": "jmvecc76n-10",
     "kind": "label-reference"
    },
    "summary": {
@@ -1267,8 +1267,8 @@
    "dataset": "d-0ab2d717f6c64c09",
    "source": "situcraft",
    "state": "complete",
-   "created": "2026-10-18T20:28:08.078967Z",
-   "registered": "2026-10-18T20:28:08.282Z",
+   "created": "2026-10-18T21:32:25.287267Z",
+   "registered": "2026-10-18T21:32:25.491Z",
    "method": {
     "name": "SituCraft nucleus expansion",
     "version": "1",
@@ -1290,11 +1290,11 @@
     {
      "name": "situcraft",
      "version": "0.6.0",
-     "commit": "9bd65c06e5990d492b6582097307ad09e917134b-dirty"
+     "commit": "094eb94ef0ff10bea6bfbc7b648b8147b2ab9851-dirty"
     }
    ],
    "job": {
-    "id": "jmvea26u8-11",
+    "id": "jmveccv1h-11",
     "kind": "expansion"
    },
    "parents": [
@@ -1441,8 +1441,8 @@
    "dataset": "d-0ab2d717f6c64c09",
    "source": "imported",
    "state": "complete",
-   "created": "2026-10-18T20:28:08.972884Z",
-   "registered": "2026-10-18T20:28:09.079Z",
+   "created": "2026-10-18T21:32:26.194595Z",
+   "registered": "2026-10-18T21:32:26.302Z",
    "method": {
     "name": "Xenium Onboard Analysis",
     "version": "xenium-2.0.0.10",
@@ -1475,11 +1475,11 @@
     {
      "name": "situcraft",
      "version": "0.6.0",
-     "commit": "9bd65c06e5990d492b6582097307ad09e917134b-dirty"
+     "commit": "094eb94ef0ff10bea6bfbc7b648b8147b2ab9851-dirty"
     }
    ],
    "job": {
-    "id": "jmvea27od-12",
+    "id": "jmveccvx0-12",
     "kind": "import"
    },
    "parents": [
@@ -1586,8 +1586,8 @@
    "a": "seg-2fec30e8d6bb2310839d",
    "b": "exp-8ffe267a82963f83a0b7",
    "state": "complete",
-   "created": "2026-10-18T20:28:11.347843Z",
-   "registered": "2026-10-18T20:28:11.555Z",
+   "created": "2026-10-18T21:32:28.8311Z",
+   "registered": "2026-10-18T21:32:29.037Z",
    "method": {
     "name": "SituCraft segmentation comparison",
     "version": "2",
@@ -1603,7 +1603,7 @@
     "seed": 20250
    },
    "job": {
-    "id": "jmvea288q-13",
+    "id": "jmveccwhu-13",
     "kind": "comparison"
    },
    "summary": {
@@ -1635,8 +1635,8 @@
    "dataset": "d-0ab2d717f6c64c09",
    "segmentation": "exp-8ffe267a82963f83a0b7",
    "state": "complete",
-   "created": "2026-10-18T20:28:13.490598Z",
-   "registered": "2026-10-18T20:28:13.654Z",
+   "created": "2026-10-18T21:32:31.577991Z",
+   "registered": "2026-10-18T21:32:31.736Z",
    "method": {
     "name": "SituCraft clustering",
     "version": "1",
@@ -1653,11 +1653,11 @@
     {
      "name": "situcraft",
      "version": "0.6.0",
-     "commit": "9bd65c06e5990d492b6582097307ad09e917134b-dirty"
+     "commit": "094eb94ef0ff10bea6bfbc7b648b8147b2ab9851-dirty"
     }
    ],
    "job": {
-    "id": "jmvea2asw-14",
+    "id": "jmveccz9e-14",
     "kind": "clustering"
    },
    "summary": {
@@ -1712,8 +1712,8 @@
    "segmentation": "exp-8ffe267a82963f83a0b7",
    "clustering": "clu-45be835e04f98d5fb496",
    "state": "complete",
-   "created": "2026-10-18T20:28:20.065352Z",
-   "registered": "2026-10-18T20:28:20.268Z",
+   "created": "2026-10-18T21:32:39.257581Z",
+   "registered": "2026-10-18T21:32:39.459Z",
    "method": {
     "name": "SituCraft UMAP",
     "version": "1",
@@ -1753,8 +1753,8 @@
    "source": null,
    "reference": null,
    "state": "complete",
-   "created": "2026-10-18T20:28:20.115567Z",
-   "registered": "2026-10-18T20:28:20.269Z",
+   "created": "2026-10-18T21:32:39.309694Z",
+   "registered": "2026-10-18T21:32:39.460Z",
    "method": {
     "name": "SituCraft labels from markers",
     "version": "1",
@@ -1777,11 +1777,11 @@
     {
      "name": "situcraft",
      "version": "0.6.0",
-     "commit": "9bd65c06e5990d492b6582097307ad09e917134b-dirty"
+     "commit": "094eb94ef0ff10bea6bfbc7b648b8147b2ab9851-dirty"
     }
    ],
    "job": {
-    "id": "jmvea2bqj-16",
+    "id": "jmvecd0ng-16",
     "kind": "labels"
    },
    "summary": {
@@ -1832,8 +1832,8 @@
     "sha256": "3895a2e3f3286f47657cc5ed408810f59035cc1c74f26979ddbc511f526eb5cf"
    },
    "state": "complete",
-   "created": "2026-10-18T20:28:20.304198Z",
-   "registered": "2026-10-18T20:28:20.509Z",
+   "created": "2026-10-18T21:32:39.490514Z",
+   "registered": "2026-10-18T21:32:39.688Z",
    "method": {
     "name": "SituCraft labels from a reference",
     "version": "1",
@@ -1848,11 +1848,11 @@
     {
      "name": "situcraft",
      "version": "0.6.0",
-     "commit": "9bd65c06e5990d492b6582097307ad09e917134b-dirty"
+     "commit": "094eb94ef0ff10bea6bfbc7b648b8147b2ab9851-dirty"
     }
    ],
    "job": {
-    "id": "jmvea2guf-17",
+    "id": "jmvecd6lz-17",
     "kind": "label-reference"
    },
    "summary": {
@@ -1891,8 +1891,8 @@
    "dataset": "d-0ab2d717f6c64c09",
    "source": "planted",
    "state": "complete",
-   "created": "2026-10-18T20:28:21.669731Z",
-   "registered": "2026-10-18T20:28:21.873Z",
+   "created": "2026-10-18T21:32:40.931388Z",
+   "registered": "2026-10-18T21:32:41.134Z",
    "method": {
     "name": "SituCraft planted errors",
     "version": "1",
@@ -1911,11 +1911,11 @@
     {
      "name": "situcraft",
      "version": "0.6.0",
-     "commit": "9bd65c06e5990d492b6582097307ad09e917134b-dirty"
+     "commit": "094eb94ef0ff10bea6bfbc7b648b8147b2ab9851-dirty"
     }
    ],
    "job": {
-    "id": "jmvea2hfi-19",
+    "id": "jmvecd76p-19",
     "kind": "plant"
    },
    "parents": [
@@ -2018,8 +2018,8 @@
    "a": "seg-2fec30e8d6bb2310839d",
    "b": "pla-5c981f8d8c480f0bd89e",
    "state": "complete",
-   "created": "2026-10-18T20:28:22.527012Z",
-   "registered": "2026-10-18T20:28:22.733Z",
+   "created": "2026-10-18T21:32:41.863605Z",
+   "registered": "2026-10-18T21:32:42.065Z",
    "method": {
     "name": "SituCraft segmentation comparison",
     "version": "2",
@@ -2035,7 +2035,7 @@
     "seed": 20250
    },
    "job": {
-    "id": "jmvea2i3w-20",
+    "id": "jmvecd7xw-20",
     "kind": "comparison"
    },
    "summary": {
@@ -2072,8 +2072,8 @@
    "dataset": "d-0ab2d717f6c64c09",
    "source": "imported",
    "state": "complete",
-   "created": "2026-10-18T20:28:27.903324Z",
-   "registered": "2026-10-18T20:28:28.012Z",
+   "created": "2026-10-18T21:32:47.659002Z",
+   "registered": "2026-10-18T21:32:47.753Z",
    "method": {
     "name": "SituCraft export",
     "version": "",
@@ -2109,11 +2109,11 @@
     {
      "name": "situcraft",
      "version": "0.6.0",
-     "commit": "9bd65c06e5990d492b6582097307ad09e917134b-dirty"
+     "commit": "094eb94ef0ff10bea6bfbc7b648b8147b2ab9851-dirty"
     }
    ],
    "job": {
-    "id": "jmvea2lyq-22",
+    "id": "jmvecdc3d-22",
     "kind": "import"
    },
    "parents": [
@@ -2222,8 +2222,8 @@
    "dataset": "d-0ab2d717f6c64c09",
    "source": "situcraft",
    "state": "complete",
-   "created": "2026-10-18T20:28:34.745067Z",
-   "registered": "2026-10-18T20:28:34.949Z",
+   "created": "2026-10-18T21:32:55.207853Z",
+   "registered": "2026-10-18T21:32:55.412Z",
    "method": {
     "name": "SituCraft transcript-informed segmentation",
     "version": "1",
@@ -2290,11 +2290,11 @@
     {
      "name": "situcraft",
      "version": "0.6.0",
-     "commit": "9bd65c06e5990d492b6582097307ad09e917134b-dirty"
+     "commit": "094eb94ef0ff10bea6bfbc7b648b8147b2ab9851-dirty"
     }
    ],
    "job": {
-    "id": "jmvea2mun-23",
+    "id": "jmvecdd1n-23",
     "kind": "refinement"
    },
    "parents": [
@@ -2482,8 +2482,8 @@
    "a": "seg-2fec30e8d6bb2310839d",
    "b": "ref-4da140ab5113cb31687e",
    "state": "complete",
-   "created": "2026-10-18T20:28:35.591828Z",
-   "registered": "2026-10-18T20:28:35.799Z",
+   "created": "2026-10-18T21:32:56.060639Z",
+   "registered": "2026-10-18T21:32:56.269Z",
    "method": {
     "name": "SituCraft segmentation comparison",
     "version": "2",
@@ -2499,7 +2499,7 @@
     "seed": 20250
    },
    "job": {
-    "id": "jmvea2s5k-24",
+    "id": "jmvecdiwm-24",
     "kind": "comparison"
    },
    "summary": {
@@ -2536,8 +2536,8 @@
    "dataset": "d-0ab2d717f6c64c09",
    "source": "situcraft",
    "state": "complete",
-   "created": "2026-10-18T20:28:40.662301Z",
-   "registered": "2026-10-18T20:28:40.855Z",
+   "created": "2026-10-18T21:33:01.192462Z",
+   "registered": "2026-10-18T21:33:01.326Z",
    "method": {
     "name": "SituCraft transcript-informed segmentation",
     "version": "1",
@@ -2613,11 +2613,11 @@
     {
      "name": "situcraft",
      "version": "0.6.0",
-     "commit": "9bd65c06e5990d492b6582097307ad09e917134b-dirty"
+     "commit": "094eb94ef0ff10bea6bfbc7b648b8147b2ab9851-dirty"
     }
    ],
    "job": {
-    "id": "jmvea2v5b-25",
+    "id": "jmvecdlwm-25",
     "kind": "refinement"
    },
    "parents": [
@@ -2815,8 +2815,8 @@
    "a": "seg-2fec30e8d6bb2310839d",
    "b": "ref-41201dce17f94ada5e76",
    "state": "complete",
-   "created": "2026-10-18T20:28:41.462451Z",
-   "registered": "2026-10-18T20:28:41.475Z",
+   "created": "2026-10-18T21:33:01.929012Z",
+   "registered": "2026-10-18T21:33:02.146Z",
    "method": {
     "name": "SituCraft segmentation comparison",
     "version": "2",
@@ -2832,7 +2832,7 @@
     "seed": 20250
    },
    "job": {
-    "id": "jmvea2wpl-26",
+    "id": "jmvecdngw-26",
     "kind": "comparison"
    },
    "summary": {
@@ -2866,8 +2866,8 @@
    "dataset": "d-0ab2d717f6c64c09",
    "segmentation": "seg-2fec30e8d6bb2310839d",
    "state": "complete",
-   "created": "2026-10-18T20:28:42.670199Z",
-   "registered": "2026-10-18T20:28:42.836Z",
+   "created": "2026-10-18T21:33:03.36135Z",
+   "registered": "2026-10-18T21:33:03.526Z",
    "method": {
     "name": "SituCraft cell graph",
     "version": "1",
@@ -2881,11 +2881,11 @@
     {
      "name": "situcraft",
      "version": "0.6.0",
-     "commit": "9bd65c06e5990d492b6582097307ad09e917134b-dirty"
+     "commit": "094eb94ef0ff10bea6bfbc7b648b8147b2ab9851-dirty"
     }
    ],
    "job": {
-    "id": "jmvea2y2t-28",
+    "id": "jmvecdp06-28",
     "kind": "graph"
    },
    "summary": {
@@ -2918,8 +2918,8 @@
    "dataset": "d-0ab2d717f6c64c09",
    "segmentation": "seg-2fec30e8d6bb2310839d",
    "state": "complete",
-   "created": "2026-10-18T20:28:42.928505Z",
-   "registered": "2026-10-18T20:28:43.106Z",
+   "created": "2026-10-18T21:33:03.620912Z",
+   "registered": "2026-10-18T21:33:03.795Z",
    "method": {
     "name": "SituCraft cell graph",
     "version": "1",
@@ -2933,11 +2933,11 @@
     {
      "name": "situcraft",
      "version": "0.6.0",
-     "commit": "9bd65c06e5990d492b6582097307ad09e917134b-dirty"
+     "commit": "094eb94ef0ff10bea6bfbc7b648b8147b2ab9851-dirty"
     }
    ],
    "job": {
-    "id": "jmvea2ya7-29",
+    "id": "jmvecdp7l-29",
     "kind": "graph"
    },
    "summary": {
@@ -2970,8 +2970,8 @@
    "dataset": "d-0ab2d717f6c64c09",
    "segmentation": "seg-2fec30e8d6bb2310839d",
    "state": "complete",
-   "created": "2026-10-18T20:28:43.22361Z",
-   "registered": "2026-10-18T20:28:43.368Z",
+   "created": "2026-10-18T21:33:03.920156Z",
+   "registered": "2026-10-18T21:33:04.059Z",
    "method": {
     "name": "SituCraft cell graph",
     "version": "1",
@@ -2985,11 +2985,11 @@
     {
      "name": "situcraft",
      "version": "0.6.0",
-     "commit": "9bd65c06e5990d492b6582097307ad09e917134b-dirty"
+     "commit": "094eb94ef0ff10bea6bfbc7b648b8147b2ab9851-dirty"
     }
    ],
    "job": {
-    "id": "jmvea2yhm-30",
+    "id": "jmvecdpez-30",
     "kind": "graph"
    },
    "summary": {
@@ -3022,8 +3022,8 @@
    "dataset": "d-0ab2d717f6c64c09",
    "segmentation": "seg-2fec30e8d6bb2310839d",
    "state": "complete",
-   "created": "2026-10-18T20:28:43.546466Z",
-   "registered": "2026-10-18T20:28:43.651Z",
+   "created": "2026-10-18T21:33:04.254005Z",
+   "registered": "2026-10-18T21:33:04.340Z",
    "method": {
     "name": "SituCraft cell graph",
     "version": "1",
@@ -3037,11 +3037,11 @@
     {
      "name": "situcraft",
      "version": "0.6.0",
-     "commit": "9bd65c06e5990d492b6582097307ad09e917134b-dirty"
+     "commit": "094eb94ef0ff10bea6bfbc7b648b8147b2ab9851-dirty"
     }
    ],
    "job": {
-    "id": "jmvea2yph-31",
+    "id": "jmvecdpmu-31",
     "kind": "graph"
    },
    "summary": {
@@ -3074,8 +3074,8 @@
    "dataset": "d-0ab2d717f6c64c09",
    "segmentation": "seg-2fec30e8d6bb2310839d",
    "state": "complete",
-   "created": "2026-10-18T20:28:44.986846Z",
-   "registered": "2026-10-18T20:28:45.188Z",
+   "created": "2026-10-18T21:33:05.676748Z",
+   "registered": "2026-10-18T21:33:05.876Z",
    "method": {
     "name": "SituCraft cell graph",
     "version": "1",
@@ -3089,11 +3089,11 @@
     {
      "name": "situcraft",
      "version": "0.6.0",
-     "commit": "9bd65c06e5990d492b6582097307ad09e917134b-dirty"
+     "commit": "094eb94ef0ff10bea6bfbc7b648b8147b2ab9851-dirty"
     }
    ],
    "job": {
-    "id": "jmvea2zw2-32",
+    "id": "jmvecdqtg-32",
     "kind": "graph"
    },
    "summary": {
@@ -3116,7 +3116,7 @@
      "checksum": "e9a7d12a32ba4e203a555ac6417378577c623c178b620c1f395f6e04b489b91b",
      "regions": [
       {
-       "id": "r-5a81c09574cc43f7",
+       "id": "r-5aae53e3b9f9417d",
        "name": "Tumor nest",
        "version": 1
       }
@@ -3134,8 +3134,8 @@
    "graph": "gra-a10c064e89df8c43cdf8",
    "question": "enrichment",
    "state": "complete",
-   "created": "2026-10-18T20:28:46.838278Z",
-   "registered": "2026-10-18T20:28:47.012Z",
+   "created": "2026-10-18T21:33:07.576061Z",
+   "registered": "2026-10-18T21:33:07.750Z",
    "method": {
     "name": "SituCraft spatial analysis",
     "version": "1",
@@ -3150,11 +3150,11 @@
     {
      "name": "situcraft",
      "version": "0.6.0",
-     "commit": "9bd65c06e5990d492b6582097307ad09e917134b-dirty"
+     "commit": "094eb94ef0ff10bea6bfbc7b648b8147b2ab9851-dirty"
     }
    ],
    "job": {
-    "id": "jmvea31ao-33",
+    "id": "jmvecds9f-33",
     "kind": "spatial"
    },
    "summary": {
@@ -3238,8 +3238,8 @@
    "graph": null,
    "question": "cooccurrence",
    "state": "complete",
-   "created": "2026-10-18T20:28:47.325338Z",
-   "registered": "2026-10-18T20:28:47.524Z",
+   "created": "2026-10-18T21:33:08.081077Z",
+   "registered": "2026-10-18T21:33:08.281Z",
    "method": {
     "name": "SituCraft spatial analysis",
     "version": "1",
@@ -3257,11 +3257,11 @@
     {
      "name": "situcraft",
      "version": "0.6.0",
-     "commit": "9bd65c06e5990d492b6582097307ad09e917134b-dirty"
+     "commit": "094eb94ef0ff10bea6bfbc7b648b8147b2ab9851-dirty"
     }
    ],
    "job": {
-    "id": "jmvea31ox-34",
+    "id": "jmvecdso5-34",
     "kind": "spatial"
    },
    "summary": {
@@ -3291,8 +3291,8 @@
    "graph": null,
    "question": "distances",
    "state": "complete",
-   "created": "2026-10-18T20:28:47.707507Z",
-   "registered": "2026-10-18T20:28:47.873Z",
+   "created": "2026-10-18T21:33:08.462262Z",
+   "registered": "2026-10-18T21:33:08.631Z",
    "method": {
     "name": "SituCraft spatial analysis",
     "version": "1",
@@ -3308,11 +3308,11 @@
     {
      "name": "situcraft",
      "version": "0.6.0",
-     "commit": "9bd65c06e5990d492b6582097307ad09e917134b-dirty"
+     "commit": "094eb94ef0ff10bea6bfbc7b648b8147b2ab9851-dirty"
     }
    ],
    "job": {
-    "id": "jmvea31yo-35",
+    "id": "jmvecdsxv-35",
     "kind": "spatial"
    },
    "summary": {
@@ -3381,15 +3381,15 @@
   },
   {
    "kind": "spatial",
-   "id": "spa-10a13b82b89820a47794",
+   "id": "spa-240eb51019fb4462d5d0",
    "name": "Ripley's K of Labels by Human lung (Xenium Human Lung panel): class in Instrument segmentation",
    "dataset": "d-0ab2d717f6c64c09",
    "segmentation": "seg-2fec30e8d6bb2310839d",
    "graph": null,
    "question": "ripley",
    "state": "complete",
-   "created": "2026-10-18T20:28:47.945792Z",
-   "registered": "2026-10-18T20:28:48.144Z",
+   "created": "2026-10-18T21:33:08.720707Z",
+   "registered": "2026-10-18T21:33:08.921Z",
    "method": {
     "name": "SituCraft spatial analysis",
     "version": "1",
@@ -3410,11 +3410,11 @@
     {
      "name": "situcraft",
      "version": "0.6.0",
-     "commit": "9bd65c06e5990d492b6582097307ad09e917134b-dirty"
+     "commit": "094eb94ef0ff10bea6bfbc7b648b8147b2ab9851-dirty"
     }
    ],
    "job": {
-    "id": "jmvea3263-36",
+    "id": "jmvecdt5t-36",
     "kind": "spatial"
    },
    "summary": {
@@ -3434,7 +3434,7 @@
     "window": {
      "kind": "region",
      "region": {
-      "id": "r-5a81c09574cc43f7",
+      "id": "r-5aae53e3b9f9417d",
       "name": "Tumor nest",
       "version": 1
      },
@@ -3446,15 +3446,15 @@
   },
   {
    "kind": "spatial",
-   "id": "spa-217e13a877155a49b51a",
+   "id": "spa-0bffca8ddf03f58263ef",
    "name": "Regions compared (Tumor nest) by Labels by Human lung (Xenium Human Lung panel): class in Instrument segmentation",
    "dataset": "d-0ab2d717f6c64c09",
    "segmentation": "seg-2fec30e8d6bb2310839d",
    "graph": null,
    "question": "regions",
    "state": "complete",
-   "created": "2026-10-18T20:28:48.537283Z",
-   "registered": "2026-10-18T20:28:48.708Z",
+   "created": "2026-10-18T21:33:09.329057Z",
+   "registered": "2026-10-18T21:33:09.501Z",
    "method": {
     "name": "SituCraft spatial analysis",
     "version": "1",
@@ -3467,11 +3467,11 @@
     {
      "name": "situcraft",
      "version": "0.6.0",
-     "commit": "9bd65c06e5990d492b6582097307ad09e917134b-dirty"
+     "commit": "094eb94ef0ff10bea6bfbc7b648b8147b2ab9851-dirty"
     }
    ],
    "job": {
-    "id": "jmvea32lt-37",
+    "id": "jmvecdtly-37",
     "kind": "spatial"
    },
    "summary": {
@@ -3498,7 +3498,7 @@
     },
     "rows": [
      {
-      "id": "r-5a81c09574cc43f7",
+      "id": "r-5aae53e3b9f9417d",
       "name": "Tumor nest",
       "version": 1
      }
@@ -3517,15 +3517,15 @@
   },
   {
    "kind": "spatial",
-   "id": "spa-e8c6de49e77f837e5e0e",
+   "id": "spa-b2a62275430892fc6db5",
    "name": "Across the edge of Tumor nest, Labels by Human lung (Xenium Human Lung panel): class in Instrument segmentation",
    "dataset": "d-0ab2d717f6c64c09",
    "segmentation": "seg-2fec30e8d6bb2310839d",
    "graph": null,
    "question": "boundary",
    "state": "complete",
-   "created": "2026-10-18T20:28:48.834921Z",
-   "registered": "2026-10-18T20:28:48.973Z",
+   "created": "2026-10-18T21:33:09.643956Z",
+   "registered": "2026-10-18T21:33:09.783Z",
    "method": {
     "name": "SituCraft spatial analysis",
     "version": "1",
@@ -3541,11 +3541,11 @@
     {
      "name": "situcraft",
      "version": "0.6.0",
-     "commit": "9bd65c06e5990d492b6582097307ad09e917134b-dirty"
+     "commit": "094eb94ef0ff10bea6bfbc7b648b8147b2ab9851-dirty"
     }
    ],
    "job": {
-    "id": "jmvea32t9-38",
+    "id": "jmvecdttw-38",
     "kind": "spatial"
    },
    "summary": {
@@ -3570,7 +3570,7 @@
      "segments": 3634
     },
     "edge": {
-     "id": "r-5a81c09574cc43f7",
+     "id": "r-5aae53e3b9f9417d",
      "name": "Tumor nest",
      "version": 1
     }
@@ -3586,8 +3586,8 @@
    "graph": null,
    "question": "niches",
    "state": "complete",
-   "created": "2026-10-18T20:28:49.28362Z",
-   "registered": "2026-10-18T20:28:49.424Z",
+   "created": "2026-10-18T21:33:10.125401Z",
+   "registered": "2026-10-18T21:33:10.265Z",
    "method": {
     "name": "SituCraft spatial analysis",
     "version": "1",
@@ -3605,11 +3605,11 @@
     {
      "name": "situcraft",
      "version": "0.6.0",
-     "commit": "9bd65c06e5990d492b6582097307ad09e917134b-dirty"
+     "commit": "094eb94ef0ff10bea6bfbc7b648b8147b2ab9851-dirty"
     }
    ],
    "job": {
-    "id": "jmvea335p-39",
+    "id": "jmvecdu79-39",
     "kind": "spatial"
    },
    "summary": {
@@ -3698,8 +3698,8 @@
    "graph": "gra-a10c064e89df8c43cdf8",
    "question": "moran",
    "state": "complete",
-   "created": "2026-10-18T20:28:58.139988Z",
-   "registered": "2026-10-18T20:28:58.271Z",
+   "created": "2026-10-18T21:33:19.02654Z",
+   "registered": "2026-10-18T21:33:19.142Z",
    "method": {
     "name": "SituCraft spatial analysis",
     "version": "1",
@@ -3716,11 +3716,11 @@
     {
      "name": "situcraft",
      "version": "0.6.0",
-     "commit": "9bd65c06e5990d492b6582097307ad09e917134b-dirty"
+     "commit": "094eb94ef0ff10bea6bfbc7b648b8147b2ab9851-dirty"
     }
    ],
    "job": {
-    "id": "jmvea39zi-40",
+    "id": "jmvece11y-40",
     "kind": "spatial"
    },
    "summary": {
@@ -3784,8 +3784,8 @@
    "dataset": "d-0ab2d717f6c64c09",
    "segmentation": "exp-8ffe267a82963f83a0b7",
    "state": "complete",
-   "created": "2026-10-18T20:28:58.651322Z",
-   "registered": "2026-10-18T20:28:58.822Z",
+   "created": "2026-10-18T21:33:19.521928Z",
+   "registered": "2026-10-18T21:33:19.696Z",
    "method": {
     "name": "SituCraft cell graph",
     "version": "1",
@@ -3799,11 +3799,11 @@
     {
      "name": "situcraft",
      "version": "0.6.0",
-     "commit": "9bd65c06e5990d492b6582097307ad09e917134b-dirty"
+     "commit": "094eb94ef0ff10bea6bfbc7b648b8147b2ab9851-dirty"
     }
    ],
    "job": {
-    "id": "jmvea3aer-41",
+    "id": "jmvece1h6-41",
     "kind": "graph"
    },
    "summary": {
@@ -3837,8 +3837,8 @@
    "graph": "gra-35f4dc89449cc05eaad7",
    "question": "enrichment",
    "state": "complete",
-   "created": "2026-10-18T20:28:58.873959Z",
-   "registered": "2026-10-18T20:28:59.043Z",
+   "created": "2026-10-18T21:33:19.752369Z",
+   "registered": "2026-10-18T21:33:19.916Z",
    "method": {
     "name": "SituCraft spatial analysis",
     "version": "1",
@@ -3853,11 +3853,11 @@
     {
      "name": "situcraft",
      "version": "0.6.0",
-     "commit": "9bd65c06e5990d492b6582097307ad09e917134b-dirty"
+     "commit": "094eb94ef0ff10bea6bfbc7b648b8147b2ab9851-dirty"
     }
    ],
    "job": {
-    "id": "jmvea3akt-42",
+    "id": "jmvece1nb-42",
     "kind": "spatial"
    },
    "summary": {
@@ -3942,7 +3942,7 @@
    "artifact": "seg-2fec30e8d6bb2310839d",
    "rationale": "The instrument's segmentation: the dataset's only segmentation when it was added.",
    "by": "SituCraft",
-   "time": "2026-10-18T20:27:18.682Z"
+   "time": "2026-10-18T21:31:35.810Z"
   },
   {
    "kind": "keep-segmentation",
@@ -3950,7 +3950,7 @@
    "artifact": "exp-8ffe267a82963f83a0b7",
    "rationale": "The same cells as the instrument's: kept as a baseline",
    "by": "a program, by remote control",
-   "time": "2026-10-18T20:28:12.430Z",
+   "time": "2026-10-18T21:32:29.925Z",
    "comparison": "cmp-3eab4a364f2971b33b89"
   },
   {
@@ -3959,7 +3959,7 @@
    "artifact": "pla-5c981f8d8c480f0bd89e",
    "rationale": "Its planted errors were found",
    "by": "a program, by remote control",
-   "time": "2026-10-18T20:28:23.220Z"
+   "time": "2026-10-18T21:32:42.579Z"
   }
  ],
  "views": [
@@ -4096,11 +4096,11 @@
    }
   },
   {
-   "id": "v-efc80951de384dc7",
+   "id": "v-f535ff460bac4ce6",
    "name": "By remote control",
    "dataset": "d-0ab2d717f6c64c09",
    "mode": "viewer",
-   "created": "2026-10-18T20:27:25.347Z",
+   "created": "2026-10-18T21:31:42.487Z",
    "segmentation": "instrument",
    "camera": {
     "cx": 750,
@@ -4142,11 +4142,11 @@
    }
   },
   {
-   "id": "v-efe2d70e29fb452c",
+   "id": "v-1f097a33fcc24c5e",
    "name": "The refinement on the tissue",
    "dataset": "d-0ab2d717f6c64c09",
    "mode": "viewer",
-   "created": "2026-10-18T20:28:38.325Z",
+   "created": "2026-10-18T21:32:58.797Z",
    "segmentation": "ref-4da140ab5113cb31687e",
    "camera": {
     "cx": 750,
@@ -4186,11 +4186,11 @@
    }
   },
   {
-   "id": "v-904cecb5c32a4bff",
+   "id": "v-aadb781d11984915",
    "name": "The Delaunay graph close up",
    "dataset": "d-0ab2d717f6c64c09",
    "mode": "viewer",
-   "created": "2026-10-18T20:28:45.985Z",
+   "created": "2026-10-18T21:33:06.673Z",
    "segmentation": "instrument",
    "camera": {
     "cx": 700,
@@ -4262,290 +4262,290 @@
    "detail": "Saved view Gene transcripts outside cells, filtered"
   },
   {
-   "time": "2026-10-18T20:27:18.674Z",
+   "time": "2026-10-18T21:31:35.802Z",
    "action": "relocate-dataset",
    "detail": "xenium-lung-2fov: /data/examples/xenium-lung-2fov → /data/examples/xenium-lung-2fov"
   },
   {
-   "time": "2026-10-18T20:27:18.682Z",
+   "time": "2026-10-18T21:31:35.810Z",
    "action": "segmentation",
    "detail": "Registered instrument segmentation of xenium-lung-2fov (artifact seg-2fec30e8d6bb2310839d, 6 files by SHA-256)"
   },
   {
-   "time": "2026-10-18T20:27:18.682Z",
+   "time": "2026-10-18T21:31:35.810Z",
    "action": "decision",
    "detail": "Promoted instrument segmentation as xenium-lung-2fov's segmentation: The instrument's segmentation: the dataset's only segmentation when it was added."
   },
   {
-   "time": "2026-10-18T20:27:25.347Z",
+   "time": "2026-10-18T21:31:42.487Z",
    "action": "view",
    "detail": "Saved view By remote control"
   },
   {
-   "time": "2026-10-18T20:27:25.612Z",
+   "time": "2026-10-18T21:31:42.751Z",
    "action": "filter",
    "detail": "Saved filter By remote control (version 1): 11254 of 11898 cells kept"
   },
   {
-   "time": "2026-10-18T20:27:27.381Z",
+   "time": "2026-10-18T21:31:44.509Z",
    "action": "clustering",
    "detail": "Clustered the cells of instrument segmentation of xenium-lung-2fov: 29 clusters of 11820 cells at resolution 1 (artifact clu-8b3e720f09c5d17b9e7b)"
   },
   {
-   "time": "2026-10-18T20:27:34.216Z",
+   "time": "2026-10-18T21:31:51.540Z",
    "action": "embedding",
    "detail": "Made map of Clusters of Instrument segmentation, resolution 1 of xenium-lung-2fov: trustworthiness 0.737 (artifact emb-09f3e4a29309055ae73a)"
   },
   {
-   "time": "2026-10-18T20:27:34.403Z",
+   "time": "2026-10-18T21:31:51.728Z",
    "action": "marker-set",
    "detail": "Added the marker set \"Human lung (Xenium Human Lung panel)\" from SituCraft's starter set \"lung\" (version 1: 26 labels, 1 state; checksum d96c65a024d9)"
   },
   {
-   "time": "2026-10-18T20:27:34.626Z",
+   "time": "2026-10-18T21:31:51.954Z",
    "action": "labels",
    "detail": "Labeled the cells of clusters of instrument segmentation, resolution 1 by the marker set \"Human lung (Xenium Human Lung panel)\" (version 1): 5555 of 11820 cells at the class level, margin 0.1 (artifact lab-c25f4eaba2e9de96a2fe)"
   },
   {
-   "time": "2026-10-18T20:27:35.452Z",
+   "time": "2026-10-18T21:31:52.778Z",
    "action": "labels",
    "detail": "Imported cell_type from labels.csv for the cells of instrument segmentation: 2 labels, 3 of 11898 cells labeled (SHA-256 bf2f713c3e88; artifact lab-f891c5828f7a6c2c1f9e)"
   },
   {
-   "time": "2026-10-18T20:27:35.878Z",
+   "time": "2026-10-18T21:31:53.227Z",
    "action": "labels",
    "detail": "Imported the instrument's graph-based clusters for the cells of instrument segmentation: 17 labels, 11897 of 11898 cells labeled (SHA-256 13c924232cd5; artifact lab-25f922ba634008c0d49a)"
   },
   {
-   "time": "2026-10-18T20:27:35.937Z",
+   "time": "2026-10-18T21:31:53.280Z",
    "action": "curated-labels",
    "detail": "Began the curated label set \"Labels by Human lung (Xenium Human Lung panel): class, curated\" from Labels by Human lung (Xenium Human Lung panel): class"
   },
   {
-   "time": "2026-10-18T20:27:35.954Z",
+   "time": "2026-10-18T21:31:53.298Z",
    "action": "curated-labels",
    "detail": "Labels by Human lung (Xenium Human Lung panel): class, curated: a cell relabeled \"Reviewed: doublet\" (two nuclei in one outline; validation)"
   },
   {
-   "time": "2026-10-18T20:27:35.954Z",
+   "time": "2026-10-18T21:31:53.298Z",
    "action": "review",
    "detail": "Relabel 1 cell of xenium-lung-2fov: Immune → Reviewed: doublet (two nuclei in one outline; validation)"
   },
   {
-   "time": "2026-10-18T20:27:36.149Z",
+   "time": "2026-10-18T21:31:53.487Z",
    "action": "consensus-labels",
    "detail": "Made the consensus label set \"Agreed\" of Labels by Human lung (Xenium Human Lung panel): class, Labels by Human lung (Xenium Human Lung panel): class, curated by a majority of 2"
   },
   {
-   "time": "2026-10-18T20:27:36.442Z",
+   "time": "2026-10-18T21:31:53.772Z",
    "action": "labels",
    "detail": "Labeled the cells of clusters of instrument segmentation, resolution 1 from the reference profiles.csv: 4 labels, 15 of the panel's genes shared; 10840 of 11820 cells labeled, fine-tuning 0.05, margin 0 (SHA-256 3895a2e3f328; artifact lab-b7ecd2ef016f3f0b625b)"
   },
   {
-   "time": "2026-10-18T20:28:08.282Z",
+   "time": "2026-10-18T21:32:25.491Z",
    "action": "segmentation",
    "detail": "Registered nucleus expansion, 5 µm of xenium-lung-2fov (artifact exp-8ffe267a82963f83a0b7, 6 files by SHA-256)"
   },
   {
-   "time": "2026-10-18T20:28:09.079Z",
+   "time": "2026-10-18T21:32:26.302Z",
    "action": "segmentation",
    "detail": "Registered xenium onboard analysis (imported) of xenium-lung-2fov (artifact imp-e5a617afc05f56fc8a66, 6 files by SHA-256)"
   },
   {
-   "time": "2026-10-18T20:28:11.555Z",
+   "time": "2026-10-18T21:32:29.037Z",
    "action": "comparison",
    "detail": "Compared Instrument segmentation (A) with Nucleus expansion, 5 µm (B) (artifact cmp-3eab4a364f2971b33b89)"
   },
   {
-   "time": "2026-10-18T20:28:12.430Z",
+   "time": "2026-10-18T21:32:29.925Z",
    "action": "decision",
    "detail": "Kept for exploration nucleus expansion, 5 µm of xenium-lung-2fov: The same cells as the instrument's: kept as a baseline"
   },
   {
-   "time": "2026-10-18T20:28:13.654Z",
+   "time": "2026-10-18T21:32:31.736Z",
    "action": "clustering",
    "detail": "Clustered the cells of nucleus expansion, 5 µm of xenium-lung-2fov: 28 clusters of 11822 cells at resolution 1 (artifact clu-45be835e04f98d5fb496)"
   },
   {
-   "time": "2026-10-18T20:28:20.268Z",
+   "time": "2026-10-18T21:32:39.459Z",
    "action": "embedding",
    "detail": "Made map of Clusters of Nucleus expansion, 5 µm, resolution 1 of xenium-lung-2fov: trustworthiness 0.743 (artifact emb-40515becdff62f04ef20)"
   },
   {
-   "time": "2026-10-18T20:28:20.269Z",
+   "time": "2026-10-18T21:32:39.460Z",
    "action": "labels",
    "detail": "Labeled the cells of clusters of nucleus expansion, 5 µm, resolution 1 by the marker set \"Human lung (Xenium Human Lung panel)\" (version 1): 5561 of 11822 cells at the class level, margin 0.1 (artifact lab-29b7e11ec3574035b6d3)"
   },
   {
-   "time": "2026-10-18T20:28:20.509Z",
+   "time": "2026-10-18T21:32:39.688Z",
    "action": "labels",
    "detail": "Labeled the cells of clusters of nucleus expansion, 5 µm, resolution 1 from the reference profiles.csv: 4 labels, 15 of the panel's genes shared; 10845 of 11822 cells labeled, fine-tuning 0.05, margin 0 (SHA-256 3895a2e3f328; artifact lab-86a48a5937b047b2682d)"
   },
   {
-   "time": "2026-10-18T20:28:21.873Z",
+   "time": "2026-10-18T21:32:41.134Z",
    "action": "segmentation",
    "detail": "Registered planted errors (simulated) of xenium-lung-2fov (artifact pla-5c981f8d8c480f0bd89e, 7 files by SHA-256)"
   },
   {
-   "time": "2026-10-18T20:28:22.733Z",
+   "time": "2026-10-18T21:32:42.065Z",
    "action": "comparison",
    "detail": "Compared Instrument segmentation (A) with Planted errors (simulated) (B) (artifact cmp-c463838efdfc21c90f20)"
   },
   {
-   "time": "2026-10-18T20:28:23.220Z",
+   "time": "2026-10-18T21:32:42.579Z",
    "action": "decision",
    "detail": "Rejected planted errors (simulated) of xenium-lung-2fov: Its planted errors were found"
   },
   {
-   "time": "2026-10-18T20:28:26.828Z",
+   "time": "2026-10-18T21:32:46.484Z",
    "action": "export",
    "detail": "Exported instrument segmentation of xenium-lung-2fov as parquet, spatialdata, xenium-ranger into /data/work/exports/xenium-lung-2fov instrument (124 files by SHA-256)"
   },
   {
-   "time": "2026-10-18T20:28:28.012Z",
+   "time": "2026-10-18T21:32:47.753Z",
    "action": "segmentation",
    "detail": "Registered situcraft export (imported) of xenium-lung-2fov (artifact imp-fe6e838f9363111c76cf, 6 files by SHA-256)"
   },
   {
-   "time": "2026-10-18T20:28:34.949Z",
+   "time": "2026-10-18T21:32:55.412Z",
    "action": "segmentation",
    "detail": "Registered transcript-informed segmentation (40 sweeps) of xenium-lung-2fov (artifact ref-4da140ab5113cb31687e, 9 files by SHA-256)"
   },
   {
-   "time": "2026-10-18T20:28:35.799Z",
+   "time": "2026-10-18T21:32:56.269Z",
    "action": "comparison",
    "detail": "Compared Instrument segmentation (A) with Transcript-informed segmentation (40 sweeps) (B) (artifact cmp-93a43f65bf0bfc52563d)"
   },
   {
-   "time": "2026-10-18T20:28:38.325Z",
+   "time": "2026-10-18T21:32:58.797Z",
    "action": "view",
    "detail": "Saved view The refinement on the tissue"
   },
   {
-   "time": "2026-10-18T20:28:40.855Z",
+   "time": "2026-10-18T21:33:01.326Z",
    "action": "segmentation",
    "detail": "Registered transcript-informed segmentation (40 sweeps, region (500, 300)–(700, 450) µm) of xenium-lung-2fov (artifact ref-41201dce17f94ada5e76, 9 files by SHA-256)"
   },
   {
-   "time": "2026-10-18T20:28:41.475Z",
+   "time": "2026-10-18T21:33:02.146Z",
    "action": "comparison",
    "detail": "Compared Instrument segmentation (A) with Transcript-informed segmentation (40 sweeps, region (500, 300)–(700, 450) µm) (B) (artifact cmp-0c64f90af9c56fbd75ea)"
   },
   {
-   "time": "2026-10-18T20:28:42.326Z",
+   "time": "2026-10-18T21:33:03.014Z",
    "action": "region",
    "detail": "Drew Tumor nest (Tumor, 29,450 µm², polygon) on xenium-lung-2fov"
   },
   {
-   "time": "2026-10-18T20:28:42.393Z",
+   "time": "2026-10-18T21:33:03.082Z",
    "action": "region",
    "detail": "Drew Edge artifact (Ignore*, 4,800 µm², rectangle) on xenium-lung-2fov"
   },
   {
-   "time": "2026-10-18T20:28:42.465Z",
+   "time": "2026-10-18T21:33:03.152Z",
    "action": "review",
    "detail": "Exclude Edge artifact of xenium-lung-2fov: included → excluded (Folded tissue at the edge; validation)"
   },
   {
-   "time": "2026-10-18T20:28:42.470Z",
+   "time": "2026-10-18T21:33:03.157Z",
    "action": "review",
    "detail": "Exclude 18 cells of xenium-lung-2fov: included → excluded (In Edge artifact, excluded: Folded tissue at the edge; validation)"
   },
   {
-   "time": "2026-10-18T20:28:42.530Z",
+   "time": "2026-10-18T21:33:03.219Z",
    "action": "review",
    "detail": "Comment Tumor nest of xenium-lung-2fov (Check against the H&E when it is scanned; validation)"
   },
   {
-   "time": "2026-10-18T20:28:42.565Z",
+   "time": "2026-10-18T21:33:03.255Z",
    "action": "review",
    "detail": "Segmentation concern 1 cell of xenium-lung-2fov: none → merged (Two nuclei in one outline; validation)"
   },
   {
-   "time": "2026-10-18T20:28:42.836Z",
+   "time": "2026-10-18T21:33:03.526Z",
    "action": "graph",
    "detail": "Built a graph of the cells of xenium-lung-2fov: Delaunay graph of Instrument segmentation, edges to 50 µm; 11880 cells, 35418 edges (artifact gra-a10c064e89df8c43cdf8)"
   },
   {
-   "time": "2026-10-18T20:28:43.106Z",
+   "time": "2026-10-18T21:33:03.795Z",
    "action": "graph",
    "detail": "Built a graph of the cells of xenium-lung-2fov: 6 nearest neighbors in Instrument segmentation; 11880 cells, 40464 edges (artifact gra-3b9c966abd7dc612a480)"
   },
   {
-   "time": "2026-10-18T20:28:43.368Z",
+   "time": "2026-10-18T21:33:04.059Z",
    "action": "graph",
    "detail": "Built a graph of the cells of xenium-lung-2fov: Neighbors within 20 µm in Instrument segmentation; 11880 cells, 133811 edges (artifact gra-b51910c4bbe63eb03632)"
   },
   {
-   "time": "2026-10-18T20:28:43.651Z",
+   "time": "2026-10-18T21:33:04.340Z",
    "action": "graph",
    "detail": "Built a graph of the cells of xenium-lung-2fov: Contact graph of Instrument segmentation, gaps to 1 µm; 11880 cells, 32965 edges (artifact gra-956fb2575a361e2de602)"
   },
   {
-   "time": "2026-10-18T20:28:45.188Z",
+   "time": "2026-10-18T21:33:05.876Z",
    "action": "graph",
    "detail": "Built a graph of the cells of xenium-lung-2fov: Delaunay graph of Instrument segmentation, edges to 50 µm, in Tumor nest; 581 cells, 1715 edges (artifact gra-0125bcf3a645a777b18a)"
   },
   {
-   "time": "2026-10-18T20:28:45.985Z",
+   "time": "2026-10-18T21:33:06.673Z",
    "action": "view",
    "detail": "Saved view The Delaunay graph close up"
   },
   {
-   "time": "2026-10-18T20:28:47.012Z",
+   "time": "2026-10-18T21:33:07.750Z",
    "action": "spatial",
    "detail": "Neighborhood enrichment of Labels by Human lung (Xenium Human Lung panel): class, Delaunay graph of Instrument segmentation, edges to 50 µm of xenium-lung-2fov (artifact spa-370428ce0e2fe60357ac)"
   },
   {
-   "time": "2026-10-18T20:28:47.524Z",
+   "time": "2026-10-18T21:33:08.281Z",
    "action": "spatial",
    "detail": "Co-occurrence of Labels by Human lung (Xenium Human Lung panel): class in Instrument segmentation of xenium-lung-2fov (artifact spa-5b7fa7c0a5155c34b5cd)"
   },
   {
-   "time": "2026-10-18T20:28:47.873Z",
+   "time": "2026-10-18T21:33:08.631Z",
    "action": "spatial",
    "detail": "Nearest distances of Labels by Human lung (Xenium Human Lung panel): class in Instrument segmentation of xenium-lung-2fov (artifact spa-c2ff43b740f2669f5149)"
   },
   {
-   "time": "2026-10-18T20:28:48.144Z",
+   "time": "2026-10-18T21:33:08.921Z",
    "action": "spatial",
-   "detail": "Ripley's K of Labels by Human lung (Xenium Human Lung panel): class in Instrument segmentation of xenium-lung-2fov (artifact spa-10a13b82b89820a47794)"
+   "detail": "Ripley's K of Labels by Human lung (Xenium Human Lung panel): class in Instrument segmentation of xenium-lung-2fov (artifact spa-240eb51019fb4462d5d0)"
   },
   {
-   "time": "2026-10-18T20:28:48.708Z",
+   "time": "2026-10-18T21:33:09.501Z",
    "action": "spatial",
-   "detail": "Regions compared (Tumor nest) by Labels by Human lung (Xenium Human Lung panel): class in Instrument segmentation of xenium-lung-2fov (artifact spa-217e13a877155a49b51a)"
+   "detail": "Regions compared (Tumor nest) by Labels by Human lung (Xenium Human Lung panel): class in Instrument segmentation of xenium-lung-2fov (artifact spa-0bffca8ddf03f58263ef)"
   },
   {
-   "time": "2026-10-18T20:28:48.973Z",
+   "time": "2026-10-18T21:33:09.783Z",
    "action": "spatial",
-   "detail": "Across the edge of Tumor nest, Labels by Human lung (Xenium Human Lung panel): class in Instrument segmentation of xenium-lung-2fov (artifact spa-e8c6de49e77f837e5e0e)"
+   "detail": "Across the edge of Tumor nest, Labels by Human lung (Xenium Human Lung panel): class in Instrument segmentation of xenium-lung-2fov (artifact spa-b2a62275430892fc6db5)"
   },
   {
-   "time": "2026-10-18T20:28:49.424Z",
+   "time": "2026-10-18T21:33:10.265Z",
    "action": "spatial",
    "detail": "Niches of Labels by Human lung (Xenium Human Lung panel): class in Instrument segmentation of xenium-lung-2fov (artifact spa-076fdfa86bf3098f127d)"
   },
   {
-   "time": "2026-10-18T20:28:58.271Z",
+   "time": "2026-10-18T21:33:19.142Z",
    "action": "spatial",
    "detail": "Moran's I of Instrument segmentation's genes, Delaunay graph of Instrument segmentation, edges to 50 µm of xenium-lung-2fov (artifact spa-87c211c7e6317d272646)"
   },
   {
-   "time": "2026-10-18T20:28:58.822Z",
+   "time": "2026-10-18T21:33:19.696Z",
    "action": "graph",
    "detail": "Built a graph of the cells of xenium-lung-2fov: Delaunay graph of Nucleus expansion, 5 µm, edges to 50 µm; 11898 cells, 35474 edges (artifact gra-35f4dc89449cc05eaad7)"
   },
   {
-   "time": "2026-10-18T20:28:59.043Z",
+   "time": "2026-10-18T21:33:19.916Z",
    "action": "spatial",
    "detail": "Neighborhood enrichment of Labels by Human lung (Xenium Human Lung panel): class, Delaunay graph of Nucleus expansion, 5 µm, edges to 50 µm of xenium-lung-2fov (artifact spa-172df994e8f34a1bb1ce)"
   }
  ],
  "reviews": [
   {
-   "id": "rev-mvea1imq-1",
-   "time": "2026-10-18T20:27:35.954Z",
+   "id": "rev-mvecc6z6-1",
+   "time": "2026-10-18T21:31:53.298Z",
    "by": "validation",
    "action": "relabel",
    "dataset": "d-0ab2d717f6c64c09",
@@ -4566,14 +4566,14 @@
    "previous": "Immune",
    "next": "Reviewed: doublet",
    "labels": {
-    "id": "cur-mvea1im9-1",
+    "id": "cur-mvecc6yo-1",
     "level": 0,
     "name": "Labels by Human lung (Xenium Human Lung panel): class, curated",
     "kind": "curated"
    },
    "edits": [
     {
-     "set": "cur-mvea1im9-1",
+     "set": "cur-mvecc6yo-1",
      "index": 0
     }
    ],
@@ -4581,14 +4581,14 @@
    "images": []
   },
   {
-   "id": "rev-mvea2xy9-2",
-   "time": "2026-10-18T20:28:42.465Z",
+   "id": "rev-mvecdovk-2",
+   "time": "2026-10-18T21:33:03.152Z",
    "by": "validation",
    "action": "exclude",
    "dataset": "d-0ab2d717f6c64c09",
    "target": "region",
    "region": {
-    "id": "r-6b2e6f44398346e6",
+    "id": "r-b21475a405904710",
     "name": "Edge artifact",
     "version": 1,
     "cls": "Ignore*"
@@ -4731,8 +4731,8 @@
    "images": []
   },
   {
-   "id": "rev-mvea2xye-3",
-   "time": "2026-10-18T20:28:42.470Z",
+   "id": "rev-mvecdovp-3",
+   "time": "2026-10-18T21:33:03.157Z",
    "by": "validation",
    "action": "exclude",
    "dataset": "d-0ab2d717f6c64c09",
@@ -4875,14 +4875,14 @@
    "images": []
   },
   {
-   "id": "rev-mvea2y02-4",
-   "time": "2026-10-18T20:28:42.530Z",
+   "id": "rev-mvecdoxf-4",
+   "time": "2026-10-18T21:33:03.219Z",
    "by": "validation",
    "action": "comment",
    "dataset": "d-0ab2d717f6c64c09",
    "target": "region",
    "region": {
-    "id": "r-5a81c09574cc43f7",
+    "id": "r-5aae53e3b9f9417d",
     "name": "Tumor nest",
     "version": 1,
     "cls": "Tumor"
@@ -8966,8 +8966,8 @@
    "images": []
   },
   {
-   "id": "rev-mvea2y11-5",
-   "time": "2026-10-18T20:28:42.565Z",
+   "id": "rev-mvecdoyf-5",
+   "time": "2026-10-18T21:33:03.255Z",
    "by": "validation",
    "action": "concern",
    "dataset": "d-0ab2d717f6c64c09",
@@ -8995,7 +8995,7 @@
  "exports": [
   {
    "kind": "export",
-   "id": "out-038e915b16d44c8f",
+   "id": "out-887528a64e59429b",
    "dataset": "d-0ab2d717f6c64c09",
    "segmentation": "seg-2fec30e8d6bb2310839d",
    "name": "Instrument segmentation",
@@ -9005,8 +9005,8 @@
     "xenium-ranger"
    ],
    "folder": "/data/work/exports/xenium-lung-2fov instrument",
-   "created": "2026-10-18T20:28:23Z",
-   "recorded": "2026-10-18T20:28:26.828Z",
+   "created": "2026-10-18T21:32:43Z",
+   "recorded": "2026-10-18T21:32:46.484Z",
    "software": "situcraft 0.6.0",
    "files": 124,
    "size": 195986935,
@@ -9038,7 +9038,7 @@
  ],
  "regions": [
   {
-   "id": "r-5a81c09574cc43f7",
+   "id": "r-5aae53e3b9f9417d",
    "dataset": "d-0ab2d717f6c64c09",
    "versions": [
     {
@@ -9074,13 +9074,13 @@
      "tool": "polygon",
      "layer": "",
      "by": "validation",
-     "time": "2026-10-18T20:28:42.326Z",
+     "time": "2026-10-18T21:33:03.014Z",
      "note": ""
     }
    ]
   },
   {
-   "id": "r-6b2e6f44398346e6",
+   "id": "r-b21475a405904710",
    "dataset": "d-0ab2d717f6c64c09",
    "versions": [
     {
@@ -9116,7 +9116,7 @@
      "tool": "rectangle",
      "layer": "",
      "by": "validation",
-     "time": "2026-10-18T20:28:42.393Z",
+     "time": "2026-10-18T21:33:03.082Z",
      "note": ""
     }
    ]
