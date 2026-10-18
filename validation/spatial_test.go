@@ -247,11 +247,13 @@ func spatialOfSet(t *testing.T, bundleDir string) (graphs map[string]*spatial.Gr
 	if extra.boundary, err = spatial.AcrossEdge(ctx, g.X, g.Y, label, K, win, regions[0], spatial.DefaultBoundary(), runtime.NumCPU()); err != nil {
 		t.Fatal(err)
 	}
-	if extra.moranValues, _, _, err = spatial.NormalizedExpression(counts, g.Rows); err != nil {
+	expr, _, _, err := spatial.NormalizedExpression(counts, g.Rows)
+	if err != nil {
 		t.Fatal(err)
 	}
 	extra.moranGenes = counts.Genes
-	if extra.moran, err = spatial.MoransI(ctx, g, extra.moranValues, len(counts.Genes), spatial.MoranParams{Weights: "row"}, runtime.NumCPU(), nil); err != nil {
+	extra.moranValues = expr.Dense()
+	if extra.moran, err = spatial.MoransI(ctx, g, expr, spatial.MoranParams{Weights: "row"}, runtime.NumCPU(), nil); err != nil {
 		t.Fatal(err)
 	}
 	nicheParams := spatial.DefaultNiches()
@@ -671,11 +673,11 @@ func TestMoranFindsDomainGenes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	values, _, _, err := spatial.NormalizedExpression(counts, g.Rows)
+	expr, _, _, err := spatial.NormalizedExpression(counts, g.Rows)
 	if err != nil {
 		t.Fatal(err)
 	}
-	m, err := spatial.MoransI(ctx, g, values, len(counts.Genes), spatial.MoranParams{Weights: "row"}, runtime.NumCPU(), nil)
+	m, err := spatial.MoransI(ctx, g, expr, spatial.MoranParams{Weights: "row"}, runtime.NumCPU(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

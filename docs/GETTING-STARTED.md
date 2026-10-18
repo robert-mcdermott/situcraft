@@ -1047,6 +1047,15 @@ tissue. On the simulated tissue, the enrichment of its types and its niches hard
 its true cells, the instrument's and a refinement; Moran's I of the marker genes nearly doubles under
 the instrument's expansion, whose cells take transcripts from their neighbors.
 
+### Large sections
+
+Every question is asked of a whole section's cells. On four cores, a million cells' graphs,
+enrichment, co-occurrence and niches take seconds, and Moran's I of a panel's genes, with its
+permutations and the leading genes' local Moran's I, about a minute and a half in about 1 GB.
+Nearest distances and Ripley's K keep every pair of cells within their reach (100 µm by default),
+3 to 4 GB at a million cells: on a computer with less memory, ask them of a region, or with a
+smaller reach.
+
 A section's cells are not independent replicates: these numbers describe this section. Comparing
 conditions needs samples, compared as samples (a later release).
 

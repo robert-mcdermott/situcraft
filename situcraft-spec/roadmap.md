@@ -2746,9 +2746,48 @@ as in waves 3 and 4.
        the less moves.
      - **A shared setup:** the three segmentations of the simulated tissue are made once a run
        (`validation/three_test.go`) and removed after it.
-8. **Scale.**
-   - Graphs, enrichment, niches and Moran's I on a million cells within stated budgets, measured
-     on generated tissues; the weekly scale test grows to them.
+8. **Scale: done.**
+   - **A million generated cells** (`simulate.Cells`): a tissue's true cells alone, laid out as a
+     simulation lays them out (a mosaic a tile at a time, on every core), each with its gene
+     transcripts of quality 20 or more as drawn, without the images, transcripts and instrument a
+     bundle carries; the same cells as a field's and a mosaic's truth, cell for cell. The large
+     preset's fields 11 by 10: 1,046,142 cells in 36 s.
+   - **Moran's I at scale** (`internal/spatial/moran.go`): each gene's nonzero values
+     (`Expression`) instead of every gene over every cell, made dense one gene at a time (4.7 GB
+     for 300 genes at a million cells before; the same I and variances to the bit); each
+     permutation deals the graph once and takes each gene's cross sum from its nonzero values
+     (twice as fast; the permutations' statistics within 6 × 10⁻¹⁰ of their deviation of the
+     previous computation's, their p-values the same), the permutations in turn, their genes shared
+     by the workers as they come free; local Moran's I's median by Hoare's selection (1961), its
+     buffers kept from cell to cell (a quarter faster).
+   - **Nearest distances and Ripley's K** keep their pairs in chunks of a fixed size, nearest
+     distances' working arrays a worker's own from deal to deal: 5.9 GB at a million cells before,
+     3.4 GB; the same numbers (the weekly reference digests).
+   - **Budgets, a million cells on four cores** (`validation/spatial_scale_test.go`, weekly; each
+     analysis a process of its own with the page's defaults; research.md §6.8): each graph within
+     a minute and 1.25 GB (measured 1 to 4 s, 0.33 to 0.77 GB); the enrichment and co-occurrence
+     within a minute and 0.5 GB (4 and 5 s, 0.23 and 0.07 GB); niches with their genes within 2
+     minutes and 2.5 GB (12 s, 1.8 GB); Moran's I with local Moran's I within 5 minutes and 1.5 GB
+     (88 s, 0.94 GB); nearest distances and Ripley's K within 3 minutes and 4.5 and 5 GB (37 and
+     36 s, 3.4 and 4.0 GB).
+   - **The weekly scale test grows to them:** the large tissue's typed cells analyzed through
+     SituCraft as the Spatial view asks (the Delaunay graph and the contact graph from the mask, the
+     labels' enrichment, niches, Moran's I), within 10 minutes and 2 GB: its 383,158 cells in
+     33 s at 1.17 GB on ten cores (each graph in 2 s, the enrichment in 2 s, niches in 3 s, Moran's
+     I in 23 s).
+   - Found by slice 8:
+     - **Moran's I was the one analysis a million cells broke:** the graphs, enrichment,
+       co-occurrence and niches already took seconds, while Moran's I held 4.7 GB and its default
+       permutations would have taken minutes more.
+     - **Permuting values is permuting the graph:** taking each gene's sum from its nonzero values
+       read them where the permutation put them, a jump each, and was slower than walking every
+       edge; dealing the graph once a permutation and reading the values in the cells' order made it
+       twice as fast as walking every edge.
+     - **Garbage as large as the data:** nearest distances' working arrays, made again each deal,
+       left as much garbage as its neighbor lists held, and the collector let it grow to that much
+       before collecting.
+     - **The niches' seeds disagree on the generated tissue** (0.84) with the default 6 niches and
+       its 4 kinds of domain, as slice 5 found: too many niches.
 9. **The product site.**
    - **A professional website for SituCraft,** as MaveScape and CytoWeave have: `docs/site/` with
      `build.mjs` (carried from MaveScape, with its origin noted), its assets (a style sheet in both

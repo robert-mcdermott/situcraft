@@ -1,7 +1,8 @@
 // The scale test (wave 3, slice 9; requirements S12 and P6): a generated tissue of about 55
 // million transcripts (the simulator's large preset, made in tiles) is refined in patches and read
-// by the Viewer, and its cells typed (wave 4, slice 8: the instrument's segmentation clustered,
-// mapped and labeled, and the map drawn in headless Chrome), each step in a process of its own,
+// by the Viewer, its cells typed (wave 4, slice 8: the instrument's segmentation clustered, mapped
+// and labeled, and the map drawn in headless Chrome) and their spatial analyses asked (wave 6,
+// slice 8: graphs, enrichment, niches and Moran's I), each step in a process of its own,
 // timed and its peak memory measured against its budget; then everything is deleted. It needs
 // about 8 GB of disk and, on four cores, about an hour and a half; the weekly workflow runs it:
 //
@@ -14,7 +15,10 @@ package validation
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -31,6 +35,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"situcraft/internal/spatial"
 )
 
 const gb = 1 << 30
@@ -44,9 +50,12 @@ const (
 	viewerBudget   = 1.5 * gb // the Viewer: reading a refinement whole took 1.8 GB at this scale
 	typingBudget   = 5 * gb   // the instrument's segmentation made, and about 400,000 cells typed
 	mapBudget      = 2 * gb   // SituCraft serving the page that draws the map
-	// typingTime bounds the typing on four cores; mapTime the map's showing in the page.
-	typingTime = 30 * time.Minute
-	mapTime    = 60 * time.Second
+	spatialBudget  = 2 * gb   // the typed cells' graphs, enrichment, niches and Moran's I (1.2 GB)
+	// typingTime bounds the typing on four cores; spatialTime the spatial analyses; mapTime the
+	// map's showing in the page.
+	typingTime  = 30 * time.Minute
+	spatialTime = 10 * time.Minute
+	mapTime     = 60 * time.Second
 	// tileBudget is the slowest a transcript tile with its cells and probabilities may answer (the
 	// Viewer suite's query budget).
 	tileBudget = 500 * time.Millisecond
@@ -328,6 +337,84 @@ func TestScale(t *testing.T) {
 	t.Logf("the types' shares against the truth's: total variation distance %.4f", distance)
 	if labeledTotal < cd.Cells.Analyzed*9/10 || distance > 0.05 {
 		t.Errorf("%d of %d cells labeled; the types' shares %.4f from the truth's", labeledTotal, cd.Cells.Analyzed, distance)
+	}
+
+	// The typed cells' spatial analyses (wave 6, slice 8), in another, asked as the Spatial view
+	// asks them, with its defaults: the Delaunay graph of every cell of the instrument's
+	// segmentation and its contact graph (its mask read a row of chunks at a time); the labels'
+	// enrichment over the Delaunay graph; niches, with their genes; and Moran's I of the panel's
+	// genes over the Delaunay graph, with the leading genes' local Moran's I.
+	p = startSituCraft(t, bin, library, cache, bundle)
+	start = time.Now()
+	lc := p.get("/api/labels/" + labels + "/cells")
+	le := binary.LittleEndian
+	segCells, labeledN, levels := int(le.Uint32(lc)), int(le.Uint32(lc[4:])), int(le.Uint32(lc[8:]))
+	if levels < 1 || len(lc) < 16+12*labeledN {
+		t.Fatalf("the label set's cells: %d of %d cells, %d levels", labeledN, segCells, levels)
+	}
+	codes := make([]byte, 4+4*segCells)
+	le.PutUint32(codes, uint32(segCells))
+	for i := 0; i < segCells; i++ {
+		le.PutUint32(codes[4+4*i:], math.MaxUint32) // −1: no label
+	}
+	for k := 0; k < labeledN; k++ {
+		cell := le.Uint32(lc[16+4*k:])
+		le.PutUint32(codes[4+4*cell:], le.Uint32(lc[16+8*labeledN+4*k:]))
+	}
+	keep := make([]byte, 4+(segCells+7)/8)
+	le.PutUint32(keep, uint32(segCells))
+	for i := 0; i < segCells; i++ {
+		keep[4+i/8] |= 1 << (i % 8)
+	}
+	var names []string
+	for _, st := range ld.Description.Sets {
+		names = append(names, st.Name)
+	}
+	encoded := func(raw []byte) (string, string) {
+		sum := sha256.Sum256(raw)
+		return base64.StdEncoding.EncodeToString(raw), hex.EncodeToString(sum[:])
+	}
+	keepCodes, keepSum := encoded(keep)
+	labelCodes, labelSum := encoded(codes)
+	cellsOf := map[string]string{"keep": keepCodes, "checksum": keepSum}
+	labelsOf := map[string]any{"codes": labelCodes, "checksum": labelSum, "id": labels, "kind": "labels", "name": "Labels from markers", "level": 0, "names": names}
+	ask := func(what, path string, body map[string]any) string {
+		raw, _ := json.Marshal(body)
+		answer := p.post(path, string(raw))
+		var made struct{ ID string }
+		json.Unmarshal(answer, &made)
+		at := time.Now()
+		p.job(answer)
+		t.Logf("%s: %.1f s", what, time.Since(at).Seconds())
+		return made.ID
+	}
+	delaunay := ask("the Delaunay graph", "/api/local/0/graph", map[string]any{"segmentation": seg, "parameters": spatial.DefaultParams(spatial.Delaunay), "cells": cellsOf})
+	ask("the contact graph", "/api/local/0/graph", map[string]any{"segmentation": seg, "parameters": spatial.DefaultParams(spatial.Contact), "cells": cellsOf})
+	enrichment := ask("the enrichment", "/api/local/0/spatial", map[string]any{"question": spatial.QuestionEnrichment, "segmentation": seg, "graph": delaunay, "labels": labelsOf, "parameters": spatial.DefaultEnrichment()})
+	niches := ask("niches", "/api/local/0/spatial", map[string]any{"question": spatial.QuestionNiches, "segmentation": seg, "cells": cellsOf, "labels": labelsOf, "parameters": spatial.DefaultNiches()})
+	moran := ask("Moran's I", "/api/local/0/spatial", map[string]any{"question": spatial.QuestionMoran, "segmentation": seg, "graph": delaunay, "parameters": spatial.DefaultMoran()})
+	analyses := p.stop("Analyzing the typed cells", start)
+	within(analyses, spatialBudget)
+	if time.Duration(analyses.Seconds*float64(time.Second)) > spatialTime {
+		t.Errorf("the spatial analyses took %.0f s, over their budget of %v", analyses.Seconds, spatialTime)
+	}
+	// Their answers, from their files.
+	p = startSituCraft(t, bin, library, cache, bundle)
+	var en struct {
+		Enrichment struct{ Cells []int }
+		Niches     struct{ Windows int }
+		Moran      struct {
+			Genes []string
+			Local []int
+		}
+	}
+	for _, id := range []string{enrichment, niches, moran} {
+		json.Unmarshal(p.get("/api/artifacts/"+id+"/files/analysis.json"), &en)
+	}
+	p.stop("", time.Now())
+	t.Logf("analyzed: the enrichment of %d labels, niches of %d windows, Moran's I of %d genes (%d local)", len(en.Enrichment.Cells), en.Niches.Windows, len(en.Moran.Genes), len(en.Moran.Local))
+	if len(en.Enrichment.Cells) == 0 || en.Niches.Windows < labeledN*9/10 || len(en.Moran.Genes) == 0 || len(en.Moran.Local) != spatial.DefaultMoran().Local {
+		t.Errorf("the spatial analyses' answers are not whole")
 	}
 
 	// The map drawn in headless Chrome, by a SituCraft serving the page.

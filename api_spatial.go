@@ -529,22 +529,24 @@ func (a *app) spatialJob(spec spatialSpec, id string) jobs.Func {
 			if err != nil {
 				return err
 			}
-			values, target, empty, err := spatial.NormalizedExpression(counts, g.Rows)
+			expr, target, empty, err := spatial.NormalizedExpression(counts, g.Rows)
 			if err != nil {
 				return err
 			}
-			r.Log("info", "Moran's I of %d genes over %s (%d cells; %s weights), %d permutations (seed %d); local Moran's I of the %d leading genes.", len(counts.Genes), gm.Name, len(g.Rows), p.Weights, p.Permutations, p.Seed, p.Local)
+			genes := counts.Genes
+			counts = nil // held as each gene's values from here on
+			r.Log("info", "Moran's I of %d genes over %s (%d cells; %s weights), %d permutations (seed %d); local Moran's I of the %d leading genes.", len(genes), gm.Name, len(g.Rows), p.Weights, p.Permutations, p.Seed, p.Local)
 			if empty > 0 {
 				r.Log("info", "%d cells have no gene transcript: their values are zeros.", empty)
 			}
-			mi, err := spatial.MoransI(ctx, g, values, len(counts.Genes), p, runtime.NumCPU(), func(f float64) { r.Progress(0.05+0.85*f, "Each gene's Moran's I") })
+			mi, err := spatial.MoransI(ctx, g, expr, p, runtime.NumCPU(), func(f float64) { r.Progress(0.05+0.85*f, "Each gene's Moran's I") })
 			if err != nil {
 				return err
 			}
 			if mi.Islands > 0 {
 				r.Log("warn", "%d cells have no neighbor in the graph: they weigh nothing.", mi.Islands)
 			}
-			res := &spatial.MoranResult{Genes: counts.Genes, Weights: p.Weights, Cells: mi.Cells, Edges: g.Edges(), Islands: mi.Islands, NoTranscript: empty, Target: target,
+			res := &spatial.MoranResult{Genes: genes, Weights: p.Weights, Cells: mi.Cells, Edges: g.Edges(), Islands: mi.Islands, NoTranscript: empty, Target: target,
 				S0: mi.S0, S1: mi.S1, S2: mi.S2, Expected: mi.Expected, I: mi.I, VarNorm: mi.VarNorm, VarRand: mi.VarRand, Z: mi.Z, P: mi.P,
 				PermMean: mi.PermMean, PermSD: mi.PermSD, PermP: mi.Perm, PAdj: mi.PAdj, Mean: mi.Mean, Detected: mi.Detected, Local: []int{}}
 			for _, l := range mi.Local {

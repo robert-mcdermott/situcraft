@@ -79,11 +79,11 @@ func analyzeUnder(t *testing.T, seg labeledSeg, ds []simulate.Domain, kinds int,
 			out.significant[key] = e.PAdj[q] < 0.05
 		}
 	}
-	values, _, _, err := spatial.NormalizedExpression(seg.counts, g.Rows)
+	expr, _, _, err := spatial.NormalizedExpression(seg.counts, g.Rows)
 	if err != nil {
 		t.Fatal(err)
 	}
-	m, err := spatial.MoransI(ctx, g, values, len(seg.counts.Genes), spatial.MoranParams{Weights: "row"}, workers, nil)
+	m, err := spatial.MoransI(ctx, g, expr, spatial.MoranParams{Weights: "row"}, workers, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

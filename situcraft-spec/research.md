@@ -2908,6 +2908,59 @@ is raised, nearly doubled on average. The refinement, assigning transcripts by t
 expression, keeps every gene's I within 0.03 of the truth's. A spatially variable gene's I is the
 number most sensitive to segmentation here.
 
+### 6.8 Spatial analyses at a million cells (verified, wave 6, slice 8)
+
+**The tissue** (`TestSpatialScale`, weekly): the large preset's fields 11 by 10 (9.6 by 8.7 mm),
+1,046,142 true cells of 4 types, 120 genes and 36.5 million nonzero counts, made by
+`simulate.Cells` in 36 s: the cells a bundle's truth holds (checked cell for cell against a field's
+and a mosaic's truth), without its images, transcripts or instrument. Each analysis runs in a
+process of its own from the files a job reads, with the page's defaults; its peak resident memory
+and time on four cores (a 10-core laptop limited to four):
+
+| Analysis (defaults) | Time | Peak memory | Budget |
+| --- | --- | --- | --- |
+| Delaunay graph (edges to 50 µm; 3.1 million edges) | 4 s | 0.77 GB | 1 min, 1.25 GB |
+| 6-nearest graph | 1 s | 0.33 GB | 1 min, 1 GB |
+| 20 µm graph (8.0 million edges) | 2 s | 0.67 GB | 1 min, 1 GB |
+| Enrichment, 1,000 permutations | 4 s | 0.23 GB | 1 min, 0.5 GB |
+| Co-occurrence, 10 to 150 µm | 5 s | 0.07 GB | 1 min, 0.5 GB |
+| Nearest distances, 199 permutations, reach 100 µm | 37 s | 3.4 GB | 3 min, 4.5 GB |
+| Ripley's K, isotropic, 199 permutations (207 million pairs) | 36 s | 4.0 GB | 3 min, 5 GB |
+| Niches, with their genes | 12 s | 1.8 GB | 2 min, 2.5 GB |
+| Moran's I, 199 permutations, 10 genes' local Moran's I | 88 s | 0.94 GB | 5 min, 1.5 GB |
+
+What a million cells changed:
+
+- **Moran's I held every gene's values over every cell**, twice (genes × cells in float32, then
+  centered in float64): 4.7 GB for 300 genes at a million cells, 20 times that for a 5,000-gene
+  panel. The values are now held as each gene's nonzero values (`Expression`), made dense one gene
+  at a time, a worker's own; every I and variance is the same to the bit as before (checked on
+  60,000 cells and 300 genes, with either weights, on different numbers of workers).
+- **Its permutations walked every edge for every gene**, about 3 s a permutation for 300 genes at
+  a million cells. Permuting the values is permuting the graph: each permutation now deals the
+  graph once (each cell's neighbors as the values see them), and each gene's cross sum is taken
+  from its nonzero values alone, Σᵤ wᵤ xᵤ Σᵥ xᵥ − m (Σᵤ xᵤ rᵤ + Σᵤ xᵤ cᵤ) + m² S0 (r and c the
+  dealt rows' and columns' weight sums), its work the gene's values times their neighbors. Read
+  value by value in the cells' order, its memory reads stay near; read in the dealt places' order,
+  they jumped, and it was slower than walking every edge. The permutations' statistics agree with
+  the previous computation's to 6 × 10⁻¹⁰ of their deviation, and their p-values exactly.
+- **Local Moran's I sorted each cell's 199 draws** to find their median: Hoare's selection (1961)
+  finds the same value in linear time, and the draws' buffers are kept from cell to cell.
+- **Nearest distances and Ripley's K** keep every pair of cells within their reach (100 µm: about
+  380 cells around each here), so their memory grows with the cells and their density. Their
+  lists were kept in slices grown cell by cell, Ripley's pairs then joined into one more copy, and
+  each nearest-distance deal left its working arrays as garbage, which the collector let grow to
+  the size of the lists (nearest distances 5.9 GB at a million cells). Kept in chunks of a fixed
+  size and their working arrays reused, they take 3.4 and 4.0 GB, their numbers the same to the
+  bit (the weekly reference digests). A computer with 8 GB runs both at a million cells; a smaller
+  reach or a region runs them in less.
+
+**Through SituCraft** (the weekly scale test): the large tissue's 383,158 typed cells asked as the
+Spatial view asks them, with its defaults, in one SituCraft: the Delaunay graph and the contact
+graph from the instrument's mask in 2 s each, the labels' enrichment in 2 s, niches with their
+genes in 3 s, Moran's I of 120 genes with local Moran's I in 23 s; 33 s in all at a peak of 1.17 GB
+on ten cores (budget: 10 minutes and 2 GB on four).
+
 ## 7. Datasets
 
 | Dataset | Source | Size | License | Use |

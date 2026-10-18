@@ -93,7 +93,8 @@ compared with intervals, and which types fill a region, stay out of it or gather
 tissue's kinds of place (cellular neighborhoods), how stable they are, and their genes; which genes
 are expressed in a spatial pattern (Moran's I, Squidpy's exactly) and where; any answer made again
 on another segmentation in one step and read with the first, number by number, with the cells
-behind each change; and every number's cells shown on the tissue.
+behind each change; and every number's cells shown on the tissue. A million cells' graphs,
+enrichment and niches take seconds on four cores, and their Moran's I under two minutes in 1 GB.
 
 ## A look around
 

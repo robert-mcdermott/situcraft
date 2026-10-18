@@ -28,6 +28,7 @@ import (
 	"math"
 	"sort"
 	"sync"
+	"sync/atomic"
 
 	"situcraft/internal/dmath"
 	"situcraft/internal/random"
@@ -97,11 +98,60 @@ type Moran struct {
 	Local                  []LocalMoran
 }
 
+// Expression is cells' values gene by gene: each gene's cells whose value is not 0 (indices among
+// the cells, increasing) and their values, from Offsets[g] to Offsets[g+1]; the rest are 0. Held
+// so, a panel's values over a million cells take what its nonzero values do, not genes × cells.
+type Expression struct {
+	Cells, Genes int
+	Offsets      []int
+	Cell         []uint32
+	Value        []float32
+}
+
+// DenseExpression holds values given gene-major (genes × cells).
+func DenseExpression(values []float32, genes int) (*Expression, error) {
+	if genes < 1 || len(values)%genes != 0 {
+		return nil, errors.New("spatial: not each gene's value in each cell")
+	}
+	n := len(values) / genes
+	e := &Expression{Cells: n, Genes: genes, Offsets: make([]int, genes+1)}
+	for g := 0; g < genes; g++ {
+		for i, v := range values[g*n : (g+1)*n] {
+			if v != 0 {
+				e.Cell, e.Value = append(e.Cell, uint32(i)), append(e.Value, v)
+			}
+		}
+		e.Offsets[g+1] = len(e.Cell)
+	}
+	return e, nil
+}
+
+// Dense answers the values gene-major (genes × cells).
+func (e *Expression) Dense() []float32 {
+	out := make([]float32, e.Genes*e.Cells)
+	for g := 0; g < e.Genes; g++ {
+		for k := e.Offsets[g]; k < e.Offsets[g+1]; k++ {
+			out[g*e.Cells+int(e.Cell[k])] = e.Value[k]
+		}
+	}
+	return out
+}
+
+// centered fills z with a gene's values less their mean (0 − mean for a cell without one).
+func (e *Expression) centered(gene int, mean float64, z []float64) {
+	for i := range z {
+		z[i] = 0 - mean
+	}
+	for k := e.Offsets[gene]; k < e.Offsets[gene+1]; k++ {
+		z[e.Cell[k]] = float64(e.Value[k]) - mean
+	}
+}
+
 // NormalizedExpression is cells' log-normalized expression as SituCraft's clustering normalizes it
 // (each cell's counts scaled to a target total, the median of the cells with a gene transcript,
-// then log1p), gene-major (genes × cells), zeros for a cell without a transcript; with the target
-// and the cells without one.
-func NormalizedExpression(c *segment.Counts, rows []uint32) (values []float32, target float64, empty int, err error) {
+// then log1p), gene by gene, zeros for a cell without a transcript; with the target and the cells
+// without one.
+func NormalizedExpression(c *segment.Counts, rows []uint32) (e *Expression, target float64, empty int, err error) {
 	n, G := len(rows), len(c.Genes)
 	if G == 0 {
 		return nil, 0, 0, errors.New("spatial: the segmentation's counts have no gene")
@@ -130,28 +180,55 @@ func NormalizedExpression(c *segment.Counts, rows []uint32) (values []float32, t
 	} else {
 		target = (float64(some[m/2-1]) + float64(some[m/2])) / 2
 	}
-	values = make([]float32, G*n)
+	// Each gene's entries counted, then filled cell by cell (so each gene's cells increase).
+	e = &Expression{Cells: n, Genes: G, Offsets: make([]int, G+1)}
+	for i, r := range rows {
+		if totals[i] == 0 {
+			continue
+		}
+		for k := c.Offsets[r]; k < c.Offsets[r+1]; k++ {
+			if int(c.Gene[k]) >= G {
+				return nil, 0, 0, errors.New("spatial: a count of a gene beyond the segmentation's genes")
+			}
+			if c.Count[k] > 0 {
+				e.Offsets[c.Gene[k]+1]++
+			}
+		}
+	}
+	for g := 0; g < G; g++ {
+		e.Offsets[g+1] += e.Offsets[g]
+	}
+	e.Cell, e.Value = make([]uint32, e.Offsets[G]), make([]float32, e.Offsets[G])
+	at := append([]int(nil), e.Offsets[:G]...)
 	for i, r := range rows {
 		if totals[i] == 0 {
 			continue
 		}
 		scale := float64(totals[i]) / target
 		for k := c.Offsets[r]; k < c.Offsets[r+1]; k++ {
-			values[int(c.Gene[k])*n+i] = float32(dmath.Log(1 + float64(c.Count[k])/scale))
+			if c.Count[k] == 0 {
+				continue
+			}
+			g := c.Gene[k]
+			e.Cell[at[g]], e.Value[at[g]] = uint32(i), float32(dmath.Log(1+float64(c.Count[k])/scale))
+			at[g]++
 		}
 	}
-	return values, target, empty, nil
+	return e, target, empty, nil
 }
 
-// MoransI finds each gene's Moran's I over a graph, values gene-major (genes × the graph's cells).
-func MoransI(ctx context.Context, g *Graph, values []float32, genes int, p MoranParams, workers int, progress func(float64)) (*Moran, error) {
+// MoransI finds each gene's Moran's I over a graph, e each gene's values over the graph's cells.
+// Each gene's values are made dense one at a time, a worker's own: what it holds throughout is e
+// and a few values a cell for each worker.
+func MoransI(ctx context.Context, g *Graph, e *Expression, p MoranParams, workers int, progress func(float64)) (*Moran, error) {
 	if err := p.Check(); err != nil {
 		return nil, err
 	}
 	n := len(g.Rows)
-	if n < 4 || genes < 1 || len(values) != genes*n {
+	if n < 4 || e == nil || e.Genes < 1 || e.Cells != n || len(e.Offsets) != e.Genes+1 {
 		return nil, errors.New("spatial: Moran's I needs four cells or more and each gene's value in each")
 	}
+	genes := e.Genes
 	if workers < 1 {
 		workers = 1
 	}
@@ -210,32 +287,30 @@ func MoransI(ctx context.Context, g *Graph, values []float32, genes int, p Moran
 	m.I, m.VarNorm, m.VarRand, m.Z, m.P = make([]float64, G), make([]float64, G), make([]float64, G), make([]float64, G), make([]float64, G)
 	m.PermMean, m.PermSD, m.Perm, m.PAdj = make([]float64, G), make([]float64, G), make([]float64, G), make([]float64, G)
 	m.Mean, m.Detected = make([]float64, G), make([]int, G)
-	// Each gene's centered values, sum of squares and observed I.
-	z := make([]float64, G*n)
+	// Each gene's mean, sum of squares and observed I, from its centered values.
 	m2 := make([]float64, G)
 	errs := make([]error, workers)
 	parallelFor(G, workers, func(wk, a, b int) {
 		out := make([]float64, n)
+		zg := make([]float64, n)
 		for gene := a; gene < b; gene++ {
 			if ctx.Err() != nil {
 				errs[wk] = ctx.Err()
 				return
 			}
-			v := values[gene*n : (gene+1)*n]
-			zg := z[gene*n : (gene+1)*n]
 			sum := 0.0
-			for i, x := range v {
+			for k := e.Offsets[gene]; k < e.Offsets[gene+1]; k++ {
+				x := e.Value[k]
 				sum += float64(x)
 				if x > 0 {
 					m.Detected[gene]++
 				}
-				zg[i] = float64(x)
 			}
 			mean := sum / nf
 			m.Mean[gene] = mean
+			e.centered(gene, mean, zg)
 			s2, s4 := 0.0, 0.0
 			for i := range zg {
-				zg[i] -= mean
 				q := mul(zg[i], zg[i])
 				s2 += q
 				s4 += mul(q, q)
@@ -269,50 +344,52 @@ func MoransI(ctx context.Context, g *Graph, values []float32, genes int, p Moran
 		}
 	}
 	progress(0.1)
-	// Permutations: each one deals the cells' values again, every gene's alike.
+	// Permutations: each one deals the cells' values again, every gene's alike. They are taken in
+	// turn, each dealt once, and its genes shared by the workers as they come free: each gene's
+	// tallies are summed in the permutations' order, the same on any number of workers.
 	P := p.Permutations
 	if P > 0 {
-		var mu sync.Mutex
-		done := 0
-		// Tallies by block of permutations, summed in the blocks' order after: the same on any
-		// number of workers.
-		const block = 50
-		blocks := (P + block - 1) / block
-		bSum := make([][]float64, blocks)
-		bSq := make([][]float64, blocks)
-		bFar := make([][]int, blocks)
-		parallelFor(blocks, workers, func(wk, a, b int) {
-			perm := make([]int32, n)
-			zp := make([]float64, n)
-			out := make([]float64, n)
-			for blk := a; blk < b; blk++ {
-				s, q, f := make([]float64, G), make([]float64, G), make([]int, G)
-				for s0 := blk * block; s0 < min(P, (blk+1)*block); s0++ {
-					if ctx.Err() != nil {
-						errs[wk] = ctx.Err()
-						return
-					}
-					st := random.New(p.Seed, uint64(s0))
-					for i := range perm {
-						perm[i] = int32(i)
-					}
-					for k := n - 1; k > 0; k-- {
-						j := st.IntN(k + 1)
-						perm[k], perm[j] = perm[j], perm[k]
-					}
-					for gene := 0; gene < G; gene++ {
+		perm := make([]int32, n)
+		inv := make([]int32, n)
+		d := newDealt(g)
+		bufs := make([][]float32, workers)
+		for wk := range bufs {
+			bufs[wk] = make([]float32, n)
+		}
+		s, q, f := make([]float64, G), make([]float64, G), make([]int, G)
+		for r := 0; r < P; r++ {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			st := random.New(p.Seed, uint64(r))
+			for i := range perm {
+				perm[i] = int32(i)
+			}
+			for k := n - 1; k > 0; k-- {
+				j := st.IntN(k + 1)
+				perm[k], perm[j] = perm[j], perm[k]
+			}
+			// Cell i takes cell perm[i]'s value: cell c's value lies at inv[c].
+			for i, c := range perm {
+				inv[c] = int32(i)
+			}
+			d.deal(g, w, rowSum, colSum, perm, inv, workers)
+			var next atomic.Int64
+			var wg sync.WaitGroup
+			for wk := 0; wk < min(workers, G); wk++ {
+				wg.Add(1)
+				go func(buf []float32) {
+					defer wg.Done()
+					for {
+						gene := int(next.Add(1) - 1)
+						if gene >= G {
+							return
+						}
 						if !(m2[gene] > 0) {
 							continue
 						}
-						zg := z[gene*n : (gene+1)*n]
-						for i := range zp {
-							zp[i] = zg[perm[i]]
-						}
-						lag(zp, out)
-						cross := 0.0
-						for i := range zp {
-							cross += mul(zp[i], out[i])
-						}
+						lo, hi := e.Offsets[gene], e.Offsets[gene+1]
+						cross := d.cross(e.Cell[lo:hi], e.Value[lo:hi], m.Mean[gene], m.S0, buf)
 						I := nf / m.S0 * cross / m2[gene]
 						s[gene] += I
 						q[gene] += mul(I, I)
@@ -321,34 +398,20 @@ func MoransI(ctx context.Context, g *Graph, values []float32, genes int, p Moran
 							f[gene]++
 						}
 					}
-					mu.Lock()
-					done++
-					progress(0.1 + 0.6*float64(done)/float64(P))
-					mu.Unlock()
-				}
-				bSum[blk], bSq[blk], bFar[blk] = s, q, f
+				}(bufs[wk])
 			}
-		})
-		for _, err := range errs {
-			if err != nil {
-				return nil, err
-			}
+			wg.Wait()
+			progress(0.1 + 0.6*float64(r+1)/float64(P))
 		}
 		for gene := 0; gene < G; gene++ {
 			if !(m2[gene] > 0) {
 				m.PermMean[gene], m.PermSD[gene], m.Perm[gene] = nan, nan, nan
 				continue
 			}
-			s, q, f := 0.0, 0.0, 0
-			for blk := 0; blk < blocks; blk++ {
-				s += bSum[blk][gene]
-				q += bSq[blk][gene]
-				f += bFar[blk][gene]
-			}
-			mean := s / float64(P)
+			mean := s[gene] / float64(P)
 			m.PermMean[gene] = mean
-			m.PermSD[gene] = math.Sqrt(math.Max(0, (q-float64(P)*mul(mean, mean))/float64(P-1)))
-			m.Perm[gene] = float64(1+f) / float64(1+P)
+			m.PermSD[gene] = math.Sqrt(math.Max(0, (q[gene]-float64(P)*mul(mean, mean))/float64(P-1)))
+			m.Perm[gene] = float64(1+f[gene]) / float64(1+P)
 		}
 	} else {
 		for gene := 0; gene < G; gene++ {
@@ -389,8 +452,10 @@ func MoransI(ctx context.Context, g *Graph, values []float32, genes int, p Moran
 			}
 			return m.I[order[a]] > m.I[order[b]]
 		})
+		zg := make([]float64, n)
 		for k, gene := range order[:min(p.Local, len(order))] {
-			lm, err := localMoran(ctx, g, w, z[gene*n:(gene+1)*n], m2[gene], p.LocalPermutations, p.Seed, workers)
+			e.centered(gene, m.Mean[gene], zg)
+			lm, err := localMoran(ctx, g, w, zg, m2[gene], p.LocalPermutations, p.Seed, workers)
 			if err != nil {
 				return nil, err
 			}
@@ -400,6 +465,68 @@ func MoransI(ctx context.Context, g *Graph, values []float32, genes int, p Moran
 		}
 	}
 	return m, nil
+}
+
+// dealt is the graph with its cells' values dealt again (cell i taking cell perm[i]'s), as seen
+// from the values: cell u's value lies at place inv[u], so its neighbors are the cells whose
+// values lie at that place's neighbors (perm of them), with that place's weight and its row's and
+// column's sums. Made once a permutation, it serves every gene, which then reads it in its cells'
+// order.
+type dealt struct {
+	offsets, neighbors []uint32
+	w, rowSum, colSum  []float64
+}
+
+func newDealt(g *Graph) *dealt {
+	n := len(g.Rows)
+	return &dealt{offsets: make([]uint32, n+1), neighbors: make([]uint32, len(g.Neighbors)), w: make([]float64, n), rowSum: make([]float64, n), colSum: make([]float64, n)}
+}
+
+// deal makes the dealt graph of a permutation (inv its inverse), its cells shared by the workers.
+func (d *dealt) deal(g *Graph, w, rowSum, colSum []float64, perm, inv []int32, workers int) {
+	at := uint32(0)
+	for u, i := range inv {
+		d.offsets[u] = at
+		at += g.Offsets[i+1] - g.Offsets[i]
+	}
+	d.offsets[len(inv)] = at
+	parallelFor(len(inv), workers, func(_, a, b int) {
+		for u := a; u < b; u++ {
+			i := inv[u]
+			at := d.offsets[u]
+			for k := g.Offsets[i]; k < g.Offsets[i+1]; k++ {
+				d.neighbors[at] = uint32(perm[g.Neighbors[k]])
+				at++
+			}
+			d.w[u], d.rowSum[u], d.colSum[u] = w[i], rowSum[i], colSum[i]
+		}
+	})
+}
+
+// cross is Σᵢ zᵢ Σⱼ wᵢⱼ zⱼ for a gene's values so dealt, z the values less their mean m, from its
+// nonzero values x alone: Σᵤ wᵤ xᵤ Σᵥ xᵥ − m (Σᵤ xᵤ rowSumᵤ + Σᵤ xᵤ colSumᵤ) + m² S0 in the dealt
+// graph's terms, each sum over the cells with a value (the first's inner sum over their
+// neighbors). Its work is the gene's values times their neighbors, not every edge. buf is all
+// zeros, and is left so.
+func (d *dealt) cross(cell []uint32, value []float32, mean, S0 float64, buf []float32) float64 {
+	for k, c := range cell {
+		buf[c] = value[k]
+	}
+	t1, t2, t3 := 0.0, 0.0, 0.0
+	for k, u := range cell {
+		v := float64(value[k])
+		s := 0.0
+		for kk := d.offsets[u]; kk < d.offsets[u+1]; kk++ {
+			s += float64(buf[d.neighbors[kk]])
+		}
+		t1 += mul(v, mul(d.w[u], s))
+		t2 += mul(v, d.rowSum[u])
+		t3 += mul(v, d.colSum[u])
+	}
+	for _, c := range cell {
+		buf[c] = 0
+	}
+	return t1 - mul(mean, t2+t3) + mul(mul(mean, mean), S0)
 }
 
 // localMoran is one gene's local Moran's I with its conditional permutations: each cell's
@@ -412,6 +539,7 @@ func localMoran(ctx context.Context, g *Graph, w []float64, z []float64, m2 floa
 	errs := make([]error, workers)
 	parallelFor(n, workers, func(wk, a, b int) {
 		var picked []int32
+		draws, sorted := make([]float64, P), make([]float64, P)
 		for i := a; i < b; i++ {
 			if (i-a)%512 == 0 && ctx.Err() != nil {
 				errs[wk] = ctx.Err()
@@ -431,7 +559,6 @@ func localMoran(ctx context.Context, g *Graph, w []float64, z []float64, m2 floa
 			}
 			// The draws: d distinct other cells, P times.
 			st := random.New(seed^0x9e3779b97f4a7c15, uint64(i))
-			draws := make([]float64, P)
 			for r := 0; r < P; r++ {
 				picked = picked[:0]
 				sum := 0.0
@@ -456,9 +583,8 @@ func localMoran(ctx context.Context, g *Graph, w []float64, z []float64, m2 floa
 				draws[r] = mul(mul(z[i], mul(w[i], sum)), scale)
 			}
 			// At least as extreme in the observed value's direction (from the draws' median).
-			sorted := append([]float64(nil), draws...)
-			sort.Float64s(sorted)
-			median := sorted[P/2]
+			copy(sorted, draws)
+			median := kth(sorted, P/2)
 			k := 0
 			for _, v := range draws {
 				if obs >= median && v >= obs || obs < median && v <= obs {
@@ -486,4 +612,47 @@ func localMoran(ctx context.Context, g *Graph, w []float64, z []float64, m2 floa
 		}
 	}
 	return lm, nil
+}
+
+// kth answers the kth smallest of v (from 0), as v sorted holds it, reordering v: Hoare's selection
+// by partitions (Hoare CAR. Algorithm 65: Find. Commun ACM 1961;4:321–322), about a median of
+// three, in time linear in v's length on average.
+func kth(v []float64, k int) float64 {
+	lo, hi := 0, len(v)-1
+	for lo < hi {
+		mid := lo + (hi-lo)/2
+		if v[mid] < v[lo] {
+			v[mid], v[lo] = v[lo], v[mid]
+		}
+		if v[hi] < v[lo] {
+			v[hi], v[lo] = v[lo], v[hi]
+		}
+		if v[hi] < v[mid] {
+			v[hi], v[mid] = v[mid], v[hi]
+		}
+		pivot := v[mid]
+		i, j := lo, hi
+		for i <= j {
+			for v[i] < pivot {
+				i++
+			}
+			for v[j] > pivot {
+				j--
+			}
+			if i <= j {
+				v[i], v[j] = v[j], v[i]
+				i++
+				j--
+			}
+		}
+		switch {
+		case k <= j:
+			hi = j
+		case k >= i:
+			lo = i
+		default:
+			return v[k]
+		}
+	}
+	return v[k]
 }

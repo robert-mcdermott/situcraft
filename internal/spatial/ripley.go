@@ -95,6 +95,21 @@ type ripleyPair struct {
 	wij, wji float32
 }
 
+// pairChunks holds pairs in chunks of a fixed size, in the order added: it grows without copying
+// what it holds, as a slice grown by doubling would (twice the pairs, at a million cells several
+// GB).
+type pairChunks [][]ripleyPair
+
+const pairChunk = 1 << 16
+
+func (c *pairChunks) add(p ripleyPair) {
+	if n := len(*c); n == 0 || len((*c)[n-1]) == pairChunk {
+		*c = append(*c, make([]ripleyPair, 0, pairChunk))
+	}
+	last := &(*c)[len(*c)-1]
+	*last = append(*last, p)
+}
+
 // Ripleys computes K and L of the labeled cells (x, y: centroids, µm; label: 0 to K−1, or −1 for none)
 // in a window.
 func Ripleys(ctx context.Context, x, y []float32, label []int32, K int, win *Window, p RipleyParams, workers int, progress func(float64)) (*Ripley, error) {
@@ -136,7 +151,7 @@ func Ripleys(ctx context.Context, x, y []float32, label []int32, K int, win *Win
 		return nil, errors.New("spatial: fewer than two labeled cells inside the window")
 	}
 	// The pairs within reach, through a grid of squares of the reach; each cell's pairs with the
-	// cells after it, found by the worker of its range, then joined in order.
+	// cells after it, found by the worker of its range, kept in its chunks, read in order.
 	x0, y0 := math.Inf(1), math.Inf(1)
 	for _, i := range cells {
 		x0, y0 = math.Min(x0, float64(x[i])), math.Min(y0, float64(y[i]))
@@ -151,7 +166,7 @@ func Ripleys(ctx context.Context, x, y []float32, label []int32, K int, win *Win
 		k := sq(c)
 		grid[k] = append(grid[k], int32(c))
 	}
-	found := make([][]ripleyPair, workers)
+	found := make([]pairChunks, workers)
 	errs := make([]error, workers)
 	parallelFor(n, workers, func(w, a, b int) {
 		win := win.Copy()
@@ -187,7 +202,7 @@ func Ripleys(ctx context.Context, x, y []float32, label []int32, K int, win *Win
 								pr.wji = float32(1 / math.Max(win.ArcInside(float64(x[j]), float64(y[j]), d), 1e-6))
 							}
 						}
-						found[w] = append(found[w], pr)
+						found[w].add(pr)
 					}
 				}
 			}
@@ -199,11 +214,13 @@ func Ripleys(ctx context.Context, x, y []float32, label []int32, K int, win *Win
 			return nil, err
 		}
 	}
-	var pairs []ripleyPair
+	var chunks [][]ripleyPair
 	for _, f := range found {
-		pairs = append(pairs, f...)
+		chunks = append(chunks, f...)
 	}
-	out.Pairs = len(pairs)
+	for _, ch := range chunks {
+		out.Pairs += len(ch)
+	}
 	lab := make([]int32, n)
 	for c, i := range cells {
 		lab[c] = label[i]
@@ -211,10 +228,12 @@ func Ripleys(ctx context.Context, x, y []float32, label []int32, K int, win *Win
 	// L of each pair of labels at each radius, from the pairs' weights summed by radius and label.
 	curves := func(lab []int32, sums []float64, kout, lout []float64) {
 		clear(sums)
-		for _, pr := range pairs {
-			a, b := int(lab[pr.i]), int(lab[pr.j])
-			sums[(a*K+b)*R+int(pr.bin)] += float64(pr.wij)
-			sums[(b*K+a)*R+int(pr.bin)] += float64(pr.wji)
+		for _, ch := range chunks {
+			for _, pr := range ch {
+				a, b := int(lab[pr.i]), int(lab[pr.j])
+				sums[(a*K+b)*R+int(pr.bin)] += float64(pr.wij)
+				sums[(b*K+a)*R+int(pr.bin)] += float64(pr.wji)
+			}
 		}
 		for a := 0; a < K; a++ {
 			for b := 0; b < K; b++ {

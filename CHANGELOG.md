@@ -166,6 +166,21 @@ with the cells it comes from.
     enrichment made again on its 5 µm expansion, each number and the rank correlation against the
     suite's own from the two analyses' files, and the cells behind the largest change against its
     own from the comparison's pairs.
+- **Spatial analyses at a million cells (wave 6, slice 8).** On a generated tissue of a million
+  cells, on four cores, with the page's defaults: each graph in 4 s or less, the enrichment in
+  4 s, niches in 12 s, Moran's I of 120 genes in 88 s at a peak of 0.94 GB; co-occurrence in 5 s,
+  nearest distances in 37 s (3.4 GB) and Ripley's K in 36 s (4.0 GB).
+  - **Moran's I** holds each gene's nonzero values instead of every gene over every cell (4.7 GB
+    for 300 genes at a million cells before), with the same results to the bit. Its permutations
+    deal the graph once each and take each gene's sum from its nonzero values, twice as fast;
+    local Moran's I finds its draws' median by selection.
+  - **Nearest distances and Ripley's K** keep their pairs without spare copies (nearest distances
+    5.9 GB at a million cells before), with the same results.
+  - **The simulator** makes a tissue's true cells alone, without images or transcripts, for
+    measuring analyses at sizes no bundle need reach.
+  - **Validated weekly:** the million cells' analyses, each in a process of its own within its
+    time and memory budget; the large simulated tissue's typed cells analyzed through SituCraft
+    (graphs, contact included, enrichment, niches and Moran's I) within theirs.
 
 ### Fixed
 

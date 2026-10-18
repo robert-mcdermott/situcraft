@@ -3,6 +3,7 @@ package spatial
 import (
 	"context"
 	"math"
+	"sort"
 	"testing"
 
 	"situcraft/internal/dmath"
@@ -28,7 +29,11 @@ func rookLattice(t *testing.T, side int) *Graph {
 
 func moran(t *testing.T, g *Graph, values []float32, genes int, p MoranParams, workers int) *Moran {
 	t.Helper()
-	m, err := MoransI(context.Background(), g, values, genes, p, workers, nil)
+	e, err := DenseExpression(values, genes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := MoransI(context.Background(), g, e, p, workers, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,10 +178,11 @@ func TestLocalMoran(t *testing.T) {
 // transcript, log1p; a cell without one zeros.
 func TestNormalizedExpression(t *testing.T) {
 	c := &segment.Counts{Genes: []string{"A", "B"}, Offsets: []uint32{0, 2, 3, 3, 4}, Gene: []uint32{0, 1, 1, 0}, Count: []uint32{4, 6, 30, 20}}
-	v, target, empty, err := NormalizedExpression(c, []uint32{0, 1, 2, 3})
+	e, target, empty, err := NormalizedExpression(c, []uint32{0, 1, 2, 3})
 	if err != nil {
 		t.Fatal(err)
 	}
+	v := e.Dense()
 	if target != 20 || empty != 1 {
 		t.Fatalf("target %g, %d without a transcript", target, empty)
 	}
@@ -184,6 +190,117 @@ func TestNormalizedExpression(t *testing.T) {
 	for k := range want {
 		if float64(v[k]) != float64(float32(want[k])) {
 			t.Errorf("value %d: %g, not %g", k, v[k], want[k])
+		}
+	}
+}
+
+// A gene's values dealt again, its cross sum from its nonzero values over the dealt graph is the
+// dense sum's to rounding: sparse and dense values, either weights, a graph with a cell alone; the
+// buffer left zeros.
+func TestDealtCross(t *testing.T) {
+	var in Inputs
+	for k := 0; k < 144; k++ {
+		in.X, in.Y = append(in.X, float32(k%12)), append(in.Y, float32(k/12))
+	}
+	in.X, in.Y = append(in.X, 100), append(in.Y, 100)
+	g, err := Build(context.Background(), in, Params{Kind: Radius, Radius: 1.01}, 2, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := len(g.Rows)
+	s := random.New(23, 6)
+	for _, weights := range []string{"row", "binary"} {
+		w, rowSum, colSum := make([]float64, n), make([]float64, n), make([]float64, n)
+		S0 := 0.0
+		for i := 0; i < n; i++ {
+			if d := g.Offsets[i+1] - g.Offsets[i]; d > 0 {
+				w[i] = 1
+				if weights == "row" {
+					w[i] = 1 / float64(d)
+				}
+			}
+			for k := g.Offsets[i]; k < g.Offsets[i+1]; k++ {
+				S0 += w[i]
+				rowSum[i] += w[i]
+				colSum[g.Neighbors[k]] += w[i]
+			}
+		}
+		for _, share := range []float64{0.2, 1} {
+			x := make([]float64, n)
+			var cell []uint32
+			var value []float32
+			mean := 0.0
+			for i := range x {
+				if s.Float64() < share {
+					v := float32(1 + 3*s.Float64())
+					x[i] = float64(v)
+					cell, value = append(cell, uint32(i)), append(value, v)
+				}
+				mean += x[i] / float64(n)
+			}
+			perm, inv, buf := make([]int32, n), make([]int32, n), make([]float32, n)
+			d := newDealt(g)
+			for r := 0; r < 20; r++ {
+				for i := range perm {
+					perm[i] = int32(i)
+				}
+				for k := n - 1; k > 0; k-- {
+					j := s.IntN(k + 1)
+					perm[k], perm[j] = perm[j], perm[k]
+				}
+				for i, c := range perm {
+					inv[c] = int32(i)
+				}
+				want, scale := 0.0, 0.0
+				for i := 0; i < n; i++ {
+					lag := 0.0
+					for k := g.Offsets[i]; k < g.Offsets[i+1]; k++ {
+						lag += x[perm[g.Neighbors[k]]] - mean
+					}
+					want += (x[perm[i]] - mean) * w[i] * lag
+					scale += math.Abs((x[perm[i]] - mean) * w[i] * lag)
+				}
+				d.deal(g, w, rowSum, colSum, perm, inv, 3)
+				got := d.cross(cell, value, mean, S0, buf)
+				if math.Abs(got-want) > 1e-12*math.Max(1, scale) {
+					t.Fatalf("%s weights, %.0f%% of cells: %.15g, not %.15g", weights, 100*share, got, want)
+				}
+				for _, v := range buf {
+					if v != 0 {
+						t.Fatal("the buffer is not left zeros")
+					}
+				}
+			}
+		}
+	}
+}
+
+// The kth smallest by selection is sorting's, for every k: distinct values, many alike, sorted
+// and reversed.
+func TestKth(t *testing.T) {
+	s := random.New(29, 7)
+	for trial := 0; trial < 300; trial++ {
+		n := 1 + s.IntN(260)
+		v := make([]float64, n)
+		for i := range v {
+			switch trial % 4 {
+			case 0:
+				v[i] = s.Normal()
+			case 1:
+				v[i] = float64(s.IntN(4))
+			case 2:
+				v[i] = float64(i)
+			default:
+				v[i] = float64(n - i)
+			}
+		}
+		sorted := append([]float64(nil), v...)
+		sort.Float64s(sorted)
+		for k := 0; k < n; k++ {
+			w := append([]float64(nil), v...)
+			if got := kth(w, k); got != sorted[k] {
+				t.Fatalf("trial %d: the %dth of %d is %g, not %g", trial, k, n, got, sorted[k])
+			}
 		}
 	}
 }

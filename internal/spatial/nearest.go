@@ -124,7 +124,11 @@ func NearestDistances(ctx context.Context, x, y []float32, label []int32, K int,
 	near := make([][]nb, n)
 	errs := make([]error, workers)
 	reachSquares := int64(math.Ceil(p.Reach / side))
+	// Each cell's list is kept in its worker's store, chunks of a fixed size (a longer list one of
+	// its own): what the lists hold, not as much again in slices grown for each cell.
+	const chunk = 1 << 16
 	parallelFor(n, workers, func(w, a, b int) {
+		var list, store []nb
 		for c := a; c < b; c++ {
 			if (c-a)%256 == 0 && ctx.Err() != nil {
 				errs[w] = ctx.Err()
@@ -132,7 +136,7 @@ func NearestDistances(ctx context.Context, x, y []float32, label []int32, K int,
 			}
 			i := cells[c]
 			k := sq(c)
-			var list []nb
+			list = list[:0]
 			for dy := -reachSquares; dy <= reachSquares; dy++ {
 				for dx := -reachSquares; dx <= reachSquares; dx++ {
 					for _, e := range grid[key{k.x + dx, k.y + dy}] {
@@ -147,7 +151,12 @@ func NearestDistances(ctx context.Context, x, y []float32, label []int32, K int,
 				}
 			}
 			sort.Slice(list, func(u, v int) bool { return list[u].d < list[v].d || list[u].d == list[v].d && list[u].c < list[v].c })
-			near[c] = list
+			if len(list) > cap(store)-len(store) {
+				store = make([]nb, 0, max(chunk, len(list)))
+			}
+			at := len(store)
+			store = append(store, list...)
+			near[c] = store[at:len(store):len(store)]
 		}
 		progress(0.2 * float64(b) / float64(n))
 	})
@@ -160,8 +169,18 @@ func NearestDistances(ctx context.Context, x, y []float32, label []int32, K int,
 	for c, i := range cells {
 		lab[c] = label[i]
 	}
-	// One deal's numbers: each pair's median and mean distance, and its distribution.
-	measure := func(lab []int32, dist []float64, median, mean, cdf []float64, beyond []int) {
+	// One deal's numbers: each pair's median and mean distance, and its distribution. dist, vals and
+	// count are a worker's own, kept from deal to deal (a million cells' deals would otherwise
+	// leave as much garbage as the neighbors hold).
+	type scratch struct {
+		dist, vals []float64
+		count      []int
+	}
+	newScratch := func() *scratch {
+		return &scratch{dist: make([]float64, n*K), vals: make([]float64, 0, n), count: make([]int, D)}
+	}
+	measure := func(lab []int32, sc *scratch, median, mean, cdf []float64, beyond []int) {
+		dist, count, vals := sc.dist, sc.count, sc.vals
 		// dist[c*K + B]: cell c's distance to its nearest B, at most the reach.
 		for c := 0; c < n; c++ {
 			row := dist[c*K : (c+1)*K]
@@ -180,8 +199,6 @@ func NearestDistances(ctx context.Context, x, y []float32, label []int32, K int,
 				}
 			}
 		}
-		count := make([]int, D)
-		var vals []float64
 		for a := 0; a < K; a++ {
 			for b := 0; b < K; b++ {
 				q := a*K + b
@@ -230,7 +247,7 @@ func NearestDistances(ctx context.Context, x, y []float32, label []int32, K int,
 		}
 	}
 	out.Median, out.Mean, out.CDF, out.Beyond = make([]float64, K*K), make([]float64, K*K), make([]float64, K*K*D), make([]int, K*K)
-	measure(lab, make([]float64, n*K), out.Median, out.Mean, out.CDF, out.Beyond)
+	measure(lab, newScratch(), out.Median, out.Mean, out.CDF, out.Beyond)
 
 	P := p.Permutations
 	permMedian := make([]float64, P*K*K)
@@ -239,7 +256,7 @@ func NearestDistances(ctx context.Context, x, y []float32, label []int32, K int,
 	finished := 0
 	parallelFor(P, workers, func(w, a, b int) {
 		mine := make([]int32, n)
-		dist := make([]float64, n*K)
+		sc := newScratch()
 		med, mean, cdf := make([]float64, K*K), make([]float64, K*K), make([]float64, K*K*D)
 		for s := a; s < b; s++ {
 			if ctx.Err() != nil {
@@ -252,7 +269,7 @@ func NearestDistances(ctx context.Context, x, y []float32, label []int32, K int,
 				j := st.IntN(k + 1)
 				mine[k], mine[j] = mine[j], mine[k]
 			}
-			measure(mine, dist, med, mean, cdf, nil)
+			measure(mine, sc, med, mean, cdf, nil)
 			copy(permMedian[s*K*K:(s+1)*K*K], med)
 			for q, v := range cdf {
 				permCDF[s*K*K*D+q] = float32(v)
