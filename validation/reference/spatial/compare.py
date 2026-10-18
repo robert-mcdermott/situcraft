@@ -1,6 +1,7 @@
 """SituCraft's neighborhood enrichment and co-occurrence against Squidpy's (wave 6, slice 2;
 research.md §6.2), its nearest distances and Ripley's K against SciPy's k-d tree and astropy's
-estimator (slice 3; §6.3), and its niches' k-means against scikit-learn's (slice 5; §6.5).
+estimator (slice 3; §6.3), its niches' k-means against scikit-learn's (slice 5; §6.5), and each
+gene's Moran's I against Squidpy's spatial_autocorr (slice 6; §6.6).
 regions.py adds its regions compared and profile across an edge (slice 4; §6.4).
 
 Reads <data>/spatial/<set>/ as SITUCRAFT_WRITE_REFERENCE=1 go test ./validation/ -run ReferenceSpatial
@@ -34,6 +35,12 @@ it, clustered by scikit-learn's KMeans (k-means++ seeding, Lloyd's iterations) i
 from as many starts, from each of five seeds, the least inertia kept. SituCraft's inertia must be
 within 1% of it (k-means finds local optima; neither is the optimum for sure), and the two sets of
 niches alike by the adjusted Rand index.
+
+Moran's I: each gene's log-normalized values as SituCraft wrote them, over the Delaunay graph with
+row-standardized weights; Squidpy's spatial_autocorr (mode "moran", analytic) gives I and the
+variance under normality, which must agree; an independent computation here (the weights' sums S0,
+S1, S2 from the sparse matrix, and Cliff and Ord's variances) must agree with I and with the
+variance under randomization too.
 
 Usage: compare.py <data> <set> <out.json>
 """
@@ -218,6 +225,54 @@ def main():
     result["versions"]["scikit-learn"] = version("scikit-learn")
     r = result["niches"]
     print(f"{set_name} niches: {r['niches']} of {r['cells']} cells; inertia {r['inertia']:.4f} against scikit-learn's {r['sklearnInertia']:.4f} ({r['relativeInertia']:+.2g}); adjusted Rand index {r['adjustedRand']:.3f}")
+
+    # Moran's I over the Delaunay graph, row-standardized.
+    mo = ours["moran"]
+    genes = mo["genes"]
+    G = len(genes)
+    vals = np.fromfile(folder / "moran.f32", dtype="<f4").reshape(G, n).astype(np.float64)
+    with open(folder / "delaunay.csv", newline="") as f:
+        edges = [(int(r["a"]), int(r["b"])) for r in csv.DictReader(f)]
+    a = np.array([e[0] for e in edges] + [e[1] for e in edges])
+    b = np.array([e[1] for e in edges] + [e[0] for e in edges])
+    A = sp.csr_matrix((np.ones(len(a)), (a, b)), shape=(n, n))
+    md = ad.AnnData(X=vals.T.copy())
+    md.var_names = genes
+    md.obsp["spatial_connectivities"] = A
+    df = sq.gr.spatial_autocorr(md, connectivity_key="spatial_connectivities", mode="moran", transformation=True, n_perms=None, copy=True, show_progress_bar=False)
+    df = df.loc[genes]
+    i_ours = np.array([np.nan if v is None else v for v in mo["i"]], dtype=float)
+    vn_ours = np.array([np.nan if v is None else v for v in mo["varNorm"]], dtype=float)
+    vr_ours = np.array([np.nan if v is None else v for v in mo["varRand"]], dtype=float)
+    ok = np.isfinite(i_ours)
+    # The same statistic computed here: row-standardized weights (a cell without a neighbor weighing nothing).
+    deg = np.asarray(A.sum(axis=1)).ravel()
+    W = sp.diags(np.where(deg > 0, 1 / np.maximum(deg, 1), 0)) @ A
+    S0 = W.sum()
+    S1 = 0.5 * (W + W.T).power(2).sum()
+    S2 = float(np.sum((np.asarray(W.sum(axis=1)).ravel() + np.asarray(W.sum(axis=0)).ravel()) ** 2))
+    E = -1 / (n - 1)
+    i_exact = np.full(G, np.nan)
+    vr_exact = np.full(G, np.nan)
+    for g in range(G):
+        z = vals[g] - vals[g].mean()
+        s2 = float(z @ z)
+        if not s2 > 0:
+            continue
+        i_exact[g] = n / S0 * float(z @ (W @ z)) / s2
+        b2 = n * float(np.sum(z ** 4)) / s2 ** 2
+        num = n * ((n * n - 3 * n + 3) * S1 - n * S2 + 3 * S0 ** 2) - b2 * ((n * n - n) * S1 - 2 * n * S2 + 6 * S0 ** 2)
+        vr_exact[g] = num / ((n - 1) * (n - 2) * (n - 3) * S0 ** 2) - E ** 2
+    rel = lambda x, y: np.max(np.abs(x[ok] / y[ok] - 1))
+    result["moran"] = {
+        "genes": G,
+        "maxDifferenceI": float(np.max(np.abs(i_ours[ok] - df["I"].to_numpy()[ok]))),
+        "maxRelativeVarNorm": float(rel(vn_ours, df["var_norm"].to_numpy())),
+        "maxDifferenceExactI": float(np.max(np.abs(i_ours[ok] - i_exact[ok]))),
+        "maxRelativeExactVarRand": float(rel(vr_ours, vr_exact)),
+    }
+    r = result["moran"]
+    print(f"{set_name} Moran's I: {G} genes; Squidpy's I within {r['maxDifferenceI']:.2g}, its variance under normality within {r['maxRelativeVarNorm']:.2g}; the computation here: I within {r['maxDifferenceExactI']:.2g}, the variance under randomization within {r['maxRelativeExactVarRand']:.2g}")
 
     out.write_text(json.dumps(result, indent=1) + "\n")
 

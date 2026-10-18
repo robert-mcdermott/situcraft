@@ -4,8 +4,9 @@ package main
 // as artifacts of kind "spatial": neighborhood enrichment over a graph; and, over the cells chosen,
 // co-occurrence across distances, nearest distances by label, Ripley's K in a window (the tissue,
 // from the segmentation's cells, or a region), regions compared, and a profile across a region's
-// edge (both within the tissue window, the regions' polygons sent with them), and cellular
-// neighborhoods (niches, each with its leading genes from the segmentation's counts). The page sends each
+// edge (both within the tissue window, the regions' polygons sent with them), cellular
+// neighborhoods (niches, each with its leading genes from the segmentation's counts), and, of no
+// labels, each gene's Moran's I over a graph (spatially variable genes). The page sends each
 // cell's label as the label set it shows has it (any kind: from markers, imported, curated,
 // consensus), and, to deal the labels within regions, each cell's region; an analysis is named by
 // what it is made from, so asking again answers it.
@@ -37,7 +38,9 @@ import (
 // spatialCitation cites the analyses' methods.
 const spatialCitation = "Schapiro D, Jackson HW, Raghuraman S, et al. histoCAT: analysis of cell phenotypes and interactions in multiplex image cytometry data. Nat Methods 2017;14:873–876. doi:10.1038/nmeth.4391; " +
 	"Palla G, Spitzer H, Klein M, et al. Squidpy: a scalable framework for spatial omics analysis. Nat Methods 2022;19:171–178. doi:10.1038/s41592-021-01358-2; " +
-	"Benjamini Y, Hochberg Y. Controlling the false discovery rate: a practical and powerful approach to multiple testing. J R Stat Soc B 1995;57:289–300"
+	"Benjamini Y, Hochberg Y. Controlling the false discovery rate: a practical and powerful approach to multiple testing. J R Stat Soc B 1995;57:289–300; " +
+	"Moran PAP. Notes on continuous stochastic phenomena. Biometrika 1950;37:17–23; Cliff AD, Ord JK. Spatial Processes: Models and Applications. Pion, 1981; " +
+	"Anselin L. Local indicators of spatial association — LISA. Geogr Anal 1995;27:93–115"
 
 // cellCodes are a number for each of a segmentation's cells, as the page sends them: base64 of the
 // count (u32) then a signed 32-bit number a cell, little-endian, and the SHA-256 of those bytes.
@@ -233,8 +236,19 @@ func checkedParameters(question string, raw json.RawMessage) (json.RawMessage, e
 			return nil, err
 		}
 		v = p
+	case spatial.QuestionMoran:
+		p := spatial.DefaultMoran()
+		if len(raw) > 0 {
+			if err := json.Unmarshal(raw, &p); err != nil {
+				return nil, err
+			}
+		}
+		if err := p.Check(); err != nil {
+			return nil, err
+		}
+		v = p
 	default:
-		return nil, fmt.Errorf("no question %q (enrichment, cooccurrence, distances, ripley, regions, boundary or niches)", question)
+		return nil, fmt.Errorf("no question %q (enrichment, cooccurrence, distances, ripley, regions, boundary, niches or moran)", question)
 	}
 	return json.Marshal(v)
 }
@@ -259,16 +273,21 @@ func spatialID(r spatialRequest, params json.RawMessage) string {
 		raw, _ := json.Marshal(r.Regions)
 		regions = string(raw)
 	}
-	h := sha256.Sum256([]byte(strings.Join([]string{r.Question, r.Segmentation, of, r.Labels.Checksum, strings.Join(r.Labels.Names, "\x1f"), strata, window, regions, spatial.AnalysisVersion, string(params)}, "\n")))
+	labels, names := "", ""
+	if r.Labels != nil {
+		labels, names = r.Labels.Checksum, strings.Join(r.Labels.Names, "\x1f")
+	}
+	h := sha256.Sum256([]byte(strings.Join([]string{r.Question, r.Segmentation, of, labels, names, strata, window, regions, spatial.AnalysisVersion, string(params)}, "\n")))
 	return "spa-" + hex.EncodeToString(h[:10])
 }
 
 func (a *app) registerSpatial(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/spatial/defaults", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, map[string]any{"enrichment": spatial.DefaultEnrichment(), "cooccurrence": spatial.DefaultCooccurrence(), "distances": spatial.DefaultNearest(), "ripley": spatial.DefaultRipley(), "regions": spatial.DefaultRegions(), "boundary": spatial.DefaultBoundary(), "niches": spatial.DefaultNiches(), "method": spatial.AnalysisVersion, "citation": spatialCitation})
+		writeJSON(w, map[string]any{"enrichment": spatial.DefaultEnrichment(), "cooccurrence": spatial.DefaultCooccurrence(), "distances": spatial.DefaultNearest(), "ripley": spatial.DefaultRipley(), "regions": spatial.DefaultRegions(), "boundary": spatial.DefaultBoundary(), "niches": spatial.DefaultNiches(), "moran": spatial.DefaultMoran(), "method": spatial.AnalysisVersion, "citation": spatialCitation})
 	})
 	mux.HandleFunc("POST /api/local/{index}/spatial", a.startSpatial)
 	mux.HandleFunc("GET /api/analyses/{id}/cells", a.spatialCells)
+	mux.HandleFunc("GET /api/analyses/{id}/local", a.spatialLocal)
 }
 
 // startSpatial starts the job making a spatial analysis, answering {id, artifact, job}: the
@@ -278,8 +297,12 @@ func (a *app) startSpatial(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body spatialRequest
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 256<<20)).Decode(&body); err != nil || body.Segmentation == "" || body.Labels == nil {
-		writeError(w, http.StatusBadRequest, "Send {\"question\", \"segmentation\": artifact id, \"graph\" (enrichment) or \"cells\" (co-occurrence), \"labels\": {…}, \"parameters\"}.")
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 256<<20)).Decode(&body); err != nil || body.Segmentation == "" || body.Labels == nil && body.Question != spatial.QuestionMoran {
+		writeError(w, http.StatusBadRequest, "Send {\"question\", \"segmentation\": artifact id, \"graph\" (enrichment, moran) or \"cells\" (the others), \"labels\": {…} (all but moran), \"parameters\"}.")
+		return
+	}
+	if body.Question == spatial.QuestionMoran && body.Labels != nil {
+		writeError(w, http.StatusBadRequest, "Moran's I is of genes: it takes no labels.")
 		return
 	}
 	params, err := checkedParameters(body.Question, body.Parameters)
@@ -287,12 +310,13 @@ func (a *app) startSpatial(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "The analysis: "+err.Error()+".")
 		return
 	}
-	if len(body.Labels.Names) == 0 || len(body.Labels.Names) > 1000 || len(body.Labels.Checksum) != 64 {
+	if body.Labels != nil && (len(body.Labels.Names) == 0 || len(body.Labels.Names) > 1000 || len(body.Labels.Checksum) != 64) {
 		writeError(w, http.StatusBadRequest, "The labels need their names (1 to 1,000), each cell's label and their checksum.")
 		return
 	}
-	if body.Question == spatial.QuestionEnrichment && body.Graph == "" || body.Question != spatial.QuestionEnrichment && (body.Cells == nil || body.Graph != "") {
-		writeError(w, http.StatusBadRequest, "An enrichment is of a graph; the other questions, of the cells chosen.")
+	ofGraph := body.Question == spatial.QuestionEnrichment || body.Question == spatial.QuestionMoran
+	if ofGraph && (body.Graph == "" || body.Cells != nil) || !ofGraph && (body.Cells == nil || body.Graph != "") {
+		writeError(w, http.StatusBadRequest, "An enrichment and Moran's I are of a graph; the other questions, of the cells chosen.")
 		return
 	}
 	switch body.Question {
@@ -361,7 +385,9 @@ func (a *app) startSpatial(w http.ResponseWriter, r *http.Request) {
 	}
 	var summary struct{ Cells int }
 	json.Unmarshal(sm.Summary, &summary)
-	if _, err := body.Labels.decode(summary.Cells); err != nil && summary.Cells > 0 {
+	if body.Labels == nil {
+		// Moran's I: no labels.
+	} else if _, err := body.Labels.decode(summary.Cells); err != nil && summary.Cells > 0 {
 		writeError(w, http.StatusBadRequest, "The labels: "+err.Error()+".")
 		return
 	}
@@ -404,7 +430,7 @@ func (a *app) startSpatial(w http.ResponseWriter, r *http.Request) {
 	}
 	body.Parameters = params
 	spec := spatialSpec{Bundle: path, spatialRequest: body}
-	what := map[string]string{spatial.QuestionEnrichment: "Neighborhood enrichment", spatial.QuestionCooccurrence: "Co-occurrence", spatial.QuestionDistances: "Nearest distances", spatial.QuestionRipley: "Ripley's K", spatial.QuestionRegions: "Regions compared", spatial.QuestionBoundary: "A profile across an edge", spatial.QuestionNiches: "Niches"}[body.Question]
+	what := map[string]string{spatial.QuestionEnrichment: "Neighborhood enrichment", spatial.QuestionCooccurrence: "Co-occurrence", spatial.QuestionDistances: "Nearest distances", spatial.QuestionRipley: "Ripley's K", spatial.QuestionRegions: "Regions compared", spatial.QuestionBoundary: "A profile across an edge", spatial.QuestionNiches: "Niches", spatial.QuestionMoran: "Moran's I"}[body.Question]
 	job, _, err := a.jobs.Submit("spatial", what+" of "+sm.Name+" of "+name, "spatial\x00"+id, spec, a.spatialJob(spec, id))
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, err.Error())
@@ -434,19 +460,28 @@ func (a *app) spatialJob(spec spatialSpec, id string) jobs.Func {
 		if err != nil {
 			return err
 		}
-		labels, err := spec.Labels.decode(len(segCells))
-		if err != nil {
-			return fmt.Errorf("the labels: %w", err)
+		// Each cell's label (none for Moran's I, which is of genes).
+		labels := make([]int32, len(segCells))
+		for i := range labels {
+			labels[i] = -1
 		}
-		K := len(spec.Labels.Names)
-		for _, l := range labels {
-			if l < -1 || l >= int32(K) {
-				return fmt.Errorf("the labels: a cell's label %d is not one of the %d", l, K)
+		K := 0
+		var labelSet spatial.LabelSet
+		if spec.Labels != nil {
+			if labels, err = spec.Labels.decode(len(segCells)); err != nil {
+				return fmt.Errorf("the labels: %w", err)
 			}
+			K = len(spec.Labels.Names)
+			for _, l := range labels {
+				if l < -1 || l >= int32(K) {
+					return fmt.Errorf("the labels: a cell's label %d is not one of the %d", l, K)
+				}
+			}
+			labelSet = spatial.LabelSet{ID: spec.Labels.ID, Kind: spec.Labels.Kind, Name: spec.Labels.Name, Level: spec.Labels.Level, Names: spec.Labels.Names, Colors: spec.Labels.Colors, Checksum: spec.Labels.Checksum}
 		}
 		out := &spatial.Analysis{Format: "situcraft-spatial-analysis", Version: 1, Method: "SituCraft spatial analysis", MethodVersion: spatial.AnalysisVersion, Question: spec.Question,
-			Segmentation: spatial.Side{ID: sm.ID, Name: sm.Name}, Parameters: spec.Parameters,
-			Labels: spatial.LabelSet{ID: spec.Labels.ID, Kind: spec.Labels.Kind, Name: spec.Labels.Name, Level: spec.Labels.Level, Names: spec.Labels.Names, Colors: spec.Labels.Colors, Checksum: spec.Labels.Checksum}}
+			Segmentation: spatial.Side{ID: sm.ID, Name: sm.Name}, Parameters: spec.Parameters, Labels: labelSet}
+		var local []spatial.LocalMoran
 		out.Cells.Segmentation = len(segCells)
 		cells := &spatial.Analyzed{}
 		parents := []artifacts.Parent{}
@@ -458,6 +493,66 @@ func (a *app) spatialJob(spec spatialSpec, id string) jobs.Func {
 		parents = append(parents, artifacts.Parent{Kind: "segmentation", ID: sm.ID, Name: sm.Name})
 		var name string
 		switch spec.Question {
+		case spatial.QuestionMoran:
+			gm, err := a.artifacts.Get(spec.Graph)
+			if err != nil {
+				return err
+			}
+			gp, err := a.artifacts.Path(gm.ID, spatial.FileDescription)
+			if err != nil {
+				return err
+			}
+			gdir := gp[:len(gp)-len(spatial.FileDescription)]
+			g, err := spatial.Read(gdir)
+			if err != nil {
+				return err
+			}
+			gd, err := spatial.ReadDescription(gdir)
+			if err != nil {
+				return err
+			}
+			out.Graph = &spatial.GraphRef{ID: gm.ID, Name: gm.Name, Parameters: gd.Parameters}
+			out.Cells.Choice = gd.Cells.Choice
+			parents = append(parents, artifacts.Parent{Kind: "graph", ID: gm.ID, Name: gm.Name})
+			cells.Rows = g.Rows
+			cells.Label = make([]int32, len(g.Rows))
+			cells.Stratum = make([]int32, len(g.Rows))
+			for i := range cells.Label {
+				cells.Label[i] = -1
+			}
+			var p spatial.MoranParams
+			if err := json.Unmarshal(spec.Parameters, &p); err != nil {
+				return err
+			}
+			r.Progress(0.03, "Normalizing the cells' expression")
+			counts, err := segment.ReadCounts(dir)
+			if err != nil {
+				return err
+			}
+			values, target, empty, err := spatial.NormalizedExpression(counts, g.Rows)
+			if err != nil {
+				return err
+			}
+			r.Log("info", "Moran's I of %d genes over %s (%d cells; %s weights), %d permutations (seed %d); local Moran's I of the %d leading genes.", len(counts.Genes), gm.Name, len(g.Rows), p.Weights, p.Permutations, p.Seed, p.Local)
+			if empty > 0 {
+				r.Log("info", "%d cells have no gene transcript: their values are zeros.", empty)
+			}
+			mi, err := spatial.MoransI(ctx, g, values, len(counts.Genes), p, runtime.NumCPU(), func(f float64) { r.Progress(0.05+0.85*f, "Each gene's Moran's I") })
+			if err != nil {
+				return err
+			}
+			if mi.Islands > 0 {
+				r.Log("warn", "%d cells have no neighbor in the graph: they weigh nothing.", mi.Islands)
+			}
+			res := &spatial.MoranResult{Genes: counts.Genes, Weights: p.Weights, Cells: mi.Cells, Edges: g.Edges(), Islands: mi.Islands, NoTranscript: empty, Target: target,
+				S0: mi.S0, S1: mi.S1, S2: mi.S2, Expected: mi.Expected, I: mi.I, VarNorm: mi.VarNorm, VarRand: mi.VarRand, Z: mi.Z, P: mi.P,
+				PermMean: mi.PermMean, PermSD: mi.PermSD, PermP: mi.Perm, PAdj: mi.PAdj, Mean: mi.Mean, Detected: mi.Detected, Local: []int{}}
+			for _, l := range mi.Local {
+				res.Local = append(res.Local, l.Gene)
+			}
+			local = mi.Local
+			out.Moran = res
+			name = fmt.Sprintf("Moran's I of %s's genes, %s", sm.Name, gm.Name)
 		case spatial.QuestionEnrichment:
 			gm, err := a.artifacts.Get(spec.Graph)
 			if err != nil {
@@ -690,10 +785,12 @@ func (a *app) spatialJob(spec spatialSpec, id string) jobs.Func {
 				out.Cells.Labeled++
 			}
 		}
-		if out.Cells.Labeled < 2 {
-			return errors.New("fewer than two of the cells analyzed have a label")
+		if spec.Question != spatial.QuestionMoran {
+			if out.Cells.Labeled < 2 {
+				return errors.New("fewer than two of the cells analyzed have a label")
+			}
+			r.Log("info", "%d cells analyzed, %d of them labeled with %d labels.", out.Cells.Analyzed, out.Cells.Labeled, K)
 		}
-		r.Log("info", "%d cells analyzed, %d of them labeled with %d labels.", out.Cells.Analyzed, out.Cells.Labeled, K)
 		stage, err := a.artifacts.Stage(id)
 		if err != nil {
 			return err
@@ -702,11 +799,17 @@ func (a *app) spatialJob(spec spatialSpec, id string) jobs.Func {
 			a.artifacts.Discard(id)
 			return err
 		}
+		if spec.Question == spatial.QuestionMoran {
+			if err := spatial.WriteLocal(stage, len(cells.Rows), local); err != nil {
+				a.artifacts.Discard(id)
+				return err
+			}
+		}
 		r.Validating()
 		r.Progress(0.95, "Checking the analysis")
 		jobSpec, _ := json.Marshal(spec)
 		var files []artifacts.File
-		for _, f := range spatial.AnalysisFiles {
+		for _, f := range spatial.AnalysisFilesOf(spec.Question) {
 			files = append(files, artifacts.File{Path: f, Role: spatial.AnalysisRoles[f]})
 		}
 		m := artifacts.Manifest{
@@ -789,4 +892,47 @@ func (a *app) spatialWindowOf(ctx context.Context, segDir string, w *spatialWind
 		return nil, nil, err
 	}
 	return win, &spatial.WindowRef{Kind: "tissue", Closing: *w.Closing, Grid: grid, Area: win.Area, Segments: win.Segments()}, nil
+}
+
+// spatialLocal answers a Moran's I analysis's local values, little-endian: the cells' count (u32),
+// the genes' (u32), the genes (u32 indices), each gene's local I for every cell (f32), their
+// p-values (f32), and their classes (a byte each: 0 none, 1 high among high, 2 low among low, 3
+// high among low, 4 low among high).
+func (a *app) spatialLocal(w http.ResponseWriter, r *http.Request) {
+	m, err := a.artifacts.Get(r.PathValue("id"))
+	if err != nil || m.Kind != "spatial" || m.State != artifacts.Complete {
+		writeError(w, http.StatusNotFound, "No such analysis.")
+		return
+	}
+	p, err := a.artifacts.Path(m.ID, spatial.FileLocal)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "The analysis has no local values.")
+		return
+	}
+	local, err := spatial.ReadLocal(p[:len(p)-len(spatial.FileLocal)])
+	if err != nil {
+		writeError(w, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+	n := 0
+	if len(local) > 0 {
+		n = len(local[0].I)
+	}
+	var buf bytes.Buffer
+	binary.Write(&buf, binary.LittleEndian, uint32(n))
+	binary.Write(&buf, binary.LittleEndian, uint32(len(local)))
+	for _, l := range local {
+		binary.Write(&buf, binary.LittleEndian, uint32(l.Gene))
+	}
+	for _, l := range local {
+		binary.Write(&buf, binary.LittleEndian, l.I)
+	}
+	for _, l := range local {
+		binary.Write(&buf, binary.LittleEndian, l.P)
+	}
+	for _, l := range local {
+		binary.Write(&buf, binary.LittleEndian, l.Class)
+	}
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Write(buf.Bytes())
 }

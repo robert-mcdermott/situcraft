@@ -206,13 +206,25 @@ func TestSpatialAnalyses(t *testing.T) {
 	if np.Radius != 15 || np.Neighbors != 0 {
 		t.Errorf("niches by a radius: %s", rd.Lineage.Parameters)
 	}
+	// Moran's I of the genes over the graph, without labels, its local values for two genes.
+	moranID, _ := run(fmt.Sprintf(`{"question":"moran","segmentation":%q,"graph":%q,"parameters":{"permutations":19,"local":2,"localPermutations":19}}`, seg.ID, g.ID))
+	mm, _ := f.a.artifacts.Get(moranID)
+	s = spatial.AnalysisSummary{}
+	json.Unmarshal(mm.Summary, &s)
+	if s.Question != "moran" || s.Genes == 0 || len(mm.Files) != 3 {
+		t.Errorf("Moran's I: %+v, %d files", s, len(mm.Files))
+	}
+	loc := request(t, f.handler, http.MethodGet, "/api/analyses/"+moranID+"/local", nil, nil).Body.Bytes()
+	if len(loc) < 8 || binary.LittleEndian.Uint32(loc[4:]) != 2 || len(loc) != 8+4*2+2*9*int(binary.LittleEndian.Uint32(loc)) {
+		t.Errorf("the local values: %d bytes", len(loc))
+	}
 	bad := func(sumOf string) string {
 		return fmt.Sprintf(`{"id":"lab-x","kind":"labels","name":"By turns","level":0,"names":["A","B","C"],"codes":%q,"checksum":%q}`, codes, sumOf)
 	}
 	short, shortSum := codesOf(labels[:10])
 	for _, c := range []struct{ body, want string }{
 		{fmt.Sprintf(`{"question":"hotspots","segmentation":%q,"graph":%q,"labels":%s}`, seg.ID, g.ID, labelsJSON), "no question"},
-		{fmt.Sprintf(`{"question":"enrichment","segmentation":%q,"labels":%s}`, seg.ID, labelsJSON), "is of a graph"},
+		{fmt.Sprintf(`{"question":"enrichment","segmentation":%q,"labels":%s}`, seg.ID, labelsJSON), "are of a graph"},
 		{fmt.Sprintf(`{"question":"enrichment","segmentation":%q,"graph":%q,"labels":%s,"parameters":{"weight":"boundary"}}`, seg.ID, g.ID, labelsJSON), "contact graph"},
 		{fmt.Sprintf(`{"question":"enrichment","segmentation":%q,"graph":%q,"labels":%s,"parameters":{"permutations":5}}`, seg.ID, g.ID, labelsJSON), "100 to 100,000"},
 		{fmt.Sprintf(`{"question":"cooccurrence","segmentation":%q,"cells":%s,"labels":%s,"strata":%s}`, seg.ID, chosenCells(keep, ""), labelsJSON, strataJSON), "within regions"},
@@ -226,6 +238,9 @@ func TestSpatialAnalyses(t *testing.T) {
 		{fmt.Sprintf(`{"question":"distances","segmentation":%q,"cells":%s,"labels":%s,"parameters":{"reach":0}}`, seg.ID, chosenCells(keep, ""), labelsJSON), "reach"},
 		{fmt.Sprintf(`{"question":"niches","segmentation":%q,"cells":%s,"labels":%s,"parameters":{"neighbors":5,"radius":10}}`, seg.ID, chosenCells(keep, ""), labelsJSON), "one of them"},
 		{fmt.Sprintf(`{"question":"niches","segmentation":%q,"cells":%s,"labels":%s,"parameters":{"niches":1}}`, seg.ID, chosenCells(keep, ""), labelsJSON), "2 to 30 niches"},
+		{fmt.Sprintf(`{"question":"moran","segmentation":%q,"graph":%q,"labels":%s}`, seg.ID, g.ID, labelsJSON), "takes no labels"},
+		{fmt.Sprintf(`{"question":"moran","segmentation":%q,"cells":%s}`, seg.ID, chosenCells(keep, "")), "of a graph"},
+		{fmt.Sprintf(`{"question":"moran","segmentation":%q,"graph":%q,"parameters":{"weights":"distance"}}`, seg.ID, g.ID), "row (standardized) or binary"},
 		{fmt.Sprintf(`{"question":"regions","segmentation":%q,"cells":%s,"labels":%s}`, seg.ID, chosenCells(keep, ""), labelsJSON), "1 to 20 regions"},
 		{fmt.Sprintf(`{"question":"boundary","segmentation":%q,"cells":%s,"labels":%s,"regions":%s}`, seg.ID, chosenCells(keep, ""), labelsJSON, twoRegions), "of one region"},
 		{fmt.Sprintf(`{"question":"distances","segmentation":%q,"cells":%s,"labels":%s,"regions":%s}`, seg.ID, chosenCells(keep, ""), labelsJSON, twoRegions), "Only regions compared"},

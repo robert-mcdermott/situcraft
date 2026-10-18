@@ -2834,6 +2834,41 @@ cells), endothelial niches at 12% and 25% (the tissue 6%; VWF, PLVAP), stroma at
 immune cells at 22% (the tissue 4%; AIF1, CD68), and stroma with endothelium (39% and 13%; COL8A1,
 PDGFRA); the other seeds agree at 0.58 to 0.99.
 
+### 6.6 Spatially variable genes (verified, wave 6, slice 6)
+
+**Moran's I** (Moran 1950) of a gene with values x over a graph with weights w:
+I = (n / S0) Σᵢⱼ wᵢⱼ zᵢ zⱼ / Σᵢ zᵢ², z = x − x̄. The weights are row-standardized (each cell's
+neighbors share 1; a cell without a neighbor weighs nothing) or binary. Under no spatial pattern,
+E[I] = −1/(n − 1) and, with S0 = Σ wᵢⱼ, S1 = ½ Σ (wᵢⱼ + wⱼᵢ)², S2 = Σᵢ (wᵢ. + w.ᵢ)² (Cliff and
+Ord 1981): under normality Var = (n² S1 − n S2 + 3 S0²) / (S0² (n² − 1)) − E²; under
+randomization (the values dealt again to the cells; b2 their kurtosis)
+Var = [n ((n² − 3n + 3) S1 − n S2 + 3 S0²) − b2 ((n² − n) S1 − 2n S2 + 6 S0²)] /
+((n − 1)(n − 2)(n − 3) S0²) − E², the exact variance of I over every permutation. The test is
+randomization's z (two-sided), and with permutations the share at least as far from E[I]; both
+Benjamini–Hochberg adjusted over the genes. The values are the genes' log-normalized expression as
+SituCraft's clustering normalizes it (each cell's counts scaled to the median total, log1p).
+
+**Local Moran's I** (Anselin 1995): Iᵢ = zᵢ Σⱼ wᵢⱼ zⱼ / m2, m2 = Σ z² / n (so Σᵢ Iᵢ = S0 · I),
+tested by conditional permutation (the cell's neighbors' values drawn again from the other cells,
+its own kept; the share of draws at least as extreme on its side of their median); cells with p
+below 0.05, unadjusted, classed by the sign of zᵢ and of its neighbors' mean.
+
+| Check | Result |
+| --- | --- |
+| A checkerboard on a 20 × 20 lattice; two halves | I −1 exactly (both weights); 1 − 2c/S0 exactly |
+| 9,999 permutations on a 7 × 7 lattice, skewed, binary and normal values | variance within 0.2–1.7% of the variance under randomization |
+| Squidpy 1.8.3 spatial_autocorr ("moran", row-standardized), the Delaunay graph, every gene | I to 1.1 × 10⁻¹⁶, 7.8 × 10⁻¹⁶, 1.1 × 10⁻¹⁶; variance under normality to 1.1 × 10⁻¹², 3 × 10⁻¹³, 1.3 × 10⁻¹³ (Lung, Breast, simulated) |
+| An independent NumPy and SciPy computation, the same | I to 4.2 × 10⁻¹³; variance under randomization to 1.4 × 10⁻¹² |
+| The simulated tissue's 30 marker genes against its 90 unmarked genes | every marker in a pattern, I ≥ 0.216; unmarked I ≤ 0.042 |
+
+PySAL's esda, planned as the reference, was not needed: Squidpy computes the same statistic and
+variance under normality, and the variance under randomization is checked against its formula
+computed independently and against permutations (which define it).
+
+**Lung** (11,898 cells, Delaunay graph, 289 genes, 199 permutations): 162 genes in a pattern; the
+greatest I GJA5 (0.436; 1.2% of the cells express it, an artery's endothelium in the stroma at the
+section's top left), IGFBP3 (0.411), CXCL13 (0.313), PLA2G7, LTBP2, ANPEP, MYH11, GPX2, AGR3, RGS5.
+
 ## 7. Datasets
 
 | Dataset | Source | Size | License | Use |

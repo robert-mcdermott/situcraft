@@ -380,6 +380,26 @@
   "violations": []
  },
  {
+  "scene": "moran",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "moran",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "moran-tissue",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "moran-tissue",
+  "theme": "light",
+  "violations": []
+ },
+ {
   "scene": "edge",
   "theme": "dark",
   "violations": []

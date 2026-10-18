@@ -1214,10 +1214,14 @@ export function installRemote(app) {
     },
 
     async spatial_analysis(args) {
-      const { dataset, seg, version } = labelVersionArg(args, { niches: true });
-      const question = choose(args.question ?? 'enrichment', ['enrichment', 'cooccurrence', 'distances', 'ripley', 'regions', 'boundary', 'niches'], 'question');
+      const question = choose(args.question ?? 'enrichment', ['enrichment', 'cooccurrence', 'distances', 'ripley', 'regions', 'boundary', 'niches', 'moran'], 'question');
+      // Moran's I is of genes: a segmentation's, without labels.
+      const { dataset, seg, version } = question === 'moran' ? (() => {
+        const ds = resolveDataset(args.dataset);
+        return { dataset: ds, seg: segmentationArg(ds, args.segmentation), version: null };
+      })() : labelVersionArg(args, { niches: true });
       let graph;
-      if (question === 'enrichment') {
+      if (question === 'enrichment' || question === 'moran') {
         const list = graphsOf(project(), dataset.id, seg.id).filter((g) => g.state === 'complete');
         if (!list.length) throw new ActionError(`${seg.name} has no graph: build_graph builds one.`);
         graph = args.graph === undefined || /^latest$/i.test(String(args.graph)) ? list.at(-1).id : String(args.graph);
@@ -1237,7 +1241,7 @@ export function installRemote(app) {
         const latest = (name) => filters.filter((f) => f.name === name).sort((a, b) => b.version - a.version)[0];
         cells = filters.find((f) => f.id === ref)?.id ?? (named.includes(ref) ? filters[named.indexOf(ref)].id : latest(choose(ref, [...new Set(filters.map((f) => f.name))], 'filter'))?.id);
       }
-      const ask = { segmentation: seg.id, question, labels: `${version.id}|${version.level}`, graph, within: regionIds('within'), regions: regionIds('regions'), cells };
+      const ask = { segmentation: seg.id, question, labels: version ? `${version.id}|${version.level}` : null, graph, within: regionIds('within'), regions: regionIds('regions'), cells };
       // Regions compared are the regions named; a profile crosses one region's edge.
       if (question === 'regions') {
         ask.compare = ask.regions;
@@ -1254,6 +1258,7 @@ export function installRemote(app) {
           : question === 'regions' ? [['closing', 'closing']]
             : question === 'boundary' ? [['reach', 'bReach'], ['every', 'bStep'], ['margin', 'margin'], ['closing', 'closing']]
               : question === 'niches' ? [['neighbors', 'neighbors'], ['radius', 'nRadius'], ['niches', 'niches'], ['starts', 'starts'], ['seeds', 'seeds'], ['seed', 'seed']]
+                : question === 'moran' ? [['permutations', 'mPermutations'], ['seed', 'seed'], ['local', 'local'], ['local_permutations', 'localPermutations']]
                 : [['permutations', 'permutations'], ['seed', 'seed'], ['up_to', 'farthest'], ['every', 'step']];
       for (const [arg, key] of keys) if (args[arg] !== undefined) ask[key] = finite(args[arg], arg);
       if (args.correction !== undefined) ask.correction = choose(args.correction, ['isotropic', 'none'], 'correction');
@@ -1263,6 +1268,7 @@ export function installRemote(app) {
       }
       if (args.window !== undefined) ask.window = /^(the )?tissue$/i.test(String(args.window)) ? 'tissue' : regionRef(dataset, args.window).id;
       if (args.weight !== undefined) ask.weight = choose(args.weight, ['edges', 'boundary'], 'weight');
+      if (args.weights !== undefined) ask.mWeights = choose(args.weights, ['row', 'binary'], 'weights');
       if (args.pairs !== undefined) ask.pairs = choose(args.pairs, ['within', 'between'], 'pairs');
       await settleMode('spatial');
       let manifest;
@@ -1298,6 +1304,17 @@ export function installRemote(app) {
         return {
           message: `${manifest.name}: ${plural(sig.length, 'pair')} of ${plural(pairs.length, 'pair')} nearer or farther than at random (adjusted p below 0.05)${near.length ? `; nearest: ${near.join(', ')}` : ''}${far.length ? `; farthest: ${far.join(', ')}` : ''}.`,
           data: { id: manifest.id, name: manifest.name, labels: names, cells: a.cells, reach: r.reach, parameters: a.parameters, pairs },
+        };
+      }
+      if (question === 'moran') {
+        const r = a.moran;
+        const genes = r.genes.map((gene, g) => ({ gene, i: r.i[g], z: r.z[g], p: r.p[g], permP: r.permP[g], padj: r.padj[g], mean: r.mean[g], detected: r.detected[g] })).filter((x) => x.i !== null).sort((x, y) => y.i - x.i);
+        const sig = genes.filter((x) => x.padj < 0.05);
+        const up = sig.filter((x) => x.i > r.expected).slice(0, 5).map((x) => `${x.gene} (I ${x.i.toFixed(3)})`);
+        const down = sig.filter((x) => x.i < r.expected).reverse().slice(0, 3).map((x) => `${x.gene} (I ${x.i.toFixed(3)})`);
+        return {
+          message: `${manifest.name}: ${plural(sig.length, 'gene')} of ${plural(r.genes.length, 'gene')} in a spatial pattern or dispersed (adjusted p below 0.05)${up.length ? `; the strongest: ${up.join(', ')}` : ''}${down.length ? `; dispersed: ${down.join(', ')}` : ''}; local Moran's I kept for ${plural(r.local.length, 'gene')}.`,
+          data: { id: manifest.id, name: manifest.name, graph: a.graph, cells: r.cells, weights: r.weights, expected: r.expected, parameters: a.parameters, local: r.local.map((g) => r.genes[g]), genes },
         };
       }
       if (question === 'niches') {
@@ -2249,8 +2266,8 @@ export function installRemote(app) {
   // Shows a spatial analysis's cells (spec: { analysis: an id or latest, a, b: labels by name, and a
   // co-occurrence's distance in µm; for regions compared, a and the region (a row's name); across an
   // edge, a (any label if not given) and the zone: core, margin, around or all; for niches, the
-  // niche (its number from 1, or name; all of them, filled by niche, if not given) }); answers what
-  // is shown.
+  // niche (its number from 1, or name; all of them, filled by niche, if not given); for Moran's I,
+  // the gene and the local class (high, low, high-low, low-high or all) }); answers what is shown.
   async function analysisCells(dataset, spec) {
     if (typeof spec !== 'object' || spec === null) throw new ActionError('cells_of is {"analysis", "a", "b", "distance"}, {"analysis", "a", "region"} or {"analysis", "a", "zone"}.');
     const list = analysesOf(project(), dataset.id).filter((x) => x.state === 'complete');
@@ -2261,6 +2278,14 @@ export function installRemote(app) {
     const names = data.analysis.labels.names;
     const segmentationOf = () => project().artifacts.find((x) => x.kind === 'segmentation' && x.id === record.segmentation);
     const itemOf = () => app.bundles.link(dataset.id)?.item ?? app.bundles.itemByPath(dataset.path);
+    if (data.analysis.question === 'moran') {
+      const r = data.analysis.moran;
+      const localGenes = r.local.map((g) => r.genes[g]);
+      if (!localGenes.length) throw new ActionError('The analysis kept no gene\'s local Moran\'s I: ask again with local above 0.');
+      const gene = r.genes.indexOf(choose(spec.gene ?? localGenes[0], localGenes, 'gene'));
+      const cls = { high: 1, low: 2, 'high-low': 3, 'low-high': 4, all: 0 }[choose(spec.class ?? 'high', ['high', 'low', 'high-low', 'low-high', 'all'], 'class')];
+      return showAnalysisCells(app, { dataset: dataset.id, item: itemOf(), segmentation: segmentationOf(), analysis: data.analysis, cells: data.cells, local: data.local, gene, localClass: cls });
+    }
     if (data.analysis.question === 'niches') {
       const niches = nicheNames(data.analysis.niches, names);
       let niche = -1;

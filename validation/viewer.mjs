@@ -1502,6 +1502,45 @@ export async function viewerSuite({ check, MissingData, verbose }) {
           const oneShown = oneNiche?.ok ? await chrome.eval('window.situcraftViewer.focus()') : null;
           check('viewer', 'niches on the tissue: the cells filled by their niche, as many in each as the analysis holds, and one niche\'s cells shown', `${filled?.message ?? filled?.error}; ${JSON.stringify(fillShown)}; ${oneNiche?.message ?? oneNiche?.error}; ${JSON.stringify(oneShown)}`,
             filled?.ok && nichesOwn && JSON.stringify(fillShown?.counts) === JSON.stringify(nichesOwn.recorded) && oneShown?.cells === nichesOwn.recorded[1], 'the niches\' cells');
+
+          // Spatially variable genes (wave 6, slice 6): each gene's local Moran's I sums to S0 times
+          // its I, S0 the suite's own from the graph (with row-standardized weights, the cells with
+          // a neighbor); every classed cell's local I of its class's sign; a gene's cells high among
+          // high shown on the tissue as many as its classes hold.
+          const moran = graph?.ok ? await act('spatial_analysis', { dataset: 'xenium-lung-2fov', segmentation: 'instrument', question: 'moran', graph: graph.data.id, permutations: 49, local: 3, local_permutations: 49 }) : null;
+          const moranOwn = moran?.ok ? await chrome.eval(`(async () => {
+            const a = await (await fetch('/api/artifacts/${moran.data.id}/files/analysis.json')).json();
+            const lb = await (await fetch('/api/analyses/${moran.data.id}/local')).arrayBuffer();
+            const v = new DataView(lb);
+            const n = v.getUint32(0, true), T = v.getUint32(4, true);
+            const gb = await (await fetch('/api/graphs/${graph?.data?.id}/edges')).arrayBuffer();
+            const gn = new DataView(gb).getUint32(0, true);
+            const offsets = new Uint32Array(gb, 12 + 12 * gn, gn + 1);
+            let S0 = 0;
+            for (let i = 0; i < gn; i += 1) if (offsets[i + 1] > offsets[i]) S0 += 1;
+            const out = { genes: [], S0, recordedS0: a.moran.s0, wrongSign: 0, high: [] };
+            for (let k = 0; k < T; k += 1) {
+              const g = v.getUint32(8 + 4 * k, true);
+              const I = new Float32Array(lb, 8 + 4 * T + 4 * n * k, n);
+              const cls = new Uint8Array(lb, 8 + 4 * T + 8 * n * T + n * k, n);
+              let sum = 0;
+              let high = 0;
+              for (let i = 0; i < n; i += 1) {
+                sum += I[i];
+                if ((cls[i] === 1 || cls[i] === 2) && !(I[i] > 0) || (cls[i] === 3 || cls[i] === 4) && !(I[i] < 0)) out.wrongSign += 1;
+                if (cls[i] === 1) high += 1;
+              }
+              out.genes.push({ gene: a.moran.genes[g], relative: Math.abs(sum / (S0 * a.moran.i[g]) - 1) });
+              out.high.push(high);
+            }
+            return out;
+          })()`) : null;
+          check('viewer', 'Moran\'s I by remote control: each leading gene\'s local Moran\'s I sums to S0 times its I (S0 the suite\'s own from the graph), every classed cell\'s local I of its class\'s sign', `${moran?.message ?? moran?.error}; ${JSON.stringify(moranOwn)}`,
+            moran?.ok && moranOwn && moranOwn.genes.length === 3 && Math.abs(moranOwn.S0 - moranOwn.recordedS0) < 1e-6 && moranOwn.genes.every((x) => x.relative < 1e-4) && moranOwn.wrongSign === 0, 'S0 × I, and each class its sign');
+          const hot = moranOwn ? await act('show_tissue', { dataset: 'xenium-lung-2fov', cells_of: { analysis: moran.data.id, gene: moranOwn.genes[0].gene, class: 'high' } }) : null;
+          const hotShown = hot?.ok ? await chrome.eval('window.situcraftViewer.focus()') : null;
+          check('viewer', 'a gene\'s cells high among high shown on the tissue, as many as its local classes hold', `${hot?.message ?? hot?.error}; ${JSON.stringify(hotShown)}`,
+            hot?.ok && hotShown?.cells === moranOwn.high[0] && moranOwn.high[0] > 0, `${moranOwn?.high?.[0]} cells`);
         }
 
         // The projects as 0.2.0, 0.3.0 and 0.4.0 saved them

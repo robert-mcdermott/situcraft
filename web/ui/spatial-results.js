@@ -5,8 +5,9 @@
 // Ripley's L, each with its envelope from the permutations; regions compared, their densities and
 // shares with intervals and two rows' ratios as a forest plot; a label's profile across a region's
 // edge, and each label's core, margin and surroundings compared; niches, their make-up against the
-// tissue's as a heat map, and each one's defining labels and leading genes. Each pair, label,
-// region or niche can be chosen, and its cells shown on the tissue.
+// tissue's as a heat map, and each one's defining labels and leading genes; spatially variable
+// genes, ranked by Moran's I. Each pair, label, region, niche or gene can be chosen, and its cells
+// shown on the tissue.
 
 import { h, formatCount } from './dom.js';
 import { divergingColor, nicheNames, rankPairs, rowNames } from '../lib/spatial.js';
@@ -601,4 +602,31 @@ export function nichesTable(analysis, { onPick, chosen = null }) {
       h('td.r', formatCount(r.cells[v]), h('div.muted.sp-sub', percent(r.cells[v] / total))),
       h('td', r.defining[v].map((k) => `${names[k]} ${percent(r.composition[v * K + k])} (${times(r.composition[v * K + k] / r.tissue[k])})`).join(', ')),
       h('td', (r.markers[v] ?? []).slice(0, 5).map((m) => m.gene).join(', ') || h('span.muted', '—')))))));
+}
+
+// --- Spatially variable genes ---
+
+// Genes by Moran's I: those in a pattern (adjusted p below 0.05, I above its expectation), the
+// greatest I first, up to `top`, and those dispersed (below it); onPick(g) when a gene is chosen;
+// each one's I, z, adjusted p and the cells expressing it, marked when its local Moran's I is kept.
+export function moranTable(analysis, { onPick, chosen = null, top = 15 }) {
+  const r = analysis.moran;
+  const G = r.genes.length;
+  const local = new Set(r.local);
+  const rows = [];
+  for (let g = 0; g < G; g += 1) if ((r.padj[g] ?? NaN) < 0.05 && Number.isFinite(r.i[g])) rows.push(g);
+  rows.sort((a, b) => r.i[b] - r.i[a]);
+  const up = rows.filter((g) => r.i[g] > r.expected).slice(0, top);
+  const down = rows.filter((g) => r.i[g] < r.expected).reverse().slice(0, 5);
+  const row = (g) => h(`tr${chosen === g ? '.selected' : ''}`, pickable({ 'data-gene': r.genes[g] }, () => onPick(g)),
+    h('td', h('b', r.genes[g]), local.has(g) ? h('span.muted', ' · local') : null),
+    h('td.r', fixed(r.i[g], 3)), h('td.r', fixed(r.z[g], 1)), h('td.r', pvalue(r.padj[g])),
+    h('td.r', percent(r.detected[g] / r.cells)));
+  const table = (list, caption) => (list.length ? h('div', h('div.section-title', caption), h('div.table-wrap', h('table.data-table.seg-table.sp-genes',
+    h('thead', h('tr', h('th', 'Gene'), h('th.r', 'Moran\'s I'), h('th.r', 'z'), h('th.r', 'Adjusted p'), h('th.r', 'Cells expressing'))),
+    h('tbody', ...list.map(row))))) : null);
+  return h('div.sp-pair-tables',
+    table(up, `In a pattern: ${rows.filter((g) => r.i[g] > r.expected).length.toLocaleString('en-US')} of ${G.toLocaleString('en-US')} genes`),
+    table(down, 'Dispersed: neighbors unlike'),
+    !up.length && !down.length ? h('p.muted.seg-note', 'No gene\'s Moran\'s I differs from what values dealt at random give (adjusted p below 0.05).') : null);
 }

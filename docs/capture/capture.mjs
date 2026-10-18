@@ -529,6 +529,30 @@ const scenes = {
     await js(`window.situcraftViewer.settled()`);
     await sleep(400);
   },
+  // Spatially variable genes (wave 6, slice 6): the Lung genes' Moran's I over the Delaunay graph,
+  // the genes in a pattern and dispersed, one gene chosen with its local Moran's I.
+  async moran() {
+    await act('open_example', { example: 'lung' });
+    await act('build_graph', { kind: 'delaunay' });
+    await act('spatial_analysis', { question: 'moran' });
+    await waitFor(`Boolean(document.querySelector('.sp-answer .sp-genes'))`);
+    await js(`document.querySelector('.sp-genes tr[data-gene="GJA5"]')?.click()`);
+    await waitFor(`Boolean(document.querySelector('.sp-answer .sp-pair'))`);
+    await scrollTo('.sp-answer .sp-pair-tables', 'start');
+    await sleep(300);
+  },
+  // A gene's local Moran's I on the tissue (wave 6, slice 6): the Lung cells high among high in
+  // GJA5's expression (an artery's endothelium, in the stroma at the section's top left), with its
+  // transcripts.
+  async 'moran-tissue'() {
+    await act('open_example', { example: 'lung' });
+    await act('build_graph', { kind: 'delaunay' });
+    const moran = await act('spatial_analysis', { question: 'moran' });
+    await act('show_tissue', { dataset: 'xenium-lung-2fov', cells_of: { analysis: moran.data.id, gene: 'GJA5', class: 'high' }, genes: ['GJA5'], center: [395, 115], width_um: 300, channels: { DAPI: { color: '#8c8c8c' } } });
+    await waitFor(`Boolean(window.situcraftViewer?.focus?.())`);
+    await js(`window.situcraftViewer.settled()`);
+    await sleep(400);
+  },
   // Across a region's edge (wave 6, slice 4): the epithelial cells' profile across the vessel
   // stroma's edge, sparse inside and dense outside, with each class's reading.
   async edge() {

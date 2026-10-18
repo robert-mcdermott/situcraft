@@ -3,7 +3,7 @@
 // region as the program reads them), the records in the project, the results read, an enrichment's
 // pairs ranked, and the cells each number comes from (a pair's cells and the edges between them; a
 // label's cells near another's; a label's cells in a region, or in bands across a region's edge;
-// a niche's cells).
+// a niche's cells; a gene's local Moran's I classes).
 
 import { sha256 } from './sha256.js';
 
@@ -36,6 +36,10 @@ export const QUESTIONS = [
     id: 'niches', label: 'Cellular neighborhoods',
     help: 'Kinds of place in the tissue: each cell\'s neighborhood (its nearest labeled cells, or those within a radius) described by its labels\' shares, and the cells grouped by them (k-means), as niches. A niche is a kind of place, not a kind of cell: an unlabeled cell has the niche of the labeled cells around it. Each niche\'s make-up against the tissue\'s, the labels that define it and its leading genes; the niches found again from other seeds say how stable they are.',
   },
+  {
+    id: 'moran', label: 'Spatially variable genes', labels: false,
+    help: 'Which genes are expressed in a spatial pattern: each gene\'s Moran\'s I over a graph (1 when neighbors\' expression is alike, about 0 for no pattern, below 0 where neighbors differ), tested against the values dealt to the cells at random (analytically and by permutation), adjusted over the genes. For the leading genes, local Moran\'s I shows where the pattern lies: cells high among high, low among low, or unlike their neighbors. Of genes, not labels: the cells need no labels.',
+  },
 ];
 
 export const ENRICHMENT_DEFAULTS = { permutations: 1000, seed: 20250, weight: 'edges' };
@@ -50,6 +54,9 @@ export const RIPLEY_DEFAULTS = { radii: Array.from({ length: 20 }, (_, i) => 5 *
 // 95% intervals; bands every 10 µm to 100 µm either side of an edge, a margin of 20 µm.
 export const REGIONS_DEFAULTS = { level: 0.95 };
 export const BOUNDARY_DEFAULTS = { reach: 100, step: 10, margin: 20, level: 0.95 };
+
+// Row-standardized weights, 199 permutations, the 10 leading genes' local Moran's I.
+export const MORAN_DEFAULTS = { weights: 'row', permutations: 199, seed: 20250, local: 10, localPermutations: 199 };
 
 // Each cell's 10 nearest labeled cells, 6 niches, the best of 10 starts, 4 further seeds.
 export const NICHES_DEFAULTS = { neighbors: 10, radius: 0, niches: 6, starts: 10, seeds: 4, seed: 20250 };
@@ -107,6 +114,13 @@ export function checkAnalysisParams(question, p) {
     if (!Number.isInteger(p.niches) || p.niches < 2 || p.niches > 30) return '2 to 30 niches.';
     if (!Number.isInteger(p.starts) || p.starts < 1 || p.starts > 100) return 'k-means\'s starts are 1 to 100.';
     if (!Number.isInteger(p.seeds) || p.seeds < 0 || p.seeds > 20) return '0 to 20 further seeds.';
+    return null;
+  }
+  if (question === 'moran') {
+    if (!['row', 'binary'].includes(p.weights)) return 'Moran\'s I\'s weights are row (standardized) or binary.';
+    if (!Number.isInteger(p.permutations) || (p.permutations !== 0 && (p.permutations < 19 || p.permutations > 9999))) return 'Moran\'s I\'s permutations are 0 (the analytic test) or 19 to 9,999.';
+    if (!Number.isInteger(p.local) || p.local < 0 || p.local > 50) return 'Local Moran\'s I is of 0 to 50 genes.';
+    if (p.local > 0 && !(Number.isInteger(p.localPermutations) && p.localPermutations >= 19 && p.localPermutations <= 9999)) return 'Local Moran\'s I\'s permutations are 19 to 9,999.';
     return null;
   }
   return `No question ${question}.`;
@@ -280,6 +294,40 @@ export function addAnalysis(project, record, now = new Date().toISOString()) {
     artifacts: [...project.artifacts, record],
     history: [...project.history, { time: now, action: 'spatial', detail: `${record.name} of ${dataset?.name ?? record.dataset} (artifact ${record.id})` }],
   };
+}
+
+// Local Moran's I classes, as local.bin numbers them.
+export const LOCAL_CLASSES = ['none', 'high among high', 'low among low', 'high among low', 'low among high'];
+
+// A Moran's I analysis's local values as GET /api/analyses/{id}/local answers them: { n, genes
+// (indices), I, P (Float32Array each, gene by gene), classes (Uint8Array each) }.
+export function readLocal(buffer) {
+  const v = new DataView(buffer);
+  const n = v.getUint32(0, true);
+  const T = v.getUint32(4, true);
+  if (buffer.byteLength !== 8 + 4 * T + 9 * n * T) throw new Error(`local values of ${buffer.byteLength} bytes, not ${8 + 4 * T + 9 * n * T}`);
+  const genes = Array.from({ length: T }, (_, k) => v.getUint32(8 + 4 * k, true));
+  const base = 8 + 4 * T;
+  return {
+    n, genes,
+    I: genes.map((_, k) => new Float32Array(buffer, base + 4 * n * k, n)),
+    P: genes.map((_, k) => new Float32Array(buffer, base + 4 * n * (T + k), n)),
+    classes: genes.map((_, k) => new Uint8Array(buffer, base + 8 * n * T + n * k, n)),
+  };
+}
+
+// A gene's cells of a local class (1 high among high … 4 low among high; 0 every class but none).
+export function localCells(local, k, cls) {
+  const classes = local.classes[k];
+  const cells = new Uint8Array(classes.length);
+  let count = 0;
+  for (let i = 0; i < classes.length; i += 1) {
+    if (cls === 0 ? classes[i] > 0 : classes[i] === cls) {
+      cells[i] = 1;
+      count += 1;
+    }
+  }
+  return { cells, count };
 }
 
 // An analysis's cells as GET /api/analyses/{id}/cells answers them: { n, rows, label, stratum }.

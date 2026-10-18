@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addAnalysis, analysesOf, analysisRecord, bandCells, bandsOf, BOUNDARY_DEFAULTS, checkAnalysisParams, codesRequest, distancesTo, divergingColor, labelsRequest, nearCells, OUTSIDE_TISSUE, pairCells, NICHES_DEFAULTS, nicheCells, nicheNames, rankPairs, readAnalyzed, regionCells, REGIONS_DEFAULTS, rowNames, strataRequest, zoneBands } from './spatial.js';
+import { addAnalysis, analysesOf, analysisRecord, bandCells, bandsOf, BOUNDARY_DEFAULTS, checkAnalysisParams, codesRequest, distancesTo, divergingColor, labelsRequest, nearCells, OUTSIDE_TISSUE, pairCells, localCells, MORAN_DEFAULTS, NICHES_DEFAULTS, nicheCells, nicheNames, readLocal, rankPairs, readAnalyzed, regionCells, REGIONS_DEFAULTS, rowNames, strataRequest, zoneBands } from './spatial.js';
 import { sha256 } from './sha256.js';
 import { createProject } from './project.js';
 
@@ -130,4 +130,27 @@ test('niches: parameters, names and cells', () => {
   assert.deepEqual(nicheNames({ defining: [[2, 0], [1]], composition: [0.3, 0.1, 0.6, 0.1, 0.85, 0.05] }, ['Stromal', 'Immune', 'Tumor']), ['1 · Tumor 60% + Stromal 30%', '2 · Immune 85%']);
   const nc = nicheCells(Int32Array.from([0, 1, 2, 1]), 0);
   assert.deepEqual([[...nc.cells], nc.count], [[0, 1, 0, 1], 2]);
+});
+
+test('Moran\'s I: parameters, and its local values read', () => {
+  assert.equal(checkAnalysisParams('moran', MORAN_DEFAULTS), null);
+  assert.equal(checkAnalysisParams('moran', { ...MORAN_DEFAULTS, permutations: 0, local: 0 }), null);
+  assert.match(checkAnalysisParams('moran', { ...MORAN_DEFAULTS, weights: 'distance' }), /row/);
+  assert.match(checkAnalysisParams('moran', { ...MORAN_DEFAULTS, permutations: 5 }), /0 \(the analytic test\)/);
+  // Two cells, one gene (index 7): I 0.5 and −1, p 0.01 and 0.5, classes high among high and none.
+  const buf = new ArrayBuffer(8 + 4 + 9 * 2);
+  const v = new DataView(buf);
+  v.setUint32(0, 2, true);
+  v.setUint32(4, 1, true);
+  v.setUint32(8, 7, true);
+  v.setFloat32(12, 0.5, true);
+  v.setFloat32(16, -1, true);
+  v.setFloat32(20, 0.01, true);
+  v.setFloat32(24, 0.5, true);
+  v.setUint8(28, 1);
+  v.setUint8(29, 0);
+  const local = readLocal(buf);
+  assert.deepEqual([local.n, local.genes, [...local.I[0]], [...local.classes[0]]], [2, [7], [0.5, -1], [1, 0]]);
+  assert.equal(localCells(local, 0, 1).count, 1);
+  assert.equal(localCells(local, 0, 2).count, 0);
 });

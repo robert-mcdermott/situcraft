@@ -7,6 +7,8 @@ package spatial
 //	                  the strata), its parameters and its results
 //	cells.bin "SCSA"  the cells analyzed: rows of the segmentation, each one's label (−1 for none)
 //	                  and stratum
+//	local.bin "SCSL"  for Moran's I, the leading genes' local Moran's I: each cell's value,
+//	                  p-value and class
 //
 // Numbers that are not defined (a z-score where the permutations never vary) are written as null.
 
@@ -34,6 +36,7 @@ const (
 	QuestionRegions      = "regions"
 	QuestionBoundary     = "boundary"
 	QuestionNiches       = "niches"
+	QuestionMoran        = "moran"
 )
 
 // AnalysisVersion names this version of the analyses, as artifacts record it.
@@ -43,13 +46,22 @@ const AnalysisVersion = "1"
 const (
 	FileAnalysis = "analysis.json"
 	FileAnalyzed = "cells.bin"
+	FileLocal    = "local.bin"
 )
 
-// AnalysisFiles lists them in order.
+// AnalysisFiles lists every question's files in order; Moran's I adds its local values.
 var AnalysisFiles = []string{FileAnalysis, FileAnalyzed}
 
+// AnalysisFilesOf lists a question's files in order.
+func AnalysisFilesOf(question string) []string {
+	if question == QuestionMoran {
+		return []string{FileAnalysis, FileAnalyzed, FileLocal}
+	}
+	return AnalysisFiles
+}
+
 // AnalysisRoles name each file's role in an artifact's manifest.
-var AnalysisRoles = map[string]string{FileAnalysis: "description and results", FileAnalyzed: "cells"}
+var AnalysisRoles = map[string]string{FileAnalysis: "description and results", FileAnalyzed: "cells", FileLocal: "local Moran's I"}
 
 // Nums are numbers written to JSON with null for NaN and infinities.
 type Nums []float64
@@ -253,6 +265,90 @@ type NichesResult struct {
 	MarkerCells int                `json:"markerCells"`
 }
 
+// MoranResult is spatially variable genes in analysis.json: the genes (the segmentation's), the
+// weights, the cells (with no transcript, and the target total of the normalization), the weights'
+// sums and the expectation; by gene, I, its variances under normality and randomization,
+// randomization's z and two-sided p, the permutations' mean and deviation of I and p (null without
+// permutations), the adjusted p (of the permutations when run), the mean value and the cells
+// expressing it; and the genes whose local Moran's I is in local.bin.
+type MoranResult struct {
+	Genes        []string `json:"genes"`
+	Weights      string   `json:"weights"`
+	Cells        int      `json:"cells"`
+	Edges        int      `json:"edges"`
+	Islands      int      `json:"islands"`
+	NoTranscript int      `json:"noTranscript"`
+	Target       float64  `json:"target"`
+	S0           float64  `json:"s0"`
+	S1           float64  `json:"s1"`
+	S2           float64  `json:"s2"`
+	Expected     float64  `json:"expected"`
+	I            Nums     `json:"i"`
+	VarNorm      Nums     `json:"varNorm"`
+	VarRand      Nums     `json:"varRand"`
+	Z            Nums     `json:"z"`
+	P            Nums     `json:"p"`
+	PermMean     Nums     `json:"permMean"`
+	PermSD       Nums     `json:"permSd"`
+	PermP        Nums     `json:"permP"`
+	PAdj         Nums     `json:"padj"`
+	Mean         Nums     `json:"mean"`
+	Detected     []int    `json:"detected"`
+	Local        []int    `json:"local"`
+}
+
+// WriteLocal writes local.bin: the cells' and genes' numbers, the genes (indices), then each
+// gene's local I for every cell (f32), their p-values (f32), and their classes (a byte each).
+func WriteLocal(dir string, cells int, local []LocalMoran) error {
+	var b segment.Buffer
+	b.U32(uint32(cells))
+	b.U32(uint32(len(local)))
+	for _, l := range local {
+		b.U32(uint32(l.Gene))
+	}
+	for _, l := range local {
+		b.F32s(l.I)
+	}
+	for _, l := range local {
+		b.F32s(l.P)
+	}
+	for _, l := range local {
+		for _, c := range l.Class {
+			b.Byte(byte(c))
+		}
+	}
+	return segment.WriteBinary(filepath.Join(dir, FileLocal), "SCSL", &b)
+}
+
+// ReadLocal reads local.bin.
+func ReadLocal(dir string) ([]LocalMoran, error) {
+	r, err := segment.ReadBinary(filepath.Join(dir, FileLocal), "SCSL")
+	if err != nil {
+		return nil, err
+	}
+	n, T := int(r.U32()), int(r.U32())
+	if n < 0 || T < 0 || T > 1000 || n > 1<<28 {
+		return nil, fmt.Errorf("%s of %d cells and %d genes", FileLocal, n, T)
+	}
+	out := make([]LocalMoran, T)
+	for k := range out {
+		out[k].Gene = int(r.U32())
+	}
+	for k := range out {
+		out[k].I = r.F32s(n)
+	}
+	for k := range out {
+		out[k].P = r.F32s(n)
+	}
+	for k := range out {
+		out[k].Class = make([]int8, n)
+		for i := range out[k].Class {
+			out[k].Class[i] = int8(r.Byte())
+		}
+	}
+	return out, r.Done(FileLocal)
+}
+
 // DefiningLabels are a niche's defining labels: those whose share of its windows is at least 1.5
 // times their share in the tissue and at least 5%, by that ratio, up to three; else the commonest.
 func DefiningLabels(composition, tissue []float64) []int {
@@ -312,6 +408,7 @@ type Analysis struct {
 	Regions      *RegionsResult      `json:"regions,omitempty"`
 	Boundary     *BoundaryResult     `json:"boundary,omitempty"`
 	Niches       *NichesResult       `json:"niches,omitempty"`
+	Moran        *MoranResult        `json:"moran,omitempty"`
 	Window       *WindowRef          `json:"window,omitempty"`
 }
 
@@ -395,8 +492,12 @@ func ReadAnalyzed(dir string) (*Analyzed, error) {
 
 // AnalysisDigest is the SHA-256 of an analysis's files, in order.
 func AnalysisDigest(dir string) (string, error) {
+	a, err := ReadAnalysis(dir)
+	if err != nil {
+		return "", err
+	}
 	h := sha256.New()
-	for _, f := range AnalysisFiles {
+	for _, f := range AnalysisFilesOf(a.Question) {
 		raw, err := os.ReadFile(filepath.Join(dir, f))
 		if err != nil {
 			return "", err
@@ -462,6 +563,18 @@ type AnalysisSummary struct {
 	Niches       []NicheSummary `json:"niches,omitempty"`
 	AgreementMin *float64       `json:"agreementMin,omitempty"`
 	AgreementAvg *float64       `json:"agreementMean,omitempty"`
+	// Moran's I: the genes analyzed, and the significant genes with the greatest I and the least
+	// (below the expectation), up to five and three.
+	Genes     int    `json:"genes,omitempty"`
+	Patterned []Gene `json:"patterned,omitempty"`
+	Dispersed []Gene `json:"dispersed,omitempty"`
+}
+
+// Gene is a gene's Moran's I, for a summary.
+type Gene struct {
+	Gene string  `json:"gene"`
+	I    float64 `json:"i"`
+	PAdj float64 `json:"padj"`
 }
 
 // NicheSummary is one niche, for a summary.
@@ -884,6 +997,69 @@ func CheckAnalysis(dir string, m *artifacts.Manifest) []artifacts.Finding {
 			}
 			avg := sum / float64(len(r.Agreement))
 			s.AgreementMin, s.AgreementAvg = &lo, &avg
+		}
+	case QuestionMoran:
+		r := a.Moran
+		if r == nil || a.Graph == nil {
+			fatal("spatial.results", "Moran's I without its graph or results.")
+			return out
+		}
+		G := len(r.Genes)
+		for _, v := range []Nums{r.I, r.VarNorm, r.VarRand, r.Z, r.P, r.PermMean, r.PermSD, r.PermP, r.PAdj, r.Mean} {
+			if len(v) != G {
+				fatal("spatial.sizes", "Moran's I's results are not for %d genes.", G)
+				return out
+			}
+		}
+		if len(r.Detected) != G || r.Cells != n {
+			fatal("spatial.sizes", "Moran's I's results are not for %d genes of %d cells.", G, n)
+			return out
+		}
+		for g := 0; g < G; g++ {
+			if math.IsInf(r.I[g], 0) || !inRange(r.P[g], 0, 1) || !inRange(r.PAdj[g], 0, 1) {
+				fatal("spatial.results", "Gene %s's I or p-values are out of range.", r.Genes[g])
+				return out
+			}
+		}
+		local, err := ReadLocal(dir)
+		if err != nil {
+			fatal("spatial.unreadable", "%v", err)
+			return out
+		}
+		if len(local) != len(r.Local) {
+			fatal("spatial.sizes", "local.bin holds %d genes; the results name %d.", len(local), len(r.Local))
+			return out
+		}
+		for k, l := range local {
+			if l.Gene != r.Local[k] || len(l.I) != n || l.Gene < 0 || l.Gene >= G {
+				fatal("spatial.sizes", "local.bin's gene %d is not the results' %d of %d cells.", l.Gene, r.Local[k], n)
+				return out
+			}
+			for _, c := range l.Class {
+				if c < LocalNone || c > LocalLowHigh {
+					fatal("spatial.results", "local.bin holds a class %d.", c)
+					return out
+				}
+			}
+		}
+		s.Genes = G
+		var sig []Gene
+		for g := 0; g < G; g++ {
+			if r.PAdj[g] < 0.05 && !math.IsNaN(r.I[g]) {
+				sig = append(sig, Gene{Gene: r.Genes[g], I: r.I[g], PAdj: r.PAdj[g]})
+			}
+		}
+		s.Significant = len(sig)
+		sort.SliceStable(sig, func(i, j int) bool { return sig[i].I > sig[j].I })
+		for _, x := range sig {
+			if x.I > r.Expected && len(s.Patterned) < 5 {
+				s.Patterned = append(s.Patterned, x)
+			}
+		}
+		for i := len(sig) - 1; i >= 0 && len(s.Dispersed) < 3; i-- {
+			if sig[i].I < r.Expected {
+				s.Dispersed = append(s.Dispersed, sig[i])
+			}
 		}
 	case QuestionEnrichment:
 		e := a.Enrichment

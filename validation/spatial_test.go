@@ -3,8 +3,9 @@ package validation
 // Neighborhood enrichment and co-occurrence (wave 6, slice 2; research.md §6.2) against Squidpy's,
 // nearest distances and Ripley's K (slice 3; §6.3) against SciPy's k-d tree and astropy's
 // estimator, regions compared and a profile across a region's edge (slice 4; §6.4) against
-// Shapely's buffers and distances, and niches (slice 5; §6.5) against scikit-learn's k-means, on the
-// instrument's segmentation of both 2-FOV bundles and the
+// Shapely's buffers and distances, niches (slice 5; §6.5) against scikit-learn's k-means, and each
+// gene's Moran's I (slice 6; §6.6) against Squidpy's spatial_autocorr, on the instrument's
+// segmentation of both 2-FOV bundles and the
 // standard simulated tissue, its cells labeled by SituCraft's clustering (the defaults) and every
 // one of them analyzed; Ripley's K, and the regions, in the rectangle of the middle half of the
 // cells' extent as the window.
@@ -17,6 +18,7 @@ package validation
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -91,6 +93,15 @@ type spatialNumbers struct {
 		RelativeInertia float64 `json:"relativeInertia"`
 		AdjustedRand    float64 `json:"adjustedRand"`
 	} `json:"niches"`
+	// Moran's I of each gene over the Delaunay graph, row-standardized: I and the variance under
+	// normality against Squidpy's, and both variances against an independent computation.
+	Moran struct {
+		Genes         int     `json:"genes"`
+		MaxI          float64 `json:"maxDifferenceI"`
+		MaxVarNorm    float64 `json:"maxRelativeVarNorm"`
+		MaxExactI     float64 `json:"maxDifferenceExactI"`
+		MaxExactVarRd float64 `json:"maxRelativeExactVarRand"`
+	} `json:"moran"`
 	Cooccurrence struct {
 		Distances            int     `json:"distances"`
 		Compared             int     `json:"compared"`
@@ -113,6 +124,9 @@ type spatialExtras struct {
 	composition *spatial.Composition
 	boundary    *spatial.Boundary
 	niches      *spatial.Niches
+	moran       *spatial.Moran
+	moranValues []float32
+	moranGenes  []string
 }
 
 // referenceRegions are two regions in the rectangle (x0, y0, x1, y1): an irregular heptagon about
@@ -233,6 +247,13 @@ func spatialOfSet(t *testing.T, bundleDir string) (graphs map[string]*spatial.Gr
 	if extra.boundary, err = spatial.AcrossEdge(ctx, g.X, g.Y, label, K, win, regions[0], spatial.DefaultBoundary(), runtime.NumCPU()); err != nil {
 		t.Fatal(err)
 	}
+	if extra.moranValues, _, _, err = spatial.NormalizedExpression(counts, g.Rows); err != nil {
+		t.Fatal(err)
+	}
+	extra.moranGenes = counts.Genes
+	if extra.moran, err = spatial.MoransI(ctx, g, extra.moranValues, len(counts.Genes), spatial.MoranParams{Weights: "row"}, runtime.NumCPU(), nil); err != nil {
+		t.Fatal(err)
+	}
 	nicheParams := spatial.DefaultNiches()
 	nicheParams.Seeds = 0
 	if extra.niches, err = spatial.FindNiches(ctx, g.X, g.Y, label, K, nicheParams, runtime.NumCPU(), nil); err != nil {
@@ -264,6 +285,8 @@ func spatialDigest(results map[string]*spatial.Enrichment, co *spatial.Cooccurre
 		h.Write(raw)
 	}
 	raw, _ := json.Marshal(map[string]any{"assign": extra.niches.Assign, "inertia": extra.niches.Inertia, "composition": spatial.Nums(extra.niches.Composition)})
+	h.Write(raw)
+	raw, _ = json.Marshal(map[string]any{"i": spatial.Nums(extra.moran.I), "varNorm": spatial.Nums(extra.moran.VarNorm), "varRand": spatial.Nums(extra.moran.VarRand)})
 	h.Write(raw)
 	return hex.EncodeToString(h.Sum(nil))
 }
@@ -332,7 +355,8 @@ func TestReferenceSpatial(t *testing.T) {
 					"ripley":  map[string]any{"rectangle": extra.rectangle, "radii": extra.isotropic.Radii, "area": extra.isotropic.Area, "isotropic": iso, "none": none},
 					"regions": map[string]any{"rectangle": extra.rectangle, "polygons": extra.polygons, "area": extra.composition.Area, "count": extra.composition.Count, "outside": extra.composition.Outside,
 						"edges": extra.boundary.Edges, "bandArea": extra.boundary.Area, "bandCount": extra.boundary.Count},
-					"niches": map[string]any{"niches": extra.niches.Count, "starts": spatial.DefaultNiches().Starts, "inertia": extra.niches.Inertia, "assign": extra.niches.Assign}}, "", " ")
+					"niches": map[string]any{"niches": extra.niches.Count, "starts": spatial.DefaultNiches().Starts, "inertia": extra.niches.Inertia, "assign": extra.niches.Assign},
+					"moran":  map[string]any{"genes": extra.moranGenes, "i": spatial.Nums(extra.moran.I), "varNorm": spatial.Nums(extra.moran.VarNorm), "varRand": spatial.Nums(extra.moran.VarRand), "expected": extra.moran.Expected}}, "", " ")
 				// The niches' windows: each cell's composition, a row a cell, in the cells' order.
 				var nb strings.Builder
 				for k := 0; k < K; k++ {
@@ -352,6 +376,14 @@ func TestReferenceSpatial(t *testing.T) {
 					nb.WriteByte('\n')
 				}
 				if err := os.WriteFile(filepath.Join(out, "niches.csv"), []byte(nb.String()), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				// Moran's I's values: genes × cells, float32, little-endian.
+				mv := make([]byte, 4*len(extra.moranValues))
+				for i, v := range extra.moranValues {
+					binary.LittleEndian.PutUint32(mv[4*i:], math.Float32bits(v))
+				}
+				if err := os.WriteFile(filepath.Join(out, "moran.f32"), mv, 0o644); err != nil {
 					t.Fatal(err)
 				}
 				if err := os.WriteFile(filepath.Join(out, "situcraft.json"), append(info, '\n'), 0o644); err != nil {
@@ -387,6 +419,11 @@ func TestReferenceSpatial(t *testing.T) {
 			t.Logf("regions compared: %d rows, the tissue's areas within %.2g of Shapely's, %d counts differing; across an edge: %d bands, their areas within %.2g (at most %.2g µm² apart), %d counts differing", rg.Rows, rg.MaxArea, rg.CountsDiffering, rg.Bands, rg.MaxBandArea, rg.MaxBandAreaDiff, rg.BandsDiffering)
 			if rg.Rows != 3 || rg.Bands != len(extra.boundary.Area) || !(rg.MaxArea < 1e-6) || !(rg.MaxBandArea < 2e-5) || !(rg.MaxBandAreaDiff < 0.05) || rg.CountsDiffering != 0 || rg.BandsDiffering != 0 {
 				t.Errorf("regions compared or the profile across an edge differ from Shapely's areas and counts")
+			}
+			mo := num.Moran
+			t.Logf("Moran's I of %d genes: Squidpy's within %.2g, its variance under normality within %.2g; an independent computation's I within %.2g and variance under randomization within %.2g", mo.Genes, mo.MaxI, mo.MaxVarNorm, mo.MaxExactI, mo.MaxExactVarRd)
+			if mo.Genes != len(extra.moranGenes) || !(mo.MaxI < 1e-9) || !(mo.MaxVarNorm < 1e-9) || !(mo.MaxExactI < 1e-9) || !(mo.MaxExactVarRd < 1e-9) {
+				t.Errorf("Moran's I differs from Squidpy's or from the independent computation")
 			}
 			nn := num.Niches
 			t.Logf("niches: %d of %d cells; SituCraft's inertia %.4f, scikit-learn's %.4f (%+.2g), their niches' adjusted Rand index %.3f", nn.Niches, nn.Cells, nn.Inertia, nn.SklearnInertia, nn.RelativeInertia, nn.AdjustedRand)
@@ -592,5 +629,78 @@ func TestNichesFindDomains(t *testing.T) {
 		n, len(ds), len(kinds), len(kinds), cluster.AdjustedRand(byKind.Assign, kind), cluster.AdjustedRand(byKind.Assign, domain), least(byKind.Agreement), len(ds), cluster.AdjustedRand(byDomain.Assign, domain), least(byDomain.Agreement))
 	if !(cluster.AdjustedRand(byKind.Assign, kind) > 0.85) || !(least(byKind.Agreement) > 0.95) || !(least(byDomain.Agreement) < least(byKind.Agreement)) {
 		t.Errorf("the niches do not find the kinds of domain, or the seeds' agreement does not show too many niches")
+	}
+}
+
+// Spatially variable genes in the standard simulated tissue (wave 6, slice 6; research.md §6.6):
+// over the Delaunay graph of the instrument's cells, the genes marking a cell type, whose cells
+// gather in the domains that type leads, against the genes no type marks (each type's share of
+// them alike): every marker's Moran's I above every unmarked gene's, and every marker in a pattern
+// (adjusted p below 0.05).
+func TestMoranFindsDomainGenes(t *testing.T) {
+	if testing.Short() || os.Getenv("SITUCRAFT_REQUIRE_DATA") == "" {
+		t.Skip("set SITUCRAFT_REQUIRE_DATA=1 to analyze the standard simulated tissue")
+	}
+	ctx := context.Background()
+	dir := simulatedStandard(t)
+	b, err := xenium.Open(dir, xenium.Options{CacheDir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer b.Close()
+	seg := filepath.Join(t.TempDir(), "instrument")
+	if err := os.MkdirAll(seg, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := imports.Instrument(ctx, b, seg, runtime.NumCPU()); err != nil {
+		t.Fatal(err)
+	}
+	cells, err := segment.ReadCells(seg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	counts, err := segment.ReadCounts(seg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	in := spatial.Inputs{X: make([]float32, len(cells)), Y: make([]float32, len(cells))}
+	for i, c := range cells {
+		in.X[i], in.Y[i] = c.X, c.Y
+	}
+	g, err := spatial.Build(ctx, in, spatial.DefaultParams(spatial.Delaunay), runtime.NumCPU(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	values, _, _, err := spatial.NormalizedExpression(counts, g.Rows)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := spatial.MoransI(ctx, g, values, len(counts.Genes), spatial.MoranParams{Weights: "row"}, runtime.NumCPU(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	marker := map[string]bool{}
+	for _, names := range simulate.MarkerNames(simulate.Presets["standard"]) {
+		for _, name := range names {
+			marker[name] = true
+		}
+	}
+	lowMarker, highOther := math.Inf(1), math.Inf(-1)
+	markers, others, patterned := 0, 0, 0
+	for gene, name := range counts.Genes {
+		if marker[name] {
+			markers++
+			lowMarker = math.Min(lowMarker, m.I[gene])
+			if m.PAdj[gene] < 0.05 && m.I[gene] > m.Expected {
+				patterned++
+			}
+		} else {
+			others++
+			highOther = math.Max(highOther, m.I[gene])
+		}
+	}
+	t.Logf("%d marker genes, Moran's I %.3f or more, %d of them in a pattern; %d genes no type marks, I %.3f at most", markers, lowMarker, patterned, others, highOther)
+	if markers == 0 || others == 0 || !(lowMarker > highOther) || patterned != markers {
+		t.Errorf("the markers' Moran's I does not stand above the unmarked genes'")
 	}
 }

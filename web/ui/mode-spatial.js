@@ -6,8 +6,9 @@
 // the view shows what it holds (degrees, edge lengths, cells without a neighbor) and draws it on
 // the tissue. Questions are asked of a label set's cells (internal/spatial, api_spatial.go):
 // neighborhood enrichment over a graph, co-occurrence across distances, nearest distances, Ripley's
-// K, regions compared, a profile across a region's edge and cellular neighborhoods (niches); each
-// answer is kept as an artifact, and every number opens the cells it comes from on the tissue.
+// K, regions compared, a profile across a region's edge and cellular neighborhoods (niches); and of
+// genes, Moran's I over a graph (spatially variable genes); each answer is kept as an artifact, and
+// every number opens the cells it comes from on the tissue.
 
 import { h, icon, clear, formatCount, relativeTime } from './dom.js';
 import { toast } from './overlays.js';
@@ -20,8 +21,8 @@ import { cellReviewState, reviewsOf } from '../lib/review-record.js';
 import { DEFAULTS, KINDS, cellsRequest, checkGraphParams, chooseCells, describeGraph, graphParams, graphsOf } from '../lib/graphs.js';
 import { histogramPlot } from './qc-plots.js';
 import { labelSource, labelVersions, refOf } from './label-sources.js';
-import { BOUNDARY_DEFAULTS, COOCCURRENCE_DEFAULTS, DISTANCES_DEFAULTS, ENRICHMENT_DEFAULTS, MAX_REGIONS, NICHES_DEFAULTS, QUESTIONS, REGIONS_DEFAULTS, RIPLEY_DEFAULTS, analysesOf, bandsOf, checkAnalysisParams, distancesTo, labelsRequest, nicheNames, rankPairs, rowNames, strataRequest, zoneBands } from '../lib/spatial.js';
-import { cooccurrenceChart, distancesChart, distancesHeatmap, distancesTable, enrichmentHeatmap, nicheHeatmap, nichesTable, pairName, pairsTable, profileChart, pvalue, ratioForest, ratioText, readingsTable, regionsTable, ripleyChart, ripleyTable, sharesTable, times } from './spatial-results.js';
+import { BOUNDARY_DEFAULTS, COOCCURRENCE_DEFAULTS, DISTANCES_DEFAULTS, ENRICHMENT_DEFAULTS, LOCAL_CLASSES, MAX_REGIONS, MORAN_DEFAULTS, NICHES_DEFAULTS, QUESTIONS, REGIONS_DEFAULTS, RIPLEY_DEFAULTS, analysesOf, bandsOf, checkAnalysisParams, distancesTo, labelsRequest, nicheNames, rankPairs, rowNames, strataRequest, zoneBands } from '../lib/spatial.js';
+import { cooccurrenceChart, distancesChart, distancesHeatmap, distancesTable, enrichmentHeatmap, moranTable, nicheHeatmap, nichesTable, pairName, pairsTable, profileChart, pvalue, ratioForest, ratioText, readingsTable, regionsTable, ripleyChart, ripleyTable, sharesTable, times } from './spatial-results.js';
 import { showAnalysisCells } from './spatial-cells.js';
 
 const exact = (v) => (Number.isFinite(v) ? v.toLocaleString('en-US') : '—');
@@ -67,10 +68,12 @@ export function mountSpatial(app, container) {
           compare: new Set(), edge: '', bReach: BOUNDARY_DEFAULTS.reach, bStep: BOUNDARY_DEFAULTS.step, margin: BOUNDARY_DEFAULTS.margin,
           // Cellular neighborhoods: the window (nearest or a radius), the niches, starts and seeds.
           windowBy: 'neighbors', neighbors: NICHES_DEFAULTS.neighbors, nRadius: 30, niches: NICHES_DEFAULTS.niches, starts: NICHES_DEFAULTS.starts, seeds: NICHES_DEFAULTS.seeds,
+          // Spatially variable genes: the weights, permutations and local genes.
+          mWeights: MORAN_DEFAULTS.weights, mPermutations: MORAN_DEFAULTS.permutations, local: MORAN_DEFAULTS.local, localPermutations: MORAN_DEFAULTS.localPermutations,
         },
         analysis: null, pair: null, from: 0, to: null, at: null,
         // Regions compared's two rows, a label chosen, densities or shares, and a profile's zone.
-        rows: null, label: null, measure: 'density', zone: 'margin', niche: null,
+        rows: null, label: null, measure: 'density', zone: 'margin', niche: null, gene: null, localClass: 1,
       });
     }
     return sessions.get(dataset.id);
@@ -336,6 +339,19 @@ export function mountSpatial(app, container) {
   async function ask(t, seg, session) {
     const q = session.q;
     const project = app.store.project;
+    if (q.question === 'moran') {
+      // Of genes: a graph, no labels.
+      const parameters = { weights: q.mWeights, permutations: q.mPermutations, seed: q.seed, local: q.local, localPermutations: q.localPermutations };
+      const problem = checkAnalysisParams('moran', parameters);
+      if (problem) throw new Error(problem);
+      const graph = graphsOf(project, t.dataset.id, seg.id).find((g) => g.id === q.graph && g.state === 'complete');
+      if (!graph) throw new Error('choose a graph of the segmentation (build one above)');
+      const manifest = await app.bundles.runAnalysis(t.item, t.dataset.id, { question: 'moran', segmentation: seg.id, graph: graph.id, parameters });
+      session.analysis = manifest.id;
+      session.gene = null;
+      render(true);
+      return manifest;
+    }
     const v = labelVersions(project, t.dataset.id, seg.id, { niches: true }).find((x) => labelKey(x) === q.labels);
     if (!v) throw new Error('choose a label set (the Cell types view labels the cells)');
     const src = await labelSource(app, refOf(v.id, v.level));
@@ -477,6 +493,14 @@ export function mountSpatial(app, container) {
       // None chosen yet: the dataset's regions, as many as can be compared at once.
       if (!q.compare.size) for (const r of regions.slice(0, MAX_REGIONS)) q.compare.add(r.id);
       inputs.splice(0, inputs.length, h('div.seg-import-grid', cellsField, closing), regionBoxes(q.compare, 'Compare these regions (and the tissue in none of them)'));
+    } else if (question.id === 'moran') {
+      inputs.splice(0, inputs.length, h('div.seg-import-grid',
+        field('sp-q-graph', 'Graph', select('sp-q-graph', graphs.map((g) => [g.id, `${describeGraph(g.parameters)}${g.summary?.choice?.regions?.length ? `, in ${g.summary.choice.regions.map((r) => r.name).join(', ')}` : ''}`]), 'graph', () => render(true)), 'Each gene\'s expression is compared across the graph\'s edges: neighbors alike make a pattern.'),
+        field('sp-q-mweights', 'Weights', select('sp-q-mweights', [['row', 'each cell\'s neighbors share 1 (row-standardized)'], ['binary', 'each edge 1 (binary)']], 'mWeights'), 'Row-standardized weights count every cell alike, however many neighbors it has.'),
+        field('sp-q-mperm', 'Permutations', number('sp-q-mperm', 'mPermutations', { min: 0, max: 9999, step: 10 }), 'How many times the cells\' values are dealt again for the test (0: the analytic test alone, under randomization).'),
+        field('sp-q-local', 'Local Moran\'s I of', number('sp-q-local', 'local', { min: 0, max: 50, step: 1 }), 'The leading genes whose local Moran\'s I is found: which cells make the pattern.'),
+        field('sp-q-lperm', 'Local permutations', number('sp-q-lperm', 'localPermutations', { min: 19, max: 9999, step: 10 })),
+        field('sp-q-seed', 'Seed', number('sp-q-seed', 'seed', { min: 0, step: 1 }))));
     } else if (question.id === 'niches') {
       inputs.splice(0, inputs.length, h('div.seg-import-grid',
         cellsField,
@@ -497,7 +521,8 @@ export function mountSpatial(app, container) {
         field('sp-q-margin', 'Margin (µm)', number('sp-q-margin', 'margin', { min: 1, max: 500, step: 5 }), 'The margin is within this of the edge on either side; the core is inside beyond it, around is outside beyond it to the reach.'),
         closing));
     }
-    const go = h('button.btn.primary', { type: 'button', disabled: !t.item || !versions.length || (question.id === 'enrichment' && !graphs.length) || ((question.id === 'regions' || question.id === 'boundary') && !regions.length), 'data-action': 'ask', onclick: async () => {
+    const ofGraph = question.id === 'enrichment' || question.id === 'moran';
+    const go = h('button.btn.primary', { type: 'button', disabled: !t.item || (!versions.length && question.labels !== false) || (ofGraph && !graphs.length) || ((question.id === 'regions' || question.id === 'boundary') && !regions.length), 'data-action': 'ask', onclick: async () => {
       try {
         const m = await ask(t, seg, session);
         toast(`${m.name}: done.`, { kind: 'ok' });
@@ -506,17 +531,17 @@ export function mountSpatial(app, container) {
       }
     } }, icon('play'), 'Ask');
     const needsRegions = (question.id === 'regions' || question.id === 'boundary') && !regions.length;
-    const missing = !versions.length ? 'Label the cells first: the Cell types view clusters and labels them, or imports labels.' : question.id === 'enrichment' && !graphs.length ? 'Build a graph above first: enrichment counts neighbors in it.' : needsRegions ? 'Draw a region on the tissue first (the Viewer\'s region tools), or read regions from a file.' : null;
+    const missing = !versions.length && question.labels !== false ? 'Label the cells first: the Cell types view clusters and labels them, or imports labels.' : ofGraph && !graphs.length ? `Build a graph above first: ${question.id === 'moran' ? 'Moran\'s I compares neighbors along it' : 'enrichment counts neighbors in it'}.` : needsRegions ? 'Draw a region on the tissue first (the Viewer\'s region tools), or read regions from a file.' : null;
     return h('section.seg-section',
       h('div.section-title', 'Questions'),
       h('div.seg-card',
         h('div.field', h('span', 'Ask'), picker),
         h('p.muted.seg-note.sp-help', question.help),
-        h('div.seg-import-grid', field('sp-q-labels', 'Labels', select('sp-q-labels', versions.map((v) => [labelKey(v), v.name]), 'labels'))),
+        question.labels === false ? null : h('div.seg-import-grid', field('sp-q-labels', 'Labels', select('sp-q-labels', versions.map((v) => [labelKey(v), v.name]), 'labels'))),
         ...inputs,
         h('div.seg-form', go, missing ? h('span.muted', missing) : null),
         ...progress(app.bundles.analyzing(t.dataset.id), (e) => QUESTIONS.find((x) => x.id === e.question)?.label ?? 'The question'),
-        h('p.muted.seg-cite', 'Methods: neighborhood enrichment by permutation of the labels (Schapiro et al. 2017; Palla et al. 2022), its expectation exact, its p-values adjusted by Benjamini and Hochberg (1995); co-occurrence as Palla et al. (2022); nearest distances and Ripley\'s K and L (Ripley 1977; Besag 1977) with the isotropic edge correction, against the labels dealt at random, with envelopes and a global test (Diggle 2003; Baddeley et al. 2014); densities and shares with Garwood\'s (1936) and Wilson\'s (1927) intervals, their ratios with exact conditional (Ederer and Mantel 1974) and Koopman\'s (1984) intervals; a tumor\'s core and margin as Galon et al. (2006) measure them; cellular neighborhoods as Goltsev et al. (2018) and Schürch et al. (2020) define them, by k-means (Lloyd 1982) with k-means++ seeding (Arthur and Vassilvitskii 2007). A section\'s cells are not replicates: these describe this section, and the sample is the unit of any comparison between samples.')));
+        h('p.muted.seg-cite', 'Methods: neighborhood enrichment by permutation of the labels (Schapiro et al. 2017; Palla et al. 2022), its expectation exact, its p-values adjusted by Benjamini and Hochberg (1995); co-occurrence as Palla et al. (2022); nearest distances and Ripley\'s K and L (Ripley 1977; Besag 1977) with the isotropic edge correction, against the labels dealt at random, with envelopes and a global test (Diggle 2003; Baddeley et al. 2014); densities and shares with Garwood\'s (1936) and Wilson\'s (1927) intervals, their ratios with exact conditional (Ederer and Mantel 1974) and Koopman\'s (1984) intervals; a tumor\'s core and margin as Galon et al. (2006) measure them; cellular neighborhoods as Goltsev et al. (2018) and Schürch et al. (2020) define them, by k-means (Lloyd 1982) with k-means++ seeding (Arthur and Vassilvitskii 2007); Moran\'s I (Moran 1950) with its variances under normality and randomization (Cliff and Ord 1981), and local Moran\'s I (Anselin 1995). A section\'s cells are not replicates: these describe this section, and the sample is the unit of any comparison between samples.')));
   }
 
   function analysisListCard(t, seg, session) {
@@ -536,16 +561,16 @@ export function mountSpatial(app, container) {
     const rows = list.map((a) => {
       const s = a.summary ?? {};
       const over = a.question === 'enrichment' ? describeGraph(s.graph?.parameters) : a.question === 'cooccurrence' ? `${s.distances ?? '?'} distances` : a.question === 'ripley' ? `${s.window?.kind === 'region' ? `the region ${s.window.region?.name}` : 'the tissue'}`
-        : a.question === 'regions' ? (s.rows ?? []).map((r) => r.name).join(', ') : a.question === 'boundary' ? `the edge of ${s.edge?.name ?? '?'}` : a.question === 'niches' ? `${s.niches?.length ?? '?'} niches` : 'the cells';
-      const what = a.question === 'cooccurrence' ? '' : a.question === 'regions' ? `${s.significant ?? 0} densities differ` : a.question === 'boundary' ? `${s.significant ?? 0} labels differ` : a.question === 'niches' ? (Number.isFinite(s.agreementMin) ? `seeds agree at ${s.agreementMin.toFixed(2)} or more` : '') : `${s.significant ?? 0} pairs differ`;
+        : a.question === 'regions' ? (s.rows ?? []).map((r) => r.name).join(', ') : a.question === 'boundary' ? `the edge of ${s.edge?.name ?? '?'}` : a.question === 'niches' ? `${s.niches?.length ?? '?'} niches` : a.question === 'moran' ? describeGraph(s.graph?.parameters) : 'the cells';
+      const what = a.question === 'cooccurrence' ? '' : a.question === 'regions' ? `${s.significant ?? 0} densities differ` : a.question === 'boundary' ? `${s.significant ?? 0} labels differ` : a.question === 'niches' ? (Number.isFinite(s.agreementMin) ? `seeds agree at ${s.agreementMin.toFixed(2)} or more` : '') : a.question === 'moran' ? `${s.significant ?? 0} of ${s.genes ?? '?'} genes differ` : `${s.significant ?? 0} pairs differ`;
       return h(`tr${session.analysis === a.id ? '.selected' : ''}`, { tabIndex: 0, style: { cursor: 'pointer' }, 'data-analysis': a.id, onclick: () => choose(a), onkeydown: (event) => {
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault();
           choose(a);
         }
       } },
-      h('td', { enrichment: 'Enrichment', cooccurrence: 'Co-occurrence', distances: 'Nearest distances', ripley: 'Ripley\'s K', regions: 'Regions compared', boundary: 'Across an edge', niches: 'Niches' }[a.question] ?? a.question),
-      h('td', s.labels?.name ?? '—'),
+      h('td', { enrichment: 'Enrichment', cooccurrence: 'Co-occurrence', distances: 'Nearest distances', ripley: 'Ripley\'s K', regions: 'Regions compared', boundary: 'Across an edge', niches: 'Niches', moran: 'Moran\'s I' }[a.question] ?? a.question),
+      h('td', a.question === 'moran' ? 'the genes' : s.labels?.name ?? '—'),
       h('td', over, s.strata?.length ? h('span.muted', `, within ${s.strata.map((r) => r.name).join(', ')}`) : null),
       h('td.r', exact(s.labeled)),
       h('td', what),
@@ -565,7 +590,7 @@ export function mountSpatial(app, container) {
     const mine = generation;
     app.bundles.analysisData(record.id).then((data) => {
       if (mine !== generation) return;
-      const answer = { enrichment: enrichmentAnswer, cooccurrence: cooccurrenceAnswer, distances: distancesAnswer, ripley: ripleyAnswer, regions: regionsAnswer, boundary: boundaryAnswer, niches: nichesAnswer }[data.analysis.question];
+      const answer = { enrichment: enrichmentAnswer, cooccurrence: cooccurrenceAnswer, distances: distancesAnswer, ripley: ripleyAnswer, regions: regionsAnswer, boundary: boundaryAnswer, niches: nichesAnswer, moran: moranAnswer }[data.analysis.question];
       clear(host).append(h('div.section-title', 'The answer'), ...answer(t, seg, session, record, data));
     }).catch((error) => {
       if (mine !== generation) return;
@@ -897,6 +922,44 @@ export function mountSpatial(app, container) {
     return parts;
   }
 
+  function moranAnswer(t, seg, session, record, { analysis, cells, local }) {
+    const r = analysis.moran;
+    const p = analysis.parameters;
+    const pick = (g) => {
+      session.gene = g;
+      render(true);
+    };
+    const kv = h('dl.kv.seg-kv',
+      h('dt', 'Graph'), h('dd', analysis.graph.name),
+      h('dt', 'Cells'), h('dd', `${exact(r.cells)} in the graph`, h('span.muted', `${r.islands ? `; ${exact(r.islands)} without a neighbor, weighing nothing` : ''}${r.noTranscript ? `; ${exact(r.noTranscript)} without a gene transcript, zeros` : ''}`)),
+      h('dt', 'Genes'), h('dd', `${exact(r.genes.length)}, log-normalized as SituCraft clusters them (each cell scaled to ${exact(Math.round(r.target))} transcripts, log1p)`),
+      h('dt', 'Weights'), h('dd', r.weights === 'row' ? 'each cell\'s neighbors share 1 (row-standardized)' : 'each edge 1 (binary)'),
+      h('dt', 'Test'), h('dd', `against the values dealt to the cells at random: ${p.permutations ? `${exact(p.permutations)} permutations (seed ${p.seed})` : 'analytically, under randomization'}; Benjamini–Hochberg over the genes; the expectation ${fixed(r.expected, 5)}`),
+      h('dt', 'Artifact'), h('dd.mono', record.id));
+    const parts = [kv, moranTable(analysis, { onPick: pick, chosen: session.gene })];
+    if (session.gene !== null && session.gene < r.genes.length) {
+      const g = session.gene;
+      const k = r.local.indexOf(g);
+      const lines = [`Moran's I ${fixed(r.i[g], 3)} (the expectation ${fixed(r.expected, 4)}): z ${fixed(r.z[g], 1)} under randomization (two-sided p ${pvalue(r.p[g])})${Number.isFinite(r.permP?.[g]) ? `, permutation p ${pvalue(r.permP[g])}` : ''}, adjusted p ${pvalue(r.padj[g])}; expressed in ${(100 * r.detected[g] / r.cells).toFixed(0)}% of the cells.`];
+      const panel = [h('b', r.genes[g]), h('p', lines[0])];
+      if (k >= 0 && local) {
+        const counts = [1, 2, 3, 4].map((c) => local.classes[k].reduce((n, v) => n + (v === c ? 1 : 0), 0));
+        panel.push(h('p', `Its local Moran's I (p below 0.05, unadjusted: where the pattern lies, not a test of it): ${counts.map((n, c) => `${exact(n)} cells ${LOCAL_CLASSES[c + 1]}`).join(', ')}.`));
+        const classPick = h('select.input', { id: 'sp-local-class', 'aria-label': 'The cells to show: those of this class' }, ...[1, 2, 3, 4, 0].map((c) => h('option', { value: String(c) }, c === 0 ? 'every class' : LOCAL_CLASSES[c])));
+        classPick.value = String(session.localClass);
+        classPick.addEventListener('change', () => {
+          session.localClass = Number(classPick.value);
+        });
+        panel.push(h('div.btn-row', classPick, h('button.btn.small.primary', { type: 'button', 'data-action': 'show-local', onclick: () => showAnalysisCells(app, { dataset: t.dataset.id, item: t.item, segmentation: seg, analysis, cells, local, gene: g, localClass: session.localClass }).catch((error) => toast(`The cells: ${error.message}`, { kind: 'error' })) }, icon('tissue'), 'Show these cells on the tissue')));
+      } else {
+        panel.push(h('p.muted', `Local Moran's I is kept for the ${r.local.length} leading genes; ask again with more to see where ${r.genes[g]}'s pattern lies.`));
+      }
+      parts.push(h('div.seg-card.sp-pair', ...panel));
+    }
+    parts.push(h('p.muted.seg-note', 'Moran\'s I measures how alike neighbors\' expression is: 1 alike everywhere, about 0 for no pattern, below 0 where neighbors differ. Genes of cell types that gather (a tissue\'s domains) are in a pattern because their cells are; a section\'s cells are not replicates, so the p-values rank genes in this section.'));
+    return parts;
+  }
+
   function showNear(t, seg, analysis, cells, a, b, k) {
     return showAnalysisCells(app, { dataset: t.dataset.id, item: t.item, segmentation: seg, analysis, cells, a, b, k }).catch((error) => toast(`The cells: ${error.message}`, { kind: 'error' }));
   }
@@ -988,7 +1051,7 @@ export function mountSpatial(app, container) {
     // as "id|level", graph, permutations, seed, weight, within: region ids, cells, regions, farthest,
     // step, pairs, dPermutations, reach, dStep, upTo, every, correction, window, closing, compare:
     // region ids, edge: a region's id, bReach, bStep, margin, windowBy, neighbors, nRadius, niches,
-    // starts, seeds }); answers its manifest.
+    // starts, seeds, mWeights, mPermutations, local, localPermutations }); answers its manifest.
     ask: async (dataset, args) => {
       const t0 = target();
       if (!t0 || t0.dataset.id !== dataset.id) app.focusItem({ kind: 'dataset', id: dataset.id });
@@ -1004,8 +1067,9 @@ export function mountSpatial(app, container) {
         dPermutations: DISTANCES_DEFAULTS.permutations, reach: DISTANCES_DEFAULTS.reach, dStep: DISTANCES_DEFAULTS.step, upTo: 100, every: 5, correction: RIPLEY_DEFAULTS.correction, window: 'tissue', closing: 10,
         edge: '', bReach: BOUNDARY_DEFAULTS.reach, bStep: BOUNDARY_DEFAULTS.step, margin: BOUNDARY_DEFAULTS.margin,
         windowBy: 'neighbors', neighbors: NICHES_DEFAULTS.neighbors, nRadius: 30, niches: NICHES_DEFAULTS.niches, starts: NICHES_DEFAULTS.starts, seeds: NICHES_DEFAULTS.seeds,
+        mWeights: MORAN_DEFAULTS.weights, mPermutations: MORAN_DEFAULTS.permutations, local: MORAN_DEFAULTS.local, localPermutations: MORAN_DEFAULTS.localPermutations,
       });
-      for (const k of ['question', 'labels', 'graph', 'permutations', 'seed', 'weight', 'cells', 'farthest', 'step', 'pairs', 'dPermutations', 'reach', 'dStep', 'upTo', 'every', 'correction', 'window', 'closing', 'edge', 'bReach', 'bStep', 'margin', 'windowBy', 'neighbors', 'nRadius', 'niches', 'starts', 'seeds']) if (args[k] !== undefined) q[k] = args[k];
+      for (const k of ['question', 'labels', 'graph', 'permutations', 'seed', 'weight', 'cells', 'farthest', 'step', 'pairs', 'dPermutations', 'reach', 'dStep', 'upTo', 'every', 'correction', 'window', 'closing', 'edge', 'bReach', 'bStep', 'margin', 'windowBy', 'neighbors', 'nRadius', 'niches', 'starts', 'seeds', 'mWeights', 'mPermutations', 'local', 'localPermutations']) if (args[k] !== undefined) q[k] = args[k];
       q.within = new Set(args.within ?? []);
       q.regions = new Set(args.regions ?? []);
       q.compare = new Set(args.compare ?? []);

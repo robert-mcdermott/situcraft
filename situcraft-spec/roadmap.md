@@ -2664,13 +2664,45 @@ as in waves 3 and 4.
      - **Lung's classes:** six niches, epithelium (44% of the cells), endothelium at 12% and 25%,
        stroma at 17%, immune cells at 22%, and stroma with endothelium (39%, 13%); their genes those
        of their cells (VWF and PLVAP; AIF1 and CD68; PDGFRB and COL8A1).
-6. **Spatially variable genes (N7).**
-   - Moran's I of each gene over a graph (Moran 1950), with its expectation and variance under
-     randomization (Cliff & Ord 1981) and by permutation, Benjamini–Hochberg adjusted; genes
-     ranked; each gene's local Moran's I (Anselin 1995) showing the cells that make it.
-   - Validation: patterns of known I by hand (a checkerboard's is −1); against PySAL's esda on the
-     development bundles; on simulated tissues, the domains' genes against genes without a
-     pattern.
+6. **Spatially variable genes (N7): done.**
+   - **Moran's I** (`internal/spatial/moran.go`; Moran 1950) of each gene over a graph, the genes
+     log-normalized as the clustering normalizes them (each cell scaled to the median total, log1p;
+     a cell without a transcript zeros); row-standardized or binary weights (a cell without a
+     neighbor weighing nothing); the expectation −1/(n − 1) and the variances under normality and
+     randomization (Cliff & Ord 1981); randomization's z and two-sided p; 199 permutations (each a
+     shuffle of the cells, every gene's values moved alike; tallied by block, the same on any number
+     of workers); Benjamini–Hochberg over the genes (of the permutations' p when run).
+   - **Local Moran's I** (Anselin 1995) of the 10 leading genes: each cell's Iᵢ, a conditional
+     permutation test (its neighbors' values drawn again from the other cells, from the cell's own
+     seeded stream), and its class (high among high, low among low, or an outlier) where p is below
+     0.05, unadjusted; in `local.bin`.
+   - **The question** `moran` (`api_spatial.go`; of a graph, without labels): the genes in a pattern
+     ranked by I, those dispersed, a gene's numbers and local classes; **Show these cells** for a
+     class. Remote control: `spatial_analysis` (`moran`); `show_tissue`'s `cells_of` a gene's class.
+   - Validation:
+     - **By hand:** on a 20 × 20 lattice, a checkerboard's I −1 with either weights, two halves'
+       1 − 2c/S0 exactly, a constant gene none; on a 7 × 7 lattice, 9,999 permutations' variance
+       within 2% of the variance under randomization (its definition) for skewed, binary and normal
+       values; normal values' two variances alike; local I summing to S0 × I, a planted block's cells
+       high among high and the noise not; the same on one worker and on eight.
+     - **Against Squidpy** (`validation/reference/spatial/`, weekly; PySAL's esda was planned, Squidpy
+       1.8.3's spatial_autocorr computes the same statistic): on both 2-FOV bundles and the simulated
+       tissue, every gene's I over the Delaunay graph Squidpy's to 10⁻¹⁵ and its variance under
+       normality to 10⁻¹²; I and the variance under randomization an independent computation's
+       (NumPy and SciPy, the weights' sums from the sparse matrix) to 10⁻¹².
+     - **The simulated tissue's genes** (weekly): its 30 marker genes, whose types gather in the
+       domains they lead, all in a pattern, I 0.216 or more; its 90 unmarked genes 0.042 at most.
+     - **In the page** (viewer suite): each leading gene's local I summing to S0 × I (S0 the suite's
+       own from the graph), every classed cell's local I of its class's sign, and a gene's cells high
+       among high shown on the tissue.
+   - Found by slice 6:
+     - **Rare genes lead:** in Lung, GJA5 (an artery's endothelium) has the greatest I (0.436) though
+       1.2% of the cells express it: its cells lie together. Its local classes show it: 73 cells high
+       among high, 286 low among high (the cells around them).
+     - **Most genes are in a pattern:** 162 of Lung's 289 genes (adjusted p below 0.05); with 11,898
+       cells even small I is significant, so the table ranks by I, the effect.
+     - **Lung's leading genes:** GJA5, IGFBP3, CXCL13, PLA2G7, LTBP2, ANPEP, MYH11 (smooth muscle),
+       GPX2, AGR3, RGS5 (pericytes).
 7. **Analyses across segmentations (C7).**
    - Any saved analysis made again on another segmentation in one step (its graph and label set
      made again, as wave 4 makes labels again), and the two read together: each number under

@@ -7,7 +7,7 @@
 import { openPaths } from './storage.js';
 import { addClustering, addEmbedding, clusteringRecord, embeddingRecord } from '../lib/clusterings.js';
 import { addGraph, graphRecord, gridOf, readGraph } from '../lib/graphs.js';
-import { addAnalysis, analysisRecord, readAnalyzed } from '../lib/spatial.js';
+import { addAnalysis, analysisRecord, readAnalyzed, readLocal } from '../lib/spatial.js';
 import { addDataset, compareFingerprint, datasetRecord, findDataset, relocateDataset, removeDataset } from '../lib/datasets.js';
 import { addLabels, labelsRecord, readLabelCells } from '../lib/labels.js';
 import { addImage as withImage, imageRecord } from '../lib/images.js';
@@ -800,7 +800,13 @@ export function createBundles(app) {
           fetch(`/api/analyses/${encodeURIComponent(id)}/cells`),
         ]);
         if (!response.ok) throw new Error(`its cells: HTTP ${response.status}`);
-        return { analysis, cells: readAnalyzed(await response.arrayBuffer()) };
+        const out = { analysis, cells: readAnalyzed(await response.arrayBuffer()) };
+        if (analysis.question === 'moran') {
+          const local = await fetch(`/api/analyses/${encodeURIComponent(id)}/local`);
+          if (!local.ok) throw new Error(`its local values: HTTP ${local.status}`);
+          out.local = readLocal(await local.arrayBuffer());
+        }
+        return out;
       })();
       p.catch(() => analysisStore.delete(id));
       analysisStore.set(id, p);

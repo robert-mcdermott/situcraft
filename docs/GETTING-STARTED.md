@@ -997,6 +997,30 @@ which, or fill a region).
   <img alt="The Viewer showing the Lung example's cells filled by their niche, the legend naming the six niches with their cells" src="images/niches-tissue-light.webp">
 </picture>
 
+### Spatially variable genes
+
+**Spatially variable genes** asks which genes are expressed in a pattern across the tissue. It is
+of genes, not labels: choose a graph and ask. Each gene's **Moran's I** measures how alike its
+expression is in neighboring cells: near 1 when neighbors are alike, about 0 for no pattern, below
+0 where neighbors differ. Each gene is tested against its values dealt to the cells at random,
+analytically and by permutation, and the p-values are adjusted over the genes. Genes of cell types
+that gather are in a pattern because their cells are.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/moran-dark.webp">
+  <img alt="The Spatial view's answer of Moran's I for the Lung example's genes over its Delaunay graph: the genes in a pattern ranked by I, GJA5 first, and GJA5 chosen with its local Moran's I counts" src="images/moran-light.webp">
+</picture>
+
+For the leading genes (10 by default), **local Moran's I** shows where a pattern lies: each cell
+high among high, low among low, or unlike its neighbors (by a permutation test of each cell, not
+adjusted: it shows the pattern, it does not test it). Choose a gene and a class, and **Show these
+cells on the tissue**.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/moran-tissue-dark.webp">
+  <img alt="The Viewer showing the Lung example's cells high among high in GJA5's expression, an artery's endothelium in the stroma at the section's top left, with GJA5's transcripts" src="images/moran-tissue-light.webp">
+</picture>
+
 A section's cells are not independent replicates: these numbers describe this section. Comparing
 conditions needs samples, compared as samples (a later release).
 

@@ -124,6 +124,22 @@ with the cells it comes from.
     its niches alike (0.89 to 0.98); the simulated tissue's kinds of domain found from its true
     cells (0.92), and too many niches flagged by the seeds' disagreement; in the page, each niche's
     make-up and every cell's niche against the suite's own search, and the niches on the tissue.
+- **Spatially variable genes (wave 6, slice 6).** A question of genes, not labels.
+  - **Moran's I** of each gene over a graph (row-standardized or binary weights), the genes
+    log-normalized as the clustering normalizes them; its expectation, its variances under
+    normality and randomization, randomization's z and two-sided p, and 199 permutations, adjusted
+    over the genes; the genes in a pattern ranked by I, and those dispersed.
+  - **Local Moran's I** of the leading genes: each cell high among high, low among low, or unlike its
+    neighbors, by conditional permutation; a gene's cells of a class shown on the tissue.
+  - **Remote control:** `spatial_analysis` asks `moran` (`weights`, `permutations`, `local`,
+    `local_permutations`); `show_tissue`'s `cells_of` a gene's local class.
+  - **Validated:** a checkerboard's I −1 and two halves' by their formula, exactly; the
+    permutations' variance within 2% of the variance under randomization (9,999 permutations); local
+    I summing to S0 × I and a planted block found high among high; on both development bundles and
+    the simulated tissue, every gene's I Squidpy 1.8.3's (to 10⁻¹⁵) and both variances an
+    independent computation's (to 10⁻¹²); the simulated tissue's 30 marker genes all in a pattern,
+    every one's I above the 90 unmarked genes'; in the page, each leading gene's local I summing to
+    S0 × I and each class of its sign, and a gene's cells high among high shown.
 
 ## 0.5.0 (2026-10-17)
 
