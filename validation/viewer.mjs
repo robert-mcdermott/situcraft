@@ -1662,26 +1662,27 @@ export async function viewerSuite({ check, MissingData, verbose }) {
             `${behindOwn?.counts?.join(' and ')} cells`);
         }
 
-        // The projects as 0.2.0, 0.3.0 and 0.4.0 saved them
+        // The projects as 0.2.0 to 0.5.0 saved them
         // (validation/projects/<version>-lung.situcraft.json): this release's written when asked
         // (SITUCRAFT_WRITE_FIXTURE=1), the places of this run's folders made neutral and given its
         // own id; then each reopened, and every artifact SituCraft made that it records made again by
         // this build with the same files' checksums (a comparison by its differences: its
-        // comparison.json records the jobs' times; a clustering, a map and a label set from markers,
-        // whose records keep no checksums, by their summaries, which hold their numbers exactly).
+        // comparison.json records the jobs' times; a clustering, a map, a label set from markers, a
+        // graph and a spatial analysis, whose records keep no checksums, by their summaries, which
+        // hold their numbers exactly).
         const fixtureOf = (v) => join(root, 'validation', 'projects', `${v}-lung.situcraft.json`);
         if (process.env.SITUCRAFT_WRITE_FIXTURE) {
           const doc = await chrome.eval(`(async () => {
             const app = window.situcraft;
             const { rename, serializeProject } = await import('/lib/project.js');
-            app.store.commit(rename(app.store.project, 'Lung example, as SituCraft 0.5.0 saved it'), 'Rename');
+            app.store.commit(rename(app.store.project, 'Lung example, as SituCraft 0.6.0 saved it'), 'Rename');
             return serializeProject(app.store.project);
           })()`);
           // Its own id: it grew from the 0.1.0 project in this run.
           const neutral = JSON.parse(doc.split(join(dataRoot, 'xenium-lung-2fov')).join('/data/examples/xenium-lung-2fov').split(work).join('/data/work'));
-          writeFileSync(fixtureOf('0.5.0'), `${JSON.stringify({ ...neutral, id: 'p-situcraft-0-5-0-lung' }, null, 1)}\n`);
+          writeFileSync(fixtureOf('0.6.0'), `${JSON.stringify({ ...neutral, id: 'p-situcraft-0-6-0-lung' }, null, 1)}\n`);
         }
-        for (const v of ['0.2.0', '0.3.0', '0.4.0', '0.5.0']) {
+        for (const v of ['0.2.0', '0.3.0', '0.4.0', '0.5.0', '0.6.0']) {
           if (!existsSync(fixtureOf(v))) continue;
           const text = readFileSync(fixtureOf(v), 'utf8');
           const fixture = JSON.parse(text);
@@ -1690,7 +1691,8 @@ export async function viewerSuite({ check, MissingData, verbose }) {
           // Labels imported or from a reference read a file this run wrote, and the instrument's
           // clusters and map are the bundle's.
           const cellTypes = (a) => (a.kind === 'clustering' && !a.summary?.source) || (a.kind === 'embedding' && !a.summary?.source) || (a.kind === 'labels' && !a.source && !a.reference);
-          const made = fixture.artifacts.filter((a) => (a.kind === 'segmentation' && a.source !== 'instrument' && a.method?.name !== 'SituCraft export') || a.kind === 'comparison' || cellTypes(a));
+          const spatial = (a) => (a.kind === 'graph' || a.kind === 'spatial') && a.state === 'complete';
+          const made = fixture.artifacts.filter((a) => (a.kind === 'segmentation' && a.source !== 'instrument' && a.method?.name !== 'SituCraft export') || a.kind === 'comparison' || cellTypes(a) || spatial(a));
           const differing = [];
           for (const a of made) {
             const m = await fetch(`${url}/api/artifacts/${encodeURIComponent(a.id)}`).then((r) => (r.ok ? r.json() : null));
@@ -1702,7 +1704,7 @@ export async function viewerSuite({ check, MissingData, verbose }) {
               if (JSON.stringify(m.summary?.classes) !== JSON.stringify(a.summary?.classes) || m.summary?.pixelAgreement !== a.summary?.pixelAgreement) differing.push(`${a.name}: other differences`);
               continue;
             }
-            if (cellTypes(a)) {
+            if (cellTypes(a) || spatial(a)) {
               if (JSON.stringify(m.summary) !== JSON.stringify(a.summary)) differing.push(`${a.name}: another summary`);
               continue;
             }
@@ -1710,7 +1712,7 @@ export async function viewerSuite({ check, MissingData, verbose }) {
             for (const f of a.files) if (sums.get(f.path) !== f.sha256) differing.push(`${a.name}: ${f.path}`);
           }
           const kinds = [...new Set(made.map((a) => a.kind))].join(', ');
-          check('viewer', `${v} Lung project: every artifact SituCraft made is made again with the same checksums`, `${made.length} artifacts (${kinds})${differing.length ? `; ${differing.slice(0, 4).join('; ')}` : ', all the same'}`, made.length >= 5 && differing.length === 0 && (v < '0.4.0' || made.filter(cellTypes).length >= 5), 'all the same');
+          check('viewer', `${v} Lung project: every artifact SituCraft made is made again with the same checksums`, `${made.length} artifacts (${kinds})${differing.length ? `; ${differing.slice(0, 4).join('; ')}` : ', all the same'}`, made.length >= 5 && differing.length === 0 && (v < '0.4.0' || made.filter(cellTypes).length >= 5) && (v < '0.6.0' || made.filter((a) => a.kind === 'spatial').length >= 8), 'all the same');
           const reopened = await chrome.eval(`(async () => {
             const app = window.situcraft;
             const { promotedSegmentation, exportsOf } = await import('/lib/segmentations.js');
@@ -1729,6 +1731,66 @@ export async function viewerSuite({ check, MissingData, verbose }) {
           const kept = v < '0.5.0' || (reopened.regions === JSON.stringify(fixture.regions ?? []) && reopened.reviews === JSON.stringify(fixture.reviews ?? []) && (fixture.regions ?? []).length >= 2 && (fixture.reviews ?? []).length >= 3);
           check('viewer', `${v} Lung project: it opens and finds its moved bundle; its segmentations, comparisons, decisions, exports${v < '0.5.0' ? '' : ', regions and reviews'} are there, and its default`, JSON.stringify({ ...reopened, regions: (fixture.regions ?? []).length, reviews: (fixture.reviews ?? []).length }), reopened.before === 'missing' && reopened.after === 'ok' && reopened.segmentations === fixture.artifacts.filter((a) => a.kind === 'segmentation').length && reopened.comparisons >= 2 && reopened.decisions === fixture.decisions.length && reopened.exports >= 1 && reopened.default && reopened.default === reopened.saved && kept, 'missing, then ok; all there');
         }
+
+        // A worked example started in the page (here the bundles are the project's datasets, not
+        // examples), run step by step to its end.
+        const runWorked = async (bundle, name) => {
+          await chrome.eval(`(async () => {
+            const app = window.situcraft;
+            const { guideFor } = await import('/lib/tours.js');
+            const { startTour } = await import('/ui/tour.js');
+            const dataset = app.store.project.datasets.find((d) => d.name === ${JSON.stringify(bundle)});
+            for (let k = 0; k < 600 && !app.store.project.artifacts.some((a) => a.kind === 'segmentation' && a.dataset === dataset.id); k += 1) await new Promise((r) => setTimeout(r, 100));
+            startTour(app, { tour: guideFor(${JSON.stringify(bundle)}, ${JSON.stringify(name)}), dataset: dataset.id });
+            return true;
+          })()`);
+          const out = [];
+          for (let k = 0; k < 16; k += 1) {
+            const x = await act('tour', { run: true });
+            out.push(x);
+            if (!x.ok || x.data?.finished) break;
+          }
+          return out;
+        };
+        const stepsRun = (steps) => steps.map((x) => (x.ok ? (x.data.finished ? 'finished' : `step ${x.data.step}`) : x.message)).join('; ');
+        const finished = (steps) => steps.every((x) => x.ok) && steps.at(-1)?.data?.finished === true;
+        const stepOf = (steps, n) => steps.find((x) => x.ok && x.data.step === n)?.data;
+        const near = (v, want, tol) => Number.isFinite(v) && Math.abs(v - want) <= tol;
+        // An enrichment's numbers as the cards state them: each pair's ratio (found over expected),
+        // z and adjusted p by names; the pairs that differ from chance; and a pair's cells with a
+        // neighbor of the other, and the edges between them, from the graph's edges.
+        const ENRICHMENT_OF = `async (id, pair) => {
+          const a = await (await fetch('/api/artifacts/' + id + '/files/analysis.json')).json();
+          const names = a.labels.names, K = names.length, e = a.enrichment;
+          const at = (x, y) => { const i = names.indexOf(x), j = names.indexOf(y); return Math.min(i, j) * K + Math.max(i, j); };
+          const ratio = (x, y) => e.count[at(x, y)] / e.expected[at(x, y)];
+          let pairs = 0, significant = 0;
+          for (let x = 0; x < K; x += 1) for (let y = x; y < K; y += 1) { pairs += 1; if (e.padj[x * K + y] < 0.05) significant += 1; }
+          const out = { labels: K, pairs, significant, ratio, z: (x, y) => e.z[at(x, y)], cells: (x) => e.cells[names.indexOf(x)], graph: a.graph.id, labelsId: a.labels.id };
+          if (pair) {
+            const cb = await (await fetch('/api/analyses/' + id + '/cells')).arrayBuffer();
+            const n = new DataView(cb).getUint32(0, true);
+            const label = new Int32Array(cb, 4 + 4 * n, n);
+            const gb = await (await fetch('/api/graphs/' + a.graph.id + '/edges')).arrayBuffer();
+            const gn = new DataView(gb).getUint32(0, true), m = new DataView(gb).getUint32(4, true);
+            const off = new Uint32Array(gb, 12 + 12 * gn, gn + 1), nb = new Uint32Array(gb, 16 + 16 * gn, m);
+            const A = names.indexOf(pair[0]), B = names.indexOf(pair[1]);
+            const touches = new Uint8Array(gn);
+            let edges = 0;
+            for (let i = 0; i < gn; i += 1) {
+              for (let k = off[i]; k < off[i + 1]; k += 1) {
+                const j = nb[k];
+                if ((label[i] === A && label[j] === B) || (label[i] === B && label[j] === A)) {
+                  touches[i] = 1;
+                  if (j > i) edges += 1;
+                }
+              }
+            }
+            out.pair = { a: 0, b: 0, edges };
+            for (let i = 0; i < gn; i += 1) if (touches[i]) out.pair[label[i] === A ? 'a' : 'b'] += 1;
+          }
+          return out;
+        }`;
 
         // The worked example on the Breast data: the instrument's cells, drawn from stains, against
         // a 5 µm nucleus expansion, as research.md §4 records them.
@@ -1775,7 +1837,6 @@ export async function viewerSuite({ check, MissingData, verbose }) {
             const c = p.artifacts.find((x) => x.kind === 'comparison' && x.a === inst?.id && x.b === refined?.id);
             return { cells: refined?.summary?.cells, changed: c?.summary?.changedFraction, coA: c?.summary?.spuriousCoexpressionA, coB: c?.summary?.spuriousCoexpressionB };
           })()`);
-          const near = (v, want, tol) => Number.isFinite(v) && Math.abs(v - want) <= tol;
           check('viewer', 'the Breast refinement worked example refines, shows its certainty and what moved, as its card expects', `${rsteps.map((x) => x.ok ? `step ${x.data.step}` : x.message).join('; ')}; ${JSON.stringify(rc?.classes ?? {})}; ${JSON.stringify(rn)}`,
             rsteps.every((x) => x.ok) && rsteps.at(-1).data.step === 5 && rn.cells === 7275 && near(rc?.classes?.['one-to-one'], 4700, 250) && near(rc?.classes?.expanded, 1700, 150) && near(rc?.classes?.contracted, 760, 80) && near(rn.changed, 0.23, 0.02) && near(rn.coA, 1.77, 0.03) && near(rn.coB, 1.83, 0.03),
             '7,275 cells; about 4,700 the same, 1,700 grown, 760 shrunk; 23% of transcripts moved; co-expression 1.77 and 1.83');
@@ -1801,6 +1862,129 @@ export async function viewerSuite({ check, MissingData, verbose }) {
             bsteps.every((x) => x.ok) && bsteps.at(-1).data.step === 10 && bl?.matched.cells === 6512 && near(bl.matched.agreement, 0.969, 0.002) && bl.split.groups === 223 && bl.merged.groups === 106 && near(bl.mecr?.a, 0.0466, 0.001) && near(bl.mecr?.b, 0.0513, 0.001) && bl.fill && bct?.review?.sensitive === bl.sensitive.a && near(bl.sensitive.a, 688, 10) && /expansion/i.test(bct.against ?? ''),
             '6,512 matched, 96.9% of those labeled under both alike; 223 split, 106 merged; mixing 0.047 and 0.051; about 688 cells flagged against the expansion');
           await act('tour', { end: true });
+
+          // The spatial worked examples on the Breast data (wave 6, slice 10), each number their
+          // cards state checked. Which cell types are neighbors: the classes' and the lineages'
+          // enrichment over the Delaunay graph, and each pair's cells lit on the tissue (their
+          // clustering and labels made above, with the same defaults and set).
+          const ns = await runWorked('xenium-breast-2fov', 'neighbors-breast');
+          const classesId = stepOf(ns, 6)?.spatial?.analysis;
+          const lineagesId = stepOf(ns, 9)?.spatial?.analysis;
+          const bn = classesId && lineagesId ? await chrome.eval(`(async () => {
+            const of = ${ENRICHMENT_OF};
+            const c = await of(${JSON.stringify(classesId)}, ['Epithelial', 'Immune']);
+            const l = await of(${JSON.stringify(lineagesId)}, ['T cell', 'Myeloid']);
+            const g = (await (await fetch('/api/artifacts/' + c.graph)).json())?.summary;
+            const set = await (await fetch('/api/labels/' + c.labelsId)).json();
+            const d = set.description;
+            const r2 = (v) => Math.round(100 * v) / 100;
+            return {
+              shares: d.cells.labeled.map((n) => Math.round((100 * n) / d.cells.analyzed)),
+              graph: { cells: g?.cells, edges: g?.edges, median: g && Math.round(10 * g.medianLength) / 10 },
+              classes: { significant: c.significant, pairs: c.pairs, endothelial: r2(c.ratio('Endothelial', 'Endothelial')), stromal: r2(c.ratio('Stromal', 'Stromal')), immune: r2(c.ratio('Immune', 'Immune')), epiStromal: r2(c.ratio('Epithelial', 'Stromal')), epiImmune: r2(c.ratio('Epithelial', 'Immune')), pair: c.pair },
+              lineages: { labels: l.labels, pairs: l.pairs, significant: l.significant, tMyeloid: r2(l.ratio('T cell', 'Myeloid')), z: Math.round(l.z('T cell', 'Myeloid')), tT: r2(l.ratio('T cell', 'T cell')), luminalT: r2(l.ratio('Luminal', 'T cell')), pair: l.pair },
+            };
+          })()`) : null;
+          const nf7 = stepOf(ns, 7)?.focus, nf10 = stepOf(ns, 10)?.focus;
+          check('viewer', 'the worked example Which cell types are neighbors: the Breast classes\' and lineages\' enrichment over the Delaunay graph, and each pair\'s cells on the tissue, as its card states', `${stepsRun(ns)}; ${JSON.stringify(bn)}; shown ${nf7?.cells} and ${nf10?.cells}`,
+            finished(ns) && bn && JSON.stringify(bn.shares) === '[81,49,6]' && bn.graph.cells === 7275 && bn.graph.edges === 21678 && bn.graph.median === 11.4
+            && bn.classes.pairs === 15 && bn.classes.significant === 9 && bn.classes.endothelial === 12.45 && bn.classes.stromal === 4.54 && bn.classes.immune === 3.9 && bn.classes.epiStromal === 0.24 && bn.classes.epiImmune === 0.32
+            && bn.classes.pair.a === 651 && bn.classes.pair.b === 299 && bn.classes.pair.edges === 823 && nf7?.cells === 950
+            && bn.lineages.labels === 16 && bn.lineages.pairs === 136 && bn.lineages.significant === 54 && bn.lineages.tMyeloid === 4.44 && bn.lineages.z === 22 && bn.lineages.tT === 8.59 && bn.lineages.luminalT === 0.12
+            && bn.lineages.pair.a === 74 && bn.lineages.pair.b === 127 && bn.lineages.pair.edges === 164 && nf10?.cells === 201,
+            '81%, 49% and 6% labeled; 21,678 edges among 7,275 cells (median 11.4 µm); 9 of 15 class pairs, endothelial 12.45, stromal 4.54, immune 3.90 with themselves, epithelial–stromal 0.24, –immune 0.32 (651 and 299 cells, 823 edges); 54 of 136 lineage pairs, T cell–myeloid 4.44 (z 22; 74 and 127 cells, 164 edges), T–T 8.59, luminal–T 0.12');
+          await act('tour', { end: true });
+
+          // Immune cells and a tumor's edge: the region drawn, and each class's density across its
+          // edge, in its core, at its margin and around it.
+          const es = await runWorked('xenium-breast-2fov', 'tumor-edge');
+          const edgeId = stepOf(es, 6)?.spatial?.analysis;
+          const be = edgeId ? await chrome.eval(`(async () => {
+            const a = await (await fetch('/api/artifacts/${edgeId}/files/analysis.json')).json();
+            const b = a.boundary, names = a.labels.names, K = names.length;
+            const E = names.indexOf('Epithelial'), I = names.indexOf('Immune');
+            const tumor = window.situcraftViewer.regions.list().find((r) => r.name === 'Tumor');
+            const r2 = (v) => Math.round(100 * v) / 100;
+            return {
+              region: tumor ? window.situcraftViewer.regions.rowsIn(tumor.id).length : null,
+              epithelial: Math.round(10 * b.ratio[3 * E]) / 10,
+              immune: { core: Math.round(b.zoneDensity[I]), margin: Math.round(b.zoneDensity[K + I]), around: Math.round(b.zoneDensity[2 * K + I]), ratio: r2(b.ratio[3 * I]), lo: r2(b.ratioLo[3 * I]), hi: r2(b.ratioHi[3 * I]), atCore: b.zoneCount[I], atMargin: b.zoneCount[K + I] },
+            };
+          })()`) : null;
+          const ef7 = stepOf(es, 7)?.focus, ef8 = stepOf(es, 8)?.focus;
+          check('viewer', 'the worked example Immune cells and a tumor\'s edge: the region drawn on the stains, the epithelial cells filling it and the immune cells kept out, and those at its margin and in its core on the tissue, as its card states', `${stepsRun(es)}; ${JSON.stringify(be)}; shown ${ef7?.cells} and ${ef8?.cells}`,
+            finished(es) && be && be.region === 5730 && be.epithelial === 4.8 && be.immune.core === 420 && be.immune.margin === 765 && be.immune.around === 1174 && be.immune.ratio === 0.36 && be.immune.lo === 0.28 && be.immune.hi === 0.45
+            && be.immune.atMargin === 76 && be.immune.atCore === 230 && ef7?.cells === 76 && ef8?.cells === 230,
+            '5,730 cells in the tumor; epithelial cells 4.8 times as dense in its core; immune cells 420 per mm² in the core, 765 at the margin, 1,174 around (0.36, 0.28 to 0.45); 76 at the margin and 230 in the core shown');
+          await act('tour', { end: true });
+        }
+
+        // The spatial worked examples on the Lung data (wave 6, slice 10), in a project of their own:
+        // the suite's Lung project has cells a review excluded, which change the cards' numbers.
+        {
+          await act('new_project', { name: 'Lung spatial worked examples' });
+          await act('open_paths', { paths: [join(dataRoot, 'xenium-lung-2fov')], add: true });
+          // Genes in a pattern: every gene's Moran's I over the Delaunay graph, and GJA5's cells
+          // high among high on the tissue.
+          const ms = await runWorked('xenium-lung-2fov', 'moran-genes');
+          const moranId = stepOf(ms, 4)?.spatial?.analysis;
+          const lm = moranId ? await chrome.eval(`(async () => {
+            const { readLocal } = await import('/lib/spatial.js');
+            const a = await (await fetch('/api/artifacts/${moranId}/files/analysis.json')).json();
+            const r = a.moran;
+            const g = (await (await fetch('/api/artifacts/' + a.graph.id)).json()).summary;
+            const order = r.genes.map((_, i) => i).sort((x, y) => r.i[y] - r.i[x]);
+            const local = readLocal(await (await fetch('/api/analyses/${moranId}/local')).arrayBuffer());
+            const G = r.genes.indexOf('GJA5');
+            const classes = local.classes[local.genes.indexOf(G)];
+            const of = (cls) => classes.reduce((n, c) => n + (c === cls ? 1 : 0), 0);
+            return { cells: g.cells, edges: g.edges, genes: r.genes.length, patterned: r.padj.filter((p) => p < 0.05).length, top: order.slice(0, 5).map((i) => r.genes[i]).join(' '), i: order.slice(0, 3).map((i) => Math.round(1000 * r.i[i]) / 1000), detected: Math.round((1000 * r.detected[G]) / r.cells) / 10, highHigh: of(1), lowHigh: of(4) };
+          })()`) : null;
+          const mf = stepOf(ms, 5)?.focus;
+          check('viewer', 'the worked example Genes in a pattern: Moran\'s I of every Lung gene over the Delaunay graph, GJA5\'s strongest, and its cells high among high on the tissue, as its card states', `${stepsRun(ms)}; ${JSON.stringify(lm)}; shown ${mf?.cells}`,
+            finished(ms) && lm && lm.cells === 11898 && lm.edges === 35472 && lm.genes === 289 && lm.patterned === 162 && lm.top === 'GJA5 IGFBP3 CXCL13 PLA2G7 LTBP2' && JSON.stringify(lm.i) === '[0.436,0.411,0.313]' && lm.detected === 1.2 && lm.highHigh === 73 && lm.lowHigh === 286 && mf?.cells === 73,
+            '35,472 edges among 11,898 cells; 162 of 289 genes; GJA5 0.436, IGFBP3 0.411, CXCL13 0.313, then PLA2G7 and LTBP2; GJA5 in 1.2% of the cells, 73 high among high and 286 low among high; 73 shown');
+          await act('tour', { end: true });
+
+          // An answer under another segmentation: the classes' enrichment, made again on a 3 µm
+          // nucleus expansion, and the two read together.
+          const rs = await runWorked('xenium-lung-2fov', 'remake-enrichment');
+          const rsAt = stepOf(rs, 8)?.spatial;
+          const lr = rsAt?.analysis && rsAt?.again ? await chrome.eval(`(async () => {
+            const { analysisNumbers, compareNumbers, rankCorrelation } = await import('/lib/spatial.js');
+            const p = window.situcraft.store.project;
+            const ds = p.datasets.find((x) => x.name === 'xenium-lung-2fov');
+            const of = ${ENRICHMENT_OF};
+            const e = await of(${JSON.stringify(rsAt.analysis)});
+            const read = async (id) => (await fetch('/api/artifacts/' + id + '/files/analysis.json')).json();
+            const a = await read(${JSON.stringify(rsAt.analysis)}), b = await read(${JSON.stringify(rsAt.again)});
+            const cmp = compareNumbers(analysisNumbers(a), analysisNumbers(b));
+            const top = cmp.rows[0];
+            const immune = (x) => x.enrichment.cells[x.labels.names.indexOf('Immune')];
+            const clustering = p.artifacts.find((x) => x.kind === 'clustering' && x.dataset === ds.id)?.summary;
+            const set = await (await fetch('/api/labels/' + e.labelsId)).json();
+            const expansion = p.artifacts.find((x) => x.kind === 'segmentation' && x.dataset === ds.id && x.parameters?.distance_um === 3)?.summary?.agreement;
+            // The cells behind the largest change, found as the step shows it.
+            let behind = null;
+            for (let k = 0; k < 200 && !/counterparts/.test(behind ?? ''); k += 1) {
+              behind = document.querySelector('.sp-behind p')?.innerText ?? null;
+              if (!/counterparts/.test(behind ?? '')) await new Promise((r) => setTimeout(r, 100));
+            }
+            const r2 = (v) => Math.round(100 * v) / 100;
+            const d = set.description;
+            return {
+              clusters: clustering?.clusters, clustered: clustering?.cells, labeled: Math.round((100 * d.cells.labeled[0]) / d.cells.analyzed),
+              significant: e.significant, pairs: e.pairs, stromal: r2(e.ratio('Stromal', 'Stromal')), epiEndothelial: r2(e.ratio('Epithelial', 'Endothelial')), epiStromal: r2(e.ratio('Epithelial', 'Stromal')),
+              pixels: expansion && Math.round(10000 * expansion.pixels.agreement) / 100, transcripts: expansion && Math.round(10000 * expansion.transcripts.agreement) / 100,
+              rho: Math.round(1000 * rankCorrelation(cmp.rows)) / 1000, numbers: cmp.rows.length, top: { key: top.key, a: r2(top.a), b: r2(top.b) }, immune: [immune(a), immune(b)],
+              behind: (behind?.match(/: ([\\d,]+) under .*?, ([\\d,]+) under/) ?? []).slice(1).join(' '),
+            };
+          })()`) : null;
+          check('viewer', 'the worked example An answer under another segmentation: the Lung classes\' enrichment made again on a 3 µm nucleus expansion, the two read together, and the cells behind the largest change, as its card states', `${stepsRun(rs)}; ${JSON.stringify(lr)}`,
+            finished(rs) && lr && lr.clusters === 29 && lr.clustered === 11820 && lr.labeled === 47 && lr.pairs === 10 && lr.significant === 7 && lr.stromal === 3.99 && lr.epiEndothelial === 0.78 && lr.epiStromal === 0.79
+            && lr.pixels === 90 && lr.transcripts === 95.45 && lr.numbers === 10 && lr.rho === 0.976 && lr.top.key === 'pair:Immune|Immune' && lr.top.a === 1.44 && lr.top.b === 1.94 && JSON.stringify(lr.immune) === '[249,227]' && lr.behind === '44 22',
+            '29 clusters of 11,820 cells, 47% labeled; 7 of 10 pairs, stromal 3.99 with themselves, epithelial–endothelial 0.78, –stromal 0.79; the expansion 90.00% of pixels and 95.45% of transcripts alike; rank correlation 0.976; immune–immune 1.44 to 1.94 (249 and 227 immune cells; 44 and 22 behind it)');
+          await act('tour', { end: true });
         }
 
         // The simulated example, made on this computer, and its worked example scoring the
@@ -1822,7 +2006,6 @@ export async function viewerSuite({ check, MissingData, verbose }) {
           return { truth: Boolean(truth), instrument: s('instrument'), refined: s('refined') };
         })()`);
         const tc = tsteps.at(-1).data?.comparison;
-        const near = (v, want, tol) => Number.isFinite(v) && Math.abs(v - want) <= tol;
         check('viewer', 'the simulated example is made here; its worked example imports the truth, refines, and scores both against it as its card expects', `${simulatedMade.message ?? simulatedMade.error}; ${tsteps.map((x) => x.ok ? `step ${x.data.step}` : x.message).join('; ')}; ${JSON.stringify(scores)}`,
           simulatedMade.ok && tsteps.every((x) => x.ok) && tsteps.at(-1).data.step === 6 && tc?.mode === 'overlay' && scores.truth && near(scores.instrument?.iou, 0.62, 0.02) && near(scores.instrument?.changed, 0.20, 0.02) && near(scores.refined?.iou, 0.72, 0.02) && near(scores.refined?.changed, 0.17, 0.02),
           'the instrument\'s: median IoU 0.62, 20% changed; the refinement\'s: 0.72, 17%');
@@ -1944,6 +2127,74 @@ export async function viewerSuite({ check, MissingData, verbose }) {
             reviewSteps.every((x) => x.ok) && /finished/.test(reviewSteps.at(-1).message ?? '') && reviewed.accepted === 18 && reviewed.relabeled === 2 && reviewed.right && reviewed.excludedCells === 43 && reviewed.records === 22 && reviewed.before === 49 && reviewed.after === 47,
             '18 accepted, 2 relabeled (to their true types), 43 cells excluded, 22 reviews; 49 wrong labels before, 47 after');
           await act('tour', { end: true });
+
+          // The spatial worked example on the simulated tissue (wave 6, slice 10): niches of the true
+          // cells by their true types, read against the domains the simulator laid out, and the
+          // defaults' less stable niches, each number its card states checked; the Viewer filled by
+          // each.
+          const nicheSteps = await card('niches-domains');
+          const fourId = stepOf(nicheSteps, 6)?.spatial?.analysis;
+          const sixId = stepOf(nicheSteps, 10)?.spatial?.analysis;
+          const fills = [];
+          for (const n of [7, 8]) {
+            await act('tour', { example: 'simulated-standard', name: 'niches-domains', step: n });
+            fills.push(await chrome.eval(`(async () => {
+              const v = window.situcraftViewer;
+              for (let k = 0; k < 300 && !(v.clusterFill?.()?.labels && v.clusterFill().sets.length === ${n === 7 ? 4 : 6}); k += 1) await new Promise((r) => setTimeout(r, 100));
+              const f = v.clusterFill?.();
+              return f ? { name: f.name, counts: [...f.counts.values()].sort((a, b) => b - a) } : null;
+            })()`));
+          }
+          await act('tour', { end: true });
+          const sn = fourId && sixId ? await chrome.eval(`(async () => {
+            const app = window.situcraft;
+            const { readAnalyzed } = await import('/lib/spatial.js');
+            const { labelSource, refOf } = await import('/ui/label-sources.js');
+            const p = app.store.project;
+            const ds = p.datasets.find((x) => x.name === 'simulated-standard');
+            const read = async (id) => (await fetch('/api/artifacts/' + id + '/files/analysis.json')).json();
+            const a = await read(${JSON.stringify(fourId)}), six = await read(${JSON.stringify(sixId)});
+            const r = a.niches, names = a.labels.names, K = names.length;
+            // Each niche's leading type and its share.
+            const lead = r.cells.map((n, v) => {
+              let best = 0;
+              for (let k = 1; k < K; k += 1) if (r.composition[v * K + k] > r.composition[v * K + best]) best = k;
+              return names[best] + ' ' + Math.round(100 * r.composition[v * K + best]) + '% of ' + n;
+            });
+            // Each true cell's niche against its domain: each domain's niche the one most of its
+            // cells lie in.
+            const domains = p.artifacts.find((x) => x.kind === 'labels' && x.dataset === ds.id && x.source?.column === 'domain');
+            const t = domains ? await labelSource(app, refOf(domains.id, 0)) : null;
+            const c = readAnalyzed(await (await fetch('/api/analyses/${fourId}/cells')).arrayBuffer());
+            const tally = t ? t.names.map(() => new Array(r.niches).fill(0)) : [];
+            for (let i = 0; i < c.n; i += 1) {
+              const d = t?.label[c.rows[i]];
+              if (d >= 0 && c.stratum[i] > 0) tally[d][c.stratum[i] - 1] += 1;
+            }
+            let own = 0, all = 0;
+            const home = {}, share = [];
+            tally.forEach((row, d) => {
+              const top = row.indexOf(Math.max(...row));
+              const n = row.reduce((s, v) => s + v, 0);
+              home[t.names[d]] = top;
+              own += row[top];
+              all += n;
+              share.push(row[top] / n);
+            });
+            return {
+              cells: a.cells.analyzed, niches: r.niches, neighbors: a.parameters.neighbors, lead, agreement: r.agreement,
+              domains: t?.names.length ?? 0, own: Math.round(1000 * own / all) / 10, lowest: Math.round(100 * Math.min(...share)), highest: Math.round(100 * Math.max(...share)),
+              shared: home['0'] === home['4'] && home['1'] === home['5'] && new Set(Object.values(home)).size === 4,
+              six: { niches: six.niches.niches, neighbors: six.parameters.neighbors, agreement: six.niches.agreement.map((v) => Math.round(100 * v) / 100) },
+            };
+          })()`) : null;
+          const ag = sn?.six.agreement ?? [];
+          check('viewer', 'the worked example Niches against the domains: four niches of the true cells, each led by one type and stable across seeds, 96.5% of the cells in their domain\'s niche, the six of the defaults less stable, and the Viewer filled by niches and by domains, as its card states', `${stepsRun(nicheSteps)}; ${JSON.stringify(sn)}; fills ${JSON.stringify(fills)}`,
+            finished(nicheSteps) && sn && sn.cells === 3030 && sn.niches === 4 && sn.neighbors === 30 && sn.lead.join('; ') === 'epithelial-like 47% of 1078; endothelial-like 53% of 887; immune-like 72% of 554; fibroblast-like 44% of 511' && sn.agreement.every((v) => v === 1)
+            && sn.domains === 6 && sn.own === 96.5 && sn.lowest === 93 && sn.highest === 99 && sn.shared
+            && sn.six.niches === 6 && sn.six.neighbors === 10 && Math.min(...ag) === 0.66 && Math.max(...ag) === 0.93
+            && /^Niches of/.test(fills[0]?.name ?? '') && JSON.stringify(fills[0]?.counts) === '[1078,887,554,511]' && /domain/.test(fills[1]?.name ?? '') && fills[1]?.counts.length === 6 && fills[1].counts.reduce((s, v) => s + v, 0) === 3030,
+            'epithelial-like 47% of 1,078, endothelial-like 53% of 887, immune-like 72% of 554, fibroblast-like 44% of 511; the seeds agree (1.00); 96.5% in their domain\'s niche (93% to 99%), domains 0 and 4 sharing one, 1 and 5 another; six niches of 10 agree 0.66 to 0.93; filled by 4 niches, then 6 domains');
         }
       }
 

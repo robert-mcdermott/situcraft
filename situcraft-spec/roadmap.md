@@ -2825,12 +2825,54 @@ as in waves 3 and 4.
        could not scroll them: a table or code block that overflows its column now takes the focus.
      - **A converted page repeated its lede:** the old guide's first sentence of a section and the
        page's lede said the same; four ledes were written again.
-10. **Examples, documentation, release 0.6.0.**
-   - Worked examples: which cell types are neighbors in the Breast section; immune cells and a
-     tumor region's edge; the simulated tissue's niches against its domains; spatially variable
-     genes; a result made again on another segmentation.
-   - The project fixture `validation/projects/0.6.0-*.situcraft.json`; the guide's pages for the
-     wave; CHANGELOG; release, and the product site published for it.
+10. **Examples, documentation, release 0.6.0: done.**
+   - **Worked examples** (`web/lib/tours.js`; the steps' jobs in `web/ui/tour.js`): a step builds a
+     graph, asks a spatial question (of a segmentation's labels from markers or the truth's types,
+     at a level, a region's edge by its name, niches' window and count), makes an answer again on
+     another segmentation, or imports the truth's domains; shows an answer in the Spatial view
+     (`app.spatialView.show`: what in it is chosen, and the answer made again, read with it) or its
+     cells on the tissue; a Viewer step fills the cells by niche or by the truth's domain.
+     - *Which cell types are neighbors* (`neighbors-breast`): the Breast classes over the Delaunay
+       graph (21,678 edges among 7,275 cells), 9 of 15 pairs differing from chance, each class its
+       own neighbor (endothelial 12.45 times, stromal 4.54, immune 3.90), the epithelial cells apart
+       from the stromal (0.24) and the immune (0.32); the epithelial and immune cells with a
+       neighbor of the other on the tissue (651 and 299, 823 edges); the lineages, 54 of 136 pairs,
+       T cells next to myeloid cells 4.44 times (z 22; 74 and 127 cells, 164 edges).
+     - *Immune cells and a tumor's edge* (`tumor-edge`): the tumor drawn on the stains (5,730
+       cells), each class's density across its edge: the epithelial cells 4.8 times as dense in its
+       core as around it, the immune cells 420 per mm² in the core, 765 at the margin and 1,174
+       around (0.36, 0.28 to 0.45); the 76 at the margin and 230 in the core on the tissue.
+     - *Niches against the domains* (`niches-domains`): the truth's domains imported as labels; four
+       niches of the 3,030 true cells' 30 nearest, each led by one type (47% to 72%), the seeds
+       agreeing exactly, 96.5% of the cells in their domain's niche (93% to 99% by domain); the
+       defaults' six niches of the 10 nearest, the seeds agreeing 0.66 to 0.93.
+     - *Genes in a pattern* (`moran-genes`): 162 of the Lung panel's 289 genes; GJA5 0.436, IGFBP3
+       0.411, CXCL13 0.313; GJA5 in 1.2% of the cells, its 73 cells high among high on the tissue.
+     - *An answer under another segmentation* (`remake-enrichment`): the Lung classes' enrichment
+       (7 of 10 pairs) made again on a 3 µm nucleus expansion; rank correlation 0.976, the largest
+       change the immune cells with themselves (1.44 to 1.94; 249 and 227 immune cells, 44 and 22
+       of them behind it).
+   - **Documentation:** the guide's worked examples, and the spatial pages pointing to them; the
+     README, remote control (`tour`'s answers of a spatial step), the CHANGELOG; the home page's
+     release line, releases and count of worked examples.
+   - **Release 0.6.0:** the Lung project as the viewer suite leaves it in 0.6.0, with its graphs
+     and spatial analyses, kept as `validation/projects/0.6.0-lung.situcraft.json` and reopened by
+     every later release, each graph and analysis made again with the same summary. The product
+     site built for it.
+   - **Validated** in the viewer suite: each worked example run step by step, each number its card
+     states from the answers' files and the graphs' edges; the 0.2.0 to 0.6.0 projects reopened,
+     their artifacts made again.
+   - Found by slice 10:
+     - **A project's reviews change its answers:** the suite's Lung project has 18 cells a review
+       excluded, which its graphs and analyses leave out, so its numbers are not a reader's; the
+       Lung worked examples are checked in a project of their own, as the example opens.
+     - **Composition cannot tell apart two places of the same mix:** domains 0 and 4, both led by
+       the epithelial-like type, share a niche, as do 1 and 5; four niches find the four kinds of
+       domain, and the defaults' six split them by chance, which the seeds' agreement shows.
+     - **Two segmentations' transcripts are alike by two measures:** an expansion's agreement with
+       the instrument's counts every transcript in the same cell or in none in both (95.45% for the
+       Lung 3 µm expansion); a comparison counts the gene transcripts of quality 20 or more whose
+       cell changed (4.59%). A card says which it reads.
 
 ## 0.7.0: samples and cohorts (wave 7)
 

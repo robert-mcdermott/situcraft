@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (0.6.0)
+## 0.6.0 (2026-10-18)
 
 Wave 6 of the [roadmap](situcraft-spec/roadmap.md): niches and spatial statistics. How the tissue is
 organized, asked of a segmentation's labeled cells: which cell types are neighbors, how far apart
@@ -192,6 +192,32 @@ with the cells it comes from.
     files, on each commit; every page against axe-core's WCAG 2.1 A and AA rules in both themes, at
     a desktop's width and a phone's, with nothing wider than a phone's screen, weekly
     (`docs/site/audit.mjs`).
+- **Worked examples of spatial analysis (wave 6, slice 10).** Each asks a question, says what to
+  expect, and does its steps' jobs from its card, showing each answer in the Spatial view and its
+  cells on the tissue.
+  - **Which cell types are neighbors** (the Breast data): the breast starter set's classes and
+    lineages over the Delaunay graph. Each class is its own neighbor more often than chance, and
+    the epithelial cells keep apart from the stromal (0.24 times) and the immune (0.32 times): the
+    tumor grows in nests the immune cells do not enter. T cells lie next to myeloid cells 4.4 times
+    as often as chance.
+  - **Immune cells and a tumor's edge** (the Breast data): a region drawn around the tumor, and
+    each class's density in bands across its edge. The immune cells are 0.36 times as dense in its
+    core as around it (0.28 to 0.45), thinner the deeper into the tumor: an immune-excluded tumor.
+  - **Niches against the domains** (the simulated tissue): the true cells' domains imported as
+    labels; four niches of the true cells, each led by one type and the same from every seed, with
+    96.5% of the cells in the niche of their domain's kind. The defaults' six niches agree across
+    seeds only 0.66 to 0.93: more niches than kinds of place.
+  - **Genes in a pattern** (the Lung data): 162 of the panel's 289 genes; the strongest, GJA5
+    (Moran's I 0.436), in 1.2% of the cells, its cells high among high an artery's endothelium.
+  - **An answer under another segmentation** (the Lung data): the classes' enrichment made again
+    on a 3 µm nucleus expansion. The 10 numbers keep their order (rank correlation 0.976); the
+    largest change is among few immune cells, with the cells behind it.
+  - **Remote control:** `tour` answers which analysis a Spatial step shows (and the one made again
+    on another segmentation), and the cells a step shows on the tissue.
+  - **Validated:** in the page, each example run step by step and every number its card states
+    checked against the answers' files and the graphs' edges; the project saved by 0.6.0
+    (`validation/projects/0.6.0-lung.situcraft.json`) opens, and every artifact it records is made
+    again as it was, its graphs and analyses among them.
 
 ### Fixed
 

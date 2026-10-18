@@ -2,9 +2,11 @@
 // views of a dataset. Each step opens its view through app.applyView, as a saved view opens,
 // without keeping it in the project. A worked example's steps may also do something first (expand
 // the nuclei, plant errors, compare two segmentations, cluster and label cells, make them again on
-// another segmentation: the card's button runs it as a job and goes on when it is done), show a
-// comparison in the Compare view (its labels read through it in the Labels tab), show a clustering
-// in the Cell types view, or reveal a planted segmentation's answer key. One tour at a time.
+// another segmentation, build a graph, ask a spatial question, make an answer again: the card's
+// button runs it as a job and goes on when it is done), show a comparison in the Compare view (its
+// labels read through it in the Labels tab), show a clustering in the Cell types view, show an
+// answer in the Spatial view or its cells on the tissue, or reveal a planted segmentation's answer
+// key. One tour at a time.
 
 import { h, icon } from './dom.js';
 import { segmentationByRole, stepView } from '../lib/tours.js';
@@ -20,6 +22,9 @@ import { addRegion, polygonOf, rectangle, regionsOf } from '../lib/regions.js';
 import { landmarksFromTruth } from '../lib/simulated-truth.js';
 import { reviewCells, reviewRegion, segmentationFor } from './reviewing.js';
 import { labelSource, refOf } from './label-sources.js';
+import { graphsOf } from '../lib/graphs.js';
+import { analysesOf, zoneBands } from '../lib/spatial.js';
+import { showAnalysisCells } from './spatial-cells.js';
 
 let active = null;
 
@@ -27,6 +32,9 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // The actions of the post-Xenium worked examples (runPostXenium).
 const POST_XENIUM_ACTIONS = new Set(['add-image', 'landmarks', 'register', 'check', 'draw-regions', 'write-regions', 'read-regions', 'import-instrument-types', 'review-queue', 'exclude-fold']);
+
+// The spatial worked examples' actions (runSpatial).
+const SPATIAL_ACTIONS = new Set(['graph', 'ask', 'remake-analysis', 'import-truth-domains']);
 
 // The Cell types view's sections a step may bring into view.
 const SECTIONS = { map: '.ct-map-host', selection: '.ct-selection', clusters: '.ct-detail', review: '.rv-section' };
@@ -70,7 +78,37 @@ export function startTour(app, { tour, dataset }) {
   };
   const trueTypes = () => {
     const s = role('truth');
-    return s ? app.store.project.artifacts.find((a) => a.kind === 'labels' && a.state === 'complete' && a.source && a.segmentation === s.id) ?? null : null;
+    return s ? app.store.project.artifacts.find((a) => a.kind === 'labels' && a.state === 'complete' && a.source && a.segmentation === s.id && a.source.column !== 'domain') ?? null : null;
+  };
+  // The truth's domains (truth/cells.parquet's domain column), imported as labels of the true cells.
+  const trueDomains = () => {
+    const s = role('truth');
+    return s ? app.store.project.artifacts.find((a) => a.kind === 'labels' && a.state === 'complete' && a.source && a.segmentation === s.id && a.source.column === 'domain') ?? null : null;
+  };
+  // A segmentation's graph of a kind (its latest); the labels a spatial question asks of (the
+  // segmentation's labels from markers, or the truth's types); an answer of a step's question (of
+  // the segmentation and labels at the level, the region's edge, the niches' window and count),
+  // not one made again; and that answer made again on another segmentation.
+  const graphOf = (r, kind) => {
+    const s = role(r);
+    return s ? graphsOf(app.store.project, dataset, s.id).filter((g) => g.state === 'complete' && g.parameters?.kind === kind).at(-1) ?? null : null;
+  };
+  const labelsFor = (q) => (q.labels === 'true-types' ? trueTypes() : labelsOf(q.segmentation ?? 'instrument'));
+  const analysisOf = (q) => {
+    const s = role(q.segmentation ?? 'instrument');
+    if (!s) return null;
+    const labels = q.question === 'moran' ? null : labelsFor(q);
+    if (q.question !== 'moran' && !labels) return null;
+    return analysesOf(app.store.project, dataset, s.id).filter((a) => a.state === 'complete' && a.question === q.question && !a.remakeOf
+      && (q.question === 'moran' || (a.summary?.labels?.id === labels.id && (a.summary?.labels?.level ?? 0) === (q.level ?? 0)))
+      && (q.region === undefined || a.summary?.edge?.name === q.region)
+      && (q.niches === undefined || a.summary?.niches?.length === q.niches)
+      && (q.neighbors === undefined || a.parameters?.neighbors === q.neighbors)).at(-1) ?? null;
+  };
+  const remadeOf = (q) => {
+    const from = analysisOf(q);
+    const to = role(q.to);
+    return from && to ? analysesOf(app.store.project, dataset, to.id).find((a) => a.state === 'complete' && a.remakeOf === from.id) ?? null : null;
   };
   const itemOf = (ds) => app.bundles.link(ds.id)?.item ?? app.bundles.itemByPath(ds.path);
   // The truth folder beside the bundle's files, in the path's own separators.
@@ -124,6 +162,10 @@ export function startTour(app, { tour, dataset }) {
     if (d.action === 'label') return Boolean(labelsOf(d.segmentation ?? 'instrument'));
     if (d.action === 'import-truth-labels') return Boolean(trueTypes());
     if (d.action === 'remake') return Boolean(labelsOf(d.to));
+    if (d.action === 'graph') return Boolean(graphOf(d.segmentation ?? 'instrument', d.kind));
+    if (d.action === 'ask') return Boolean(analysisOf(d));
+    if (d.action === 'remake-analysis') return Boolean(remadeOf(d));
+    if (d.action === 'import-truth-domains') return Boolean(trueDomains());
     return true;
   }
 
@@ -133,6 +175,7 @@ export function startTour(app, { tour, dataset }) {
     const d = step.do;
     const ds = datasetRecord();
     if (POST_XENIUM_ACTIONS.has(d.action)) return runPostXenium(d, ds);
+    if (SPATIAL_ACTIONS.has(d.action)) return runSpatial(d, ds);
     if (step.mode === 'celltypes') {
       for (let k = 0; k < 200 && !app.cellTypesView; k += 1) await sleep(25);
       if (!app.cellTypesView) throw new Error('the Cell types view did not open');
@@ -217,7 +260,7 @@ export function startTour(app, { tour, dataset }) {
       for (const r of d.regions) {
         if (regionsOf(next, ds.id).some((x) => x.name === r.name)) continue;
         const geometry = r.rectangle ? rectangle(...r.rectangle) : polygonOf(r.polygon);
-        next = addRegion(next, { dataset: ds.id, name: r.name, cls: r.cls, geometry, tool: r.rectangle ? 'rectangle' : 'polygon', layer: 'the H&E', by: BY, note: 'Drawn by the worked example' });
+        next = addRegion(next, { dataset: ds.id, name: r.name, cls: r.cls, geometry, tool: r.rectangle ? 'rectangle' : 'polygon', layer: r.layer ?? 'the H&E', by: BY, note: 'Drawn by the worked example' });
       }
       app.store.commit(next, 'Draw the worked example\'s regions');
       return null;
@@ -270,6 +313,100 @@ export function startTour(app, { tour, dataset }) {
     return null;
   }
   let lastWritten = null;
+
+  // The spatial worked examples' actions: a graph built, a question asked, an answer made again on
+  // another segmentation, the truth's domains imported as labels of the true cells.
+  async function runSpatial(d, ds) {
+    const before = 'do the steps before this one first';
+    for (let k = 0; k < 200 && !app.spatialView; k += 1) await sleep(25);
+    if (!app.spatialView) throw new Error('the Spatial view did not open');
+    if (d.action === 'import-truth-domains') {
+      const s = role('truth');
+      if (!s) throw new Error(`${before}: the truth is not imported yet`);
+      const { folder, sep } = truthFolder(ds);
+      return app.bundles.importLabels(itemOf(ds), ds.id, { segmentation: s.id, path: `${folder}${sep}cells.parquet`, columns: { idColumn: 'cell_id', column: 'domain', confidenceColumn: '', colorColumn: '' } });
+    }
+    const s = role(d.segmentation ?? 'instrument');
+    if (!s) throw new Error(`${before}: the segmentation is not made yet`);
+    if (d.action === 'graph') return app.spatialView.build(ds, { segmentation: s.id, kind: d.kind, params: d.params ?? {} });
+    if (d.action === 'ask') {
+      const ask = { segmentation: s.id, question: d.question, ...(d.params ?? {}) };
+      if (d.question !== 'moran') {
+        const labels = labelsFor(d);
+        if (!labels) throw new Error(`${before}: the cells are not labeled yet`);
+        ask.labels = `${labels.id}|${d.level ?? 0}`;
+      }
+      if (d.question === 'enrichment' || d.question === 'moran') {
+        const g = graphOf(d.segmentation ?? 'instrument', d.graph ?? 'delaunay');
+        if (!g) throw new Error(`${before}: the graph is not built yet`);
+        ask.graph = g.id;
+      }
+      if (d.region !== undefined) {
+        const region = regionsOf(app.store.project, ds.id).find((r) => r.name === d.region);
+        if (!region) throw new Error(`${before}: the region ${d.region} is not drawn yet`);
+        ask.edge = region.id;
+      }
+      if (d.niches !== undefined) ask.niches = d.niches;
+      if (d.neighbors !== undefined) ask.neighbors = d.neighbors;
+      return app.spatialView.ask(ds, ask);
+    }
+    if (d.action === 'remake-analysis') {
+      const from = analysisOf(d);
+      const to = role(d.to);
+      if (!from || !to) throw new Error(`${before}: the answer, and the other segmentation, are not made yet`);
+      return app.spatialView.remake(ds, from.id, to.id);
+    }
+    return null;
+  }
+
+  // Shows a step's answer in the Spatial view, with what in it the step chooses; or, made again on
+  // another segmentation, the first read with it.
+  async function showSpatial(step) {
+    const q = step.spatial;
+    const analysis = analysisOf(q);
+    const again = q.to ? remadeOf(q) : null;
+    if (!analysis || (q.to && !again)) {
+      note.hidden = false;
+      note.textContent = 'The answer is not made yet: go back to the steps that make it.';
+      return null;
+    }
+    app.focusItem({ kind: 'dataset', id: dataset });
+    app.setMode('spatial');
+    for (let k = 0; k < 200 && !app.spatialView?.show; k += 1) await sleep(25);
+    const choice = { ...(q.choose ?? {}) };
+    if (again) choice.readWith = again.id;
+    const shown = await app.spatialView.show(datasetRecord(), analysis.id, choice);
+    if (active !== controller || tour.steps[index] !== step) return shown;
+    await sleep(50);
+    const at = q.section ? document.querySelector(q.section) : document.querySelector('.sp-answer');
+    at?.scrollIntoView({ block: 'start' });
+    return shown;
+  }
+
+  // Shows an answer's cells on the tissue, as the answer's Show these cells does: a pair's cells,
+  // a label's in a zone of a region's edge, a gene's cells of a local class, or a niche's.
+  async function showCells(step) {
+    const c = step.cells_of;
+    const record = analysisOf(c);
+    if (!record) {
+      note.hidden = false;
+      note.textContent = 'The answer is not made yet: go back to the steps that make it.';
+      return null;
+    }
+    const data = await app.bundles.analysisData(record.id);
+    const names = data.analysis.labels?.names ?? [];
+    const ds = datasetRecord();
+    const segmentation = app.store.project.artifacts.find((x) => x.kind === 'segmentation' && x.id === record.segmentation);
+    const base = { dataset, item: itemOf(ds), segmentation, analysis: data.analysis, cells: data.cells };
+    if (data.analysis.question === 'moran') return showAnalysisCells(app, { ...base, local: data.local, gene: data.analysis.moran.genes.indexOf(c.gene), localClass: c.localClass ?? 1 });
+    if (data.analysis.question === 'niches') return showAnalysisCells(app, { ...base, id: record.id, niche: c.niche === undefined ? -1 : c.niche - 1 });
+    if (data.analysis.question === 'boundary') {
+      const p = data.analysis.parameters;
+      const where = { core: `in the core (inside, beyond ${p.margin} µm)`, margin: `at the margin (within ${p.margin} µm of the edge)`, around: `around (outside, ${p.margin} to ${p.reach} µm)` }[c.zone];
+      return showAnalysisCells(app, { ...base, a: names.indexOf(c.a), bands: zoneBands(data.analysis.boundary.edges, p.margin, c.zone), where });
+    }
+    return showAnalysisCells(app, { ...base, a: names.indexOf(c.a), b: names.indexOf(c.b ?? c.a), k: 0 });
+  }
 
   // Shows an image's alignment in the Alignment view as a step says: a version by how it was made
   // (or 'in use'), over the stains, as a checkerboard, with DAPI's edges, and where it is off.
@@ -393,8 +530,18 @@ export function startTour(app, { tour, dataset }) {
       close();
       return;
     }
-    card.classList.toggle('aside', Boolean(step.compare || step.mode === 'celltypes' || step.mode === 'alignment'));
-    if (step.alignment) {
+    card.classList.toggle('aside', Boolean(step.compare || step.mode === 'celltypes' || step.mode === 'alignment' || step.spatial));
+    if (step.spatial) {
+      controller.shown = showSpatial(step).catch((error) => {
+        note.hidden = false;
+        note.textContent = `The answer could not be shown: ${error.message}`;
+      });
+    } else if (step.cells_of) {
+      controller.shown = showCells(step).catch((error) => {
+        note.hidden = false;
+        note.textContent = `The cells could not be shown: ${error.message}`;
+      });
+    } else if (step.alignment) {
       controller.shown = showAlignment(step).catch((error) => {
         note.hidden = false;
         note.textContent = `The alignment could not be shown: ${error.message}`;
@@ -426,6 +573,9 @@ export function startTour(app, { tour, dataset }) {
       }
       const fill = view?.cells.fill ?? '';
       if (fill === 'true-types') view.cells.fill = instrumentTypes() ? `labels:${instrumentTypes().id}:0` : null;
+      // The niches of a step's question, and the truth's domains, as label sets of the true cells.
+      if (fill === 'niches') view.cells.fill = analysisOf({ ...step.niches, question: 'niches' }) ? `labels:${analysisOf({ ...step.niches, question: 'niches' }).id}:0` : null;
+      if (fill === 'true-domains') view.cells.fill = trueDomains() ? `labels:${trueDomains().id}:0` : null;
       if (fill === 'clusters' || /^labels(:\d+)?$/.test(fill)) {
         const r = step.segmentation ?? 'instrument';
         const c = clusteringOf(r);
@@ -450,7 +600,12 @@ export function startTour(app, { tour, dataset }) {
     if (active === controller) active = null;
   }
 
-  const controller = { close, go, advance, step: () => index, card, tour, dataset, open: () => card.isConnected, done: () => done(tour.steps[index]), shown: Promise.resolve() };
+  // A step's spatial answer, and the answer made again on another segmentation: for remote control.
+  const answers = (step) => {
+    const q = step.spatial ?? step.cells_of;
+    return q ? { analysis: analysisOf(q)?.id ?? null, again: q.to ? remadeOf(q)?.id ?? null : null } : null;
+  };
+  const controller = { close, go, advance, step: () => index, card, tour, dataset, open: () => card.isConnected, done: () => done(tour.steps[index]), answers: () => answers(tour.steps[index]), shown: Promise.resolve() };
   active = controller;
   app.tour = controller;
   go(0);

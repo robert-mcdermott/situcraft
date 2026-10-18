@@ -1285,6 +1285,37 @@ export function mountSpatial(app, container) {
     render(true);
     return out;
   };
+  // Shows an answer, with what in it a worked example's step chooses, by name ({ pair: [a, b],
+  // label, zone, niche (from 1), gene, readWith: another answer read with it, change: one of the
+  // two's numbers by its key }); answers the analysis shown.
+  app.spatialView.show = async (dataset, analysisId, choice = {}) => {
+    const t0 = target();
+    if (!t0 || t0.dataset.id !== dataset.id) app.focusItem({ kind: 'dataset', id: dataset.id });
+    const record = app.store.project.artifacts.find((a) => a.kind === 'spatial' && a.id === analysisId && a.dataset === dataset.id);
+    if (!record) throw new Error(`No analysis ${analysisId} of ${dataset.name}.`);
+    const { analysis } = await app.bundles.analysisData(record.id);
+    const names = analysis.labels?.names ?? [];
+    const index = (name) => {
+      const k = names.indexOf(name);
+      if (k < 0) throw new Error(`the answer has no label ${name}`);
+      return k;
+    };
+    const session = sessionOf(dataset);
+    session.segmentation = record.segmentation;
+    Object.assign(session, { analysis: record.id, pair: null, to: null, at: null, rows: null, label: null, niche: null, gene: null, change: null });
+    if (choice.pair) session.pair = choice.pair.map(index);
+    if (choice.label !== undefined) session.label = index(choice.label);
+    if (choice.zone) session.zone = choice.zone;
+    if (choice.niche !== undefined) session.niche = choice.niche - 1;
+    if (choice.gene !== undefined) {
+      session.gene = analysis.moran?.genes.indexOf(choice.gene) ?? -1;
+      if (session.gene < 0) throw new Error(`the answer has no gene ${choice.gene}`);
+    }
+    if (choice.readWith) session.readWith = choice.readWith;
+    if (choice.change) session.change = choice.change;
+    render(true);
+    return analysis;
+  };
   return {
     update(topics) {
       if (topics.has('project') || topics.has('project-loaded') || topics.has('focus') || topics.has('bundles') || topics.has('mode')) render();

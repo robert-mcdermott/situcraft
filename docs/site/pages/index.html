@@ -5,7 +5,7 @@ description: A local-first workbench for imaging-based spatial transcriptomics, 
 ---
     <section class="hero">
       <div class="container hero-grid">
-        <a class="eyebrow" href="{{github}}/releases/tag/v{{version}}"><span class="pill">v{{version}}</span> The pathology bridge: H&amp;E and immunofluorescence on the tissue, aligned and checked in µm, with regions and reviews</a>
+        <a class="eyebrow" href="{{github}}/releases/tag/v{{version}}"><span class="pill">v{{version}}</span> Niches and spatial statistics: which cells are neighbors, at what distances, at a region's edge, the tissue's niches and the genes that follow space</a>
         <h1>Spatial transcriptomics <span class="accent">you can check</span></h1>
         <p class="lede">SituCraft opens the output of a 10x Genomics Xenium run, checks it, and shows the tissue, its transcripts and its cells at any zoom. It makes and compares cell segmentations, types and reviews the cells, brings in the H&amp;E, and asks how the tissue is organized, keeping every decision on record. It runs on your own computer as one self-contained program, installed with a single command: no account, Python or R, and your data never leave your machine.</p>
         <shot name="viewer-genes" alt="SituCraft's Viewer on the Lung example: transcripts of EPCAM, COL5A2, PLVAP and CD68 over the gray DAPI stain and the cells' outlines, a selected cell's transcripts by gene in the inspector" window eager>The Xenium human Lung section (10x Genomics, CC BY 4.0), one of the examples: four genes' transcripts over the DAPI stain and the cells, one cell in the inspector.</shot>
@@ -170,7 +170,7 @@ description: A local-first workbench for imaging-based spatial transcriptomics, 
           <a class="card" href="docs/getting-started.html#worked-examples">
             <span class="icon-badge mint"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6M10 3v6L4 19a1 1 0 0 0 .9 1.5h14.2A1 1 0 0 0 20 19l-6-10V3"/></svg></span>
             <h3>Examples with known answers</h3>
-            <p>Two public Xenium sections, and a simulated tissue whose every cell, transcript and type is known, with an H&amp;E and an immunofluorescence image of it. Ten worked examples, each a question answered step by step.</p>
+            <p>Two public Xenium sections, and a simulated tissue whose every cell, transcript and type is known, with an H&amp;E and an immunofluorescence image of it. Fifteen worked examples, each a question answered step by step.</p>
           </a>
           <a class="card" href="docs/remote-control.html">
             <span class="icon-badge"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 9-4 3 4 3M16 9l4 3-4 3M13 6l-2 12"/></svg></span>
@@ -237,7 +237,8 @@ description: A local-first workbench for imaging-based spatial transcriptomics, 
               <tr><td><strong>0.3.0</strong></td><td>SituCraft's own transcript-informed segmentation, in a studio and the terminal, validated against simulated truth</td></tr>
               <tr><td><strong>0.4.0</strong></td><td>Cell identities: clusters, a map, labels from markers, a reference or elsewhere, reviewed with their evidence and read under two segmentations</td></tr>
               <tr><td><strong>0.5.0</strong></td><td>The pathology bridge: post-Xenium images aligned and checked in µm, regions exchanged with QuPath, and reviews with their provenance</td></tr>
-              <tr><td><strong>0.6.0</strong> (coming)</td><td>Niches and spatial statistics: graphs, enrichment, distances, regions measured, niches, spatially variable genes, and any answer made again on another segmentation</td></tr>
+              <tr><td><strong>0.6.0</strong></td><td>Niches and spatial statistics: graphs, enrichment, distances, regions measured, niches, spatially variable genes, and any answer made again on another segmentation</td></tr>
+              <tr><td><strong>0.7.0</strong> (coming)</td><td>Samples and cohorts: several sections in a project, their design, and comparisons with the sample as the unit, with effect sizes and intervals</td></tr>
             </tbody>
           </table>
         </div>

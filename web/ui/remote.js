@@ -457,6 +457,12 @@ export function installRemote(app) {
         const queue = step.celltypes.review ? app.labelReview?.queue?.() : null;
         data.celltypes = { clustering: st?.clustersOf ?? null, map: st?.mapId ?? null, cells: st?.map?.n ?? 0, color: st?.color ?? null, selected: st?.count ?? 0, ...(queue ? { review: queue.counts, against: queue.against } : {}) };
       }
+      // A spatial step: its answer (and that answer made again), and the cells it shows on the tissue.
+      if (step.spatial || step.cells_of) data.spatial = card.answers();
+      if (step.cells_of) {
+        for (let k = 0; k < 200 && !window.situcraftViewer?.focus?.(); k += 1) await sleep(25);
+        data.focus = window.situcraftViewer?.focus?.() ?? null;
+      }
       return { message: `${card.tour.title}, step ${at + 1} of ${steps.length}: ${step.title}. ${step.text}`, data };
     },
 

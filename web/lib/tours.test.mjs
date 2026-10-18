@@ -77,7 +77,10 @@ test('a dataset is known as its example by its manifest, wherever it is', () => 
 test('every worked example asks its question, says what to expect, and its steps can be done', () => {
   // The downloaded examples', and the simulated one made on this computer (api_examples.go).
   assert.deepEqual(Object.keys(WORKED).sort(), [...Object.keys(sources), 'simulated-standard'].sort());
-  const roles = new Set(['instrument', 'expansion-5', 'planted', 'refined', 'truth']);
+  const roles = new Set(['instrument', 'expansion-5', 'expansion-3', 'planted', 'refined', 'truth']);
+  // A spatial question as a step asks it: its question, segmentation, labels and level, region,
+  // niches' window and count.
+  const answer = (q) => `answer:${[q.question, q.segmentation ?? 'instrument', q.labels ?? 'markers', q.level ?? 0, q.region ?? '', q.niches ?? '', q.neighbors ?? ''].join('|')}`;
   // The starter marker sets (internal/label/starters), and the simulated tissue's own.
   const starters = new Set(['simulated', ...readdirSync(join(root, 'internal', 'label', 'starters')).map((f) => f.replace(/\.json$/, ''))]);
   for (const [name, list] of Object.entries(WORKED)) {
@@ -88,7 +91,7 @@ test('every worked example asks its question, says what to expect, and its steps
       // of a segmentation (clustering:role, labels:role).
       const made = new Set(['instrument']);
       for (const step of w.steps) {
-        assert.ok(['segmentation', 'compare', 'viewer', 'qc', 'data', 'celltypes', 'alignment'].includes(step.mode), step.title);
+        assert.ok(['segmentation', 'compare', 'viewer', 'qc', 'data', 'celltypes', 'alignment', 'spatial'].includes(step.mode), step.title);
         assert.ok(step.mode !== 'alignment' || step.alignment, `${step.title}: an Alignment view step says what it shows`);
         assert.ok(step.title && step.text.length > 40, step.title);
         if (step.do) {
@@ -139,7 +142,36 @@ test('every worked example asks its question, says what to expect, and its steps
           if (d.action === 'import-instrument-types') made.add('labels:true-types');
           if (d.action === 'review-queue') assert.ok(step.mode === 'celltypes' && made.has('labels:instrument') && d.first > 0, `${step.title}: the labels are made before`);
           if (d.action === 'exclude-fold') assert.ok(step.mode === 'viewer' && d.region.name && d.note, step.title);
+          // Spatial: a graph of a segmentation made before; a question of its labels (or the truth's
+          // types), over a graph built before, across a region drawn before; an answer made again
+          // on a segmentation made before; the truth's domains imported.
+          if (['graph', 'ask', 'remake-analysis', 'import-truth-domains'].includes(d.action)) assert.equal(step.mode, 'spatial', step.title);
+          if (d.action === 'graph') {
+            assert.ok(made.has(d.segmentation ?? 'instrument') && ['delaunay', 'knn', 'radius', 'contact'].includes(d.kind), `${step.title}: its segmentation is made before`);
+            made.add(`graph:${d.segmentation ?? 'instrument'}:${d.kind}`);
+          }
+          if (d.action === 'ask') {
+            const r = d.segmentation ?? 'instrument';
+            if (d.question !== 'moran') assert.ok(made.has(d.labels === 'true-types' ? 'labels:truth' : `labels:${r}`), `${step.title}: its labels are made before`);
+            if (d.question === 'enrichment' || d.question === 'moran') assert.ok(made.has(`graph:${r}:delaunay`), `${step.title}: its graph is built before`);
+            if (d.region !== undefined) assert.ok(made.has(`region:${d.region}`), `${step.title}: its region is drawn before`);
+            made.add(answer(d));
+          }
+          if (d.action === 'remake-analysis') {
+            assert.ok(made.has(answer(d)) && roles.has(d.to) && made.has(d.to), `${step.title}: its answer and the other segmentation are made before`);
+            made.add(`${answer(d)}>${d.to}`);
+          }
+          if (d.action === 'import-truth-domains') {
+            assert.ok(made.has('truth'), `${step.title}: the truth is imported before`);
+            made.add('domains:truth');
+          }
         }
+        if (step.spatial) {
+          assert.equal(step.mode, 'spatial', step.title);
+          assert.ok(made.has(answer(step.spatial)), `${step.title}: its answer is made before`);
+          if (step.spatial.to) assert.ok(made.has(`${answer(step.spatial)}>${step.spatial.to}`), `${step.title}: its answer is made again before`);
+        }
+        if (step.cells_of) assert.ok(step.mode === 'viewer' && made.has(answer(step.cells_of)), `${step.title}: its answer is made before`);
         if (step.images) assert.ok(Object.keys(step.images).every((k) => made.has(`image:${k}`)), `${step.title}: its images are added before`);
         if (step.alignment) {
           const a = step.alignment;
@@ -163,6 +195,8 @@ test('every worked example asks its question, says what to expect, and its steps
         const fill = step.cells?.fill ?? '';
         if (fill === 'clusters' || /^labels/.test(fill)) assert.ok(made.has(`${fill === 'clusters' ? 'clustering' : 'labels'}:${step.segmentation ?? 'instrument'}`), `${step.title}: what fills the cells is made before`);
         if (fill === 'true-types') assert.ok(made.has('labels:true-types'), `${step.title}: the true types are imported before`);
+        if (fill === 'niches') assert.ok(step.niches && made.has(answer({ ...step.niches, question: 'niches' })), `${step.title}: its niches are found before`);
+        if (fill === 'true-domains') assert.ok(made.has('domains:truth'), `${step.title}: the truth's domains are imported before`);
       }
     }
   }
