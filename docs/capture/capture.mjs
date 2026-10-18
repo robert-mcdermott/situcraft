@@ -1,9 +1,9 @@
 // Captures the documentation's screenshots, in the light and dark themes, as
-// docs/images/<scene>-<theme>.webp: the README shows the one matching the reader's theme. Each scene
-// drives a SituCraft built from source through its remote control (actions.go, web/ui/remote.js),
-// as any script can, on a fresh, empty library, with the development bundles as its examples (node
-// validation/fetch.mjs downloads them), so every run gives the same pictures. Follows MaveScape
-// 0.8.0's docs/capture/capture.mjs.
+// docs/images/<scene>-<theme>.webp: the README and the website (docs/site/build.mjs copies them)
+// show the one matching the reader's theme. Each scene drives a SituCraft built from source
+// through its remote control (actions.go, web/ui/remote.js), as any script can, on a fresh, empty
+// library, with the development bundles as its examples (node validation/fetch.mjs downloads
+// them), so every run gives the same pictures. Follows MaveScape 0.8.0's docs/capture/capture.mjs.
 //
 //   node docs/capture/capture.mjs [scene …] [--theme light|dark|both] [--audit [--no-shots]]
 //

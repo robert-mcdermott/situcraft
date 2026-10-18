@@ -1,0 +1,44 @@
+---
+title: Troubleshooting
+description: What to do when SituCraft's window does not open, a bundle will not open, the Viewer needs WebGL2, a refinement will not fit in memory, or the cache grows.
+lede: Most problems say what to do where they happen: a bundle's check lists each fatal finding with its remedy, and a job that fails says what went wrong. The rest are here.
+---
+      <h2 id="window">The window</h2>
+      <ul>
+        <li><strong>The window does not open:</strong> <code>situcraft --window browser</code> uses your default browser instead; <code>--window none</code> prints the address to open yourself.</li>
+        <li><strong>"Start SituCraft with its program":</strong> the page was opened without SituCraft running; run <code>situcraft</code>.</li>
+        <li><strong>The Viewer needs WebGL2,</strong> which current Chrome, Edge, Firefox and Safari have.</li>
+        <li><strong>Its port is taken:</strong> SituCraft uses the next free port up to 8859, or the one you give with <code>--port</code>.</li>
+      </ul>
+
+      <h2 id="data">Bundles and jobs</h2>
+      <ul>
+        <li><strong>A bundle will not open:</strong> the Data view lists each fatal finding with its remedy (<a href="opening-data.html#check">Check it</a>).</li>
+        <li><strong>A bundle moved:</strong> <strong>Locate…</strong> in the Data view points the project to its new place (<a href="record.html#projects">Projects</a>).</li>
+        <li><strong>A job was interrupted</strong> (SituCraft or the computer stopped): it is shown as interrupted when SituCraft starts again; <strong>Resume</strong> continues it where it stopped (<a href="segmentations.html#jobs">Jobs</a>).</li>
+        <li><strong>A refinement will not fit:</strong> the studio's Compute step says what it needs against what the computer has, and refuses a run past the computer's memory. Refine a region, or use the Low memory preset (<a href="refinement.html">Refinement</a>; <a href="../install.html#memory">what it needs</a>).</li>
+        <li><strong>The cache grows:</strong> derived data are kept within <code>--cache-limit</code> (10 GB unless you say), removing what was used least recently, and can be deleted at any time: they are built again when needed.</li>
+      </ul>
+
+      <h2 id="options">Command-line options</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Flag</th><th>Default</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td><code>--port</code></td><td>8840</td><td>Preferred port; the next free one up to 8859 is used if it is taken</td></tr>
+            <tr><td><code>--window</code></td><td><code>app</code></td><td><code>app</code> (a desktop window), <code>browser</code> (the default browser) or <code>none</code></td></tr>
+            <tr><td><code>--keep-running</code></td><td>off</td><td>Keep serving after the window is closed</td></tr>
+            <tr><td><code>--data-dir</code></td><td><code>&lt;user config dir&gt;/SituCraft</code></td><td>Where the project library is kept</td></tr>
+            <tr><td><code>--cache-dir</code></td><td><code>&lt;user cache dir&gt;/situcraft</code></td><td>Where derived data go (image tiles, transcript indexes, tiled outlines, a zipped bundle's unpacked members); can be deleted at any time</td></tr>
+            <tr><td><code>--cache-limit</code></td><td><code>10GB</code></td><td>The size the cache is kept within, removing what was used least recently (<code>500MB</code>, <code>20GB</code>; <code>0</code> for no limit)</td></tr>
+            <tr><td><code>--examples-dir</code></td><td><code>&lt;data dir&gt;/examples</code></td><td>Where example datasets are downloaded, when you ask</td></tr>
+            <tr><td><code>--remote-control</code></td><td>off</td><td>Let programs on this computer drive the window (<a href="remote-control.html">Remote control</a>)</td></tr>
+            <tr><td><code>--host</code></td><td>127.0.0.1</td><td>Interface to bind</td></tr>
+            <tr><td><code>--version</code></td><td></td><td>Print <code>situcraft X.Y.Z</code> and exit</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="research-use">Research use</h2>
+      <p>SituCraft is for research use only. It is not a medical device and makes no diagnostic claims.</p>
+      <p>Something else? <a href="{{github}}/issues">Open an issue</a> with what you did, what you expected and what happened; the drawer's log (⌘J) says what SituCraft did.</p>

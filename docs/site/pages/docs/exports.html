@@ -1,0 +1,27 @@
+---
+title: Exports
+description: Export any segmentation from SituCraft to SpatialData, AnnData, Parquet, CSV, Matrix Market, GeoJSON or Xenium Ranger's import-segmentation, every file listed by its SHA-256 with fingerprints any reader can check.
+lede: Any segmentation of a dataset exports for other tools, into one folder: SpatialData and AnnData Zarr, Parquet and CSV, Matrix Market, GeoJSON, or Xenium Ranger's inputs with the command. Every file is listed by its SHA-256.
+---
+      <h2 id="formats">The formats</h2>
+      <shot name="export" alt="The Segmentation view's Export a segmentation: the formats chosen, the folder, and an export of the Lung example's instrument segmentation listed with its files and the prepared Xenium Ranger command">An export of the Lung example's instrument segmentation, with its files and the prepared Xenium Ranger command.</shot>
+      <p><strong>Export a segmentation</strong> writes any of a dataset's segmentations for other tools, into one folder you name:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Format</th><th>For</th><th>Holds</th></tr></thead>
+          <tbody>
+            <tr><td>SpatialData Zarr</td><td>spatialdata, napari-spatialdata</td><td>The cells as a label image and as polygons, the transcripts as points with their cells, the counts as an AnnData table</td></tr>
+            <tr><td>AnnData Zarr</td><td>scanpy, anndata</td><td>The counts, with each cell's measures and centroid</td></tr>
+            <tr><td>Parquet; CSV</td><td>DuckDB, pandas, R, polars</td><td>Cells, transcripts with their cells, outlines and counts, in Xenium's column names</td></tr>
+            <tr><td>Matrix Market</td><td>Seurat (<code>Read10X</code>), scanpy</td><td>The counts as Xenium and Cell Ranger write them</td></tr>
+            <tr><td>GeoJSON</td><td>QuPath, GIS tools</td><td>Each cell's outline as a polygon naming it</td></tr>
+            <tr><td>Xenium Ranger inputs</td><td>Xenium Ranger's <code>import-segmentation</code></td><td>The cells and nuclei as label masks on the morphology image's pixels, and the command</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="checked">What an export keeps</h2>
+      <p>Coordinates are in µm. Beside the files, <code>situcraft-export.json</code> says what was exported, from what and by which SituCraft, lists every file by its SHA-256, and gives fingerprints of the label image, the counts and the transcripts' cells that every format holds the same (<a href="{{github}}/blob/main/docs/FORMATS.md">Formats</a>), so that you can check any reader got it exactly. The export runs as a job, is written under a temporary name and renamed into place when complete, and is recorded in the project. A folder that exists is replaced only when you ask, and only when it is an earlier SituCraft export.</p>
+
+      <h2 id="xenium-ranger">For Xenium Ranger</h2>
+      <p>For <strong>Xenium Ranger</strong>, SituCraft prepares the inputs and the command, and does not run it. It checks first that the masks are the morphology image's size, which cells have no pixel (Xenium Ranger cannot keep them), and how many transcripts this segmentation assigns otherwise than its mask holds at their pixel (Xenium Ranger assigns by the mask). <strong>Copy the command</strong> puts it on the clipboard to run where Xenium Ranger is installed.</p>

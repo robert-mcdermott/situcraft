@@ -1,0 +1,590 @@
+[
+ {
+  "page": "docs/clusters.html",
+  "theme": "light",
+  "width": "desktop",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/comparing.html",
+  "theme": "light",
+  "width": "desktop",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/exports.html",
+  "theme": "light",
+  "width": "desktop",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/getting-started.html",
+  "theme": "light",
+  "width": "desktop",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/images.html",
+  "theme": "light",
+  "width": "desktop",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/index.html",
+  "theme": "light",
+  "width": "desktop",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/labels.html",
+  "theme": "light",
+  "width": "desktop",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/niches.html",
+  "theme": "light",
+  "width": "desktop",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/opening-data.html",
+  "theme": "light",
+  "width": "desktop",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/qc.html",
+  "theme": "light",
+  "width": "desktop",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/record.html",
+  "theme": "light",
+  "width": "desktop",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/refinement.html",
+  "theme": "light",
+  "width": "desktop",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/regions.html",
+  "theme": "light",
+  "width": "desktop",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/remote-control.html",
+  "theme": "light",
+  "width": "desktop",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/segmentations.html",
+  "theme": "light",
+  "width": "desktop",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/spatial.html",
+  "theme": "light",
+  "width": "desktop",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/troubleshooting.html",
+  "theme": "light",
+  "width": "desktop",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/viewer.html",
+  "theme": "light",
+  "width": "desktop",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "index.html",
+  "theme": "light",
+  "width": "desktop",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "install.html",
+  "theme": "light",
+  "width": "desktop",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "science.html",
+  "theme": "light",
+  "width": "desktop",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/clusters.html",
+  "theme": "dark",
+  "width": "desktop",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/comparing.html",
+  "theme": "dark",
+  "width": "desktop",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/exports.html",
+  "theme": "dark",
+  "width": "desktop",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/getting-started.html",
+  "theme": "dark",
+  "width": "desktop",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/images.html",
+  "theme": "dark",
+  "width": "desktop",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/index.html",
+  "theme": "dark",
+  "width": "desktop",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/labels.html",
+  "theme": "dark",
+  "width": "desktop",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/niches.html",
+  "theme": "dark",
+  "width": "desktop",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/opening-data.html",
+  "theme": "dark",
+  "width": "desktop",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/qc.html",
+  "theme": "dark",
+  "width": "desktop",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/record.html",
+  "theme": "dark",
+  "width": "desktop",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/refinement.html",
+  "theme": "dark",
+  "width": "desktop",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/regions.html",
+  "theme": "dark",
+  "width": "desktop",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/remote-control.html",
+  "theme": "dark",
+  "width": "desktop",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/segmentations.html",
+  "theme": "dark",
+  "width": "desktop",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/spatial.html",
+  "theme": "dark",
+  "width": "desktop",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/troubleshooting.html",
+  "theme": "dark",
+  "width": "desktop",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/viewer.html",
+  "theme": "dark",
+  "width": "desktop",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "index.html",
+  "theme": "dark",
+  "width": "desktop",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "install.html",
+  "theme": "dark",
+  "width": "desktop",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "science.html",
+  "theme": "dark",
+  "width": "desktop",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/clusters.html",
+  "theme": "light",
+  "width": "phone",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/comparing.html",
+  "theme": "light",
+  "width": "phone",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/exports.html",
+  "theme": "light",
+  "width": "phone",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/getting-started.html",
+  "theme": "light",
+  "width": "phone",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/images.html",
+  "theme": "light",
+  "width": "phone",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/index.html",
+  "theme": "light",
+  "width": "phone",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/labels.html",
+  "theme": "light",
+  "width": "phone",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/niches.html",
+  "theme": "light",
+  "width": "phone",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/opening-data.html",
+  "theme": "light",
+  "width": "phone",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/qc.html",
+  "theme": "light",
+  "width": "phone",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/record.html",
+  "theme": "light",
+  "width": "phone",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/refinement.html",
+  "theme": "light",
+  "width": "phone",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/regions.html",
+  "theme": "light",
+  "width": "phone",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/remote-control.html",
+  "theme": "light",
+  "width": "phone",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/segmentations.html",
+  "theme": "light",
+  "width": "phone",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/spatial.html",
+  "theme": "light",
+  "width": "phone",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/troubleshooting.html",
+  "theme": "light",
+  "width": "phone",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/viewer.html",
+  "theme": "light",
+  "width": "phone",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "index.html",
+  "theme": "light",
+  "width": "phone",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "install.html",
+  "theme": "light",
+  "width": "phone",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "science.html",
+  "theme": "light",
+  "width": "phone",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/clusters.html",
+  "theme": "dark",
+  "width": "phone",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/comparing.html",
+  "theme": "dark",
+  "width": "phone",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/exports.html",
+  "theme": "dark",
+  "width": "phone",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/getting-started.html",
+  "theme": "dark",
+  "width": "phone",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/images.html",
+  "theme": "dark",
+  "width": "phone",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/index.html",
+  "theme": "dark",
+  "width": "phone",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/labels.html",
+  "theme": "dark",
+  "width": "phone",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/niches.html",
+  "theme": "dark",
+  "width": "phone",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/opening-data.html",
+  "theme": "dark",
+  "width": "phone",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/qc.html",
+  "theme": "dark",
+  "width": "phone",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/record.html",
+  "theme": "dark",
+  "width": "phone",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/refinement.html",
+  "theme": "dark",
+  "width": "phone",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/regions.html",
+  "theme": "dark",
+  "width": "phone",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/remote-control.html",
+  "theme": "dark",
+  "width": "phone",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/segmentations.html",
+  "theme": "dark",
+  "width": "phone",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/spatial.html",
+  "theme": "dark",
+  "width": "phone",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/troubleshooting.html",
+  "theme": "dark",
+  "width": "phone",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/viewer.html",
+  "theme": "dark",
+  "width": "phone",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "index.html",
+  "theme": "dark",
+  "width": "phone",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "install.html",
+  "theme": "dark",
+  "width": "phone",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "science.html",
+  "theme": "dark",
+  "width": "phone",
+  "violations": [],
+  "overflow": 0
+ }
+]

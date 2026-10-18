@@ -1,0 +1,41 @@
+---
+title: Remote control
+description: Drive the open SituCraft window from a script or a notebook on your computer: open bundles, show the tissue, segment, type cells, ask spatial questions and write the record, each action undoable in the project's history.
+lede: A program on your computer (a script, a notebook, the screenshots on this site) can drive the open SituCraft window. The window performs each action where you see it, and what an action changes goes into the project's history like any edit, so you can undo it.
+---
+      <h2 id="start">Starting it</h2>
+      <div class="code"><pre><code><span class="prompt">$ </span>situcraft --remote-control</code></pre></div>
+      <p>SituCraft prints where scripts send actions, and writes <code>remote.json</code> to its data folder (<a href="record.html#where">where things are kept</a>) with the address and a token. The file is readable by you alone and removed when SituCraft stops.</p>
+
+      <h2 id="actions">Sending an action</h2>
+      <p>POST <code>{"action": …, "args": {…}, "client": …}</code> to <code>/api/remote/action</code>; the answer is <code>{"ok": …, "message": …, "data": …}</code>. In Python, with only the standard library:</p>
+      <div class="code"><pre><code>import json, pathlib, urllib.request
+
+info = json.loads((pathlib.Path.home() / "Library/Application Support/SituCraft/remote.json").read_text())
+
+def act(action, **args):
+    request = urllib.request.Request(
+        info["url"] + "/api/remote/action",
+        data=json.dumps({"action": action, "args": args, "client": "notebook"}).encode(),
+        headers={"Content-Type": "application/json", "X-SituCraft-Token": info["token"]},
+    )
+    answer = json.load(urllib.request.urlopen(request, timeout=3600))
+    if not answer["ok"]:
+        raise RuntimeError(answer["message"])
+    return answer
+
+act("open_example", example="lung")
+act("cluster_cells")
+act("label_cells", markers="lung")
+print(act("methods")["message"])</code></pre></div>
+      <p>Actions run one at a time, in the window most recently opened from this run of SituCraft. Most answer within seconds; those that build derived data, download an example or run a long job may take minutes. <code>GET /api/remote/tools</code> lists every action with its arguments as a JSON schema, under an API version that changes only when an action, an argument or a result's field is removed or changes its meaning.</p>
+
+      <h2 id="what">What it can do</h2>
+      <p>Every view's work: projects and data (open bundles and examples, add datasets), seeing the tissue (genes, stains, layers, a cell, any segmentation's fill), regions and reviews, saved views, segmentations (expand, refine, import, compare, decide, export), cell types (cluster, map, label from markers or a reference, import labels, review), post-Xenium images and their alignment, spatial analysis (graphs, every question, an answer made again on another segmentation), quality control (filters, metrics) and the record (the methods paragraph). The <a href="{{github}}/blob/main/docs/REMOTE-CONTROL.md">remote control reference</a> lists each action with its arguments and what it answers.</p>
+
+      <h2 id="security">Security</h2>
+      <ul>
+        <li>SituCraft listens on this computer only, and refuses requests that do not name it (DNS rebinding) and web pages of other sites.</li>
+        <li>Actions that open paths, read files or write them also need the header <code>X-SituCraft-Token</code> with the token from <code>remote.json</code>: another user of a shared computer can reach the port, but not your files.</li>
+        <li>A file is written only at an absolute path in a folder that exists, never over an existing file unless asked, and through a temporary file renamed into place.</li>
+      </ul>

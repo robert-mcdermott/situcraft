@@ -181,6 +181,17 @@ with the cells it comes from.
   - **Validated weekly:** the million cells' analyses, each in a process of its own within its
     time and memory budget; the large simulated tissue's typed cells analyzed through SituCraft
     (graphs, contact included, enrichment, niches and Moran's I) within theirs.
+- **The website (wave 6, slice 9),** built from `docs/site/` for GitHub Pages: what SituCraft is
+  and for whom, with the screenshots in the reader's theme and each release's highlights; how to
+  install it, and the memory it needs; the methods, each with its citation and what it was
+  validated against, with the numbers; and the user guide, a page a subject, from the examples to
+  spatial analysis, remote control, the record and troubleshooting.
+  - **Getting started moves into the guide;** `docs/GETTING-STARTED.md` points to its pages.
+    Formats and remote control stay in the repository as references.
+  - **Checked:** every local link, anchor and screenshot, and every link into the repository's
+    files, on each commit; every page against axe-core's WCAG 2.1 A and AA rules in both themes, at
+    a desktop's width and a phone's, with nothing wider than a phone's screen, weekly
+    (`docs/site/audit.mjs`).
 
 ### Fixed
 

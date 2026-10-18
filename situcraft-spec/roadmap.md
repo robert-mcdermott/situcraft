@@ -2788,27 +2788,43 @@ as in waves 3 and 4.
        before collecting.
      - **The niches' seeds disagree on the generated tissue** (0.84) with the default 6 niches and
        its 4 kinds of domain, as slice 5 found: too many niches.
-9. **The product site.**
-   - **A professional website for SituCraft,** as MaveScape and CytoWeave have: `docs/site/` with
-     `build.mjs` (carried from MaveScape, with its origin noted), its assets (a style sheet in both
-     themes, a script, a link-preview image) and its pages: **Home** (what SituCraft is and for
-     whom, the screenshots in the reader's theme, the highlights of each wave, how to install),
-     **Install**, **Science** (each method with its citation, and what it was validated against,
-     with the numbers), and the **user guide**, a page a subject: starting out and the examples,
-     opening and checking a bundle, the Viewer and QC, segmentations (expansion, refinement and
-     the studio, imports, comparing and deciding, exports), cell types (clusters, the map, labels
-     and their review), the pathology bridge (images, alignment, regions, reviews), spatial
-     analysis, remote control, the record and troubleshooting. `docs/GETTING-STARTED.md` moves
-     into the guide (the Markdown kept as a pointer to it); `FORMATS.md` and `REMOTE-CONTROL.md`
-     stay in the repository as references, linked from the site.
-   - **Screenshots** with `<shot>`: each figure the capture scenes' light and dark pictures, the
-     page showing the one of its theme.
-   - **Published** with `--publish` into `../situcraft-site`, a checkout (or worktree) of the
-     `gh-pages` branch, which holds only the built site; `docs/site/README.md` says how to build,
-     preview, publish, and make the branch the first time.
-   - Validation: the build checks every local link, anchor and screenshot, and fails on any broken
-     one; it runs in CI with the browser modules; the pages pass axe-core (WCAG 2.1 A and AA) in
-     both themes and read well at a phone's width.
+9. **The product site: done.**
+   - **`docs/site/`** for GitHub Pages: `build.mjs` (adapted from MaveScape 0.8.0's, as noted in it),
+     its style sheet in both themes and script (from MaveScape's: the theme, menus, install tabs,
+     copy buttons, the contents list, a lightbox), a link-preview image made from the Viewer's
+     screenshot, and 22 pages:
+     - **Home:** what SituCraft is and for whom, the Viewer in a window frame, four pillars, a
+       section a part of the work with its screenshot, examples, scripts and whole sections, the
+       validation table, each release's highlights, and how to install.
+     - **Install** (with the memory it needs), **Science** (each method with its citation and what
+       it was validated against, with the numbers; how to cite SituCraft; credits) and a 404.
+     - **The user guide,** 18 pages in seven groups: Start (overview, getting started with the
+       examples, tour, worked examples and keys; opening a bundle), the tissue (the Viewer, QC),
+       segmentations (segmentations, refinement, comparing and deciding, exports), cell types
+       (clusters and the map, labels), pathology (images and alignment, regions and reviews),
+       spatial (spatial analysis, niches and genes), and reference (remote control, the record,
+       troubleshooting with the program's options).
+   - **Getting started moved into the guide,** converted section by section and edited into its
+     pages, each with a lede, sections with anchors, the screenshots with captions (45, every one
+     the capture writes), and links between pages for the old guide's "above" and "below";
+     `docs/GETTING-STARTED.md` lists the pages. `FORMATS.md` and `REMOTE-CONTROL.md` stay as
+     references, linked from the site, the build checking each link into the repository's files.
+   - **Published** with `--publish` into `../situcraft-site`, a checkout of the `gh-pages` branch;
+     `docs/site/README.md` says how to build, audit, preview, publish and make the branch.
+   - Validation:
+     - **The build** checks every local link, anchor and screenshot and every link into the
+       repository, and fails on any; CI runs it with the browser modules, on each commit.
+     - **The audit** (`docs/site/audit.mjs`, weekly): every page in headless Chrome in both themes,
+       at 1,280 and 390 pixels wide, against axe-core's WCAG 2.1 A and AA rules, and nothing wider
+       than a phone's screen: 84 checks, none failing (`docs/site/audit.json`).
+   - Found by slice 9:
+     - **MaveScape's style sheet failed contrast in its light theme** where text sits on the soft
+       background: captions, the footer's headings and the validation tables' agreements (4.3:1
+       and 3.6:1). Their colors are darker here (5:1).
+     - **Tables and code wider than a phone scroll sideways but took no focus,** so a keyboard
+       could not scroll them: a table or code block that overflows its column now takes the focus.
+     - **A converted page repeated its lede:** the old guide's first sentence of a section and the
+       page's lede said the same; four ledes were written again.
 10. **Examples, documentation, release 0.6.0.**
    - Worked examples: which cell types are neighbors in the Breast section; immune cells and a
      tumor region's edge; the simulated tissue's niches against its domains; spatially variable

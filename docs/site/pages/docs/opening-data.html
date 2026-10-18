@@ -1,0 +1,27 @@
+---
+title: Opening a bundle
+description: Open a Xenium output bundle in SituCraft, as a folder, its experiment.xenium or a zip, and check it: what it is, findings with their remedies, and the run's metrics recomputed from its data.
+lede: SituCraft opens a Xenium output bundle where it lies, never changing it, and checks it before anything else: what it is, how far SituCraft supports it, and what is wrong with it, with what to do.
+---
+      <h2 id="open">Open your own bundle</h2>
+      <p>A Xenium output bundle is the folder the instrument or Xenium Ranger wrote, holding <code>experiment.xenium</code>, <code>transcripts.parquet</code>, <code>cells.parquet</code>, the boundaries, the cell-feature matrix and the morphology images. SituCraft opens it as:</p>
+      <ul>
+        <li>its folder, its <code>experiment.xenium</code> file, or a <code>.zip</code> of it;</li>
+        <li>on the command line, <code>situcraft /path/to/output-XETG00000__0000000__Region_1__20240101__000000</code> (several bundles, or a folder of them, at once);</li>
+        <li>or <strong>Open a bundle</strong> in the window (⌘O or Ctrl+O), typing or pasting its path.</li>
+      </ul>
+      <p>SituCraft reads a bundle where it is, and never changes, moves or copies it. Running <code>situcraft &lt;paths&gt;</code> while SituCraft is open hands them to the open window.</p>
+
+      <h2 id="check">Check it: the Data view</h2>
+      <shot name="data" alt="The Data view of the Lung example: the run's facts, its derived data built, and the check's three notes">The Lung example in the Data view: the run's facts, its derived data and the check's findings.</shot>
+      <p>The Data view says what the bundle is (instrument software and version, panel, tissue, cells, transcripts, channels) and how far SituCraft supports it: Xenium Onboard Analysis 2.x fully, other versions best-effort, said so.</p>
+      <p>It then checks the bundle. Each finding is:</p>
+      <ul>
+        <li><strong>fatal:</strong> the bundle cannot be used until it is fixed (a missing or unreadable file);</li>
+        <li><strong>a warning:</strong> usable, but it may bias an analysis;</li>
+        <li><strong>a note:</strong> worth knowing, nothing to fix.</li>
+      </ul>
+      <p>Each finding names its files, how many records it concerns, where in the tissue, and what to do. SituCraft also recomputes 20 of the run's recorded metrics and 2 values of its manifest from the data and says whether they agree.</p>
+      
+      <h2 id="derived-data">Add it to the project</h2>
+      <p><strong>Add to project</strong> records a bundle with no fatal finding in the current project. SituCraft then builds its <em>derived data</em> once (image tiles at every zoom, a spatial index of the transcripts, tiled cell outlines): a few seconds for the examples, shown with its progress. They are kept in the cache and reused whenever the bundle is unchanged; they can be deleted at any time and are rebuilt when needed. <strong>View the tissue</strong> opens the Viewer.</p>

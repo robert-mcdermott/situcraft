@@ -1,0 +1,16 @@
+---
+title: Quality control
+description: SituCraft's QC view for Xenium runs: the run's metrics explained and recomputed, quality mapped over the tissue, plots linked to the tissue, and cell filters kept as reproducible versions.
+lede: The QC view says whether the run supports analysis, and where: its metrics explained and recomputed from the data, maps over the tissue, plots whose cells light up in it, and filters that never change the data.
+---
+      <h2 id="view">The QC view</h2>
+      <shot name="qc" alt="The QC view: the run's metrics with SituCraft's recomputed values, cells colored by their gene transcripts, and a histogram">The run's metrics beside SituCraft's own values, and the cells colored by their gene transcripts.</shot>
+      <ul>
+        <li><strong>Run metrics:</strong> every metric the run recorded, explained, with SituCraft's own value beside the recorded one where it can be recomputed (<strong>Reproduced</strong>), or why not.</li>
+        <li><strong>Maps over the tissue:</strong> cells colored by an attribute (gene transcripts, genes detected, area, negative controls, segmentation method and more), or small regions colored by the share of transcripts outside cells, the share below quality 20, or negative-control density.</li>
+        <li><strong>Plots:</strong> a histogram, box plots by segmentation method, and a scatter plot. Drag across a plot to choose cells; they light up in the tissue (here and in the Viewer) and the inspector compares them with all cells.</li>
+        <li><strong>Filters:</strong> conditions on cells (for example, gene transcripts at least 20 and area 15 to 400 µm²), each condition's effect counted as you edit it. <strong>Save version</strong> keeps the filter as a numbered version in the project, with the count and a checksum of the cells it keeps; it is checked to keep the same cells whenever the project reopens (<strong>Reproduced</strong>). Filters never change the data.</li>
+      </ul>
+      <shot name="qc-outside" alt="The QC view's map of the Breast section: small regions colored by the share of their transcripts that fall outside cells">Where the Breast section's transcripts fall outside cells.</shot>
+      <shot name="qc-filter" alt="The QC view's Filters tab: a filter's two conditions with their effects, and two saved versions, each reproduced">A filter's conditions with their effects, and its saved versions, each reproduced.</shot>
+      <p><strong>Save view</strong> in the QC view keeps the map, the filter in use and the place.</p>

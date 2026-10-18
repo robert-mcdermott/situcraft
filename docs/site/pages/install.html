@@ -1,0 +1,74 @@
+---
+title: Install
+layout: page
+heading: Install SituCraft
+description: Install SituCraft on macOS, Linux or Windows with one command. One self-contained program, checked against its SHA-256 checksum, with no administrator rights needed.
+lede: SituCraft is one executable. The browser application is inside it, so nothing else needs to be installed; example data are downloaded only when you ask. One command downloads the release for your computer, checks it and installs it.
+---
+      <div class="install-card" style="max-width:none">
+        <div class="tablist" role="tablist" aria-label="Operating system" data-os>
+          <button class="tab" role="tab" id="tab-unix" aria-controls="panel-unix" aria-selected="true" data-os="macos linux">macOS and Linux</button>
+          <button class="tab" role="tab" id="tab-win" aria-controls="panel-win" aria-selected="false" tabindex="-1" data-os="windows">Windows</button>
+        </div>
+        <div class="tabpanel" role="tabpanel" id="panel-unix" aria-labelledby="tab-unix">
+          <div class="code wrap"><pre><code><span class="prompt">$ </span>curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/robert-mcdermott/situcraft/main/install.sh | sh</code></pre></div>
+          <p class="note">Installs the latest release as <code>~/.local/bin/situcraft</code>. No <code>sudo</code>, and your <code>PATH</code> is left as it is; if <code>~/.local/bin</code> is not on it, the installer prints the full path to run.</p>
+        </div>
+        <div class="tabpanel" role="tabpanel" id="panel-win" aria-labelledby="tab-win" hidden>
+          <div class="code wrap"><pre><code><span class="prompt">PS&gt; </span>irm https://raw.githubusercontent.com/robert-mcdermott/situcraft/main/install.ps1 | iex</code></pre></div>
+          <p class="note">Run in PowerShell. Installs to <code>%LocalAppData%\Programs\SituCraft</code> and adds it to your user <code>PATH</code>. No administrator rights and no change to the execution policy needed.</p>
+        </div>
+      </div>
+
+      <h2 id="start">Start it</h2>
+      <div class="code"><pre><code><span class="prompt">$ </span>situcraft</code></pre></div>
+      <p>SituCraft starts a local server on <code>http://127.0.0.1:8840</code> (or the next free port) and opens its window. If Chrome, Edge, Brave or Chromium is installed, the window is a desktop app window with its own profile; otherwise your default browser is used. Closing the window stops the program. On Windows, open a new terminal after installing so that it sees the updated <code>PATH</code>.</p>
+      <p>Bundles named on the command line (their folder, their <code>.zip</code> or their <code>experiment.xenium</code>, or folders of them) open directly, and running <code>situcraft &lt;paths&gt;</code> again while it is open hands them to the open window:</p>
+      <div class="code"><pre><code><span class="prompt">$ </span>situcraft /path/to/Xenium_output_bundle</code></pre></div>
+      <p>Then continue with <a href="docs/getting-started.html">Getting started</a>.</p>
+
+      <h2 id="requirements">Requirements</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Operating system</th><th>Architecture</th><th>Release file</th></tr></thead>
+          <tbody>
+            <tr><td><strong>macOS</strong></td><td>Apple silicon (ARM64)</td><td><code>situcraft-darwin-arm64</code></td></tr>
+            <tr><td><strong>macOS</strong></td><td>Intel (x64)</td><td><code>situcraft-darwin-amd64</code></td></tr>
+            <tr><td><strong>Linux</strong></td><td>x64</td><td><code>situcraft-linux-amd64</code></td></tr>
+            <tr><td><strong>Linux</strong></td><td>ARM64</td><td><code>situcraft-linux-arm64</code></td></tr>
+            <tr><td><strong>Windows</strong></td><td>x64</td><td><code>situcraft-windows-amd64.exe</code></td></tr>
+            <tr><td><strong>Windows</strong></td><td>ARM64</td><td><code>situcraft-windows-arm64.exe</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>The window is a page in a current browser with WebGL2; SituCraft is tested in Chrome and the browsers built on Chromium. Each release has <code>SHA256SUMS</code>, the checksum of every file; the installers require exactly one matching checksum and run the downloaded program's <code>--version</code> before moving it into place, so a failed download never replaces a working copy.</p>
+
+      <h2 id="memory">Memory</h2>
+      <p><strong>16 GB is recommended for whole sections; 8 GB is enough for the examples and smaller sections.</strong> What takes memory, as measured:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Work</th><th>Memory at its peak</th></tr></thead>
+          <tbody>
+            <tr><td>Opening, viewing and checking the examples (2 fields of view)</td><td>under 1 GB</td></tr>
+            <tr><td>Refining a segmentation</td><td>about 100 bytes a transcript: under 0.3 GB for an example, 5 to 7.4 GB for 55 million transcripts</td></tr>
+            <tr><td>Clustering, mapping and labeling 380,000 cells</td><td>4.3 GB</td></tr>
+            <tr><td>Spatial analyses of a million cells</td><td>under 2 GB; nearest distances and Ripley's K 3 to 4 GB</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Before a refinement starts, the segmentation studio estimates its memory, disk and time against the computer's, and refuses a run that would not fit.</p>
+
+      <h2 id="options">Options</h2>
+      <p>To install a particular release, or somewhere else:</p>
+      <div class="code wrap"><pre><code><span class="prompt">$ </span>curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/robert-mcdermott/situcraft/main/install.sh | SITUCRAFT_VERSION=v{{version}} SITUCRAFT_INSTALL_DIR="$HOME/bin" sh</code></pre></div>
+      <p>In PowerShell, set <code>$env:SITUCRAFT_VERSION</code> and <code>$env:SITUCRAFT_INSTALL_DIR</code> before the same command. To read an installer before running it, download it first; <a href="{{github}}/blob/main/docs/INSTALLING.md">INSTALLING.md</a> describes every option, and how to install by hand. The program's own options are in <a href="docs/troubleshooting.html#options">Troubleshooting</a>.</p>
+
+      <h2 id="upgrade">Upgrading and uninstalling</h2>
+      <p>Run the installer again to upgrade; it replaces the program only after every check passes. On Windows, stop SituCraft first. To go back, install the release you want by its tag. Each release opens the projects earlier releases saved.</p>
+      <p>To uninstall, delete the program (<code>~/.local/bin/situcraft</code>, or <code>%LocalAppData%\Programs\SituCraft</code> and its <code>PATH</code> entry). Your projects and the cache stay where they are (<a href="docs/record.html#where">where things are kept</a>) until you delete them.</p>
+
+      <h2 id="source">Building from source</h2>
+      <p>With Go (the version in <code>go.mod</code> or newer), and nothing else:</p>
+      <div class="code"><pre><code><span class="prompt">$ </span>git clone https://github.com/robert-mcdermott/situcraft.git
+<span class="prompt">$ </span>cd situcraft
+<span class="prompt">$ </span>go build -o situcraft .</code></pre></div>

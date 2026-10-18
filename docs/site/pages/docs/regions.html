@@ -1,0 +1,46 @@
+---
+title: Regions and reviews
+description: Draw regions on a Xenium tissue in SituCraft (rectangle, polygon, freehand, brush), kept as versions and exchanged with QuPath in any image's pixels; review cells and regions with their provenance.
+lede: Regions mark areas of the tissue: drawn over any layer, kept as versions, and exchanged with QuPath in the pixels of the image you draw on there. Reviews are decisions about cells or regions, kept with who made them, when, and what was on screen.
+---
+      <h2 id="regions">Drawing regions</h2>
+      <p>The Viewer's <strong>Regions</strong> draws areas on the tissue, over any layer (the stains, an H&amp;E or an immunofluorescence image): a tumor's invasive front, a stromal band, an area to leave out. Choose a <strong>class</strong> (QuPath's own: Tumor, Stroma, Immune cells, Necrosis, Other, Region*, Ignore*, or a new one), then a tool:</p>
+      <ul>
+        <li><strong>Rectangle:</strong> drag it.</li>
+        <li><strong>Polygon:</strong> click its corners; double-click, press Enter or click its first corner to close it; Backspace takes the last corner back.</li>
+        <li><strong>Freehand:</strong> drag around it.</li>
+        <li><strong>Brush:</strong> paint it, the brush's size in pixels of the screen (zoom in for a fine edge). With a region chosen, the brush paints onto it, or with <strong>Erase</strong> takes from it, holes included.</li>
+      </ul>
+      <shot name="regions" alt="The Viewer on the simulated tissue: two regions drawn over the H&E, the epithelial and the immune domains, over cells filled by their true types, and the Regions section listing each with its class, area and cells">Two regions drawn over the simulated H&E, with their classes, areas and cells.</shot>
+      <p>While a tool is chosen the wheel still zooms, holding the space bar pans, and Esc stops drawing. Each region is listed with its class, area and cells: those of the segmentation drawn whose center lies in it. Click one to choose it; double-click to go to it. A region chosen can be renamed, reclassed, gone to, removed, and its cells chosen: <strong>Choose its cells</strong> chooses the instrument's cells in it, as brushing a plot in the QC view does, and the Viewer, the QC view and the inspector show them.</p>
+
+      <h2 id="versions">Versions</h2>
+      <p>Every change is a <strong>version</strong> of the region, with who made it, when and why: the region chosen lists its versions, and any earlier one can be restored. A region removed is kept with its versions. Regions are kept in the project.</p>
+
+      <h2 id="qupath">With QuPath</h2>
+      <p><strong>With QuPath.</strong> Under <strong>GeoJSON, as QuPath reads and writes it</strong>, regions are written and read as QuPath writes and reads annotations, in one of:</p>
+      <ul>
+        <li><strong>µm</strong>, the dataset's own coordinates;</li>
+        <li><strong>the Xenium image's pixels</strong>, as QuPath opens <code>morphology_focus</code>;</li>
+        <li><strong>a post-Xenium image's pixels</strong>, as QuPath opens that image: through the version of its alignment in use.</li>
+      </ul>
+      <p>To take regions to QuPath, choose the image you will open there (the H&amp;E, say) and <strong>Write them all</strong>; in QuPath, open that image and import the file's objects. To bring QuPath's annotations here, export them from QuPath as GeoJSON, choose the image they were drawn on, and <strong>Read a file…</strong>: each annotation becomes a region, with its name, class and color; detections and cells are left out, and how many is reported.</p>
+
+      <h2 id="reviews">Reviewing cells and regions</h2>
+      <p>A review is a decision about cells or a region, kept with its provenance: who made it, what, the value before and after, when, of which segmentation and label set, each cell's label and its confidence as you saw them, and which version of each post-Xenium image's alignment was in use (and whether the image was shown). Reviews are never changed or removed: taking one back is another.</p>
+      <ul>
+        <li><strong>Accept</strong> a label (or a region's class), or <strong>Relabel</strong> it, saying why. Relabeling cells adds to a curated set begun from the label set shown (the Viewer then shows it); relabeling a region reclasses it, as a version of it.</li>
+        <li><strong>Ambiguous</strong>: it could be one of several labels (name them if you can).</li>
+        <li><strong>Exclude</strong> it from analyses, saying why (a fold, debris, outside the tissue); <strong>Include again</strong> takes an exclusion back. Excluding a region can exclude the cells in it too.</li>
+        <li><strong>Segmentation concern</strong>: its segmentation looks wrong (cells merged, a cell split, its boundary off, not a cell, cells missed); <strong>Resolve the concern</strong> when it is answered.</li>
+        <li><strong>Comment</strong>: a note, changing nothing.</li>
+      </ul>
+      <p>Review where you look:</p>
+      <ul>
+        <li><strong>A cell:</strong> click it in the Viewer; its inspector shows its label in the label set filling the cells (fill by a label set to review labels) with its confidence, its reviews, and the review buttons.</li>
+        <li><strong>Many cells:</strong> choose them (brushing a plot in the QC view, or a region's <strong>Choose its cells</strong>); the Viewer's <strong>Reviews</strong> reviews them together.</li>
+        <li><strong>A region:</strong> choose it under <strong>Regions</strong>; <strong>Review it</strong> under its details.</li>
+        <li><strong>The review queue</strong> of the Cell types view (<a href="labels.html#review">Reviewing labels</a>).</li>
+      </ul>
+      <shot name="reviews" alt="The Viewer after a pathologist's review of the simulated tissue: cells filled by their review status (accepted, relabeled, and a fold's cells excluded) and the Reviews section counting them and listing each review with its reason, reviewer and time">After a pathologist's review: cells filled by their review status, and the reviews listed.</shot>
+      <p>The Viewer's <strong>Reviews</strong> counts the cells drawn that are accepted, relabeled, ambiguous, excluded, of concern and commented, lists every review (click one to go to its cell or region), and writes the record as CSV (a row for each cell or region reviewed) or JSON. <strong>Fill by: Review status</strong> colors each cell by its review: excluded gray, a concern vermillion, ambiguous orange, relabeled blue, accepted green, commented purple (a palette apart in every color vision).</p>

@@ -181,8 +181,9 @@ in app mode with its own profile, or else your default browser. Name bundles (th
 bundle** in the window. A bundle is read where it is: SituCraft never copies, changes or moves it.
 Running `situcraft <paths>` again hands them to the SituCraft already running.
 
-[Getting started](docs/GETTING-STARTED.md) walks through the examples, the Data view, the Viewer,
-QC, saved views and the methods paragraph.
+The [user guide](https://robert-mcdermott.github.io/situcraft/docs/) on SituCraft's website walks
+through the examples and every view, a page a subject (its sources are in
+[docs/site/pages/docs/](docs/site/pages/docs/)).
 
 ## Options
 
@@ -223,7 +224,8 @@ lists the settings, `--preflight` says what a run would need, and
 
 ## Documentation
 
-- [Getting started](docs/GETTING-STARTED.md): from the examples to a saved, reproducible view.
+- [The website](https://robert-mcdermott.github.io/situcraft/): the user guide, installing, and
+  the methods with their validation ([docs/site/](docs/site/README.md) builds it).
 - [Formats](docs/FORMATS.md): what SituCraft reads and writes.
 - [Remote control](docs/REMOTE-CONTROL.md): driving the window from scripts and notebooks.
 - [Installing](docs/INSTALLING.md): release files, installers, upgrading, uninstalling.

@@ -65,6 +65,10 @@ jobs:
           # A runner has no GPU: Chrome's software WebGL, and no sandbox on the throwaway machine.
           SITUCRAFT_CHROME_ARGS: --use-angle=swiftshader --enable-unsafe-swiftshader --no-sandbox
         run: node validation/run.mjs viewer --require-data
+      - name: The website's pages against axe-core (WCAG 2.1 A and AA) in both themes, and at a phone's width (docs/site/audit.mjs)
+        env:
+          SITUCRAFT_CHROME_ARGS: --use-angle=swiftshader --enable-unsafe-swiftshader --no-sandbox
+        run: node validation/fetch.mjs axe-core && node docs/site/audit.mjs
 
   scale:
     name: A tissue of 55 million transcripts; a million cells analyzed

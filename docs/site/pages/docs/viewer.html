@@ -1,0 +1,21 @@
+---
+title: The Viewer
+description: SituCraft's tissue viewer: morphology stains, the transcripts of chosen genes and the cells of any segmentation at any zoom, every image sample exactly as recorded, with saved views that reopen exactly.
+lede: The Viewer shows the tissue at any zoom: the morphology stains as recorded, the transcripts of the genes you choose, and the cells of any segmentation, linked to the inspector and to every other view.
+---
+      <h2 id="layers">Moving and the layers</h2>
+      <shot name="viewer-genes" alt="The Viewer: transcripts of EPCAM, COL5A2, PLVAP and CD68 over the gray DAPI stain and the cell outlines, a selected cell's transcripts by gene in the inspector">The Lung example: four genes' transcripts over DAPI and the cells, a cell's genes in the inspector.</shot>
+      <ul>
+        <li><strong>Move:</strong> drag to pan; scroll, pinch, <strong>+</strong> and <strong>−</strong>, or double-click to zoom; <strong>0</strong> shows the whole tissue; the minimap (top right) jumps to a place. The scale bar and position are in µm.</li>
+        <li><strong>Image:</strong> each morphology stain with its color, brightness window (<strong>Low</strong>, <strong>High</strong>, or <strong>Auto</strong>) and gamma; the eye shows or hides it.</li>
+        <li><strong>Transcripts:</strong> type a gene's name to show its transcripts (up to 16 genes, each in its color), or show all transcripts. Up close each transcript is a dot; farther out, each gene's density. <strong>Quality 20 or more only</strong> keeps the transcripts Xenium counts.</li>
+        <li><strong>Cells:</strong> cell and nucleus outlines (drawn once cells are large enough to see), and cells filled by their transcripts, area or segmentation method, with a legend.</li>
+        <li><strong>Segmentation:</strong> any of the dataset's segmentations, chosen in the Cells layer (its default first); the legend says how it was made. A transcript-informed one also fills its cells by the limitations it flagged, its boundary certainty or its assignment certainty, and colors its transcripts, close up, by their probability of their cell: doubtful ones bright, certain ones dark. <strong>Show on the tissue</strong>, beside a segmentation in the Segmentation view or the inspector, opens it here.</li>
+        <li><strong>A cell:</strong> click it to see its ID, position, areas, segmentation method and genes in the inspector (right); <strong>Esc</strong> clears it. In another segmentation than the instrument's, the inspector also says which instrument's cell it came from and how sure the segmentation is of it.</li>
+      </ul>
+      <shot name="viewer" alt="The Viewer on the Breast example: its nuclear and boundary stains, each in its color, and the cells' outlines">The Breast section's stains, each in its own color and window, with the cells' outlines.</shot>
+      <shot name="viewer-methods" alt="SituCraft's Viewer: cells of the Breast example colored by the method that found them, from the boundary or interior stains or by expanding a nucleus, with a legend counting each">The Breast example's cells, filled by how the instrument found each one.</shot>
+      <shot name="refined" alt="The Viewer drawing the Lung example's transcript-informed segmentation: cells filled by their boundary certainty, transcripts colored by their probability of their cell, a refined cell described in the inspector">A transcript-informed segmentation drawn with its certainties: doubtful transcripts bright, certain ones dark.</shot>
+      
+      <h2 id="saved-views">Saved views</h2>
+      <p><strong>Save view</strong> keeps exactly what the Viewer shows: the place and zoom, the stains and their settings, the genes, the layers, the segmentation and the selected cell. Saved views are listed in the project tree (left) and the command palette (⌘K or Ctrl+K). Select one to reopen it; in the inspector, <strong>Copy link</strong> gives a link that reopens it, <strong>Rename</strong> and <strong>Remove</strong> change it.</p>
