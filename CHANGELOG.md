@@ -167,6 +167,13 @@ with the cells it comes from.
     suite's own from the two analyses' files, and the cells behind the largest change against its
     own from the comparison's pairs.
 
+### Fixed
+
+- **A chosen row was not shown as chosen** in most of the page's tables: the Spatial view's graphs,
+  analyses, regions, readings, niches, genes and changes; the Cell types view's clusterings and
+  markers; the label sets; the review queue. The row is highlighted, as in the Segmentation view's
+  tables.
+
 ## 0.5.0 (2026-10-17)
 
 Wave 5 of the [roadmap](situcraft-spec/roadmap.md): the pathology bridge. Post-Xenium H&E and

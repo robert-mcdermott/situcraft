@@ -585,6 +585,7 @@ button.link { background: none; border: 0; padding: 0; color: var(--accent-text)
 .seg-section { margin-bottom: 18px; }
 .seg-note { font-size: 12px; margin: 6px 0 0; line-height: 1.45; }
 .seg-table tbody tr:focus-visible td { outline: none; background: var(--active); }
+.seg-table tbody tr.selected td { background: var(--active); }
 .seg-card { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
 .seg-card > p { margin: 0; font-size: 12.5px; line-height: 1.5; }
 .seg-card-title { margin: 0; font-size: 13.5px; }
