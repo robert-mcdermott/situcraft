@@ -1209,7 +1209,10 @@ td div.studio-problem { padding: 2px 6px; margin-top: 4px; font-size: 11.5px; }
 .sp-regions-table th[scope="row"], .sp-readings th[scope="row"] { text-align: left; font-weight: 600; white-space: nowrap; }
 .sp-regions-table th[scope="row"] .sp-swatch, .sp-readings th[scope="row"] .sp-swatch { margin-right: 6px; vertical-align: -1px; }
 .sp-readings td:last-child { white-space: nowrap; }
-.sp-readings .r, .sp-regions-table .r { padding-left: 16px; }
+.sp-readings .r, .sp-regions-table .r, .sp-changes .r { padding-left: 16px; }
+.sp-remake .btn-row select.input { width: auto; max-width: 100%; }
+.sp-remake { margin-top: 14px; }
+.sp-behind { margin-top: 10px; }
 .sp-legend { display: flex; flex-wrap: wrap; gap: 4px 6px; margin-top: 6px; }
 .sp-legend-item { display: inline-flex; align-items: center; gap: 5px; font: inherit; font-size: 12px; padding: 2px 6px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--text); cursor: pointer; }
 .sp-legend-item.chosen { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }

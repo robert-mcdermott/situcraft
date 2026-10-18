@@ -8,11 +8,15 @@
 // neighborhood enrichment over a graph, co-occurrence across distances, nearest distances, Ripley's
 // K, regions compared, a profile across a region's edge and cellular neighborhoods (niches); and of
 // genes, Moran's I over a graph (spatially variable genes); each answer is kept as an artifact, and
-// every number opens the cells it comes from on the tissue.
+// every number opens the cells it comes from on the tissue. An answer is made again on another
+// segmentation in one step (its labels and graph made again, through a comparison of the two), and
+// the two read together: each number under each, the change, and the cells behind it.
 
 import { h, icon, clear, formatCount, relativeTime } from './dom.js';
 import { toast } from './overlays.js';
-import { promotedSegmentation, segmentationsOf } from '../lib/segmentations.js';
+import { comparisonsOf, promotedSegmentation, segmentationsOf } from '../lib/segmentations.js';
+import { int32sOf, originOf, sideOf } from '../lib/impact.js';
+import { remakeOnSegmentation } from './remake.js';
 import { evaluate, keepChecksum } from '../lib/filters.js';
 import { readCells } from '../lib/viewer-data.js';
 import { readSegCells } from '../lib/segview.js';
@@ -21,7 +25,7 @@ import { cellReviewState, reviewsOf } from '../lib/review-record.js';
 import { DEFAULTS, KINDS, cellsRequest, checkGraphParams, chooseCells, describeGraph, graphParams, graphsOf } from '../lib/graphs.js';
 import { histogramPlot } from './qc-plots.js';
 import { labelSource, labelVersions, refOf } from './label-sources.js';
-import { BOUNDARY_DEFAULTS, COOCCURRENCE_DEFAULTS, DISTANCES_DEFAULTS, ENRICHMENT_DEFAULTS, LOCAL_CLASSES, MAX_REGIONS, MORAN_DEFAULTS, NICHES_DEFAULTS, QUESTIONS, REGIONS_DEFAULTS, RIPLEY_DEFAULTS, analysesOf, bandsOf, checkAnalysisParams, distancesTo, labelsRequest, nicheNames, rankPairs, rowNames, strataRequest, zoneBands } from '../lib/spatial.js';
+import { BOUNDARY_DEFAULTS, COOCCURRENCE_DEFAULTS, DISTANCES_DEFAULTS, ENRICHMENT_DEFAULTS, LOCAL_CLASSES, MAX_REGIONS, MORAN_DEFAULTS, NICHES_DEFAULTS, QUESTIONS, REGIONS_DEFAULTS, RIPLEY_DEFAULTS, analysesOf, analysisNumbers, bandsOf, checkAnalysisParams, compareNumbers, distancesTo, labelsRequest, linkRemake, nicheNames, rankCorrelation, rankPairs, remakeAnalysisPlan, remakesOf, rowNames, strataRequest, zoneBands } from '../lib/spatial.js';
 import { cooccurrenceChart, distancesChart, distancesHeatmap, distancesTable, enrichmentHeatmap, moranTable, nicheHeatmap, nichesTable, pairName, pairsTable, profileChart, pvalue, ratioForest, ratioText, readingsTable, regionsTable, ripleyChart, ripleyTable, sharesTable, times } from './spatial-results.js';
 import { showAnalysisCells } from './spatial-cells.js';
 
@@ -74,6 +78,9 @@ export function mountSpatial(app, container) {
         analysis: null, pair: null, from: 0, to: null, at: null,
         // Regions compared's two rows, a label chosen, densities or shares, and a profile's zone.
         rows: null, label: null, measure: 'density', zone: 'margin', niche: null, gene: null, localClass: 1,
+        // Making an answer again: the segmentation chosen, the step under way, the other answer read
+        // with this one, and the number chosen.
+        remakeTo: '', remaking: null, readWith: null, change: null,
       });
     }
     return sessions.get(dataset.id);
@@ -591,7 +598,7 @@ export function mountSpatial(app, container) {
     app.bundles.analysisData(record.id).then((data) => {
       if (mine !== generation) return;
       const answer = { enrichment: enrichmentAnswer, cooccurrence: cooccurrenceAnswer, distances: distancesAnswer, ripley: ripleyAnswer, regions: regionsAnswer, boundary: boundaryAnswer, niches: nichesAnswer, moran: moranAnswer }[data.analysis.question];
-      clear(host).append(h('div.section-title', 'The answer'), ...answer(t, seg, session, record, data));
+      clear(host).append(h('div.section-title', 'The answer'), ...answer(t, seg, session, record, data), remakeCard(t, seg, session, record, data));
     }).catch((error) => {
       if (mine !== generation) return;
       clear(host).append(h('div.section-title', 'The answer'), h('p.muted.seg-note', `The answer could not be read: ${error.message}`));
@@ -960,6 +967,192 @@ export function mountSpatial(app, container) {
     return parts;
   }
 
+  // --- An answer made again on another segmentation, and the two read together ---
+
+  // A region's polygons as an analysis recorded it (its id and version).
+  function geometryOf(t, ref) {
+    const r = (app.store.project.regions ?? []).find((x) => x.id === ref.id && x.dataset === t.dataset.id);
+    const v = r?.versions[(ref.version ?? r.versions.length) - 1];
+    if (!v || v.removed) throw new Error(`the region ${ref.name} (v${ref.version}) is no longer in the project`);
+    return v.geometry;
+  }
+
+  // Makes an analysis again on another segmentation: the two compared (unless they are), its labels
+  // made again from its clustering (as the Cell types view does), its graph built again with the
+  // same definition, and the question asked with the same parameters, regions and window; the new
+  // answer recorded as made from this one. step(text) says what is under way.
+  async function remake(t, record, segmentationId, step = () => {}) {
+    const { analysis } = await app.bundles.analysisData(record.id);
+    const plan = remakeAnalysisPlan(app.store.project, record, analysis, segmentationId);
+    if (plan.problem) throw new Error(plan.problem);
+    const seg2 = segmentationList(t).find((s) => s.id === segmentationId);
+    if (!seg2) throw new Error('the other segmentation is not one the view lists');
+    step('Comparing the segmentations');
+    let cmp = comparisonsOf(app.store.project, t.dataset.id).find((c) => c.state === 'complete' && ((c.a === record.segmentation && c.b === segmentationId) || (c.a === segmentationId && c.b === record.segmentation)));
+    if (!cmp) cmp = await app.bundles.compareSegmentations(t.item, t.dataset.id, record.segmentation, segmentationId);
+    const request = { question: analysis.question, segmentation: segmentationId, parameters: analysis.parameters };
+    if (plan.labels) {
+      step('Making the labels again');
+      const out = await remakeOnSegmentation(app, t, plan.labels.clustering, segmentationId);
+      const origin = originOf(plan.labels.label);
+      const made = app.store.project.artifacts.find((a) => a.kind === 'labels' && a.clustering === out.clustering.id && a.state === 'complete' && originOf(a) === origin);
+      if (!made) throw new Error(`the labels were not made again${out.failed.length ? `: ${out.failed.map((f) => f.error).join('; ')}` : ''}`);
+      request.labels = labelsRequest(await labelSource(app, refOf(made.id, plan.labels.level)));
+    }
+    const chosen = await chosenCells(t, seg2, { cells: 'all', regions: new Set(plan.regions) });
+    if (plan.graph) {
+      step('Building the graph');
+      const g = await app.bundles.buildGraph(t.item, t.dataset.id, { segmentation: segmentationId, parameters: plan.graph.parameters, cells: chosen.request });
+      request.graph = g.id;
+    } else request.cells = chosen.request;
+    if (analysis.window) request.window = analysis.window.kind === 'region' ? { kind: 'region', region: analysis.window.region, geometry: geometryOf(t, analysis.window.region) } : { kind: 'tissue', closing: analysis.window.closing };
+    const regionRefs = analysis.regions?.regions ?? (analysis.boundary ? [analysis.boundary.region] : null);
+    if (regionRefs) request.regions = regionRefs.map((r) => ({ region: r, geometry: geometryOf(t, r) }));
+    if (analysis.strata) {
+      const cells2 = await cellsOf(t, seg2);
+      request.strata = strataRequest(cells2.n, analysis.strata.regions.map((r) => ({ ...r, rows: cellsIn(geometryOf(t, r), cells2) })));
+    }
+    step('Asking the question');
+    const manifest = await app.bundles.runAnalysis(t.item, t.dataset.id, request);
+    app.store.commit(linkRemake(app.store.project, manifest.id, record.id, cmp.id), `Make ${record.name} again on ${seg2.name}`);
+    return { manifest, comparison: cmp.id, notes: plan.notes };
+  }
+
+  // The cells behind a change of a number of labels: those of the labels under each segmentation
+  // whose counterparts, through the comparison, carry another label or none. Answers [mask of each
+  // side's cells, count] for the first answer's segmentation and the second's.
+  const impacts = new Map();
+  async function cellsBehind(t, recA, anA, recB, anB, labels) {
+    const comparison = recB.comparison ?? recA.comparison;
+    const cmp = comparisonsOf(app.store.project, t.dataset.id).find((c) => c.id === comparison);
+    if (!cmp) throw new Error('the two segmentations\' comparison is no longer in the project');
+    const [srcA, srcB] = await Promise.all([labelSource(app, refOf(anA.labels.id, anA.labels.level)), labelSource(app, refOf(anB.labels.id, anB.labels.level))]);
+    const aFirst = cmp.a === recA.segmentation;
+    const key = `${cmp.id}|${anA.labels.id}:${anA.labels.level}|${anB.labels.id}:${anB.labels.level}`;
+    if (!impacts.has(key)) {
+      const [x, y] = aFirst ? [srcA, srcB] : [srcB, srcA];
+      const p = app.bundles.comparisonImpact(t.item, cmp.id, { a: sideOf(x), b: sideOf(y) });
+      p.catch(() => impacts.delete(key));
+      impacts.set(key, p);
+    }
+    const answer = await impacts.get(key);
+    const sensitive = [int32sOf(answer.sensitiveA), int32sOf(answer.sensitiveB)];
+    const [sa, sb] = aFirst ? sensitive : [sensitive[1], sensitive[0]];
+    const side = (src, flags) => {
+      const ks = new Set(labels.map((n) => src.names.indexOf(n)).filter((k) => k >= 0));
+      const mask = new Uint8Array(src.segCells);
+      let count = 0;
+      for (let i = 0; i < src.segCells; i += 1) {
+        if (ks.has(src.label[i]) && flags[i] >= 0) {
+          mask[i] = 1;
+          count += 1;
+        }
+      }
+      return { mask, count, fill: `labels:${src.id}:${src.level ?? 0}` };
+    };
+    return [side(srcA, sa), side(srcB, sb)];
+  }
+
+  function remakeCard(t, seg, session, record, data) {
+    const project = app.store.project;
+    const others = segmentationList(t).filter((s) => s.id !== record.segmentation);
+    const linked = remakesOf(project, record.id);
+    const host = h('div.seg-card.sp-remake', h('b', 'Under another segmentation'));
+    if (!others.length) {
+      host.append(h('p.muted', 'Another segmentation of the dataset (an expansion, a refinement, an import) would let this answer be made again on its cells and the two read together.'));
+      return host;
+    }
+    if (!others.some((s) => s.id === session.remakeTo)) session.remakeTo = (others.find((s) => !linked.some((a) => a.segmentation === s.id)) ?? others[0]).id;
+    const pick = h('select.input', { id: 'sp-remake-to', 'aria-label': 'The segmentation to make the answer again on' }, ...others.map((s) => h('option', { value: s.id }, s.name)));
+    pick.value = session.remakeTo;
+    pick.addEventListener('change', () => {
+      session.remakeTo = pick.value;
+    });
+    const status = h('span.muted', session.remaking ?? '');
+    const go = h('button.btn.small.primary', { type: 'button', 'data-action': 'remake', disabled: Boolean(session.remaking), onclick: async () => {
+      session.remaking = 'Starting';
+      render(true);
+      try {
+        const out = await remake(t, record, session.remakeTo, (text) => {
+          session.remaking = text;
+          render(true);
+        });
+        session.readWith = out.manifest.id;
+        session.change = null;
+        toast(`Made again on ${others.find((s) => s.id === session.remakeTo)?.name}.${out.notes.length ? ` ${out.notes.join(' ')}` : ''}`, { kind: 'ok', timeout: 9000 });
+      } catch (error) {
+        toast(`Making the answer again: ${error.message}`, { kind: 'error', timeout: 12000 });
+      } finally {
+        session.remaking = null;
+        render(true);
+      }
+    } }, icon('play'), 'Make it again on');
+    host.append(h('p.muted.seg-note', 'The same question asked of another segmentation\'s cells: its labels made again from the same clustering and marker set, its graph with the same definition, the same parameters and regions; the two segmentations compared, so each change can be traced to the cells behind it.'),
+      h('div.btn-row', go, pick, status));
+    if (!linked.length) return host;
+    if (!linked.some((a) => a.id === session.readWith)) session.readWith = linked.at(-1).id;
+    const other = linked.find((a) => a.id === session.readWith);
+    const segName = (id) => segmentationList(t).find((s) => s.id === id)?.name ?? id;
+    const withPick = h('select.input', { id: 'sp-read-with', 'aria-label': 'The other answer to read with this one' }, ...linked.map((a) => h('option', { value: a.id }, `${segName(a.segmentation)} (${a.id})`)));
+    withPick.value = other.id;
+    withPick.addEventListener('change', () => {
+      session.readWith = withPick.value;
+      session.change = null;
+      render(true);
+    });
+    const table = h('div', h('p.muted', 'Reading the two together…'));
+    host.append(h('div.section-title', 'Read together'), h('div.seg-import-grid', h('label.field', { for: 'sp-read-with' }, h('span', 'With the answer under'), withPick)), table);
+    const mine = generation;
+    app.bundles.analysisData(other.id).then((otherData) => {
+      if (mine !== generation) return;
+      const cmp = compareNumbers(analysisNumbers(data.analysis), analysisNumbers(otherData.analysis));
+      const shown = cmp.rows.filter((r) => Number.isFinite(r.change)).slice(0, 12);
+      const fmt = (v, r) => (!Number.isFinite(v) ? '—' : r.scale === 'log' ? `${v >= 10 ? v.toFixed(0) : v.toFixed(2)}×` : `${fixed(v, r.unit ? 1 : 3)}${r.unit ? ` ${r.unit}` : ''}`);
+      const change = (r) => (r.scale === 'log' ? `${r.change > 0 ? '×' : '÷'}${(2 ** Math.abs(r.change)).toFixed(2)}` : `${r.change > 0 ? '+' : ''}${fixed(r.change, r.unit ? 1 : 3)}`);
+      const rho = rankCorrelation(cmp.rows);
+      clear(table).append(
+        h('p', `${exact(cmp.rows.length)} numbers under both (${exact(cmp.onlyA)} under ${seg.name} only, ${exact(cmp.onlyB)} under ${segName(other.segmentation)} only); their rank correlation ${fixed(rho, 3)}. The largest changes:`),
+        h('div.table-wrap', h('table.data-table.seg-table.sp-changes',
+          h('thead', h('tr', h('th', 'Number'), h('th.r', seg.name), h('th.r', segName(other.segmentation)), h('th.r', 'Change'))),
+          h('tbody', ...shown.map((r) => h(`tr${session.change === r.key ? '.selected' : ''}`, { tabIndex: 0, style: { cursor: 'pointer' }, 'data-key': r.key, onclick: () => {
+            session.change = r.key;
+            render(true);
+          }, onkeydown: (event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              session.change = r.key;
+              render(true);
+            }
+          } }, h('td', r.text), h('td.r', fmt(r.a, r)), h('td.r', fmt(r.b, r)), h('td.r', change(r))))))));
+      const row = cmp.rows.find((r) => r.key === session.change);
+      if (row) {
+        const panel = h('div.sp-behind', h('b', row.text), h('p.muted', 'Finding the cells behind the change…'));
+        table.append(panel);
+        if (!row.labels.length) {
+          clear(panel).append(h('b', row.text), h('p.muted', 'A gene\'s change follows how each segmentation draws its cells and assigns their transcripts; the comparison of the two (the Compare view) shows where they differ.'));
+        } else {
+          const labels = [...new Set(row.labels)];
+          cellsBehind(t, record, data.analysis, other, otherData.analysis, labels).then(([a, b]) => {
+            if (mine !== generation) return;
+            const show = (side, segId, name) => () => app.showSpatial({ dataset: t.dataset.id, segmentation: segId, fill: side.fill, focus: { title: `${labels.join(' and ')}: differ under ${name}`, text: `${side.count.toLocaleString('en-US')} ${labels.join(' or ')} cells under ${name} whose counterparts carry another label or none`, mask: side.mask } });
+            clear(panel).append(h('b', row.text),
+              h('p', `Of the ${labels.join(' or ')} cells, those whose counterparts under the other segmentation carry another label or none: ${exact(a.count)} under ${seg.name}, ${exact(b.count)} under ${segName(other.segmentation)}. They, with the cells either segmentation alone draws, make the change.`),
+              h('div.btn-row',
+                h('button.btn.small', { type: 'button', 'data-action': 'behind-a', onclick: show(a, record.segmentation, seg.name) }, icon('tissue'), `Under ${seg.name}`),
+                h('button.btn.small', { type: 'button', 'data-action': 'behind-b', onclick: show(b, other.segmentation, segName(other.segmentation)) }, icon('tissue'), `Under ${segName(other.segmentation)}`)));
+          }).catch((error) => {
+            if (mine !== generation) return;
+            clear(panel).append(h('b', row.text), h('p.muted', `The cells behind it could not be found: ${error.message}.`));
+          });
+        }
+      }
+    }).catch((error) => {
+      if (mine !== generation) return;
+      clear(table).append(h('p.muted', `The other answer could not be read: ${error.message}`));
+    });
+    return host;
+  }
+
   function showNear(t, seg, analysis, cells, a, b, k) {
     return showAnalysisCells(app, { dataset: t.dataset.id, item: t.item, segmentation: seg, analysis, cells, a, b, k }).catch((error) => toast(`The cells: ${error.message}`, { kind: 'error' }));
   }
@@ -1075,6 +1268,22 @@ export function mountSpatial(app, container) {
       q.compare = new Set(args.compare ?? []);
       return ask(t, seg, session);
     },
+  };
+  // Makes an analysis again on another segmentation (remote control): answers the new manifest,
+  // the comparison's id and notes.
+  app.spatialView.remake = async (dataset, analysisId, segmentationId) => {
+    const t0 = target();
+    if (!t0 || t0.dataset.id !== dataset.id) app.focusItem({ kind: 'dataset', id: dataset.id });
+    const t = target();
+    if (!t.item) throw new Error(`${dataset.name}'s bundle was not found where the project records it.`);
+    const record = app.store.project.artifacts.find((a) => a.kind === 'spatial' && a.id === analysisId && a.dataset === dataset.id);
+    if (!record) throw new Error(`No analysis ${analysisId} of ${dataset.name}.`);
+    const out = await remake(t, record, segmentationId);
+    const session = sessionOf(dataset);
+    session.analysis = record.id;
+    session.readWith = out.manifest.id;
+    render(true);
+    return out;
   };
   return {
     update(topics) {

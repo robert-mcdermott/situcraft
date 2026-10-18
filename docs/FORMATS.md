@@ -419,7 +419,7 @@ Moran's I of three:
 An analysis is named by its question, segmentation, graph (or the cells' checksum), the labels'
 checksum and names, the regions' checksum, its window, the regions compared or crossed (their
 versions and polygons), the method's version and its parameters, so asking again answers it. The project records each analysis it uses (kind `spatial`, with its dataset,
-segmentation, graph, question, parameters and summary: the pairs most enriched and most depleted). Niches are a label set too: a fill `labels:<their analysis's id>:0` colors each cell by its niche.
+segmentation, graph, question, parameters and summary: the pairs most enriched and most depleted); one made again on another segmentation (from 0.6.0) records the analysis it was made from (`remakeOf`, its id) and the comparison of the two segmentations (`comparison`, its id), through which its numbers are read with that analysis's. Niches are a label set too: a fill `labels:<their analysis's id>:0` colors each cell by its niche.
 
 ### Post-Xenium images
 

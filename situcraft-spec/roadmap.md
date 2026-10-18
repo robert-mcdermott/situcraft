@@ -2703,13 +2703,49 @@ as in waves 3 and 4.
        cells even small I is significant, so the table ranks by I, the effect.
      - **Lung's leading genes:** GJA5, IGFBP3, CXCL13, PLA2G7, LTBP2, ANPEP, MYH11 (smooth muscle),
        GPX2, AGR3, RGS5 (pericytes).
-7. **Analyses across segmentations (C7).**
-   - Any saved analysis made again on another segmentation in one step (its graph and label set
-     made again, as wave 4 makes labels again), and the two read together: each number under
-     each, the change, and which cells' differences make it, through the segmentations'
-     comparison.
-   - Validation: on the simulated tissue, results under the instrument's segmentation and the
-     refinement against those under the true cells.
+7. **Analyses across segmentations (C7): done.**
+   - **Made again in one step** (`web/lib/spatial.js`'s `remakeAnalysisPlan`; the Spatial view's
+     **Under another segmentation**): the two segmentations compared, or their comparison reused;
+     the labels made again on the other's cells from the same clustering parameters and marker set
+     or reference, as wave 4 makes them, and the set of the same origin and level chosen; a graph
+     of the same definition over its cells; the same parameters, window, regions and strata (each
+     region's geometry as the version used). The project records the answer's `remakeOf` and
+     `comparison`. Curated, consensus and imported label sets, and niches, belong to one
+     segmentation's cells: refused, saying what to do; a QC filter's cells become all the other's,
+     with a note.
+   - **Read together:** every number of both answers by name (`analysisNumbers`: a pair's ratio, a
+     label's density in a region, a gene's I, …), the change (log₂ of a ratio, else the
+     difference), the largest first, and the rank correlation of the two (Spearman 1904); for a
+     change of labels' numbers, **the cells behind it**: of its labels' cells, those whose
+     counterparts through the comparison carry another label or none (wave 4's
+     segmentation-sensitive cells), under each segmentation, shown on the tissue.
+   - Remote control: `remake_analysis` (`dataset`, `analysis`, `segmentation`).
+   - Validation:
+     - **The simulated tissue** (weekly, `TestAnalysesAcrossSegmentations`): its truth, the
+       instrument's segmentation and the refinement, each labeled from markers (made once a run,
+       shared with `TestLabelsAcrossSegmentations`), analyzed alike. Under both segmentations the
+       enrichment of every label pair in the truth's order (rank correlation 1.00; the largest
+       change ÷1.16 and ×1.02), every pair the truth finds enriched or avoided found so; the niches
+       finding the kinds of domain (adjusted Rand index 0.900 and 0.904; the truth's 0.919); the
+       markers' Moran's I raised under the instrument's expansion (their mean 0.345; the truth's
+       0.189) and within 0.03 of the truth's under the refinement (0.188).
+     - **In the page** (viewer suite): the Lung enrichment made again on its 5 µm expansion, its
+       labels and graph made again and the answer linked through the comparison; each number and
+       the rank correlation the suite's own from the two analyses' files; the cells behind the
+       largest change the suite's own from the comparison's pairs and the label sets, and shown.
+   - Found by slice 7:
+     - **Expression moves with the segmentation; labels hold:** on the simulated tissue the
+       enrichment and niches, read from the cells' types, hardly change; Moran's I, read from their
+       transcripts, nearly doubles for the markers under the instrument's expansion, whose cells
+       take transcripts from their neighbors. The refinement keeps it.
+     - **Lung under its 5 µm expansion:** 10 pairs, rank correlation 0.976; the largest change
+       Immune with Immune, 1.45× → 1.54×, behind it 7 immune cells under the instrument's
+       segmentation and 14 under the expansion whose counterparts are labeled otherwise (or not
+       at all). Under a 3 µm expansion (the guide's picture) the same pair went from 1.44× to
+       1.94×, with 44 and 22 cells behind it: the nearer an expansion is to the instrument's own,
+       the less moves.
+     - **A shared setup:** the three segmentations of the simulated tissue are made once a run
+       (`validation/three_test.go`) and removed after it.
 8. **Scale.**
    - Graphs, enrichment, niches and Moran's I on a million cells within stated budgets, measured
      on generated tissues; the weekly scale test grows to them.

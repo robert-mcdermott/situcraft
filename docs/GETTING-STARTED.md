@@ -1021,6 +1021,32 @@ cells on the tissue**.
   <img alt="The Viewer showing the Lung example's cells high among high in GJA5's expression, an artery's endothelium in the stroma at the section's top left, with GJA5's transcripts" src="images/moran-tissue-light.webp">
 </picture>
 
+### Under another segmentation
+
+An answer depends on the cells it was asked of. To see how much, make it again on another
+segmentation of the dataset (an expansion, a refinement, an import): under the answer, **Under
+another segmentation**, choose one and **Make it again on**. SituCraft compares the two
+segmentations (or uses their comparison), makes the labels again on the other's cells from the same
+clustering and marker set, builds a graph of the same definition, and asks the same question with
+the same parameters and regions. Labels curated by hand, agreed among sets, imported for one
+segmentation's cells, or niches cannot be made again this way; it says what to do instead.
+
+**Read together** lists every number under both, the largest changes first, and the rank
+correlation of the two answers (near 1: the same order). Choose a change to find the cells behind
+it: of its labels' cells, those whose counterparts under the other segmentation carry another label
+or none.
+Show them under either segmentation.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/remake-dark.webp">
+  <img alt="The Spatial view's enrichment of the Lung example's classes read with the same question made again on a 3 µm nucleus expansion: ten numbers under both with their rank correlation, the largest changes first, and Immune with Immune chosen with the cells behind its change under each segmentation" src="images/remake-light.webp">
+</picture>
+
+A number that changes much between segmentations is a number of the segmentation as much as of the
+tissue. On the simulated tissue, the enrichment of its types and its niches hardly change between
+its true cells, the instrument's and a refinement; Moran's I of the marker genes nearly doubles under
+the instrument's expansion, whose cells take transcripts from their neighbors.
+
 A section's cells are not independent replicates: these numbers describe this section. Comparing
 conditions needs samples, compared as samples (a later release).
 

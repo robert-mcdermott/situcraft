@@ -1541,6 +1541,125 @@ export async function viewerSuite({ check, MissingData, verbose }) {
           const hotShown = hot?.ok ? await chrome.eval('window.situcraftViewer.focus()') : null;
           check('viewer', 'a gene\'s cells high among high shown on the tissue, as many as its local classes hold', `${hot?.message ?? hot?.error}; ${JSON.stringify(hotShown)}`,
             hot?.ok && hotShown?.cells === moranOwn.high[0] && moranOwn.high[0] > 0, `${moranOwn?.high?.[0]} cells`);
+
+          // Analyses across segmentations (wave 6, slice 7): the enrichment made again on the 5 µm
+          // expansion in one step — its label set made again from the same clustering and marker
+          // set, its graph of the same definition over the expansion's cells — and recorded as made
+          // from it through the two segmentations' comparison; each number read together the
+          // suite's own from the two analyses' files, their rank correlation its own; and the cells
+          // behind the largest change its own, from the comparison's pairs and the two analyses'
+          // labels, shown on the tissue.
+          const enrichmentId = graph?.ok ? await chrome.eval(`window.situcraft.store.project.artifacts.find((a) => a.kind === 'spatial' && a.question === 'enrichment' && a.segmentation === ${JSON.stringify(graph.data.segmentation.id)} && a.state === 'complete')?.id ?? null`) : null;
+          const remade = enrichmentId ? await act('remake_analysis', { dataset: 'xenium-lung-2fov', analysis: enrichmentId, segmentation: 'Nucleus expansion, 5 µm' }) : null;
+          const remadeOwn = remade?.ok ? await chrome.eval(`(async () => {
+            const app = window.situcraft;
+            const { originOf } = await import('/lib/impact.js');
+            const ids = [${JSON.stringify(enrichmentId)}, ${JSON.stringify(remade.data.id)}];
+            const [a, b] = await Promise.all(ids.map(async (id) => (await fetch('/api/artifacts/' + id + '/files/analysis.json')).json()));
+            const art = (id) => app.store.project.artifacts.find((x) => x.id === id);
+            const rec = art(ids[1]), cmp = art(rec.comparison), la = art(a.labels.id), lb = art(b.labels.id), gb = art(b.graph.id);
+            const ratios = (x) => {
+              const K = x.labels.names.length, out = new Map();
+              for (let i = 0; i < K; i += 1) for (let j = i; j < K; j += 1) {
+                const e = Number(x.enrichment.expected[i * K + j] ?? NaN);
+                out.set('pair:' + [x.labels.names[i], x.labels.names[j]].sort().join('|'), e > 0 ? Number(x.enrichment.count[i * K + j]) / e : NaN);
+              }
+              return out;
+            };
+            const ra = ratios(a), rb = ratios(b);
+            const keys = [...ra.keys()].filter((k) => rb.has(k));
+            const both = keys.filter((k) => Number.isFinite(ra.get(k)) && Number.isFinite(rb.get(k)));
+            const rank = (v) => {
+              const idx = v.map((_, i) => i).sort((p, q) => v[p] - v[q]);
+              const out = new Array(v.length);
+              for (let i = 0; i < idx.length;) {
+                let j = i;
+                while (j + 1 < idx.length && v[idx[j + 1]] === v[idx[i]]) j += 1;
+                for (let k = i; k <= j; k += 1) out[idx[k]] = (i + j) / 2;
+                i = j + 1;
+              }
+              return out;
+            };
+            const x = rank(both.map((k) => ra.get(k))), y = rank(both.map((k) => rb.get(k)));
+            const m = (both.length - 1) / 2;
+            let sxy = 0, sxx = 0, syy = 0;
+            x.forEach((v, i) => { sxy += (v - m) * (y[i] - m); sxx += (v - m) * (v - m); syy += (y[i] - m) * (y[i] - m); });
+            const largest = Math.max(...both.map((k) => Math.abs(Math.log2(rb.get(k) / ra.get(k)))));
+            const changes = ${JSON.stringify(remade.data.changes)};
+            const wrong = changes.filter((r, i) => !(Math.abs(r.a / ra.get(r.key) - 1) < 1e-12 && Math.abs(r.b / rb.get(r.key) - 1) < 1e-12 && Math.abs(r.change - Math.log2(rb.get(r.key) / ra.get(r.key))) < 1e-9 && (i === 0 || Math.abs(r.change) <= Math.abs(changes[i - 1].change)))).map((r) => r.key);
+            // The cells behind the largest change, as the page shows them.
+            let tr = null;
+            for (let k = 0; k < 300 && !tr; k += 1) {
+              tr = document.querySelector('.sp-remake .sp-changes tbody tr');
+              if (!tr) await new Promise((r) => setTimeout(r, 100));
+            }
+            tr?.click();
+            let panel = null;
+            for (let k = 0; k < 600 && !panel; k += 1) {
+              await new Promise((r) => setTimeout(r, 100));
+              panel = document.querySelector('.sp-behind [data-action="behind-a"]') ? document.querySelector('.sp-behind p')?.textContent : null;
+            }
+            const shown = /another label or none: ([0-9,]+) under .+, ([0-9,]+) under /.exec(panel ?? '');
+            return {
+              linked: rec.remakeOf === ids[0] && rec.comparison === ${JSON.stringify(remade.data.comparison)} && [cmp?.a, cmp?.b].sort().join() === [a.segmentation?.id ?? art(ids[0]).segmentation, b.segmentation?.id ?? rec.segmentation].sort().join(),
+              labels: lb?.segmentation === rec.segmentation && la?.segmentation === art(ids[0]).segmentation && originOf(la) === originOf(lb) && a.labels.level === b.labels.level && JSON.stringify(a.labels.names) === JSON.stringify(b.labels.names),
+              graph: gb?.segmentation === rec.segmentation && JSON.stringify(a.graph.parameters) === JSON.stringify(b.graph.parameters) && a.graph.id !== b.graph.id,
+              numbers: keys.length, rho: sxy / Math.sqrt(sxx * syy), largest, wrong, row: tr?.dataset.key ?? null,
+              behind: shown ? [Number(shown[1].replaceAll(',', '')), Number(shown[2].replaceAll(',', ''))] : panel,
+            };
+          })()`) : null;
+          const behindA = remadeOwn?.behind?.length ? await chrome.eval(`(async () => {
+            document.querySelector('.sp-behind [data-action="behind-a"]').click();
+            for (let k = 0; k < 100 && !window.situcraftViewer?.focus(); k += 1) await new Promise((r) => setTimeout(r, 100));
+            return window.situcraftViewer?.focus() ?? null;
+          })()`) : null;
+          // The suite's own: the comparison's pairs, each cell's label in its analysis.
+          const pairsShown = remadeOwn ? await act('show_comparison', { dataset: 'xenium-lung-2fov', comparison: remade.data.comparison }) : null;
+          const behindOwn = pairsShown?.ok ? await chrome.eval(`(async () => {
+            const app = window.situcraft;
+            const w = app.compareView.current();
+            const ids = [${JSON.stringify(enrichmentId)}, ${JSON.stringify(remade.data.id)}];
+            const cmp = app.store.project.artifacts.find((x) => x.id === ${JSON.stringify(remade.data.comparison)});
+            const recA = app.store.project.artifacts.find((x) => x.id === ids[0]);
+            const aFirst = cmp.a === recA.segmentation;
+            // Each cell's label by name from its label set's files (the analyses leave out cells a
+            // review excluded): '' for a cell the set covers without a label at the level, null for
+            // one it leaves out (not analyzed), which is not compared.
+            const sides = await Promise.all(ids.map(async (id) => {
+              const x = await (await fetch('/api/artifacts/' + id + '/files/analysis.json')).json();
+              const set = await (await fetch('/api/labels/' + encodeURIComponent(x.labels.id))).json();
+              const lc = await (await fetch('/api/labels/' + encodeURIComponent(x.labels.id) + '/cells')).arrayBuffer();
+              const [, n, levels] = new Uint32Array(lc, 0, 4);
+              const level = Math.min(x.labels.level, levels - 1);
+              return { names: set.description.sets.map((t) => t.name), cells: new Uint32Array(lc, 16, n), label: new Int32Array(lc, 16 + 8 * n + 4 * n * level, n) };
+            }));
+            const [sa, sb] = aFirst ? sides : [sides[1], sides[0]];
+            const byRow = (s, n) => {
+              const out = new Array(n).fill(null);
+              s.cells.forEach((r, i) => { out[r] = s.label[i] >= 0 ? s.names[s.label[i]] : ''; });
+              return out;
+            };
+            const nameA = byRow(sa, w.prepared.idsA.length), nameB = byRow(sb, w.prepared.idsB.length);
+            const want = new Set(${JSON.stringify(remade.data.changes[0]?.labels ?? [])});
+            let countA = 0, countB = 0, other = 0;
+            for (const g of w.groups) {
+              if (g.a.length !== 1 || g.b.length !== 1) {
+                other += 1;
+                continue;
+              }
+              const x = nameA[g.a[0]], y = nameB[g.b[0]];
+              if (x === null || y === null || x === y) continue;
+              if (want.has(x)) countA += 1;
+              if (want.has(y)) countB += 1;
+            }
+            return aFirst ? { counts: [countA, countB], other } : { counts: [countB, countA], other };
+          })()`) : null;
+          check('viewer', 'an analysis made again on another segmentation by remote control: the enrichment on the 5 µm expansion, its labels made again from the same marker set and its graph of the same definition, recorded as made from it through the comparison; each number read together the suite\'s own, the rank correlation its own', `${remade?.message ?? remade?.error}; ${JSON.stringify(remadeOwn && { ...remadeOwn, wrong: remadeOwn.wrong.slice(0, 4) })}`,
+            remade?.ok && remadeOwn?.linked && remadeOwn.labels && remadeOwn.graph && remade.data.numbers === remadeOwn.numbers && remade.data.onlyA === 0 && remade.data.onlyB === 0 && remadeOwn.wrong.length === 0 && Math.abs(remade.data.rankCorrelation - remadeOwn.rho) < 1e-9 && Math.abs(Math.abs(remade.data.changes[0].change) - remadeOwn.largest) < 1e-9 && remadeOwn.row === remade.data.changes[0].key,
+            `${remadeOwn?.numbers} numbers, rank correlation ${remadeOwn?.rho?.toFixed?.(3)}`);
+          check('viewer', 'the cells behind the largest change: those of its labels whose counterparts, through the comparison, carry another label or none, under each segmentation the suite\'s own, and shown on the tissue', `${JSON.stringify(remadeOwn?.behind)}; shown ${JSON.stringify(behindA)}; own ${JSON.stringify(behindOwn)}`,
+            Array.isArray(remadeOwn?.behind) && behindOwn && behindOwn.other === 0 && remadeOwn.behind[0] === behindOwn.counts[0] && remadeOwn.behind[1] === behindOwn.counts[1] && behindA?.cells === behindOwn.counts[0] && behindOwn.counts[0] > 0,
+            `${behindOwn?.counts?.join(' and ')} cells`);
         }
 
         // The projects as 0.2.0, 0.3.0 and 0.4.0 saved them

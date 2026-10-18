@@ -28,7 +28,7 @@ import { labelSource, labelVersions, refOf } from './label-sources.js';
 import { defaultPair, impactLines, sideOf } from '../lib/impact.js';
 import { remakeOnSegmentation } from './remake.js';
 import { KINDS as GRAPH_KINDS, describeGraph, graphsOf } from '../lib/graphs.js';
-import { analysesOf, bandsOf, nicheNames, rankPairs, rowNames, zoneBands } from '../lib/spatial.js';
+import { analysesOf, analysisNumbers, bandsOf, compareNumbers, nicheNames, rankCorrelation, rankPairs, rowNames, zoneBands } from '../lib/spatial.js';
 import { ratioText } from './spatial-results.js';
 import { showAnalysisCells } from './spatial-cells.js';
 
@@ -1391,6 +1391,34 @@ export function installRemote(app) {
       return {
         message: `${manifest.name}: ${names.length} labels at ${co.distances.length} distances, ${co.distances[0]} to ${co.distances.at(-1)} µm, the pairs ${co.pairs === 'between' ? 'since the distance before' : 'within each'}.`,
         data: { id: manifest.id, name: manifest.name, labels: names, cells: a.cells, distances: co.distances, pairs: co.pairs, ratio: co.ratio, count: co.count },
+      };
+    },
+
+    async remake_analysis(args) {
+      const dataset = resolveDataset(args.dataset);
+      const list = analysesOf(project(), dataset.id).filter((x) => x.state === 'complete');
+      if (!list.length) throw new ActionError(`${dataset.name} has no spatial analysis: spatial_analysis makes one.`);
+      const record = args.analysis === undefined || /^latest$/i.test(String(args.analysis)) ? list.at(-1) : list.find((x) => x.id === String(args.analysis));
+      if (!record) throw new ActionError(`No analysis ${args.analysis} of ${dataset.name}; its analyses are ${list.map((x) => x.id).join(', ')}.`);
+      const seg = segmentationArg(dataset, args.segmentation);
+      await settleMode('spatial');
+      let out;
+      try {
+        out = await app.spatialView.remake(dataset, record.id, seg.id);
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      await frames();
+      const [a, b] = await Promise.all([app.bundles.analysisData(record.id), app.bundles.analysisData(out.manifest.id)]);
+      const cmp = compareNumbers(analysisNumbers(a.analysis), analysisNumbers(b.analysis));
+      const segName = (id) => project().artifacts.find((x) => x.kind === 'segmentation' && x.id === id)?.name ?? id;
+      const rows = cmp.rows.filter((r) => Number.isFinite(r.change)).slice(0, 20).map((r) => ({ key: r.key, number: r.text, a: r.a, b: r.b, change: r.change, scale: r.scale, labels: r.labels }));
+      const r0 = rankCorrelation(cmp.rows);
+      const rho = Number.isFinite(r0) ? r0 : null;
+      const top = rows.slice(0, 3).map((r) => `${r.number} ${r.scale === 'log' ? `${r.a.toFixed(2)}× → ${r.b.toFixed(2)}×` : `${r.a.toFixed(3)} → ${r.b.toFixed(3)}`}`);
+      return {
+        message: `${record.name} made again on ${seg.name} (${out.manifest.id}): ${plural(cmp.rows.length, 'number')} under both, their rank correlation ${rho === null ? '—' : rho.toFixed(3)}${top.length ? `; the largest changes: ${top.join('; ')}` : ''}.${out.notes.length ? ` ${out.notes.join(' ')}` : ''}`,
+        data: { id: out.manifest.id, of: record.id, comparison: out.comparison, a: { segmentation: segName(record.segmentation) }, b: { segmentation: seg.name }, numbers: cmp.rows.length, onlyA: cmp.onlyA, onlyB: cmp.onlyB, rankCorrelation: rho, changes: rows, notes: out.notes },
       };
     },
 

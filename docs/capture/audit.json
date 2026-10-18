@@ -400,6 +400,16 @@
   "violations": []
  },
  {
+  "scene": "remake",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "remake",
+  "theme": "light",
+  "violations": []
+ },
+ {
   "scene": "edge",
   "theme": "dark",
   "violations": []

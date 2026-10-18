@@ -6,6 +6,7 @@
 // a niche's cells; a gene's local Moran's I classes).
 
 import { sha256 } from './sha256.js';
+import { log, square } from './dmath.js';
 
 export const QUESTIONS = [
   {
@@ -436,4 +437,141 @@ export function divergingColor(log2ratio, limit = 2) {
   const f = t - k;
   const c = RDBU[k].map((v, i) => Math.round(v + f * (RDBU[k + 1][i] - v)));
   return `rgb(${c.join(', ')})`;
+}
+
+// --- An analysis made again on another segmentation (wave 6, slice 7) ---
+
+// What making an analysis again on another segmentation of its dataset needs, or why it cannot be:
+// { problem } or { analysis (its record), segmentation (the other's record), labels: { clustering,
+// label (the set's record), level } or null, graph: { parameters, regions } or null, regions (the
+// cells chosen in them, by id), notes }. analysis: its analysis.json.
+export function remakeAnalysisPlan(project, record, analysis, segmentationId) {
+  const seg = project.artifacts.find((a) => a.kind === 'segmentation' && a.id === segmentationId);
+  if (!seg || seg.dataset !== record.dataset) return { problem: 'No such segmentation of the analysis\'s dataset.' };
+  if (seg.id === record.segmentation) return { problem: `The analysis is already of ${seg.name}.` };
+  if (seg.state !== 'complete') return { problem: `${seg.name} is not complete.` };
+  const notes = [];
+  let labels = null;
+  if (analysis.question !== 'moran') {
+    const id = analysis.labels.id;
+    const kind = analysis.labels.kind;
+    if (kind === 'curated' || kind === 'consensus') return { problem: `Its labels are a ${kind} set, made for the cells of its segmentation: make the analysis again with labels from markers or a reference.` };
+    if (kind === 'niches') return { problem: 'Its labels are niches: make the niches\' analysis again first, then ask this question of them.' };
+    const set = project.artifacts.find((a) => a.kind === 'labels' && a.id === id);
+    if (!set) return { problem: 'Its label set is no longer in the project.' };
+    if (set.source) return { problem: `Its labels were imported for the cells of its segmentation (${set.source.file ?? 'a table'}): import labels of the other's cells, or label them from markers.` };
+    if (!set.clustering) return { problem: 'Its label set names no clustering to make again.' };
+    labels = { clustering: set.clustering, label: set, level: analysis.labels.level };
+  }
+  const choice = analysis.cells ?? {};
+  if (choice.filter) notes.push(`The cells were those the QC filter ${choice.filter.name} kept; on ${seg.name} they are all the cells${choice.regions?.length ? ' in the regions' : ''}.`);
+  const regions = (choice.regions ?? []).map((r) => r.id);
+  const graph = analysis.graph ? { parameters: analysis.graph.parameters, regions } : null;
+  return { analysis: record, segmentation: seg, labels, graph, regions, notes };
+}
+
+const finiteOr = (v) => (v === null || v === undefined ? NaN : v);
+
+// An analysis's numbers, each keyed by what it is of (labels and genes by name, so the same set made
+// again on another segmentation lines up): [{ key, text, value, scale ('log': a ratio, compared by
+// log₂; 'linear'), labels (names it is of), unit }].
+export function analysisNumbers(analysis) {
+  const out = [];
+  const names = analysis.labels?.names ?? [];
+  const K = names.length;
+  const push = (key, text, value, scale, labels = [], unit = '') => out.push({ key, text, value: finiteOr(value), scale, labels, unit });
+  if (analysis.enrichment) {
+    // An unordered pair: keyed by its names in order, whatever the sets' order of labels.
+    for (const p of rankPairs(analysis)) {
+      const pair = [names[p.a], names[p.b]].sort();
+      push(`pair:${pair.join('|')}`, `${pair.join(' – ')}, neighbors found over expected`, p.ratio, 'log', pair);
+    }
+  }
+  if (analysis.cooccurrence) {
+    const co = analysis.cooccurrence;
+    co.distances.forEach((d, k) => {
+      for (let a = 0; a < K; a += 1) for (let b = 0; b < K; b += 1) push(`co:${names[a]}|${names[b]}@${d}`, `${names[b]} within ${d} µm of ${names[a]}`, co.ratio[k][a * K + b], 'log', [names[a], names[b]]);
+    });
+  }
+  if (analysis.nearest) {
+    const r = analysis.nearest;
+    for (let q = 0; q < K * K; q += 1) push(`near:${names[Math.floor(q / K)]}|${names[q % K]}`, `${names[Math.floor(q / K)]} → the nearest ${names[q % K]}, median`, r.median[q], 'linear', [names[Math.floor(q / K)], names[q % K]], 'µm');
+  }
+  if (analysis.ripley) {
+    const r = analysis.ripley;
+    const R = r.radii.length;
+    for (let q = 0; q < K * K; q += 1) {
+      r.radii.forEach((rad, k) => push(`L:${names[Math.floor(q / K)]}|${names[q % K]}@${rad}`, `L(${rad} µm) − r, ${Math.floor(q / K) === q % K ? names[q % K] : `${names[q % K]} around ${names[Math.floor(q / K)]}`}`, finiteOr(r.l[q * R + k]) - rad, 'linear', [names[Math.floor(q / K)], names[q % K]], 'µm'));
+    }
+  }
+  if (analysis.regions) {
+    const r = analysis.regions;
+    const rows = rowNames(r);
+    rows.forEach((row, i) => names.forEach((n, k) => push(`density:${row}|${n}`, `${n} in ${row}, cells per mm²`, r.density[i * K + k], 'log', [n])));
+  }
+  if (analysis.boundary) {
+    const b = analysis.boundary;
+    names.forEach((n, k) => push(`edge:${n}`, `${n}, the core over around`, b.ratio[k * 3], 'log', [n]));
+  }
+  if (analysis.moran) {
+    const r = analysis.moran;
+    r.genes.forEach((g, i) => push(`gene:${g}`, `${g}, Moran's I`, r.i[i], 'linear'));
+  }
+  return out;
+}
+
+// Two analyses' numbers read together: those of both, with the change (log₂ of the ratio for a
+// ratio; the difference otherwise), the largest first; and how many are of one only.
+export function compareNumbers(a, b) {
+  const byKey = new Map(b.map((x) => [x.key, x]));
+  const rows = [];
+  let onlyA = 0;
+  for (const x of a) {
+    const y = byKey.get(x.key);
+    if (!y) {
+      onlyA += 1;
+      continue;
+    }
+    byKey.delete(x.key);
+    const change = x.scale === 'log' ? (x.value > 0 && y.value > 0 ? log(y.value / x.value) / Math.LN2 : NaN) : y.value - x.value;
+    rows.push({ key: x.key, text: x.text, a: x.value, b: y.value, change, scale: x.scale, labels: x.labels, unit: x.unit });
+  }
+  rows.sort((p, q) => (Number.isFinite(q.change) ? Math.abs(q.change) : -1) - (Number.isFinite(p.change) ? Math.abs(p.change) : -1) || (p.key < q.key ? -1 : 1));
+  return { rows, onlyA, onlyB: byKey.size };
+}
+
+// How alike two analyses' numbers are overall: the rank correlation (Spearman's, ties broken by
+// order) of the numbers of both; NaN with fewer than three.
+export function rankCorrelation(rows) {
+  const both = rows.filter((r) => Number.isFinite(r.a) && Number.isFinite(r.b));
+  if (both.length < 3) return NaN;
+  const ranks = (vs) => {
+    const out = new Array(vs.length);
+    vs.map((v, i) => [v, i]).sort((p, q) => p[0] - q[0] || p[1] - q[1]).forEach(([, i], k) => { out[i] = k; });
+    return out;
+  };
+  const ra = ranks(both.map((r) => r.a));
+  const rb = ranks(both.map((r) => r.b));
+  const m = (both.length - 1) / 2;
+  let sab = 0;
+  let saa = 0;
+  let sbb = 0;
+  ra.forEach((x, i) => {
+    sab += (x - m) * (rb[i] - m);
+    saa += square(x - m);
+    sbb += square(rb[i] - m);
+  });
+  return sab / Math.sqrt(saa * sbb);
+}
+
+// The project with an analysis recorded as another's made again on another segmentation, through a
+// comparison of the two.
+export function linkRemake(project, id, of, comparison) {
+  return { ...project, artifacts: project.artifacts.map((a) => (a.kind === 'spatial' && a.id === id ? { ...a, remakeOf: of, comparison } : a)) };
+}
+
+// The analyses linked to one by making again: those made from it, and the one it was made from.
+export function remakesOf(project, id) {
+  const record = project.artifacts.find((a) => a.kind === 'spatial' && a.id === id);
+  return project.artifacts.filter((a) => a.kind === 'spatial' && a.id !== id && a.state === 'complete' && (a.remakeOf === id || record?.remakeOf === a.id || (record?.remakeOf && a.remakeOf === record.remakeOf)));
 }

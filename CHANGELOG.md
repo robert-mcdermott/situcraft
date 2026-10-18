@@ -140,6 +140,32 @@ with the cells it comes from.
     independent computation's (to 10⁻¹²); the simulated tissue's 30 marker genes all in a pattern,
     every one's I above the 90 unmarked genes'; in the page, each leading gene's local I summing to
     S0 × I and each class of its sign, and a gene's cells high among high shown.
+- **Analyses across segmentations (wave 6, slice 7).** Any saved analysis made again on another
+  segmentation of its dataset, and the two read together.
+  - **Made again in one step:** the two segmentations compared (or their comparison reused); the
+    labels made again on the other's cells from the same clustering parameters and marker set (or
+    reference), as `repeat_on_segmentation` makes them; a graph of the same definition over its
+    cells; the same parameters, window, regions and strata. The answer is recorded as made from
+    the first through the comparison. Curated, consensus and imported label sets, and niches, are
+    of one segmentation's cells: asked of them, it says what to do instead.
+  - **Read together:** every number under both (enrichment and co-occurrence ratios, median
+    nearest distances, L(r) − r, densities by region, the core over around, Moran's I), with its
+    change, the largest first, and the rank correlation of the two; for a change, the cells behind
+    it (those of its labels whose counterparts, through the comparison, carry another label or
+    none) under each segmentation, shown on the tissue.
+  - **Remote control:** `remake_analysis` (`dataset`, `analysis`, `segmentation`) answers the
+    numbers under both, the largest changes and their rank correlation.
+  - **Validated:** on the standard simulated tissue, its truth, the instrument's segmentation and
+    the refinement each labeled from markers and analyzed alike: under both segmentations the
+    enrichment of every label pair in the truth's order (rank correlation 1.00; the largest change
+    ÷1.16 under the instrument's, ×1.02 under the refinement), every pair the truth finds enriched
+    or avoided found so, and the niches finding the kinds of domain as well (adjusted Rand index
+    0.90 and 0.90; the truth's 0.92); Moran's I raised under the instrument's expansion, whose
+    cells take transcripts from their neighbors (the markers' mean 0.35; the truth's 0.19), and
+    within 0.03 of the truth's for every gene under the refinement; in the page, the Lung
+    enrichment made again on its 5 µm expansion, each number and the rank correlation against the
+    suite's own from the two analyses' files, and the cells behind the largest change against its
+    own from the comparison's pairs.
 
 ## 0.5.0 (2026-10-17)
 

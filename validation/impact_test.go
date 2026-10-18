@@ -22,8 +22,6 @@ import (
 	"situcraft/internal/label"
 	"situcraft/internal/segment"
 	"situcraft/internal/segment/expand"
-	"situcraft/internal/segment/imports"
-	"situcraft/internal/segment/refine"
 	"situcraft/internal/xenium"
 )
 
@@ -135,36 +133,13 @@ func TestLabelsAcrossSegmentations(t *testing.T) {
 		t.Skip("set SITUCRAFT_REQUIRE_DATA=1 to label the simulated tissue under three segmentations")
 	}
 	ctx := context.Background()
-	dir := simulatedStandard(t)
-	work := t.TempDir()
-	b, err := xenium.Open(dir, xenium.Options{CacheDir: work})
+	th := threeSegmentations(t)
+	dir, folders, segs, set := th.dir, th.folders, th.segs, th.set
+	b, err := xenium.Open(dir, xenium.Options{CacheDir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer b.Close()
-	ds, err := imports.BundleDataset(b)
-	if err != nil {
-		t.Fatal(err)
-	}
-	workers := runtime.NumCPU()
-	folders := map[string]string{"truth": filepath.Join(work, "truth"), "instrument": filepath.Join(work, "instrument"), "refinement": filepath.Join(work, "refinement")}
-	for _, f := range folders {
-		os.MkdirAll(f, 0o755)
-	}
-	if _, _, _, err := imports.Run(ctx, ds, imports.Options{Format: imports.Xenium, Paths: []string{filepath.Join(dir, "truth")}}, folders["truth"], workers, nil); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := imports.Instrument(ctx, b, folders["instrument"], workers); err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := refine.Refine(ctx, b, refine.DefaultSpec(), folders["refinement"], refine.Job{Workers: workers}); err != nil {
-		t.Fatal(err)
-	}
-	set := markersFor(t, "simulated-standard", b)
-	segs := map[string]labeledSeg{}
-	for name, f := range folders {
-		segs[name] = labelFromMarkers(t, f, set)
-	}
 	truthTypes := trueTypes(t, dir, folders["truth"])
 	var pairs [][2]string
 	for i, l1 := range set.Labels {

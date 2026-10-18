@@ -313,6 +313,11 @@ var remoteActions = []remoteAction{
 		"closing":            numberArg("Ripley's K in the tissue, regions compared, across an edge: gaps between cells narrower than twice this are tissue, µm (10)."),
 		"correction":         textArg("Ripley's K: the edge correction, isotropic (the default) or none."),
 	}), long: true},
+	{Name: "remake_analysis", Title: "Make an analysis again on another segmentation", Description: "Makes a spatial analysis again on another segmentation of its dataset, in one step, in the Spatial view: the two segmentations compared (unless they are), its labels made again from the same clustering parameters and marker set (or reference), its graph built again with the same definition over the same regions' cells, and the question asked with the same parameters, regions and window. The new analysis is recorded as made from the first. Answers the two read together: each number under both (keyed by label and gene names), the change, the numbers' rank correlation, and the largest changes. Labels imported, curated or in a consensus, and niches, are not made again.", InputSchema: schema(map[string]any{
+		"dataset":      datasetArg,
+		"analysis":     textArg("The analysis, by id (the latest if not given)."),
+		"segmentation": textArg("The other segmentation, by name or artifact id."),
+	}, "segmentation"), long: true},
 	{Name: "show_map", Title: "Show the map", Description: "Shows a clustering in the Cell types view, with its map (UMAP; made first if it has none) beside the tissue, linked: the cells colored by a clustering's clusters, a gene's expression, their gene transcripts, area or how faithfully the map keeps their neighbors, and a selection of cells (by cluster, or inside a polygon on the map or the tissue) drawn on both. Answers the map's trustworthiness, the selection's size and its composition by cluster.", InputSchema: schema(map[string]any{
 		"dataset":    datasetArg,
 		"clustering": textArg("A clustering, by artifact id or name; SituCraft's latest if not given."),

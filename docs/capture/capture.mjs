@@ -553,6 +553,23 @@ const scenes = {
     await js(`window.situcraftViewer.settled()`);
     await sleep(400);
   },
+  // An answer made again on another segmentation (wave 6, slice 7): the Lung classes' enrichment
+  // made again on a 3 µm nucleus expansion, the two read together, the largest change chosen with
+  // the cells behind it.
+  async remake() {
+    await act('open_example', { example: 'lung' });
+    await act('expand_nuclei', { dataset: 'xenium-lung-2fov', distance_um: 3 });
+    await act('cluster_cells', {});
+    const markers = await act('label_cells', { markers: 'lung' });
+    await act('build_graph', { segmentation: 'instrument', kind: 'delaunay' });
+    const first = await act('spatial_analysis', { segmentation: 'instrument', question: 'enrichment', labels: markers.data.id, level: 1 });
+    await act('remake_analysis', { analysis: first.data.id, segmentation: 'Nucleus expansion, 3 µm' });
+    await waitFor(`Boolean(document.querySelector('.sp-changes tbody tr'))`);
+    await js(`document.querySelector('.sp-changes tbody tr')?.click()`);
+    await waitFor(`Boolean(document.querySelector('.sp-behind [data-action="behind-a"]'))`);
+    await scrollTo('.sp-remake', 'start');
+    await sleep(300);
+  },
   // Across a region's edge (wave 6, slice 4): the epithelial cells' profile across the vessel
   // stroma's edge, sparse inside and dense outside, with each class's reading.
   async edge() {

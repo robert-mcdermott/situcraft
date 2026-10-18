@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addAnalysis, analysesOf, analysisRecord, bandCells, bandsOf, BOUNDARY_DEFAULTS, checkAnalysisParams, codesRequest, distancesTo, divergingColor, labelsRequest, nearCells, OUTSIDE_TISSUE, pairCells, localCells, MORAN_DEFAULTS, NICHES_DEFAULTS, nicheCells, nicheNames, readLocal, rankPairs, readAnalyzed, regionCells, REGIONS_DEFAULTS, rowNames, strataRequest, zoneBands } from './spatial.js';
+import { addAnalysis, analysesOf, analysisNumbers, analysisRecord, compareNumbers, linkRemake, rankCorrelation, remakeAnalysisPlan, remakesOf, bandCells, bandsOf, BOUNDARY_DEFAULTS, checkAnalysisParams, codesRequest, distancesTo, divergingColor, labelsRequest, nearCells, OUTSIDE_TISSUE, pairCells, localCells, MORAN_DEFAULTS, NICHES_DEFAULTS, nicheCells, nicheNames, readLocal, rankPairs, readAnalyzed, regionCells, REGIONS_DEFAULTS, rowNames, strataRequest, zoneBands } from './spatial.js';
 import { sha256 } from './sha256.js';
 import { createProject } from './project.js';
 
@@ -153,4 +153,47 @@ test('Moran\'s I: parameters, and its local values read', () => {
   assert.deepEqual([local.n, local.genes, [...local.I[0]], [...local.classes[0]]], [2, [7], [0.5, -1], [1, 0]]);
   assert.equal(localCells(local, 0, 1).count, 1);
   assert.equal(localCells(local, 0, 2).count, 0);
+});
+
+test('an analysis made again on another segmentation: its plan, its numbers read with the other\'s', () => {
+  const project = {
+    artifacts: [
+      { kind: 'segmentation', id: 's1', dataset: 'd', name: 'Instrument', state: 'complete' },
+      { kind: 'segmentation', id: 's2', dataset: 'd', name: 'Refinement', state: 'complete' },
+      { kind: 'segmentation', id: 's3', dataset: 'd', name: 'Running', state: 'running' },
+      { kind: 'labels', id: 'lab-1', dataset: 'd', segmentation: 's1', clustering: 'clu-1', markerSet: 'mk-1', state: 'complete' },
+      { kind: 'labels', id: 'lab-2', dataset: 'd', segmentation: 's1', source: { file: 'cells.csv' }, state: 'complete' },
+      { kind: 'spatial', id: 'spa-1', dataset: 'd', segmentation: 's1', state: 'complete' },
+      { kind: 'spatial', id: 'spa-2', dataset: 'd', segmentation: 's2', state: 'complete' },
+    ],
+  };
+  const record = project.artifacts.find((a) => a.id === 'spa-1');
+  const analysis = { question: 'enrichment', labels: { id: 'lab-1', kind: 'labels', level: 1, names: ['A', 'B'] }, graph: { parameters: { kind: 'delaunay', longest: 50 } }, cells: { regions: [{ id: 'r-1' }], filter: { name: 'QC' } } };
+  const plan = remakeAnalysisPlan(project, record, analysis, 's2');
+  assert.deepEqual([plan.labels.clustering, plan.labels.level, plan.graph.parameters.kind, plan.regions], ['clu-1', 1, 'delaunay', ['r-1']]);
+  assert.match(plan.notes[0], /QC filter QC/);
+  assert.match(remakeAnalysisPlan(project, record, analysis, 's1').problem, /already of/);
+  assert.match(remakeAnalysisPlan(project, record, analysis, 's3').problem, /not complete/);
+  assert.match(remakeAnalysisPlan(project, record, { ...analysis, labels: { id: 'lab-2', kind: 'labels' } }, 's2').problem, /imported/);
+  assert.match(remakeAnalysisPlan(project, record, { ...analysis, labels: { id: 'cur-1', kind: 'curated' } }, 's2').problem, /curated/);
+  assert.equal(remakeAnalysisPlan(project, record, { question: 'moran', graph: { parameters: { kind: 'knn' } }, cells: {} }, 's2').labels, null);
+  // Numbers by name: an enrichment's pairs (A ≤ B) and a Moran's I's genes.
+  const e1 = { labels: { names: ['A', 'B'] }, enrichment: { count: [4, 2, 2, 8], expected: [2, 4, 4, 4], z: [1, -1, -1, 2], p: [0.1, 0.1, 0.1, 0.1], padj: [0.1, 0.1, 0.1, 0.1] } };
+  const e2 = { labels: { names: ['B', 'A'] }, enrichment: { count: [8, 2, 2, 2], expected: [4, 4, 4, 2], z: [2, -1, -1, 0], p: [0.1, 0.1, 0.1, 0.1], padj: [0.1, 0.1, 0.1, 0.1] } };
+  const n1 = analysisNumbers(e1);
+  assert.deepEqual(n1.map((x) => [x.key, x.value]).sort(), [['pair:A|A', 2], ['pair:A|B', 0.5], ['pair:B|B', 2]]);
+  // The second's labels in another order: A – A is 2/2 = 1 there, B – B 8/4 = 2, and B – A its A – B.
+  const cmp = compareNumbers(n1, analysisNumbers(e2));
+  const aa = cmp.rows.find((r) => r.key === 'pair:A|A');
+  assert.deepEqual([aa.a, aa.b, aa.change], [2, 1, -1]);
+  assert.deepEqual([cmp.rows.length, cmp.onlyA, cmp.onlyB], [3, 0, 0]);
+  const m = compareNumbers(analysisNumbers({ moran: { genes: ['G1', 'G2'], i: [0.3, null] } }), analysisNumbers({ moran: { genes: ['G1'], i: [0.1] } }));
+  assert.ok(Math.abs(m.rows[0].change + 0.2) < 1e-12);
+  assert.equal(rankCorrelation([{ a: 1, b: 10 }, { a: 2, b: 20 }, { a: 3, b: 30 }]), 1);
+  assert.equal(rankCorrelation([{ a: 1, b: 3 }, { a: 2, b: 2 }, { a: 3, b: 1 }]), -1);
+  assert.ok(Number.isNaN(rankCorrelation([{ a: 1, b: 2 }])));
+  // Linked: each finds the other.
+  const linked = linkRemake(project, 'spa-2', 'spa-1', 'cmp-1');
+  assert.deepEqual(remakesOf(linked, 'spa-1').map((a) => a.id), ['spa-2']);
+  assert.deepEqual(remakesOf(linked, 'spa-2').map((a) => a.id), ['spa-1']);
 });

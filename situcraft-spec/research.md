@@ -2869,6 +2869,45 @@ computed independently and against permutations (which define it).
 greatest I GJA5 (0.436; 1.2% of the cells express it, an artery's endothelium in the stroma at the
 section's top left), IGFBP3 (0.411), CXCL13 (0.313), PLA2G7, LTBP2, ANPEP, MYH11, GPX2, AGR3, RGS5.
 
+### 6.7 Analyses across segmentations (verified, wave 6, slice 7)
+
+An analysis is made again on another segmentation by asking the same question of the other's
+cells, with everything else held: the labels made again from the same clustering parameters and
+marker set (or reference) and the same level (§5.7's making again, matched by their origin); a
+graph of the same definition; the same parameters, window, regions and strata (the regions'
+geometry as the version used). The two segmentations' comparison (§2) relates the cells, so a
+number's change can be traced: the cells behind a change of a label's (or a pair's) number are
+those of its labels whose counterparts through the comparison carry another label (§5.7's
+segmentation-sensitive cells), under each segmentation. The numbers are read together by name (a
+pair of labels, a label in a region, a gene), each change a log₂ ratio for a ratio and a difference
+otherwise, and the two answers' agreement as the rank correlation of every number under both
+(Spearman 1904, *Am J Psychol* 15:72–101).
+
+**The simulated tissue under three segmentations** (`TestAnalysesAcrossSegmentations`, weekly):
+its truth (3,030 cells), the instrument's nucleus expansion and the refinement (Balanced; 2,925
+cells each), each clustered with the defaults and labeled from its types' markers; the enrichment
+over the Delaunay graph (1,000 permutations), Moran's I over it (row-standardized), and 4 niches of
+each cell's 30 nearest labeled cells (as many as the kinds of domain), against the kind of domain at
+each cell's centroid.
+
+| Number | Truth | Instrument | Refinement |
+| --- | --- | --- | --- |
+| Enrichment, rank correlation with the truth's (10 pairs) | — | 1.000 | 1.000 |
+| Enrichment, the largest change | — | ÷1.16 (epithelial and immune, 0.57 → 0.49) | ×1.02 (endothelial and immune, 1.10 → 1.13) |
+| Pairs enriched or avoided (adjusted p below 0.05) found so | 10 | 10 of 10 | 10 of 10 |
+| Niches against the kinds of domain (adjusted Rand index) | 0.919 | 0.900 | 0.904 |
+| Moran's I, the 30 markers' mean | 0.189 | 0.345 | 0.188 |
+| Moran's I, rank correlation with the truth's (markers) | — | 0.847 | 0.943 |
+| Moran's I, the largest change | — | +0.281 (SIM002, 0.258 → 0.539) | −0.027 (SIM006, 0.259 → 0.232) |
+
+What the labels decide (enrichment, niches) barely moves: the cells keep their types under either
+segmentation, so the counts of neighbors by type and the windows' compositions are nearly the
+truth's. Moran's I is of expression, and the instrument's expansion takes transcripts from
+neighboring cells into each cell, so neighbors share expression they do not have: every marker's I
+is raised, nearly doubled on average. The refinement, assigning transcripts by their cells'
+expression, keeps every gene's I within 0.03 of the truth's. A spatially variable gene's I is the
+number most sensitive to segmentation here.
+
 ## 7. Datasets
 
 | Dataset | Source | Size | License | Use |
