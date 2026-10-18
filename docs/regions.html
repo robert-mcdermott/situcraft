@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Regions and reviews · SituCraft</title>
+  <meta name="description" content="Draw regions on a Xenium tissue in SituCraft (rectangle, polygon, freehand, brush), kept as versions and exchanged with QuPath in any image's pixels; review cells and regions with their provenance." />
+  <link rel="canonical" href="https://robert-mcdermott.github.io/situcraft/docs/regions.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Regions and reviews" />
+  <meta property="og:description" content="Draw regions on a Xenium tissue in SituCraft (rectangle, polygon, freehand, brush), kept as versions and exchanged with QuPath in any image's pixels; review cells and regions with their provenance." />
+  <meta property="og:url" content="https://robert-mcdermott.github.io/situcraft/docs/regions.html" />
+  <meta property="og:image" content="https://robert-mcdermott.github.io/situcraft/assets/img/og-image.jpg" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="theme-color" content="#07090e" />
+  <link rel="icon" href="../assets/img/logo.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="../assets/css/site.css" />
+  <script>try { const t = localStorage.getItem('situcraft-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+  <script src="../assets/js/site.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="container">
+      <a class="brand" href="../"><img src="../assets/img/logo.svg" alt="" width="30" height="30" /><span>Situ<b>Craft</b></span></a>
+      <nav class="site-nav" id="site-nav" aria-label="Main">
+        <a href="../#features">Features</a>
+        <a href="../docs/" aria-current="page">Documentation</a>
+        <a href="../install.html">Install</a>
+        <a href="../science.html">Science</a>
+      </nav>
+      <div class="header-actions">
+        <a class="icon-button" href="https://github.com/robert-mcdermott/situcraft" aria-label="SituCraft on GitHub">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.71 1.26 3.37.96.1-.75.4-1.26.73-1.55-2.56-.29-5.25-1.28-5.25-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.7 5.4-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"/></svg>
+        </a>
+        <button class="icon-button theme-toggle" type="button" aria-label="Switch between light and dark">
+          <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        </button>
+        <button class="icon-button nav-toggle" type="button" aria-label="Menu" aria-controls="site-nav" aria-expanded="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <div class="docs-layout">
+    <aside class="docs-sidebar" aria-label="Documentation">
+      <button class="btn docs-menu-toggle" type="button" aria-expanded="false">Documentation menu <span aria-hidden="true">▾</span></button>
+      <nav>
+        <h4>Start</h4>
+        <ul>
+          <li><a href="./">Overview</a></li>
+          <li><a href="getting-started.html">Getting started</a></li>
+          <li><a href="opening-data.html">Opening a bundle</a></li>
+        </ul>
+        <h4>The tissue</h4>
+        <ul>
+          <li><a href="viewer.html">The Viewer</a></li>
+          <li><a href="qc.html">Quality control</a></li>
+        </ul>
+        <h4>Segmentations</h4>
+        <ul>
+          <li><a href="segmentations.html">Segmentations</a></li>
+          <li><a href="refinement.html">Refinement</a></li>
+          <li><a href="comparing.html">Comparing and deciding</a></li>
+          <li><a href="exports.html">Exports</a></li>
+        </ul>
+        <h4>Cell types</h4>
+        <ul>
+          <li><a href="clusters.html">Clusters and the map</a></li>
+          <li><a href="labels.html">Labels</a></li>
+        </ul>
+        <h4>Pathology</h4>
+        <ul>
+          <li><a href="images.html">Images and alignment</a></li>
+          <li><a href="regions.html" aria-current="page">Regions and reviews</a></li>
+        </ul>
+        <h4>Spatial</h4>
+        <ul>
+          <li><a href="spatial.html">Spatial analysis</a></li>
+          <li><a href="niches.html">Niches and genes</a></li>
+        </ul>
+        <h4>Reference</h4>
+        <ul>
+          <li><a href="remote-control.html">Remote control</a></li>
+          <li><a href="record.html">The record</a></li>
+          <li><a href="troubleshooting.html">Troubleshooting</a></li>
+        </ul>
+      </nav>
+    </aside>
+
+    <main id="main" class="doc">
+      <h1>Regions and reviews</h1>
+      <p class="doc-lede">Regions mark areas of the tissue: drawn over any layer, kept as versions, and exchanged with QuPath in the pixels of the image you draw on there. Reviews are decisions about cells or regions, kept with who made them, when, and what was on screen.</p>
+
+      <h2 id="regions">Drawing regions</h2>
+      <p>The Viewer's <strong>Regions</strong> draws areas on the tissue, over any layer (the stains, an H&amp;E or an immunofluorescence image): a tumor's invasive front, a stromal band, an area to leave out. Choose a <strong>class</strong> (QuPath's own: Tumor, Stroma, Immune cells, Necrosis, Other, Region*, Ignore*, or a new one), then a tool:</p>
+      <ul>
+        <li><strong>Rectangle:</strong> drag it.</li>
+        <li><strong>Polygon:</strong> click its corners; double-click, press Enter or click its first corner to close it; Backspace takes the last corner back.</li>
+        <li><strong>Freehand:</strong> drag around it.</li>
+        <li><strong>Brush:</strong> paint it, the brush's size in pixels of the screen (zoom in for a fine edge). With a region chosen, the brush paints onto it, or with <strong>Erase</strong> takes from it, holes included.</li>
+      </ul>
+      <figure>
+        <div class="shot"><img class="shot-dark" src="../assets/img/regions-dark.webp" width="2000" height="1250" loading="lazy" alt="The Viewer on the simulated tissue: two regions drawn over the H&E, the epithelial and the immune domains, over cells filled by their true types, and the Regions section listing each with its class, area and cells" /><img class="shot-light" src="../assets/img/regions-light.webp" width="2000" height="1250" loading="lazy" alt="The Viewer on the simulated tissue: two regions drawn over the H&E, the epithelial and the immune domains, over cells filled by their true types, and the Regions section listing each with its class, area and cells" /></div>
+        <figcaption>Two regions drawn over the simulated H&E, with their classes, areas and cells.</figcaption>
+      </figure>
+      <p>While a tool is chosen the wheel still zooms, holding the space bar pans, and Esc stops drawing. Each region is listed with its class, area and cells: those of the segmentation drawn whose center lies in it. Click one to choose it; double-click to go to it. A region chosen can be renamed, reclassed, gone to, removed, and its cells chosen: <strong>Choose its cells</strong> chooses the instrument's cells in it, as brushing a plot in the QC view does, and the Viewer, the QC view and the inspector show them.</p>
+
+      <h2 id="versions">Versions</h2>
+      <p>Every change is a <strong>version</strong> of the region, with who made it, when and why: the region chosen lists its versions, and any earlier one can be restored. A region removed is kept with its versions. Regions are kept in the project.</p>
+
+      <h2 id="qupath">With QuPath</h2>
+      <p><strong>With QuPath.</strong> Under <strong>GeoJSON, as QuPath reads and writes it</strong>, regions are written and read as QuPath writes and reads annotations, in one of:</p>
+      <ul>
+        <li><strong>µm</strong>, the dataset's own coordinates;</li>
+        <li><strong>the Xenium image's pixels</strong>, as QuPath opens <code>morphology_focus</code>;</li>
+        <li><strong>a post-Xenium image's pixels</strong>, as QuPath opens that image: through the version of its alignment in use.</li>
+      </ul>
+      <p>To take regions to QuPath, choose the image you will open there (the H&amp;E, say) and <strong>Write them all</strong>; in QuPath, open that image and import the file's objects. To bring QuPath's annotations here, export them from QuPath as GeoJSON, choose the image they were drawn on, and <strong>Read a file…</strong>: each annotation becomes a region, with its name, class and color; detections and cells are left out, and how many is reported.</p>
+
+      <h2 id="reviews">Reviewing cells and regions</h2>
+      <p>A review is a decision about cells or a region, kept with its provenance: who made it, what, the value before and after, when, of which segmentation and label set, each cell's label and its confidence as you saw them, and which version of each post-Xenium image's alignment was in use (and whether the image was shown). Reviews are never changed or removed: taking one back is another.</p>
+      <ul>
+        <li><strong>Accept</strong> a label (or a region's class), or <strong>Relabel</strong> it, saying why. Relabeling cells adds to a curated set begun from the label set shown (the Viewer then shows it); relabeling a region reclasses it, as a version of it.</li>
+        <li><strong>Ambiguous</strong>: it could be one of several labels (name them if you can).</li>
+        <li><strong>Exclude</strong> it from analyses, saying why (a fold, debris, outside the tissue); <strong>Include again</strong> takes an exclusion back. Excluding a region can exclude the cells in it too.</li>
+        <li><strong>Segmentation concern</strong>: its segmentation looks wrong (cells merged, a cell split, its boundary off, not a cell, cells missed); <strong>Resolve the concern</strong> when it is answered.</li>
+        <li><strong>Comment</strong>: a note, changing nothing.</li>
+      </ul>
+      <p>Review where you look:</p>
+      <ul>
+        <li><strong>A cell:</strong> click it in the Viewer; its inspector shows its label in the label set filling the cells (fill by a label set to review labels) with its confidence, its reviews, and the review buttons.</li>
+        <li><strong>Many cells:</strong> choose them (brushing a plot in the QC view, or a region's <strong>Choose its cells</strong>); the Viewer's <strong>Reviews</strong> reviews them together.</li>
+        <li><strong>A region:</strong> choose it under <strong>Regions</strong>; <strong>Review it</strong> under its details.</li>
+        <li><strong>The review queue</strong> of the Cell types view (<a href="labels.html#review">Reviewing labels</a>).</li>
+      </ul>
+      <figure>
+        <div class="shot"><img class="shot-dark" src="../assets/img/reviews-dark.webp" width="2000" height="1250" loading="lazy" alt="The Viewer after a pathologist's review of the simulated tissue: cells filled by their review status (accepted, relabeled, and a fold's cells excluded) and the Reviews section counting them and listing each review with its reason, reviewer and time" /><img class="shot-light" src="../assets/img/reviews-light.webp" width="2000" height="1250" loading="lazy" alt="The Viewer after a pathologist's review of the simulated tissue: cells filled by their review status (accepted, relabeled, and a fold's cells excluded) and the Reviews section counting them and listing each review with its reason, reviewer and time" /></div>
+        <figcaption>After a pathologist's review: cells filled by their review status, and the reviews listed.</figcaption>
+      </figure>
+      <p>The Viewer's <strong>Reviews</strong> counts the cells drawn that are accepted, relabeled, ambiguous, excluded, of concern and commented, lists every review (click one to go to its cell or region), and writes the record as CSV (a row for each cell or region reviewed) or JSON. <strong>Fill by: Review status</strong> colors each cell by its review: excluded gray, a concern vermillion, ambiguous orange, relabeled blue, accepted green, commented purple (a palette apart in every color vision).</p>
+
+      <nav class="doc-pager" aria-label="Pages">
+        <a class="prev" href="images.html"><span>Previous</span>Images and alignment</a>
+        <a class="next" href="spatial.html"><span>Next</span>Spatial analysis</a>
+      </nav>
+    </main>
+
+    <aside class="toc" aria-label="On this page">
+      <h4>On this page</h4>
+      <ul></ul>
+    </aside>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-about">
+          <a class="brand" href="../"><img src="../assets/img/logo.svg" alt="" width="30" height="30" /><span>Situ<b>Craft</b></span></a>
+          <p>A local-first workbench for imaging-based spatial transcriptomics: Xenium bundles checked, segmented, typed, reviewed and analyzed on your own computer, every decision on record. Free and open source under the Apache License 2.0.</p>
+        </div>
+        <div>
+          <h4>Product</h4>
+          <ul>
+            <li><a href="../#features">Features</a></li>
+            <li><a href="../install.html">Install</a></li>
+            <li><a href="../science.html">Science</a></li>
+            <li><a href="https://github.com/robert-mcdermott/situcraft/blob/main/CHANGELOG.md">Changelog</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Documentation</h4>
+          <ul>
+            <li><a href="../docs/getting-started.html">Getting started</a></li>
+            <li><a href="../docs/segmentations.html">Segmentations</a></li>
+            <li><a href="../docs/clusters.html">Cell types</a></li>
+            <li><a href="../docs/spatial.html">Spatial analysis</a></li>
+            <li><a href="../docs/troubleshooting.html">Troubleshooting</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Project</h4>
+          <ul>
+            <li><a href="https://github.com/robert-mcdermott/situcraft">GitHub</a></li>
+            <li><a href="https://github.com/robert-mcdermott/situcraft/releases">Releases</a></li>
+            <li><a href="https://github.com/robert-mcdermott/situcraft/issues">Issues</a></li>
+            <li><a href="../science.html#cite">Cite SituCraft</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">SituCraft is licensed under the Apache License 2.0. It is for research use only: it is not a medical device and makes no diagnostic claims. See <a href="../science.html#credits">credits</a>.</div>
+    </div>
+  </footer>
+</body>
+</html>

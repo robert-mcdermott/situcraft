@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Labels · SituCraft</title>
+  <meta name="description" content="Label a Xenium dataset's cells in SituCraft: from marker genes in a hierarchy, from a single-cell reference (as SingleR does), or imported; review the cells most worth a look with their evidence; and see how labels change under another segmentation." />
+  <link rel="canonical" href="https://robert-mcdermott.github.io/situcraft/docs/labels.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Labels" />
+  <meta property="og:description" content="Label a Xenium dataset's cells in SituCraft: from marker genes in a hierarchy, from a single-cell reference (as SingleR does), or imported; review the cells most worth a look with their evidence; and see how labels change under another segmentation." />
+  <meta property="og:url" content="https://robert-mcdermott.github.io/situcraft/docs/labels.html" />
+  <meta property="og:image" content="https://robert-mcdermott.github.io/situcraft/assets/img/og-image.jpg" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="theme-color" content="#07090e" />
+  <link rel="icon" href="../assets/img/logo.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="../assets/css/site.css" />
+  <script>try { const t = localStorage.getItem('situcraft-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+  <script src="../assets/js/site.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="container">
+      <a class="brand" href="../"><img src="../assets/img/logo.svg" alt="" width="30" height="30" /><span>Situ<b>Craft</b></span></a>
+      <nav class="site-nav" id="site-nav" aria-label="Main">
+        <a href="../#features">Features</a>
+        <a href="../docs/" aria-current="page">Documentation</a>
+        <a href="../install.html">Install</a>
+        <a href="../science.html">Science</a>
+      </nav>
+      <div class="header-actions">
+        <a class="icon-button" href="https://github.com/robert-mcdermott/situcraft" aria-label="SituCraft on GitHub">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.71 1.26 3.37.96.1-.75.4-1.26.73-1.55-2.56-.29-5.25-1.28-5.25-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.7 5.4-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"/></svg>
+        </a>
+        <button class="icon-button theme-toggle" type="button" aria-label="Switch between light and dark">
+          <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        </button>
+        <button class="icon-button nav-toggle" type="button" aria-label="Menu" aria-controls="site-nav" aria-expanded="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <div class="docs-layout">
+    <aside class="docs-sidebar" aria-label="Documentation">
+      <button class="btn docs-menu-toggle" type="button" aria-expanded="false">Documentation menu <span aria-hidden="true">▾</span></button>
+      <nav>
+        <h4>Start</h4>
+        <ul>
+          <li><a href="./">Overview</a></li>
+          <li><a href="getting-started.html">Getting started</a></li>
+          <li><a href="opening-data.html">Opening a bundle</a></li>
+        </ul>
+        <h4>The tissue</h4>
+        <ul>
+          <li><a href="viewer.html">The Viewer</a></li>
+          <li><a href="qc.html">Quality control</a></li>
+        </ul>
+        <h4>Segmentations</h4>
+        <ul>
+          <li><a href="segmentations.html">Segmentations</a></li>
+          <li><a href="refinement.html">Refinement</a></li>
+          <li><a href="comparing.html">Comparing and deciding</a></li>
+          <li><a href="exports.html">Exports</a></li>
+        </ul>
+        <h4>Cell types</h4>
+        <ul>
+          <li><a href="clusters.html">Clusters and the map</a></li>
+          <li><a href="labels.html" aria-current="page">Labels</a></li>
+        </ul>
+        <h4>Pathology</h4>
+        <ul>
+          <li><a href="images.html">Images and alignment</a></li>
+          <li><a href="regions.html">Regions and reviews</a></li>
+        </ul>
+        <h4>Spatial</h4>
+        <ul>
+          <li><a href="spatial.html">Spatial analysis</a></li>
+          <li><a href="niches.html">Niches and genes</a></li>
+        </ul>
+        <h4>Reference</h4>
+        <ul>
+          <li><a href="remote-control.html">Remote control</a></li>
+          <li><a href="record.html">The record</a></li>
+          <li><a href="troubleshooting.html">Troubleshooting</a></li>
+        </ul>
+      </nav>
+    </aside>
+
+    <main id="main" class="doc">
+      <h1>Labels</h1>
+      <p class="doc-lede">Labels name the cells: from known marker genes, from a labeled single-cell reference, or made elsewhere and imported. They are predictions, so SituCraft keeps each set with what it came from, shows each cell's evidence, and ranks the cells most worth reviewing.</p>
+
+      <h2 id="markers">Labels from markers</h2>
+      <p>Under a clustering, <strong>Labels from markers</strong> labels each cell from the genes known to mark cell types. A <strong>marker set</strong> is a hierarchy of labels (a class such as Immune, a lineage such as T cell, a subtype such as CD8 T cell) and states (Proliferating), each with <strong>positive</strong> markers, the genes its cells express, and <strong>negative</strong> ones, genes they do not. SituCraft offers a starter set for each example's panel, from published breast and lung cell atlases (the <strong>Sources</strong>), every marker in the panel.</p>
+      <figure>
+        <div class="shot"><img class="shot-dark" src="../assets/img/labels-dark.webp" width="2000" height="1250" loading="lazy" alt="The Cell types view of the Breast example labeled from the breast starter set: each cluster's labels at the lineage level as colored bars (the tumor clusters Epithelial and Luminal, with some cells left without a label; the macrophages Myeloid, the fibroblasts Fibroblast, the T cells T cell, the vessels Endothelial), names for the clusters from them, and the labels with their markers" /><img class="shot-light" src="../assets/img/labels-light.webp" width="2000" height="1250" loading="lazy" alt="The Cell types view of the Breast example labeled from the breast starter set: each cluster's labels at the lineage level as colored bars (the tumor clusters Epithelial and Luminal, with some cells left without a label; the macrophages Myeloid, the fibroblasts Fibroblast, the T cells T cell, the vessels Endothelial), names for the clusters from them, and the labels with their markers" /></div>
+        <figcaption>The Breast example labeled from the breast starter set: each cluster's labels at the lineage level.</figcaption>
+      </figure>
+      <p><strong>Label the cells</strong> scores each cell for each label: its markers' expression less that of control genes of similar average expression (as scanpy's <code>score_genes</code> scores a gene list), its negative markers counting against it where the cell expresses them. Labels are then taken from the top down: a cell takes the best class when it leads the next by the <strong>margin</strong>, then the best of that class's lineages, and so on; where no label leads, the cell stays at the level above, so a T cell whose CD4 and CD8 markers are both faint stays a T cell. Each cell's <strong>confidence</strong> is how far its label led. A label set is kept as an artifact with the marker set it came from and every parameter; asking again answers it.</p>
+      <p>Under the labels:</p>
+      <ul>
+        <li><strong>Each cluster's labels</strong> at the level chosen (Class, Lineage, Subtype), as bars. A cluster split between labels may hold two kinds of cells, or cells whose outlines hold parts of two.</li>
+        <li><strong>Name the clusters</strong> by the most specific label at least half (or a share you choose) of each cluster's cells carry: a new version of the names, which you can edit. Clusters given the same name merge on the map and the tissue.</li>
+        <li><strong>Color the map and the tissue</strong> by the labels, their confidence, or one label's score (choose it in the labels' table, which lists each label's markers and control genes). The Viewer's <strong>Fill by</strong> lists each label set's levels.</li>
+      </ul>
+      <p><strong>Edit</strong> the marker set to add labels, levels or states, or change markers (the panel's genes are offered as you type, and those it lacks are marked). Saving makes a new version, kept with the earlier ones and the labels made from them. <strong>Save as a file</strong> writes the set as JSON, and <strong>Read a file…</strong> reads one (<a href="https://github.com/robert-mcdermott/situcraft/blob/main/docs/FORMATS.md">Formats</a>); a set naming genes the panel lacks offers to remove them.</p>
+      <p>Starter sets are a starting point. Markers that hold in an atlas may not in your tissue (in the Breast example the tumor cells express LPL, an adipocyte marker), and in a tissue one type dominates, its own markers score low against control genes that are mostly its other genes, so many of its cells may stay without a label. Check each cluster's labels against its markers before naming it.</p>
+
+      <h2 id="reference">Labels from a reference</h2>
+      <p>When a labeled single-cell dataset of the same tissue exists (an atlas, or your own single-cell experiment), <strong>Labels from a reference</strong> labels each cell by the reference label it most resembles. Name the reference (its path on this computer) and <strong>Read</strong> it: an AnnData object saved with <code>write_zarr</code> (a <code>.zarr</code> folder, or a zip of one), whose cells carry their labels in an <code>obs</code> column, or a table of each label's mean expression (CSV, TSV or Parquet, a row per label or per gene). An <code>.h5ad</code> file is written as Zarr in one line of Python: <code>anndata.read_h5ad("reference.h5ad").write_zarr("reference.zarr")</code>.</p>
+      <figure>
+        <div class="shot"><img class="shot-dark" src="../assets/img/reference-dark.webp" width="2000" height="1250" loading="lazy" alt="The simulated example's reference read against its panel: an AnnData object of 1,200 cells, its counts in X, its labels in obs cell_type (four types of 300 cells each), all 120 of the panel's genes in the reference and compared; the button to label the cells from it" /><img class="shot-light" src="../assets/img/reference-light.webp" width="2000" height="1250" loading="lazy" alt="The simulated example's reference read against its panel: an AnnData object of 1,200 cells, its counts in X, its labels in obs cell_type (four types of 300 cells each), all 120 of the panel's genes in the reference and compared; the button to label the cells from it" /></div>
+        <figcaption>The simulated example's reference read against its panel, ready to label the cells from it.</figcaption>
+      </figure>
+      <p>SituCraft suggests the reference's expression (counts preferred), its column of labels and its column of gene names, and says what it found: its labels and their cells, how many of the panel's genes it has (and which it lacks: if it has few, check that its genes are named by symbol, and the species), and how many will be compared. <strong>Label the cells from the reference</strong> then correlates each cell with each label's profile (its reference cells' mean expression) over the genes that set the labels apart, and scores the leading labels again on their own genes until one is left (as SingleR does, Aran et al. 2019). Each cell's <strong>confidence</strong> is how far its label led the next, in correlation. The label set is kept with the reference as it was compared and its SHA-256.</p>
+      <p>The labels follow the reference: a reference of other cells (an atlas of healthy tissue for a tumor, say) gives each cell the nearest label it has, which may be wrong. The evidence card (<a href="#review">Reviewing labels</a>) shows, for each cell, how close the leading labels were and which genes set its label apart from the next. To try it, <code>situcraft simulate --reference 300 &lt;folder&gt;</code> writes a simulated tissue and a reference of its types beside it.</p>
+
+      <h2 id="imported">Labels made elsewhere</h2>
+      <p>Labels from another tool or an earlier analysis (a colleague's annotation, a reference mapping, the instrument's clusters) are imported under <strong>Labels made elsewhere</strong>, for the segmentation's cells. Name the table (its path on this computer) and <strong>Read</strong> it: a CSV or TSV file, a Parquet file, an AnnData object saved with <code>write_zarr</code> (or a SpatialData store), or Xenium Explorer's cell groups. SituCraft lists the columns and suggests which holds the cells' ids, which their labels, and, optionally, a confidence and colors; change them if they are wrong. Before you import, it says how the ids match: a table naming cells this segmentation does not have is refused (its labels were made for another segmentation, or another sample), and the cells it does not name will have no label. <strong>Or the instrument's clusters</strong> imports one of the instrument's clusterings as labels.</p>
+      <figure>
+        <div class="shot"><img class="shot-dark" src="../assets/img/imported-dark.webp" width="2000" height="1250" loading="lazy" alt="The Lung example's graph-based clusters from the instrument imported as labels: each of SituCraft's clusters by the instrument's clusters, the tumor clusters spread across many of them, the vessel and stroma clusters mostly one (80% to 85%)" /><img class="shot-light" src="../assets/img/imported-light.webp" width="2000" height="1250" loading="lazy" alt="The Lung example's graph-based clusters from the instrument imported as labels: each of SituCraft's clusters by the instrument's clusters, the tumor clusters spread across many of them, the vessel and stroma clusters mostly one (80% to 85%)" /></div>
+        <figcaption>The Lung example's graph-based clusters from the instrument, imported as labels and read against SituCraft's clusters.</figcaption>
+      </figure>
+      <p>An imported label set is shown like one from markers: each cluster's labels (here, how SituCraft's clusters of the Lung example split among the instrument's), names for the clusters from them, the map, the tissue and the Viewer colored by them, and a label's cells selected when you choose it. Its file is recorded by its SHA-256, so the project says exactly what was imported.</p>
+
+      <h2 id="review">Reviewing labels</h2>
+      <p>Labels are predictions. Under <strong>Label versions</strong> each label set of the segmentation is listed: from markers or a reference, imported, curated and consensus. <strong>Curate</strong> begins a curated set from a predicted one: its labels, with your changes appended, each with its reason, who made it and when (the predicted set stays as the method made it). <strong>Make a consensus…</strong> combines sets by a rule: unanimous (every set gives the label), majority (at least so many sets, more than any other label) or in order (the first set's label, else the next's); labels the sets name differently can be mapped to a common name. Any two versions are compared <strong>side by side</strong> in a table of their labels.</p>
+      <figure>
+        <div class="shot"><img class="shot-dark" src="../assets/img/review-dark.webp" width="2000" height="1250" loading="lazy" alt="The review of the Breast example's labels: a cell in a tumor cluster labeled Stromal though all ten of its nearest cells are Epithelial, with its evidence: Stromal led Immune by 0.12, its markers in the cell (PDGFRB 2, SFRP4 2, and EPCAM 9 counted against it), why not Epithelial (its markers 0.50 against their controls' 0.75), its neighbors' labels, and the buttons to accept or relabel it" /><img class="shot-light" src="../assets/img/review-light.webp" width="2000" height="1250" loading="lazy" alt="The review of the Breast example's labels: a cell in a tumor cluster labeled Stromal though all ten of its nearest cells are Epithelial, with its evidence: Stromal led Immune by 0.12, its markers in the cell (PDGFRB 2, SFRP4 2, and EPCAM 9 counted against it), why not Epithelial (its markers 0.50 against their controls' 0.75), its neighbors' labels, and the buttons to accept or relabel it" /></div>
+        <figcaption>A cell in a tumor cluster labeled Stromal, with its evidence and the buttons to accept or relabel it.</figcaption>
+      </figure>
+      <p><strong>Review</strong> ranks the cells to look at first: those whose label few of their nearest cells in the tissue share while most share another (a lone label among others is often a mislabel, two cells in one outline, or a cell at a boundary), those whose label changes under another segmentation (choose the label set of it in <strong>Label changes against</strong>; <a href="#two-segmentations">below</a>), and those of low confidence. Choose a cell, in the list or on the map or the tissue, to see its <strong>evidence</strong>: its label in every version; for labels from markers, why it took its label and not the next, gene by gene in the cell (green, a marker it expresses; red, a negative marker it expresses), and why not the label its neighbors carry; for labels from a reference, each round's correlations and the genes higher in its label's profile and in the next's that the cell expresses; what its counterparts carry under the other segmentation; its neighbors' labels in the tissue and in expression; its transcripts and its segmentation's flags. <strong>Accept</strong> its label or <strong>Relabel</strong> it, saying why (or mark it ambiguous, exclude it, record a segmentation concern, comment); the decision is recorded as a review (<a href="regions.html#reviews">Reviewing cells and regions</a>), a relabel added to a curated set, and the next cell is shown.</p>
+
+      <h2 id="two-segmentations">Labels under two segmentations</h2>
+      <p>Cell types are read from cells, so the segmentation chosen can change them: a cell drawn too wide takes its neighbor's transcripts and may take its neighbor's label; a cell split in two may become two kinds. To see how much, <a href="comparing.html">compare two segmentations</a> (Segmentation view), then, under a clustering's label sets, <strong>Make this clustering and its label sets again on</strong> the other segmentation: the clustering with the same parameters, its map, and each label set from markers or a reference, in one step (imported labels belong to their segmentation's cells and are not made again; a QC filter's cells are the instrument segmentation's, so the cells are then those with enough transcripts).</p>
+      <figure>
+        <div class="shot"><img class="shot-dark" src="../assets/img/impact-dark.webp" width="2000" height="1250" loading="lazy" alt="The Compare workspace's Labels tab for the Breast example: the instrument's segmentation and a 5 µm nucleus expansion side by side, each cell colored by its label (Epithelial, Immune, Endothelial, Stromal, Adipocyte); of the 6,512 cells matched one to one, 96.9% labeled alike; what split and merged cells carry; marker mixing slightly higher under the expansion" /><img class="shot-light" src="../assets/img/impact-light.webp" width="2000" height="1250" loading="lazy" alt="The Compare workspace's Labels tab for the Breast example: the instrument's segmentation and a 5 µm nucleus expansion side by side, each cell colored by its label (Epithelial, Immune, Endothelial, Stromal, Adipocyte); of the 6,512 cells matched one to one, 96.9% labeled alike; what split and merged cells carry; marker mixing slightly higher under the expansion" /></div>
+        <figcaption>The Breast labels under two segmentations: 96.9% of the cells matched one to one keep their label.</figcaption>
+      </figure>
+      <p>The comparison's <strong>Labels</strong> tab (Compare workspace) reads a label set of each segmentation through the comparison (by default two made the same way, at their first level):</p>
+      <ul>
+        <li><strong>How many cells keep their label:</strong> of the cells matched one to one, the share labeled alike, and every change (T cell → Macrophage, and so on); what split cells' pieces carry (the cell's label, some of them, or none) and what merged cells carried.</li>
+        <li><strong>Each label's cells</strong> under each segmentation, and the change in its share.</li>
+        <li><strong>Marker mixing by label:</strong> of each label's cells, the share expressing two mutually exclusive markers together, and the mutually exclusive co-expression rate among them. Under a segmentation that gives cells their neighbors' transcripts, it rises.</li>
+        <li><strong>The differences whose labels change,</strong> the most transcripts reassigned first; each opens where it lies. <strong>Color the cells by their labels</strong> fills each side's cells with its labels' colors.</li>
+      </ul>
+      <p>The cells whose label changes are segmentation-sensitive: the review queue lists them when you choose the other segmentation's label set in <strong>Label changes against</strong>, with what their counterparts carry.</p>
+
+      <nav class="doc-pager" aria-label="Pages">
+        <a class="prev" href="clusters.html"><span>Previous</span>Clusters and the map</a>
+        <a class="next" href="images.html"><span>Next</span>Images and alignment</a>
+      </nav>
+    </main>
+
+    <aside class="toc" aria-label="On this page">
+      <h4>On this page</h4>
+      <ul></ul>
+    </aside>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-about">
+          <a class="brand" href="../"><img src="../assets/img/logo.svg" alt="" width="30" height="30" /><span>Situ<b>Craft</b></span></a>
+          <p>A local-first workbench for imaging-based spatial transcriptomics: Xenium bundles checked, segmented, typed, reviewed and analyzed on your own computer, every decision on record. Free and open source under the Apache License 2.0.</p>
+        </div>
+        <div>
+          <h4>Product</h4>
+          <ul>
+            <li><a href="../#features">Features</a></li>
+            <li><a href="../install.html">Install</a></li>
+            <li><a href="../science.html">Science</a></li>
+            <li><a href="https://github.com/robert-mcdermott/situcraft/blob/main/CHANGELOG.md">Changelog</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Documentation</h4>
+          <ul>
+            <li><a href="../docs/getting-started.html">Getting started</a></li>
+            <li><a href="../docs/segmentations.html">Segmentations</a></li>
+            <li><a href="../docs/clusters.html">Cell types</a></li>
+            <li><a href="../docs/spatial.html">Spatial analysis</a></li>
+            <li><a href="../docs/troubleshooting.html">Troubleshooting</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Project</h4>
+          <ul>
+            <li><a href="https://github.com/robert-mcdermott/situcraft">GitHub</a></li>
+            <li><a href="https://github.com/robert-mcdermott/situcraft/releases">Releases</a></li>
+            <li><a href="https://github.com/robert-mcdermott/situcraft/issues">Issues</a></li>
+            <li><a href="../science.html#cite">Cite SituCraft</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">SituCraft is licensed under the Apache License 2.0. It is for research use only: it is not a medical device and makes no diagnostic claims. See <a href="../science.html#credits">credits</a>.</div>
+    </div>
+  </footer>
+</body>
+</html>

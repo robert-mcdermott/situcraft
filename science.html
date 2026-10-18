@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Science · SituCraft</title>
+  <meta name="description" content="The methods SituCraft implements for Xenium spatial transcriptomics, each with its citation and what it was validated against, with the numbers; how to cite SituCraft; and credits for the example data." />
+  <link rel="canonical" href="https://robert-mcdermott.github.io/situcraft/science.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Science" />
+  <meta property="og:description" content="The methods SituCraft implements for Xenium spatial transcriptomics, each with its citation and what it was validated against, with the numbers; how to cite SituCraft; and credits for the example data." />
+  <meta property="og:url" content="https://robert-mcdermott.github.io/situcraft/science.html" />
+  <meta property="og:image" content="https://robert-mcdermott.github.io/situcraft/assets/img/og-image.jpg" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="theme-color" content="#07090e" />
+  <link rel="icon" href="assets/img/logo.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="assets/css/site.css" />
+  <script>try { const t = localStorage.getItem('situcraft-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+  <script src="assets/js/site.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="container">
+      <a class="brand" href="./"><img src="assets/img/logo.svg" alt="" width="30" height="30" /><span>Situ<b>Craft</b></span></a>
+      <nav class="site-nav" id="site-nav" aria-label="Main">
+        <a href="./#features">Features</a>
+        <a href="docs/">Documentation</a>
+        <a href="install.html">Install</a>
+        <a href="science.html" aria-current="page">Science</a>
+      </nav>
+      <div class="header-actions">
+        <a class="icon-button" href="https://github.com/robert-mcdermott/situcraft" aria-label="SituCraft on GitHub">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.71 1.26 3.37.96.1-.75.4-1.26.73-1.55-2.56-.29-5.25-1.28-5.25-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.7 5.4-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"/></svg>
+        </a>
+        <button class="icon-button theme-toggle" type="button" aria-label="Switch between light and dark">
+          <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        </button>
+        <button class="icon-button nav-toggle" type="button" aria-label="Menu" aria-controls="site-nav" aria-expanded="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <div class="page-layout">
+    <main id="main" class="doc">
+      <h1>Methods and validation</h1>
+      <p class="doc-lede">SituCraft implements each method itself, from its publication, and checks it against an independent implementation, published data, or a simulated tissue whose every cell, transcript and type is known. Each method below names its source and what it agrees with.</p>
+
+      <h2 id="approach">How methods are checked</h2>
+      <p>Three kinds of check, as each method allows: the same numbers as an independent implementation of the same method, on the same inputs (scanpy, SciPy, Squidpy and the like, run by the validation suite and recorded in the repository); the truth of a simulated tissue, whose cells, transcripts, types, domains and image placements are known; and invariants worked by hand on small cases. The heaviest checks run every week. The same inputs and settings give the same bytes on any computer, so a result recorded once is checked again exactly.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Data</th><th>What it is</th><th>Used for</th></tr></thead>
+          <tbody>
+            <tr><td>Xenium human Lung and Breast, 2 FOVs</td><td>10x Genomics example data, CC BY 4.0</td><td>Development, the examples, every reader and reference comparison</td></tr>
+            <tr><td>A published breast cancer section with its H&amp;E and immunofluorescence (Janesick et al. 2023)</td><td>10x Genomics, CC BY 4.0</td><td>Xenium Onboard Analysis 1.0 bundles and post-Xenium images</td></tr>
+            <tr><td>Simulated tissues</td><td>Made by <code>situcraft simulate</code>, seeded</td><td>Accuracy against the truth; scale, up to 55 million transcripts and a million cells</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="bundles">Bundles and the tissue</h2>
+      <p>SituCraft reads every file of a Xenium bundle with its own readers: Parquet, Zarr, HDF5, TIFF and OME-TIFF with JPEG 2000. Every Parquet column of both development bundles reads as DuckDB reads it, every Zarr array as zarr-python and numcodecs read it, and every TIFF's structure and pixels as tifffile and imagecodecs read them. A bundle's check recomputes 22 of the run's recorded values from its data and reproduces each; thirteen bundles broken one way each raise exactly their findings. The Viewer draws every image sample as the bundle records it: channels read back from the page at several levels equal the derived data's tiles sample for sample. Quantiles in the QC plots are Hyndman and Fan's type 7, and box plots Tukey's.</p>
+
+      <h2 id="segmentation">Segmentation</h2>
+      <p><strong>Nucleus expansion</strong> gives each pixel to the nearest nucleus within the distance, by exact Euclidean distance transforms (Felzenszwalb and Huttenlocher 2012). It reproduces the Lung bundle's own 5 µm expansion: the same 11,898 cells, 98.1% of pixels and 98.9% of transcripts in the same cells.</p>
+      <p><strong>Transcript-informed segmentation</strong> is implemented from the model of Jones et al. (2025): each cell a region whose transcripts are a Poisson process with its own rate for each gene, over a background, with expression states and cell sizes as priors; segmentations are sampled from the posterior and summarized, each transcript in its most probable cell with that probability kept, and convergence judged by Geweke's diagnostic. Every update is tested against its analytic posterior. On a simulated tissue it puts 84.7% of transcripts in their true cell, against the instrument's nucleus expansion's 82.2%; in patches it is as accurate (86.1% against 86.3% in one run). Its preflight estimated the memory of a whole run of the Lung example within 5%.</p>
+      <p><strong>Comparing segmentations</strong> pairs cells that share a nucleus, or of which half of one lies in the other, and classes each difference. Two measures read transcripts given to the wrong cell: the spurious co-expression of gene pairs relative to nuclei alone (Jones et al. 2025), and the mutually exclusive co-expression rate of markers of different lineages (Hartman and Satija 2024). On the Lung example, errors planted for practice are found exactly: 60 planted, 60 found, each in its class.</p>
+
+      <h2 id="cell-types">Cell types</h2>
+      <p><strong>Clusters</strong> follow scanpy's defaults (Wolf et al. 2018): each cell scaled to the median total and log-transformed, each gene scaled, 50 principal components (computed exactly, or by the Lanczos method for panels above 1,000 genes), 15 nearest neighbors (by NN-Descent, Dong et al. 2011, above 50,000 cells), and Leiden communities (Traag et al. 2019) of modularity with a resolution (Reichardt and Bornholdt 2006). Markers are the rank-sum test's (Mann and Whitney 1947). Against scanpy, leidenalg, umap-learn and scikit-learn on both bundles and the simulated tissue: components within 10⁻¹³, the same neighbors, markers' scores identical to the rank-sum test with exact ties, and on the simulated tissue the clusters agree with the true types (adjusted Rand index 0.95; Hubert and Arabie 1985).</p>
+      <p><strong>The map</strong> is UMAP (McInnes et al. 2018) from a spectral start, its faithfulness measured as trustworthiness (Venna and Kaski 2001): the same as umap-learn's of the same graph, by every measure within its spread over five seeds.</p>
+      <p><strong>Labels from markers</strong> score each cell's markers against control genes of similar expression (Tirosh et al. 2016), as scanpy's <code>score_genes</code> does: every control set scanpy's, every score within 3 × 10⁻⁷, and 97% of the simulated tissue's cells their true type. <strong>Labels from a reference</strong> correlate each cell with each label's profile and fine-tune among the leading labels, as SingleR does (Aran et al. 2019): given the same profiles, every correlation within 3 × 10⁻⁸ and the same label on 99.97% to 100% of cells. The review queue finds at least 92% of the mislabels planted in the Breast section.</p>
+
+      <h2 id="pathology">Pathology images</h2>
+      <p><strong>Landmark fits</strong> are least-squares similarities (Umeyama 1991) or affine transforms, each landmark with its residual and its leave-one-out error (Stone 1974). <strong>Automatic registration</strong> separates an H&amp;E's hematoxylin by color deconvolution (Ruifrok and Johnston 2001), finds the scale and turn from log-polar spectra (Reddy and Chatterji 1996) and the shift by phase correlation (Kuglin and Hines 1975), keeps the candidate of highest normalized mutual information (Studholme et al. 1999), refines it by compass search (Hooke and Jeeves 1961), matches patches with sub-pixel phase correlation (Foroosh et al. 2002), and fits a smooth cubic B-spline deformation (Rueckert et al. 1999) when it predicts held-out matches better. On the published section, without their alignments, the H&amp;E and the immunofluorescence image are placed within 0.61 and 0.68 µm of 10x's alignment; on simulated images, within 0.2 µm of the truth, and each checked patch's error is measured within 0.15 µm of its true one. Regions go to and from QuPath (Bankhead et al. 2017) in its GeoJSON: written for QuPath 0.7.0, they open there as written.</p>
+
+      <h2 id="spatial">Spatial analysis</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Method</th><th>Source</th><th>Checked against</th><th>Agreement</th></tr></thead>
+          <tbody>
+            <tr><td>Delaunay, nearest-neighbor, radius and contact graphs</td><td>Lee and Schachter 1980; Bowyer 1981; Watson 1981; exact predicates, Shewchuk 1997</td><td>SciPy (Qhull, <code>cKDTree</code>) and Squidpy 1.8.3</td><td class="agree">every edge</td></tr>
+            <tr><td>Neighborhood enrichment</td><td>Schapiro et al. 2017; Palla et al. 2022</td><td>Squidpy 1.8.3 on the same graphs</td><td class="agree">every count; every z within its permutation error</td></tr>
+            <tr><td>Co-occurrence</td><td>Palla et al. 2022</td><td>Squidpy 1.8.3</td><td class="agree">every ratio, in float64</td></tr>
+            <tr><td>Nearest distances</td><td>Diggle 2003</td><td>SciPy's k-d tree</td><td class="agree">every median and mean</td></tr>
+            <tr><td>Ripley's K and L, isotropic correction</td><td>Ripley 1977; Besag 1977</td><td>astropy; the estimator by Ripley's formula</td><td class="agree">without a correction to 10⁻⁹</td></tr>
+            <tr><td>Regions compared; across an edge</td><td>Garwood 1936; Wilson 1927; Ederer and Mantel 1974; Koopman 1984; Galon et al. 2006</td><td>Shapely; SciPy and statsmodels for the intervals</td><td class="agree">areas to 2 × 10⁻⁷; every count; intervals to 10⁻⁹</td></tr>
+            <tr><td>Niches</td><td>Goltsev et al. 2018; Schürch et al. 2020; k-means++, Arthur and Vassilvitskii 2007</td><td>scikit-learn's k-means; the simulated tissue's domains</td><td class="agree">inertia within 0.2%; kinds of domain found, adjusted Rand index 0.92</td></tr>
+            <tr><td>Moran's I; local Moran's I</td><td>Moran 1950; Cliff and Ord 1981; Anselin 1995</td><td>Squidpy 1.8.3; an independent computation of both variances</td><td class="agree">I to 10⁻¹⁵; variances to 10⁻¹²</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Where a question tests many pairs, labels or genes, its p-values are adjusted by Benjamini and Hochberg's procedure (1995). Under another segmentation, on the simulated tissue, the enrichment of its types and its niches hardly change between its true cells, the instrument's and the refinement's (rank correlation 1.00), while the markers' Moran's I nearly doubles under the instrument's expansion and stays within 0.03 of the truth's under the refinement. At a million generated cells, on four cores, each graph takes seconds and Moran's I with its permutations 88 s in 0.94 GB.</p>
+
+      <h2 id="cite">Cite SituCraft</h2>
+      <p>If you use SituCraft in your research, please cite it (the repository's <a href="https://github.com/robert-mcdermott/situcraft/blob/main/CITATION.cff">CITATION.cff</a>), with its version, and the methods you used as the methods paragraph lists them:</p>
+      <div class="code wrap" data-no-copy><pre><code>McDermott R. SituCraft: a local-first workbench for imaging-based spatial transcriptomics. Version 0.5.0. https://github.com/robert-mcdermott/situcraft</code></pre></div>
+
+      <h2 id="references">References</h2>
+      <ul class="references">
+        <li>Anselin L. Local indicators of spatial association: LISA. <em>Geogr Anal</em> 1995;27:93–115.</li>
+        <li>Aran D, Looney AP, Liu L, et al. Reference-based analysis of lung single-cell sequencing reveals a transitional profibrotic macrophage. <em>Nat Immunol</em> 2019;20:163–172.</li>
+        <li>Arthur D, Vassilvitskii S. k-means++: the advantages of careful seeding. <em>SODA</em> 2007:1027–1035.</li>
+        <li>Bankhead P, Loughrey MB, Fernández JA, et al. QuPath: open source software for digital pathology image analysis. <em>Sci Rep</em> 2017;7:16878.</li>
+        <li>Benjamini Y, Hochberg Y. Controlling the false discovery rate. <em>J R Stat Soc B</em> 1995;57:289–300.</li>
+        <li>Besag J. Contribution to the discussion of Dr Ripley's paper. <em>J R Stat Soc B</em> 1977;39:193–195.</li>
+        <li>Bowyer A. Computing Dirichlet tessellations. <em>Comput J</em> 1981;24:162–166.</li>
+        <li>Cliff AD, Ord JK. <em>Spatial Processes: Models and Applications</em>. Pion, 1981.</li>
+        <li>Diggle PJ. <em>Statistical Analysis of Spatial Point Patterns</em>, 2nd ed. Arnold, 2003.</li>
+        <li>Dong W, Moses C, Li K. Efficient k-nearest neighbor graph construction for generic similarity measures. <em>WWW</em> 2011:577–586.</li>
+        <li>Ederer F, Mantel N. Confidence limits on the ratio of two Poisson variables. <em>Am J Epidemiol</em> 1974;100:165–167.</li>
+        <li>Felzenszwalb PF, Huttenlocher DP. Distance transforms of sampled functions. <em>Theory Comput</em> 2012;8:415–428.</li>
+        <li>Foroosh H, Zerubia J, Berthod M. Extension of phase correlation to subpixel registration. <em>IEEE Trans Image Process</em> 2002;11:188–200.</li>
+        <li>Galon J, Costes A, Sanchez-Cabo F, et al. Type, density, and location of immune cells within human colorectal tumors predict clinical outcome. <em>Science</em> 2006;313:1960–1964.</li>
+        <li>Garwood F. Fiducial limits for the Poisson distribution. <em>Biometrika</em> 1936;28:437–442.</li>
+        <li>Goltsev Y, Samusik N, Kennedy-Darling J, et al. Deep profiling of mouse splenic architecture with CODEX multiplexed imaging. <em>Cell</em> 2018;174:968–981.</li>
+        <li>Hartman A, Satija R. Comparative analysis of multiplexed in situ gene expression profiling technologies. <em>bioRxiv</em> 2024. doi:10.1101/2024.01.11.575135.</li>
+        <li>Hooke R, Jeeves TA. "Direct search" solution of numerical and statistical problems. <em>J ACM</em> 1961;8:212–229.</li>
+        <li>Hubert L, Arabie P. Comparing partitions. <em>J Classif</em> 1985;2:193–218.</li>
+        <li>Janesick A, Shelansky R, Gottscho AD, et al. High resolution mapping of the tumor microenvironment using integrated single-cell, spatial and in situ analysis. <em>Nat Commun</em> 2023;14:8353.</li>
+        <li>Jones DC, Elz AE, Hadadianpour A, Ryu H, Glass DR, Newell EW. Cell simulation as cell segmentation. <em>Nat Methods</em> 2025;22:1331–1342.</li>
+        <li>Koopman PAR. Confidence intervals for the ratio of two binomial proportions. <em>Biometrics</em> 1984;40:513–517.</li>
+        <li>Kuglin CD, Hines DC. The phase correlation image alignment method. <em>Proc IEEE Conf Cybernetics and Society</em> 1975.</li>
+        <li>Lee DT, Schachter BJ. Two algorithms for constructing a Delaunay triangulation. <em>Int J Comput Inf Sci</em> 1980;9:219–242.</li>
+        <li>Mann HB, Whitney DR. On a test of whether one of two random variables is stochastically larger than the other. <em>Ann Math Stat</em> 1947;18:50–60.</li>
+        <li>McInnes L, Healy J, Melville J. UMAP: uniform manifold approximation and projection for dimension reduction. arXiv:1802.03426, 2018.</li>
+        <li>Moran PAP. Notes on continuous stochastic phenomena. <em>Biometrika</em> 1950;37:17–23.</li>
+        <li>Palla G, Spitzer H, Klein M, et al. Squidpy: a scalable framework for spatial omics analysis. <em>Nat Methods</em> 2022;19:171–178.</li>
+        <li>Reddy BS, Chatterji BN. An FFT-based technique for translation, rotation, and scale-invariant image registration. <em>IEEE Trans Image Process</em> 1996;5:1266–1271.</li>
+        <li>Reichardt J, Bornholdt S. Statistical mechanics of community detection. <em>Phys Rev E</em> 2006;74:016110.</li>
+        <li>Ripley BD. Modelling spatial patterns. <em>J R Stat Soc B</em> 1977;39:172–212.</li>
+        <li>Rueckert D, Sonoda LI, Hayes C, Hill DLG, Leach MO, Hawkes DJ. Nonrigid registration using free-form deformations: application to breast MR images. <em>IEEE Trans Med Imaging</em> 1999;18:712–721.</li>
+        <li>Ruifrok AC, Johnston DA. Quantification of histochemical staining by color deconvolution. <em>Anal Quant Cytol Histol</em> 2001;23:291–299.</li>
+        <li>Schapiro D, Jackson HW, Raghuraman S, et al. histoCAT: analysis of cell phenotypes and interactions in multiplex image cytometry data. <em>Nat Methods</em> 2017;14:873–876.</li>
+        <li>Schürch CM, Bhate SS, Barlow GL, et al. Coordinated cellular neighborhoods orchestrate antitumoral immunity at the colorectal cancer invasive front. <em>Cell</em> 2020;182:1341–1359.</li>
+        <li>Shewchuk JR. Adaptive precision floating-point arithmetic and fast robust geometric predicates. <em>Discrete Comput Geom</em> 1997;18:305–363.</li>
+        <li>Stone M. Cross-validatory choice and assessment of statistical predictions. <em>J R Stat Soc B</em> 1974;36:111–147.</li>
+        <li>Studholme C, Hill DLG, Hawkes DJ. An overlap invariant entropy measure of 3D medical image alignment. <em>Pattern Recognit</em> 1999;32:71–86.</li>
+        <li>Tirosh I, Izar B, Prakadan SM, et al. Dissecting the multicellular ecosystem of metastatic melanoma by single-cell RNA-seq. <em>Science</em> 2016;352:189–196.</li>
+        <li>Traag VA, Waltman L, van Eck NJ. From Louvain to Leiden: guaranteeing well-connected communities. <em>Sci Rep</em> 2019;9:5233.</li>
+        <li>Umeyama S. Least-squares estimation of transformation parameters between two point patterns. <em>IEEE TPAMI</em> 1991;13:376–380.</li>
+        <li>Venna J, Kaski S. Neighborhood preservation in nonlinear projection methods: an experimental study. <em>ICANN</em> 2001:485–491.</li>
+        <li>Watson DF. Computing the n-dimensional Delaunay tessellation with application to Voronoi polytopes. <em>Comput J</em> 1981;24:167–172.</li>
+        <li>Wilson EB. Probable inference, the law of succession, and statistical inference. <em>J Am Stat Assoc</em> 1927;22:209–212.</li>
+        <li>Wolf FA, Angerer P, Theis FJ. SCANPY: large-scale single-cell gene expression data analysis. <em>Genome Biol</em> 2018;19:15.</li>
+      </ul>
+
+      <h2 id="credits">Credits</h2>
+      <p>The example datasets are 10x Genomics' Xenium V1 human Lung and Breast 2-FOV bundles, and the pathology fixture a section of Janesick et al. (2023), each used under the Creative Commons Attribution 4.0 license; their source and license are linked on each example's card and cited in the methods paragraph. The website, its build and parts of SituCraft's host and library are adapted from MaveScape, by the same author, under the Apache License 2.0.</p>
+      <p>SituCraft is for research use only. It is not a medical device and makes no diagnostic claims.</p>
+    </main>
+
+    <aside class="toc" aria-label="On this page">
+      <h4>On this page</h4>
+      <ul></ul>
+    </aside>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-about">
+          <a class="brand" href="./"><img src="assets/img/logo.svg" alt="" width="30" height="30" /><span>Situ<b>Craft</b></span></a>
+          <p>A local-first workbench for imaging-based spatial transcriptomics: Xenium bundles checked, segmented, typed, reviewed and analyzed on your own computer, every decision on record. Free and open source under the Apache License 2.0.</p>
+        </div>
+        <div>
+          <h4>Product</h4>
+          <ul>
+            <li><a href="./#features">Features</a></li>
+            <li><a href="install.html">Install</a></li>
+            <li><a href="science.html">Science</a></li>
+            <li><a href="https://github.com/robert-mcdermott/situcraft/blob/main/CHANGELOG.md">Changelog</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Documentation</h4>
+          <ul>
+            <li><a href="docs/getting-started.html">Getting started</a></li>
+            <li><a href="docs/segmentations.html">Segmentations</a></li>
+            <li><a href="docs/clusters.html">Cell types</a></li>
+            <li><a href="docs/spatial.html">Spatial analysis</a></li>
+            <li><a href="docs/troubleshooting.html">Troubleshooting</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Project</h4>
+          <ul>
+            <li><a href="https://github.com/robert-mcdermott/situcraft">GitHub</a></li>
+            <li><a href="https://github.com/robert-mcdermott/situcraft/releases">Releases</a></li>
+            <li><a href="https://github.com/robert-mcdermott/situcraft/issues">Issues</a></li>
+            <li><a href="science.html#cite">Cite SituCraft</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">SituCraft is licensed under the Apache License 2.0. It is for research use only: it is not a medical device and makes no diagnostic claims. See <a href="science.html#credits">credits</a>.</div>
+    </div>
+  </footer>
+</body>
+</html>

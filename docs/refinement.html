@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Refinement · SituCraft</title>
+  <meta name="description" content="SituCraft's transcript-informed cell segmentation (after Jones et al. 2025): each cell redrawn from its transcripts in a six-step studio, a pilot region first, large tissues in patches, and the same result in the terminal." />
+  <link rel="canonical" href="https://robert-mcdermott.github.io/situcraft/docs/refinement.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Refinement" />
+  <meta property="og:description" content="SituCraft's transcript-informed cell segmentation (after Jones et al. 2025): each cell redrawn from its transcripts in a six-step studio, a pilot region first, large tissues in patches, and the same result in the terminal." />
+  <meta property="og:url" content="https://robert-mcdermott.github.io/situcraft/docs/refinement.html" />
+  <meta property="og:image" content="https://robert-mcdermott.github.io/situcraft/assets/img/og-image.jpg" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="theme-color" content="#07090e" />
+  <link rel="icon" href="../assets/img/logo.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="../assets/css/site.css" />
+  <script>try { const t = localStorage.getItem('situcraft-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+  <script src="../assets/js/site.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="container">
+      <a class="brand" href="../"><img src="../assets/img/logo.svg" alt="" width="30" height="30" /><span>Situ<b>Craft</b></span></a>
+      <nav class="site-nav" id="site-nav" aria-label="Main">
+        <a href="../#features">Features</a>
+        <a href="../docs/" aria-current="page">Documentation</a>
+        <a href="../install.html">Install</a>
+        <a href="../science.html">Science</a>
+      </nav>
+      <div class="header-actions">
+        <a class="icon-button" href="https://github.com/robert-mcdermott/situcraft" aria-label="SituCraft on GitHub">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.71 1.26 3.37.96.1-.75.4-1.26.73-1.55-2.56-.29-5.25-1.28-5.25-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.7 5.4-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"/></svg>
+        </a>
+        <button class="icon-button theme-toggle" type="button" aria-label="Switch between light and dark">
+          <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        </button>
+        <button class="icon-button nav-toggle" type="button" aria-label="Menu" aria-controls="site-nav" aria-expanded="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <div class="docs-layout">
+    <aside class="docs-sidebar" aria-label="Documentation">
+      <button class="btn docs-menu-toggle" type="button" aria-expanded="false">Documentation menu <span aria-hidden="true">▾</span></button>
+      <nav>
+        <h4>Start</h4>
+        <ul>
+          <li><a href="./">Overview</a></li>
+          <li><a href="getting-started.html">Getting started</a></li>
+          <li><a href="opening-data.html">Opening a bundle</a></li>
+        </ul>
+        <h4>The tissue</h4>
+        <ul>
+          <li><a href="viewer.html">The Viewer</a></li>
+          <li><a href="qc.html">Quality control</a></li>
+        </ul>
+        <h4>Segmentations</h4>
+        <ul>
+          <li><a href="segmentations.html">Segmentations</a></li>
+          <li><a href="refinement.html" aria-current="page">Refinement</a></li>
+          <li><a href="comparing.html">Comparing and deciding</a></li>
+          <li><a href="exports.html">Exports</a></li>
+        </ul>
+        <h4>Cell types</h4>
+        <ul>
+          <li><a href="clusters.html">Clusters and the map</a></li>
+          <li><a href="labels.html">Labels</a></li>
+        </ul>
+        <h4>Pathology</h4>
+        <ul>
+          <li><a href="images.html">Images and alignment</a></li>
+          <li><a href="regions.html">Regions and reviews</a></li>
+        </ul>
+        <h4>Spatial</h4>
+        <ul>
+          <li><a href="spatial.html">Spatial analysis</a></li>
+          <li><a href="niches.html">Niches and genes</a></li>
+        </ul>
+        <h4>Reference</h4>
+        <ul>
+          <li><a href="remote-control.html">Remote control</a></li>
+          <li><a href="record.html">The record</a></li>
+          <li><a href="troubleshooting.html">Troubleshooting</a></li>
+        </ul>
+      </nav>
+    </aside>
+
+    <main id="main" class="doc">
+      <h1>Refinement</h1>
+      <p class="doc-lede">SituCraft redraws the instrument's cells from their transcripts, starting from the cells and their nuclei. Its studio says what a run would do on this bundle and this computer before it starts, and the same settings and seed give the same segmentation on any computer.</p>
+
+      <h2 id="what">What it does</h2>
+      <p><strong>Transcript-informed segmentation</strong> redraws each cell from the transcripts (SituCraft's implementation, after Jones et al. 2025). It starts from the instrument's cells and their nuclei. Each boundary moves to where the cell's own transcripts are, and each transcript may have drifted from the cell it came from. </p>
+
+      <h2 id="studio">The studio</h2>
+      <p>Its studio takes you through six steps, each showing what the run would do on this bundle and this computer:</p>
+      <figure>
+        <div class="shot"><img class="shot-dark" src="../assets/img/studio-dark.webp" width="2000" height="1250" loading="lazy" alt="The segmentation studio on the Breast example at its Compute step: the threads, and the memory, disk and time the Balanced refinement needs against what the computer has" /><img class="shot-light" src="../assets/img/studio-light.webp" width="2000" height="1250" loading="lazy" alt="The segmentation studio on the Breast example at its Compute step: the threads, and the memory, disk and time the Balanced refinement needs against what the computer has" /></div>
+        <figcaption>The studio's Compute step on the Breast example: what the run needs against what the computer has.</figcaption>
+      </figure>
+      <ol>
+        <li><strong>Input:</strong> the transcripts' quality (Q20 to start), the cells it starts from, and what it covers: the whole tissue, its separate sections apart, or chosen regions (typed in µm, or the region last framed in the Viewer). Outside a region the instrument's cells stay as they are.</li>
+        <li><strong>Compute:</strong> the threads, and the memory, disk and time it needs against what the computer has.</li>
+        <li><strong>Model:</strong> a preset (Balanced, Conservative boundary, Flexible morphology, Low memory, ROI pilot, Expert), what it changes and what it risks, and every setting with what it does and costs.</li>
+        <li><strong>Review:</strong> what will run, anything that stops it (with what to do) and its risks; <strong>Refine</strong> starts it, and <strong>Save the recipe</strong> keeps its settings as a file, to run again here or with <code>situcraft refine</code> in a terminal.</li>
+        <li><strong>Run:</strong> its progress and log, and <strong>Stop</strong>. A failure says what went wrong and what to do.</li>
+        <li><strong>Compare:</strong> whether it settled, which cells its result is least sure of (few transcripts, uncertain boundaries, no nucleus), and, for an ROI pilot, how often a second seed put the transcripts in the same cells. <strong>Review the differences</strong> opens the comparison workspace on it against the instrument's segmentation, made as soon as the refinement is.</li>
+      </ol>
+
+      <h2 id="pilot">A pilot first</h2>
+      <p>The ROI pilot is the place to start on a new tissue: a region of a few hundred µm takes seconds, and its two seeds show how much of the result is chance. The result itself is the summary of many samples from the model: each transcript in its most probable cell, with that probability kept.</p>
+
+      <h2 id="large">Large tissues</h2>
+      <p>A large tissue (more than about 4 million transcripts modeled) is refined in patches of about 2 million transcripts each, one after another, each also refining the cells within 40 µm of its square, and stitched into one segmentation; the Compute step says how many. The result is the same for the same seed whatever the computer. The memory still grows with the tissue, by about 100 bytes a transcript: a tissue of 55 million transcripts needed 5 to 7.4 GB (<a href="../install.html#memory">what it needs</a>).</p>
+
+      <h2 id="terminal">In the terminal</h2>
+      <p><code>situcraft refine &lt;bundle&gt; &lt;new folder&gt;</code> runs the same segmentation without the app, from a preset or a recipe saved in the studio (<code>--recipe</code>), and writes its files with the recipe beside them. The same recipe gives the same segmentation, byte for byte, in the app or the terminal, and the folder imports back into the app. <code>situcraft refine -h</code> lists the settings, <code>--preflight</code> says what a run would need, and <a href="https://github.com/robert-mcdermott/situcraft/blob/main/docs/FORMATS.md#refinements-in-the-terminal-situcraft-refine">Formats</a> describes the files.</p>
+      <div class="code"><pre><code><span class="prompt">$ </span>situcraft refine --preflight /path/to/bundle
+<span class="prompt">$ </span>situcraft refine --recipe recipe.json /path/to/bundle /path/to/refined</code></pre></div>
+
+      <nav class="doc-pager" aria-label="Pages">
+        <a class="prev" href="segmentations.html"><span>Previous</span>Segmentations</a>
+        <a class="next" href="comparing.html"><span>Next</span>Comparing and deciding</a>
+      </nav>
+    </main>
+
+    <aside class="toc" aria-label="On this page">
+      <h4>On this page</h4>
+      <ul></ul>
+    </aside>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-about">
+          <a class="brand" href="../"><img src="../assets/img/logo.svg" alt="" width="30" height="30" /><span>Situ<b>Craft</b></span></a>
+          <p>A local-first workbench for imaging-based spatial transcriptomics: Xenium bundles checked, segmented, typed, reviewed and analyzed on your own computer, every decision on record. Free and open source under the Apache License 2.0.</p>
+        </div>
+        <div>
+          <h4>Product</h4>
+          <ul>
+            <li><a href="../#features">Features</a></li>
+            <li><a href="../install.html">Install</a></li>
+            <li><a href="../science.html">Science</a></li>
+            <li><a href="https://github.com/robert-mcdermott/situcraft/blob/main/CHANGELOG.md">Changelog</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Documentation</h4>
+          <ul>
+            <li><a href="../docs/getting-started.html">Getting started</a></li>
+            <li><a href="../docs/segmentations.html">Segmentations</a></li>
+            <li><a href="../docs/clusters.html">Cell types</a></li>
+            <li><a href="../docs/spatial.html">Spatial analysis</a></li>
+            <li><a href="../docs/troubleshooting.html">Troubleshooting</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Project</h4>
+          <ul>
+            <li><a href="https://github.com/robert-mcdermott/situcraft">GitHub</a></li>
+            <li><a href="https://github.com/robert-mcdermott/situcraft/releases">Releases</a></li>
+            <li><a href="https://github.com/robert-mcdermott/situcraft/issues">Issues</a></li>
+            <li><a href="../science.html#cite">Cite SituCraft</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">SituCraft is licensed under the Apache License 2.0. It is for research use only: it is not a medical device and makes no diagnostic claims. See <a href="../science.html#credits">credits</a>.</div>
+    </div>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Getting started · SituCraft</title>
+  <meta name="description" content="Install SituCraft, start it, and try it on an example Xenium dataset or a simulated tissue with known truth, with a guided tour and worked examples." />
+  <link rel="canonical" href="https://robert-mcdermott.github.io/situcraft/docs/getting-started.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Getting started" />
+  <meta property="og:description" content="Install SituCraft, start it, and try it on an example Xenium dataset or a simulated tissue with known truth, with a guided tour and worked examples." />
+  <meta property="og:url" content="https://robert-mcdermott.github.io/situcraft/docs/getting-started.html" />
+  <meta property="og:image" content="https://robert-mcdermott.github.io/situcraft/assets/img/og-image.jpg" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="theme-color" content="#07090e" />
+  <link rel="icon" href="../assets/img/logo.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="../assets/css/site.css" />
+  <script>try { const t = localStorage.getItem('situcraft-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+  <script src="../assets/js/site.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="container">
+      <a class="brand" href="../"><img src="../assets/img/logo.svg" alt="" width="30" height="30" /><span>Situ<b>Craft</b></span></a>
+      <nav class="site-nav" id="site-nav" aria-label="Main">
+        <a href="../#features">Features</a>
+        <a href="../docs/" aria-current="page">Documentation</a>
+        <a href="../install.html">Install</a>
+        <a href="../science.html">Science</a>
+      </nav>
+      <div class="header-actions">
+        <a class="icon-button" href="https://github.com/robert-mcdermott/situcraft" aria-label="SituCraft on GitHub">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.71 1.26 3.37.96.1-.75.4-1.26.73-1.55-2.56-.29-5.25-1.28-5.25-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.7 5.4-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"/></svg>
+        </a>
+        <button class="icon-button theme-toggle" type="button" aria-label="Switch between light and dark">
+          <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        </button>
+        <button class="icon-button nav-toggle" type="button" aria-label="Menu" aria-controls="site-nav" aria-expanded="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <div class="docs-layout">
+    <aside class="docs-sidebar" aria-label="Documentation">
+      <button class="btn docs-menu-toggle" type="button" aria-expanded="false">Documentation menu <span aria-hidden="true">▾</span></button>
+      <nav>
+        <h4>Start</h4>
+        <ul>
+          <li><a href="./">Overview</a></li>
+          <li><a href="getting-started.html" aria-current="page">Getting started</a></li>
+          <li><a href="opening-data.html">Opening a bundle</a></li>
+        </ul>
+        <h4>The tissue</h4>
+        <ul>
+          <li><a href="viewer.html">The Viewer</a></li>
+          <li><a href="qc.html">Quality control</a></li>
+        </ul>
+        <h4>Segmentations</h4>
+        <ul>
+          <li><a href="segmentations.html">Segmentations</a></li>
+          <li><a href="refinement.html">Refinement</a></li>
+          <li><a href="comparing.html">Comparing and deciding</a></li>
+          <li><a href="exports.html">Exports</a></li>
+        </ul>
+        <h4>Cell types</h4>
+        <ul>
+          <li><a href="clusters.html">Clusters and the map</a></li>
+          <li><a href="labels.html">Labels</a></li>
+        </ul>
+        <h4>Pathology</h4>
+        <ul>
+          <li><a href="images.html">Images and alignment</a></li>
+          <li><a href="regions.html">Regions and reviews</a></li>
+        </ul>
+        <h4>Spatial</h4>
+        <ul>
+          <li><a href="spatial.html">Spatial analysis</a></li>
+          <li><a href="niches.html">Niches and genes</a></li>
+        </ul>
+        <h4>Reference</h4>
+        <ul>
+          <li><a href="remote-control.html">Remote control</a></li>
+          <li><a href="record.html">The record</a></li>
+          <li><a href="troubleshooting.html">Troubleshooting</a></li>
+        </ul>
+      </nav>
+    </aside>
+
+    <main id="main" class="doc">
+      <h1>Getting started</h1>
+      <p class="doc-lede">Install SituCraft, start it, and try it on an example: two public Xenium sections from 10x Genomics, or a simulated tissue whose every cell is known. A tour and worked examples take you through it.</p>
+
+      <h2 id="start">Install and start it</h2>
+      <p>Install SituCraft with the one-line installer (<a href="../install.html">Install</a>), then run:</p>
+      <div class="code"><pre><code><span class="prompt">$ </span>situcraft</code></pre></div>
+      <p>SituCraft opens in its own window: Chrome, Edge, Brave or Chromium in app mode if you have one, else your default browser. The terminal shows where it keeps your projects, its cache and the example datasets. Closing the window stops SituCraft (<code>--keep-running</code> keeps it serving).</p>
+      <p>The start page offers your recent projects, the example datasets and <strong>Open a bundle</strong>.</p>
+
+      <h2 id="examples">Try an example</h2>
+      <figure>
+        <div class="shot"><img class="shot-dark" src="../assets/img/start-dark.webp" width="2000" height="1250" loading="lazy" alt="SituCraft's start page: recent projects, and the example datasets with their size, source and license and their worked examples, each with a Download or Make it button" /><img class="shot-light" src="../assets/img/start-light.webp" width="2000" height="1250" loading="lazy" alt="SituCraft's start page: recent projects, and the example datasets with their size, source and license and their worked examples, each with a Download or Make it button" /></div>
+        <figcaption>The start page: recent projects, and the examples with their worked examples.</figcaption>
+      </figure>
+      <p>Under <strong>Examples</strong>, two public Xenium bundles from 10x Genomics (CC BY 4.0) are ready to download, and a simulated tissue is ready to make:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Example</th><th>Download</th><th>On disk</th><th>What it shows</th></tr></thead>
+          <tbody>
+            <tr><td>Xenium V1 human Lung, 2 FOVs</td><td>278 MB</td><td>284 MB</td><td>11,898 cells, 825,885 transcripts, 289 genes, a DAPI image, nucleus-expansion segmentation</td></tr>
+            <tr><td>Xenium V1 human Breast, 2 FOVs</td><td>379 MB</td><td>385 MB</td><td>7,275 cells, 1,113,950 transcripts, 280 genes, four stains, multimodal cell segmentation</td></tr>
+            <tr><td>A simulated tissue with known truth</td><td>none: made here in seconds</td><td>42 MB</td><td>3,030 cells of four types, 436,996 transcripts, 120 genes, a DAPI image, nucleus-expansion segmentation, an H&amp;E and an immunofluorescence image of the section stained after the run, and the truth: every cell's, transcript's and type, and where each image's pixels lie</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p><strong>Download</strong> fetches one from 10x Genomics, checks the archive and every file against recorded checksums, keeps only the bundle and deletes the archive. Nothing is downloaded until you ask. <strong>Make it</strong> simulates the third with SituCraft's standard settings (<code>situcraft simulate --post-xenium</code> makes the same tissue, byte for byte); it is labeled simulated wherever it is shown. One made by an earlier SituCraft, without the H&amp;E, offers <strong>Make it again</strong>: the same run, cells and transcripts, with the images.</p>
+      <p>Each example is used under its license; its source and license are linked on its card, and the <a href="record.html#methods">methods paragraph</a> cites it.</p>
+
+      <h2 id="tour">The tour</h2>
+      <p>When a 10x Genomics example is ready, <strong>Take the tour</strong>: seven steps through the Data view, the Viewer and QC. Use <strong>Next</strong> and <strong>Back</strong> on the card at the foot of the window; you can explore at any step, and the tour continues from there.</p>
+      <figure>
+        <div class="shot"><img class="shot-dark" src="../assets/img/tour-dark.webp" width="2000" height="1250" loading="lazy" alt="The Lung example's guided tour at its third step, a card over the Viewer saying what the four genes mark" /><img class="shot-light" src="../assets/img/tour-light.webp" width="2000" height="1250" loading="lazy" alt="The Lung example's guided tour at its third step, a card over the Viewer saying what the four genes mark" /></div>
+        <figcaption>The Lung example's tour at its third step: what four genes mark.</figcaption>
+      </figure>
+
+      <h2 id="worked-examples">Worked examples</h2>
+      <p>Each example also has <strong>worked examples</strong>: a question answered step by step, saying first what to expect. Some steps run a job before going on (the card's button says what it does: expand the nuclei, plant errors, refine, import the truth, compare, cluster, label, make the labels again on another segmentation, add the H&amp;E, place landmarks, align it automatically, check its alignments, draw regions and write them for QuPath, decide the review queue's first cells, exclude a fold), and others open the comparison in the Compare workspace, the clustering in the Cell types view, the Alignment view, or the Viewer, with the view, the ranking, the colors and the difference the step talks about.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Example</th><th>Worked example</th><th>The question</th></tr></thead>
+          <tbody>
+            <tr><td>Breast</td><td>The instrument's cells against a nucleus expansion</td><td>Where does growing each nucleus by 5 µm disagree with the cells the instrument drew from its stains, and which does the evidence favor there?</td></tr>
+            <tr><td>Breast</td><td>Redraw the cells from their transcripts</td><td>How does SituCraft's transcript-informed segmentation redraw the instrument's cells, and where is it unsure of itself?</td></tr>
+            <tr><td>Breast</td><td>Labels under two segmentations</td><td>How much do the cells' labels depend on the segmentation they were counted in, and which cells does the choice change?</td></tr>
+            <tr><td>Lung</td><td>Find the planted errors (simulated)</td><td>Can you find a segmentation's errors with the comparison workspace, and which ranking finds which kind?</td></tr>
+            <tr><td>Lung</td><td>Cluster and label the Lung cells</td><td>Which cells are in this section, as their expression groups them and as known markers name them, and how far can each label be trusted?</td></tr>
+            <tr><td>Simulated</td><td>Score segmentations against the truth</td><td>When every cell is known, how close do the instrument's nucleus expansion and SituCraft's transcript-informed segmentation come to the true cells?</td></tr>
+            <tr><td>Simulated</td><td>Labels against the truth</td><td>When every cell's type is known, how many cells do markers label correctly, and how much of the error is the segmentation's?</td></tr>
+            <tr><td>Simulated</td><td>Align an H&amp;E three ways</td><td>The section was stained with H&amp;E and scanned after the run: placed by Xenium Explorer's matrix, by six landmarks, or automatically by the nuclei, which places it best, and how do you tell without a truth?</td></tr>
+            <tr><td>Simulated</td><td>Regions for QuPath</td><td>Draw the epithelial and the immune domains on the H&amp;E, count their cells, and take the regions to QuPath in the H&amp;E's own pixels: do they come back as they were?</td></tr>
+            <tr><td>Simulated</td><td>A pathologist's review</td><td>Labels from markers are predictions. Which cells should a pathologist look at first, what do the decisions change, and what does the record keep of each?</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <figure>
+        <div class="shot"><img class="shot-dark" src="../assets/img/worked-dark.webp" width="2000" height="1250" loading="lazy" alt="The Lung example's worked example in the Compare workspace: the instrument's segmentation and one with planted errors side by side, a planted merge chosen, and the worked example's card beside the queue" /><img class="shot-light" src="../assets/img/worked-light.webp" width="2000" height="1250" loading="lazy" alt="The Lung example's worked example in the Compare workspace: the instrument's segmentation and one with planted errors side by side, a planted merge chosen, and the worked example's card beside the queue" /></div>
+        <figcaption>Find the planted errors: a planted merge, chosen in the review queue.</figcaption>
+      </figure>
+      <figure>
+        <div class="shot"><img class="shot-dark" src="../assets/img/worked-labels-dark.webp" width="2000" height="1250" loading="lazy" alt="The simulated tissue's worked example on labels in the Compare workspace: its true cells and the instrument's side by side, each colored by type (the true types and the labels from the types' markers), the Labels tab reading both through the comparison, and the worked example's card beside it" /><img class="shot-light" src="../assets/img/worked-labels-light.webp" width="2000" height="1250" loading="lazy" alt="The simulated tissue's worked example on labels in the Compare workspace: its true cells and the instrument's side by side, each colored by type (the true types and the labels from the types' markers), the Labels tab reading both through the comparison, and the worked example's card beside it" /></div>
+        <figcaption>Labels against the truth: the true types and the labels from markers, read through the comparison of the two segmentations.</figcaption>
+      </figure>
+
+      <h2 id="keyboard">Keyboard</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Action</th><th>Keys</th></tr></thead>
+          <tbody>
+            <tr><td>Search and commands</td><td>⌘K</td></tr>
+            <tr><td>Open a bundle; a saved project</td><td>⌘O; ⇧⌘O</td></tr>
+            <tr><td>Save now</td><td>⌘S</td></tr>
+            <tr><td>Undo; redo</td><td>⌘Z; ⇧⌘Z</td></tr>
+            <tr><td>Go to a view</td><td>⌘1 … ⌘9</td></tr>
+            <tr><td>Hide the project tree; the inspector</td><td>⌘\; ⇧⌘\</td></tr>
+            <tr><td>History and log</td><td>⌘J</td></tr>
+            <tr><td>Viewer: pan; zoom; whole tissue; clear the cell</td><td>arrows; + and −; 0; Esc</td></tr>
+            <tr><td>Drawing a region: close a polygon; its last corner back; pan; stop</td><td>Enter; Backspace; hold space; Esc</td></tr>
+            <tr><td>All shortcuts</td><td>?</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>On Windows and Linux, use Ctrl for ⌘.</p>
+
+      <nav class="doc-pager" aria-label="Pages">
+        <a class="prev" href="./"><span>Previous</span>Overview</a>
+        <a class="next" href="opening-data.html"><span>Next</span>Opening a bundle</a>
+      </nav>
+    </main>
+
+    <aside class="toc" aria-label="On this page">
+      <h4>On this page</h4>
+      <ul></ul>
+    </aside>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-about">
+          <a class="brand" href="../"><img src="../assets/img/logo.svg" alt="" width="30" height="30" /><span>Situ<b>Craft</b></span></a>
+          <p>A local-first workbench for imaging-based spatial transcriptomics: Xenium bundles checked, segmented, typed, reviewed and analyzed on your own computer, every decision on record. Free and open source under the Apache License 2.0.</p>
+        </div>
+        <div>
+          <h4>Product</h4>
+          <ul>
+            <li><a href="../#features">Features</a></li>
+            <li><a href="../install.html">Install</a></li>
+            <li><a href="../science.html">Science</a></li>
+            <li><a href="https://github.com/robert-mcdermott/situcraft/blob/main/CHANGELOG.md">Changelog</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Documentation</h4>
+          <ul>
+            <li><a href="../docs/getting-started.html">Getting started</a></li>
+            <li><a href="../docs/segmentations.html">Segmentations</a></li>
+            <li><a href="../docs/clusters.html">Cell types</a></li>
+            <li><a href="../docs/spatial.html">Spatial analysis</a></li>
+            <li><a href="../docs/troubleshooting.html">Troubleshooting</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Project</h4>
+          <ul>
+            <li><a href="https://github.com/robert-mcdermott/situcraft">GitHub</a></li>
+            <li><a href="https://github.com/robert-mcdermott/situcraft/releases">Releases</a></li>
+            <li><a href="https://github.com/robert-mcdermott/situcraft/issues">Issues</a></li>
+            <li><a href="../science.html#cite">Cite SituCraft</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">SituCraft is licensed under the Apache License 2.0. It is for research use only: it is not a medical device and makes no diagnostic claims. See <a href="../science.html#credits">credits</a>.</div>
+    </div>
+  </footer>
+</body>
+</html>

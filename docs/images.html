@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Images and alignment · SituCraft</title>
+  <meta name="description" content="Add post-Xenium H&amp;E and immunofluorescence images to a Xenium dataset in SituCraft, align them by landmarks or automatically by their nuclei, and check an alignment over the whole section, in µm." />
+  <link rel="canonical" href="https://robert-mcdermott.github.io/situcraft/docs/images.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Images and alignment" />
+  <meta property="og:description" content="Add post-Xenium H&amp;E and immunofluorescence images to a Xenium dataset in SituCraft, align them by landmarks or automatically by their nuclei, and check an alignment over the whole section, in µm." />
+  <meta property="og:url" content="https://robert-mcdermott.github.io/situcraft/docs/images.html" />
+  <meta property="og:image" content="https://robert-mcdermott.github.io/situcraft/assets/img/og-image.jpg" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="theme-color" content="#07090e" />
+  <link rel="icon" href="../assets/img/logo.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="../assets/css/site.css" />
+  <script>try { const t = localStorage.getItem('situcraft-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+  <script src="../assets/js/site.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="container">
+      <a class="brand" href="../"><img src="../assets/img/logo.svg" alt="" width="30" height="30" /><span>Situ<b>Craft</b></span></a>
+      <nav class="site-nav" id="site-nav" aria-label="Main">
+        <a href="../#features">Features</a>
+        <a href="../docs/" aria-current="page">Documentation</a>
+        <a href="../install.html">Install</a>
+        <a href="../science.html">Science</a>
+      </nav>
+      <div class="header-actions">
+        <a class="icon-button" href="https://github.com/robert-mcdermott/situcraft" aria-label="SituCraft on GitHub">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.71 1.26 3.37.96.1-.75.4-1.26.73-1.55-2.56-.29-5.25-1.28-5.25-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.7 5.4-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"/></svg>
+        </a>
+        <button class="icon-button theme-toggle" type="button" aria-label="Switch between light and dark">
+          <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        </button>
+        <button class="icon-button nav-toggle" type="button" aria-label="Menu" aria-controls="site-nav" aria-expanded="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <div class="docs-layout">
+    <aside class="docs-sidebar" aria-label="Documentation">
+      <button class="btn docs-menu-toggle" type="button" aria-expanded="false">Documentation menu <span aria-hidden="true">▾</span></button>
+      <nav>
+        <h4>Start</h4>
+        <ul>
+          <li><a href="./">Overview</a></li>
+          <li><a href="getting-started.html">Getting started</a></li>
+          <li><a href="opening-data.html">Opening a bundle</a></li>
+        </ul>
+        <h4>The tissue</h4>
+        <ul>
+          <li><a href="viewer.html">The Viewer</a></li>
+          <li><a href="qc.html">Quality control</a></li>
+        </ul>
+        <h4>Segmentations</h4>
+        <ul>
+          <li><a href="segmentations.html">Segmentations</a></li>
+          <li><a href="refinement.html">Refinement</a></li>
+          <li><a href="comparing.html">Comparing and deciding</a></li>
+          <li><a href="exports.html">Exports</a></li>
+        </ul>
+        <h4>Cell types</h4>
+        <ul>
+          <li><a href="clusters.html">Clusters and the map</a></li>
+          <li><a href="labels.html">Labels</a></li>
+        </ul>
+        <h4>Pathology</h4>
+        <ul>
+          <li><a href="images.html" aria-current="page">Images and alignment</a></li>
+          <li><a href="regions.html">Regions and reviews</a></li>
+        </ul>
+        <h4>Spatial</h4>
+        <ul>
+          <li><a href="spatial.html">Spatial analysis</a></li>
+          <li><a href="niches.html">Niches and genes</a></li>
+        </ul>
+        <h4>Reference</h4>
+        <ul>
+          <li><a href="remote-control.html">Remote control</a></li>
+          <li><a href="record.html">The record</a></li>
+          <li><a href="troubleshooting.html">Troubleshooting</a></li>
+        </ul>
+      </nav>
+    </aside>
+
+    <main id="main" class="doc">
+      <h1>Images and alignment</h1>
+      <p class="doc-lede">Post-Xenium H&amp;E and immunofluorescence images are drawn on the tissue under the transcripts and cells, placed by an alignment you can make by landmarks or automatically, and check in µm over the whole section.</p>
+
+      <h2 id="images">Post-Xenium images</h2>
+      <p>A Xenium run leaves the section intact, so it can be stained (H&amp;E) or imaged for proteins (immunofluorescence) afterwards. SituCraft draws such an image on the tissue, under the transcripts and cells, placed by an alignment to the Xenium image. To practice, the simulated example has both (in its <code>post_xenium</code> folder, the matrix in its truth), and its worked examples align the H&amp;E, draw regions on it and review cells against it.</p>
+      <p>In the Viewer, open <strong>Post-Xenium images</strong>, then <strong>Add a post-Xenium image</strong>:</p>
+      <ol>
+        <li><strong>Image:</strong> the path of the OME-TIFF. SituCraft reads pyramidal, tiled OME-TIFFs, as Xenium Explorer does; a flat image is refused with how to make one (10x's image conversion guide, or <code>bfconvert -pyramid-resolutions 6 -pyramid-scale 2 -tilex 1024 -tiley 1024</code>).</li>
+        <li><strong>Check:</strong> says what the image is (RGB or its channels, its size and levels, its compression) and fills in the alignment when one named after the image lies beside it, as 10x names them (<code>&lt;sample&gt;_he_imagealignment.csv</code> for <code>&lt;sample&gt;_he_image.ome.tif</code>).</li>
+        <li><strong>Alignment (optional):</strong> the transformation matrix or the keypoints Xenium Explorer saves (its <strong>Download Image Alignment File</strong>). Without one, the image is added unaligned, to place by landmarks. An image is placed by an alignment alone: the pixel size its own metadata gives is often the Xenium image's, whatever its own.</li>
+        <li><strong>Add the image:</strong> a job checksums the image where it lies (it is never copied) and records it as an artifact of the dataset, with its alignment as the first version of it.</li>
+      </ol>
+      <p>Each image is listed under <strong>Images</strong> in the project tree and in the Viewer's panel, with the version of its alignment that places it (its scale, its turn, whether it is mirrored). Show or hide it and set its opacity; an H&amp;E is drawn in its colors over the stains, an immunofluorescence image's channels each in a color, window and gamma as the stains are (its nuclear stain off at first: the Xenium image's DAPI is the same nuclei). A saved view keeps each image's settings. An image not aligned yet is listed but not drawn.</p>
+
+      <h2 id="landmarks">Aligning by landmarks</h2>
+      <p>The <strong>Alignment</strong> view (<strong>Align it…</strong> or <strong>Alignment…</strong> beside an image in the Viewer) shows the Xenium image on the left, in µm, and the post-Xenium image on the right, in its own pixels; each pans and zooms on its own.</p>
+      <ol>
+        <li><strong>Place landmarks.</strong> Click a place on one image, then the same place on the other: a nucleus, a vessel, the tissue's edge. Spread them over the section. From the fourth on, the fit predicts where the second click falls and that image goes there (a dashed marker); click the exact place. Drag a landmark to move it; Delete removes the one chosen, Escape one placed on one image only.</li>
+        <li><strong>Read the fit.</strong> A similarity moves, turns, scales (one scale) and mirrors the image; an affine transform also stretches and shears it (scanners' pixels are not always square). For each landmark: its <strong>residual</strong>, how far the fit puts it from where it was placed, and its <strong>left out</strong> error, how far the fit of the other landmarks puts it. Residuals understate the error between landmarks; the left-out error is what to expect where no landmark is. A landmark whose left-out error stands out is likely misplaced. With an alignment in use, the panel also says how far these landmarks are from it.</li>
+        <li><strong>See it.</strong> <strong>Lay the image over the stains, as fitted</strong> draws it under the fit on the left; <strong>Move the images together</strong> keeps the two images on the same place as you pan.</li>
+        <li><strong>Save.</strong> <strong>Save and use</strong> records the fit as a version of the image's alignment, with your name and a note, and places the image by it; <strong>Save as a version</strong> keeps it without using it.</li>
+      </ol>
+      <p>Every version is listed under <strong>Versions</strong>, with how it was made, how well it fits, who made it, when, and the version it was made from. <strong>Use</strong> places the image by another (the reason is kept with the decision); <strong>Edit from it</strong> loads its landmarks to change them into a new version; <strong>Matrix</strong> and <strong>Keypoints</strong> write it as Xenium Explorer's files, to load with the image there.</p>
+      <p>To practice, <code>situcraft simulate --post-xenium &lt;folder&gt;</code> makes a simulated tissue with an H&amp;E and an immunofluorescence image of it in <code>post_xenium/</code>, each moved by a known transform and a smooth deformation; <code>truth/post_xenium/registration.json</code> says where each pixel truly lies.</p>
+
+      <h2 id="automatic">Aligning automatically</h2>
+      <p><strong>Align automatically</strong> registers the image by its nuclei: an H&amp;E's hematoxylin (separated from its eosin by color), or an immunofluorescence image's nuclear stain (chosen by its name; pick it if the name does not say), against the Xenium image's DAPI. It finds the image's scale, turn and mirroring whatever its metadata says, refines them, then matches patches over the tissue and fits the model to them (a similarity, or an affine transform). It runs as a job; a small section takes seconds, a whole one a minute or so.</p>
+      <ul>
+        <li><strong>Allow a smooth deformation</strong> for a section that stretched as it was stained: after the model, a smooth warp fitted to the matches, kept only when it predicts matches it was not fitted to better than the model alone. The Viewer draws the image as deformed.</li>
+        <li><strong>Start from the version in use</strong> to refine an alignment (10x's, or yours) without searching.</li>
+        <li>The result is saved as a version, like one made from landmarks; <strong>Show its matches</strong> draws the patches it matched on both images, in green, and those it dropped, in red.</li>
+      </ul>
+      <p>The same images always give the same alignment, on any computer.</p>
+
+      <h2 id="check">Seeing and checking an alignment</h2>
+      <figure>
+        <div class="shot"><img class="shot-dark" src="../assets/img/alignment-dark.webp" width="2000" height="1250" loading="lazy" alt="The Alignment view on the simulated tissue's H&E: on the left the Xenium image with the H&E placed over it by Xenium Explorer's matrix and each checked patch drawn as a square colored by how far off the matrix is there, on the right the H&E itself, and the worked example's card beside them" /><img class="shot-light" src="../assets/img/alignment-light.webp" width="2000" height="1250" loading="lazy" alt="The Alignment view on the simulated tissue's H&E: on the left the Xenium image with the H&E placed over it by Xenium Explorer's matrix and each checked patch drawn as a square colored by how far off the matrix is there, on the right the H&E itself, and the worked example's card beside them" /></div>
+        <figcaption>The simulated H&E placed by Xenium Explorer's matrix, each checked patch colored by how far off it is.</figcaption>
+      </figure>
+      <p><strong>See and check</strong> shows on the Xenium image (the left) any version of the alignment, the landmarks' fit before it is saved, or nothing:</p>
+      <ul>
+        <li><strong>Over the stains</strong> at an opacity; <strong>a checkerboard</strong> of the image and the stains, in squares of a size you choose (a structure that runs straight across the squares' edges is aligned there); or <strong>flickering</strong> between the image and the stains (what moves is off).</li>
+        <li><strong>DAPI's edges</strong> over the image, in yellow: the nuclei as the Xenium image sees them, on the image's nuclei. <strong>The nuclei's outlines</strong> draws the Xenium segmentation's instead.</li>
+        <li><strong>Move the images together</strong> keeps both images on the same place as you pan.</li>
+      </ul>
+      <p><strong>Measure where it is off</strong> checks a saved version over the whole section, as a job: patches of the Xenium image's DAPI where there is tissue, each compared with the image drawn there as the version places it (patches between those an automatic alignment used, so that it is not checked by its own matches). It reports how far the version is off, in µm (the median, the 90th percentile and the most, over how many patches), and a bound of the matches' own error: an error below it may be the matches', one well above it is the alignment's. <strong>Show where it is off</strong> draws each patch as a square colored by its error (green at 0, yellow at 1 µm, red at 2 µm or more) with an arrow from where the image belongs to where it is drawn, twenty times as long. Check two versions to compare them: 10x's alignment against an automatic one, or one with a deformation against one without.</p>
+
+      <nav class="doc-pager" aria-label="Pages">
+        <a class="prev" href="labels.html"><span>Previous</span>Labels</a>
+        <a class="next" href="regions.html"><span>Next</span>Regions and reviews</a>
+      </nav>
+    </main>
+
+    <aside class="toc" aria-label="On this page">
+      <h4>On this page</h4>
+      <ul></ul>
+    </aside>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-about">
+          <a class="brand" href="../"><img src="../assets/img/logo.svg" alt="" width="30" height="30" /><span>Situ<b>Craft</b></span></a>
+          <p>A local-first workbench for imaging-based spatial transcriptomics: Xenium bundles checked, segmented, typed, reviewed and analyzed on your own computer, every decision on record. Free and open source under the Apache License 2.0.</p>
+        </div>
+        <div>
+          <h4>Product</h4>
+          <ul>
+            <li><a href="../#features">Features</a></li>
+            <li><a href="../install.html">Install</a></li>
+            <li><a href="../science.html">Science</a></li>
+            <li><a href="https://github.com/robert-mcdermott/situcraft/blob/main/CHANGELOG.md">Changelog</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Documentation</h4>
+          <ul>
+            <li><a href="../docs/getting-started.html">Getting started</a></li>
+            <li><a href="../docs/segmentations.html">Segmentations</a></li>
+            <li><a href="../docs/clusters.html">Cell types</a></li>
+            <li><a href="../docs/spatial.html">Spatial analysis</a></li>
+            <li><a href="../docs/troubleshooting.html">Troubleshooting</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Project</h4>
+          <ul>
+            <li><a href="https://github.com/robert-mcdermott/situcraft">GitHub</a></li>
+            <li><a href="https://github.com/robert-mcdermott/situcraft/releases">Releases</a></li>
+            <li><a href="https://github.com/robert-mcdermott/situcraft/issues">Issues</a></li>
+            <li><a href="../science.html#cite">Cite SituCraft</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">SituCraft is licensed under the Apache License 2.0. It is for research use only: it is not a medical device and makes no diagnostic claims. See <a href="../science.html#credits">credits</a>.</div>
+    </div>
+  </footer>
+</body>
+</html>
