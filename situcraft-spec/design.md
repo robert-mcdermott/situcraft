@@ -54,8 +54,8 @@ see `conventions.md`. For the methods, formats and datasets behind these choices
 │   internal/label     marker sets and scores, hierarchical labels, references, imports, review         │
 │   internal/linalg    symmetric eigendecomposition (whole, or Lanczos), the same on every processor     │
 │   internal/register  transforms, Xenium Explorer's alignments, fits; automatic registration           │
-│   internal/nuclei    the nuclear signal registration reads: a bundle's DAPI, an H&E's haematoxylin    │
-│   internal/spatial   graphs and spatial statistics on large tables (later)                            │
+│   internal/nuclei    the nuclear signal registration reads: a bundle's DAPI, an H&E's hematoxylin     │
+│   internal/spatial   cell graphs, spatial statistics, niches, spatially variable genes (wave 6)       │
 │   internal/jobs      durable background jobs: spec, state, progress, cancellation, logs               │
 │ embed web/ ──────────────────────────────────────────────────────────────────────────────────────┐   │
 └──────────────────────────────────────────────────────────────────────────────────────────────────│───┘

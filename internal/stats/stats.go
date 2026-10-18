@@ -279,3 +279,22 @@ func KS2(a, b []float64) (d, p float64) {
 	en := math.Sqrt(n)
 	return d, KolmogorovQ((en + 0.12 + 0.11/en) * d)
 }
+
+// BenjaminiHochberg adjusts p-values by Benjamini and Hochberg's procedure (Benjamini Y, Hochberg Y.
+// Controlling the false discovery rate: a practical and powerful approach to multiple testing. J R
+// Stat Soc B 1995;57:289–300): p₍ᵢ₎·m/i, made monotone from the largest down and capped at 1 (ties
+// ordered by position), into adj.
+func BenjaminiHochberg(p, adj []float64) {
+	m := len(p)
+	order := make([]int, m)
+	for i := range order {
+		order[i] = i
+	}
+	sort.SliceStable(order, func(a, b int) bool { return p[order[a]] < p[order[b]] })
+	least := 1.0
+	for r := m - 1; r >= 0; r-- {
+		v := float64(p[order[r]]*float64(m)) / float64(r+1)
+		least = math.Min(least, v)
+		adj[order[r]] = least
+	}
+}

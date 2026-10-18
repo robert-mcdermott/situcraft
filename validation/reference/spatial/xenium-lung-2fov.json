@@ -1,0 +1,78 @@
+{
+ "situcraft": {
+  "cells": 11820,
+  "labels": 29,
+  "digest": "b279b6326158a8b91b205b1d6449a5df11ba183fc8c700db4e635b6dde2e8921"
+ },
+ "versions": {
+  "squidpy": "1.8.3",
+  "anndata": "0.13.4",
+  "numpy": "2.5.4",
+  "scipy": "1.18.1",
+  "astropy": "8.0.2",
+  "scikit-learn": "1.9.1",
+  "shapely": "2.2.0"
+ },
+ "enrichment": {
+  "delaunay": {
+   "edges": 35240,
+   "pairs": 841,
+   "countsDiffering": 0,
+   "zCompared": 841,
+   "zBeyond": 0,
+   "zCorrelation": 0.9997705174331677,
+   "zMaxDifference": 1.4534885058953506
+  },
+  "radius": {
+   "edges": 132195,
+   "pairs": 841,
+   "countsDiffering": 0,
+   "zCompared": 841,
+   "zBeyond": 0,
+   "zCorrelation": 0.9998320992871248,
+   "zMaxDifference": 7.112273018574655
+  }
+ },
+ "cooccurrence": {
+  "distances": 15,
+  "compared": 12615,
+  "maxDifference": 1.7763568394002505e-15,
+  "maxDifferenceFloat32": 0.00010529649681179087,
+  "pairsPlacedOtherwiseInFloat32": 3
+ },
+ "nearest": {
+  "pairs": 841,
+  "maxDifference": 0.0
+ },
+ "ripley": {
+  "labels": 29,
+  "maxRelativeNone": 0.0,
+  "maxRelativeExact": 2.457792858123753e-09,
+  "maxRelativeIsotropic": 0.039546413081033016,
+  "medianRelativeIsotropic": 0.0059199031660776
+ },
+ "niches": {
+  "niches": 6,
+  "cells": 11820,
+  "inertia": 1007.3476655288891,
+  "sklearnInertia": 1005.6831331091669,
+  "relativeInertia": 0.0016551261176829257,
+  "adjustedRand": 0.8884952715543855
+ },
+ "moran": {
+  "genes": 289,
+  "maxDifferenceI": 1.1102230246251565e-16,
+  "maxRelativeVarNorm": 1.0595968547022494e-12,
+  "maxDifferenceExactI": 4.2049697057677804e-13,
+  "maxRelativeExactVarRand": 1.3575807145116414e-12
+ },
+ "regions": {
+  "rows": 3,
+  "bands": 22,
+  "maxRelativeArea": 1.590972662501855e-07,
+  "maxRelativeBandArea": 5.506615735617615e-07,
+  "maxBandAreaDifference": 0.00796771710156463,
+  "countsDiffering": 0,
+  "bandCountsDiffering": 0
+ }
+}

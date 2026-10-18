@@ -1,10 +1,11 @@
 // The project tree: what the project holds, by kind (datasets, segmentations, comparisons,
-// clusterings, label sets, marker sets, filters, saved views), and what was handed to SituCraft on
+// clusterings, label sets, marker sets, graphs, spatial analyses, filters, saved views), and what was handed to SituCraft on
 // this computer but is not in the project yet.
 // Selecting an item focuses it (store.ui.focus): the inspector describes it, and the views that
 // use it open on it. Adapted from MaveScape 0.8.0 web/ui/sidebar.js.
 
 import { h, icon, clear, formatBytes, formatCount } from './dom.js';
+import { describeGraph } from '../lib/graphs.js';
 import { promotedSegmentation } from '../lib/segmentations.js';
 import { transformInUse } from '../lib/transforms.js';
 import { labelSetName, markerSetsOf } from '../lib/labels.js';
@@ -116,6 +117,25 @@ const SECTIONS = [
     empty: 'Labels with their positive and negative markers, each version kept.',
   },
   {
+    kind: 'graph', title: 'Graphs', icon: 'graph',
+    items: (project) => project.artifacts.filter((a) => a.kind === 'graph'),
+    label: (a, app) => {
+      const seg = app.store.project.artifacts.find((x) => x.kind === 'segmentation' && x.id === a.segmentation);
+      return `${seg?.name ?? 'Cells'} · ${describeGraph(a.parameters)}`;
+    },
+    itemIcon: (a) => (a.state === 'complete' ? 'graph' : 'warning'),
+    meta: (a) => (a.state === 'complete' ? `${formatCount(a.summary?.edges ?? 0)} edges` : a.state),
+    empty: 'Which cells are neighbors: each graph of a segmentation\'s cells kept with its definition and the cells it was built over.',
+  },
+  {
+    kind: 'spatial', title: 'Spatial analyses', icon: 'graph',
+    items: (project) => project.artifacts.filter((a) => a.kind === 'spatial'),
+    label: (a) => `${{ enrichment: 'Enrichment', cooccurrence: 'Co-occurrence', distances: 'Nearest distances', ripley: 'Ripley\'s K', regions: 'Regions compared', boundary: 'Across an edge', niches: 'Niches', moran: 'Moran\'s I' }[a.question] ?? a.question} · ${a.question === 'moran' ? 'the genes' : a.summary?.labels?.name ?? 'labels'}`,
+    itemIcon: (a) => (a.state === 'complete' ? 'graph' : 'warning'),
+    meta: (a) => (a.state !== 'complete' ? a.state : a.question === 'cooccurrence' ? `${a.summary?.distances ?? '?'} distances` : a.question === 'regions' ? `${a.summary?.significant ?? 0} differ` : a.question === 'boundary' ? `${a.summary?.significant ?? 0} labels` : a.question === 'niches' ? `${a.summary?.niches?.length ?? 0} niches` : a.question === 'moran' ? `${a.summary?.significant ?? 0} genes` : `${a.summary?.significant ?? 0} pairs`),
+    empty: 'Questions asked of a label set\'s cells (which types are neighbors, at what distances, in which regions), each answer kept with its inputs.',
+  },
+  {
     kind: 'filter', title: 'Filters', icon: 'filter',
     items: (project) => project.artifacts.filter((a) => a.kind === 'filter'),
     label: (a) => `${a.name} · v${a.version}`,
@@ -158,6 +178,7 @@ export function mountSidebar(app) {
             // A filter is edited and compared in the QC view; a saved view opens.
             if (section.kind === 'filter') app.setMode('qc');
             if (section.kind === 'clustering') app.setMode('celltypes');
+            if (section.kind === 'graph' || section.kind === 'spatial') app.setMode('spatial');
             // An image is shown on its dataset's tissue; one not aligned yet, in the Alignment view.
             if (section.kind === 'image') {
               if (transformInUse(app.store.project, item.id)) {

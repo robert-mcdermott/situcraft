@@ -18,7 +18,7 @@ import { colorVisionFriendly, setColorVisionFriendly } from './lib/colormaps.js'
 import { createProject, isEmptyProject, parseProject, rename, serializeProject } from './lib/project.js';
 import { parseViewLink } from './lib/views.js';
 
-const VERSION = '0.5.0';
+const VERSION = '0.6.0';
 
 const toOpen = { label: 'Open a bundle', icon: 'bundle', run: (app) => app.openPathDialog() };
 
@@ -35,14 +35,7 @@ const MODES = [
   { id: 'compare', label: 'Compare', icon: 'compare', load: () => import('./ui/mode-compare.js').then((m) => m.mountCompare) },
   'sep',
   { id: 'celltypes', label: 'Cell types', icon: 'tag', load: () => import('./ui/mode-celltypes.js').then((m) => m.mountCellTypes) },
-  {
-    id: 'spatial', label: 'Spatial', icon: 'graph',
-    load: async () => plannedMode({
-      title: 'Spatial analysis', icon: 'graph',
-      purpose: 'Questions about tissue organization: which cell types are neighbors more often than chance, which enter or stay outside a region, what recurring neighborhoods (niches) the tissue has, and which genes follow space. Every result shows the cells it comes from, and can be re-run on another segmentation to test it.',
-      steps: ['Promote a segmentation and a label set.', 'Choose a question and a neighborhood definition.', 'Run, and open the contributing cells.'],
-    }),
-  },
+  { id: 'spatial', label: 'Spatial', icon: 'graph', load: () => import('./ui/mode-spatial.js').then((m) => m.mountSpatial) },
   {
     id: 'cohort', label: 'Cohort', icon: 'samples',
     load: async () => plannedMode({
@@ -393,10 +386,10 @@ async function start() {
 
   // Shows a segmentation on its dataset's tissue: the Viewer draws it (wave 3, slice 8), keeping
   // where it was and what else it showed.
-  app.showOnTissue = (datasetId, segmentationId, fill = undefined) => {
+  app.showOnTissue = (datasetId, segmentationId, fill = undefined, { graph = undefined, focus = undefined } = {}) => {
     if (!store.project.datasets.some((d) => d.id === datasetId)) return;
     const record = store.project.artifacts.find((a) => a.kind === 'segmentation' && a.id === segmentationId && a.dataset === datasetId);
-    app.pendingSegmentation = { dataset: datasetId, segmentation: !record || record.source === 'instrument' ? null : record.id, fill };
+    app.pendingSegmentation = { dataset: datasetId, segmentation: !record || record.source === 'instrument' ? null : record.id, fill, graph, focus };
     app.focusItem({ kind: 'dataset', id: datasetId });
     if (store.ui.mode === 'viewer') store.notify(['view-pending']);
     else app.setMode('viewer');
@@ -404,6 +397,11 @@ async function start() {
   // A clustering's clusters on the tissue: its segmentation drawn, its cells filled by cluster.
   app.showClusters = (clustering) => app.showOnTissue(clustering.dataset, clustering.segmentation, `clusters:${clustering.id}`);
   app.showLabels = (labels, level = 0) => app.showOnTissue(labels.dataset, labels.segmentation, `labels:${labels.id}:${level}`);
+  // A graph's edges on the tissue, over its segmentation's cells.
+  app.showGraph = (graph) => app.showOnTissue(graph.dataset, graph.segmentation, undefined, { graph: graph.id });
+  // A spatial analysis's cells on the tissue (ui/mode-spatial.js): the cells filled by its labels,
+  // its graph drawn, and the cells and edges a number comes from shown.
+  app.showSpatial = ({ dataset, segmentation, fill, graph = undefined, focus }) => app.showOnTissue(dataset, segmentation, fill, { graph, focus });
 
   // A deep link (#project=…&view=…) opens its project from the library and shows the view.
   async function openLink(hash) {

@@ -5,8 +5,9 @@ name: Real data
 # checked on the smaller Lung bundle by ci.yml; this run catches what only the larger bundle has
 # (four channels, multimodal segmentation) without making every commit download it. The pathology
 # fixture too (2.8 GB: an XOA 1.0.1 bundle's files and its post-Xenium H&E and immunofluorescence
-# images), its images against tifffile. And the scale test: a simulated tissue of 55 million
-# transcripts made, refined and drawn, its cells typed, then deleted.
+# images), its images against tifffile. And the scale tests: a simulated tissue of 55 million
+# transcripts made, refined and drawn, its cells typed and their spatial analyses asked, then
+# deleted; and the spatial analyses of a million generated cells.
 on:
   schedule:
     - cron: '17 6 * * 1'
@@ -46,7 +47,7 @@ jobs:
           # Outside the cached folder: the exports are rewritten each run.
           SITUCRAFT_EXPORT_DIR: ${{ runner.temp }}/exports
           JP2K_ZSTACK_ALL: '1'
-        run: go test -v -timeout 2h -run 'Real|Readers|Bundle|Estimates|ReferenceSegmentation|ReferenceClustering|ReferenceLabels|StarterSets|ImportedLabels|ReviewQueue|ReferenceMapping|LabelsAcrossSegmentations|LargePanels|ApproximateNeighbors|PostXeniumImages' . ./validation/ ./internal/jp2k/ ./internal/xenium/ ./internal/cache/ ./internal/view/ ./internal/segment/... ./internal/compare/ ./internal/export/
+        run: go test -v -timeout 2h -run 'Real|Readers|Bundle|Estimates|ReferenceSegmentation|ReferenceClustering|ReferenceLabels|StarterSets|ImportedLabels|ReviewQueue|ReferenceMapping|LabelsAcrossSegmentations|LargePanels|ApproximateNeighbors|PostXeniumImages|ReferenceGraphs|ReferenceSpatial|DomainsAsRegions|NichesFindDomains|MoranFindsDomainGenes|AnalysesAcrossSegmentations' . ./validation/ ./internal/jp2k/ ./internal/xenium/ ./internal/cache/ ./internal/view/ ./internal/segment/... ./internal/compare/ ./internal/export/
       - name: The exports read by spatialdata, anndata, pandas, scipy, geopandas and numpy, as the committed check recorded
         env:
           SITUCRAFT_EXPORT_DIR: ${{ runner.temp }}/exports
@@ -64,9 +65,13 @@ jobs:
           # A runner has no GPU: Chrome's software WebGL, and no sandbox on the throwaway machine.
           SITUCRAFT_CHROME_ARGS: --use-angle=swiftshader --enable-unsafe-swiftshader --no-sandbox
         run: node validation/run.mjs viewer --require-data
+      - name: The website's pages against axe-core (WCAG 2.1 A and AA) in both themes, and at a phone's width (docs/site/audit.mjs)
+        env:
+          SITUCRAFT_CHROME_ARGS: --use-angle=swiftshader --enable-unsafe-swiftshader --no-sandbox
+        run: node validation/fetch.mjs axe-core && node docs/site/audit.mjs
 
   scale:
-    name: A tissue of 55 million transcripts
+    name: A tissue of 55 million transcripts; a million cells analyzed
     runs-on: ubuntu-latest
     timeout-minutes: 240
     steps:
@@ -84,7 +89,9 @@ jobs:
           if ! { sudo mkdir -p "$dir" && sudo chown "$USER" "$dir"; }; then dir="$RUNNER_TEMP/situcraft-scale"; mkdir -p "$dir"; fi
           df -h "$dir"
           echo "SITUCRAFT_SCALE=$dir" >> "$GITHUB_ENV"
-      - name: Made, refined in patches, opened and drawn, its cells typed and their map drawn, each step's time and peak memory within its budget, then deleted (validation/scale_test.go)
+      - name: Made, refined in patches, opened and drawn, its cells typed, their spatial analyses asked and their map drawn, each step's time and peak memory within its budget, then deleted (validation/scale_test.go)
         env:
           SITUCRAFT_CHROME_ARGS: --use-angle=swiftshader --enable-unsafe-swiftshader --no-sandbox
         run: go test -v -timeout 4h -run 'TestScale$' ./validation/
+      - name: The spatial analyses of a million generated cells, each in a process of its own within its time and memory budgets (validation/spatial_scale_test.go)
+        run: go test -v -timeout 1h -run 'TestSpatialScale$' ./validation/

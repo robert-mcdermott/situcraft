@@ -38,6 +38,7 @@ import (
 	"time"
 
 	"situcraft/internal/compare"
+	"situcraft/internal/label"
 	"situcraft/internal/segment/expand"
 	"situcraft/internal/segment/imports"
 	"situcraft/internal/simulate"
@@ -273,12 +274,19 @@ func buildSituCraft(t *testing.T) string {
 }
 
 // simulatedStandard is the standard simulated tissue, made once in the data folder (the same, byte
-// for byte, wherever it is made).
+// for byte, wherever it is made); made again when an earlier simulator's (its truth without each
+// cell's domain) is found there.
 func simulatedStandard(t *testing.T) string {
 	t.Helper()
 	dir := filepath.Join(dataRoot(), "simulated-standard")
 	if _, err := os.Stat(filepath.Join(dir, "experiment.xenium")); err == nil {
-		return dir
+		if tab, err := label.ReadTable(filepath.Join(dir, "truth", "cells.parquet")); err == nil && tab.Column("domain") != nil {
+			return dir
+		}
+		t.Logf("remaking %s: its truth has no domains", dir)
+		if err := os.RemoveAll(dir); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if _, err := simulate.Run(context.Background(), simulate.Presets["standard"], dir, "validation", nil); err != nil {
 		t.Fatal(err)

@@ -87,3 +87,14 @@ test('views in a project, and their links', () => {
   assert.deepEqual(parseViewLink(new URL(link).hash), { project: 'p-abc', view: 'v-1' });
   assert.equal(parseViewLink('#project=p-abc'), null);
 });
+
+test('a view keeps the graph drawn, and only when there is one', () => {
+  const plain = captureView({ name: 'v', dataset: 'd1', state: shown(), desc });
+  assert.equal('graph' in plain.cells, false);
+  const state = shown();
+  state.layers.cells.graph = 'gra-0a5299a64a7cf1b80bf7';
+  const view = captureView({ name: 'v', dataset: 'd1', state, desc });
+  assert.equal(view.cells.graph, 'gra-0a5299a64a7cf1b80bf7');
+  assert.equal(viewLayers(view, desc, { ...defaults, cells: { ...defaults.cells, graph: null } }).layers.cells.graph, 'gra-0a5299a64a7cf1b80bf7');
+  assert.equal(viewLayers(plain, desc, { ...defaults, cells: { ...defaults.cells, graph: null } }).layers.cells.graph, null);
+});

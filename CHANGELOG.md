@@ -1,5 +1,232 @@
 # Changelog
 
+## 0.6.0 (2026-10-18)
+
+Wave 6 of the [roadmap](situcraft-spec/roadmap.md): niches and spatial statistics. How the tissue is
+organized, asked of a segmentation's labeled cells: which cell types are neighbors, how far apart
+they lie, which enter a region, what niches the tissue has and which genes follow space, each result
+with the cells it comes from.
+
+### Added
+
+- **Cell graphs (wave 6, slice 1).** The **Spatial** view builds a graph of which of a
+  segmentation's cells are neighbors, the first step of every spatial question.
+  - **Four definitions:** the Delaunay triangulation of the cells' centers, its edges up to a
+    longest length (50 µm by default); each cell's k nearest (6), an edge when either cell is among
+    the other's k; the cells within a radius (20 µm); and contact, cells whose outlines touch in the
+    segmentation (or lie within a gap), with the boundary they share.
+  - **The cells:** all of a segmentation's, a QC filter's or those in regions; cells a review
+    excluded from analyses are always left out, and the graph records how many.
+  - **Exact:** the triangulation by exact geometric predicates, the same for any points, lattices
+    whose cells lie four on a circle included; every graph the same on any number of threads and on
+    any processor.
+  - **An artifact** of kind `graph`, named by what it is made from (asking again answers it): its
+    cells and edges with their lengths and shared boundaries, and what it holds: the neighbors a
+    cell, cells without one, its pieces, its edges' lengths, with histograms.
+  - **On the tissue:** the Viewer's **Graph** draws the edges over the cells, close up; a cell's
+    inspector lists its neighbors with their distances and labels. Saved views keep the graph. The
+    project tree lists **Graphs**.
+  - **Remote control:** `build_graph`; `show_tissue` takes `graph`.
+  - **Validated:** lattices worked by hand (each kind's degrees and lengths); the triangulation's
+    empty circumcircles and Euler's count of triangles on random, cocircular, collinear and
+    repeated points; radius and k-nearest graphs against an exhaustive search; contact on label
+    rasters drawn by hand; on both development bundles and the standard simulated tissue, the same
+    edges as SciPy 1.18 (Delaunay by Qhull, a k-d tree) and Squidpy 1.8 (`spatial_neighbors`),
+    edge for edge, lengths identical; in the page, a radius graph's edges those of an exhaustive
+    search, a region's graph over its cells, the edges drawn where they lie.
+- **Which cell types are neighbors (wave 6, slice 2).** The Spatial view's **Questions** ask a
+  label set's cells (any set, any level) how they are arranged; each answer is an artifact of kind
+  `spatial`, named by what it is asked of.
+  - **Neighborhood enrichment** over a graph: for each pair of labels, the neighbors between their
+    cells against the number expected if the labels were dealt to the same cells at random, the
+    expectation exact; z-scores and two-sided p-values from seeded permutations (1,000 by default),
+    adjusted by Benjamini and Hochberg's procedure over the pairs that can be tested. Optionally
+    dealt within regions, so that each keeps its composition; in a contact graph, counted by the
+    boundary shared, with the contact fractions. Shown as a heat map of the ratio (red more, blue
+    fewer, the significant marked), tables of the pairs most and least often neighbors, and each
+    label's neighbors by label.
+  - **Co-occurrence across distances:** from one label's cells, how much likelier each label's are
+    within a distance (or since the distance before) than any cell's, as curves.
+  - **Every number's cells** on the tissue: a pair's cells with a neighbor of the other label
+    highlighted, the edges between them drawn in color over the graph; a label's cells near
+    another's.
+  - **Remote control:** `spatial_analysis`; `show_tissue` takes `cells_of`. The project tree lists
+    **Spatial analyses**.
+  - **Validated:** a checkerboard's enrichment, the permutations' mean against the exact
+    expectation (with and without regions), uniform p-values on randomly labeled cells, regions
+    that fix every label; co-occurrence worked by hand and against an exhaustive count; on both
+    development bundles and the standard simulated tissue, labeled by their clusters, every count
+    Squidpy 1.8.3's, every z-score within the two tools' permutation error (correlation above
+    0.999), and every co-occurrence ratio Squidpy's routine's in float64 (to 10⁻¹⁴; its float32
+    places 3 pairs of Lung and 1 of Breast on the other side of a distance); in the page, the
+    counts, expectation, a pair's cells and a co-occurrence ratio against the suite's own.
+- **How far apart, and at what scale (wave 6, slice 3).** Two more questions in the Spatial view.
+  - **Nearest distances:** each label's cells' distance to the nearest cell of each label, up to a
+    reach (100 µm); each pair's median against the labels dealt again to the same cells (z,
+    two-sided p, Benjamini–Hochberg), and the distribution of the distances with chance's
+    envelope. A heat map, red where nearer than chance, and tables of the nearest and farthest.
+  - **Ripley's K and L,** of each label and across each pair, in a window (the tissue, its cells'
+    footprint with narrow gaps closed and holes kept, or a drawn region), with Ripley's isotropic
+    edge correction computed exactly for any polygon; shown as L(r) − r against the envelope of the
+    labels dealt at random, with a global test over the radii; tables of the labels that gather and
+    those that keep apart.
+  - **Effect sizes first:** among the significant pairs, tables and summaries rank by the size of
+    the effect (a ratio, or µm), not by z.
+  - **Remote control:** `spatial_analysis` asks both (`distances`, `ripley`, with `reach`,
+    `window`, `closing`, `correction`); `show_tissue`'s `cells_of` shows the cells within a
+    distance of each other.
+  - **Validated:** a window's area, inside, edge distance and circle shares by hand and against
+    Ripley's closed form for rectangles (2,000 cases, to 10⁻⁹); K of complete spatial randomness
+    within 0.6% of πr² in a square and an L-shaped window (without a correction, 8% to 13% short at
+    100 µm); a Thomas process's K within 6%; nearest distances against an exhaustive search; labels
+    kept apart, drawn together and dealt at random; on both development bundles and the standard
+    simulated tissue, nearest distances SciPy's k-d tree's exactly, K without a correction
+    astropy's exactly, and the isotropic correction the same estimator computed independently to
+    10⁻⁸ (astropy's variant, weighing each pair by one circle, a median of 0.6% apart); in the page,
+    a pair's median nearest distance, K in a region and the cells within a radius against the
+    suite's own.
+- **Regions measured (wave 6, slice 4).** Two questions asked of drawn regions.
+  - **Regions compared:** each region's cells by label per mm² of the tissue within it (its glass
+    and holes not counted) and per labeled cell, with Garwood's and Wilson's intervals; the tissue
+    in none of the regions a row of its own; any two rows compared as ratios with exact conditional
+    and Koopman's intervals, shown as a forest plot.
+  - **Across a region's edge:** each label's density in bands of distance from the edge (every
+    10 µm, 100 µm inside to 100 µm outside), each band's own tissue its denominator; the core, the
+    margin and around compared, saying which labels fill the region, stay out or gather at its
+    margin; a label's profile across the edge.
+  - **Areas exact:** the tissue within each region or band found by squares split until uniform,
+    those crossed by an edge at the finest size split along it, to about 10⁻⁶.
+  - **Remote control:** `spatial_analysis` asks both (`regions`, `boundary`, with `region` and
+    `margin`); `show_tissue`'s `cells_of` shows a label's cells in a region or a zone.
+  - **Validated:** band areas of a square, a 64-sided polygon and a square in a pixel tissue
+    against their exact formulas (to 10⁻⁵, most to 10⁻⁷); uniformly placed cells' densities within
+    their intervals as often as they claim; labels placed by rule read as filling, staying out and
+    gathering at the margin; the intervals against SciPy's and statsmodels' (to 10⁻⁹); on both
+    development bundles and the standard simulated tissue, every region's and band's area Shapely's
+    (to 2 × 10⁻⁷ and 4 × 10⁻⁶) and every count its; the simulated tissue's own domains, as regions,
+    each found denser in its dominant type; in the page, the counts in a region and in each band and
+    the cells at a margin against the suite's own.
+- **Cellular neighborhoods (wave 6, slice 5).** A question in the Spatial view, and a label set.
+  - **Niches:** each cell's neighborhood (its 10 nearest labeled cells, or those within a radius)
+    by its labels' shares, the cells grouped by k-means with k-means++ seeding, the best of 10
+    starts, into niches numbered by size; each niche's make-up against the tissue's (a heat map),
+    its defining labels and its leading genes; the niches found again from 4 other seeds and their
+    agreement stated (the adjusted Rand index).
+  - **Niches as labels:** the Viewer fills cells by niche, and every other question can be asked
+    of niches.
+  - **Remote control:** `spatial_analysis` asks `niches` (`neighbors` or `radius`, `niches`,
+    `starts`, `seeds`); `show_tissue` takes `fill: niches` and `cells_of` with a niche.
+  - **The simulator's truth** gives each cell its domain (`truth/cells.parquet`'s `domain`).
+  - **Validated:** k-means against every partition of small sets (the optimum each time),
+    separated clusters found exactly, the same on any number of workers; each window against an
+    exhaustive search; stripes of three compositions found (adjusted Rand index 0.98); on both
+    development bundles and the simulated tissue, k-means within 0.2% of scikit-learn's inertia and
+    its niches alike (0.89 to 0.98); the simulated tissue's kinds of domain found from its true
+    cells (0.92), and too many niches flagged by the seeds' disagreement; in the page, each niche's
+    make-up and every cell's niche against the suite's own search, and the niches on the tissue.
+- **Spatially variable genes (wave 6, slice 6).** A question of genes, not labels.
+  - **Moran's I** of each gene over a graph (row-standardized or binary weights), the genes
+    log-normalized as the clustering normalizes them; its expectation, its variances under
+    normality and randomization, randomization's z and two-sided p, and 199 permutations, adjusted
+    over the genes; the genes in a pattern ranked by I, and those dispersed.
+  - **Local Moran's I** of the leading genes: each cell high among high, low among low, or unlike its
+    neighbors, by conditional permutation; a gene's cells of a class shown on the tissue.
+  - **Remote control:** `spatial_analysis` asks `moran` (`weights`, `permutations`, `local`,
+    `local_permutations`); `show_tissue`'s `cells_of` a gene's local class.
+  - **Validated:** a checkerboard's I −1 and two halves' by their formula, exactly; the
+    permutations' variance within 2% of the variance under randomization (9,999 permutations); local
+    I summing to S0 × I and a planted block found high among high; on both development bundles and
+    the simulated tissue, every gene's I Squidpy 1.8.3's (to 10⁻¹⁵) and both variances an
+    independent computation's (to 10⁻¹²); the simulated tissue's 30 marker genes all in a pattern,
+    every one's I above the 90 unmarked genes'; in the page, each leading gene's local I summing to
+    S0 × I and each class of its sign, and a gene's cells high among high shown.
+- **Analyses across segmentations (wave 6, slice 7).** Any saved analysis made again on another
+  segmentation of its dataset, and the two read together.
+  - **Made again in one step:** the two segmentations compared (or their comparison reused); the
+    labels made again on the other's cells from the same clustering parameters and marker set (or
+    reference), as `repeat_on_segmentation` makes them; a graph of the same definition over its
+    cells; the same parameters, window, regions and strata. The answer is recorded as made from
+    the first through the comparison. Curated, consensus and imported label sets, and niches, are
+    of one segmentation's cells: asked of them, it says what to do instead.
+  - **Read together:** every number under both (enrichment and co-occurrence ratios, median
+    nearest distances, L(r) − r, densities by region, the core over around, Moran's I), with its
+    change, the largest first, and the rank correlation of the two; for a change, the cells behind
+    it (those of its labels whose counterparts, through the comparison, carry another label or
+    none) under each segmentation, shown on the tissue.
+  - **Remote control:** `remake_analysis` (`dataset`, `analysis`, `segmentation`) answers the
+    numbers under both, the largest changes and their rank correlation.
+  - **Validated:** on the standard simulated tissue, its truth, the instrument's segmentation and
+    the refinement each labeled from markers and analyzed alike: under both segmentations the
+    enrichment of every label pair in the truth's order (rank correlation 1.00; the largest change
+    ÷1.16 under the instrument's, ×1.02 under the refinement), every pair the truth finds enriched
+    or avoided found so, and the niches finding the kinds of domain as well (adjusted Rand index
+    0.90 and 0.90; the truth's 0.92); Moran's I raised under the instrument's expansion, whose
+    cells take transcripts from their neighbors (the markers' mean 0.35; the truth's 0.19), and
+    within 0.03 of the truth's for every gene under the refinement; in the page, the Lung
+    enrichment made again on its 5 µm expansion, each number and the rank correlation against the
+    suite's own from the two analyses' files, and the cells behind the largest change against its
+    own from the comparison's pairs.
+- **Spatial analyses at a million cells (wave 6, slice 8).** On a generated tissue of a million
+  cells, on four cores, with the page's defaults: each graph in 4 s or less, the enrichment in
+  4 s, niches in 12 s, Moran's I of 120 genes in 88 s at a peak of 0.94 GB; co-occurrence in 5 s,
+  nearest distances in 37 s (3.4 GB) and Ripley's K in 36 s (4.0 GB).
+  - **Moran's I** holds each gene's nonzero values instead of every gene over every cell (4.7 GB
+    for 300 genes at a million cells before), with the same results to the bit. Its permutations
+    deal the graph once each and take each gene's sum from its nonzero values, twice as fast;
+    local Moran's I finds its draws' median by selection.
+  - **Nearest distances and Ripley's K** keep their pairs without spare copies (nearest distances
+    5.9 GB at a million cells before), with the same results.
+  - **The simulator** makes a tissue's true cells alone, without images or transcripts, for
+    measuring analyses at sizes no bundle need reach.
+  - **Validated weekly:** the million cells' analyses, each in a process of its own within its
+    time and memory budget; the large simulated tissue's typed cells analyzed through SituCraft
+    (graphs, contact included, enrichment, niches and Moran's I) within theirs.
+- **The website (wave 6, slice 9),** built from `docs/site/` for GitHub Pages: what SituCraft is
+  and for whom, with the screenshots in the reader's theme and each release's highlights; how to
+  install it, and the memory it needs; the methods, each with its citation and what it was
+  validated against, with the numbers; and the user guide, a page a subject, from the examples to
+  spatial analysis, remote control, the record and troubleshooting.
+  - **Getting started moves into the guide;** `docs/GETTING-STARTED.md` points to its pages.
+    Formats and remote control stay in the repository as references.
+  - **Checked:** every local link, anchor and screenshot, and every link into the repository's
+    files, on each commit; every page against axe-core's WCAG 2.1 A and AA rules in both themes, at
+    a desktop's width and a phone's, with nothing wider than a phone's screen, weekly
+    (`docs/site/audit.mjs`).
+- **Worked examples of spatial analysis (wave 6, slice 10).** Each asks a question, says what to
+  expect, and does its steps' jobs from its card, showing each answer in the Spatial view and its
+  cells on the tissue.
+  - **Which cell types are neighbors** (the Breast data): the breast starter set's classes and
+    lineages over the Delaunay graph. Each class is its own neighbor more often than chance, and
+    the epithelial cells keep apart from the stromal (0.24 times) and the immune (0.32 times): the
+    tumor grows in nests the immune cells do not enter. T cells lie next to myeloid cells 4.4 times
+    as often as chance.
+  - **Immune cells and a tumor's edge** (the Breast data): a region drawn around the tumor, and
+    each class's density in bands across its edge. The immune cells are 0.36 times as dense in its
+    core as around it (0.28 to 0.45), thinner the deeper into the tumor: an immune-excluded tumor.
+  - **Niches against the domains** (the simulated tissue): the true cells' domains imported as
+    labels; four niches of the true cells, each led by one type and the same from every seed, with
+    96.5% of the cells in the niche of their domain's kind. The defaults' six niches agree across
+    seeds only 0.66 to 0.93: more niches than kinds of place.
+  - **Genes in a pattern** (the Lung data): 162 of the panel's 289 genes; the strongest, GJA5
+    (Moran's I 0.436), in 1.2% of the cells, its cells high among high an artery's endothelium.
+  - **An answer under another segmentation** (the Lung data): the classes' enrichment made again
+    on a 3 µm nucleus expansion. The 10 numbers keep their order (rank correlation 0.976); the
+    largest change is among few immune cells, with the cells behind it.
+  - **Remote control:** `tour` answers which analysis a Spatial step shows (and the one made again
+    on another segmentation), and the cells a step shows on the tissue.
+  - **Validated:** in the page, each example run step by step and every number its card states
+    checked against the answers' files and the graphs' edges; the project saved by 0.6.0
+    (`validation/projects/0.6.0-lung.situcraft.json`) opens, and every artifact it records is made
+    again as it was, its graphs and analyses among them (but those of a drawn region, which each
+    run draws anew).
+
+### Fixed
+
+- **A chosen row was not shown as chosen** in most of the page's tables: the Spatial view's graphs,
+  analyses, regions, readings, niches, genes and changes; the Cell types view's clusterings and
+  markers; the label sets; the review queue. The row is highlighted, as in the Segmentation view's
+  tables.
+
 ## 0.5.0 (2026-10-17)
 
 Wave 5 of the [roadmap](situcraft-spec/roadmap.md): the pathology bridge. Post-Xenium H&E and

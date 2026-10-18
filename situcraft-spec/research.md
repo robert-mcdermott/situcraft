@@ -2600,6 +2600,367 @@ H&E placed by its automatic version, labels imported with a confidence each):
 - **Moderated statistics:** where used, from MaveScape's `limma.js` (Smyth 2004, *Stat Appl Genet
   Mol Biol* 3:3).
 
+### 6.1 Cell graphs (verified, wave 6, slice 1)
+
+A graph joins cells that are neighbors; every spatial statistic of wave 6 is computed on one. Four
+definitions, each with one parameter, over the cells chosen (a cell left out is no one's
+neighbor), distances between centroids in µm:
+
+| Graph | Edge between cells i and j | Parameter (default) | What it does on tissue |
+| --- | --- | --- | --- |
+| Delaunay | i and j share a triangle of the Delaunay triangulation of the centroids | longest edge (50 µm) | Adapts to density; joins across gaps unless capped |
+| k nearest | j among i's k nearest, or i among j's | k (6) | Every cell has ≥ k neighbors; isolated cells reach far |
+| Radius | centroids at most r apart | r (20 µm) | The same distance everywhere; degree follows density |
+| Contact | pixels 4-adjacent in the label raster (after a gap's growth) | gap (0 µm) | Physical contact, as the segmentation drew it |
+
+- **The triangulation** (Lee & Schachter 1980; Bowyer 1981; Watson 1981): points inserted one at a
+  time along a Hilbert curve over their bounding box (2¹⁶ cells a side), each located by a walk
+  from the last (which terminates on a Delaunay triangulation: Edelsbrunner 1990); the triangles
+  whose circumcircles strictly contain it removed and the cavity filled. The hull is closed by
+  ghost triangles sharing a vertex at infinity, whose "circumcircle" is the open half-plane beyond
+  the hull edge with the open edge itself, so points outside the hull insert as others do.
+  Orientation and in-circle tests are exact: computed in floating point with every product rounded
+  on its own, trusted when beyond Shewchuk's error bounds (orientation (3 + 16ε)ε, in-circle
+  (10 + 96ε)ε of the permanent, ε = 2⁻⁵³; Shewchuk 1997, *Discrete Comput Geom* 18:305–363,
+  doi:10.1007/PL00009321), and otherwise in exact rationals. Where four or more points lie on one
+  circle (lattices), the triangulation is not unique; a triangle is replaced only when the new point
+  is strictly inside, so the result is fixed by the points' order on the curve. A million random
+  points triangulate in 1.7 s (Apple M4, one core).
+- **k nearest** from `internal/graph`'s exact grid search (ties by index), joined when either cell is
+  among the other's k (so a graph, not a directed relation; Squidpy's `spatial_neighbors` with
+  `n_neighs` is the same union). **Radius** by a grid of squares of side r, each pair compared
+  exactly; d ≤ r.
+- **Contact:** a pixel edge between two cells' pixels, side by side or one above the other, joins
+  them; their shared boundary is the count of such edges times the pixel's side (a staircase along
+  a slanted boundary, up to √2 and on average 4/π the line's length, the same for every cell). A
+  gap g grows each cell by g/2 into pixels of no cell (each to the nearest cell, the expansion's
+  exact distance transform, §3.1) before counting; every cell of the segmentation is in the raster,
+  so a cell left out of the graph still separates the cells on either side.
+- **Against independent implementations** (`validation/reference/graphs/`): on the instrument's
+  segmentation of both 2-FOV bundles and the standard simulated tissue, SituCraft's Delaunay (to
+  50 µm), 6-nearest and 20 µm graphs have exactly SciPy 1.18.1's edges (Qhull's triangulation;
+  `cKDTree.query` and `query_pairs`), lengths identical in float32, and Squidpy 1.8.3's
+  `spatial_neighbors` (generic coordinates; `delaunay`, `n_neighs`, `radius`) gives SciPy's:
+
+| Data set | Cells | Delaunay ≤ 50 µm (all) | 6 nearest | Within 20 µm | Contact (gap 0) |
+| --- | --- | --- | --- | --- | --- |
+| Lung 2-FOV | 11,898 | 35,472 (35,665) | 40,524 | 133,975 | 32,504 |
+| Breast 2-FOV | 7,275 | 21,678 (21,797) | 24,644 | 38,415 | 13,560 |
+| Simulated (standard) | 2,925 | 8,706 (8,758) | 9,558 | 20,064 | — |
+
+- **Defaults.** Lung's median Delaunay edge is 7.9 µm (95th percentile 14.2), Breast's 11.4. A
+  radius of 20 µm gives 22.5 neighbors a cell in Lung and 10.6 in Breast (30 µm: 49.6 in Lung), so
+  radius graphs mean different things in different tissues; the view states each graph's degrees.
+  The 50 µm cap removes 193 of Lung's 35,665 triangulation edges (0.5%), those across the hull and
+  holes. Contact on Breast's multimodal segmentation leaves 208 cells (2.9%) touching no other.
+
+### 6.2 Neighborhood enrichment and co-occurrence (verified, wave 6, slice 2)
+
+**Neighborhood enrichment** (Schapiro et al. 2017; Palla et al. 2022). In a graph of N labeled cells
+(unlabeled cells keep their places and count for no pair), with n_A cells of label A:
+
+- **Found:** the directed count C[A][B] = Σ over cells c of A of the neighbors of c labeled B (an
+  edge within A counts twice), as Squidpy's `nhood_enrichment` counts; or each neighbor weighted by
+  the boundary the two cells share (a contact graph). Each label's row, divided by its sum, is the
+  share of its neighbors (or boundary: the contact fractions) of each label.
+- **Expected,** exactly, under dealing the labels again to the same labeled cells (within each
+  stratum s, a region, when strata are given): each edge between strata s and t adds its weight times
+  P(A at one end, B at the other) + P(B, A), with P = n_As·n_Bt / (N_s·N_t) for s ≠ t and
+  n_As·(n_Bs − [A = B]) / (N_s·(N_s − 1)) within a stratum (dealing without replacement).
+- **Spread:** n permutations (1,000), each a Fisher–Yates deal within each stratum from its own
+  seeded stream; z = (C − mean) / sd (sd with n − 1); the two-sided p = (1 + #{|C* − E| ≥ |C − E|})
+  / (1 + n), never below 1 / (n + 1); Benjamini–Hochberg (1995) over the unordered pairs both of
+  whose labels some cell has.
+- **What it says:** the ratio C / E is the effect's size. z and p rest on the null that the labels
+  are exchangeable among these cells' places: they say how unusual an arrangement is in this section,
+  not that it holds in other sections, and they grow with the section's size. Dealing within regions
+  removes what the regions' composition alone explains. Cells are not replicates: comparing
+  conditions is wave 7's, with samples as the unit.
+
+**Co-occurrence** (Palla et al. 2022): at distance d, over the pairs of labeled cells within d
+(Squidpy 1.8's definition; or since the previous distance, as an option), counted both ways,
+ratio[A][B] = P(B | A) / P(B) = C[A][B]·T / (r_A·r_B), T the total and r the rows. Distances are
+compared in float64 (sqrt of the squared differences of float32 coordinates); Squidpy 1.8.3's
+`co_occurrence` computes in float32.
+
+**Against Squidpy 1.8.3** (`validation/reference/spatial/`), on the instrument's segmentation,
+every analyzed cell labeled by SituCraft's clusters (the defaults), its Delaunay (≤ 50 µm) and 20 µm
+graphs given to Squidpy as its adjacency, 1,000 permutations each:
+
+| Data set | Cells | Labels | Counts differing | z within error (correlation, Delaunay / 20 µm) | Co-occurrence, float64 (float32: pairs placed otherwise) |
+| --- | --- | --- | --- | --- | --- |
+| Lung 2-FOV | 11,820 | 29 | 0 of 841 | all (0.99977 / 0.99983) | 1.8 × 10⁻¹⁵ (3) |
+| Breast 2-FOV | 7,163 | 15 | 0 of 225 | all (0.99963 / 0.99937) | 7.1 × 10⁻¹⁵ (1) |
+| Simulated (standard) | 2,925 | 5 | 0 of 25 | all (0.99950 / 0.99958) | 4.4 × 10⁻¹⁶ (0) |
+
+Two independent estimates of z from n permutations differ by about sqrt(2·(1 + z²/2) / n); "within
+error" is within five of these. On Lung's classes (the panel's starter set, its first level; 5,555
+labeled cells): stromal–stromal 3.99× (z 18.3), endothelial–stromal 2.71× (z 14.3),
+endothelial–endothelial 3.13× (z 12.3); epithelial–endothelial 0.78× (z −7.6), epithelial–stromal
+0.79× (z −7.5), epithelial–immune 0.89× (z −3.2).
+
+### 6.3 Nearest distances and Ripley's K and L (verified, wave 6, slice 3)
+
+**The null.** Cells are not points of a Poisson process: they cannot overlap, and tissue is neither
+uniform nor whole (airways, vessels, tears). Complete spatial randomness, K = πr² (L = r), is shown
+as a reference line only; every comparison is with random labeling, the labels dealt again to the
+same cells, which keeps the cells' places, the tissue's shape and every edge effect.
+
+**Windows.** A window is a set of boundary segments and the area they enclose by the even–odd rule:
+a drawn region's polygons (holes and several parts allowed), or the tissue, its cells' pixels from the
+segmentation's label raster on a grid of about 1 µm (the raster's pixels grouped), closed by a radius
+ρ (10 µm): dilated to the pixels within ρ of a cell's pixel, then eroded to those farther than ρ from
+every pixel the dilation left out, both by the exact Euclidean distance transform (§3.1). Gaps
+narrower than 2ρ are tissue; wider ones, and the space beyond the section, are not. Lung 2-FOV:
+687,212 µm².
+
+**Ripley's K** (Ripley 1977; L = √(K/π), Besag 1977) of labels A and B in window W:
+K_AB(r) = |W| / (n_A (n_B − [A = B])) Σ_{i ∈ A} Σ_{j ∈ B, j ≠ i} w_ij 1[d_ij ≤ r], with Ripley's
+isotropic weight w_ij = 1 / (the share of the circle about i of radius d_ij inside W), computed
+exactly: the circle cut where it crosses the boundary's segments, each arc in or out by its
+midpoint (1 when d_ij is within i's distance to the edge). For a rectangle and circles reaching two
+of its sides this is Ripley's closed form, 1 − (acos(min(h, r)/r) + acos(min(v, r)/r))/π, or
+3/4 − (acos(h/r) + acos(v/r))/(2π) past the corner; SituCraft's shares agree with it to 10⁻⁹. Random
+labeling's envelope: the pointwise 2.5% and 97.5% of 199 permutations' L; the global test: the
+maximum over r of |L − mean L*|, its p (1 + k)/(1 + n) (Diggle 2003; Baddeley et al. 2014).
+
+| Check | Result |
+| --- | --- |
+| CSR, 30 × 1,000 points, isotropic correction, r = 25–100 µm | K / πr² 0.997–1.006 (square), 1.000–1.006 (L-shaped window) |
+| CSR, no correction, r = 100 µm | K / πr² 0.918 (square), 0.870 (L) |
+| Thomas process (κ = 20 mm⁻², μ = 50, σ = 20 µm), 20 patterns | K within 6% of πr² + (1 − exp(−r²/4σ²))/κ at r = 20–80 µm |
+| astropy 8.0.2 `RipleysKEstimator`, each label in the middle rectangle | "none" exactly (0 and 3 × 10⁻¹⁶ relative); "ripley" a median 0.45–0.61% apart (max 1.5%, 4.0%, 10.3% on the simulated, Lung and Breast sets) |
+| The same isotropic estimator by Ripley's formula (NumPy, every ordered pair) | to 7.9 × 10⁻¹⁰, 2.5 × 10⁻⁹, 1.5 × 10⁻⁸ relative (SituCraft keeps the weights in float32) |
+
+astropy's "ripley" mode weighs a pair by the circle about its first point only and counts it both
+ways (and counts d < r), so it is a different estimator, apart mostly for labels of few cells.
+
+**Nearest distances.** Each cell's distance to the nearest cell of each label (another of its own,
+for its label), up to a reach (100 µm; farther counts as the reach), kept in float32; each ordered
+pair's median and mean, and the share within each step's distance (cross-type G, Diggle 2003);
+against random labeling, z of the median and its two-sided p, Benjamini–Hochberg over the ordered
+pairs, and the distribution's pointwise 2.5–97.5% envelope. Every pair's median and mean are SciPy's
+`cKDTree` query's exactly on the three reference sets. Each cell's neighbors within the reach are
+found and sorted once (Lung: about 370 a cell); each permutation takes, for each cell, the first
+neighbor of each label.
+
+**Lung's classes** (5,555 labeled cells): stromal cells' nearest stromal cell at a median 15.3 µm
+(chance 20.0), endothelial cells' nearest endothelial 17.8 µm (20.9); epithelial cells' nearest
+stromal 24.4 µm (19.9); in the tissue window, stromal cells' L 11.4 µm above chance's mean at 60 µm,
+stromal cells' L around epithelial cells 3.6 µm below it at 100 µm.
+
+### 6.4 Regions measured: composition and the edge (verified, wave 6, slice 4)
+
+**Denominators.** A region's cells are counted two ways: per mm² of the tissue within it (a
+density) and per labeled cell in it (a share). The tissue is the window of §6.3 (the cells'
+pixels on a grid of about 1 µm, gaps narrower than 20 µm closed), so a region drawn over the
+section's edge, or around an airway, is not diluted by the glass inside it. The tissue in none of
+the regions is a row of its own: a region against the rest of the section.
+
+**Areas.** The area of the tissue within a region, or within a band of signed distance from its
+edge, is found by squares split in four until uniform. A square is wholly on one side of an edge
+when the signed distance at its center exceeds its half-diagonal (the signed distance changes no
+faster than the point moves); a square still crossed at the finest size (a sixteenth of the
+tissue's grid, about 0.07 µm) is split along the edge, the signed distance taken as linear (its
+gradient away from the boundary's nearest point), and the tissue's own pixels are counted by summed
+counts. Placing the finest squares by their centers instead errs to first order in their size where
+an edge runs at an angle to the grid (2 × 10⁻⁴ of a band); the split leaves only the edge's bending
+within a square, about 10⁻⁶ of a band at a corner and 10⁻⁷ along straight edges.
+
+**Intervals.** A density's is Garwood's (1936), the gamma quantiles Γ⁻¹(α/2; k) and
+Γ⁻¹(1 − α/2; k + 1) over the area; a share's, Wilson's score interval (1927). Two rows' densities of
+a label are compared by their ratio with the exact interval conditional on the counts' sum (the
+first count binomial among both, Clopper and Pearson's interval, its odds scaled by the areas;
+Ederer and Mantel 1974); their shares, by the ratio with Koopman's score interval (1984), the ratios
+whose Pearson chi-square at the proportions most likely under them is within the critical value.
+Every interval treats cells as placed independently: cells cluster, so the true uncertainty is
+wider, and a section's regions are not samples. They describe the section.
+
+**Across an edge.** Each cell's signed distance to the region's edge (inside negative); each label's
+density and share in bands of it (10 µm wide to 100 µm either side, the deeper and the farther a
+band each), each band's own tissue its denominator. Three zones, as a tumor's core and invasive
+margin are measured (Galon et al. 2006): the core, inside beyond the margin (20 µm); the margin,
+within it of the edge on either side; around, outside beyond it to the reach. A label fills the
+region when the core's density over around's has an interval above 1, stays out when below, and
+gathers at the margin when the margin's over both the core's and around's is above 1.
+
+| Check | Result |
+| --- | --- |
+| Band areas of a square, a 64-sided polygon and a square in a pixel tissue, against A + Pd + πd² outward and similar polygons inward | to 1.4–2.4 × 10⁻⁷; in a drawn tissue whose edges miss the grid, 3.9 × 10⁻⁶ (the inner square's corners) |
+| Garwood, Wilson, Clopper–Pearson, the conditional rate ratio and Koopman's interval against SciPy 1.18.1 and statsmodels 0.15.0 | to 10⁻⁹ |
+| Coverage: Poisson means 0.7, 4 and 30; a ratio of proportions 0.12 / 0.08 (n 150, 200) | Garwood's at least 95%; Koopman's 95% ± 1.5% |
+| Shapely 2.2.0: two regions in the middle rectangle of the simulated tissue and both 2-FOV bundles | every row's area to 2 × 10⁻⁷, every band's to 4 × 10⁻⁶ (at most 0.008 µm²), every count the same |
+| The standard simulated tissue's six domains as regions, its true cells by their true types | each dominant type the largest share of its domain (40–75%) and 1.96–8.63× as dense as in the others, intervals clear of 1; filling its domain where no domain of its type lies within the reach |
+
+A domain beside another of its own type is no denser than its surroundings (1.26×) though twice
+as dense as the rest of the tissue: "around" is local, and the two questions answer different
+things.
+
+**Lung** (5,555 labeled cells, the classes), a region drawn by its stromal and endothelial cells
+(21,498 µm² of tissue): stromal cells 2.90× (1.93 to 4.19) and endothelial 2.88× (1.90 to 4.23) as
+dense as in the rest of the tissue, epithelial 0.45× (0.35 to 0.57); across its edge the
+endothelial cells fill it (the core over around 2.78×, 1.15 to 7.66) and the epithelial cells stay
+out (0.45×, 0.29 to 0.67).
+
+### 6.5 Cellular neighborhoods (verified, wave 6, slice 5)
+
+**Niches** (Goltsev et al. 2018; Schürch et al. 2020): each cell's window, its 10 nearest labeled
+cells (itself among them when labeled; ties by index) or the labeled cells within a radius, is
+described by its labels' shares; the windows are clustered by k-means, each start seeded by
+k-means++ (Arthur and Vassilvitskii 2007: a first center at random, each next with probability
+proportional to its squared distance to the nearest chosen) and run by Lloyd's iterations (Lloyd
+1982) until no window changes niche; the least inertia of 10 starts is kept. A niche is a kind of
+place: unlabeled cells take the niche of the labeled cells around them. k-means finds local optima,
+so the niches are found again from 4 further seeds and compared by the adjusted Rand index (Hubert
+and Arabie 1985); each niche's genes are its cells' against the other niches' cells (the clusterings'
+Wilcoxon markers), exploratory.
+
+| Check | Result |
+| --- | --- |
+| Every partition of 9 points into 2 and 3 clusters (12 sets) | k-means's best of 20 starts the optimum each time |
+| Four separated clusters, 12,000 points | found exactly; the same on one worker and on eight |
+| Windows, nearest 10 and within 25 µm, 1,500 cells | each one's composition the exhaustive search's |
+| scikit-learn 1.9.1's KMeans (k-means++, 10 starts, 5 seeds), the same windows, 6 niches | SituCraft's inertia +0.17%, +0.004%, +0.14% (Lung, Breast, simulated); niches alike at 0.888, 0.980, 0.938 |
+| The simulated tissue's 6 domains (4 kinds, by the leading type), its true cells by type | 4 niches of 30 nearest: the kinds at 0.918, every seed agreeing; 6 niches of 10 nearest: the domains at 0.446, the seeds at 0.66–0.93 |
+
+scikit-learn's seeding tries several candidates for each center and keeps the best (greedy
+k-means++), which accounts for its slightly lower inertia. Domains led by the same type differ only
+in their minor types (Gamma-drawn shares of the other 40%), which a window of 10 cells cannot
+resolve: asked for as many niches as domains, k-means splits kinds of domain differently from each
+seed, and the agreement says so.
+
+**Lung** (5,555 labeled cells by class, 6 niches): epithelium (95% of its windows; 44% of the
+cells), endothelial niches at 12% and 25% (the tissue 6%; VWF, PLVAP), stroma at 17% (PDGFRB),
+immune cells at 22% (the tissue 4%; AIF1, CD68), and stroma with endothelium (39% and 13%; COL8A1,
+PDGFRA); the other seeds agree at 0.58 to 0.99.
+
+### 6.6 Spatially variable genes (verified, wave 6, slice 6)
+
+**Moran's I** (Moran 1950) of a gene with values x over a graph with weights w:
+I = (n / S0) Σᵢⱼ wᵢⱼ zᵢ zⱼ / Σᵢ zᵢ², z = x − x̄. The weights are row-standardized (each cell's
+neighbors share 1; a cell without a neighbor weighs nothing) or binary. Under no spatial pattern,
+E[I] = −1/(n − 1) and, with S0 = Σ wᵢⱼ, S1 = ½ Σ (wᵢⱼ + wⱼᵢ)², S2 = Σᵢ (wᵢ. + w.ᵢ)² (Cliff and
+Ord 1981): under normality Var = (n² S1 − n S2 + 3 S0²) / (S0² (n² − 1)) − E²; under
+randomization (the values dealt again to the cells; b2 their kurtosis)
+Var = [n ((n² − 3n + 3) S1 − n S2 + 3 S0²) − b2 ((n² − n) S1 − 2n S2 + 6 S0²)] /
+((n − 1)(n − 2)(n − 3) S0²) − E², the exact variance of I over every permutation. The test is
+randomization's z (two-sided), and with permutations the share at least as far from E[I]; both
+Benjamini–Hochberg adjusted over the genes. The values are the genes' log-normalized expression as
+SituCraft's clustering normalizes it (each cell's counts scaled to the median total, log1p).
+
+**Local Moran's I** (Anselin 1995): Iᵢ = zᵢ Σⱼ wᵢⱼ zⱼ / m2, m2 = Σ z² / n (so Σᵢ Iᵢ = S0 · I),
+tested by conditional permutation (the cell's neighbors' values drawn again from the other cells,
+its own kept; the share of draws at least as extreme on its side of their median); cells with p
+below 0.05, unadjusted, classed by the sign of zᵢ and of its neighbors' mean.
+
+| Check | Result |
+| --- | --- |
+| A checkerboard on a 20 × 20 lattice; two halves | I −1 exactly (both weights); 1 − 2c/S0 exactly |
+| 9,999 permutations on a 7 × 7 lattice, skewed, binary and normal values | variance within 0.2–1.7% of the variance under randomization |
+| Squidpy 1.8.3 spatial_autocorr ("moran", row-standardized), the Delaunay graph, every gene | I to 1.1 × 10⁻¹⁶, 7.8 × 10⁻¹⁶, 1.1 × 10⁻¹⁶; variance under normality to 1.1 × 10⁻¹², 3 × 10⁻¹³, 1.3 × 10⁻¹³ (Lung, Breast, simulated) |
+| An independent NumPy and SciPy computation, the same | I to 4.2 × 10⁻¹³; variance under randomization to 1.4 × 10⁻¹² |
+| The simulated tissue's 30 marker genes against its 90 unmarked genes | every marker in a pattern, I ≥ 0.216; unmarked I ≤ 0.042 |
+
+PySAL's esda, planned as the reference, was not needed: Squidpy computes the same statistic and
+variance under normality, and the variance under randomization is checked against its formula
+computed independently and against permutations (which define it).
+
+**Lung** (11,898 cells, Delaunay graph, 289 genes, 199 permutations): 162 genes in a pattern; the
+greatest I GJA5 (0.436; 1.2% of the cells express it, an artery's endothelium in the stroma at the
+section's top left), IGFBP3 (0.411), CXCL13 (0.313), PLA2G7, LTBP2, ANPEP, MYH11, GPX2, AGR3, RGS5.
+
+### 6.7 Analyses across segmentations (verified, wave 6, slice 7)
+
+An analysis is made again on another segmentation by asking the same question of the other's
+cells, with everything else held: the labels made again from the same clustering parameters and
+marker set (or reference) and the same level (§5.7's making again, matched by their origin); a
+graph of the same definition; the same parameters, window, regions and strata (the regions'
+geometry as the version used). The two segmentations' comparison (§2) relates the cells, so a
+number's change can be traced: the cells behind a change of a label's (or a pair's) number are
+those of its labels whose counterparts through the comparison carry another label (§5.7's
+segmentation-sensitive cells), under each segmentation. The numbers are read together by name (a
+pair of labels, a label in a region, a gene), each change a log₂ ratio for a ratio and a difference
+otherwise, and the two answers' agreement as the rank correlation of every number under both
+(Spearman 1904, *Am J Psychol* 15:72–101).
+
+**The simulated tissue under three segmentations** (`TestAnalysesAcrossSegmentations`, weekly):
+its truth (3,030 cells), the instrument's nucleus expansion and the refinement (Balanced; 2,925
+cells each), each clustered with the defaults and labeled from its types' markers; the enrichment
+over the Delaunay graph (1,000 permutations), Moran's I over it (row-standardized), and 4 niches of
+each cell's 30 nearest labeled cells (as many as the kinds of domain), against the kind of domain at
+each cell's centroid.
+
+| Number | Truth | Instrument | Refinement |
+| --- | --- | --- | --- |
+| Enrichment, rank correlation with the truth's (10 pairs) | — | 1.000 | 1.000 |
+| Enrichment, the largest change | — | ÷1.16 (epithelial and immune, 0.57 → 0.49) | ×1.02 (endothelial and immune, 1.10 → 1.13) |
+| Pairs enriched or avoided (adjusted p below 0.05) found so | 10 | 10 of 10 | 10 of 10 |
+| Niches against the kinds of domain (adjusted Rand index) | 0.919 | 0.900 | 0.904 |
+| Moran's I, the 30 markers' mean | 0.189 | 0.345 | 0.188 |
+| Moran's I, rank correlation with the truth's (markers) | — | 0.847 | 0.943 |
+| Moran's I, the largest change | — | +0.281 (SIM002, 0.258 → 0.539) | −0.027 (SIM006, 0.259 → 0.232) |
+
+What the labels decide (enrichment, niches) barely moves: the cells keep their types under either
+segmentation, so the counts of neighbors by type and the windows' compositions are nearly the
+truth's. Moran's I is of expression, and the instrument's expansion takes transcripts from
+neighboring cells into each cell, so neighbors share expression they do not have: every marker's I
+is raised, nearly doubled on average. The refinement, assigning transcripts by their cells'
+expression, keeps every gene's I within 0.03 of the truth's. A spatially variable gene's I is the
+number most sensitive to segmentation here.
+
+### 6.8 Spatial analyses at a million cells (verified, wave 6, slice 8)
+
+**The tissue** (`TestSpatialScale`, weekly): the large preset's fields 11 by 10 (9.6 by 8.7 mm),
+1,046,142 true cells of 4 types, 120 genes and 36.5 million nonzero counts, made by
+`simulate.Cells` in 36 s: the cells a bundle's truth holds (checked cell for cell against a field's
+and a mosaic's truth), without its images, transcripts or instrument. Each analysis runs in a
+process of its own from the files a job reads, with the page's defaults; its peak resident memory
+and time on four cores (a 10-core laptop limited to four):
+
+| Analysis (defaults) | Time | Peak memory | Budget |
+| --- | --- | --- | --- |
+| Delaunay graph (edges to 50 µm; 3.1 million edges) | 4 s | 0.77 GB | 1 min, 1.25 GB |
+| 6-nearest graph | 1 s | 0.33 GB | 1 min, 1 GB |
+| 20 µm graph (8.0 million edges) | 2 s | 0.67 GB | 1 min, 1 GB |
+| Enrichment, 1,000 permutations | 4 s | 0.23 GB | 1 min, 0.5 GB |
+| Co-occurrence, 10 to 150 µm | 5 s | 0.07 GB | 1 min, 0.5 GB |
+| Nearest distances, 199 permutations, reach 100 µm | 37 s | 3.4 GB | 3 min, 4.5 GB |
+| Ripley's K, isotropic, 199 permutations (207 million pairs) | 36 s | 4.0 GB | 3 min, 5 GB |
+| Niches, with their genes | 12 s | 1.8 GB | 2 min, 2.5 GB |
+| Moran's I, 199 permutations, 10 genes' local Moran's I | 88 s | 0.94 GB | 5 min, 1.5 GB |
+
+What a million cells changed:
+
+- **Moran's I held every gene's values over every cell**, twice (genes × cells in float32, then
+  centered in float64): 4.7 GB for 300 genes at a million cells, 20 times that for a 5,000-gene
+  panel. The values are now held as each gene's nonzero values (`Expression`), made dense one gene
+  at a time, a worker's own; every I and variance is the same to the bit as before (checked on
+  60,000 cells and 300 genes, with either weights, on different numbers of workers).
+- **Its permutations walked every edge for every gene**, about 3 s a permutation for 300 genes at
+  a million cells. Permuting the values is permuting the graph: each permutation now deals the
+  graph once (each cell's neighbors as the values see them), and each gene's cross sum is taken
+  from its nonzero values alone, Σᵤ wᵤ xᵤ Σᵥ xᵥ − m (Σᵤ xᵤ rᵤ + Σᵤ xᵤ cᵤ) + m² S0 (r and c the
+  dealt rows' and columns' weight sums), its work the gene's values times their neighbors. Read
+  value by value in the cells' order, its memory reads stay near; read in the dealt places' order,
+  they jumped, and it was slower than walking every edge. The permutations' statistics agree with
+  the previous computation's to 6 × 10⁻¹⁰ of their deviation, and their p-values exactly.
+- **Local Moran's I sorted each cell's 199 draws** to find their median: Hoare's selection (1961)
+  finds the same value in linear time, and the draws' buffers are kept from cell to cell.
+- **Nearest distances and Ripley's K** keep every pair of cells within their reach (100 µm: about
+  380 cells around each here), so their memory grows with the cells and their density. Their
+  lists were kept in slices grown cell by cell, Ripley's pairs then joined into one more copy, and
+  each nearest-distance deal left its working arrays as garbage, which the collector let grow to
+  the size of the lists (nearest distances 5.9 GB at a million cells). Kept in chunks of a fixed
+  size and their working arrays reused, they take 3.4 and 4.0 GB, their numbers the same to the
+  bit (the weekly reference digests). A computer with 8 GB runs both at a million cells; a smaller
+  reach or a region runs them in less.
+
+**Through SituCraft** (the weekly scale test): the large tissue's 383,158 typed cells asked as the
+Spatial view asks them, with its defaults, in one SituCraft: the Delaunay graph and the contact
+graph from the instrument's mask in 2 s each, the labels' enrichment in 2 s, niches with their
+genes in 3 s, Moran's I of 120 genes with local Moran's I in 23 s; 33 s in all at a peak of 1.17 GB
+on ten cores (budget: 10 minutes and 2 GB on four).
+
 ## 7. Datasets
 
 | Dataset | Source | Size | License | Use |

@@ -1040,26 +1040,649 @@ export async function viewerSuite({ check, MissingData, verbose }) {
             'each as asked; the excluded cells those in the region');
         }
 
-        // The projects as 0.2.0, 0.3.0 and 0.4.0 saved them
+        // Cell graphs of the Lung cells (wave 6): each kind built by remote control over the cells a
+        // review did not exclude; a radius graph's edges those of the suite's own exhaustive search
+        // over its cells; a graph of a region's cells over those the suite counts in it; its edges
+        // drawn where the graph puts them, the selected cell's neighbors listed as the graph has
+        // them, and a saved view keeping the graph.
+        {
+          const built = {};
+          for (const [kind, args] of [['delaunay', {}], ['knn', { k: 6 }], ['radius', { radius: 20 }], ['contact', { gap: 1 }]]) built[kind] = await act('build_graph', { dataset: 'xenium-lung-2fov', kind, ...args });
+          const excludedLung = (await act('reviews', { dataset: 'xenium-lung-2fov' })).data?.counts.excluded ?? -1;
+          const graphsOk = Object.values(built).every((b) => b.ok && b.data.cells.inGraph === 11898 - excludedLung && b.data.cells.excluded === excludedLung && b.data.edges > 0);
+          check('viewer', 'remote control: build_graph builds each kind of graph of the Lung cells, those a review excluded left out', Object.values(built).map((b) => b.message ?? b.error).join(' | '),
+            graphsOk && excludedLung > 0 && built.contact.data.shared && built.knn.data.isolated === 0, `${11898 - excludedLung} cells each (${excludedLung} excluded); shared boundaries in the contact graph`);
+          // The radius graph against an exhaustive search over its own cells' centroids.
+          const radius = built.radius.ok ? await chrome.eval(`(async () => {
+            const buf = await (await fetch('/api/graphs/${built.radius.data.id}/edges')).arrayBuffer();
+            const v = new DataView(buf);
+            const n = v.getUint32(0, true), m = v.getUint32(4, true);
+            const x = new Float32Array(buf, 12 + 4 * n, n), y = new Float32Array(buf, 12 + 8 * n, n);
+            const off = new Uint32Array(buf, 12 + 12 * n, n + 1), nb = new Uint32Array(buf, 16 + 16 * n, m);
+            let missing = 0, extra = 0, ends = 0;
+            for (let i = 0; i < n; i += 1) {
+              const mine = new Set(nb.subarray(off[i], off[i + 1]));
+              for (let j = 0; j < n; j += 1) {
+                if (j === i) continue;
+                const dx = x[j] - x[i], dy = y[j] - y[i];
+                const near = Math.sqrt(dx * dx + dy * dy) <= 20;
+                if (near) ends += 1;
+                if (near && !mine.has(j)) missing += 1;
+                if (!near && mine.has(j)) extra += 1;
+              }
+            }
+            return { n, m, ends, missing, extra };
+          })()`) : null;
+          check('viewer', 'a radius graph\'s edges: those of the suite\'s own search over every pair of its cells', JSON.stringify(radius), radius && radius.ends === radius.m && radius.missing === 0 && radius.extra === 0, 'every pair within 20 µm, and no other');
+          // A graph of the cells in the tumor nest.
+          const nest = [[600, 250], [800, 260], [790, 420], [610, 400], [600, 250]];
+          const windingIn = (ring, px, py) => {
+            let w = 0;
+            for (let i = 0; i + 1 < ring.length; i += 1) {
+              const [ax, ay] = ring[i];
+              const [bx, by] = ring[i + 1];
+              const side = (bx - ax) * (py - ay) - (px - ax) * (by - ay);
+              if (ay <= py) {
+                if (by > py && side > 0) w += 1;
+              } else if (by <= py && side < 0) w -= 1;
+            }
+            return w;
+          };
+          await act('show_tissue', { dataset: 'xenium-lung-2fov', segmentation: 'instrument' });
+          const lungCells = await chrome.eval('(() => { const c = window.situcraftViewer.cellsDrawn(); return { x: Array.from(c.x), y: Array.from(c.y) }; })()');
+          const inNest = lungCells.x.reduce((n, x, i) => n + (windingIn(nest, x, lungCells.y[i]) !== 0 ? 1 : 0), 0);
+          const nestGraph = await act('build_graph', { dataset: 'xenium-lung-2fov', kind: 'delaunay', regions: ['Tumor nest'] });
+          check('viewer', 'a graph of a region\'s cells: built over the cells the suite counts in it', `${nestGraph.message ?? nestGraph.error}; the suite counts ${inNest}`,
+            nestGraph.ok && nestGraph.data.cells.inGraph === inNest && nestGraph.data.cells.regions?.[0]?.name === 'Tumor nest', `${inNest} cells`);
+          // Drawn: the Delaunay graph close up; the overlay light at edges' midpoints and clear
+          // between cells; a cell's neighbors in the inspector the graph's.
+          const shownGraph = built.delaunay.ok ? await act('show_tissue', { dataset: 'xenium-lung-2fov', graph: built.delaunay.data.id, center: [700, 330], um_per_pixel: 0.25, genes: [], cell: 'nheihaca-1' }) : null;
+          await chrome.eval('new Promise((r) => setTimeout(r, 500))');
+          const drawnGraph = await chrome.eval(`(async () => {
+            const v = window.situcraftViewer;
+            const g = v.graph()?.graph;
+            if (!g) return null;
+            const canvas = document.querySelector('.viewer-graph');
+            const ctx = canvas.getContext('2d');
+            const cam = v.renderer.camera;
+            const [w, hh] = v.renderer.size();
+            const at = (x, y) => [Math.round((x - cam.cx) * cam.scale + w / 2), Math.round((y - cam.cy) * cam.scale + hh / 2)];
+            let lit = 0, probed = 0;
+            for (let i = 0; i < g.n && probed < 40; i += 1) {
+              const [sx, sy] = at(g.x[i], g.y[i]);
+              if (sx < w * 0.2 || sx > w * 0.8 || sy < hh * 0.2 || sy > hh * 0.8) continue;
+              const j = g.neighbors[g.offsets[i]];
+              // Within a pixel of the midpoint, light: the line's white over its casing (the casing
+              // alone is black).
+              const [mx, my] = at((g.x[i] + g.x[j]) / 2, (g.y[i] + g.y[j]) / 2);
+              const px = ctx.getImageData(mx - 1, my - 1, 3, 3).data;
+              probed += 1;
+              let light = false;
+              for (let k = 0; k < px.length; k += 4) if (px[k + 3] > 200 && px[k] > 150) light = true;
+              if (light) lit += 1;
+            }
+            const d = v.detail();
+            const i = g.indexOf[d.row];
+            const want = [];
+            for (let k = g.offsets[i]; k < g.offsets[i + 1]; k += 1) want.push(g.rows[g.neighbors[k]]);
+            for (let t = 0; t < 50 && !document.querySelector('.viewer-neighbor-list li'); t += 1) await new Promise((r) => setTimeout(r, 100));
+            const listed = [...document.querySelectorAll('.viewer-neighbor-list li')].length;
+            return { lit, probed, shown: v.graphShown(), neighbors: want.length, listed, layers: v.layers().cells.graph };
+          })()`);
+          check('viewer', 'a graph drawn: its edges where the graph puts them, a cell\'s neighbors listed as the graph has them', `${shownGraph?.message ?? shownGraph?.error}; ${JSON.stringify(drawnGraph)}`,
+            shownGraph?.ok && drawnGraph && drawnGraph.probed >= 20 && drawnGraph.lit === drawnGraph.probed && drawnGraph.shown.count > 0 && !drawnGraph.shown.tooMany && drawnGraph.listed === drawnGraph.neighbors && drawnGraph.neighbors > 0, 'every edge probed drawn; the neighbors listed');
+          const graphView = await act('save_view', { name: 'The Delaunay graph close up' });
+          await act('show_tissue', { dataset: 'xenium-lung-2fov', graph: 'none' });
+          // Cleared: no graph, and nothing left on the overlay.
+          const cleared = await chrome.eval(`(() => {
+            const c = document.querySelector('.viewer-graph');
+            const px = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+            let alpha = 0;
+            for (let k = 3; k < px.length; k += 4) alpha += px[k];
+            return window.situcraftViewer.graph() === null && alpha === 0 ? null : { alpha };
+          })()`);
+          const graphReopened = await act('open_view', { view: 'The Delaunay graph close up' });
+          await chrome.eval('new Promise((r) => setTimeout(r, 500))');
+          const reGraph = await chrome.eval('window.situcraftViewer.graph()?.id ?? null');
+          check('viewer', 'a view of a graph reopens exactly, the graph drawn again', `${graphReopened.message ?? graphReopened.error}; cleared ${cleared === null}, drawn again ${reGraph}`,
+            graphView.ok && graphReopened.ok && graphReopened.data.exact === true && cleared === null && reGraph === built.delaunay.data?.id, 'exactly as saved');
+        }
+
+        // Neighborhood enrichment and co-occurrence of the Lung cells' classes (wave 6, slice 2), each
+        // number against the suite's own: the counts from the graph's edges and the cells' labels, the
+        // expectation from its formula, a pair's cells shown, and a co-occurrence ratio from every pair
+        // of cells.
+        {
+          const graph = await act('build_graph', { dataset: 'xenium-lung-2fov', segmentation: 'instrument', kind: 'delaunay' });
+          // The instrument's cells labeled from the panel's markers (earlier in the suite).
+          const labelsId = graph.ok ? await chrome.eval(`window.situcraft.store.project.artifacts.find((a) => a.kind === 'labels' && a.segmentation === ${JSON.stringify(graph.data.segmentation.id)} && !a.source && !a.reference && a.state === 'complete')?.id ?? null`) : null;
+          const markers = { ok: Boolean(labelsId), data: { id: labelsId }, message: 'no label set from markers of the instrument\'s cells' };
+          const asked = markers.ok && graph.ok ? await act('spatial_analysis', { dataset: 'xenium-lung-2fov', segmentation: 'instrument', question: 'enrichment', labels: markers.data.id, level: 1, graph: graph.data.id, permutations: 1000 }) : null;
+          const own = asked?.ok ? await chrome.eval(`(async () => {
+            const a = await (await fetch('/api/artifacts/${asked.data.id}/files/analysis.json')).json();
+            const cb = await (await fetch('/api/analyses/${asked.data.id}/cells')).arrayBuffer();
+            const n = new DataView(cb).getUint32(0, true);
+            const label = new Int32Array(cb, 4 + 4 * n, n);
+            const gb = await (await fetch('/api/graphs/${graph.data.id}/edges')).arrayBuffer();
+            const gv = new DataView(gb);
+            const gn = gv.getUint32(0, true), m = gv.getUint32(4, true);
+            const off = new Uint32Array(gb, 12 + 12 * gn, gn + 1), nb = new Uint32Array(gb, 16 + 16 * gn, m);
+            const K = a.labels.names.length;
+            // The directed counts: each cell's neighbors by label; the edges between labeled cells.
+            const count = new Float64Array(K * K);
+            const cells = new Float64Array(K);
+            let N = 0, E = 0;
+            for (let i = 0; i < gn; i += 1) {
+              if (label[i] < 0) continue;
+              cells[label[i]] += 1;
+              N += 1;
+              for (let k = off[i]; k < off[i + 1]; k += 1) {
+                const j = nb[k];
+                if (label[j] < 0) continue;
+                count[label[i] * K + label[j]] += 1;
+                if (j > i) E += 1;
+              }
+            }
+            // The expectation: each edge's ends take A and B with chance n_A·(n_B − [A = B]) / (N·(N − 1)),
+            // in either order.
+            let countOff = 0, expOff = 0;
+            for (let x = 0; x < K; x += 1) {
+              for (let y = 0; y < K; y += 1) {
+                const q = x * K + y;
+                if (count[q] !== a.enrichment.count[q]) countOff += 1;
+                const e = 2 * E * cells[x] * (cells[y] - (x === y ? 1 : 0)) / (N * (N - 1));
+                expOff = Math.max(expOff, Math.abs(e - a.enrichment.expected[q]) / Math.max(1, e));
+              }
+            }
+            return { K, N, E, edges: a.enrichment.edges, countOff, expOff };
+          })()`) : null;
+          check('viewer', 'neighborhood enrichment by remote control: every count the suite\'s own (the graph\'s edges by the cells\' labels), the expectation its formula\'s', `${asked?.message ?? asked?.error ?? markers.message}; ${JSON.stringify(own)}`,
+            asked?.ok && own && own.countOff === 0 && own.expOff < 1e-9 && own.E === own.edges && asked.data.pairs.length === own.K * (own.K + 1) / 2 && asked.data.pairs.some((p) => p.padj < 0.05), 'the same counts; the expectation within 10⁻⁹');
+          // A pair's cells on the tissue: those with a neighbor of the other label, as the suite counts them.
+          const top = asked?.ok ? asked.data.pairs.find((p) => p.a !== p.b && p.padj < 0.05) : null;
+          const shownPair = top ? await act('show_tissue', { dataset: 'xenium-lung-2fov', cells_of: { analysis: asked.data.id, a: top.a, b: top.b } }) : null;
+          const pairCount = top ? await chrome.eval(`(async () => {
+            const a = await (await fetch('/api/artifacts/${asked.data.id}/files/analysis.json')).json();
+            const cb = await (await fetch('/api/analyses/${asked.data.id}/cells')).arrayBuffer();
+            const n = new DataView(cb).getUint32(0, true);
+            const label = new Int32Array(cb, 4 + 4 * n, n);
+            const gb = await (await fetch('/api/graphs/${graph.data.id}/edges')).arrayBuffer();
+            const gn = new DataView(gb).getUint32(0, true), m = new DataView(gb).getUint32(4, true);
+            const off = new Uint32Array(gb, 12 + 12 * gn, gn + 1), nb = new Uint32Array(gb, 16 + 16 * gn, m);
+            const A = a.labels.names.indexOf(${JSON.stringify(top.a)}), B = a.labels.names.indexOf(${JSON.stringify(top.b)});
+            let cells = 0;
+            for (let i = 0; i < gn; i += 1) {
+              let touches = false;
+              for (let k = off[i]; k < off[i + 1]; k += 1) {
+                const j = nb[k];
+                if ((label[i] === A && label[j] === B) || (label[i] === B && label[j] === A)) touches = true;
+              }
+              if (touches) cells += 1;
+            }
+            return { suite: cells, shown: window.situcraftViewer.focus(), graph: window.situcraftViewer.graph()?.id };
+          })()`) : null;
+          check('viewer', 'a pair\'s cells shown on the tissue: those with a neighbor of the other label, its graph drawn', `${shownPair?.message ?? shownPair?.error}; ${JSON.stringify(pairCount)}`,
+            shownPair?.ok && pairCount && pairCount.shown?.cells === pairCount.suite && pairCount.suite > 0 && pairCount.graph === graph.data.id, `${pairCount?.suite} cells`);
+          // Co-occurrence: one pair's ratio at one distance from every pair of cells.
+          const co = markers.ok ? await act('spatial_analysis', { dataset: 'xenium-lung-2fov', segmentation: 'instrument', question: 'cooccurrence', labels: markers.data.id, level: 1, up_to: 60, every: 20 }) : null;
+          const coOwn = co?.ok ? await chrome.eval(`(async () => {
+            const a = await (await fetch('/api/artifacts/${co.data.id}/files/analysis.json')).json();
+            const cb = await (await fetch('/api/analyses/${co.data.id}/cells')).arrayBuffer();
+            const n = new DataView(cb).getUint32(0, true);
+            const rows = new Uint32Array(cb, 4, n), label = new Int32Array(cb, 4 + 4 * n, n);
+            // The segmentation's centroids, as the graph of the same cells holds them.
+            const gb = await (await fetch('/api/graphs/${graph.data.id}/edges')).arrayBuffer();
+            const gn = new DataView(gb).getUint32(0, true);
+            const grows = new Uint32Array(gb, 12, gn), gx = new Float32Array(gb, 12 + 4 * gn, gn), gy = new Float32Array(gb, 12 + 8 * gn, gn);
+            const t = { x: new Float64Array(a.cells.segmentation), y: new Float64Array(a.cells.segmentation) };
+            for (let i = 0; i < gn; i += 1) {
+              t.x[grows[i]] = gx[i];
+              t.y[grows[i]] = gy[i];
+            }
+            const K = a.labels.names.length, d = 40, k = a.cooccurrence.distances.indexOf(d);
+            const count = new Float64Array(K * K);
+            const idx = [];
+            for (let i = 0; i < n; i += 1) if (label[i] >= 0) idx.push(i);
+            for (let p = 0; p < idx.length; p += 1) {
+              const i = idx[p];
+              for (let q = p + 1; q < idx.length; q += 1) {
+                const j = idx[q];
+                const dx = t.x[rows[j]] - t.x[rows[i]], dy = t.y[rows[j]] - t.y[rows[i]];
+                if (Math.sqrt(dx * dx + dy * dy) <= d) {
+                  count[label[i] * K + label[j]] += 1;
+                  count[label[j] * K + label[i]] += 1;
+                }
+              }
+            }
+            const row = (x) => count.slice(x * K, (x + 1) * K).reduce((s, v) => s + v, 0);
+            const total = count.reduce((s, v) => s + v, 0);
+            let worst = 0;
+            for (let x = 0; x < K; x += 1) for (let y = 0; y < K; y += 1) if (row(x) > 0 && row(y) > 0) worst = Math.max(worst, Math.abs(count[x * K + y] * total / (row(x) * row(y)) - a.cooccurrence.ratio[k][x * K + y]));
+            return { K, k, worst };
+          })()`) : null;
+          check('viewer', 'co-occurrence by remote control: within 40 µm, every ratio from the suite\'s own count of every pair of cells', `${co?.message ?? co?.error}; ${JSON.stringify(coOwn)}`,
+            co?.ok && coOwn && coOwn.k === 1 && coOwn.worst < 1e-9, 'within 10⁻⁹');
+        }
+
+        // Nearest distances and Ripley's K of the Lung classes (wave 6, slice 3), against the suite's
+        // own: one pair's median nearest distance by an exhaustive search; K without a correction in
+        // the tumor nest from its own count of pairs and the polygon's area; and the cells shown
+        // within a radius.
+        {
+          const graph = await act('build_graph', { dataset: 'xenium-lung-2fov', segmentation: 'instrument', kind: 'delaunay' });
+          const labelsId = graph.ok ? await chrome.eval(`window.situcraft.store.project.artifacts.find((a) => a.kind === 'labels' && a.segmentation === ${JSON.stringify(graph.data.segmentation.id)} && !a.source && !a.reference && a.state === 'complete')?.id ?? null`) : null;
+          const dist = labelsId ? await act('spatial_analysis', { dataset: 'xenium-lung-2fov', segmentation: 'instrument', question: 'distances', labels: labelsId, level: 1, permutations: 49 }) : null;
+          const ripley = labelsId ? await act('spatial_analysis', { dataset: 'xenium-lung-2fov', segmentation: 'instrument', question: 'ripley', labels: labelsId, level: 1, window: 'Tumor nest', correction: 'none', up_to: 40, every: 10, permutations: 19 }) : null;
+          const own = dist?.ok && ripley?.ok ? await chrome.eval(`(async () => {
+            const read = async (id) => {
+              const a = await (await fetch('/api/artifacts/' + id + '/files/analysis.json')).json();
+              const cb = await (await fetch('/api/analyses/' + id + '/cells')).arrayBuffer();
+              const n = new DataView(cb).getUint32(0, true);
+              return { a, rows: new Uint32Array(cb, 4, n), label: new Int32Array(cb, 4 + 4 * n, n) };
+            };
+            // The segmentation's centroids, as the graph of all the cells holds them.
+            const gb = await (await fetch('/api/graphs/${graph.data.id}/edges')).arrayBuffer();
+            const gn = new DataView(gb).getUint32(0, true);
+            const grows = new Uint32Array(gb, 12, gn), gx = new Float32Array(gb, 12 + 4 * gn, gn), gy = new Float32Array(gb, 12 + 8 * gn, gn);
+            const X = new Map(), Y = new Map();
+            for (let i = 0; i < gn; i += 1) {
+              X.set(grows[i], gx[i]);
+              Y.set(grows[i], gy[i]);
+            }
+            const d = await read(${JSON.stringify(dist?.data?.id)});
+            const K = d.a.labels.names.length, A = d.a.labels.names.indexOf('Stromal'), B = d.a.labels.names.indexOf('Endothelial');
+            const reach = d.a.nearest.reach;
+            const near = [];
+            for (let i = 0; i < d.rows.length; i += 1) {
+              if (d.label[i] !== A) continue;
+              let best = Infinity;
+              for (let j = 0; j < d.rows.length; j += 1) {
+                if (j === i || d.label[j] !== B) continue;
+                const dx = X.get(d.rows[j]) - X.get(d.rows[i]), dy = Y.get(d.rows[j]) - Y.get(d.rows[i]);
+                best = Math.min(best, Math.fround(Math.sqrt(dx * dx + dy * dy)));
+              }
+              near.push(Math.min(best, reach));
+            }
+            near.sort((u, v) => u - v);
+            const m = near.length;
+            const median = m % 2 ? near[(m - 1) / 2] : (near[m / 2 - 1] + near[m / 2]) / 2;
+            // Ripley's K without a correction in the tumor nest: its area by the shoelace, its cells by
+            // a winding number, and the pairs within each radius.
+            const r = await read(${JSON.stringify(ripley?.data?.id)});
+            const nest = [[600, 250], [800, 260], [790, 420], [610, 400]];
+            let area = 0;
+            for (let k = 0; k < 4; k += 1) area += nest[k][0] * nest[(k + 1) % 4][1] - nest[(k + 1) % 4][0] * nest[k][1];
+            area = Math.abs(area) / 2;
+            const inside = (px, py) => {
+              let w = 0;
+              for (let k = 0; k < 4; k += 1) {
+                const [ax, ay] = nest[k], [bx, by] = nest[(k + 1) % 4];
+                const side = (bx - ax) * (py - ay) - (px - ax) * (by - ay);
+                if (ay <= py) {
+                  if (by > py && side > 0) w += 1;
+                } else if (by <= py && side < 0) w -= 1;
+              }
+              return w !== 0;
+            };
+            const R = r.a.ripley.radii.length, E = r.a.labels.names.indexOf('Epithelial');
+            const pts = [];
+            for (let i = 0; i < r.rows.length; i += 1) if (r.label[i] === E && inside(X.get(r.rows[i]), Y.get(r.rows[i]))) pts.push([X.get(r.rows[i]), Y.get(r.rows[i])]);
+            let worst = 0;
+            r.a.ripley.radii.forEach((rad, k) => {
+              let pairs = 0;
+              for (let i = 0; i < pts.length; i += 1) for (let j = i + 1; j < pts.length; j += 1) if (Math.sqrt((pts[j][0] - pts[i][0]) ** 2 + (pts[j][1] - pts[i][1]) ** 2) <= rad) pairs += 2;
+              const k0 = area * pairs / (pts.length * (pts.length - 1));
+              worst = Math.max(worst, Math.abs(r.a.ripley.k[(E * r.a.labels.names.length + E) * R + k] / k0 - 1));
+            });
+            return { median, recorded: d.a.nearest.median[A * K + B], cells: pts.length, recordedCells: r.a.ripley.cells[E], area, recordedArea: r.a.window.area, worst };
+          })()`) : null;
+          check('viewer', 'nearest distances and Ripley\'s K by remote control: a pair\'s median nearest distance the suite\'s exhaustive search\'s; K in the tumor nest, without a correction, from the suite\'s own count of pairs and the polygon\'s area', `${dist?.message ?? dist?.error}; ${ripley?.message ?? ripley?.error}; ${JSON.stringify(own)}`,
+            dist?.ok && ripley?.ok && own && Math.abs(own.median - own.recorded) < 1e-6 && own.cells === own.recordedCells && Math.abs(own.area - own.recordedArea) < 1e-6 && own.worst < 1e-9, 'the same median, cells, area and K');
+          // The cells within a radius shown: stromal cells with another within 30 µm, as the suite counts them.
+          const shownNear = dist?.ok ? await act('show_tissue', { dataset: 'xenium-lung-2fov', cells_of: { analysis: ripley.data.id, a: 'Stromal', b: 'Stromal', distance: 30 } }) : null;
+          const nearCount = shownNear?.ok ? await chrome.eval(`(async () => {
+            const a = await (await fetch('/api/artifacts/${ripley.data.id}/files/analysis.json')).json();
+            const cb = await (await fetch('/api/analyses/${ripley.data.id}/cells')).arrayBuffer();
+            const n = new DataView(cb).getUint32(0, true);
+            const rows = new Uint32Array(cb, 4, n), label = new Int32Array(cb, 4 + 4 * n, n);
+            const t = window.situcraftViewer.cellsDrawn();
+            const S = a.labels.names.indexOf('Stromal');
+            let cells = 0;
+            for (let i = 0; i < n; i += 1) {
+              if (label[i] !== S) continue;
+              for (let j = 0; j < n; j += 1) {
+                if (j !== i && label[j] === S && Math.sqrt((t.x[rows[j]] - t.x[rows[i]]) ** 2 + (t.y[rows[j]] - t.y[rows[i]]) ** 2) <= 30) {
+                  cells += 1;
+                  break;
+                }
+              }
+            }
+            return { suite: cells, shown: window.situcraftViewer.focus() };
+          })()`) : null;
+          check('viewer', 'the cells within a radius shown on the tissue: stromal cells with another within 30 µm, as the suite counts them', `${shownNear?.message ?? shownNear?.error}; ${JSON.stringify(nearCount)}`,
+            shownNear?.ok && nearCount && nearCount.suite > 0 && nearCount.shown?.cells === nearCount.suite, `${nearCount?.suite} cells`);
+
+          // Regions compared and a profile across an edge (wave 6, slice 4), against the suite's own:
+          // each label's cells in the tumor nest and in the rest of the tissue by a winding number,
+          // and each band's by the suite's own signed distance to the nest's outline; the cells shown
+          // at its margin.
+          const compared = labelsId ? await act('spatial_analysis', { dataset: 'xenium-lung-2fov', segmentation: 'instrument', question: 'regions', labels: labelsId, level: 1, regions: ['Tumor nest'] }) : null;
+          const edge = labelsId ? await act('spatial_analysis', { dataset: 'xenium-lung-2fov', segmentation: 'instrument', question: 'boundary', labels: labelsId, level: 1, region: 'Tumor nest', reach: 40, every: 10, margin: 10 }) : null;
+          const regionsOwn = compared?.ok && edge?.ok ? await chrome.eval(`(async () => {
+            const read = async (id) => {
+              const a = await (await fetch('/api/artifacts/' + id + '/files/analysis.json')).json();
+              const cb = await (await fetch('/api/analyses/' + id + '/cells')).arrayBuffer();
+              const n = new DataView(cb).getUint32(0, true);
+              return { a, n, rows: new Uint32Array(cb, 4, n), label: new Int32Array(cb, 4 + 4 * n, n), stratum: new Int32Array(cb, 4 + 8 * n, n) };
+            };
+            // The segmentation's centroids, as the graph of all the cells holds them (the Spatial view
+            // is shown, not the Viewer).
+            const gb = await (await fetch('/api/graphs/${graph?.data?.id}/edges')).arrayBuffer();
+            const gn = new DataView(gb).getUint32(0, true);
+            const grows = new Uint32Array(gb, 12, gn), gx = new Float32Array(gb, 12 + 4 * gn, gn), gy = new Float32Array(gb, 12 + 8 * gn, gn);
+            const t = { x: [], y: [] };
+            for (let i = 0; i < gn; i += 1) {
+              t.x[grows[i]] = gx[i];
+              t.y[grows[i]] = gy[i];
+            }
+            const nest = [[600, 250], [800, 260], [790, 420], [610, 400]];
+            const inside = (px, py) => {
+              let w = 0;
+              for (let k = 0; k < 4; k += 1) {
+                const [ax, ay] = nest[k], [bx, by] = nest[(k + 1) % 4];
+                const side = (bx - ax) * (py - ay) - (px - ax) * (by - ay);
+                if (ay <= py) {
+                  if (by > py && side > 0) w += 1;
+                } else if (by <= py && side < 0) w -= 1;
+              }
+              return w !== 0;
+            };
+            const signed = (px, py) => {
+              let best = Infinity;
+              for (let k = 0; k < 4; k += 1) {
+                const [ax, ay] = nest[k], [bx, by] = nest[(k + 1) % 4];
+                const dx = bx - ax, dy = by - ay;
+                const u = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)));
+                const ex = px - (ax + u * dx), ey = py - (ay + u * dy);
+                best = Math.min(best, Math.sqrt(ex * ex + ey * ey));
+              }
+              return inside(px, py) ? -best : best;
+            };
+            const c = await read(${JSON.stringify(compared?.data?.id)});
+            const K = c.a.labels.names.length;
+            const count = new Array(2 * K).fill(0);
+            let membership = 0;
+            for (let i = 0; i < c.n; i += 1) {
+              if (c.stratum[i] === (1 << 30)) continue;
+              const inNest = inside(t.x[c.rows[i]], t.y[c.rows[i]]);
+              if ((c.stratum[i] === 1) !== inNest) membership += 1;
+              if (c.label[i] >= 0) count[(inNest ? 0 : 1) * K + c.label[i]] += 1;
+            }
+            const regionsDiffer = count.filter((v, q) => v !== c.a.regions.count[q]).length;
+            const e = await read(${JSON.stringify(edge?.data?.id)});
+            const edges = e.a.boundary.edges;
+            const bands = new Array((edges.length + 1) * K).fill(0);
+            let bandOf = 0;
+            let margin = 0;
+            const E = e.a.labels.names.indexOf('Epithelial');
+            for (let i = 0; i < e.n; i += 1) {
+              if (e.stratum[i] === 0) continue;
+              const s = signed(t.x[e.rows[i]], t.y[e.rows[i]]);
+              const b = edges.filter((v) => v <= s).length;
+              if (e.stratum[i] - 1 !== b) bandOf += 1;
+              if (e.label[i] >= 0) bands[b * K + e.label[i]] += 1;
+              if (e.label[i] === E && s >= -10 && s < 10) margin += 1;
+            }
+            const bandsDiffer = bands.filter((v, q) => v !== e.a.boundary.count[q]).length;
+            return { regionsDiffer, membership, bandsDiffer, bandOf, inNest: count.slice(0, K).reduce((a, v) => a + v, 0), margin };
+          })()`) : null;
+          check('viewer', 'regions compared and a profile across an edge by remote control: each label\'s cells in the tumor nest and the rest, and in each band across its edge, as the suite counts them', `${compared?.message ?? compared?.error}; ${edge?.message ?? edge?.error}; ${JSON.stringify(regionsOwn)}`,
+            compared?.ok && edge?.ok && regionsOwn && regionsOwn.inNest > 0 && regionsOwn.regionsDiffer === 0 && regionsOwn.membership === 0 && regionsOwn.bandsDiffer === 0 && regionsOwn.bandOf === 0, 'the same counts');
+          const shownMargin = edge?.ok ? await act('show_tissue', { dataset: 'xenium-lung-2fov', cells_of: { analysis: edge.data.id, a: 'Epithelial', zone: 'margin' } }) : null;
+          const marginShown = shownMargin?.ok ? await chrome.eval('window.situcraftViewer.focus()') : null;
+          check('viewer', 'the cells at a region\'s margin shown on the tissue: epithelial cells within 10 µm of the tumor nest\'s edge, as the suite counts them', `${shownMargin?.message ?? shownMargin?.error}; ${JSON.stringify(marginShown)}`,
+            shownMargin?.ok && regionsOwn && regionsOwn.margin > 0 && marginShown?.cells === regionsOwn.margin, `${regionsOwn?.margin} cells`);
+
+          // Niches (wave 6, slice 5), against the suite's own: each cell's 10 nearest labeled cells
+          // by an exhaustive search, each niche's make-up the mean of its cells' windows, every cell
+          // nearest its own niche's center (k-means's fixed point); then the cells filled by niche,
+          // and one niche's cells shown.
+          const niches = labelsId ? await act('spatial_analysis', { dataset: 'xenium-lung-2fov', segmentation: 'instrument', question: 'niches', labels: labelsId, level: 1, niches: 5, seeds: 2 }) : null;
+          const nichesOwn = niches?.ok ? await chrome.eval(`(async () => {
+            const a = await (await fetch('/api/artifacts/${niches.data.id}/files/analysis.json')).json();
+            const cb = await (await fetch('/api/analyses/${niches.data.id}/cells')).arrayBuffer();
+            const n = new DataView(cb).getUint32(0, true);
+            const rows = new Uint32Array(cb, 4, n), label = new Int32Array(cb, 4 + 4 * n, n), stratum = new Int32Array(cb, 4 + 8 * n, n);
+            const gb = await (await fetch('/api/graphs/${graph?.data?.id}/edges')).arrayBuffer();
+            const gn = new DataView(gb).getUint32(0, true);
+            const grows = new Uint32Array(gb, 12, gn), gx = new Float32Array(gb, 12 + 4 * gn, gn), gy = new Float32Array(gb, 12 + 8 * gn, gn);
+            const X = [], Y = [];
+            for (let i = 0; i < gn; i += 1) {
+              X[grows[i]] = gx[i];
+              Y[grows[i]] = gy[i];
+            }
+            const K = a.labels.names.length, N = a.niches.niches;
+            const labeled = [];
+            for (let i = 0; i < n; i += 1) if (label[i] >= 0) labeled.push(i);
+            const sums = new Float64Array(N * K), size = new Array(N).fill(0);
+            const comp = new Float64Array(n * K);
+            for (let i = 0; i < n; i += 1) {
+              const px = X[rows[i]], py = Y[rows[i]];
+              const near = labeled.map((j) => [(X[rows[j]] - px) ** 2 + (Y[rows[j]] - py) ** 2, j]).sort((u, v) => u[0] - v[0] || u[1] - v[1]).slice(0, 10);
+              for (const [, j] of near) comp[i * K + label[j]] += 1 / near.length;
+              const v = stratum[i] - 1;
+              if (v < 0) continue;
+              size[v] += 1;
+              for (let k = 0; k < K; k += 1) sums[v * K + k] += comp[i * K + k];
+            }
+            let worst = 0;
+            for (let v = 0; v < N; v += 1) for (let k = 0; k < K; k += 1) worst = Math.max(worst, Math.abs(sums[v * K + k] / size[v] - a.niches.composition[v * K + k]));
+            // Each cell nearest its own niche's center.
+            let elsewhere = 0;
+            for (let i = 0; i < n; i += 1) {
+              let best = -1, bd = Infinity;
+              for (let v = 0; v < N; v += 1) {
+                let d = 0;
+                for (let k = 0; k < K; k += 1) d += (comp[i * K + k] - a.niches.composition[v * K + k]) ** 2;
+                if (d < bd - 1e-12) [best, bd] = [v, d];
+              }
+              if (best !== stratum[i] - 1) elsewhere += 1;
+            }
+            return { niches: N, sizes: size, recorded: a.niches.cells, worst, elsewhere };
+          })()`) : null;
+          check('viewer', 'niches by remote control: each niche\'s make-up the mean of its cells\' windows by the suite\'s own search of the 10 nearest labeled cells, every cell nearest its own niche\'s center', `${niches?.message ?? niches?.error}; ${JSON.stringify(nichesOwn)}`,
+            niches?.ok && nichesOwn && nichesOwn.niches === 5 && JSON.stringify(nichesOwn.sizes) === JSON.stringify(nichesOwn.recorded) && nichesOwn.worst < 1e-9 && nichesOwn.elsewhere === 0, 'the same make-up, each cell in its nearest niche');
+          const filled = niches?.ok ? await act('show_tissue', { dataset: 'xenium-lung-2fov', fill: 'niches' }) : null;
+          const fillShown = filled?.ok ? await chrome.eval(`(async () => {
+            for (let k = 0; k < 100 && !/^Niches/.test(window.situcraftViewer?.clusterFill?.()?.name ?? ''); k += 1) await new Promise((r) => setTimeout(r, 100));
+            const f = window.situcraftViewer?.clusterFill?.();
+            return f ? { name: f.name, counts: f.sets.map((_, k) => f.counts.get(k) ?? 0) } : null;
+          })()`) : null;
+          const oneNiche = filled?.ok ? await act('show_tissue', { dataset: 'xenium-lung-2fov', cells_of: { analysis: niches.data.id, niche: 2 } }) : null;
+          const oneShown = oneNiche?.ok ? await chrome.eval('window.situcraftViewer.focus()') : null;
+          check('viewer', 'niches on the tissue: the cells filled by their niche, as many in each as the analysis holds, and one niche\'s cells shown', `${filled?.message ?? filled?.error}; ${JSON.stringify(fillShown)}; ${oneNiche?.message ?? oneNiche?.error}; ${JSON.stringify(oneShown)}`,
+            filled?.ok && nichesOwn && JSON.stringify(fillShown?.counts) === JSON.stringify(nichesOwn.recorded) && oneShown?.cells === nichesOwn.recorded[1], 'the niches\' cells');
+
+          // Spatially variable genes (wave 6, slice 6): each gene's local Moran's I sums to S0 times
+          // its I, S0 the suite's own from the graph (with row-standardized weights, the cells with
+          // a neighbor); every classed cell's local I of its class's sign; a gene's cells high among
+          // high shown on the tissue as many as its classes hold.
+          const moran = graph?.ok ? await act('spatial_analysis', { dataset: 'xenium-lung-2fov', segmentation: 'instrument', question: 'moran', graph: graph.data.id, permutations: 49, local: 3, local_permutations: 49 }) : null;
+          const moranOwn = moran?.ok ? await chrome.eval(`(async () => {
+            const a = await (await fetch('/api/artifacts/${moran.data.id}/files/analysis.json')).json();
+            const lb = await (await fetch('/api/analyses/${moran.data.id}/local')).arrayBuffer();
+            const v = new DataView(lb);
+            const n = v.getUint32(0, true), T = v.getUint32(4, true);
+            const gb = await (await fetch('/api/graphs/${graph?.data?.id}/edges')).arrayBuffer();
+            const gn = new DataView(gb).getUint32(0, true);
+            const offsets = new Uint32Array(gb, 12 + 12 * gn, gn + 1);
+            let S0 = 0;
+            for (let i = 0; i < gn; i += 1) if (offsets[i + 1] > offsets[i]) S0 += 1;
+            const out = { genes: [], S0, recordedS0: a.moran.s0, wrongSign: 0, high: [] };
+            for (let k = 0; k < T; k += 1) {
+              const g = v.getUint32(8 + 4 * k, true);
+              const I = new Float32Array(lb, 8 + 4 * T + 4 * n * k, n);
+              const cls = new Uint8Array(lb, 8 + 4 * T + 8 * n * T + n * k, n);
+              let sum = 0;
+              let high = 0;
+              for (let i = 0; i < n; i += 1) {
+                sum += I[i];
+                if ((cls[i] === 1 || cls[i] === 2) && !(I[i] > 0) || (cls[i] === 3 || cls[i] === 4) && !(I[i] < 0)) out.wrongSign += 1;
+                if (cls[i] === 1) high += 1;
+              }
+              out.genes.push({ gene: a.moran.genes[g], relative: Math.abs(sum / (S0 * a.moran.i[g]) - 1) });
+              out.high.push(high);
+            }
+            return out;
+          })()`) : null;
+          check('viewer', 'Moran\'s I by remote control: each leading gene\'s local Moran\'s I sums to S0 times its I (S0 the suite\'s own from the graph), every classed cell\'s local I of its class\'s sign', `${moran?.message ?? moran?.error}; ${JSON.stringify(moranOwn)}`,
+            moran?.ok && moranOwn && moranOwn.genes.length === 3 && Math.abs(moranOwn.S0 - moranOwn.recordedS0) < 1e-6 && moranOwn.genes.every((x) => x.relative < 1e-4) && moranOwn.wrongSign === 0, 'S0 × I, and each class its sign');
+          const hot = moranOwn ? await act('show_tissue', { dataset: 'xenium-lung-2fov', cells_of: { analysis: moran.data.id, gene: moranOwn.genes[0].gene, class: 'high' } }) : null;
+          const hotShown = hot?.ok ? await chrome.eval('window.situcraftViewer.focus()') : null;
+          check('viewer', 'a gene\'s cells high among high shown on the tissue, as many as its local classes hold', `${hot?.message ?? hot?.error}; ${JSON.stringify(hotShown)}`,
+            hot?.ok && hotShown?.cells === moranOwn.high[0] && moranOwn.high[0] > 0, `${moranOwn?.high?.[0]} cells`);
+
+          // Analyses across segmentations (wave 6, slice 7): the enrichment made again on the 5 µm
+          // expansion in one step — its label set made again from the same clustering and marker
+          // set, its graph of the same definition over the expansion's cells — and recorded as made
+          // from it through the two segmentations' comparison; each number read together the
+          // suite's own from the two analyses' files, their rank correlation its own; and the cells
+          // behind the largest change its own, from the comparison's pairs and the two analyses'
+          // labels, shown on the tissue.
+          const enrichmentId = graph?.ok ? await chrome.eval(`window.situcraft.store.project.artifacts.find((a) => a.kind === 'spatial' && a.question === 'enrichment' && a.segmentation === ${JSON.stringify(graph.data.segmentation.id)} && a.state === 'complete')?.id ?? null`) : null;
+          const remade = enrichmentId ? await act('remake_analysis', { dataset: 'xenium-lung-2fov', analysis: enrichmentId, segmentation: 'Nucleus expansion, 5 µm' }) : null;
+          const remadeOwn = remade?.ok ? await chrome.eval(`(async () => {
+            const app = window.situcraft;
+            const { originOf } = await import('/lib/impact.js');
+            const ids = [${JSON.stringify(enrichmentId)}, ${JSON.stringify(remade.data.id)}];
+            const [a, b] = await Promise.all(ids.map(async (id) => (await fetch('/api/artifacts/' + id + '/files/analysis.json')).json()));
+            const art = (id) => app.store.project.artifacts.find((x) => x.id === id);
+            const rec = art(ids[1]), cmp = art(rec.comparison), la = art(a.labels.id), lb = art(b.labels.id), gb = art(b.graph.id);
+            const ratios = (x) => {
+              const K = x.labels.names.length, out = new Map();
+              for (let i = 0; i < K; i += 1) for (let j = i; j < K; j += 1) {
+                const e = Number(x.enrichment.expected[i * K + j] ?? NaN);
+                out.set('pair:' + [x.labels.names[i], x.labels.names[j]].sort().join('|'), e > 0 ? Number(x.enrichment.count[i * K + j]) / e : NaN);
+              }
+              return out;
+            };
+            const ra = ratios(a), rb = ratios(b);
+            const keys = [...ra.keys()].filter((k) => rb.has(k));
+            const both = keys.filter((k) => Number.isFinite(ra.get(k)) && Number.isFinite(rb.get(k)));
+            const rank = (v) => {
+              const idx = v.map((_, i) => i).sort((p, q) => v[p] - v[q]);
+              const out = new Array(v.length);
+              for (let i = 0; i < idx.length;) {
+                let j = i;
+                while (j + 1 < idx.length && v[idx[j + 1]] === v[idx[i]]) j += 1;
+                for (let k = i; k <= j; k += 1) out[idx[k]] = (i + j) / 2;
+                i = j + 1;
+              }
+              return out;
+            };
+            const x = rank(both.map((k) => ra.get(k))), y = rank(both.map((k) => rb.get(k)));
+            const m = (both.length - 1) / 2;
+            let sxy = 0, sxx = 0, syy = 0;
+            x.forEach((v, i) => { sxy += (v - m) * (y[i] - m); sxx += (v - m) * (v - m); syy += (y[i] - m) * (y[i] - m); });
+            const largest = Math.max(...both.map((k) => Math.abs(Math.log2(rb.get(k) / ra.get(k)))));
+            const changes = ${JSON.stringify(remade.data.changes)};
+            const wrong = changes.filter((r, i) => !(Math.abs(r.a / ra.get(r.key) - 1) < 1e-12 && Math.abs(r.b / rb.get(r.key) - 1) < 1e-12 && Math.abs(r.change - Math.log2(rb.get(r.key) / ra.get(r.key))) < 1e-9 && (i === 0 || Math.abs(r.change) <= Math.abs(changes[i - 1].change)))).map((r) => r.key);
+            // The cells behind the largest change, as the page shows them.
+            let tr = null;
+            for (let k = 0; k < 300 && !tr; k += 1) {
+              tr = document.querySelector('.sp-remake .sp-changes tbody tr');
+              if (!tr) await new Promise((r) => setTimeout(r, 100));
+            }
+            tr?.click();
+            let panel = null;
+            for (let k = 0; k < 600 && !panel; k += 1) {
+              await new Promise((r) => setTimeout(r, 100));
+              panel = document.querySelector('.sp-behind [data-action="behind-a"]') ? document.querySelector('.sp-behind p')?.textContent : null;
+            }
+            const shown = /another label or none: ([0-9,]+) under .+, ([0-9,]+) under /.exec(panel ?? '');
+            return {
+              linked: rec.remakeOf === ids[0] && rec.comparison === ${JSON.stringify(remade.data.comparison)} && [cmp?.a, cmp?.b].sort().join() === [a.segmentation?.id ?? art(ids[0]).segmentation, b.segmentation?.id ?? rec.segmentation].sort().join(),
+              labels: lb?.segmentation === rec.segmentation && la?.segmentation === art(ids[0]).segmentation && originOf(la) === originOf(lb) && a.labels.level === b.labels.level && JSON.stringify(a.labels.names) === JSON.stringify(b.labels.names),
+              graph: gb?.segmentation === rec.segmentation && JSON.stringify(a.graph.parameters) === JSON.stringify(b.graph.parameters) && a.graph.id !== b.graph.id,
+              numbers: keys.length, rho: sxy / Math.sqrt(sxx * syy), largest, wrong, row: tr?.dataset.key ?? null,
+              behind: shown ? [Number(shown[1].replaceAll(',', '')), Number(shown[2].replaceAll(',', ''))] : panel,
+            };
+          })()`) : null;
+          const behindA = remadeOwn?.behind?.length ? await chrome.eval(`(async () => {
+            document.querySelector('.sp-behind [data-action="behind-a"]').click();
+            for (let k = 0; k < 100 && !window.situcraftViewer?.focus(); k += 1) await new Promise((r) => setTimeout(r, 100));
+            return window.situcraftViewer?.focus() ?? null;
+          })()`) : null;
+          // The suite's own: the comparison's pairs, each cell's label in its analysis.
+          const pairsShown = remadeOwn ? await act('show_comparison', { dataset: 'xenium-lung-2fov', comparison: remade.data.comparison }) : null;
+          const behindOwn = pairsShown?.ok ? await chrome.eval(`(async () => {
+            const app = window.situcraft;
+            const w = app.compareView.current();
+            const ids = [${JSON.stringify(enrichmentId)}, ${JSON.stringify(remade.data.id)}];
+            const cmp = app.store.project.artifacts.find((x) => x.id === ${JSON.stringify(remade.data.comparison)});
+            const recA = app.store.project.artifacts.find((x) => x.id === ids[0]);
+            const aFirst = cmp.a === recA.segmentation;
+            // Each cell's label by name from its label set's files (the analyses leave out cells a
+            // review excluded): '' for a cell the set covers without a label at the level, null for
+            // one it leaves out (not analyzed), which is not compared.
+            const sides = await Promise.all(ids.map(async (id) => {
+              const x = await (await fetch('/api/artifacts/' + id + '/files/analysis.json')).json();
+              const set = await (await fetch('/api/labels/' + encodeURIComponent(x.labels.id))).json();
+              const lc = await (await fetch('/api/labels/' + encodeURIComponent(x.labels.id) + '/cells')).arrayBuffer();
+              const [, n, levels] = new Uint32Array(lc, 0, 4);
+              const level = Math.min(x.labels.level, levels - 1);
+              return { names: set.description.sets.map((t) => t.name), cells: new Uint32Array(lc, 16, n), label: new Int32Array(lc, 16 + 8 * n + 4 * n * level, n) };
+            }));
+            const [sa, sb] = aFirst ? sides : [sides[1], sides[0]];
+            const byRow = (s, n) => {
+              const out = new Array(n).fill(null);
+              s.cells.forEach((r, i) => { out[r] = s.label[i] >= 0 ? s.names[s.label[i]] : ''; });
+              return out;
+            };
+            const nameA = byRow(sa, w.prepared.idsA.length), nameB = byRow(sb, w.prepared.idsB.length);
+            const want = new Set(${JSON.stringify(remade.data.changes[0]?.labels ?? [])});
+            let countA = 0, countB = 0, other = 0;
+            for (const g of w.groups) {
+              if (g.a.length !== 1 || g.b.length !== 1) {
+                other += 1;
+                continue;
+              }
+              const x = nameA[g.a[0]], y = nameB[g.b[0]];
+              if (x === null || y === null || x === y) continue;
+              if (want.has(x)) countA += 1;
+              if (want.has(y)) countB += 1;
+            }
+            return aFirst ? { counts: [countA, countB], other } : { counts: [countB, countA], other };
+          })()`) : null;
+          check('viewer', 'an analysis made again on another segmentation by remote control: the enrichment on the 5 µm expansion, its labels made again from the same marker set and its graph of the same definition, recorded as made from it through the comparison; each number read together the suite\'s own, the rank correlation its own', `${remade?.message ?? remade?.error}; ${JSON.stringify(remadeOwn && { ...remadeOwn, wrong: remadeOwn.wrong.slice(0, 4) })}`,
+            remade?.ok && remadeOwn?.linked && remadeOwn.labels && remadeOwn.graph && remade.data.numbers === remadeOwn.numbers && remade.data.onlyA === 0 && remade.data.onlyB === 0 && remadeOwn.wrong.length === 0 && Math.abs(remade.data.rankCorrelation - remadeOwn.rho) < 1e-9 && Math.abs(Math.abs(remade.data.changes[0].change) - remadeOwn.largest) < 1e-9 && remadeOwn.row === remade.data.changes[0].key,
+            `${remadeOwn?.numbers} numbers, rank correlation ${remadeOwn?.rho?.toFixed?.(3)}`);
+          check('viewer', 'the cells behind the largest change: those of its labels whose counterparts, through the comparison, carry another label or none, under each segmentation the suite\'s own, and shown on the tissue', `${JSON.stringify(remadeOwn?.behind)}; shown ${JSON.stringify(behindA)}; own ${JSON.stringify(behindOwn)}`,
+            Array.isArray(remadeOwn?.behind) && behindOwn && behindOwn.other === 0 && remadeOwn.behind[0] === behindOwn.counts[0] && remadeOwn.behind[1] === behindOwn.counts[1] && behindA?.cells === behindOwn.counts[0] && behindOwn.counts[0] > 0,
+            `${behindOwn?.counts?.join(' and ')} cells`);
+        }
+
+        // The projects as 0.2.0 to 0.5.0 saved them
         // (validation/projects/<version>-lung.situcraft.json): this release's written when asked
         // (SITUCRAFT_WRITE_FIXTURE=1), the places of this run's folders made neutral and given its
         // own id; then each reopened, and every artifact SituCraft made that it records made again by
         // this build with the same files' checksums (a comparison by its differences: its
-        // comparison.json records the jobs' times; a clustering, a map and a label set from markers,
-        // whose records keep no checksums, by their summaries, which hold their numbers exactly).
+        // comparison.json records the jobs' times; a clustering, a map, a label set from markers, a
+        // graph and a spatial analysis, whose records keep no checksums, by their summaries, which
+        // hold their numbers exactly; those of a drawn region left out).
         const fixtureOf = (v) => join(root, 'validation', 'projects', `${v}-lung.situcraft.json`);
         if (process.env.SITUCRAFT_WRITE_FIXTURE) {
           const doc = await chrome.eval(`(async () => {
             const app = window.situcraft;
             const { rename, serializeProject } = await import('/lib/project.js');
-            app.store.commit(rename(app.store.project, 'Lung example, as SituCraft 0.5.0 saved it'), 'Rename');
+            app.store.commit(rename(app.store.project, 'Lung example, as SituCraft 0.6.0 saved it'), 'Rename');
             return serializeProject(app.store.project);
           })()`);
           // Its own id: it grew from the 0.1.0 project in this run.
           const neutral = JSON.parse(doc.split(join(dataRoot, 'xenium-lung-2fov')).join('/data/examples/xenium-lung-2fov').split(work).join('/data/work'));
-          writeFileSync(fixtureOf('0.5.0'), `${JSON.stringify({ ...neutral, id: 'p-situcraft-0-5-0-lung' }, null, 1)}\n`);
+          writeFileSync(fixtureOf('0.6.0'), `${JSON.stringify({ ...neutral, id: 'p-situcraft-0-6-0-lung' }, null, 1)}\n`);
         }
-        for (const v of ['0.2.0', '0.3.0', '0.4.0', '0.5.0']) {
+        for (const v of ['0.2.0', '0.3.0', '0.4.0', '0.5.0', '0.6.0']) {
           if (!existsSync(fixtureOf(v))) continue;
           const text = readFileSync(fixtureOf(v), 'utf8');
           const fixture = JSON.parse(text);
@@ -1068,7 +1691,12 @@ export async function viewerSuite({ check, MissingData, verbose }) {
           // Labels imported or from a reference read a file this run wrote, and the instrument's
           // clusters and map are the bundle's.
           const cellTypes = (a) => (a.kind === 'clustering' && !a.summary?.source) || (a.kind === 'embedding' && !a.summary?.source) || (a.kind === 'labels' && !a.source && !a.reference);
-          const made = fixture.artifacts.filter((a) => (a.kind === 'segmentation' && a.source !== 'instrument' && a.method?.name !== 'SituCraft export') || a.kind === 'comparison' || cellTypes(a));
+          // A graph or analysis of a drawn region is not made again: each run draws its regions anew,
+          // each with an id of its own, which names the analyses of it and is in the graphs' records.
+          const regionIds = (fixture.regions ?? []).map((r) => r.id);
+          const ofRegion = (a) => regionIds.some((id) => JSON.stringify(a).includes(id));
+          const spatial = (a) => (a.kind === 'graph' || a.kind === 'spatial') && a.state === 'complete' && !ofRegion(a);
+          const made = fixture.artifacts.filter((a) => (a.kind === 'segmentation' && a.source !== 'instrument' && a.method?.name !== 'SituCraft export') || a.kind === 'comparison' || cellTypes(a) || spatial(a));
           const differing = [];
           for (const a of made) {
             const m = await fetch(`${url}/api/artifacts/${encodeURIComponent(a.id)}`).then((r) => (r.ok ? r.json() : null));
@@ -1080,7 +1708,7 @@ export async function viewerSuite({ check, MissingData, verbose }) {
               if (JSON.stringify(m.summary?.classes) !== JSON.stringify(a.summary?.classes) || m.summary?.pixelAgreement !== a.summary?.pixelAgreement) differing.push(`${a.name}: other differences`);
               continue;
             }
-            if (cellTypes(a)) {
+            if (cellTypes(a) || spatial(a)) {
               if (JSON.stringify(m.summary) !== JSON.stringify(a.summary)) differing.push(`${a.name}: another summary`);
               continue;
             }
@@ -1088,7 +1716,7 @@ export async function viewerSuite({ check, MissingData, verbose }) {
             for (const f of a.files) if (sums.get(f.path) !== f.sha256) differing.push(`${a.name}: ${f.path}`);
           }
           const kinds = [...new Set(made.map((a) => a.kind))].join(', ');
-          check('viewer', `${v} Lung project: every artifact SituCraft made is made again with the same checksums`, `${made.length} artifacts (${kinds})${differing.length ? `; ${differing.slice(0, 4).join('; ')}` : ', all the same'}`, made.length >= 5 && differing.length === 0 && (v < '0.4.0' || made.filter(cellTypes).length >= 5), 'all the same');
+          check('viewer', `${v} Lung project: every artifact SituCraft made is made again with the same checksums`, `${made.length} artifacts (${kinds})${differing.length ? `; ${differing.slice(0, 4).join('; ')}` : ', all the same'}`, made.length >= 5 && differing.length === 0 && (v < '0.4.0' || made.filter(cellTypes).length >= 5) && (v < '0.6.0' || (made.filter((a) => a.kind === 'graph').length >= 5 && made.filter((a) => a.kind === 'spatial').length >= 6)), 'all the same');
           const reopened = await chrome.eval(`(async () => {
             const app = window.situcraft;
             const { promotedSegmentation, exportsOf } = await import('/lib/segmentations.js');
@@ -1107,6 +1735,66 @@ export async function viewerSuite({ check, MissingData, verbose }) {
           const kept = v < '0.5.0' || (reopened.regions === JSON.stringify(fixture.regions ?? []) && reopened.reviews === JSON.stringify(fixture.reviews ?? []) && (fixture.regions ?? []).length >= 2 && (fixture.reviews ?? []).length >= 3);
           check('viewer', `${v} Lung project: it opens and finds its moved bundle; its segmentations, comparisons, decisions, exports${v < '0.5.0' ? '' : ', regions and reviews'} are there, and its default`, JSON.stringify({ ...reopened, regions: (fixture.regions ?? []).length, reviews: (fixture.reviews ?? []).length }), reopened.before === 'missing' && reopened.after === 'ok' && reopened.segmentations === fixture.artifacts.filter((a) => a.kind === 'segmentation').length && reopened.comparisons >= 2 && reopened.decisions === fixture.decisions.length && reopened.exports >= 1 && reopened.default && reopened.default === reopened.saved && kept, 'missing, then ok; all there');
         }
+
+        // A worked example started in the page (here the bundles are the project's datasets, not
+        // examples), run step by step to its end.
+        const runWorked = async (bundle, name) => {
+          await chrome.eval(`(async () => {
+            const app = window.situcraft;
+            const { guideFor } = await import('/lib/tours.js');
+            const { startTour } = await import('/ui/tour.js');
+            const dataset = app.store.project.datasets.find((d) => d.name === ${JSON.stringify(bundle)});
+            for (let k = 0; k < 600 && !app.store.project.artifacts.some((a) => a.kind === 'segmentation' && a.dataset === dataset.id); k += 1) await new Promise((r) => setTimeout(r, 100));
+            startTour(app, { tour: guideFor(${JSON.stringify(bundle)}, ${JSON.stringify(name)}), dataset: dataset.id });
+            return true;
+          })()`);
+          const out = [];
+          for (let k = 0; k < 16; k += 1) {
+            const x = await act('tour', { run: true });
+            out.push(x);
+            if (!x.ok || x.data?.finished) break;
+          }
+          return out;
+        };
+        const stepsRun = (steps) => steps.map((x) => (x.ok ? (x.data.finished ? 'finished' : `step ${x.data.step}`) : x.message)).join('; ');
+        const finished = (steps) => steps.every((x) => x.ok) && steps.at(-1)?.data?.finished === true;
+        const stepOf = (steps, n) => steps.find((x) => x.ok && x.data.step === n)?.data;
+        const near = (v, want, tol) => Number.isFinite(v) && Math.abs(v - want) <= tol;
+        // An enrichment's numbers as the cards state them: each pair's ratio (found over expected),
+        // z and adjusted p by names; the pairs that differ from chance; and a pair's cells with a
+        // neighbor of the other, and the edges between them, from the graph's edges.
+        const ENRICHMENT_OF = `async (id, pair) => {
+          const a = await (await fetch('/api/artifacts/' + id + '/files/analysis.json')).json();
+          const names = a.labels.names, K = names.length, e = a.enrichment;
+          const at = (x, y) => { const i = names.indexOf(x), j = names.indexOf(y); return Math.min(i, j) * K + Math.max(i, j); };
+          const ratio = (x, y) => e.count[at(x, y)] / e.expected[at(x, y)];
+          let pairs = 0, significant = 0;
+          for (let x = 0; x < K; x += 1) for (let y = x; y < K; y += 1) { pairs += 1; if (e.padj[x * K + y] < 0.05) significant += 1; }
+          const out = { labels: K, pairs, significant, ratio, z: (x, y) => e.z[at(x, y)], cells: (x) => e.cells[names.indexOf(x)], graph: a.graph.id, labelsId: a.labels.id };
+          if (pair) {
+            const cb = await (await fetch('/api/analyses/' + id + '/cells')).arrayBuffer();
+            const n = new DataView(cb).getUint32(0, true);
+            const label = new Int32Array(cb, 4 + 4 * n, n);
+            const gb = await (await fetch('/api/graphs/' + a.graph.id + '/edges')).arrayBuffer();
+            const gn = new DataView(gb).getUint32(0, true), m = new DataView(gb).getUint32(4, true);
+            const off = new Uint32Array(gb, 12 + 12 * gn, gn + 1), nb = new Uint32Array(gb, 16 + 16 * gn, m);
+            const A = names.indexOf(pair[0]), B = names.indexOf(pair[1]);
+            const touches = new Uint8Array(gn);
+            let edges = 0;
+            for (let i = 0; i < gn; i += 1) {
+              for (let k = off[i]; k < off[i + 1]; k += 1) {
+                const j = nb[k];
+                if ((label[i] === A && label[j] === B) || (label[i] === B && label[j] === A)) {
+                  touches[i] = 1;
+                  if (j > i) edges += 1;
+                }
+              }
+            }
+            out.pair = { a: 0, b: 0, edges };
+            for (let i = 0; i < gn; i += 1) if (touches[i]) out.pair[label[i] === A ? 'a' : 'b'] += 1;
+          }
+          return out;
+        }`;
 
         // The worked example on the Breast data: the instrument's cells, drawn from stains, against
         // a 5 µm nucleus expansion, as research.md §4 records them.
@@ -1153,7 +1841,6 @@ export async function viewerSuite({ check, MissingData, verbose }) {
             const c = p.artifacts.find((x) => x.kind === 'comparison' && x.a === inst?.id && x.b === refined?.id);
             return { cells: refined?.summary?.cells, changed: c?.summary?.changedFraction, coA: c?.summary?.spuriousCoexpressionA, coB: c?.summary?.spuriousCoexpressionB };
           })()`);
-          const near = (v, want, tol) => Number.isFinite(v) && Math.abs(v - want) <= tol;
           check('viewer', 'the Breast refinement worked example refines, shows its certainty and what moved, as its card expects', `${rsteps.map((x) => x.ok ? `step ${x.data.step}` : x.message).join('; ')}; ${JSON.stringify(rc?.classes ?? {})}; ${JSON.stringify(rn)}`,
             rsteps.every((x) => x.ok) && rsteps.at(-1).data.step === 5 && rn.cells === 7275 && near(rc?.classes?.['one-to-one'], 4700, 250) && near(rc?.classes?.expanded, 1700, 150) && near(rc?.classes?.contracted, 760, 80) && near(rn.changed, 0.23, 0.02) && near(rn.coA, 1.77, 0.03) && near(rn.coB, 1.83, 0.03),
             '7,275 cells; about 4,700 the same, 1,700 grown, 760 shrunk; 23% of transcripts moved; co-expression 1.77 and 1.83');
@@ -1179,6 +1866,129 @@ export async function viewerSuite({ check, MissingData, verbose }) {
             bsteps.every((x) => x.ok) && bsteps.at(-1).data.step === 10 && bl?.matched.cells === 6512 && near(bl.matched.agreement, 0.969, 0.002) && bl.split.groups === 223 && bl.merged.groups === 106 && near(bl.mecr?.a, 0.0466, 0.001) && near(bl.mecr?.b, 0.0513, 0.001) && bl.fill && bct?.review?.sensitive === bl.sensitive.a && near(bl.sensitive.a, 688, 10) && /expansion/i.test(bct.against ?? ''),
             '6,512 matched, 96.9% of those labeled under both alike; 223 split, 106 merged; mixing 0.047 and 0.051; about 688 cells flagged against the expansion');
           await act('tour', { end: true });
+
+          // The spatial worked examples on the Breast data (wave 6, slice 10), each number their
+          // cards state checked. Which cell types are neighbors: the classes' and the lineages'
+          // enrichment over the Delaunay graph, and each pair's cells lit on the tissue (their
+          // clustering and labels made above, with the same defaults and set).
+          const ns = await runWorked('xenium-breast-2fov', 'neighbors-breast');
+          const classesId = stepOf(ns, 6)?.spatial?.analysis;
+          const lineagesId = stepOf(ns, 9)?.spatial?.analysis;
+          const bn = classesId && lineagesId ? await chrome.eval(`(async () => {
+            const of = ${ENRICHMENT_OF};
+            const c = await of(${JSON.stringify(classesId)}, ['Epithelial', 'Immune']);
+            const l = await of(${JSON.stringify(lineagesId)}, ['T cell', 'Myeloid']);
+            const g = (await (await fetch('/api/artifacts/' + c.graph)).json())?.summary;
+            const set = await (await fetch('/api/labels/' + c.labelsId)).json();
+            const d = set.description;
+            const r2 = (v) => Math.round(100 * v) / 100;
+            return {
+              shares: d.cells.labeled.map((n) => Math.round((100 * n) / d.cells.analyzed)),
+              graph: { cells: g?.cells, edges: g?.edges, median: g && Math.round(10 * g.medianLength) / 10 },
+              classes: { significant: c.significant, pairs: c.pairs, endothelial: r2(c.ratio('Endothelial', 'Endothelial')), stromal: r2(c.ratio('Stromal', 'Stromal')), immune: r2(c.ratio('Immune', 'Immune')), epiStromal: r2(c.ratio('Epithelial', 'Stromal')), epiImmune: r2(c.ratio('Epithelial', 'Immune')), pair: c.pair },
+              lineages: { labels: l.labels, pairs: l.pairs, significant: l.significant, tMyeloid: r2(l.ratio('T cell', 'Myeloid')), z: Math.round(l.z('T cell', 'Myeloid')), tT: r2(l.ratio('T cell', 'T cell')), luminalT: r2(l.ratio('Luminal', 'T cell')), pair: l.pair },
+            };
+          })()`) : null;
+          const nf7 = stepOf(ns, 7)?.focus, nf10 = stepOf(ns, 10)?.focus;
+          check('viewer', 'the worked example Which cell types are neighbors: the Breast classes\' and lineages\' enrichment over the Delaunay graph, and each pair\'s cells on the tissue, as its card states', `${stepsRun(ns)}; ${JSON.stringify(bn)}; shown ${nf7?.cells} and ${nf10?.cells}`,
+            finished(ns) && bn && JSON.stringify(bn.shares) === '[81,49,6]' && bn.graph.cells === 7275 && bn.graph.edges === 21678 && bn.graph.median === 11.4
+            && bn.classes.pairs === 15 && bn.classes.significant === 9 && bn.classes.endothelial === 12.45 && bn.classes.stromal === 4.54 && bn.classes.immune === 3.9 && bn.classes.epiStromal === 0.24 && bn.classes.epiImmune === 0.32
+            && bn.classes.pair.a === 651 && bn.classes.pair.b === 299 && bn.classes.pair.edges === 823 && nf7?.cells === 950
+            && bn.lineages.labels === 16 && bn.lineages.pairs === 136 && bn.lineages.significant === 54 && bn.lineages.tMyeloid === 4.44 && bn.lineages.z === 22 && bn.lineages.tT === 8.59 && bn.lineages.luminalT === 0.12
+            && bn.lineages.pair.a === 74 && bn.lineages.pair.b === 127 && bn.lineages.pair.edges === 164 && nf10?.cells === 201,
+            '81%, 49% and 6% labeled; 21,678 edges among 7,275 cells (median 11.4 µm); 9 of 15 class pairs, endothelial 12.45, stromal 4.54, immune 3.90 with themselves, epithelial–stromal 0.24, –immune 0.32 (651 and 299 cells, 823 edges); 54 of 136 lineage pairs, T cell–myeloid 4.44 (z 22; 74 and 127 cells, 164 edges), T–T 8.59, luminal–T 0.12');
+          await act('tour', { end: true });
+
+          // Immune cells and a tumor's edge: the region drawn, and each class's density across its
+          // edge, in its core, at its margin and around it.
+          const es = await runWorked('xenium-breast-2fov', 'tumor-edge');
+          const edgeId = stepOf(es, 6)?.spatial?.analysis;
+          const be = edgeId ? await chrome.eval(`(async () => {
+            const a = await (await fetch('/api/artifacts/${edgeId}/files/analysis.json')).json();
+            const b = a.boundary, names = a.labels.names, K = names.length;
+            const E = names.indexOf('Epithelial'), I = names.indexOf('Immune');
+            const tumor = window.situcraftViewer.regions.list().find((r) => r.name === 'Tumor');
+            const r2 = (v) => Math.round(100 * v) / 100;
+            return {
+              region: tumor ? window.situcraftViewer.regions.rowsIn(tumor.id).length : null,
+              epithelial: Math.round(10 * b.ratio[3 * E]) / 10,
+              immune: { core: Math.round(b.zoneDensity[I]), margin: Math.round(b.zoneDensity[K + I]), around: Math.round(b.zoneDensity[2 * K + I]), ratio: r2(b.ratio[3 * I]), lo: r2(b.ratioLo[3 * I]), hi: r2(b.ratioHi[3 * I]), atCore: b.zoneCount[I], atMargin: b.zoneCount[K + I] },
+            };
+          })()`) : null;
+          const ef7 = stepOf(es, 7)?.focus, ef8 = stepOf(es, 8)?.focus;
+          check('viewer', 'the worked example Immune cells and a tumor\'s edge: the region drawn on the stains, the epithelial cells filling it and the immune cells kept out, and those at its margin and in its core on the tissue, as its card states', `${stepsRun(es)}; ${JSON.stringify(be)}; shown ${ef7?.cells} and ${ef8?.cells}`,
+            finished(es) && be && be.region === 5730 && be.epithelial === 4.8 && be.immune.core === 420 && be.immune.margin === 765 && be.immune.around === 1174 && be.immune.ratio === 0.36 && be.immune.lo === 0.28 && be.immune.hi === 0.45
+            && be.immune.atMargin === 76 && be.immune.atCore === 230 && ef7?.cells === 76 && ef8?.cells === 230,
+            '5,730 cells in the tumor; epithelial cells 4.8 times as dense in its core; immune cells 420 per mm² in the core, 765 at the margin, 1,174 around (0.36, 0.28 to 0.45); 76 at the margin and 230 in the core shown');
+          await act('tour', { end: true });
+        }
+
+        // The spatial worked examples on the Lung data (wave 6, slice 10), in a project of their own:
+        // the suite's Lung project has cells a review excluded, which change the cards' numbers.
+        {
+          await act('new_project', { name: 'Lung spatial worked examples' });
+          await act('open_paths', { paths: [join(dataRoot, 'xenium-lung-2fov')], add: true });
+          // Genes in a pattern: every gene's Moran's I over the Delaunay graph, and GJA5's cells
+          // high among high on the tissue.
+          const ms = await runWorked('xenium-lung-2fov', 'moran-genes');
+          const moranId = stepOf(ms, 4)?.spatial?.analysis;
+          const lm = moranId ? await chrome.eval(`(async () => {
+            const { readLocal } = await import('/lib/spatial.js');
+            const a = await (await fetch('/api/artifacts/${moranId}/files/analysis.json')).json();
+            const r = a.moran;
+            const g = (await (await fetch('/api/artifacts/' + a.graph.id)).json()).summary;
+            const order = r.genes.map((_, i) => i).sort((x, y) => r.i[y] - r.i[x]);
+            const local = readLocal(await (await fetch('/api/analyses/${moranId}/local')).arrayBuffer());
+            const G = r.genes.indexOf('GJA5');
+            const classes = local.classes[local.genes.indexOf(G)];
+            const of = (cls) => classes.reduce((n, c) => n + (c === cls ? 1 : 0), 0);
+            return { cells: g.cells, edges: g.edges, genes: r.genes.length, patterned: r.padj.filter((p) => p < 0.05).length, top: order.slice(0, 5).map((i) => r.genes[i]).join(' '), i: order.slice(0, 3).map((i) => Math.round(1000 * r.i[i]) / 1000), detected: Math.round((1000 * r.detected[G]) / r.cells) / 10, highHigh: of(1), lowHigh: of(4) };
+          })()`) : null;
+          const mf = stepOf(ms, 5)?.focus;
+          check('viewer', 'the worked example Genes in a pattern: Moran\'s I of every Lung gene over the Delaunay graph, GJA5\'s strongest, and its cells high among high on the tissue, as its card states', `${stepsRun(ms)}; ${JSON.stringify(lm)}; shown ${mf?.cells}`,
+            finished(ms) && lm && lm.cells === 11898 && lm.edges === 35472 && lm.genes === 289 && lm.patterned === 162 && lm.top === 'GJA5 IGFBP3 CXCL13 PLA2G7 LTBP2' && JSON.stringify(lm.i) === '[0.436,0.411,0.313]' && lm.detected === 1.2 && lm.highHigh === 73 && lm.lowHigh === 286 && mf?.cells === 73,
+            '35,472 edges among 11,898 cells; 162 of 289 genes; GJA5 0.436, IGFBP3 0.411, CXCL13 0.313, then PLA2G7 and LTBP2; GJA5 in 1.2% of the cells, 73 high among high and 286 low among high; 73 shown');
+          await act('tour', { end: true });
+
+          // An answer under another segmentation: the classes' enrichment, made again on a 3 µm
+          // nucleus expansion, and the two read together.
+          const rs = await runWorked('xenium-lung-2fov', 'remake-enrichment');
+          const rsAt = stepOf(rs, 8)?.spatial;
+          const lr = rsAt?.analysis && rsAt?.again ? await chrome.eval(`(async () => {
+            const { analysisNumbers, compareNumbers, rankCorrelation } = await import('/lib/spatial.js');
+            const p = window.situcraft.store.project;
+            const ds = p.datasets.find((x) => x.name === 'xenium-lung-2fov');
+            const of = ${ENRICHMENT_OF};
+            const e = await of(${JSON.stringify(rsAt.analysis)});
+            const read = async (id) => (await fetch('/api/artifacts/' + id + '/files/analysis.json')).json();
+            const a = await read(${JSON.stringify(rsAt.analysis)}), b = await read(${JSON.stringify(rsAt.again)});
+            const cmp = compareNumbers(analysisNumbers(a), analysisNumbers(b));
+            const top = cmp.rows[0];
+            const immune = (x) => x.enrichment.cells[x.labels.names.indexOf('Immune')];
+            const clustering = p.artifacts.find((x) => x.kind === 'clustering' && x.dataset === ds.id)?.summary;
+            const set = await (await fetch('/api/labels/' + e.labelsId)).json();
+            const expansion = p.artifacts.find((x) => x.kind === 'segmentation' && x.dataset === ds.id && x.parameters?.distance_um === 3)?.summary?.agreement;
+            // The cells behind the largest change, found as the step shows it.
+            let behind = null;
+            for (let k = 0; k < 200 && !/counterparts/.test(behind ?? ''); k += 1) {
+              behind = document.querySelector('.sp-behind p')?.innerText ?? null;
+              if (!/counterparts/.test(behind ?? '')) await new Promise((r) => setTimeout(r, 100));
+            }
+            const r2 = (v) => Math.round(100 * v) / 100;
+            const d = set.description;
+            return {
+              clusters: clustering?.clusters, clustered: clustering?.cells, labeled: Math.round((100 * d.cells.labeled[0]) / d.cells.analyzed),
+              significant: e.significant, pairs: e.pairs, stromal: r2(e.ratio('Stromal', 'Stromal')), epiEndothelial: r2(e.ratio('Epithelial', 'Endothelial')), epiStromal: r2(e.ratio('Epithelial', 'Stromal')),
+              pixels: expansion && Math.round(10000 * expansion.pixels.agreement) / 100, transcripts: expansion && Math.round(10000 * expansion.transcripts.agreement) / 100,
+              rho: Math.round(1000 * rankCorrelation(cmp.rows)) / 1000, numbers: cmp.rows.length, top: { key: top.key, a: r2(top.a), b: r2(top.b) }, immune: [immune(a), immune(b)],
+              behind: (behind?.match(/: ([\\d,]+) under .*?, ([\\d,]+) under/) ?? []).slice(1).join(' '),
+            };
+          })()`) : null;
+          check('viewer', 'the worked example An answer under another segmentation: the Lung classes\' enrichment made again on a 3 µm nucleus expansion, the two read together, and the cells behind the largest change, as its card states', `${stepsRun(rs)}; ${JSON.stringify(lr)}`,
+            finished(rs) && lr && lr.clusters === 29 && lr.clustered === 11820 && lr.labeled === 47 && lr.pairs === 10 && lr.significant === 7 && lr.stromal === 3.99 && lr.epiEndothelial === 0.78 && lr.epiStromal === 0.79
+            && lr.pixels === 90 && lr.transcripts === 95.45 && lr.numbers === 10 && lr.rho === 0.976 && lr.top.key === 'pair:Immune|Immune' && lr.top.a === 1.44 && lr.top.b === 1.94 && JSON.stringify(lr.immune) === '[249,227]' && lr.behind === '44 22',
+            '29 clusters of 11,820 cells, 47% labeled; 7 of 10 pairs, stromal 3.99 with themselves, epithelial–endothelial 0.78, –stromal 0.79; the expansion 90.00% of pixels and 95.45% of transcripts alike; rank correlation 0.976; immune–immune 1.44 to 1.94 (249 and 227 immune cells; 44 and 22 behind it)');
+          await act('tour', { end: true });
         }
 
         // The simulated example, made on this computer, and its worked example scoring the
@@ -1200,7 +2010,6 @@ export async function viewerSuite({ check, MissingData, verbose }) {
           return { truth: Boolean(truth), instrument: s('instrument'), refined: s('refined') };
         })()`);
         const tc = tsteps.at(-1).data?.comparison;
-        const near = (v, want, tol) => Number.isFinite(v) && Math.abs(v - want) <= tol;
         check('viewer', 'the simulated example is made here; its worked example imports the truth, refines, and scores both against it as its card expects', `${simulatedMade.message ?? simulatedMade.error}; ${tsteps.map((x) => x.ok ? `step ${x.data.step}` : x.message).join('; ')}; ${JSON.stringify(scores)}`,
           simulatedMade.ok && tsteps.every((x) => x.ok) && tsteps.at(-1).data.step === 6 && tc?.mode === 'overlay' && scores.truth && near(scores.instrument?.iou, 0.62, 0.02) && near(scores.instrument?.changed, 0.20, 0.02) && near(scores.refined?.iou, 0.72, 0.02) && near(scores.refined?.changed, 0.17, 0.02),
           'the instrument\'s: median IoU 0.62, 20% changed; the refinement\'s: 0.72, 17%');
@@ -1322,6 +2131,74 @@ export async function viewerSuite({ check, MissingData, verbose }) {
             reviewSteps.every((x) => x.ok) && /finished/.test(reviewSteps.at(-1).message ?? '') && reviewed.accepted === 18 && reviewed.relabeled === 2 && reviewed.right && reviewed.excludedCells === 43 && reviewed.records === 22 && reviewed.before === 49 && reviewed.after === 47,
             '18 accepted, 2 relabeled (to their true types), 43 cells excluded, 22 reviews; 49 wrong labels before, 47 after');
           await act('tour', { end: true });
+
+          // The spatial worked example on the simulated tissue (wave 6, slice 10): niches of the true
+          // cells by their true types, read against the domains the simulator laid out, and the
+          // defaults' less stable niches, each number its card states checked; the Viewer filled by
+          // each.
+          const nicheSteps = await card('niches-domains');
+          const fourId = stepOf(nicheSteps, 6)?.spatial?.analysis;
+          const sixId = stepOf(nicheSteps, 10)?.spatial?.analysis;
+          const fills = [];
+          for (const n of [7, 8]) {
+            await act('tour', { example: 'simulated-standard', name: 'niches-domains', step: n });
+            fills.push(await chrome.eval(`(async () => {
+              const v = window.situcraftViewer;
+              for (let k = 0; k < 300 && !(v.clusterFill?.()?.labels && v.clusterFill().sets.length === ${n === 7 ? 4 : 6}); k += 1) await new Promise((r) => setTimeout(r, 100));
+              const f = v.clusterFill?.();
+              return f ? { name: f.name, counts: [...f.counts.values()].sort((a, b) => b - a) } : null;
+            })()`));
+          }
+          await act('tour', { end: true });
+          const sn = fourId && sixId ? await chrome.eval(`(async () => {
+            const app = window.situcraft;
+            const { readAnalyzed } = await import('/lib/spatial.js');
+            const { labelSource, refOf } = await import('/ui/label-sources.js');
+            const p = app.store.project;
+            const ds = p.datasets.find((x) => x.name === 'simulated-standard');
+            const read = async (id) => (await fetch('/api/artifacts/' + id + '/files/analysis.json')).json();
+            const a = await read(${JSON.stringify(fourId)}), six = await read(${JSON.stringify(sixId)});
+            const r = a.niches, names = a.labels.names, K = names.length;
+            // Each niche's leading type and its share.
+            const lead = r.cells.map((n, v) => {
+              let best = 0;
+              for (let k = 1; k < K; k += 1) if (r.composition[v * K + k] > r.composition[v * K + best]) best = k;
+              return names[best] + ' ' + Math.round(100 * r.composition[v * K + best]) + '% of ' + n;
+            });
+            // Each true cell's niche against its domain: each domain's niche the one most of its
+            // cells lie in.
+            const domains = p.artifacts.find((x) => x.kind === 'labels' && x.dataset === ds.id && x.source?.column === 'domain');
+            const t = domains ? await labelSource(app, refOf(domains.id, 0)) : null;
+            const c = readAnalyzed(await (await fetch('/api/analyses/${fourId}/cells')).arrayBuffer());
+            const tally = t ? t.names.map(() => new Array(r.niches).fill(0)) : [];
+            for (let i = 0; i < c.n; i += 1) {
+              const d = t?.label[c.rows[i]];
+              if (d >= 0 && c.stratum[i] > 0) tally[d][c.stratum[i] - 1] += 1;
+            }
+            let own = 0, all = 0;
+            const home = {}, share = [];
+            tally.forEach((row, d) => {
+              const top = row.indexOf(Math.max(...row));
+              const n = row.reduce((s, v) => s + v, 0);
+              home[t.names[d]] = top;
+              own += row[top];
+              all += n;
+              share.push(row[top] / n);
+            });
+            return {
+              cells: a.cells.analyzed, niches: r.niches, neighbors: a.parameters.neighbors, lead, agreement: r.agreement,
+              domains: t?.names.length ?? 0, own: Math.round(1000 * own / all) / 10, lowest: Math.round(100 * Math.min(...share)), highest: Math.round(100 * Math.max(...share)),
+              shared: home['0'] === home['4'] && home['1'] === home['5'] && new Set(Object.values(home)).size === 4,
+              six: { niches: six.niches.niches, neighbors: six.parameters.neighbors, agreement: six.niches.agreement.map((v) => Math.round(100 * v) / 100) },
+            };
+          })()`) : null;
+          const ag = sn?.six.agreement ?? [];
+          check('viewer', 'the worked example Niches against the domains: four niches of the true cells, each led by one type and stable across seeds, 96.5% of the cells in their domain\'s niche, the six of the defaults less stable, and the Viewer filled by niches and by domains, as its card states', `${stepsRun(nicheSteps)}; ${JSON.stringify(sn)}; fills ${JSON.stringify(fills)}`,
+            finished(nicheSteps) && sn && sn.cells === 3030 && sn.niches === 4 && sn.neighbors === 30 && sn.lead.join('; ') === 'epithelial-like 47% of 1078; endothelial-like 53% of 887; immune-like 72% of 554; fibroblast-like 44% of 511' && sn.agreement.every((v) => v === 1)
+            && sn.domains === 6 && sn.own === 96.5 && sn.lowest === 93 && sn.highest === 99 && sn.shared
+            && sn.six.niches === 6 && sn.six.neighbors === 10 && Math.min(...ag) === 0.66 && Math.max(...ag) === 0.93
+            && /^Niches of/.test(fills[0]?.name ?? '') && JSON.stringify(fills[0]?.counts) === '[1078,887,554,511]' && /domain/.test(fills[1]?.name ?? '') && fills[1]?.counts.length === 6 && fills[1].counts.reduce((s, v) => s + v, 0) === 3030,
+            'epithelial-like 47% of 1,078, endothelial-like 53% of 887, immune-like 72% of 554, fibroblast-like 44% of 511; the seeds agree (1.00); 96.5% in their domain\'s niche (93% to 99%), domains 0 and 4 sharing one, 1 and 5 another; six niches of 10 agree 0.66 to 0.93; filled by 4 niches, then 6 domains');
         }
       }
 

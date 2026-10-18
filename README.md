@@ -18,9 +18,10 @@ tissue-level spatial analysis one reproducible workflow:
 - export open formats with complete provenance.
 
 SituCraft runs as one self-contained program on macOS, Linux and Windows. It opens as a desktop
-window, needs no other software, and keeps your data on your computer.
+window, needs no other software, and keeps your data on your computer. 16 GB of memory is
+recommended for whole sections; 8 GB is enough for the examples ([what it needs](docs/INSTALLING.md#what-it-needs)).
 
-**Status:** 0.5.0. SituCraft opens a Xenium output bundle (folder or zip), reads every byte of it
+**Status:** 0.6.0. SituCraft opens a Xenium output bundle (folder or zip), reads every byte of it
 with its own readers, validates it (fatal problems, warnings and notes, and 22 of the run's
 recorded values recomputed from its data) and records it in a project. Its tissue viewer shows the
 morphology stains, the transcripts of chosen genes and the cells at any zoom, every image sample
@@ -80,6 +81,24 @@ kept with who, why, the value before and after, the label set, the label's confi
 alignment in use, and written as CSV or JSON. The simulated example now has an H&E and an
 immunofluorescence image with their truth, and worked examples that align the H&E three ways and
 score each, take regions to QuPath and back, and review the cells a queue ranks first.
+
+Since 0.6.0, SituCraft asks how the tissue is organized, in the Spatial view: graphs of which cells
+are neighbors (the Delaunay triangulation of their centers, their nearest neighbors, a radius, or
+contact in the segmentation), edge for edge those SciPy and Squidpy build; which cell types are
+neighbors more or less often than chance (neighborhood enrichment, its expectation exact, its
+significance by permutation, within regions if asked) and at what distances (co-occurrence),
+Squidpy's numbers on the same cells; how far each type lies from the nearest of each other, and at
+what scale cells gather or keep apart (Ripley's K and L in the tissue or a region, edge-corrected),
+each against the labels dealt at random; each region's cells per mm² of its tissue and per labeled
+cell, regions compared with intervals, and which types fill a region, stay out of it or gather at
+its margin; the tissue's kinds of place (cellular neighborhoods), how stable they are, and their
+genes; which genes are expressed in a spatial pattern (Moran's I, Squidpy's exactly) and where; any
+answer made again on another segmentation in one step and read with the first, number by number,
+with the cells behind each change; and every number's cells shown on the tissue. A million cells'
+graphs, enrichment and niches take seconds on four cores, and their Moran's I under two minutes in
+1 GB. Worked examples ask which cell types are neighbors in the Breast section and whether its
+immune cells enter its tumor, read the simulated tissue's niches against its domains, find the Lung
+genes in a pattern, and make an answer again under another segmentation.
 
 ## A look around
 
@@ -165,8 +184,9 @@ in app mode with its own profile, or else your default browser. Name bundles (th
 bundle** in the window. A bundle is read where it is: SituCraft never copies, changes or moves it.
 Running `situcraft <paths>` again hands them to the SituCraft already running.
 
-[Getting started](docs/GETTING-STARTED.md) walks through the examples, the Data view, the Viewer,
-QC, saved views and the methods paragraph.
+The [user guide](https://robert-mcdermott.github.io/situcraft/docs/) on SituCraft's website walks
+through the examples and every view, a page a subject (its sources are in
+[docs/site/pages/docs/](docs/site/pages/docs/)).
 
 ## Options
 
@@ -207,7 +227,8 @@ lists the settings, `--preflight` says what a run would need, and
 
 ## Documentation
 
-- [Getting started](docs/GETTING-STARTED.md): from the examples to a saved, reproducible view.
+- [The website](https://robert-mcdermott.github.io/situcraft/): the user guide, installing, and
+  the methods with their validation ([docs/site/](docs/site/README.md) builds it).
 - [Formats](docs/FORMATS.md): what SituCraft reads and writes.
 - [Remote control](docs/REMOTE-CONTROL.md): driving the window from scripts and notebooks.
 - [Installing](docs/INSTALLING.md): release files, installers, upgrading, uninstalling.

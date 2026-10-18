@@ -1,0 +1,40 @@
+---
+title: Clusters and the map
+description: Cluster a Xenium segmentation's cells in SituCraft: normalization, principal components, nearest neighbors and Leiden, scanpy's defaults; markers per cluster; a UMAP map linked to the tissue; names and the instrument's clusters.
+lede: Cell types begin with clusters: cells grouped by their expression as scanpy groups them, each cluster with its markers, and a map of the cells beside the tissue, linked to it.
+---
+      <h2 id="cluster">Clustering the cells</h2>
+      <p>The <strong>Cell types</strong> view groups a segmentation's cells by their gene expression, the first step toward naming them. Choose the segmentation (the default to start) and the cells to analyze: those with at least 10 gene transcripts, or, for the instrument's segmentation, the cells one of your QC filters keeps. <strong>Cluster the cells</strong> runs the common single-cell workflow as a job (about a second for the examples):</p>
+      <ol>
+        <li>each cell's counts scaled to the median total and log-transformed;</li>
+        <li>each gene scaled, so that every gene counts alike;</li>
+        <li>principal components (50), computed exactly;</li>
+        <li>each cell's 15 nearest neighbors in them, as a graph;</li>
+        <li>Leiden communities of the graph: the clusters, numbered from the largest.</li>
+      </ol>
+      <p>The same steps serve a whole section: above 50,000 cells the nearest neighbors are found by NN-Descent rather than by comparing every pair (the clustering says how many of the exact neighbors it found, measured on 1,000 of its cells: 99.9% on the examples), the map is laid out over every core, and for panels of more than 1,000 genes (Xenium Prime) the components are found by the Lanczos method, the full decomposition's to rounding.</p>
+
+      <h2 id="parameters">Parameters</h2>
+      <p><strong>Parameters</strong> shows each setting with what it does. They are scanpy's defaults, so the numbers match what the scanpy tutorials give. <strong>Resolution</strong> is the one you will change most: higher gives more and smaller clusters. There is no right value; make a few and compare their markers. Each clustering is kept as an artifact of its segmentation with every parameter and its seed, and the same seed gives the same clusters on any computer. Asking for one already made answers it at once.</p>
+
+      <h2 id="clusters">The clusters</h2>
+      <shot name="celltypes" alt="The Cell types view of the Breast example: 15 clusters of 7,163 cells, each with its size and leading markers (TOP2A and MKI67 for dividing cells, CD68 for macrophages, LUM for fibroblasts, CD3E for T cells), the components' share of the variance, and the first cluster's markers against the other cells">The Breast example's 15 clusters, each with its size and leading markers, and the first cluster's markers.</shot>
+      <p>Under each clustering are its numbers (the cells analyzed and left out, the components' share of the variance, the graph and the modularity Leiden reached) and its clusters, each with its size and leading markers. Choose a cluster to see its markers against all the other cells: how much higher its expression is (log₂ fold change), the share of cells expressing the gene in and out of it, and the rank-sum test's score and adjusted p-value. These are exploratory: the cells of one tissue are not independent replicates, so the p-values rank genes rather than test them.</p>
+      <p><strong>Show in the Viewer</strong> opens the Viewer with the cells filled by cluster and a legend. The Viewer's <strong>Fill by</strong> lists every clustering of the segmentation drawn, and a saved view keeps the one shown.</p>
+      <shot name="clusters" alt="The Breast example in the Viewer, its cells filled by their cluster: tumor nests and stroma in different clusters, with the clusters' legend">The Breast clusters on the tissue: tumor nests and stroma in different clusters.</shot>
+
+      <h2 id="map">The map and the tissue</h2>
+      <shot name="cellmap" alt="The Cell types view of the Breast example: the map of the cells (UMAP) beside the tissue, colored by cluster with some clusters named, the T cells selected on both, the selection's composition below">The map of the Breast cells beside the tissue, linked: the T cells selected on both.</shot>
+      <p>Each clustering comes with a <strong>map</strong> (UMAP, made at once, a few seconds for the examples): cells with similar expression lie near each other. It sits beside the tissue, and the two are linked:</p>
+      <ul>
+        <li><strong>Color by</strong> a clustering's clusters (any clustering of the segmentation), a gene (type its name), the cells' gene transcripts or area, or how faithfully the map keeps each region's neighbors.</li>
+        <li><strong>Select cells</strong> on either side with the <strong>Lasso</strong> (shift adds to the selection), or by clicking a cluster in the legend or the table: the cells are selected on both, the others faint. Click a cell on the map to find it on the tissue, or on the tissue to mark it on the map.</li>
+        <li><strong>Markers of the selection</strong> compares the selected cells with the clustering's other cells, as the clusters' markers are computed: what distinguishes a region you drew.</li>
+      </ul>
+      <p>A map shows which cells are alike, not how alike: distances between groups, and their sizes, mean little. Under the map, SituCraft says how far this one can be trusted, from its trustworthiness and how many of each cell's nearest neighbors in expression stay near it on the map.</p>
+
+      <h2 id="names">Names</h2>
+      <p><strong>Name</strong> clusters in the table (a T-cell cluster, a tumor cluster): names show on the map, the tissue and the legends, and giving several clusters the same name merges them. Each change is a new version of the names, kept in the project's history; the clusters keep their numbers. The <strong>dot plot</strong> shows each cluster's two leading markers across all clusters: dot size, the share of cells expressing the gene; color, its mean expression.</p>
+
+      <h2 id="instrument">The instrument's clusters</h2>
+      <p><strong>The instrument's clusters:</strong> the bundle holds the instrument's own analysis (graph-based clusters, and k-means for 2 to 10 clusters, with its own map). <strong>Add</strong> one to explore it here like any clustering (SituCraft computes its markers), and the instrument's map comes with the first. <strong>Two clusterings compared</strong> cross-tabulates any two clusterings of the same cells, with the adjusted Rand index (1: the same partition; about 0: as alike as chance).</p>

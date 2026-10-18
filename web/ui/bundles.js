@@ -6,6 +6,8 @@
 
 import { openPaths } from './storage.js';
 import { addClustering, addEmbedding, clusteringRecord, embeddingRecord } from '../lib/clusterings.js';
+import { addGraph, graphRecord, gridOf, readGraph } from '../lib/graphs.js';
+import { addAnalysis, analysisRecord, readAnalyzed, readLocal } from '../lib/spatial.js';
 import { addDataset, compareFingerprint, datasetRecord, findDataset, relocateDataset, removeDataset } from '../lib/datasets.js';
 import { addLabels, labelsRecord, readLabelCells } from '../lib/labels.js';
 import { addImage as withImage, imageRecord } from '../lib/images.js';
@@ -695,6 +697,123 @@ export function createBundles(app) {
     return getJSON(`/api/clusterings/${encodeURIComponent(id)}/markers?top=${top}`);
   }
 
+  // --- Graphs of cells (api_graphs.go) ---
+
+  // Builds a graph of a segmentation's cells: request { segmentation, parameters, cells }
+  // (lib/graphs.js cellsRequest). A job builds it unless it was built already; it is recorded in the
+  // project. Answers its manifest.
+  const graphing = new Map(); // `${dataset}|${segmentation}|${kind}` → { dataset, segmentation, kind, job, promise }
+  function buildGraph(item, datasetId, request) {
+    const key = `${datasetId}|${request.segmentation}|${request.parameters?.kind}`;
+    if (graphing.has(key)) return graphing.get(key).promise;
+    const entry = { dataset: datasetId, segmentation: request.segmentation, kind: request.parameters?.kind, job: null, promise: null };
+    entry.promise = (async () => {
+      try {
+        const answer = await getJSON(`${item.url}/graph`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) });
+        let manifest = answer.artifact;
+        if (!manifest) {
+          entry.job = answer.job?.id ?? null;
+          notify();
+          const job = await app.jobs.finished(entry.job);
+          if (job?.state !== 'complete') throw new Error(`the graph ${job?.state ?? 'ended'}${job?.error ? `: ${job.error}` : ''}`);
+          manifest = await getJSON(`/api/artifacts/${encodeURIComponent(answer.id)}`);
+        }
+        const dataset = app.store.project.datasets.find((d) => d.id === datasetId);
+        if (!dataset) throw new Error('the dataset is no longer in the project');
+        const next = addGraph(app.store.project, graphRecord(dataset, manifest));
+        if (next !== app.store.project) app.store.commit(next, `Build a graph of the cells of ${dataset.name}`);
+        return manifest;
+      } finally {
+        graphing.delete(key);
+        notify();
+      }
+    })();
+    graphing.set(key, entry);
+    notify();
+    return entry.promise;
+  }
+
+  // A graph's description (graph.json) and edges (lib/graphs.js readGraph), with a grid of its cells,
+  // kept for the session.
+  const graphStore = new Map();
+  function graphData(id) {
+    if (!graphStore.has(id)) {
+      const p = (async () => {
+        const [description, response] = await Promise.all([
+          getJSON(`/api/artifacts/${encodeURIComponent(id)}/files/graph.json`),
+          fetch(`/api/graphs/${encodeURIComponent(id)}/edges`),
+        ]);
+        if (!response.ok) throw new Error(`its edges: HTTP ${response.status}`);
+        const graph = readGraph(await response.arrayBuffer());
+        return { description, graph, grid: gridOf(graph) };
+      })();
+      p.catch(() => graphStore.delete(id));
+      graphStore.set(id, p);
+    }
+    return graphStore.get(id);
+  }
+
+  // --- Spatial analyses (api_spatial.go) ---
+
+  // Makes a spatial analysis: request { question, segmentation, graph or cells, labels, strata,
+  // parameters } (lib/spatial.js). A job makes it unless it was made already; it is recorded in the
+  // project. Answers its manifest.
+  const analyzing = new Map(); // `${dataset}|${question}|${segmentation}` → { dataset, question, segmentation, job, promise }
+  function runAnalysis(item, datasetId, request) {
+    const key = `${datasetId}|${request.question}|${request.segmentation}`;
+    if (analyzing.has(key)) return analyzing.get(key).promise;
+    const entry = { dataset: datasetId, question: request.question, segmentation: request.segmentation, job: null, promise: null };
+    entry.promise = (async () => {
+      try {
+        const answer = await getJSON(`${item.url}/spatial`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) });
+        let manifest = answer.artifact;
+        if (!manifest) {
+          entry.job = answer.job?.id ?? null;
+          notify();
+          const job = await app.jobs.finished(entry.job);
+          if (job?.state !== 'complete') throw new Error(`the analysis ${job?.state ?? 'ended'}${job?.error ? `: ${job.error}` : ''}`);
+          manifest = await getJSON(`/api/artifacts/${encodeURIComponent(answer.id)}`);
+        }
+        const dataset = app.store.project.datasets.find((d) => d.id === datasetId);
+        if (!dataset) throw new Error('the dataset is no longer in the project');
+        const next = addAnalysis(app.store.project, analysisRecord(dataset, manifest));
+        if (next !== app.store.project) app.store.commit(next, `${manifest.name}`);
+        return manifest;
+      } finally {
+        analyzing.delete(key);
+        notify();
+      }
+    })();
+    analyzing.set(key, entry);
+    notify();
+    return entry.promise;
+  }
+
+  // An analysis's description and results (analysis.json) and cells (lib/spatial.js readAnalyzed),
+  // kept for the session.
+  const analysisStore = new Map();
+  function analysisData(id) {
+    if (!analysisStore.has(id)) {
+      const p = (async () => {
+        const [analysis, response] = await Promise.all([
+          getJSON(`/api/artifacts/${encodeURIComponent(id)}/files/analysis.json`),
+          fetch(`/api/analyses/${encodeURIComponent(id)}/cells`),
+        ]);
+        if (!response.ok) throw new Error(`its cells: HTTP ${response.status}`);
+        const out = { analysis, cells: readAnalyzed(await response.arrayBuffer()) };
+        if (analysis.question === 'moran') {
+          const local = await fetch(`/api/analyses/${encodeURIComponent(id)}/local`);
+          if (!local.ok) throw new Error(`its local values: HTTP ${local.status}`);
+          out.local = readLocal(await local.arrayBuffer());
+        }
+        return out;
+      })();
+      p.catch(() => analysisStore.delete(id));
+      analysisStore.set(id, p);
+    }
+    return analysisStore.get(id);
+  }
+
   // --- Labels from markers (api_labels.go) ---
 
   // The marker sets SituCraft offers for a clustering, with the genes its panel lacks: { genes,
@@ -1017,6 +1136,12 @@ export function createBundles(app) {
     removeComparison,
     clusterCells,
     clusteringData,
+    buildGraph,
+    graphing: (datasetId) => [...graphing.values()].filter((x) => x.dataset === datasetId),
+    graphData,
+    runAnalysis,
+    analyzing: (datasetId) => [...analyzing.values()].filter((x) => x.dataset === datasetId),
+    analysisData,
     clusteringMarkers,
     makeMap,
     mapData,

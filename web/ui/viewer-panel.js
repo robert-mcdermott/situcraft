@@ -54,7 +54,8 @@ export function defaultLayers(desc) {
     transcripts: { visible: true, all: false, genes: [], colors: [], minQ: 20, pointSize: 3, gain: 1, allColor: '#ffd84d', colorBy: 'gene' },
     // segmentation: null for the dataset's own (the instrument's), an artifact's id, or undefined
     // for the dataset's default (the Viewer resolves it).
-    cells: { outlines: true, nuclei: false, fill: null, opacity: 0.55, segmentation: undefined },
+    // graph: the id of a graph of the segmentation drawn, its edges drawn over the cells, or null.
+    cells: { outlines: true, nuclei: false, fill: null, opacity: 0.55, segmentation: undefined, graph: null },
   };
 }
 
@@ -112,7 +113,7 @@ function certaintyLegend(label, help) {
 // images: the dataset's post-Xenium images, [{ record (lib/images.js), transform (the record placing
 // it, or null: not aligned), desc (api_images.go, with the transform's) or error }]; imageActions:
 // { check(path, alignment), add({ path, alignment }), align(imageId) } to add one or align one.
-export function mountViewerPanel(host, { desc, layers, cells, onChange, segmentations = [], drawn = null, clusterings = [], images = [], imageActions = null }) {
+export function mountViewerPanel(host, { desc, layers, cells, onChange, segmentations = [], drawn = null, clusterings = [], graphs = [], images = [], imageActions = null }) {
   let state = structuredClone(layers);
   state.images ??= [];
   const emit = (what) => onChange(structuredClone(state), what);
@@ -450,6 +451,13 @@ export function mountViewerPanel(host, { desc, layers, cells, onChange, segmenta
     emit('segmentation');
   });
   const opacity = h('input', { type: 'range', min: 0.1, max: 1, step: 0.05, value: state.cells.opacity, 'aria-label': 'Fill opacity' });
+  // A graph of the segmentation drawn (lib/graphs.js), its edges over the cells.
+  const graphPick = h('select', { 'aria-label': 'Graph drawn' }, h('option', { value: '' }, 'No graph'), ...graphs.map((g) => h('option', { value: g.id }, g.label)));
+  graphPick.value = graphs.some((g) => g.id === state.cells.graph) ? state.cells.graph : '';
+  graphPick.addEventListener('change', () => {
+    state.cells.graph = graphPick.value || null;
+    emit('graph');
+  });
   const sets = new Set((desc.geometry ?? []).map((s) => s.name));
   outlines.disabled = !sets.has('cells');
   nuclei.disabled = !sets.has('nuclei');
@@ -491,7 +499,8 @@ export function mountViewerPanel(host, { desc, layers, cells, onChange, segmenta
       toggle(outlines, `Cell outlines (${formatCount(cells?.n ?? desc.cells.count)})`),
       toggle(nuclei, 'Nucleus outlines'),
       h('label.viewer-slider', 'Fill by', fill),
-      h('label.viewer-slider', 'Fill opacity', opacity)) : null);
+      h('label.viewer-slider', 'Fill opacity', opacity),
+      graphs.length ? h('label.viewer-slider', 'Graph', graphPick) : null) : null);
   renderChannels();
   renderImages();
   renderChips();

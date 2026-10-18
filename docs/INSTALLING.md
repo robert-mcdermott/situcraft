@@ -4,6 +4,24 @@ SituCraft is one executable. The browser application is inside it, so nothing
 else needs to be installed. Example data are downloaded only when you ask for
 them, never with the program.
 
+## What it needs
+
+A 64-bit computer running macOS, Linux or Windows, and a Chromium-family
+browser for its window (otherwise it opens in the default browser).
+
+**Memory: 16 GB is recommended for whole sections; 8 GB is enough for the
+examples and smaller sections.** What takes memory, as measured:
+
+| Work | Memory at its peak |
+| --- | --- |
+| Opening, viewing and checking the examples (2 fields of view) | under 1 GB |
+| Refining a segmentation | about 100 bytes a transcript: under 0.3 GB for an example, 5 to 7.4 GB for 55 million transcripts |
+| Clustering, mapping and labeling 380,000 cells | 4.3 GB |
+| Spatial analyses of a million cells | under 2 GB; nearest distances and Ripley's K 3 to 4 GB |
+
+Before a refinement starts, the segmentation studio estimates its memory, disk
+and time against the computer's, and refuses a run that would not fit.
+
 ## Release files
 
 | Operating system | Architecture | Release file |
@@ -50,7 +68,7 @@ lists them):
 ```sh
 curl --proto '=https' --tlsv1.2 -fsSL \
   https://raw.githubusercontent.com/robert-mcdermott/situcraft/main/install.sh |
-  SITUCRAFT_VERSION=v0.5.0 sh
+  SITUCRAFT_VERSION=v0.6.0 sh
 ```
 
 To install somewhere else, use a directory you can write to:
@@ -64,7 +82,7 @@ curl --proto '=https' --tlsv1.2 -fsSL \
 A downloaded installer takes the same settings as options:
 
 ```sh
-sh install-situcraft.sh --version v0.5.0 --install-dir "$HOME/bin"
+sh install-situcraft.sh --version v0.6.0 --install-dir "$HOME/bin"
 ```
 
 `SITUCRAFT_REPOSITORY=owner/repository` installs from a fork. For a
@@ -110,7 +128,7 @@ Piping into `iex` cannot pass parameters. Set environment variables, which the
 piped form reads:
 
 ```powershell
-$env:SITUCRAFT_VERSION = 'v0.5.0'
+$env:SITUCRAFT_VERSION = 'v0.6.0'
 $env:SITUCRAFT_INSTALL_DIR = "$HOME\bin"
 irm https://raw.githubusercontent.com/robert-mcdermott/situcraft/main/install.ps1 | iex
 ```
@@ -119,7 +137,7 @@ or build a script block, which accepts parameters:
 
 ```powershell
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/robert-mcdermott/situcraft/main/install.ps1))) `
-  -Version v0.5.0 -InstallDir "$HOME\bin"
+  -Version v0.6.0 -InstallDir "$HOME\bin"
 ```
 
 | Parameter | Environment variable | Purpose |

@@ -777,7 +777,347 @@ const SIMULATED_REVIEW = {
   ],
 };
 
-export const WORKED = { 'xenium-breast-2fov': [BREAST_COMPARE, BREAST_REFINE, BREAST_LABELS], 'xenium-lung-2fov': [LUNG_PLANTED, LUNG_CELL_TYPES], 'simulated-standard': [SIMULATED_TRUTH, SIMULATED_LABELS, SIMULATED_ALIGN, SIMULATED_REGIONS, SIMULATED_REVIEW] };
+// --- The spatial worked examples (wave 6) -----------------------------------------------------
+//
+// A step may build a graph (do: graph, of a segmentation by role, of a kind), ask a spatial
+// question (do: ask: its question, of a segmentation's labels from markers or the truth's types,
+// at a level from 0, over its latest graph of a kind; a region's edge by its name; niches' window
+// and count), or make an answer again on another segmentation (do: remake-analysis); show an answer
+// in the Spatial view (spatial: the question as asked, what in it is chosen, and to: the answer made
+// again on another segmentation, read with it) or its cells on the tissue (cells_of: the question,
+// and a pair, a label in a zone of an edge, a gene's local class or a niche). A Viewer step fills
+// the true cells by a question's niches ('niches', with niches: the question) or the truth's
+// domains ('true-domains').
+
+const CLASSES = { segmentation: 'instrument', level: 0 };
+const LINEAGES = { segmentation: 'instrument', level: 1 };
+
+const BREAST_NEIGHBORS = {
+  id: 'neighbors-breast',
+  title: 'Which cell types are neighbors',
+  question: 'In this breast cancer section, which kinds of cells lie next to each other more often than chance, and which keep apart?',
+  expect: 'The cells are clustered and labeled from the breast starter set (81% take a class, 49% a lineage). Over the Delaunay graph, 21,678 edges among 7,275 cells, each class is its own neighbor more often than chance (immune cells with immune cells 3.90 times as often), and the epithelial cells keep apart from the stromal (0.24 times) and the immune (0.32 times): the tumor grows in nests the immune cells do not enter. Among the lineages, T cells lie next to myeloid cells 4.4 times as often as chance.',
+  steps: [
+    {
+      mode: 'spatial',
+      title: 'The question',
+      text: 'The Spatial view asks how the tissue is organized. Every question starts from a graph of which cells are neighbors, and is asked of a label set: here the breast starter set\'s classes, then its lineages.',
+    },
+    {
+      mode: 'celltypes',
+      title: 'Cluster the cells',
+      text: 'scanpy\'s steps and defaults: 15 clusters of the 7,163 cells with at least 10 gene transcripts. The map is made at once.',
+      do: { action: 'cluster' },
+      label: 'Cluster the cells',
+    },
+    {
+      mode: 'celltypes',
+      title: 'Label them from markers',
+      text: 'The panel\'s breast starter set names classes, lineages and subtypes by their markers: 81% of the cells take a class, 49% a lineage and 6% a subtype. Cells that take no lineage keep their class.',
+      do: { action: 'label', markers: 'breast' },
+      label: 'Label the cells',
+    },
+    {
+      mode: 'spatial',
+      title: 'Which cells are neighbors',
+      text: 'The Delaunay triangulation of the cells\' centers joins each cell to the cells around it, however dense the tissue; edges longer than 50 µm, across a tear or the tissue\'s edge, are left out. Here 21,678 edges among the 7,275 cells, six neighbors a cell on average, the median edge 11.4 µm.',
+      do: { action: 'graph', kind: 'delaunay' },
+      label: 'Build the graph',
+    },
+    {
+      mode: 'spatial',
+      title: 'Ask which classes are neighbors',
+      text: 'Neighborhood enrichment counts, for each pair of classes, the edges between their cells, against the count expected if the labels were dealt to the same cells at random (computed exactly) and 1,000 such deals (how far chance strays).',
+      do: { action: 'ask', question: 'enrichment', ...CLASSES },
+      label: 'Ask',
+    },
+    {
+      mode: 'spatial',
+      title: 'The classes\' neighbors',
+      text: '9 of the 15 pairs differ from chance (adjusted p below 0.05). Each class is its own neighbor more often than chance: endothelial cells 12.45 times, stromal 4.54, immune 3.90. The epithelial cells keep apart from the stromal cells (0.24 times) and the immune cells (0.32 times). The heat map colors each pair by its ratio, found over expected; the chosen pair is described below it.',
+      spatial: { question: 'enrichment', ...CLASSES, choose: { pair: ['Epithelial', 'Immune'] } },
+    },
+    {
+      mode: 'viewer',
+      title: 'Where the tumor meets the immune cells',
+      text: 'The 651 epithelial and 299 immune cells with a neighbor of the other, and the 823 edges between them, lit on the tissue: at the nests\' edges and along the stroma that runs between them. Neighbors are counted, not distances: Nearest distances and Ripley\'s K ask at what distance and scale.',
+      cells_of: { question: 'enrichment', ...CLASSES, a: 'Epithelial', b: 'Immune' },
+    },
+    {
+      mode: 'spatial',
+      title: 'Ask it of the lineages',
+      text: 'The same question of the lineages: 16 labels, 136 pairs.',
+      do: { action: 'ask', question: 'enrichment', ...LINEAGES },
+      label: 'Ask',
+    },
+    {
+      mode: 'spatial',
+      title: 'T cells and myeloid cells',
+      text: '54 of the 136 pairs differ from chance. T cells lie next to myeloid cells 4.44 times as often as chance (z 22), and next to other T cells 8.59 times; luminal cells keep apart from T cells (0.12 times): the immune cells gather together in the stroma, apart from the tumor. These numbers describe this section: its cells are not replicates, and comparing conditions needs samples.',
+      spatial: { question: 'enrichment', ...LINEAGES, choose: { pair: ['T cell', 'Myeloid'] } },
+    },
+    {
+      mode: 'viewer',
+      title: 'Together on the tissue',
+      text: 'The 74 T cells and 127 myeloid cells with a neighbor of the other, and the 164 edges between them: most in the stroma on the section\'s left.',
+      cells_of: { question: 'enrichment', ...LINEAGES, a: 'T cell', b: 'Myeloid' },
+    },
+  ],
+};
+
+// The tumor of the Breast section, drawn around its epithelial cells: the immune cells and stroma
+// along its left side and the stroma below its middle outside (µm).
+const BREAST_TUMOR = { name: 'Tumor', cls: 'Tumor', layer: 'the stains', polygon: [[255, 5], [1228, 5], [1228, 745], [1080, 745], [1080, 600], [1050, 520], [720, 505], [700, 560], [700, 745], [255, 745]] };
+
+const BREAST_EDGE = {
+  id: 'tumor-edge',
+  title: 'Immune cells and a tumor\'s edge',
+  question: 'Do the immune cells enter the tumor, stay out of it, or gather at its edge?',
+  expect: 'A region drawn around the tumor holds 5,730 of the 7,275 cells. Measured in bands across its edge, from 100 µm inside to 100 µm outside, the epithelial cells fill it (4.8 times as dense in its core as around it), and the immune cells stay out: 420 cells per mm² of tissue in the core, 765 at the margin (within 20 µm of the edge, either side), 1,174 around, the core over around 0.36 times (0.28 to 0.45). Thinner the deeper into the tumor: an immune-excluded tumor.',
+  steps: [
+    {
+      mode: 'spatial',
+      title: 'The question',
+      text: 'A tumor\'s immune cells are measured in its core, at its invasive margin and around it, as Galon et al. (2006) measured colorectal cancers. Here the region is drawn on the tissue, and each class\'s density is measured in bands of distance from its edge, each band\'s own area of tissue its denominator.',
+    },
+    {
+      mode: 'celltypes',
+      title: 'Cluster the cells',
+      text: 'scanpy\'s steps and defaults: 15 clusters of the 7,163 cells with at least 10 gene transcripts.',
+      do: { action: 'cluster' },
+      label: 'Cluster the cells',
+    },
+    {
+      mode: 'celltypes',
+      title: 'Label them from markers',
+      text: 'The breast starter set: 81% of the cells take a class.',
+      do: { action: 'label', markers: 'breast' },
+      label: 'Label the cells',
+    },
+    {
+      mode: 'viewer',
+      title: 'Draw the tumor',
+      text: 'The tumor drawn as a region around the epithelial cells, which fill most of the section; the immune cells and stroma along its left side, and the stroma below its middle, lie outside. It holds 5,730 cells. A region drawn by hand decides where the edge is: draw it on what you can see (the stains, an H&E), and say so.',
+      do: { action: 'draw-regions', regions: [BREAST_TUMOR] },
+      label: 'Draw the region',
+      cells: { outlines: false, fill: 'labels:0', opacity: 0.6 },
+      transcripts: { genes: [] },
+      channels: GRAY_NUCLEI_ONLY,
+    },
+    {
+      mode: 'spatial',
+      title: 'Measure across its edge',
+      text: 'Each class\'s density in bands every 10 µm, from 100 µm inside the edge to 100 µm outside, the tissue in each band (gaps and glass left out) its denominator; then three zones: the core (inside, beyond 20 µm), the margin (within 20 µm, either side) and around.',
+      do: { action: 'ask', question: 'boundary', ...CLASSES, region: 'Tumor' },
+      label: 'Measure',
+    },
+    {
+      mode: 'spatial',
+      title: 'The immune cells stay out',
+      text: 'The epithelial cells fill the tumor: 4.8 times as dense in its core as around it. The immune cells stay out: 420 cells per mm² in the core, 765 at the margin, 1,174 around, the core over around 0.36 times (0.28 to 0.45). The profile shows them thinning band by band into the tumor. The intervals treat cells as placed independently; cells cluster, so the true uncertainty is wider.',
+      spatial: { question: 'boundary', ...CLASSES, region: 'Tumor', choose: { label: 'Immune', zone: 'margin' } },
+    },
+    {
+      mode: 'viewer',
+      title: 'The immune cells at the margin',
+      text: 'The 76 immune cells within 20 µm of the edge, either side, lit on the tissue along the region\'s edge.',
+      cells_of: { question: 'boundary', ...CLASSES, region: 'Tumor', a: 'Immune', zone: 'margin' },
+    },
+    {
+      mode: 'viewer',
+      title: 'And in the core',
+      text: 'The 230 immune cells in the core, more than 20 µm inside: scattered through the tumor, thinner than around it.',
+      cells_of: { question: 'boundary', ...CLASSES, region: 'Tumor', a: 'Immune', zone: 'core' },
+    },
+  ],
+};
+
+const TRUE_NICHES = { segmentation: 'truth', labels: 'true-types', niches: 4, neighbors: 30 };
+
+const SIMULATED_NICHES = {
+  id: 'niches-domains',
+  title: 'Niches against the domains',
+  simulated: true,
+  question: 'The simulator laid the tissue out in domains, each led by one type. Do niches found from what each cell\'s neighborhood holds find them?',
+  expect: 'The 3,030 true cells, labeled by their true types; each cell\'s neighborhood its 30 nearest cells; four niches, as many as the kinds of domain. Each niche is led by one type (epithelial-like, 47% of its 1,078 cells; endothelial-like, 53% of 887; immune-like, 72% of 554; fibroblast-like, 44% of 511), the seeds agree exactly, and 96.5% of the cells lie in the niche of their domain\'s kind: the two epithelial-led domains share a niche, as do the two fibroblast-led. With the defaults, six niches of the 10 nearest, the seeds agree only 0.66 to 0.93: more niches than kinds of place.',
+  steps: [
+    {
+      mode: 'data',
+      title: 'A tissue whose domains are known',
+      text: 'SituCraft simulated this tissue on this computer: six domains, each led by one of four types, the cells of each domain drawn from its mix. Its truth folder holds every true cell, its type and its domain.',
+    },
+    {
+      mode: 'segmentation',
+      title: 'Import the true cells',
+      text: 'The truth is shaped as a Xenium Ranger output of the same run: imported, it is a segmentation like any other.',
+      do: { action: 'import-truth' },
+      label: 'Import the truth',
+    },
+    {
+      mode: 'celltypes',
+      title: 'Import their types',
+      text: 'The truth\'s cells.parquet names each true cell\'s type: imported for the true cells, a label set like any other.',
+      do: { action: 'import-truth-labels' },
+      label: 'Import the true types',
+    },
+    {
+      mode: 'spatial',
+      title: 'Import their domains',
+      text: 'The same file names each true cell\'s domain (0 to 5): imported too, to read the niches against.',
+      do: { action: 'import-truth-domains' },
+      label: 'Import the domains',
+    },
+    {
+      mode: 'spatial',
+      title: 'Find four niches',
+      text: 'Each cell\'s neighborhood, its 30 nearest cells, is described by its types\' shares, and the cells are grouped by k-means into four niches, as many as the kinds of domain (by the type leading them); then found again from four other seeds.',
+      do: { action: 'ask', question: 'niches', ...TRUE_NICHES },
+      label: 'Find the niches',
+    },
+    {
+      mode: 'spatial',
+      title: 'Four kinds of place',
+      text: 'Each niche is led by one type: epithelial-like (47% of its 1,078 cells), endothelial-like (53% of 887), immune-like (72% of 554), fibroblast-like (44% of 511). The heat map shows each niche\'s make-up against the tissue\'s. The four other seeds give the same niches (an adjusted Rand index of 1.00): they are stable.',
+      spatial: { question: 'niches', ...TRUE_NICHES, choose: { niche: 3 } },
+    },
+    {
+      mode: 'viewer',
+      title: 'The niches on the tissue',
+      text: 'Every true cell filled by its niche. A niche is a kind of place, not a kind of cell: its cells are of every type, in the mix of the place.',
+      segmentation: 'truth',
+      cells: { outlines: false, fill: 'niches', opacity: 0.75 },
+      niches: TRUE_NICHES,
+      transcripts: { genes: [] },
+      channels: GRAY_NUCLEI,
+    },
+    {
+      mode: 'viewer',
+      title: 'The domains on the tissue',
+      text: 'The same cells filled by their domain: the niches follow them. 96.5% of the cells lie in the niche of their domain\'s kind (93% to 99% for each domain); domains 0 and 4, both epithelial-led, share a niche, as do domains 1 and 5, fibroblast-led. Composition cannot tell apart two places of the same mix.',
+      segmentation: 'truth',
+      cells: { outlines: false, fill: 'true-domains', opacity: 0.75 },
+      transcripts: { genes: [] },
+      channels: GRAY_NUCLEI,
+    },
+    {
+      mode: 'spatial',
+      title: 'Ask with the defaults',
+      text: 'The defaults: six niches, each cell\'s 10 nearest cells.',
+      do: { action: 'ask', question: 'niches', segmentation: 'truth', labels: 'true-types', niches: 6, neighbors: 10 },
+      label: 'Find six niches',
+    },
+    {
+      mode: 'spatial',
+      title: 'More niches than places',
+      text: 'Six niches split the four kinds of place by chance, and the seeds say so: an adjusted Rand index of 0.66 to 0.93 between them. Low agreement means more niches than the tissue holds kinds of place: try fewer, or larger neighborhoods.',
+      spatial: { question: 'niches', segmentation: 'truth', labels: 'true-types', niches: 6, neighbors: 10 },
+    },
+  ],
+};
+
+const LUNG_MORAN = {
+  id: 'moran-genes',
+  title: 'Genes in a pattern',
+  question: 'Which genes are expressed in a pattern across the Lung section, and where?',
+  expect: 'Over the Delaunay graph of the 11,898 cells, 162 of the panel\'s 289 genes are in a pattern (adjusted p below 0.05). The strongest is GJA5 (Moran\'s I 0.436), expressed in 1.2% of the cells: an artery\'s endothelium, its 73 cells high among high lying together in the stroma at the section\'s top left. Then IGFBP3 (0.411) and CXCL13 (0.313).',
+  steps: [
+    {
+      mode: 'spatial',
+      title: 'The question',
+      text: 'Spatially variable genes asks of genes, not labels: how alike each gene\'s expression is in neighboring cells (Moran\'s I), near 1 when neighbors are alike, about 0 for no pattern, below 0 where they differ.',
+    },
+    {
+      mode: 'spatial',
+      title: 'Which cells are neighbors',
+      text: 'The Delaunay graph of the instrument\'s cells, edges to 50 µm: 35,472 edges among 11,898 cells.',
+      do: { action: 'graph', kind: 'delaunay' },
+      label: 'Build the graph',
+    },
+    {
+      mode: 'spatial',
+      title: 'Ask which genes are in a pattern',
+      text: 'Each gene\'s log-normalized expression, as the clustering normalizes it; its I tested against its values dealt to the cells at random, analytically and by 199 permutations, the p-values adjusted over the genes; and for the 10 leading genes, local Moran\'s I: each cell high among high, low among low, or unlike its neighbors.',
+      do: { action: 'ask', question: 'moran' },
+      label: 'Ask',
+    },
+    {
+      mode: 'spatial',
+      title: 'The genes in a pattern',
+      text: '162 of the 289 genes are in a pattern. The table ranks them by I, the effect: GJA5 0.436, IGFBP3 0.411, CXCL13 0.313, PLA2G7, LTBP2. With 11,898 cells even a small I is significant, so the rank is by I. GJA5 is expressed in 1.2% of the cells, but they lie together: its local Moran\'s I classes 73 cells high among high and 286 low among high (the cells around them).',
+      spatial: { question: 'moran', choose: { gene: 'GJA5' } },
+    },
+    {
+      mode: 'viewer',
+      title: 'Where GJA5\'s pattern lies',
+      text: 'GJA5\'s 73 cells high among high, with its transcripts: an artery\'s endothelium in the stroma at the section\'s top left. Local Moran\'s I shows where a pattern lies (each cell\'s test is not adjusted); it does not test it.',
+      cells_of: { question: 'moran', gene: 'GJA5', localClass: 1 },
+    },
+  ],
+};
+
+const LUNG_REMAKE = {
+  id: 'remake-enrichment',
+  title: 'An answer under another segmentation',
+  question: 'How much does which cell types are neighbors in the Lung section depend on how its cells were drawn?',
+  expect: 'The Lung classes\' enrichment over the Delaunay graph (7 of 10 pairs differ from chance), made again on a 3 µm nucleus expansion, its labels made again from the same clustering parameters and markers. The 10 numbers keep their order (rank correlation 0.976); the largest change is immune cells with immune cells, 1.44 to 1.94 times: there are few immune cells (249, and 227 under the expansion), and 44 and 22 of them carry another label, or none, under the other segmentation.',
+  steps: [
+    {
+      mode: 'spatial',
+      title: 'The question',
+      text: 'Every spatial answer is of a segmentation\'s cells. Made again on another segmentation, its numbers say how much of the answer is the tissue\'s and how much the segmentation\'s.',
+    },
+    {
+      mode: 'celltypes',
+      title: 'Cluster the cells',
+      text: 'scanpy\'s steps and defaults: 29 clusters of the 11,820 cells with at least 10 gene transcripts.',
+      do: { action: 'cluster' },
+      label: 'Cluster the cells',
+    },
+    {
+      mode: 'celltypes',
+      title: 'Label them from markers',
+      text: 'The panel\'s lung starter set: 47% of the cells take a class.',
+      do: { action: 'label', markers: 'lung' },
+      label: 'Label the cells',
+    },
+    {
+      mode: 'spatial',
+      title: 'Which cells are neighbors',
+      text: 'The Delaunay graph of the instrument\'s cells, edges to 50 µm.',
+      do: { action: 'graph', kind: 'delaunay' },
+      label: 'Build the graph',
+    },
+    {
+      mode: 'spatial',
+      title: 'Ask which classes are neighbors',
+      text: 'Neighborhood enrichment of the four classes: 7 of the 10 pairs differ from chance. Stromal cells with stromal cells 3.99 times as often as chance; epithelial cells keep apart from endothelial (0.78 times) and stromal cells (0.79 times).',
+      do: { action: 'ask', question: 'enrichment', ...CLASSES },
+      label: 'Ask',
+    },
+    {
+      mode: 'segmentation',
+      title: 'Another segmentation',
+      text: 'Each nucleus grown by 3 µm, not the instrument\'s 5: smaller cells, the same nuclei. 90.00% of the pixels and 95.45% of the transcripts are in the same cells as the instrument\'s.',
+      do: { action: 'expand', distance: 3 },
+      label: 'Expand the nuclei',
+    },
+    {
+      mode: 'spatial',
+      title: 'Make the answer again',
+      text: 'In one step: the two segmentations compared, the labels made again on the expansion\'s cells from the same clustering parameters and markers, a Delaunay graph of the same definition, and the same question asked.',
+      do: { action: 'remake-analysis', question: 'enrichment', ...CLASSES, to: 'expansion-3' },
+      label: 'Make it again',
+    },
+    {
+      mode: 'spatial',
+      title: 'Read the two together',
+      text: 'The 10 numbers under both keep their order (rank correlation 0.976). The largest change is immune cells with immune cells, 1.44 to 1.94 times: there are few immune cells, 249 under the instrument\'s and 227 under the expansion, and of them 44 and 22 carry another label, or none, under the other segmentation (the buttons below show them). A number that moves with the segmentation is the segmentation\'s as much as the tissue\'s.',
+      spatial: { question: 'enrichment', ...CLASSES, to: 'expansion-3', choose: { change: 'pair:Immune|Immune' }, section: '.sp-remake' },
+    },
+  ],
+};
+
+export const WORKED = { 'xenium-breast-2fov': [BREAST_COMPARE, BREAST_REFINE, BREAST_LABELS, BREAST_NEIGHBORS, BREAST_EDGE], 'xenium-lung-2fov': [LUNG_PLANTED, LUNG_CELL_TYPES, LUNG_MORAN, LUNG_REMAKE], 'simulated-standard': [SIMULATED_TRUTH, SIMULATED_LABELS, SIMULATED_ALIGN, SIMULATED_REGIONS, SIMULATED_REVIEW, SIMULATED_NICHES] };
 
 export function workedExamples(example) {
   return WORKED[example] ?? [];

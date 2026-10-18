@@ -4,6 +4,7 @@
 // 0.8.0 web/ui/inspector.js.
 
 import { h, icon, relativeTime, formatBytes } from './dom.js';
+import { describeGraph } from '../lib/graphs.js';
 import { promptDialog, toast } from './overlays.js';
 import { removeView, renameView, viewLink } from '../lib/views.js';
 import { promotedSegmentation } from '../lib/segmentations.js';
@@ -203,6 +204,76 @@ export function mountInspector(app) {
       c.method?.citation ? h('p.muted', { style: { margin: '8px 0 0', fontSize: '11.5px' } }, c.method.citation) : null);
   }
 
+  // A graph: its segmentation, definition, the cells it was built over, and what it holds.
+  function graphSection(g) {
+    const { project } = app.store;
+    const seg = project.artifacts.find((a) => a.kind === 'segmentation' && a.id === g.segmentation);
+    const s = g.summary ?? {};
+    const choice = s.choice ?? {};
+    const over = [choice.filter ? `filter ${choice.filter.name}` : '', choice.regions?.length ? `in ${choice.regions.map((r) => r.name).join(', ')}` : '', choice.excluded ? `${choice.excluded.toLocaleString('en-US')} excluded by review left out` : ''].filter(Boolean).join('; ');
+    return h('section.inspector-section',
+      h('h3', icon('graph'), 'Graph'),
+      h('dl.kv',
+        h('dt', 'Segmentation'), h('dd', seg?.name ?? g.segmentation),
+        h('dt', 'Neighbors'), h('dd', describeGraph(g.parameters)),
+        h('dt', 'Cells'), h('dd', (s.cells ?? 0).toLocaleString('en-US'), over ? h('span.muted', ` (${over})`) : null),
+        h('dt', 'Edges'), h('dd', (s.edges ?? 0).toLocaleString('en-US')),
+        h('dt', 'Mean degree'), h('dd', Number.isFinite(s.meanDegree) ? s.meanDegree.toFixed(2) : '—'),
+        h('dt', 'Without one'), h('dd', `${(s.isolated ?? 0).toLocaleString('en-US')} cells`),
+        h('dt', 'Median edge'), h('dd', Number.isFinite(s.medianLength) ? `${s.medianLength.toFixed(1)} µm` : '—'),
+        h('dt', 'Method'), h('dd', `${g.method?.name ?? ''} ${g.method?.version ?? ''}`.trim()),
+        h('dt', 'Artifact'), h('dd.mono', g.id)),
+      g.state === 'complete' ? h('div.btn-row', { style: { marginTop: '8px' } },
+        h('button.btn.small.primary', { type: 'button', onclick: () => app.showGraph(g) }, icon('tissue'), 'Show on the tissue'),
+        h('button.btn.small', { type: 'button', onclick: () => {
+          app.focusItem({ kind: 'graph', id: g.id });
+          app.setMode('spatial');
+        } }, icon('graph'), 'In the Spatial view')) : null);
+  }
+
+  // A spatial analysis: its question, labels, what it is of, and what it found.
+  function analysisSection(r) {
+    const { project } = app.store;
+    const seg = project.artifacts.find((a) => a.kind === 'segmentation' && a.id === r.segmentation);
+    const s = r.summary ?? {};
+    const pair = (p) => `${p.a} – ${p.b} ${p.ratio.toFixed(2)}×`;
+    return h('section.inspector-section',
+      h('h3', icon('graph'), { enrichment: 'Neighborhood enrichment', cooccurrence: 'Co-occurrence', distances: 'Nearest distances', ripley: 'Ripley\'s K and L', regions: 'Regions compared', boundary: 'Across a region\'s edge', niches: 'Cellular neighborhoods', moran: 'Spatially variable genes' }[r.question] ?? r.question),
+      h('dl.kv',
+        h('dt', 'Segmentation'), h('dd', seg?.name ?? r.segmentation),
+        r.question === 'moran' ? [h('dt', 'Genes'), h('dd', `${(s.genes ?? 0).toLocaleString('en-US')}, over ${describeGraph(s.graph?.parameters)}`)] : [h('dt', 'Labels'), h('dd', `${s.labels?.name ?? '—'} (${s.labels?.count ?? '?'})`)],
+        r.question === 'enrichment' ? [h('dt', 'Graph'), h('dd', describeGraph(s.graph?.parameters))] : r.question === 'cooccurrence' ? [h('dt', 'Distances'), h('dd', String(s.distances ?? '—'))] : null,
+        s.rows?.length ? [h('dt', 'Regions'), h('dd', s.rows.map((x) => x.name).join(', '))] : null,
+        s.edge ? [h('dt', 'Edge'), h('dd', `of ${s.edge.name}`)] : null,
+        s.window ? [h('dt', 'Window'), h('dd', s.window.kind === 'region' ? `the region ${s.window.region?.name ?? ''}` : `the tissue, ${Math.round(s.window.area).toLocaleString('en-US')} µm²`)] : null,
+        h('dt', 'Cells'), h('dd', `${(s.labeled ?? 0).toLocaleString('en-US')} labeled of ${(s.cells ?? 0).toLocaleString('en-US')}`),
+        s.strata?.length ? [h('dt', 'Dealt within'), h('dd', s.strata.map((x) => x.name).join(', '))] : null,
+        r.question === 'regions' ? [h('dt', 'Densities that differ'), h('dd', String(s.significant ?? 0))] : r.question === 'boundary' ? [h('dt', 'Labels that differ'), h('dd', String(s.significant ?? 0))] : r.question === 'moran' ? [h('dt', 'Genes that differ'), h('dd', String(s.significant ?? 0))] : r.question !== 'cooccurrence' && r.question !== 'niches' ? [h('dt', 'Pairs that differ'), h('dd', String(s.significant ?? 0))] : null,
+        s.denser?.length ? [h('dt', 'Denser'), h('dd', s.denser.map((x) => `${x.label} in ${x.region} ${x.ratio === null ? '∞' : x.ratio.toFixed(2)}×`).join('; '))] : null,
+        s.sparser?.length ? [h('dt', 'Sparser'), h('dd', s.sparser.map((x) => `${x.label} in ${x.region} ${x.ratio.toFixed(2)}×`).join('; '))] : null,
+        s.fill?.length ? [h('dt', 'Fill it'), h('dd', s.fill.join(', '))] : null,
+        s.avoid?.length ? [h('dt', 'Stay out'), h('dd', s.avoid.join(', '))] : null,
+        s.gather?.length ? [h('dt', 'At its margin'), h('dd', s.gather.join(', '))] : null,
+        s.niches?.length ? [h('dt', 'Niches'), h('dd', s.niches.map((x, v) => `${v + 1} · ${x.defining.join(' + ')} (${x.cells.toLocaleString('en-US')})`).join('; '))] : null,
+        Number.isFinite(s.agreementMin) ? [h('dt', 'Stability'), h('dd', `other seeds agree at ${s.agreementMin.toFixed(2)} or more (adjusted Rand index)`)] : null,
+        s.patterned?.length ? [h('dt', 'In a pattern'), h('dd', s.patterned.map((x) => `${x.gene} ${x.i.toFixed(2)}`).join('; '))] : null,
+        s.dispersed?.length ? [h('dt', 'Dispersed'), h('dd', s.dispersed.map((x) => `${x.gene} ${x.i.toFixed(2)}`).join('; '))] : null,
+        s.enriched?.length ? [h('dt', 'Most'), h('dd', s.enriched.map(pair).join('; '))] : null,
+        s.depleted?.length ? [h('dt', 'Least'), h('dd', s.depleted.map(pair).join('; '))] : null,
+        s.nearer?.length ? [h('dt', 'Nearer'), h('dd', s.nearer.map((p) => `${p.a} → ${p.b} ${p.ratio.toFixed(2)}×`).join('; '))] : null,
+        s.farther?.length ? [h('dt', 'Farther'), h('dd', s.farther.map((p) => `${p.a} → ${p.b} ${p.ratio.toFixed(2)}×`).join('; '))] : null,
+        s.above?.length ? [h('dt', 'Gathered'), h('dd', s.above.map((c) => `${c.a === c.b ? c.a : `${c.a} → ${c.b}`} at ${c.radius} µm`).join('; '))] : null,
+        s.below?.length ? [h('dt', 'Apart'), h('dd', s.below.map((c) => `${c.a === c.b ? c.a : `${c.a} → ${c.b}`} at ${c.radius} µm`).join('; '))] : null,
+        h('dt', 'Method'), h('dd', `${r.method?.name ?? ''} ${r.method?.version ?? ''}`.trim()),
+        h('dt', 'Artifact'), h('dd.mono', r.id)),
+      h('div.btn-row', { style: { marginTop: '8px' } },
+        h('button.btn.small', { type: 'button', onclick: () => {
+          app.focusItem({ kind: 'spatial', id: r.id });
+          app.setMode('spatial');
+        } }, icon('graph'), 'In the Spatial view')),
+      r.method?.citation ? h('p.muted', { style: { margin: '8px 0 0', fontSize: '11.5px' } }, r.method.citation) : null);
+  }
+
   // A label set: its clustering, marker set, cells labeled at each level, and parameters.
   function labelsSection(r) {
     const { project } = app.store;
@@ -311,6 +382,14 @@ export function mountInspector(app) {
     if (focus?.kind === 'clustering') {
       const c = app.store.project.artifacts.find((a) => a.kind === 'clustering' && a.id === focus.id);
       if (c) return clusteringSection(c);
+    }
+    if (focus?.kind === 'spatial') {
+      const r = app.store.project.artifacts.find((a) => a.kind === 'spatial' && a.id === focus.id);
+      if (r) return analysisSection(r);
+    }
+    if (focus?.kind === 'graph') {
+      const g = app.store.project.artifacts.find((a) => a.kind === 'graph' && a.id === focus.id);
+      if (g) return graphSection(g);
     }
     if (focus?.kind === 'labels') {
       const r = app.store.project.artifacts.find((a) => a.id === focus.id && ['labels', 'curated-labels', 'consensus-labels'].includes(a.kind));

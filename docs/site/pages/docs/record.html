@@ -1,0 +1,32 @@
+---
+title: The record
+description: What SituCraft keeps: projects that save themselves with their history, artifacts with their lineage and checksums, decisions and reviews never removed, a methods paragraph with references, project archives, and where it all lives.
+lede: Everything you do is kept: projects save themselves with their history, every result is an artifact with its lineage and the SHA-256 of its files, and decisions and reviews are appended, never removed. The methods paragraph and project archives take the record elsewhere.
+---
+      <h2 id="projects">Projects</h2>
+      <p><strong>Projects save themselves</strong> to the library as you work; the start page and the project menu (the project's name, top left) reopen them. <strong>Undo</strong> and <strong>Redo</strong> (⌘Z, ⇧⌘Z) cover every change, and the drawer (⌘J) shows the project's history and the session's log.</p>
+      <p><strong>A bundle that moved:</strong> reopening a project finds each bundle where it was recorded. If it is gone, <strong>Locate…</strong> in the Data view points to its new place, once SituCraft has checked it is the same run.</p>
+      <shot name="saved-views" alt="Three saved views in the project tree, one open in the Viewer, its details and Copy link in the inspector">Saved views in the project tree, one open, with its link in the inspector (<a href="viewer.html#saved-views">saved views</a>).</shot>
+
+      <h2 id="artifacts">Artifacts and their lineage</h2>
+      <p>Each result is an artifact of the project: a segmentation, a comparison, a clustering and its map, a label set, a graph, an analysis, an export. Each is kept with what it was made from (its lineage), the method's version, every parameter and seed, and the SHA-256 of its files, so the same inputs and settings give the same result on any computer, and asking again answers the one already made. Decisions (a segmentation promoted, kept or rejected), reviews and the versions of filters, names, marker sets, regions and alignments are appended to the project with who made them, when and why, and never removed: taking one back is another. <a href="{{github}}/blob/main/docs/FORMATS.md">Formats</a> describes every file SituCraft reads and writes.</p>
+
+      <h2 id="methods">The methods paragraph</h2>
+      <shot name="methods" alt="The Data view's methods paragraph for the Breast example: the platform, panel and software, the segmentation and how the bundle was checked, and the data cited with references">The Breast example's methods paragraph, its data cited.</shot>
+      <p><strong>Methods</strong> in the Data view writes a paragraph for the dataset from what the project records: the platform, panel and software, the segmentation, the transcripts counted, how SituCraft checked the bundle (with its version and commit), the filters you choose, and the data's source, with references. <strong>Copy</strong> puts it on the clipboard; read it against what you did and add what was done elsewhere.</p>
+
+      <h2 id="archives">Project archives</h2>
+      <p><strong>Project archive (.scz)…</strong> in the project menu writes the project (datasets, filters, saved views, history) to a file you name. It does not contain the bundles: it records each one relative to the archive, so a folder holding the archive and its bundles can be moved, copied or shared, and opened with <code>situcraft project.scz</code> or <strong>Open a bundle</strong>.</p>
+
+      <h2 id="where">Where things are kept</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>What</th><th>Where (macOS; Linux; Windows)</th><th>Flag</th></tr></thead>
+          <tbody>
+            <tr><td>Projects</td><td><code>~/Library/Application Support/SituCraft</code>; <code>~/.config/SituCraft</code>; <code>%AppData%\SituCraft</code></td><td><code>--data-dir</code></td></tr>
+            <tr><td>Example datasets</td><td>the <code>examples</code> folder of the above</td><td><code>--examples-dir</code></td></tr>
+            <tr><td>Derived data (can be deleted)</td><td><code>~/Library/Caches/situcraft</code>; <code>~/.cache/situcraft</code>; <code>%LocalAppData%\situcraft</code></td><td><code>--cache-dir</code>, <code>--cache-limit</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>SituCraft listens only on this computer (127.0.0.1) and sends nothing anywhere. Its only request to the internet is an example's download, when you ask for it.</p>

@@ -1,0 +1,32 @@
+---
+title: Documentation
+description: SituCraft's user guide: from installing it and opening a Xenium bundle to segmentations, cell types, post-Xenium images, regions, reviews and spatial analysis, a page a subject.
+lede: SituCraft opens the output of a 10x Genomics Xenium run, checks it, and shows the tissue, its transcripts and its cells at any zoom. From there it segments, types and reviews the cells and asks how the tissue is organized, keeping every decision on record. Everything runs on your computer; your data are never uploaded.
+---
+      <h2 id="path">A path through it</h2>
+      <p>Each page is a subject, in the order an analysis usually goes. Start with <a href="getting-started.html">Getting started</a> and an example; the worked examples there answer a question on each subject step by step.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Subject</th><th>Pages</th><th>What you do there</th></tr></thead>
+          <tbody>
+            <tr><td>Start</td><td><a href="getting-started.html">Getting started</a>, <a href="opening-data.html">Opening a bundle</a></td><td>Install, try an example, open your own bundle and check it</td></tr>
+            <tr><td>The tissue</td><td><a href="viewer.html">The Viewer</a>, <a href="qc.html">Quality control</a></td><td>See the stains, transcripts and cells at any zoom; decide whether the run supports analysis, and where</td></tr>
+            <tr><td>Segmentations</td><td><a href="segmentations.html">Segmentations</a>, <a href="refinement.html">Refinement</a>, <a href="comparing.html">Comparing and deciding</a>, <a href="exports.html">Exports</a></td><td>Expand nuclei, redraw cells from their transcripts, import other tools' cells, compare any two and choose one, export it</td></tr>
+            <tr><td>Cell types</td><td><a href="clusters.html">Clusters and the map</a>, <a href="labels.html">Labels</a></td><td>Group cells by their expression, name them from markers or a reference, review the cells worth a look</td></tr>
+            <tr><td>Pathology</td><td><a href="images.html">Images and alignment</a>, <a href="regions.html">Regions and reviews</a></td><td>Add the H&amp;E and immunofluorescence images, align them, draw regions with QuPath, record a pathologist's review</td></tr>
+            <tr><td>Spatial</td><td><a href="spatial.html">Spatial analysis</a>, <a href="niches.html">Niches and genes</a></td><td>Which cells and types are neighbors, at what distances, in which regions; niches, spatially variable genes, and how much an answer depends on the segmentation</td></tr>
+            <tr><td>Reference</td><td><a href="remote-control.html">Remote control</a>, <a href="record.html">The record</a>, <a href="troubleshooting.html">Troubleshooting</a></td><td>Drive SituCraft from scripts; what is kept and where; what to do when something goes wrong</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="principles">How it works</h2>
+      <ul>
+        <li><strong>One program, on your computer.</strong> SituCraft is a single file with nothing else to install. It reads every file of a bundle with its own readers, never changes, moves or copies a bundle, and sends nothing anywhere.</li>
+        <li><strong>Checked before it is used.</strong> A bundle is checked before analysis, and the run's recorded metrics are recomputed from its data. Each method is validated against an independent implementation or a known truth, with the numbers on the <a href="../science.html">Science</a> page.</li>
+        <li><strong>Everything is an artifact.</strong> Segmentations, comparisons, clusterings, labels, graphs and analyses are kept with their lineage, parameters, seeds and the SHA-256 of their files. The same inputs and settings give the same result on any computer.</li>
+        <li><strong>Nothing is lost.</strong> Decisions and reviews are appended, never removed; filters, names, marker sets, regions and alignments are kept as versions. Undo covers every change.</li>
+      </ul>
+
+      <h2 id="references">References</h2>
+      <p>Two references stay in the repository: <a href="{{github}}/blob/main/docs/FORMATS.md">Formats</a>, every file SituCraft reads and writes, and the <a href="{{github}}/blob/main/docs/REMOTE-CONTROL.md">remote control reference</a>, every action a script can send. The <a href="{{github}}/blob/main/CHANGELOG.md">changelog</a> says what each release added.</p>

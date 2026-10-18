@@ -15,7 +15,9 @@ import { fitCamera, scaleBar, screenToWorld, visibleRect, worldToScreen } from '
 import { attachNavigation } from './navigation.js';
 import { mountRegions } from './regions-layer.js';
 import { mountReviews } from './reviews-section.js';
-import { cellsState, labelSetFor, reviewCells, reviewForm, reviewLine, reviewsOfCell, segmentationFor } from './reviewing.js';
+import { cellIds, cellsState, labelSetFor, reviewCells, reviewForm, reviewLine, reviewsOfCell, segmentationFor } from './reviewing.js';
+import { mountGraphLayer } from './graph-layer.js';
+import { describeGraph, graphsOf, neighborsOf } from '../lib/graphs.js';
 import { cellReviewState, reviewColors, reviewsOf, stateCounts, STATUS_COLORS } from '../lib/review-record.js';
 import { readCells, joinSamples, nearestCell } from '../lib/viewer-data.js';
 import { mountViewerPanel, defaultLayers, cellFillColors } from './viewer-panel.js';
@@ -161,12 +163,19 @@ export function mountViewer(app, container) {
     body.append(panelHost, stage);
     let regions = null;
     let reviews = null;
+    // The graph drawn over the cells (ui/graph-layer.js), made once the renderer is.
+    let graphLayer = null;
 
     const session = sessions.get(t.dataset.id);
     const layers = session?.layers ?? defaultLayers(desc);
     const renderer = new TissueRenderer(canvas, { onChange: (plan) => afterFrame(plan) });
     renderer.setDataset(desc, cells);
     renderer.setLayers(layers);
+    // The graph's line in the legend: how many of its edges the view shows.
+    const graphLegend = h('div.viewer-legend-graph');
+    // A spatial analysis's cells shown (ui/mode-spatial.js): their line in the legend.
+    const focusLegend = h('div.viewer-legend-focus');
+    graphLayer = mountGraphLayer({ canvas, renderer, onCount: (shown) => describeGraphShown(shown) });
     const state = {
       dataset: t.dataset, item: t.item, desc, cells, renderer, layers, selectedRow: -1, detail: null,
       // The segmentation drawn other than the dataset's own: { id, choice, cells }, or null.
@@ -175,6 +184,7 @@ export function mountViewer(app, container) {
         observer.disconnect();
         navigation.dispose();
         regions?.dispose();
+        graphLayer?.destroy();
         renderer.destroy();
         window.removeEventListener('keydown', onKey);
         if (window.situcraftViewer?.renderer === renderer) delete window.situcraftViewer;
@@ -190,10 +200,12 @@ export function mountViewer(app, container) {
     const drawnChoice = () => state.seg?.choice ?? choices().find((c) => c.instrument) ?? null;
     // What the panel lists: the segmentations, and the drawn one's clusterings.
     // Curated and consensus label sets, drawn as labels at one level.
-    const versionFills = () => labelVersions(app.store.project, t.dataset.id, drawnChoice()?.id).filter((v) => v.kind === 'curated' || v.kind === 'consensus').map((v) => ({ id: `labels:${v.id}:0`, labels: v.id, level: 0, label: `${v.kind === 'curated' ? 'Curated' : 'Consensus'} labels: ${v.name}` }));
+    const versionFills = () => labelVersions(app.store.project, t.dataset.id, drawnChoice()?.id, { niches: true }).filter((v) => ['curated', 'consensus', 'niches'].includes(v.kind)).map((v) => ({ id: `labels:${v.id}:0`, labels: v.id, level: 0, label: v.kind === 'niches' ? v.name : `${v.kind === 'curated' ? 'Curated' : 'Consensus'} labels: ${v.name}`, help: v.kind === 'niches' ? 'Each cell by the kind of place it is in: its neighborhood\'s make-up (the Spatial view\'s cellular neighborhoods)' : undefined }));
     const analysisFills = () => [...clusterFills(app.store.project, t.dataset.id, drawnChoice()?.id), ...labelFills(app.store.project, t.dataset.id, drawnChoice()?.id), ...versionFills(), { id: 'review', label: 'Review status', help: 'Each cell by its review: excluded, a segmentation concern, ambiguous, relabeled, accepted or commented' }];
     const imageRecords = () => placedImages(app.store.project, t.dataset.id);
-    const choiceKey = () => `${choices().map((c) => `${c.id}${c.isDefault ? '*' : ''}`).join()}|${analysisFills().map((f) => f.id).join()}|${imageRecords().map((r) => `${r.record.id}:${r.transform?.id ?? ''}`).join()}`;
+    // The drawn segmentation's graphs (lib/graphs.js), as the panel lists them.
+    const graphChoices = () => graphsOf(app.store.project, t.dataset.id, drawnChoice()?.id).filter((g) => g.state === 'complete');
+    const choiceKey = () => `${choices().map((c) => `${c.id}${c.isDefault ? '*' : ''}`).join()}|${analysisFills().map((f) => f.id).join()}|${imageRecords().map((r) => `${r.record.id}:${r.transform?.id ?? ''}`).join()}|${graphChoices().map((g) => g.id).join()}`;
     // Adding a post-Xenium image, from the panel, or aligning one.
     const imageActions = {
       check: (path, alignment) => app.bundles.checkImage(t.item, path, alignment),
@@ -204,9 +216,14 @@ export function mountViewer(app, container) {
     function mountPanel(start) {
       clear(panelHost);
       state.choiceKey = choiceKey();
-      panel = mountViewerPanel(panelHost, { desc, layers: start, cells: renderer.cells, app, segmentations: choices(), drawn: drawnChoice(), clusterings: analysisFills(), images: state.imageEntries ?? [], imageActions, onChange: (next, what) => {
+      panel = mountViewerPanel(panelHost, { desc, layers: start, cells: renderer.cells, app, segmentations: choices(), drawn: drawnChoice(), clusterings: analysisFills(), graphs: graphChoices().map((g) => ({ id: g.id, label: graphLabel(g) })), images: state.imageEntries ?? [], imageActions, onChange: (next, what) => {
         state.layers = next;
         renderer.setLayers(next);
+        if (what === 'graph') {
+          applyGraph();
+          updateLegend();
+          return;
+        }
         if (what === 'images') {
           applyImages();
           return;
@@ -376,7 +393,98 @@ export function mountViewer(app, container) {
       if (part) legend.append(part);
       const probability = panel.probabilityLegend?.();
       if (probability) legend.append(probability);
+      if (state.graph) {
+        describeGraphShown(graphLayer.shown());
+        legend.append(graphLegend);
+      }
+      if (state.focus) {
+        clear(focusLegend).append(h('div.viewer-legend-item', h('span.dot', { style: { background: '#ff4fd8' } }), h('b', state.focus.title)),
+          h('div.muted', state.focus.text),
+          h('button.link', { type: 'button', onclick: () => setFocus(null) }, 'Clear'));
+        legend.append(focusLegend);
+      }
       legend.hidden = !legend.childNodes.length;
+    }
+
+    // --- The graph drawn: one of the drawn segmentation's graphs, its edges over the cells ---
+    function graphLabel(g) {
+      const s = g.summary ?? {};
+      const where = s.choice?.regions?.length ? `, in ${s.choice.regions.map((r) => r.name).join(', ')}` : s.choice?.filter ? `, filter ${s.choice.filter.name}` : '';
+      return `${describeGraph(g.parameters)}${where}`;
+    }
+    function describeGraphShown(shown) {
+      const g = state.graph ? graphChoices().find((x) => x.id === state.graph.id) : null;
+      if (!g) return;
+      clear(graphLegend).append(h('b', `Graph: ${graphLabel(g)}`),
+        h('div.muted', shown.tooMany ? 'Zoom in to see its edges.' : `${formatCount(shown.count)} of its ${formatCount(g.summary?.edges ?? 0)} edges in view; the selected cell's in yellow.`));
+    }
+    // Draws the graph the layers name (none when it is not one of the drawn segmentation's).
+    function applyGraph() {
+      const id = state.layers.cells.graph ?? null;
+      if (!id || !graphChoices().some((g) => g.id === id)) {
+        if (id) state.layers = { ...state.layers, cells: { ...state.layers.cells, graph: null } };
+        state.graph = null;
+        state.graphGeneration = (state.graphGeneration ?? 0) + 1;
+        graphLayer?.set(null);
+        return Promise.resolve();
+      }
+      if (state.graph?.id === id) return Promise.resolve();
+      const mine = (state.graphGeneration = (state.graphGeneration ?? 0) + 1);
+      return app.bundles.graphData(id).then((data) => {
+        if (mine !== state.graphGeneration || current !== state) return;
+        state.graph = { id, ...data };
+        graphLayer.set(data);
+        graphLayer.select(state.selectedRow);
+        graphLayer.emphasize(state.focus?.emphasis ?? null);
+        updateLegend();
+        if (state.detail) app.inspector.setSection('viewer-cell', () => (state.seg ? segCellSection(state.detail) : cellSection(state.detail)));
+      }).catch((error) => toast(`The graph could not be drawn: ${error.message}`, { kind: 'error', timeout: 10000 }));
+    }
+    // Shows a spatial analysis's cells: { title, text, mask (over the drawn segmentation's cells),
+    // emphasis (the graph's edges to draw in color: { test(i, j), color }) }, or none.
+    function setFocus(focus) {
+      state.focus = focus ?? null;
+      state.showChosen?.();
+      graphLayer?.emphasize(state.focus?.emphasis ?? null);
+      updateLegend();
+    }
+    function setGraph(id) {
+      state.layers = { ...state.layers, cells: { ...state.layers.cells, graph: id ?? null } };
+      renderer.setLayers(state.layers);
+      const drawn = applyGraph();
+      mountPanel(state.layers);
+      updateLegend();
+      return drawn;
+    }
+
+    // The cell's neighbors in the graph drawn: each one a link to it, with its distance (and the
+    // boundary they share, in a contact graph) and, when the cells are filled by a label set, its
+    // label.
+    function neighborsBlock(d) {
+      const g = state.graph;
+      if (!g) return null;
+      const record = graphChoices().find((x) => x.id === g.id);
+      // The graph's name is not in the title, whose capitals would turn µm into Greek.
+      const title = h('div.section-title', 'Neighbors');
+      const which = record ? graphLabel(record) : 'the graph drawn';
+      const list = neighborsOf(g.graph, d.row);
+      if (!list) return h('div.viewer-neighbors', title, h('p.muted.seg-note', `Not in ${which}: the cell was not among the cells it was built over.`));
+      if (!list.length) return h('div.viewer-neighbors', title, h('p.muted.seg-note', `No neighbor in ${which}.`));
+      const host = h('div.viewer-neighbors', title, h('p.muted.seg-note', `${list.length} in ${which}, nearest first.`));
+      const project = app.store.project;
+      const seg = segmentationFor(project, t.dataset.id, state.seg?.id ?? null);
+      const set = seg ? labelSetFor(project, t.dataset.id, seg.id, parseLabelFill(state.layers.cells.fill)) : null;
+      const shown = list.slice(0, 24);
+      Promise.all([seg ? cellIds(t.item, seg, shown.map((e) => e.row)).catch(() => null) : null, set ? labelSource(app, refOf(set.id, set.level)).catch(() => null) : null]).then(([ids, src]) => {
+        host.append(h('ul.inspector-list.viewer-neighbor-list', ...shown.map((e, k) => {
+          const label = src && src.label[e.row] >= 0 ? src.names[src.label[e.row]] : null;
+          return h('li',
+            h('button.link', { type: 'button', title: `Select ${ids?.[k] ?? `row ${e.row}`}`, onclick: () => selectRow(e.row) }, ids?.[k] ?? `row ${e.row}`),
+            h('span.muted', ` ${e.length.toFixed(1)} µm${e.shared !== null ? `, ${e.shared.toFixed(1)} µm shared` : ''}`),
+            label ? ` · ${label}` : null);
+        })), list.length > shown.length ? h('p.muted.seg-note', `and ${list.length - shown.length} more`) : null);
+      });
+      return host;
     }
 
     // Draws a segmentation: undefined for the dataset's default, null for its own (the
@@ -399,6 +507,9 @@ export function mountViewer(app, container) {
         state.detail = null;
         state.selectedRow = -1;
         app.inspector.setSection('viewer-cell', null);
+        // A spatial analysis's cells were of the segmentation drawn before.
+        state.focus = null;
+        applyGraph();
         mountPanel(state.layers);
         applyFill();
         state.showChosen?.();
@@ -527,6 +638,7 @@ export function mountViewer(app, container) {
 
     async function selectRow(row) {
       state.selectedRow = row;
+      graphLayer?.select(row);
       if (row < 0) {
         state.detail = null;
         renderer.setSelected(null);
@@ -565,6 +677,7 @@ export function mountViewer(app, container) {
           h('div.muted', { style: { fontSize: '11.5px', margin: '8px 0 4px' } }, 'Top genes (Q20 transcripts); click one to show it'),
           ...d.genes.map((g) => h('button.viewer-gene-bar', { type: 'button', title: `Show ${g.name}'s transcripts`, onclick: () => panel.addGene(g.gene) },
             h('span.name', g.name), h('span.bar', h('span', { style: { width: `${(100 * g.count) / maxGene}%` } })), h('span.n', String(g.count))))) : null,
+        neighborsBlock(d),
         reviewBlock(d),
         h('div.btn-row', { style: { marginTop: '10px' } },
           h('button.btn.small', { type: 'button', onclick: () => centerOn(d) }, icon('target'), 'Center'),
@@ -623,6 +736,7 @@ export function mountViewer(app, container) {
           h('div.muted', { style: { fontSize: '11.5px', margin: '8px 0 4px' } }, 'Top genes (Q20 transcripts); click one to show it'),
           ...d.genes.map((g) => h('button.viewer-gene-bar', { type: 'button', disabled: g.gene < 0, title: g.gene < 0 ? `${g.name} is not among the dataset's features` : `Show ${g.name}'s transcripts`, onclick: () => panel.addGene(g.gene) },
             h('span.name', g.name), h('span.bar', h('span', { style: { width: `${(100 * g.count) / maxGene}%` } })), h('span.n', String(g.count))))) : null,
+        neighborsBlock(d),
         reviewBlock(d),
         h('div.btn-row', { style: { marginTop: '10px' } },
           h('button.btn.small', { type: 'button', onclick: () => centerOn(d) }, icon('target'), 'Center'),
@@ -647,6 +761,7 @@ export function mountViewer(app, container) {
       status.textContent = [`level ${plan.level}`, mode, pending ? `loading ${pending}` : ''].filter(Boolean).join(' · ');
       drawMinimapView();
       regions?.afterFrame();
+      graphLayer?.afterFrame();
     }
 
     // The minimap: the coarsest level of the visible channels, and the view's rectangle.
@@ -737,6 +852,10 @@ export function mountViewer(app, container) {
 
     // Cells chosen in the QC view are the instrument's: they show while its cells are drawn.
     state.showChosen = () => {
+      if (state.focus) {
+        renderer.setHighlight(state.focus.mask, '#ff4fd8', 0.6);
+        return;
+      }
       const chosen = app.selection?.dataset === t.dataset.id && !state.seg ? app.selection : null;
       renderer.setHighlight(chosen?.mask ?? null, '#ff4fd8', 0.6);
     };
@@ -749,6 +868,8 @@ export function mountViewer(app, container) {
     if (asked) app.pendingSegmentation = null;
     drawSegmentation(asked ? asked.segmentation : layers.cells.segmentation).then(() => {
       if (asked?.fill !== undefined) setFill(asked.fill);
+      const drawnGraph = asked?.graph !== undefined ? setGraph(asked.graph) : Promise.resolve();
+      if (asked?.focus) drawnGraph.then(() => setFocus(asked.focus));
       if (!asked && session?.selected >= 0) selectRow(session.selected);
     });
 
@@ -813,6 +934,8 @@ export function mountViewer(app, container) {
         app.pendingSegmentation = null;
         drawSegmentation(asked.segmentation).then(() => {
           if (asked.fill !== undefined) setFill(asked.fill);
+          const drawn = asked.graph !== undefined ? setGraph(asked.graph) : Promise.resolve();
+          if (asked.focus) drawn.then(() => setFocus(asked.focus));
         });
       }
       const view = app.pendingView;
@@ -846,6 +969,13 @@ export function mountViewer(app, container) {
       choices: () => choices(),
       fillColors: () => (state.layers.cells.fill?.startsWith('clusters:') || parseLabelFill(state.layers.cells.fill) || state.layers.cells.fill === 'review' ? state.clusterFill?.rgba ?? null : cellFillColors(state.layers.cells.fill, renderer.cells, desc)),
       clusterFill: () => state.clusterFill,
+      // The graph drawn ({ id, graph, grid, description } or null), drawing another, and how many
+      // of its edges the view shows ({ count, tooMany }).
+      graph: () => state.graph,
+      setGraph: (id) => setGraph(id),
+      graphShown: () => graphLayer.shown(),
+      // A spatial analysis's cells shown: { title, cells (how many) } or null.
+      focus: () => (state.focus ? { title: state.focus.title, cells: state.focus.mask.reduce((n, v) => n + (v ? 1 : 0), 0) } : null),
       setCells: (patch) => {
         state.layers = { ...state.layers, cells: { ...state.layers.cells, ...patch } };
         renderer.setLayers(state.layers);

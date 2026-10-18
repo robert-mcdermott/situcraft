@@ -1,0 +1,30 @@
+---
+title: Refinement
+description: SituCraft's transcript-informed cell segmentation (after Jones et al. 2025): each cell redrawn from its transcripts in a six-step studio, a pilot region first, large tissues in patches, and the same result in the terminal.
+lede: SituCraft redraws the instrument's cells from their transcripts, starting from the cells and their nuclei. Its studio says what a run would do on this bundle and this computer before it starts, and the same settings and seed give the same segmentation on any computer.
+---
+      <h2 id="what">What it does</h2>
+      <p><strong>Transcript-informed segmentation</strong> redraws each cell from the transcripts (SituCraft's implementation, after Jones et al. 2025). It starts from the instrument's cells and their nuclei. Each boundary moves to where the cell's own transcripts are, and each transcript may have drifted from the cell it came from. </p>
+
+      <h2 id="studio">The studio</h2>
+      <p>Its studio takes you through six steps, each showing what the run would do on this bundle and this computer:</p>
+      <shot name="studio" alt="The segmentation studio on the Breast example at its Compute step: the threads, and the memory, disk and time the Balanced refinement needs against what the computer has">The studio's Compute step on the Breast example: what the run needs against what the computer has.</shot>
+      <ol>
+        <li><strong>Input:</strong> the transcripts' quality (Q20 to start), the cells it starts from, and what it covers: the whole tissue, its separate sections apart, or chosen regions (typed in µm, or the region last framed in the Viewer). Outside a region the instrument's cells stay as they are.</li>
+        <li><strong>Compute:</strong> the threads, and the memory, disk and time it needs against what the computer has.</li>
+        <li><strong>Model:</strong> a preset (Balanced, Conservative boundary, Flexible morphology, Low memory, ROI pilot, Expert), what it changes and what it risks, and every setting with what it does and costs.</li>
+        <li><strong>Review:</strong> what will run, anything that stops it (with what to do) and its risks; <strong>Refine</strong> starts it, and <strong>Save the recipe</strong> keeps its settings as a file, to run again here or with <code>situcraft refine</code> in a terminal.</li>
+        <li><strong>Run:</strong> its progress and log, and <strong>Stop</strong>. A failure says what went wrong and what to do.</li>
+        <li><strong>Compare:</strong> whether it settled, which cells its result is least sure of (few transcripts, uncertain boundaries, no nucleus), and, for an ROI pilot, how often a second seed put the transcripts in the same cells. <strong>Review the differences</strong> opens the comparison workspace on it against the instrument's segmentation, made as soon as the refinement is.</li>
+      </ol>
+
+      <h2 id="pilot">A pilot first</h2>
+      <p>The ROI pilot is the place to start on a new tissue: a region of a few hundred µm takes seconds, and its two seeds show how much of the result is chance. The result itself is the summary of many samples from the model: each transcript in its most probable cell, with that probability kept.</p>
+
+      <h2 id="large">Large tissues</h2>
+      <p>A large tissue (more than about 4 million transcripts modeled) is refined in patches of about 2 million transcripts each, one after another, each also refining the cells within 40 µm of its square, and stitched into one segmentation; the Compute step says how many. The result is the same for the same seed whatever the computer. The memory still grows with the tissue, by about 100 bytes a transcript: a tissue of 55 million transcripts needed 5 to 7.4 GB (<a href="../install.html#memory">what it needs</a>).</p>
+
+      <h2 id="terminal">In the terminal</h2>
+      <p><code>situcraft refine &lt;bundle&gt; &lt;new folder&gt;</code> runs the same segmentation without the app, from a preset or a recipe saved in the studio (<code>--recipe</code>), and writes its files with the recipe beside them. The same recipe gives the same segmentation, byte for byte, in the app or the terminal, and the folder imports back into the app. <code>situcraft refine -h</code> lists the settings, <code>--preflight</code> says what a run would need, and <a href="{{github}}/blob/main/docs/FORMATS.md#refinements-in-the-terminal-situcraft-refine">Formats</a> describes the files.</p>
+      <div class="code"><pre><code><span class="prompt">$ </span>situcraft refine --preflight /path/to/bundle
+<span class="prompt">$ </span>situcraft refine --recipe recipe.json /path/to/bundle /path/to/refined</code></pre></div>

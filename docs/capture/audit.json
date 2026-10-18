@@ -310,6 +310,116 @@
   "violations": []
  },
  {
+  "scene": "spatial",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "spatial",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "graph",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "graph",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "enrichment",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "enrichment",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "ripley",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "ripley",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "compared",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "compared",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "niches",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "niches",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "niches-tissue",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "niches-tissue",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "moran",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "moran",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "moran-tissue",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "moran-tissue",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "remake",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "remake",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "edge",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "edge",
+  "theme": "light",
+  "violations": []
+ },
+ {
   "scene": "clusters",
   "theme": "dark",
   "violations": []

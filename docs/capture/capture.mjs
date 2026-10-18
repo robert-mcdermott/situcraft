@@ -1,9 +1,9 @@
 // Captures the documentation's screenshots, in the light and dark themes, as
-// docs/images/<scene>-<theme>.webp: the README shows the one matching the reader's theme. Each scene
-// drives a SituCraft built from source through its remote control (actions.go, web/ui/remote.js),
-// as any script can, on a fresh, empty library, with the development bundles as its examples (node
-// validation/fetch.mjs downloads them), so every run gives the same pictures. Follows MaveScape
-// 0.8.0's docs/capture/capture.mjs.
+// docs/images/<scene>-<theme>.webp: the README and the website (docs/site/build.mjs copies them)
+// show the one matching the reader's theme. Each scene drives a SituCraft built from source
+// through its remote control (actions.go, web/ui/remote.js), as any script can, on a fresh, empty
+// library, with the development bundles as its examples (node validation/fetch.mjs downloads
+// them), so every run gives the same pictures. Follows MaveScape 0.8.0's docs/capture/capture.mjs.
 //
 //   node docs/capture/capture.mjs [scene …] [--theme light|dark|both] [--audit [--no-shots]]
 //
@@ -438,6 +438,149 @@ const scenes = {
     await scrollTo('.viewer-reviews-section');
     await js(`window.situcraftViewer.settled()`);
     await sleep(400);
+  },
+  // The Lung example's cells as a graph (wave 6, slice 1): the Spatial view, the Delaunay graph's
+  // definition, and its numbers with histograms of each cell's neighbors and the edges' lengths.
+  async spatial() {
+    await act('open_example', { example: 'lung' });
+    await act('build_graph', { kind: 'delaunay' });
+    await waitFor(`Boolean(document.querySelector('.sp-plots canvas'))`);
+    await scrollTo('.sp-detail', 'start');
+    await sleep(300);
+  },
+  // The graph on the tissue close up (wave 6, slice 1): its edges over the cells, a cell's in
+  // yellow, and the cell's neighbors in the inspector.
+  async graph() {
+    await act('open_example', { example: 'lung' });
+    const built = await act('build_graph', { kind: 'delaunay' });
+    await act('show_tissue', { graph: built.data.id, center: [700, 330], um_per_pixel: 0.22, genes: ['EPCAM', 'CD68'], cell: 'nheihaca-1', channels: { DAPI: { color: '#8c8c8c' } } });
+    await waitFor(`Boolean(document.querySelector('.viewer-neighbor-list li'))`);
+    await js(`window.situcraftViewer.settled()`);
+    await sleep(400);
+  },
+  // Which cell types are neighbors (wave 6, slice 2): the Lung example's classes' neighborhood
+  // enrichment over its Delaunay graph, the heat map and the pairs most and least often neighbors,
+  // one pair chosen.
+  async enrichment() {
+    await act('open_example', { example: 'lung' });
+    await act('cluster_cells', {});
+    const markers = await act('label_cells', { markers: 'lung' });
+    await act('build_graph', { kind: 'delaunay' });
+    await act('spatial_analysis', { question: 'enrichment', labels: markers.data.id, level: 1 });
+    await waitFor(`Boolean(document.querySelector('.sp-heatmap'))`);
+    await js(`document.querySelector('.sp-square[data-pair="2,3"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))`);
+    await waitFor(`Boolean(document.querySelector('.sp-pair'))`);
+    await scrollTo('.sp-answer', 'start');
+    await sleep(300);
+  },
+  // At what scale (wave 6, slice 3): Ripley's L of the Lung classes in the tissue, the stromal cells'
+  // curve above the envelope of the labels dealt at random.
+  async ripley() {
+    await act('open_example', { example: 'lung' });
+    await act('cluster_cells', {});
+    const markers = await act('label_cells', { markers: 'lung' });
+    await act('spatial_analysis', { question: 'ripley', labels: markers.data.id, level: 1 });
+    await waitFor(`Boolean(document.querySelector('.sp-answer .sp-chart'))`);
+    // Each choice draws the answer again, so the second select is found after the first is drawn.
+    for (const id of ['sp-from', 'sp-to']) {
+      await waitFor(`Boolean(document.getElementById('${id}'))`);
+      await js(`(() => { const el = document.getElementById('${id}'); el.value = String([...el.options].findIndex((o) => o.text === 'Stromal')); el.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+      await waitFor(`document.getElementById('${id}')?.selectedOptions[0]?.text === 'Stromal'`);
+    }
+    await scrollTo('.sp-answer .sp-pair-tables', 'start');
+    await sleep(300);
+  },
+  // Regions compared (wave 6, slice 4): two stromal regions of the Lung example drawn by their
+  // stromal and endothelial cells, and each class's density in them and in the rest of the tissue,
+  // the first region over the rest as a forest plot.
+  async compared() {
+    await act('open_example', { example: 'lung' });
+    await act('cluster_cells', {});
+    const markers = await act('label_cells', { markers: 'lung' });
+    await act('draw_region', { dataset: 'xenium-lung-2fov', polygon: [[260, 0], [420, 0], [440, 80], [400, 170], [300, 170], [255, 100]], class: 'Stroma', name: 'Vessel stroma', by: 'docs/capture' });
+    await act('draw_region', { dataset: 'xenium-lung-2fov', polygon: [[60, 470], [200, 460], [250, 560], [240, 700], [120, 760], [0, 720], [0, 640]], class: 'Stroma', name: 'Lower stroma', by: 'docs/capture' });
+    await act('spatial_analysis', { question: 'regions', labels: markers.data.id, level: 1, regions: ['Vessel stroma', 'Lower stroma'] });
+    await waitFor(`Boolean(document.querySelector('.sp-answer .sp-forest'))`);
+    await scrollTo('.sp-answer .sp-regions-table', 'start');
+    await sleep(300);
+  },
+  // Cellular neighborhoods (wave 6, slice 5): the Lung classes' six niches, their make-up against the
+  // tissue's as a heat map, and each one's defining labels and leading genes, one niche chosen.
+  async niches() {
+    await act('open_example', { example: 'lung' });
+    await act('cluster_cells', {});
+    const markers = await act('label_cells', { markers: 'lung' });
+    await act('spatial_analysis', { question: 'niches', labels: markers.data.id, level: 1 });
+    await waitFor(`Boolean(document.querySelector('.sp-answer .sp-niches'))`);
+    await js(`document.querySelector('.sp-niches tr[data-niche="5"]')?.click()`);
+    await waitFor(`Boolean(document.querySelector('.sp-answer .sp-pair'))`);
+    await scrollTo('.sp-answer .sp-heatmap-wrap', 'start');
+    await sleep(300);
+  },
+  // The niches on the tissue (wave 6, slice 5): the Lung cells filled by their niche, the legend
+  // naming each one.
+  async 'niches-tissue'() {
+    await act('open_example', { example: 'lung' });
+    await act('cluster_cells', {});
+    const markers = await act('label_cells', { markers: 'lung' });
+    await act('spatial_analysis', { question: 'niches', labels: markers.data.id, level: 1 });
+    await act('show_tissue', { dataset: 'xenium-lung-2fov', fill: 'niches', opacity: 0.85, transcripts: false, whole: true, channels: { DAPI: { color: '#8c8c8c' } } });
+    await waitFor(`Boolean(window.situcraftViewer?.clusterFill?.())`);
+    await js(`window.situcraftViewer.settled()`);
+    await sleep(400);
+  },
+  // Spatially variable genes (wave 6, slice 6): the Lung genes' Moran's I over the Delaunay graph,
+  // the genes in a pattern and dispersed, one gene chosen with its local Moran's I.
+  async moran() {
+    await act('open_example', { example: 'lung' });
+    await act('build_graph', { kind: 'delaunay' });
+    await act('spatial_analysis', { question: 'moran' });
+    await waitFor(`Boolean(document.querySelector('.sp-answer .sp-genes'))`);
+    await js(`document.querySelector('.sp-genes tr[data-gene="GJA5"]')?.click()`);
+    await waitFor(`Boolean(document.querySelector('.sp-answer .sp-pair'))`);
+    await scrollTo('.sp-answer .sp-pair-tables', 'start');
+    await sleep(300);
+  },
+  // A gene's local Moran's I on the tissue (wave 6, slice 6): the Lung cells high among high in
+  // GJA5's expression (an artery's endothelium, in the stroma at the section's top left), with its
+  // transcripts.
+  async 'moran-tissue'() {
+    await act('open_example', { example: 'lung' });
+    await act('build_graph', { kind: 'delaunay' });
+    const moran = await act('spatial_analysis', { question: 'moran' });
+    await act('show_tissue', { dataset: 'xenium-lung-2fov', cells_of: { analysis: moran.data.id, gene: 'GJA5', class: 'high' }, genes: ['GJA5'], center: [395, 115], width_um: 300, channels: { DAPI: { color: '#8c8c8c' } } });
+    await waitFor(`Boolean(window.situcraftViewer?.focus?.())`);
+    await js(`window.situcraftViewer.settled()`);
+    await sleep(400);
+  },
+  // An answer made again on another segmentation (wave 6, slice 7): the Lung classes' enrichment
+  // made again on a 3 µm nucleus expansion, the two read together, the largest change chosen with
+  // the cells behind it.
+  async remake() {
+    await act('open_example', { example: 'lung' });
+    await act('expand_nuclei', { dataset: 'xenium-lung-2fov', distance_um: 3 });
+    await act('cluster_cells', {});
+    const markers = await act('label_cells', { markers: 'lung' });
+    await act('build_graph', { segmentation: 'instrument', kind: 'delaunay' });
+    const first = await act('spatial_analysis', { segmentation: 'instrument', question: 'enrichment', labels: markers.data.id, level: 1 });
+    await act('remake_analysis', { analysis: first.data.id, segmentation: 'Nucleus expansion, 3 µm' });
+    await waitFor(`Boolean(document.querySelector('.sp-changes tbody tr'))`);
+    await js(`document.querySelector('.sp-changes tbody tr')?.click()`);
+    await waitFor(`Boolean(document.querySelector('.sp-behind [data-action="behind-a"]'))`);
+    await scrollTo('.sp-remake', 'start');
+    await sleep(300);
+  },
+  // Across a region's edge (wave 6, slice 4): the epithelial cells' profile across the vessel
+  // stroma's edge, sparse inside and dense outside, with each class's reading.
+  async edge() {
+    await act('open_example', { example: 'lung' });
+    await act('cluster_cells', {});
+    const markers = await act('label_cells', { markers: 'lung' });
+    await act('draw_region', { dataset: 'xenium-lung-2fov', polygon: [[260, 0], [420, 0], [440, 80], [400, 170], [300, 170], [255, 100]], class: 'Stroma', name: 'Vessel stroma', by: 'docs/capture' });
+    await act('spatial_analysis', { question: 'boundary', labels: markers.data.id, level: 1, region: 'Vessel stroma' });
+    await waitFor(`Boolean(document.querySelector('.sp-answer .sp-profile'))`);
+    await scrollTo('.sp-answer .sp-readings', 'start');
+    await sleep(300);
   },
   // The Breast example's clusters on the tissue (wave 4, slice 1): the cells filled by cluster,
   // with the legend.

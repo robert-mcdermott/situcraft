@@ -757,7 +757,7 @@ func (wr *writer) writeTruth() error {
 		}
 	}
 	wr.w.trueCellsByType = map[string]int{}
-	fields := []parquet.Field{text("cell_id"), f64("x_centroid"), f64("y_centroid"), i64("transcript_counts"), f64("cell_area"), f64("nucleus_area"), text("cell_type"), u32("nucleus_in_section")}
+	fields := []parquet.Field{text("cell_id"), f64("x_centroid"), f64("y_centroid"), i64("transcript_counts"), f64("cell_area"), f64("nucleus_area"), text("cell_type"), u32("nucleus_in_section"), u32("domain")}
 	err := parquetFile(filepath.Join(dir, "cells.parquet"), fields, wr.software, n, func(from, to int) []*parquet.Values {
 		c := make([]*parquet.Values, len(fields))
 		for i := range c {
@@ -781,6 +781,7 @@ func (wr *writer) writeTruth() error {
 				wr.w.visibleNuclei++
 			}
 			c[7].Int32 = append(c[7].Int32, seen)
+			c[8].Int32 = append(c[8].Int32, int32(cl.domain))
 		}
 		return c
 	})
