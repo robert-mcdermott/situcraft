@@ -2,8 +2,9 @@
 // dataset a sample or its regions instead (a tissue microarray's cores, sections on one slide),
 // with the user's fields and those read from each bundle, written and read as CSV (lib/samples.js).
 // Slice 3: the design (ui/cohort-design.js). Slice 4: the same steps on every sample and the cohort
-// table (ui/cohort-summary.js). Slice 5: cohort QC, batches and panels (ui/cohort-qc.js). The
-// comparisons come in the slices after (situcraft-spec/roadmap.md, wave 7).
+// table (ui/cohort-summary.js). Slice 5: cohort QC, batches and panels (ui/cohort-qc.js). Slice 6:
+// differential abundance (ui/cohort-abundance.js). The comparisons of expression and spatial
+// statistics come in the slices after (situcraft-spec/roadmap.md, wave 7).
 
 import { h, icon, clear, downloadBlob, formatCount } from './dom.js';
 import { confirmDialog, toast } from './overlays.js';
@@ -16,6 +17,7 @@ import { makeDesign } from '../lib/design.js';
 import { batchStatements, itemIndex } from '../lib/cohort.js';
 import { cohortSession, runSteps, stepsSection, summarize, summaryDocument, summarySection, summaryTable, updateSummaryProgress } from './cohort-summary.js';
 import { qcSection } from './cohort-qc.js';
+import { abundanceSection, abundanceSession, compareAbundance, comparisonDocument, showSampleCells } from './cohort-abundance.js';
 import { BUNDLE_FIELDS, FIELD_KINDS, addSampleField, fieldValue, readSamplesTable, removeSampleField, renameSample, renameSampleField, sampleFields, samplesCSV, samplesOf, setFieldKind, setRegionSamples, setSampleField } from '../lib/samples.js';
 
 const exact = (v) => (Number.isFinite(v) ? v.toLocaleString('en-US') : '—');
@@ -276,7 +278,7 @@ export function mountCohort(app, container) {
     const regions = regionsSection(project, samples);
     if (regions) body.append(regions);
     body.append(designSection(app, { commit, redraw: () => schedule() }));
-    body.append(stepsSection(app, { cellsOf, redraw: () => schedule() }), summarySection(app, { cellsOf, redraw: () => schedule() }), qcSection(app, { redraw: () => schedule() }));
+    body.append(stepsSection(app, { cellsOf, redraw: () => schedule() }), summarySection(app, { cellsOf, redraw: () => schedule() }), qcSection(app, { redraw: () => schedule() }), abundanceSection(app, { cellsOf, redraw: () => schedule() }));
     const focus = app.store.ui.focus?.kind === 'sample' ? app.store.ui.focus.id : null;
     if (focus) body.querySelector(`tr[data-sample="${CSS.escape(focus)}"]`)?.scrollIntoView({ block: 'nearest' });
   }
@@ -350,6 +352,19 @@ export function mountCohort(app, container) {
       const design = makeDesign(app.store.project, draftOf(app.store.project).spec);
       return { doc, design: { group: design.spec.group, levels: design.levels, balance: design.balance, statements: batchStatements(design) } };
     },
+    // Compares the abundances (cohort-abundance.js compareAbundance): { families, level, summary,
+    // spec }; answers the comparison's manifest, shown in the view.
+    abundance: (options = {}) => compareAbundance(app, options, () => schedule()),
+    // A comparison's document, shown in the view (a family and a result chosen when given).
+    comparison: async (id, { family = null, pick = null } = {}) => {
+      abundanceSession.shown = id;
+      if (family) abundanceSession.family = family;
+      if (pick) abundanceSession.pick = pick;
+      schedule();
+      return comparisonDocument(id);
+    },
+    // A sample's cells of a label shown on its tissue (cohort-abundance.js showSampleCells).
+    sampleCells: (summaryId, sampleId, label) => showSampleCells(app, cellsOf, summaryId, sampleId, label),
     // The samples' panels compared now, before any summary (api_cohort.go comparePanels).
     panels: async () => {
       const samples = samplesOf(app.store.project).filter((s) => !s.removed);
@@ -380,6 +395,7 @@ export function mountCohort(app, container) {
       // A design chosen in the project tree is shown in the Design section.
       const focus = app.store.ui.focus;
       if (topics.has('focus') && focus?.kind === 'cohort-summary') cohortSession.shown = focus.id;
+      if (topics.has('focus') && focus?.kind === 'abundance') abundanceSession.shown = focus.id;
       if (topics.has('focus') && focus?.kind === 'design' && focus.id !== shownDesign) {
         const d = app.store.project.artifacts.find((a) => a.kind === 'design' && a.id === focus.id);
         if (d) setDraft(app.store.project, d.spec, d.name);

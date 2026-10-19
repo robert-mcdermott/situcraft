@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"situcraft/internal/dmath"
+	"situcraft/internal/random"
 )
 
 // tinyCohort is the standard cohort with one subject a group and sections of 120 µm: quick to
@@ -360,5 +361,41 @@ func TestCohortOutlier(t *testing.T) {
 		if len(x) == 0 || !bytes.Equal(x, y) {
 			t.Errorf("S01's %s differs with S02 planted", f)
 		}
+	}
+}
+
+// A cohort's reference is of its samples' panel: every gene's profile in every type each sample's
+// panel's, but for the sample's own levels (its variation and its group's effects, which multiply
+// it), and written as an AnnData store.
+func TestCohortReference(t *testing.T) {
+	c := tinyCohort()
+	samples := c.design()
+	equal := []float64{0.25, 0.25, 0.25, 0.25}
+	pr := c.referenceParams()
+	ref := makePanel(pr, random.New(pr.seed(streamPanel), streamPanel), equal)
+	for k, s := range samples {
+		ps := c.sampleParams(k, s)
+		pn := makePanel(ps, random.New(ps.seed(streamPanel), streamPanel), equal)
+		if !reflect.DeepEqual(pn.names, ref.names) {
+			t.Fatalf("%s: its panel's genes are not the reference's", s.Name)
+		}
+		for ty := range ref.profiles {
+			for g := range ref.profiles[ty] {
+				if pn.profiles[ty][g] != mul(ref.profiles[ty][g], ps.LevelFolds[ty][g]) {
+					t.Fatalf("%s: gene %d of type %d is not the reference's times the sample's level", s.Name, g, ty)
+				}
+			}
+		}
+	}
+	rows, labels, genes := ReferenceCells(pr, 10, ReferenceDepth, c.Seed)
+	if len(rows) != 40 || len(labels) != 40 || len(genes) != pr.Genes || genes[0] != GeneName(0) {
+		t.Errorf("reference cells: %d rows, %d labels, %d genes", len(rows), len(labels), len(genes))
+	}
+	path := filepath.Join(t.TempDir(), CohortReferenceFile)
+	if err := CohortReference(c, path, 10); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(path, "obs")); err != nil {
+		t.Errorf("the reference's store: %v", err)
 	}
 }

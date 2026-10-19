@@ -688,6 +688,22 @@ const scenes = {
     await scrollTo('.cohort-qc');
     await clearToasts();
   },
+  // Differential abundance (wave 7, slice 6): the simulated cohort's subjects compared by condition,
+  // the endothelial-like cells' result chosen and its subjects plotted.
+  async abundance() {
+    await act('open_example', { example: 'cohort' });
+    await act('design', { unit: 'subject', group: 'condition', reference: 'control' });
+    await act('cohort_steps', { questions: [] });
+    await act('summarize_samples', { niches: 0 });
+    await act('compare_abundance', {});
+    await waitFor(`Boolean(document.querySelector('.cohort-abundance-table tr[data-test^="endothelial-like"]'))`);
+    await js(`document.querySelector('.cohort-abundance-table tr[data-test^="endothelial-like"]').click()`);
+    await waitFor(`Boolean(document.querySelector('.cohort-dots'))`);
+    await js(`document.getElementById('app').classList.add('inspector-closed')`);
+    await sleep(600);
+    await scrollTo('.cohort-abundance');
+    await clearToasts();
+  },
   // The Jobs view after both examples were opened: each job's state and times, one's log open.
   async jobs() {
     await act('open_example', { example: 'lung' });

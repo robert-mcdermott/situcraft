@@ -3142,16 +3142,53 @@ makes, which SituCraft refuses.
      - **Every gene the Lung and Breast panels share is read by other codewords:** codewords are
        each panel's own assignment, so a difference says the probes may differ, not that the gene
        is another.
-6. **Differential abundance (H3).**
-   - Each label's share between groups: its cells against the sample's labeled cells, by a
-     quasi-binomial generalized linear model with the design's pairing and covariates; densities by
-     a model of log counts with the sample's tissue area as offset; niches' shares the same way.
-     Effect sizes (the share's ratio) with intervals, raw and Benjamini–Hochberg-adjusted p-values,
-     the tests' universe recorded.
-   - A result's samples as points by group; a sample's cells of that label on its tissue.
-   - The same steps on every sample also label from a reference (slice 4 labels from a marker set).
-   - Validation: against statsmodels' GLM on the same tables; on simulated cohorts, the known
-     shifts within their intervals, and error rates on null cohorts.
+6. **Differential abundance (H3): done.**
+   - **Each label's share between groups** (`internal/cohort` `FitQuasi`, `Abundance`;
+     `api_abundance.go`, `POST /api/cohort/abundance`): its cells against the row's labeled cells,
+     by a quasi-binomial generalized linear model of the design's matrix (its pairing and
+     covariates; a unit's samples in a group combined); densities by a quasi-Poisson model with the
+     log of the tissue's area as offset; niches' shares as shares. Fitted by iteratively reweighted
+     least squares as R's glm (its starting values, a tighter tolerance); the dispersion Pearson's χ²
+     over the residual degrees of freedom; each contrast a t test on those degrees of freedom
+     (`internal/stats` Student's t, against R). Effect sizes as ratios (odds, densities) with
+     intervals, raw and Benjamini–Hochberg-adjusted p-values over each family's tests, the universe
+     stated; what cannot be tested (no cells; a group with none) said. An artifact of kind
+     `abundance` (`abundance.json`, `results.csv`); the project tree's **Comparisons**.
+   - **A result's units as points by group** (`ui/cohort-abundance.js`); a point opens its sample's
+     cells of that label on its tissue (the summary's label set, its cells chosen).
+   - **The same steps on every sample also label from a reference** (a label set's source: its
+     marker set, or a reference by its file's SHA-256 and column); `situcraft simulate --cohort …
+     --reference N` and the start page's cohort example write a reference over the cohort's panel.
+   - Remote control: `compare_abundance`, `show_sample_cells`; `cohort_steps` and `summarize_samples`
+     take a `reference`. The cohort's summary and comparison jobs are resumed after a restart.
+   - Validation:
+     - **Against statsmodels** (`validation/reference/abundance/`: `compare.sh` runs statsmodels
+       0.15.0 on 19 models, the simulated cohort's shares and densities by condition and adjusted
+       for the slide, a paired design, three groups with a contrast between two, densities over
+       varying areas; compared on every commit): every coefficient, standard error, dispersion,
+       contrast estimate, t, p and interval within 10⁻⁸ (2·10⁻¹⁴ found).
+     - **Calibration** (`TestAbundanceCalibration`): 4,000 null tables of beta-binomial shares and
+       negative binomial densities, four samples against four: rejections 5.6% and 5.6% at 5%, 1.1%
+       and 0.97% at 1%.
+     - **In the page** (viewer suite): the simulated cohort's subjects by condition, each effect the
+       pooled ratio of its labeled counts (as a model of the groups alone gives) and each interval
+       covering the true cells' ratio (endothelial-like 1.75, interval 0.84 to 3.64, the true cells
+       1.74); a sample's cells of a label shown, as many as the summary counts; a null cohort
+       labeled from its own reference, its shares within 0.08 of its true types', none of its 14
+       tests below an adjusted p of 0.05.
+   - Found by slice 6:
+     - **statsmodels' two-column binomial leaves the trials out of Pearson's χ²:** its dispersion is
+       then the binomial's divided by the trials (0.005 here, against R's 3.63). The proportions
+       weighted by their trials (`var_weights`) give R's; the reference uses them.
+     - **The planted effect is not the share's odds ratio:** the standard cohort's endothelial-like
+       type has its odds against each other type doubled, but the immune-like type's change in the
+       epithelial-led domains moves the labeled cells it is a share of, so its odds ratio among all
+       labeled cells is 1.74 in the true cells; the comparison estimates that (1.75).
+     - **Four subjects a group give wide intervals:** with the samples' own spread (dispersions of 4
+       to 26 on 6 degrees of freedom), the endothelial-like doubling is not significant here. The
+       interval says so; slice 8 states power at the known effects.
+     - **A reference's labels are less exact than the starter markers here** (shares within 0.053
+       against 0.015): its profiles leave out each sample's own levels.
 7. **Differential expression and spatial statistics (H3).**
    - **Pseudobulk expression:** each label's counts by sample, filtered for expression, normalized
      (TMM; Robinson and Oshlack 2010), voom's weights and limma's moderated t (Law et al. 2014;

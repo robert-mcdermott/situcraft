@@ -62,6 +62,7 @@ type cohortSummarySpec struct {
 func (a *app) registerCohort(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/cohort/summary", a.startCohortSummary)
 	mux.HandleFunc("POST /api/cohort/panels", a.comparePanels)
+	mux.HandleFunc("POST /api/cohort/abundance", a.startAbundance)
 }
 
 // startCohortSummary starts the job summarizing a cohort's samples, answering {id, artifact, job}:

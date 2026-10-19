@@ -48,14 +48,24 @@ func newExamples(dir string) *examples.Library {
 		}, {
 			Name:    cohortExample,
 			Title:   "A simulated cohort",
-			Summary: "SituCraft's standard simulated cohort: eight sections of 250 × 250 µm, four subjects in each of two groups (control and treated) on two slides, about 6,000 cells in all. In the treated sections a cell is twice as likely to be endothelial-like (its odds against each other type, in every part of the tissue), four times as likely to be immune-like where epithelial-like cells lead, and epithelial-like cells hold 2.5 times the SIM033; every section also differs from the others by chance. Made on this computer in seconds; each sample's subject and condition are read in with it, and the truth of every effect and sample is beside it.",
+			Summary: "SituCraft's standard simulated cohort: eight sections of 250 × 250 µm, four subjects in each of two groups (control and treated) on two slides, about 6,000 cells in all, with a single-cell reference of its types. In the treated sections a cell is twice as likely to be endothelial-like (its odds against each other type, in every part of the tissue), four times as likely to be immune-like where epithelial-like cells lead, and epithelial-like cells hold 2.5 times the SIM033; every section also differs from the others by chance. Made on this computer in seconds; each sample's subject and condition are read in with it, and the truth of every effect and sample is beside it.",
 			Size:    64 << 20,
 			Make: func(ctx context.Context, dir string, progress examples.Progress) error {
-				_, err := simulate.RunCohort(ctx, simulate.CohortPresets["standard"], dir, version, func(f float64, message string) { progress(f, message) })
-				return err
+				c := simulate.CohortPresets["standard"]
+				if _, err := simulate.RunCohort(ctx, c, dir, version, func(f float64, message string) { progress(f, message) }); err != nil {
+					return err
+				}
+				return simulate.CohortReference(c, filepath.Join(dir, simulate.CohortReferenceFile), 300)
 			},
-			Marker: simulate.CohortFile,
-			Kind:   "cohort",
+			// From 0.7.0 it has a single-cell reference of its types; made again, its sections are
+			// the same.
+			Current: func(dir string) bool {
+				_, err := os.Stat(filepath.Join(dir, simulate.CohortReferenceFile))
+				return err == nil
+			},
+			Outdated: "Made by an earlier SituCraft, without the cohort's single-cell reference: make it again to add it (its sections stay the same).",
+			Marker:   simulate.CohortFile,
+			Kind:     "cohort",
 		}}}
 }
 

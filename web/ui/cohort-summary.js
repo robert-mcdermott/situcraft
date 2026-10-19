@@ -7,7 +7,8 @@
 
 import { h, icon, downloadBlob } from './dom.js';
 import { toast } from './overlays.js';
-import { labelClustering } from './labels-card.js';
+import { labelClustering, referenceClustering } from './labels-card.js';
+import { pickPaths } from './file-picker.js';
 import { labelSource, refOf } from './label-sources.js';
 import { promotedSegmentation } from '../lib/segmentations.js';
 import { cellsIn } from '../lib/regions.js';
@@ -39,11 +40,12 @@ async function clusteringDefaults() {
   return clusterDefaults;
 }
 
-// What the sections choose, for the session: the marker set (a project set's id, or '' for
-// SituCraft's starter set that fits the first sample's panel) and its level, the graph's kind, the
-// questions, the niches; the steps under way, the summary being made, and the summary shown.
+// What the sections choose, for the session: the labels' source (a marker set's id, a reference's
+// source, '' for SituCraft's starter set that fits the first sample's panel, or 'path' for the
+// reference at referencePath) and its level, the graph's kind, the questions, the niches; the steps
+// under way, the summary being made, and the summary shown.
 export const cohortSession = {
-  markers: '', level: 0, kind: 'delaunay', questions: new Set(['enrichment']),
+  markers: '', referencePath: '', level: 0, kind: 'delaunay', questions: new Set(['enrichment']),
   niches: true, nicheCount: NICHES_DEFAULTS.niches, neighbors: NICHES_DEFAULTS.neighbors,
   running: null, summarizing: null, shown: null, family: 'cells',
 };
@@ -95,9 +97,33 @@ export function chosenOf(app, cellsOf, t) {
   return chosenStore.get(key);
 }
 
-// A dataset's labels from a marker set (its record's id) on a segmentation: complete, the latest.
-export function labelsFrom(project, datasetId, segmentationId, markerSet) {
-  return latest(project.artifacts.filter((a) => a.kind === 'labels' && a.dataset === datasetId && a.segmentation === segmentationId && a.markerSet === markerSet && a.state === 'complete'));
+// A label set's source: the marker set its cells were labeled from (the set's record's id), or the
+// reference ('ref:', the reference file's SHA-256 and its column of labels); null for another.
+export function sourceOf(record) {
+  if (record?.markerSet) return record.markerSet;
+  if (record?.reference?.sha256) return `ref:${record.reference.sha256}:${record.reference.labelColumn ?? ''}`;
+  return null;
+}
+
+// A dataset's labels from a source on a segmentation: complete, the latest.
+export function labelsFrom(project, datasetId, segmentationId, source) {
+  return latest(project.artifacts.filter((a) => a.kind === 'labels' && a.dataset === datasetId && a.segmentation === segmentationId && a.state === 'complete' && sourceOf(a) === source));
+}
+
+// The sources the steps and the summary label from: the project's marker sets (and those labels
+// were made from), and the references labels were made from: { value, name, label, kind, levels,
+// file }.
+export function sourceChoices(project) {
+  const out = markerSetChoices(project).map((r) => ({ value: r.id, name: `${r.name} · v${r.version}`, label: r.name, kind: 'markers', levels: r.set.levels ?? [] }));
+  for (const a of project.artifacts) {
+    if (a.kind !== 'labels' || !a.reference?.sha256) continue;
+    const value = sourceOf(a);
+    if (out.some((c) => c.value === value)) continue;
+    const file = a.reference.file ?? '';
+    const base = file.split(/[\\/]/).filter(Boolean).at(-1) ?? 'a reference';
+    out.push({ value, name: `Reference ${base}${a.reference.labelColumn ? ` (${a.reference.labelColumn})` : ''}`, label: `Reference ${base}`, kind: 'reference', levels: [], file });
+  }
+  return out;
 }
 
 // The marker sets the project's labels were made from or holds, latest first.
@@ -111,10 +137,11 @@ function markerSetChoices(project) {
   return out;
 }
 
-// The marker set a summary reads: the one chosen, else the first whose labels every sample has.
-function summaryMarkerSet(project, targets) {
-  if (cohortSession.markers) return cohortSession.markers;
-  return markerSetChoices(project).find((r) => targets.every((t) => labelsFrom(project, t.dataset.id, t.seg.id, r.id)))?.id ?? '';
+// The source a summary reads: the one chosen, else the first whose labels every sample has.
+function summarySource(project, targets) {
+  const choices = sourceChoices(project);
+  if (choices.some((c) => c.value === cohortSession.markers)) return cohortSession.markers;
+  return choices.find((c) => targets.every((t) => labelsFrom(project, t.dataset.id, t.seg.id, c.value)))?.value ?? '';
 }
 
 // A distances answer's cells' checksum (analysis.json's), read once.
@@ -130,9 +157,9 @@ function cellsChecksum(id) {
 // A sample's artifacts a summary reads: its labels (from the marker set), its graph (over its cells,
 // of the kind chosen if there is one) and its answers (an enrichment of its labels and Moran's I over
 // the graph, nearest distances of its cells and labels), at the level.
-export async function artifactsOf(app, cellsOf, t, markerSet, level, kind = cohortSession.kind) {
+export async function artifactsOf(app, cellsOf, t, source, level, kind = cohortSession.kind) {
   const project = app.store.project;
-  const labels = markerSet ? labelsFrom(project, t.dataset.id, t.seg.id, markerSet) : null;
+  const labels = source ? labelsFrom(project, t.dataset.id, t.seg.id, source) : null;
   const chosen = await chosenOf(app, cellsOf, t);
   const checksum = chosen.request.checksum;
   const graph = graphOfSample(project, t.dataset.id, t.seg.id, checksum, kind) ?? graphOfSample(project, t.dataset.id, t.seg.id, checksum);
@@ -152,12 +179,18 @@ export async function artifactsOf(app, cellsOf, t, markerSet, level, kind = coho
 // --- The steps -----------------------------------------------------------------------------------------
 
 // Runs the same steps on every sample: each dataset's cells clustered (SituCraft's defaults) and
-// labeled from the marker set (the first's resolving a starter, which the others then use), and each
-// sample's graph built and its questions asked, with the same parameters. Steps made already are
-// answered at once. onStep(text, done, total) says what is under way. Answers { markerSet, samples:
+// labeled from one source, a marker set (the first's resolving a starter, which the others then use)
+// or a reference (options.reference, its path; or a reference's source), and each sample's graph
+// built and its questions asked, with the same parameters. Steps made already are answered at once.
+// onStep(text, done, total) says what is under way. Answers { source, markerSet, level, samples:
 // [{ sample, name, clustering, labels, graph, answers }] }.
 export async function runSteps(app, cellsOf, options = {}, onStep = () => {}) {
-  const o = { markers: cohortSession.markers, level: cohortSession.level, kind: cohortSession.kind, questions: [...cohortSession.questions], ...options };
+  const o = { level: cohortSession.level, kind: cohortSession.kind, questions: [...cohortSession.questions], ...options };
+  // The source asked for, else the one the section chose.
+  if (options.markers === undefined && options.reference === undefined) {
+    o.markers = cohortSession.markers;
+    if (o.markers === 'path') o.reference = cohortSession.referencePath;
+  }
   for (const q of o.questions) if (!SUMMARY_QUESTIONS.includes(q)) throw new Error(`No question ${q} of a summary: ${SUMMARY_QUESTIONS.join(', ')}.`);
   if (!KINDS.some((k) => k.id === o.kind)) throw new Error(`No graph of kind ${o.kind}: ${KINDS.map((k) => k.id).join(', ')}.`);
   const { targets, problems } = targetsOf(app);
@@ -176,23 +209,26 @@ export async function runSteps(app, cellsOf, options = {}, onStep = () => {}) {
     clusterings.set(t.dataset.id, m.id);
     done += 1;
   }
-  let markerSet = markerSetChoices(project()).some((r) => r.id === o.markers) ? o.markers : null;
+  const known = o.reference ? null : sourceChoices(project()).find((c) => c.value === o.markers) ?? null;
+  const path = o.reference || (known?.kind === 'reference' ? known.file : '');
+  let source = known?.value ?? null;
   const labels = new Map();
   for (const t of datasets) {
     const clustering = project().artifacts.find((a) => a.kind === 'clustering' && a.id === clusterings.get(t.dataset.id));
     step(`Labeling the cells of ${t.dataset.name}`);
-    const m = await labelClustering(app, { t: { item: t.item, dataset: t.dataset }, session: {}, clustering }, { markers: markerSet ?? o.markers ?? '' });
+    const ctx = { t: { item: t.item, dataset: t.dataset }, session: {}, clustering };
+    const m = path ? await referenceClustering(app, ctx, { path }) : await labelClustering(app, ctx, { markers: source ?? (o.markers === 'path' ? '' : o.markers) ?? '' });
     const record = project().artifacts.find((a) => a.kind === 'labels' && a.id === m.id);
-    markerSet ??= record?.markerSet ?? null;
-    if (record?.markerSet !== markerSet) throw new Error(`${t.dataset.name}'s cells were labeled from another marker set`);
+    source ??= sourceOf(record);
+    if (sourceOf(record) !== source) throw new Error(`${t.dataset.name}'s cells were labeled from another ${path ? 'reference' : 'marker set'}`);
     labels.set(t.dataset.id, record);
     done += 1;
   }
-  cohortSession.markers = markerSet;
+  cohortSession.markers = source;
   cohortSession.kind = o.kind;
   cohortSession.questions = new Set(o.questions);
-  const set = project().artifacts.find((a) => a.kind === 'marker-set' && a.id === markerSet);
-  const level = Math.min(o.level, Math.max(0, (set?.set.levels?.length ?? 1) - 1));
+  const chosen = sourceChoices(project()).find((c) => c.value === source);
+  const level = Math.min(o.level, Math.max(0, (chosen?.levels.length || 1) - 1));
   cohortSession.level = level;
   const out = [];
   for (const t of targets) {
@@ -219,7 +255,7 @@ export async function runSteps(app, cellsOf, options = {}, onStep = () => {}) {
     out.push({ sample: t.sample.id, name: t.sample.name, clustering: clusterings.get(t.dataset.id), labels: labels.get(t.dataset.id).id, graph: graph.id, answers });
   }
   onStep('Done', total, total);
-  return { markerSet, level, samples: out };
+  return { source, markerSet: chosen?.kind === 'markers' ? source : null, level, samples: out };
 }
 
 // --- The summary -------------------------------------------------------------------------------------
@@ -227,21 +263,21 @@ export async function runSteps(app, cellsOf, options = {}, onStep = () => {}) {
 // The summary's request (api_cohort.go): the cohort's label names (every label of the level, those
 // of coarser levels the cells carry there), and each sample's bundle, segmentation, cells, labels,
 // region, graph and answers; of every sample, or those given (samples: ids).
-export async function summaryRequest(app, cellsOf, { markerSet, level, kind = cohortSession.kind, niches = null, closing = null, samples: only = null }) {
+export async function summaryRequest(app, cellsOf, { source, level, kind = cohortSession.kind, niches = null, closing = null, samples: only = null }) {
   const project = app.store.project;
   const all = targetsOf(app);
   const targets = only ? all.targets.filter((t) => only.includes(t.sample.id)) : all.targets;
   const problems = (only ? all.issues.filter((x) => only.includes(x.id)) : all.issues).map((x) => x.text);
   if (problems.length) throw new Error(problems.join('; '));
   if (!targets.length) throw new Error('The project has no sample yet.');
-  const set = project.artifacts.find((a) => a.kind === 'marker-set' && a.id === markerSet);
-  if (!set) throw new Error('Choose the marker set every sample is labeled from (run the steps first).');
+  const set = sourceChoices(project).find((c) => c.value === source);
+  if (!set) throw new Error('Choose the labels every sample has, from one marker set or reference (run the steps first).');
   const samples = [];
   const used = new Set();
   let sets = null;
   const colors = new Map();
   for (const t of targets) {
-    const a = await artifactsOf(app, cellsOf, t, markerSet, level, kind);
+    const a = await artifactsOf(app, cellsOf, t, source, level, kind);
     if (!a.labels) throw new Error(`${t.sample.name}: its cells are not labeled from ${set.name} yet (run the steps)`);
     const src = await labelSource(app, refOf(a.labels.id, level));
     sets ??= src.description?.sets ?? src.names.map((name) => ({ name, level }));
@@ -259,10 +295,10 @@ export async function summaryRequest(app, cellsOf, { markerSet, level, kind = co
     });
   }
   const names = vocabularyOf(sets, level, used);
-  const levels = set.set.levels ?? [];
+  const levels = set.levels;
   const toRGB = (c) => (Array.isArray(c) ? `rgb(${c.join(', ')})` : String(c ?? ''));
   return {
-    labels: { name: levels.length > 1 ? `${set.name}: ${String(levels[level]).toLowerCase()}` : set.name, level, names, colors: names.map((n) => toRGB(colors.get(n))) },
+    labels: { name: levels.length > 1 ? `${set.label}: ${String(levels[level]).toLowerCase()}` : set.label, level, names, colors: names.map((n) => toRGB(colors.get(n))) },
     samples,
     ...(niches ? { niches } : {}),
     ...(closing !== null ? { closing } : {}),
@@ -274,7 +310,7 @@ export async function summarize(app, cellsOf, options = {}, redraw = () => {}) {
   const project = () => app.store.project;
   const { targets } = targetsOf(app);
   const o = {
-    markerSet: summaryMarkerSet(project(), targets), level: cohortSession.level, kind: cohortSession.kind,
+    source: summarySource(project(), targets), level: cohortSession.level, kind: cohortSession.kind,
     niches: cohortSession.niches ? { ...NICHES_DEFAULTS, niches: cohortSession.nicheCount, neighbors: cohortSession.neighbors } : null,
     ...options,
   };
@@ -292,7 +328,7 @@ export async function summarize(app, cellsOf, options = {}, redraw = () => {}) {
     }
     manifest = await getJSON(`/api/artifacts/${encodeURIComponent(answer.id)}`);
   }
-  const next = addSummary(project(), summaryRecord(manifest, { markerSet: o.markerSet, level: o.level, samples: request.samples.map((s) => s.sample) }));
+  const next = addSummary(project(), summaryRecord(manifest, { markerSet: o.source?.startsWith('ref:') ? null : o.source, labelsFrom: o.source, level: o.level, samples: request.samples.map((s) => s.sample) }));
   if (next !== project()) app.store.commit(next, `Summarize ${request.samples.length} samples`);
   cohortSession.shown = manifest.id;
   redraw();
@@ -327,14 +363,14 @@ export function summaryTable(id) {
 
 // What each sample has of the steps, worked out once per state of the project.
 const statuses = new WeakMap();
-function statusOf(app, cellsOf, t, markerSet, level, redraw) {
+function statusOf(app, cellsOf, t, source, level, redraw) {
   const project = app.store.project;
   if (!statuses.has(project)) statuses.set(project, new Map());
   const cache = statuses.get(project);
-  const key = `${t.sample.id}|${markerSet}|${level}|${cohortSession.kind}`;
+  const key = `${t.sample.id}|${source}|${level}|${cohortSession.kind}`;
   if (!cache.has(key)) {
     cache.set(key, null);
-    artifactsOf(app, cellsOf, t, markerSet, level).then((a) => {
+    artifactsOf(app, cellsOf, t, source, level).then((a) => {
       cache.set(key, a);
       redraw();
     }, (error) => cache.set(key, { error }));
@@ -346,13 +382,30 @@ export function stepsSection(app, { cellsOf, redraw }) {
   const project = app.store.project;
   const { targets, problems } = targetsOf(app);
   const s = cohortSession;
-  const choices = markerSetChoices(project);
-  if (s.markers && !choices.some((r) => r.id === s.markers)) s.markers = '';
-  const set = choices.find((r) => r.id === s.markers) ?? null;
-  const levels = set?.set.levels ?? [];
-  const markerPick = h('select.input.small', { 'aria-label': 'The marker set every sample is labeled from', onchange: (e) => { s.markers = e.target.value; s.level = 0; redraw(); } },
-    h('option', { value: '', selected: !s.markers }, 'SituCraft\'s starter set that fits the panel'),
-    ...choices.map((r) => h('option', { value: r.id, selected: r.id === s.markers }, `${r.name} · v${r.version}`)));
+  const choices = sourceChoices(project);
+  if (s.markers && s.markers !== 'path' && !choices.some((c) => c.value === s.markers)) s.markers = '';
+  if (s.markers === 'path' && !s.referencePath) s.markers = '';
+  const set = choices.find((c) => c.value === s.markers) ?? null;
+  const levels = set?.levels ?? [];
+  const base = (p) => p.split(/[\\/]/).filter(Boolean).at(-1) ?? p;
+  const markerPick = h('select.input.small', {
+    'aria-label': 'The marker set or reference every sample is labeled from',
+    onchange: async (e) => {
+      if (e.target.value === 'choose') {
+        const paths = await pickPaths({ title: 'A single-cell reference', confirm: 'Choose', choose: 'file', hint: 'An AnnData object saved with write_zarr (a .zarr folder, or a zip of one), labeled cell by cell: every sample\'s cells are labeled from it.' });
+        if (paths?.length) {
+          s.referencePath = paths[0];
+          s.markers = 'path';
+        }
+      } else s.markers = e.target.value;
+      s.level = 0;
+      redraw();
+    },
+  },
+  h('option', { value: '', selected: !s.markers }, 'SituCraft\'s starter set that fits the panel'),
+  ...choices.map((c) => h('option', { value: c.value, selected: c.value === s.markers }, c.name)),
+  s.referencePath ? h('option', { value: 'path', selected: s.markers === 'path' }, `Reference ${base(s.referencePath)}`) : null,
+  h('option', { value: 'choose' }, 'A reference on this computer…'));
   const levelPick = levels.length > 1 ? h('select.input.small', { 'aria-label': 'The level of the labels', onchange: (e) => { s.level = Number(e.target.value); redraw(); } },
     ...levels.map((l, k) => h('option', { value: String(k), selected: k === s.level }, l))) : null;
   const kindPick = h('select.input.small', { 'aria-label': 'The graph of each sample\'s cells', onchange: (e) => { s.kind = e.target.value; redraw(); } },
@@ -380,10 +433,10 @@ export function stepsSection(app, { cellsOf, redraw }) {
       redraw();
     }
   };
-  const markerSet = s.markers || summaryMarkerSet(project, targets);
+  const source = s.markers && s.markers !== 'path' ? s.markers : summarySource(project, targets);
   const mark = (v, title) => (v === null ? h('span.muted', '…') : v ? h('span', { title }, '✓') : h('span.muted', '—'));
   const rows = targets.map((t) => {
-    const a = statusOf(app, cellsOf, t, markerSet, s.level, redraw);
+    const a = statusOf(app, cellsOf, t, source, s.level, redraw);
     const has = (q) => a?.answers?.find((x) => x.question === q) ?? false;
     return h('tr',
       h('td', t.sample.name),
@@ -395,7 +448,7 @@ export function stepsSection(app, { cellsOf, redraw }) {
   return h('section.seg-section.cohort-steps',
     h('div.section-title', 'The same steps on every sample'),
     h('div.seg-card',
-      h('p', 'Every sample is summarized the same way: each dataset\'s cells clustered with SituCraft\'s defaults and labeled from one marker set, so that every sample\'s labels have the same names; then a graph of each sample\'s cells (a region sample\'s, its region\'s) and the same questions asked of it, with the same parameters. A step made already is answered at once.'),
+      h('p', 'Every sample is summarized the same way: each dataset\'s cells clustered with SituCraft\'s defaults and labeled from one marker set or one reference, so that every sample\'s labels have the same names; then a graph of each sample\'s cells (a region sample\'s, its region\'s) and the same questions asked of it, with the same parameters. A step made already is answered at once.'),
       h('div.btn-row', h('span.muted', 'Labels from'), markerPick, levelPick, h('span.muted', 'Graph'), kindPick),
       questionBoxes,
       problems.length ? h('p.seg-note', h('span.badge.warn', 'Cannot run'), ` ${problems.join('; ')}.`) : null,
@@ -413,8 +466,7 @@ export function summarySection(app, { cellsOf, redraw }) {
   const list = summariesOf(project);
   if (s.shown && !list.some((r) => r.id === s.shown)) s.shown = null;
   const shown = list.find((r) => r.id === s.shown) ?? list[0] ?? null;
-  const markerSet = summaryMarkerSet(project, targets);
-  const set = project.artifacts.find((a) => a.kind === 'marker-set' && a.id === markerSet);
+  const set = sourceChoices(project).find((c) => c.value === summarySource(project, targets)) ?? null;
   const num = (value, label, min, max, onchange) => h('input.input.small.r', { type: 'number', min, max, step: 1, value: String(value), 'aria-label': label, style: { width: '64px' }, onchange: (e) => onchange(Number(e.target.value)) });
   const job = s.summarizing ? app.jobs.get(s.summarizing) : null;
   const go = async () => {
@@ -432,7 +484,7 @@ export function summarySection(app, { cellsOf, redraw }) {
     num(s.neighbors, 'The labeled cells each window holds', 2, 200, (v) => { s.neighbors = v; }), h('span.muted', 'nearest labeled cells'));
   const parts = [
     h('p', 'The cohort table holds each sample\'s numbers, each traced to the artifact it came from: its cells by label, their shares and their densities per mm² of its tissue (its region\'s, for a region sample); its niches\' shares, the niches found across the samples together so that a niche is the same kind of place in every sample; its quality; its graph\'s numbers; its answers\' (an enrichment\'s ratios, nearest distances, Moran\'s I by gene); and its pseudobulk, each label\'s transcripts gene by gene.'),
-    h('p.muted', set ? `Labels from ${set.name} (v${set.version})${(set.set.levels?.length ?? 0) > 1 ? `, ${String(set.set.levels[s.level]).toLowerCase()}` : ''}.` : 'Run the steps first: the samples are labeled from one marker set.'),
+    h('p.muted', set ? `Labels from ${set.name}${set.levels.length > 1 ? `, ${String(set.levels[s.level]).toLowerCase()}` : ''}.` : 'Run the steps first: the samples are labeled from one marker set or reference.'),
     s.niches ? controls : h('div.btn-row', controls.firstChild),
     h('div.btn-row', h('button.btn.small.primary', { type: 'button', 'data-action': 'cohort-summarize', disabled: Boolean(s.summarizing) || !set || !targets.length, onclick: go }, icon('table'), s.summarizing ? 'Summarizing…' : `Summarize the ${targets.length} samples`)),
   ];

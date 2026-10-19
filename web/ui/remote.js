@@ -2284,7 +2284,9 @@ export function installRemote(app) {
 
     async cohort_steps(args) {
       const options = {};
+      if (args.markers !== undefined && args.reference !== undefined) throw new ActionError('The samples are labeled from a marker set or a reference: give one.');
       if (args.markers !== undefined) options.markers = String(args.markers);
+      if (args.reference !== undefined) options.reference = String(args.reference);
       if (args.level !== undefined) options.level = Math.max(0, Math.round(finite(args.level, 'level')) - 1);
       if (args.graph !== undefined) options.kind = choose(String(args.graph), ['delaunay', 'knn', 'radius', 'contact'], 'graph');
       if (args.questions !== undefined) {
@@ -2299,10 +2301,12 @@ export function installRemote(app) {
         throw new ActionError(error.message);
       }
       const set = project().artifacts.find((a) => a.kind === 'marker-set' && a.id === out.markerSet);
+      const reference = out.source?.startsWith('ref:') ? project().artifacts.find((a) => a.kind === 'labels' && a.reference && `ref:${a.reference.sha256}:${a.reference.labelColumn ?? ''}` === out.source)?.reference : null;
       const answers = out.samples.reduce((n, x) => n + x.answers.length, 0);
+      const from = set ? `${set.name}${(set.set.levels?.length ?? 0) > 1 ? ` (${set.set.levels[out.level]})` : ''}` : reference ? `the reference ${reference.file.split(/[\\/]/).at(-1)} (its ${reference.labelColumn})` : out.source;
       return {
-        message: `${plural(out.samples.length, 'sample')} labeled from ${set?.name ?? out.markerSet}${(set?.set.levels?.length ?? 0) > 1 ? ` (${set.set.levels[out.level]})` : ''}, each with a graph of its cells${answers ? ` and ${plural(answers, 'answer')}` : ''}.`,
-        data: { markerSet: set ? { id: set.id, name: set.name, version: set.version } : null, level: out.level + 1, samples: out.samples },
+        message: `${plural(out.samples.length, 'sample')} labeled from ${from}, each with a graph of its cells${answers ? ` and ${plural(answers, 'answer')}` : ''}.`,
+        data: { source: out.source, markerSet: set ? { id: set.id, name: set.name, version: set.version } : null, reference: reference ? { file: reference.file, sha256: reference.sha256, labelColumn: reference.labelColumn } : null, level: out.level + 1, samples: out.samples },
       };
     },
 
@@ -2316,7 +2320,15 @@ export function installRemote(app) {
         // Of its versions, the latest whose labels every sample has.
         const labeled = (r) => project().artifacts.some((a) => a.kind === 'labels' && a.markerSet === r.id);
         const pick = [...byName].sort((x, y) => y.version - x.version);
-        options.markerSet = (pick.find(labeled) ?? pick[0]).id;
+        options.source = (pick.find(labeled) ?? pick[0]).id;
+      }
+      if (args.reference !== undefined) {
+        const ref = String(args.reference);
+        // By its path or SHA-256 (a label set records the reference's file by its name).
+        const base = (x) => String(x).split(/[\\/]/).filter(Boolean).at(-1);
+        const made = project().artifacts.filter((a) => a.kind === 'labels' && a.reference && (a.reference.sha256 === ref || a.reference.file === ref || base(a.reference.file) === base(ref)));
+        if (!made.length) throw new ActionError(`No sample is labeled from the reference ${ref}: cohort_steps with reference labels them.`);
+        options.source = `ref:${made[0].reference.sha256}:${made[0].reference.labelColumn ?? ''}`;
       }
       if (args.level !== undefined) options.level = Math.max(0, Math.round(finite(args.level, 'level')) - 1);
       const niches = args.niches === undefined ? NICHES_DEFAULTS.niches : Math.round(finite(args.niches, 'niches'));
@@ -2407,6 +2419,55 @@ export function installRemote(app) {
           panels,
         },
       };
+    },
+
+    async compare_abundance(args) {
+      const families = args.families === undefined ? ['share', 'density'] : (Array.isArray(args.families) ? args.families : [args.families]).map((f) => choose(String(f), ['share', 'density', 'niche'], 'family'));
+      const options = { families };
+      if (args.summary !== undefined) options.summary = String(args.summary);
+      if (args.level !== undefined) options.level = finite(args.level, 'level');
+      if (args.design !== undefined) {
+        const saved = designsOf(project()).filter((d) => d.name === String(args.design));
+        if (!saved.length) throw new ActionError(`No saved design ${args.design}; the project's are ${[...new Set(designsOf(project()).map((d) => d.name))].join(', ') || 'none'}.`);
+        options.spec = saved[0].spec;
+      }
+      await settleMode('cohort');
+      let manifest;
+      try {
+        manifest = await app.cohortView.abundance(options);
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      const c = await app.cohortView.comparison(manifest.id);
+      const fams = c.families.map((f) => ({
+        family: f.family, name: f.name, model: f.model, effect: f.effect, universe: f.universe, labels: f.labels,
+        tests: f.tests.map((t) => (t.tested ? { label: t.label, contrast: t.contrast, ratio: t.ratio, lo: t.lo, hi: t.hi, estimate: t.estimate, se: t.se, t: t.t, df: t.df, p: t.p, padj: t.padj, dispersion: t.dispersion } : { label: t.label, contrast: t.contrast, untested: t.note })),
+      }));
+      const found = fams.flatMap((f) => f.tests.filter((t) => t.padj < 0.05).map((t) => `${t.label} ${t.ratio.toFixed(2)}× (${f.family}, adjusted p ${t.padj < 1e-4 ? t.padj.toExponential(1) : t.padj.toFixed(4)})`));
+      await frames();
+      return {
+        message: `${manifest.name} (${manifest.id}), of ${c.summary.name}: ${fams.map((f) => `${f.name.toLowerCase()}, ${f.universe}`).join('; ')}. ${found.length ? `Below an adjusted p of 0.05: ${found.join('; ')}.` : 'None below an adjusted p of 0.05.'}`,
+        data: { id: manifest.id, summary: c.summary, level: c.level, design: { names: c.design.names, rows: c.design.rows.map((r) => ({ unit: r.unit, group: r.group, samples: r.samples })), contrasts: c.design.contrasts }, families: fams },
+      };
+    },
+
+    async show_sample_cells(args) {
+      const list = summariesOf(project());
+      if (!list.length) throw new ActionError('The project has no summary yet: summarize_samples makes one.');
+      const record = args.summary === undefined ? list[0] : list.find((r) => r.id === String(args.summary));
+      if (!record) throw new ActionError(`No summary ${args.summary}.`);
+      const samples = samplesOf(project());
+      const ref = String(args.sample ?? '');
+      const sample = samples.find((x) => x.id === ref) ?? samples.find((x) => x.name === choose(ref, samples.map((y) => y.name), 'sample'));
+      if (args.label === undefined) throw new ActionError('Name the label whose cells to show.');
+      let shown;
+      try {
+        shown = await app.cohortView.sampleCells(record.id, sample.id, String(args.label));
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      await frames();
+      return { message: `Showing ${plural(shown.cells, 'cell')} of ${shown.label} in ${shown.sample}, on its tissue.`, data: shown };
     },
 
     async compare_panels() {

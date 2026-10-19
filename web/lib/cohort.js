@@ -72,15 +72,17 @@ export function latestByQuestion(list) {
   return [...out.values()];
 }
 
-// A summary as the project records it: what it is of (the marker set and level, the samples by id)
-// beside its manifest's lineage.
-export function summaryRecord(manifest, { markerSet = null, level = 0, samples = [] } = {}, now = new Date().toISOString()) {
+// A summary as the project records it: what it is of (the labels' source, a marker set's record id or
+// a reference's 'ref:' source, the marker set again when it is one, and the level; the samples by
+// id) beside its manifest's lineage.
+export function summaryRecord(manifest, { markerSet = null, labelsFrom = null, level = 0, samples = [] } = {}, now = new Date().toISOString()) {
   const lineage = manifest.lineage ?? {};
   return {
     kind: 'cohort-summary',
     id: manifest.id,
     name: manifest.name,
     markerSet,
+    labelsFrom: labelsFrom ?? markerSet,
     level,
     samples,
     state: manifest.state,

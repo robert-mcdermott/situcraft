@@ -2559,6 +2559,76 @@ export async function viewerSuite({ check, MissingData, verbose }) {
             && plantedOpened.ok && plantedSummary.ok && planted.join() === 'S06' && far.length >= 2 && far.every((o) => o.name === 'S06' && o.z < 0)
             && ['medianTranscripts', 'transcriptsPer100um2'].every((m) => far.some((o) => o.metric === m && /times the samples' median/.test(o.reason))),
             'none far out; 2 slides, 1 panel of 120 genes; 7 components; confounded when the groups follow the slides; S06 alone far out, below, on its median transcripts and transcripts per 100 µm²');
+
+          // Differential abundance (wave 7, slice 6): the standard cohort's subjects compared by
+          // condition (each subject a sample: unpaired); each label's share and density effect the
+          // pooled ratio of its counts (as a model of the groups alone gives), its interval covering
+          // the ratio the true cells show; a sample's cells of a label shown on its tissue, as many as
+          // the summary counts. A null cohort labeled from its own single-cell reference: its shares
+          // the true types', and nothing found.
+          await act('open_project', { project: 'A simulated cohort example' });
+          await act('set_samples', { values: Object.fromEntries(cs.map((x) => [x.sample, { subject: x.sample }])) });
+          await act('design', { unit: 'subject', group: 'condition', reference: 'control' });
+          const da = await act('compare_abundance', { summary: sd.id });
+          const daf = Object.fromEntries((da.data?.families ?? []).map((f) => [f.family, f]));
+          const groupOf = (name) => (cs.findIndex((x) => x.sample === name) < 4 ? 'control' : 'treated');
+          const pooled = (count, total) => {
+            const by = { control: [0, 0], treated: [0, 0] };
+            for (const x of sd.samples ?? []) {
+              const g = by[groupOf(x.name)];
+              g[0] += count(x);
+              g[1] += total(x);
+            }
+            return by;
+          };
+          const daOff = [];
+          for (const l of cohortNames) {
+            const share = daf.share?.tests.find((t) => t.label === l);
+            const dens = daf.density?.tests.find((t) => t.label === l);
+            const lab = pooled((x) => x.counts[l], (x) => x.labeled);
+            const odds = (g) => g[0] / (g[1] - g[0]);
+            const area = pooled((x) => x.counts[l], (x) => x.tissueAreaUm2 / 1e6);
+            if (!share || Math.abs(share.ratio - odds(lab.treated) / odds(lab.control)) > 1e-9 * share.ratio) daOff.push(`${l}: odds ratio ${share?.ratio}`);
+            if (!dens || Math.abs(dens.ratio - (area.treated[0] / area.treated[1]) / (area.control[0] / area.control[1])) > 1e-9 * dens.ratio) daOff.push(`${l}: density ratio ${dens?.ratio}`);
+            // The true cells' pooled ratios (every section the same area).
+            const tr = { control: [0, 0], treated: [0, 0] };
+            for (const ts of cohortTruth.samples) {
+              const g = tr[ts.group];
+              g[0] += ts.cells_by_type[l] ?? 0;
+              g[1] += Object.values(ts.cells_by_type).reduce((n, v) => n + v, 0);
+            }
+            const trueOdds = odds(tr.treated) / odds(tr.control);
+            const trueDensity = tr.treated[0] / tr.control[0];
+            if (!(share?.lo <= trueOdds && trueOdds <= share?.hi)) daOff.push(`${l}: the true odds ratio ${trueOdds.toFixed(3)} outside ${share?.lo}–${share?.hi}`);
+            if (!(dens?.lo <= trueDensity && trueDensity <= dens?.hi)) daOff.push(`${l}: the true density ratio ${trueDensity.toFixed(3)} outside ${dens?.lo}–${dens?.hi}`);
+          }
+          const endo = daf.share?.tests.find((t) => t.label === 'endothelial-like');
+          const shown = await act('show_sample_cells', { summary: sd.id, sample: 'S05', label: 'endothelial-like' });
+          const s05 = (sd.samples ?? []).find((x) => x.name === 'S05');
+          const nullDir = join(work, 'null-cohort');
+          rmSync(nullDir, { recursive: true, force: true });
+          execFileSync(bin, ['simulate', '--cohort', 'null', '--reference', '300', '--quiet', nullDir]);
+          const nullTruth = JSON.parse(readFileSync(join(nullDir, 'truth', 'cohort.json'), 'utf8'));
+          await act('new_project', { name: 'A null cohort' });
+          await act('open_paths', { paths: [nullDir], add: true });
+          await act('set_samples', { table: readFileSync(join(nullDir, 'samples.csv'), 'utf8') });
+          await act('design', { unit: 'subject', group: 'condition', reference: 'control' });
+          const refSteps = await act('cohort_steps', { questions: [], reference: join(nullDir, 'reference.zarr') });
+          const refSummary = await act('summarize_samples', { reference: join(nullDir, 'reference.zarr') });
+          const nullDA = await act('compare_abundance', { families: ['share', 'density', 'niche'] });
+          const refShares = (refSummary.data?.samples ?? []).map((x, k) => {
+            const ts = nullTruth.samples[k];
+            const total = Object.values(ts.cells_by_type).reduce((n, v) => n + v, 0);
+            return Math.max(...Object.entries(x.counts).map(([l, v]) => Math.abs(v / x.labeled - (ts.cells_by_type[l] ?? 0) / total)));
+          });
+          const nullTests = (nullDA.data?.families ?? []).flatMap((f) => f.tests.filter((t) => t.padj !== undefined));
+          check('viewer', 'differential abundance: each label\'s share and density compared by condition, each effect the pooled ratio of its counts and its interval covering the true cells\' ratio; a sample\'s cells of a label shown on its tissue as the summary counts them; a null cohort labeled from its own reference, its shares the true types\', and nothing found',
+            `${da.message ?? da.error} | off: ${daOff.join('; ') || 'none'} | ${shown.message ?? shown.error} | ${refSteps.message ?? refSteps.error} ${refSummary.message ?? refSummary.error} | shares off the truth by ${Math.max(...refShares).toFixed(4)} at most | ${nullDA.message ?? nullDA.error}`,
+            da.ok && daf.share?.tests.length === 4 && daf.density?.tests.length === 4 && daOff.length === 0 && endo?.ratio > 1 && endo?.df === 6
+            && shown.ok && shown.data.cells === s05?.counts['endothelial-like']
+            && refSteps.ok && refSteps.data.reference?.labelColumn === 'cell_type' && refSummary.ok && refShares.length === 8 && Math.max(...refShares) < 0.08
+            && nullDA.ok && nullTests.length === 14 && nullTests.every((t) => t.padj >= 0.05),
+            'odds and density ratios their pooled counts\', every interval covering the truth; S05\'s endothelial cells the summary\'s; reference labels within 0.08 of the truth; the null cohort\'s 14 tests none below 0.05');
         }
       }
 

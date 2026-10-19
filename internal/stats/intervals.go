@@ -201,3 +201,32 @@ func ProportionRatio(x1, n1, x2, n2 int, level float64) (ratio, lo, hi float64) 
 	}
 	return ratio, lo, hi
 }
+
+// StudentTTwoSided is the two-sided p-value of a t statistic with df degrees of freedom: the
+// chance of a |T| at least |t|, I_{df/(df+t²)}(df/2, 1/2).
+func StudentTTwoSided(t, df float64) float64 {
+	switch {
+	case math.IsNaN(t) || !(df > 0):
+		return math.NaN()
+	case math.IsInf(t, 0):
+		return 0
+	}
+	return BetaCDF(df/(df+t*t), df/2, 0.5)
+}
+
+// StudentTQuantile is the p-quantile of Student's t distribution with df degrees of freedom.
+func StudentTQuantile(p, df float64) float64 {
+	switch {
+	case !(df > 0) || !(p >= 0 && p <= 1):
+		return math.NaN()
+	case p == 0.5:
+		return 0
+	case p < 0.5:
+		return -StudentTQuantile(1-p, df)
+	case p == 1:
+		return math.Inf(1)
+	}
+	// |T| beyond t has chance 2(1 − p): x = df/(df + t²) is that beta quantile.
+	x := BetaQuantile(2*(1-p), df/2, 0.5)
+	return math.Sqrt(df * (1 - x) / x)
+}

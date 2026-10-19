@@ -236,3 +236,126 @@ func TestCohortSummary(t *testing.T) {
 		}
 	}
 }
+
+// A comparison of four region samples of the small simulated tissue (two on each side): the job
+// records an artifact of kind abundance made from the summary, its tests those internal/cohort
+// makes of the summary's own numbers; asked again, answered at once; what cannot be compared
+// refused.
+func TestAbundanceAPI(t *testing.T) {
+	f := newRefineFixture(t, true)
+	all, _ := f.a.artifacts.List()
+	var seg artifacts.Manifest
+	for _, m := range all {
+		if m.Kind == "segmentation" && isBundleOwn(m) {
+			seg = m
+		}
+	}
+	b, err := xenium.Open(f.folder, xenium.Options{CacheDir: f.a.cacheDir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir, err := f.a.segmentationFolder(context.Background(), b, seg)
+	b.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cells, _ := segment.ReadCells(dir)
+	n := len(cells)
+	labels := make([]int32, n)
+	for i := range labels {
+		labels[i] = int32(i % 2)
+	}
+	codes, sum := codesOf(labels)
+	labelsJSON := fmt.Sprintf(`{"id":"lab-x","kind":"labels","name":"By turns","level":0,"names":["A","B"],"codes":%q,"checksum":%q}`, codes, sum)
+	rect := func(x0, y0, x1, y1 float64) string {
+		return fmt.Sprintf(`[[[[%g,%g],[%g,%g],[%g,%g],[%g,%g]]]]`, x0, y0, x1, y0, x1, y1, x0, y1)
+	}
+	type part struct {
+		id, name       string
+		x0, y0, x1, y1 float64
+	}
+	parts := []part{{"s-1", "Left top", 0, 0, 40, 30}, {"s-2", "Left bottom", 0, 30, 40, 120}, {"s-3", "Right top", 40, 0, 120, 30}, {"s-4", "Right bottom", 40, 30, 120, 120}}
+	var samples []string
+	for k, p := range parts {
+		keep := make([]bool, n)
+		for i, c := range cells {
+			keep[i] = float64(c.X) >= p.x0 && float64(c.X) < p.x1 && float64(c.Y) >= p.y0 && float64(c.Y) < p.y1
+		}
+		samples = append(samples, fmt.Sprintf(`{"sample":%q,"name":%q,"dataset":"d-1","item":"0","segmentation":%q,"cells":%s,"labels":%s,"region":{"kind":"region","region":{"id":"r-%d","name":%q,"version":1},"geometry":%s}}`,
+			p.id, p.name, seg.ID, chosenCells(keep, ""), labelsJSON, k, p.name, rect(p.x0, p.y0, p.x1, p.y1)))
+	}
+	var answer struct {
+		ID  string
+		Job *struct{ ID string }
+	}
+	rec := f.post("/api/cohort/summary", fmt.Sprintf(`{"labels":{"name":"By turns","level":0,"names":["A","B"]},"samples":[%s]}`, strings.Join(samples, ",")))
+	if err := json.Unmarshal(rec.Body.Bytes(), &answer); err != nil || answer.ID == "" {
+		t.Fatalf("the summary: %d %s", rec.Code, rec.Body.String())
+	}
+	if answer.Job != nil {
+		f.wait(answer.Job.ID)
+	}
+	design := `{"names":["Intercept","side[T.right]"],"rows":[{"unit":"1","group":"left","samples":["s-1"],"x":[1,0]},{"unit":"2","group":"left","samples":["s-2"],"x":[1,0]},{"unit":"3","group":"right","samples":["s-3"],"x":[1,1]},{"unit":"4","group":"right","samples":["s-4"],"x":[1,1]}],"contrasts":[{"name":"right − left","vector":[0,1]}]}`
+	body := fmt.Sprintf(`{"summary":%q,"design":%s}`, answer.ID, design)
+	var started struct {
+		ID       string
+		Artifact *artifacts.Manifest
+		Job      *struct{ ID string }
+	}
+	rec = f.post("/api/cohort/abundance", body)
+	if err := json.Unmarshal(rec.Body.Bytes(), &started); err != nil || started.Job == nil || !strings.HasPrefix(started.ID, "abu-") {
+		t.Fatalf("the comparison: %d %s", rec.Code, rec.Body.String())
+	}
+	f.wait(started.Job.ID)
+	m, err := f.a.artifacts.Get(started.ID)
+	if err != nil || m.State != artifacts.Complete || m.Kind != "abundance" || len(m.Lineage.Parents) != 1 || m.Lineage.Parents[0].ID != answer.ID {
+		t.Fatalf("the artifact: %v %+v", err, m)
+	}
+	p, _ := f.a.artifacts.Path(m.ID, cohort.FileAbundance)
+	got, err := cohort.ReadComparison(filepath.Dir(p))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sp, _ := f.a.artifacts.Path(answer.ID, cohort.FileSummary)
+	doc, _, _ := cohort.Read(filepath.Dir(sp))
+	var design0 cohort.ComparisonDesign
+	json.Unmarshal([]byte(design), &design0)
+	want, err := cohort.Abundance(doc, design0, []string{cohort.FamilyShare, cohort.FamilyDensity}, 0.95)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Families) != 2 || got.Summary.ID != answer.ID || got.Level != 0.95 {
+		t.Fatalf("the comparison: %+v", got.Summary)
+	}
+	for fi := range want.Families {
+		for k, w := range want.Families[fi].Tests {
+			g := got.Families[fi].Tests[k]
+			if g.Tested != w.Tested || g.Estimate != w.Estimate || g.P != w.P || g.PAdj != w.PAdj {
+				t.Errorf("%s %s: %+v, want %+v", got.Families[fi].Family, g.Label, g, w)
+			}
+		}
+	}
+	if !got.Families[0].Tests[1].Tested || got.Families[0].Tests[1].DF != 2 {
+		t.Errorf("B's share: %+v", got.Families[0].Tests[1])
+	}
+	var again struct {
+		ID       string
+		Artifact *artifacts.Manifest
+	}
+	json.Unmarshal(f.post("/api/cohort/abundance", body).Body.Bytes(), &again)
+	if again.ID != started.ID || again.Artifact == nil {
+		t.Error("asked again: not answered at once")
+	}
+	for want, bad := range map[string]string{
+		"no cohort summary":     strings.Replace(body, answer.ID, "coh-nothing", 1),
+		"not in the summary":    strings.Replace(body, `"s-4"`, `"s-9"`, 1),
+		"no niches to compare":  strings.Replace(body, `"design":`, `"families":["niche"],"design":`, 1),
+		"no family":             strings.Replace(body, `"design":`, `"families":["mass"],"design":`, 1),
+		"no degrees of freedom": strings.Replace(strings.Replace(body, `,{"unit":"4","group":"right","samples":["s-4"],"x":[1,1]}`, "", 1), `{"unit":"2","group":"left","samples":["s-2"],"x":[1,0]},`, "", 1),
+	} {
+		rec := f.post("/api/cohort/abundance", bad)
+		if rec.Code != 400 || !strings.Contains(rec.Body.String(), want) {
+			t.Errorf("%s: %d %s", want, rec.Code, rec.Body.String())
+		}
+	}
+}

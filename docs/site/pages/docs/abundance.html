@@ -1,0 +1,35 @@
+---
+title: Differential abundance
+description: SituCraft compares each cell type's share and density between groups of samples with the sample or subject as the unit: quasi-likelihood models of the design, with its pairing and covariates, effect sizes with intervals, and p-values adjusted over the tests, the universe recorded.
+lede: Does a cell type make up more of the tissue in one group than another? SituCraft answers with each sample (or subject) as one observation, never each cell, by a model of the design, and gives the effect with its interval, not only a p-value.
+---
+      <h2 id="unit">The sample is the unit</h2>
+      <p>A section holds thousands of cells, but its cells are not independent replicates: they share the subject, the slide and the run. Treated as replicates, they make tiny differences look certain. SituCraft compares <strong>the design's rows</strong> instead. Each row is a replicate unit, such as a subject, in a group, with its samples' cells combined (technical replicates). A paired design, such as each subject before and after, compares each subject with itself. See <a href="designs.html">The design</a>.</p>
+
+      <h2 id="models">The models</h2>
+      <p><strong>Compare the groups</strong> in the Cohort view's <strong>Differential abundance</strong> fits a model for each label of the cohort table (see <a href="summaries.html">Sample summaries</a>):</p>
+      <ul>
+        <li><strong>Shares of the labeled cells:</strong> the label's cells out of each row's labeled cells, by a quasi-binomial generalized linear model of the design (logit link). The effect is an odds ratio: for a label that is a small share it is close to the ratio of shares, and for a large one it is larger.</li>
+        <li><strong>Cells per mm² of tissue:</strong> the label's cells by a quasi-Poisson model (log link), with the log of each row's tissue area as offset (the tissue within its region, for a region sample). The effect is a density ratio.</li>
+        <li><strong>Niches' shares:</strong> each niche's cells out of the cells with a window, as a share. The niches are found across the samples together, so a niche is the same kind of place in every sample.</li>
+      </ul>
+      <p>The models are fitted as R's <code>glm</code> fits them. Samples vary more than the binomial or Poisson model alone allows, so the variation is measured, not assumed: the <strong>dispersion</strong> is Pearson's χ² over the residual degrees of freedom. Each contrast of the design (each group against the reference, or those chosen) is tested by a t test on those degrees of freedom. A label no sample has a cell of, or one a group has none of, is left untested, and the reason is said.</p>
+
+      <h2 id="results">Reading the results</h2>
+      <p>For each label and contrast the table gives the effect with its interval (95% by default), the p-value, and the p-value adjusted by Benjamini and Hochberg over the family's tests (all its labels and contrasts). The <strong>universe</strong> of tests is stated with the family, so the correction can be read. Rows whose adjusted p is below 0.05 are marked higher or lower.</p>
+      <p>Choosing a row plots each replicate unit's share or density by group, with each group's mean. A point opens its sample's cells of that label on its tissue in the Viewer, so a result can be traced to the cells behind it. <strong>The results (CSV)</strong> writes every test.</p>
+      <shot name="abundance" alt="The Cohort view's differential abundance of the simulated cohort: the four labels' odds ratios treated against control with their intervals and p-values, the endothelial-like row chosen, and its eight subjects' shares plotted by condition">The simulated cohort's subjects compared by condition: the endothelial-like cells' odds 1.75 times as high in the treated subjects, the interval wide with four subjects a group.</shot>
+      <p>An interval that is wide, as with four subjects in a group, says how little the samples pin the effect down. A larger cohort, or pairing, narrows it.</p>
+
+      <h2 id="reference">Labels from a reference</h2>
+      <p>The same steps on every sample (see <a href="summaries.html#steps">Sample summaries</a>) can label every sample from one labeled single-cell reference instead of a marker set: choose <strong>A reference on this computer…</strong> under <strong>Labels from</strong>. Every sample's labels then come from the same reference, with the same names. The start page's <strong>A simulated cohort</strong> includes a reference of its types, made with its panel.</p>
+
+      <h2 id="remote">By remote control</h2>
+      <p><code>compare_abundance</code> compares the samples (shares, densities and niches, by the design draft or a saved design) and answers every test. <code>show_sample_cells</code> shows a sample's cells of a label on its tissue. <code>cohort_steps</code> and <code>summarize_samples</code> take a <code>reference</code> to label from. See <a href="remote-control.html">Remote control</a>.</p>
+
+      <h2 id="checked">How it is checked</h2>
+      <ul>
+        <li><strong>Against statsmodels:</strong> on 19 cases (the simulated cohort's shares and densities, by condition and adjusted for the slide; a paired design; three groups with a contrast between two; densities over varying areas), every coefficient, standard error, dispersion, t, p and interval equals statsmodels 0.15.0's (and R's) to 10⁻⁸.</li>
+        <li><strong>On null tables:</strong> of 4,000 tables of overdispersed counts without a difference, the tests reject about as often as their level says (5.6% at 5%, 1.1% at 1%).</li>
+        <li><strong>In the page:</strong> on the simulated cohort, each effect equals the pooled ratio of its counts (as a model of the groups alone gives), and every interval covers the ratio the true cells show. A sample's cells of a label are shown as the summary counts them. A null cohort, labeled from its own reference (its shares within 0.08 of its true types'), finds nothing.</li>
+      </ul>

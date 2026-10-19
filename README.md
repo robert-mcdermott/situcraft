@@ -113,7 +113,10 @@ found across the samples together, its quality, its spatial statistics and its p
 number traced to the artifact it came from. Before any comparison, cohort QC lays the samples side
 by side: samples far out flagged with the reason (never passed or failed), the numbers by slide,
 run and panel, a group confounded with a batch said, the pseudobulk's principal components, and the
-panels compared so that only genes every sample measured are compared.
+panels compared so that only genes every sample measured are compared. Each cell type's share and
+density is then compared between groups with the replicate unit, not the cell, as the unit, by
+quasi-likelihood models of the design: effects with intervals, p-values adjusted over the tests,
+and each result traced to its samples' cells.
 
 ## A look around
 

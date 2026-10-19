@@ -353,6 +353,31 @@ func (a *app) handleJobs() {
 			removePartialExports(p.Folder)
 		}
 	})
+	// A cohort's summary and a comparison are made again from their specifications.
+	a.jobs.Handle("cohort", func(spec json.RawMessage) (jobs.Func, error) {
+		var p cohortSummarySpec
+		if err := json.Unmarshal(spec, &p); err != nil || len(p.Bundles) != len(p.Samples) {
+			return nil, errors.New("the summary's specification is not readable")
+		}
+		return a.cohortSummaryJob(p, cohortSummaryID(p.cohortSummaryRequest)), nil
+	}, func(id string, spec json.RawMessage) {
+		var p cohortSummarySpec
+		if json.Unmarshal(spec, &p) == nil && len(p.Samples) > 0 {
+			a.artifacts.Discard(cohortSummaryID(p.cohortSummaryRequest))
+		}
+	})
+	a.jobs.Handle("abundance", func(spec json.RawMessage) (jobs.Func, error) {
+		var p abundanceRequest
+		if err := json.Unmarshal(spec, &p); err != nil || p.Summary == "" {
+			return nil, errors.New("the comparison's specification is not readable")
+		}
+		return a.abundanceJob(p, abundanceID(p)), nil
+	}, func(id string, spec json.RawMessage) {
+		var p abundanceRequest
+		if json.Unmarshal(spec, &p) == nil && p.Summary != "" {
+			a.artifacts.Discard(abundanceID(p))
+		}
+	})
 	a.jobs.Handle("example", func(spec json.RawMessage) (jobs.Func, error) {
 		var p struct {
 			Example string `json:"example"`

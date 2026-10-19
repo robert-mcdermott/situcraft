@@ -255,6 +255,28 @@ export function mountInspector(app) {
       r.method?.citation ? h('p.muted', { style: { margin: '8px 0 0', fontSize: '11.5px' } }, r.method.citation) : null);
   }
 
+  // A comparison of abundance: what it compared and what it found.
+  function abundanceSection(r) {
+    const s = r.summaryOf ?? {};
+    const summary = app.store.project.artifacts.find((a) => a.kind === 'cohort-summary' && a.id === r.summary);
+    return h('section.inspector-section',
+      h('h3', icon('compare'), 'Differential abundance'),
+      h('dl.kv',
+        h('dt', 'Contrasts'), h('dd', r.name.replace(/^Abundance compared: /, '')),
+        h('dt', 'Of'), h('dd', summary?.name ?? r.summary ?? '—'),
+        h('dt', 'Design'), h('dd', r.design ? `${r.design.name}, version ${r.design.version}` : 'the draft, unsaved'),
+        h('dt', 'Tests'), h('dd', `${s.tests ?? '?'}${s.untested ? `, ${s.untested} untested` : ''}`),
+        h('dt', 'Found'), h('dd', (s.found ?? []).length ? s.found.map((f) => `${f.label} ${f.ratio.toFixed(2)}× (${f.family}, adjusted p ${f.padj < 1e-4 ? f.padj.toExponential(1) : f.padj.toFixed(4)})`).join('; ') : 'none below an adjusted p of 0.05'),
+        h('dt', 'Method'), h('dd', `${r.method?.name ?? ''} ${r.method?.version ?? ''}`.trim()),
+        h('dt', 'Artifact'), h('dd.mono', r.id)),
+      h('div.btn-row', { style: { marginTop: '8px' } },
+        h('button.btn.small', { type: 'button', onclick: () => {
+          app.focusItem({ kind: 'abundance', id: r.id });
+          app.setMode('cohort');
+        } }, icon('compare'), 'In the Cohort view')),
+      r.method?.citation ? h('p.muted', { style: { margin: '8px 0 0', fontSize: '11.5px' } }, r.method.citation) : null);
+  }
+
   // A spatial analysis: its question, labels, what it is of, and what it found.
   function analysisSection(r) {
     const { project } = app.store;
@@ -410,6 +432,10 @@ export function mountInspector(app) {
     if (focus?.kind === 'spatial') {
       const r = app.store.project.artifacts.find((a) => a.kind === 'spatial' && a.id === focus.id);
       if (r) return analysisSection(r);
+    }
+    if (focus?.kind === 'abundance') {
+      const r = app.store.project.artifacts.find((a) => a.kind === 'abundance' && a.id === focus.id);
+      if (r) return abundanceSection(r);
     }
     if (focus?.kind === 'cohort-summary') {
       const r = app.store.project.artifacts.find((a) => a.kind === 'cohort-summary' && a.id === focus.id);

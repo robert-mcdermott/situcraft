@@ -15,6 +15,7 @@ import (
 	"math"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"sort"
 	"strings"
 	"syscall"
@@ -39,7 +40,7 @@ func runSimulate(args []string, stdout, stderr io.Writer) int {
 	printParams := flags.Bool("print-params", false, "print the parameters as JSON and exit")
 	quiet := flags.Bool("quiet", false, "print only the summary")
 	postXenium := flags.Bool("post-xenium", false, "also make post-Xenium images of the section, an H&E and an immunofluorescence image (DAPI and a membrane stain), each placed by a known transform and deformation, in its post_xenium/ folder; where each lies is in truth/post_xenium/")
-	reference := flags.Int("reference", 0, "also write a single-cell reference of the tissue's types, this many cells of each, as an AnnData object in Zarr beside the bundle (<folder>-reference.zarr), to label its cells from")
+	reference := flags.Int("reference", 0, "also write a single-cell reference of the tissue's types, this many cells of each, as an AnnData object in Zarr beside the bundle (<folder>-reference.zarr; a cohort's in its folder, reference.zarr, over the panel its samples share), to label its cells from")
 	var cohortNames []string
 	for name := range simulate.CohortPresets {
 		cohortNames = append(cohortNames, name)
@@ -60,7 +61,7 @@ func runSimulate(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	if *cohort != "" {
-		return runCohort(*cohort, cohortNames, *paramsFile, *seed, *width, *height, *postXenium || *reference > 0, *printParams, *quiet, folders, stdout, stderr, flags.Usage)
+		return runCohort(*cohort, cohortNames, *paramsFile, *seed, *width, *height, *postXenium, *reference, *printParams, *quiet, folders, stdout, stderr, flags.Usage)
 	}
 	p, ok := simulate.Presets[*preset]
 	if !ok {
@@ -155,14 +156,18 @@ func runSimulate(args []string, stdout, stderr io.Writer) int {
 
 // runCohort runs `situcraft simulate --cohort`: a preset, its parameters read from a file, its seed
 // and sections' size replaced if asked; printed, or made.
-func runCohort(name string, names []string, paramsFile string, seed uint64, width, height float64, extras, printParams, quiet bool, folders []string, stdout, stderr io.Writer, usage func()) int {
+func runCohort(name string, names []string, paramsFile string, seed uint64, width, height float64, postXenium bool, reference int, printParams, quiet bool, folders []string, stdout, stderr io.Writer, usage func()) int {
 	c, ok := simulate.CohortPresets[name]
 	if !ok {
 		fmt.Fprintf(stderr, "situcraft simulate: no cohort %q (%s)\n", name, strings.Join(names, ", "))
 		return 2
 	}
-	if extras {
-		fmt.Fprintln(stderr, "situcraft simulate: a cohort's sections have no post-Xenium images or reference")
+	if postXenium {
+		fmt.Fprintln(stderr, "situcraft simulate: a cohort's sections have no post-Xenium images")
+		return 2
+	}
+	if reference < 0 || reference > 100000 {
+		fmt.Fprintln(stderr, "situcraft simulate: --reference is a number of cells per type from 0 to 100000")
 		return 2
 	}
 	if paramsFile != "" {
@@ -237,6 +242,14 @@ func runCohort(name string, names []string, paramsFile string, seed uint64, widt
 	}
 	if len(sum.Truth.Effects) == 0 {
 		fmt.Fprintln(stdout, "No effect: the groups differ only by chance.")
+	}
+	if reference > 0 {
+		path := filepath.Join(sum.Folder, simulate.CohortReferenceFile)
+		if err := simulate.CohortReference(c, path, reference); err != nil {
+			fmt.Fprintf(stderr, "situcraft simulate: the reference: %v\n", err)
+			return 1
+		}
+		fmt.Fprintf(stdout, "A single-cell reference of its types over its panel (%d cells of each) is in %s.\n", reference, path)
 	}
 	fmt.Fprintf(stdout, "Written to %s (each sample a bundle; samples.csv; the truth in truth/cohort.json). Open it with: situcraft %s\n", sum.Folder, sum.Folder)
 	return 0

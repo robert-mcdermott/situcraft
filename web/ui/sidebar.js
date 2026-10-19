@@ -12,6 +12,7 @@ import { labelSetName, markerSetsOf } from '../lib/labels.js';
 import { samplesOf } from '../lib/samples.js';
 import { designsOf } from '../lib/design.js';
 import { summariesOf } from '../lib/cohort.js';
+import { comparisonsOf } from '../lib/abundance.js';
 
 // The icon of an item handed to the program, by its kind (local.go, fileKind and dirKind).
 export const KIND_ICONS = {
@@ -75,6 +76,17 @@ const SECTIONS = [
     meta: (r) => {
       const n = r.summary?.samples?.length ?? r.samples?.length ?? 0;
       return `${n} sample${n === 1 ? '' : 's'}${r.summary?.niches ? `, ${r.summary.niches} niches` : ''}`;
+    },
+    hideWhenEmpty: true,
+  },
+  {
+    kind: 'abundance', title: 'Comparisons', icon: 'compare',
+    // The cohort's comparisons of abundance (wave 7), the latest first.
+    items: (project) => comparisonsOf(project),
+    label: (r) => r.name.replace(/^Abundance compared: /, ''),
+    meta: (r) => {
+      const n = r.summaryOf?.found?.length ?? 0;
+      return `${r.summaryOf?.tests ?? '?'} tests, ${n} found`;
     },
     hideWhenEmpty: true,
   },
@@ -213,7 +225,7 @@ export function mountSidebar(app) {
             if (section.kind === 'filter') app.setMode('qc');
             if (section.kind === 'clustering') app.setMode('celltypes');
             if (section.kind === 'graph' || section.kind === 'spatial') app.setMode('spatial');
-            if (section.kind === 'sample' || section.kind === 'design' || section.kind === 'cohort-summary') app.setMode('cohort');
+            if (['sample', 'design', 'cohort-summary', 'abundance'].includes(section.kind)) app.setMode('cohort');
             // An image is shown on its dataset's tissue; one not aligned yet, in the Alignment view.
             if (section.kind === 'image') {
               if (transformInUse(app.store.project, item.id)) {

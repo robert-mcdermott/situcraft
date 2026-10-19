@@ -130,6 +130,29 @@ project, each a sample, compared with the sample or the subject, not the cell, a
     cohort with none far out and both groups on each slide, its groups made to follow the slides
     said to be confounded, a planted sample alone found far out on its transcripts and genes, and
     the Lung and Breast panels' 67 shared genes, 435 in one, and codewords as their files say.
+- **Differential abundance (wave 7, slice 6).** Each cell type compared between groups of samples,
+  with the replicate unit (not the cell) as the unit, in the Cohort view.
+  - **The models:** a label's share of the labeled cells by a quasi-binomial generalized linear model
+    of the design (its pairing and covariates; technical replicates combined); its density per mm²
+    of tissue by a quasi-Poisson model with the tissue's area as offset; the niches' shares as
+    shares. The dispersion is Pearson's, each contrast tested by a t test on the residual degrees of
+    freedom.
+  - **The results:** each effect (an odds ratio, a density ratio) with its interval, the p-value
+    and the Benjamini–Hochberg-adjusted p over each family's tests, the universe stated; labels that
+    cannot be tested said so with why. Kept as an artifact of kind `abundance`; written as CSV.
+  - **Traced to the cells:** a result's units plotted by group; a point opens its sample's cells
+    of that label on its tissue.
+  - **Labels from a reference:** the same steps on every sample label from one single-cell
+    reference as well as from a marker set. `situcraft simulate --cohort … --reference N` writes a
+    reference of a cohort's types over its panel, and the start page's simulated cohort has one.
+  - **Remote control:** `compare_abundance`, `show_sample_cells`; `cohort_steps` and
+    `summarize_samples` take a `reference`. The project tree lists **Comparisons**.
+  - **Validated:** 19 models against statsmodels 0.15.0's (and R's), every coefficient, standard
+    error, dispersion, t, p and interval to 10⁻⁸ (`validation/reference/abundance/`); on 4,000
+    overdispersed null tables, rejections at their levels (5.6% at 5%, 1.1% at 1%); in the page, the
+    simulated cohort's effects the pooled ratios of its counts with every interval covering the true
+    cells' ratio, a sample's cells of a label shown as the summary counts them, and a null cohort
+    labeled from its own reference (shares within 0.08 of its true types') finding nothing.
 - **Open by browsing.** **Open a bundle** shows this computer's folders instead of asking for a
   path.
   - **Places** to start from (the home folder, its Desktop, Documents and Downloads, SituCraft's

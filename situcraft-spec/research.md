@@ -3141,6 +3141,38 @@ for its samples, never zero. Codewords are each panel's own assignment of barcod
 gene the two development panels share is read by other codewords: a difference says the probes may
 differ, and with them the detection, not that the gene is another.
 
+### 6.12 Differential abundance (verified, wave 7, slice 6)
+
+**The unit.** Cells of one section are not replicates of a condition: they share the subject, the
+slide and the run, and treating them as replicates makes chance differences between sections look
+certain (Squair et al. 2021; the pseudoreplication slice 8 shows). Each cell type's count is
+therefore a count per replicate unit, the design's rows (§6.9), a unit's samples in a group
+combined, and compared across units.
+
+**The models.** A share of the labeled cells is a binomial count with more than binomial variation
+between samples (the samples' compositions differ), so a quasi-binomial generalized linear model
+(Wedderburn 1974; McCullagh and Nelder 1989) of the design's matrix: the logit of the share linear
+in the design, the variance the binomial's times a dispersion estimated as Pearson's χ² over the
+residual degrees of freedom. A density is a count over an area: a quasi-Poisson model with the log
+of the tissue's area as offset. Contrasts are t tests on the residual degrees of freedom (as R's
+`summary.glm` for a quasi family), so few units give wide intervals rather than false certainty.
+This is the model the field's composition tests reduce to for a sample-level design (propeller
+transforms the shares and uses limma, Phipson et al. 2022; scCODA is Bayesian, Büttner et al.
+2021); a model of the counts keeps each sample's weight its cells. The effect is the model's: an
+odds ratio (close to the share's ratio for a label that is a small share) and a density ratio. The
+p-values of each family (its labels and contrasts) are adjusted by Benjamini and Hochberg, and the
+number of tests stated.
+
+**Checked.** Against statsmodels 0.15.0 (and R 4.6.1's `glm` with `quasibinomial`), 19 models to
+10⁻⁸; note that statsmodels' two-column binomial form computes Pearson's χ² on the proportions
+without the trials, giving a dispersion divided by the trials (0.005 against 3.63 on the simulated
+cohort), so the reference weights the proportions by their trials, which gives R's. On 4,000 null
+tables of beta-binomial shares (four samples against four, a concentration of 150) and negative
+binomial densities (dispersion 20, areas varying threefold), the tests reject 5.6% at 5% and about
+1% at 1%: slightly liberal, as quasi-likelihood's t approximation is with few units. On the
+simulated cohort, the estimates are the pooled ratios of the labeled counts (exactly, for a design
+of the groups alone) and every interval covers the ratio the true cells show.
+
 ## 7. Datasets
 
 | Dataset | Source | Size | License | Use |

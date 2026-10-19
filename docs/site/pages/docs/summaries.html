@@ -6,7 +6,7 @@ lede: Before groups of samples can be compared, every sample has to be measured 
       <h2 id="steps">The same steps on every sample</h2>
       <p>The Cohort view's <strong>The same steps on every sample</strong> runs each step on every sample, with the same parameters:</p>
       <ul>
-        <li><strong>Clustering and labels.</strong> Each dataset's cells are clustered with SituCraft's defaults (on its default segmentation) and labeled from one marker set. Every sample's labels then have the same names, and a sample with no cells of one type counts that type as none instead of leaving it out. <strong>Labels from</strong> chooses the set: one of the project's, or SituCraft's starter set that fits the first sample's panel, which is then used for the rest.</li>
+        <li><strong>Clustering and labels.</strong> Each dataset's cells are clustered with SituCraft's defaults (on its default segmentation) and labeled from one marker set or one reference. Every sample's labels then have the same names, and a sample with no cells of one type counts that type as none instead of leaving it out. <strong>Labels from</strong> chooses the set: one of the project's, SituCraft's starter set that fits the first sample's panel (then used for the rest), or a labeled single-cell reference on this computer, every sample labeled from it.</li>
         <li><strong>A graph of each sample's cells.</strong> A region sample's graph is of its region's cells. Cells a review excluded are left out. See <a href="spatial.html">Spatial analysis</a>.</li>
         <li><strong>The same questions of each:</strong> neighborhood enrichment over the graph, nearest distances, and spatially variable genes (Moran's I), with their defaults.</li>
       </ul>

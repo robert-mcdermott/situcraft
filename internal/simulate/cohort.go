@@ -51,6 +51,24 @@ const CohortFile = "situcraft-cohort.json"
 // CohortTruthFile is the cohort's truth, within it.
 const CohortTruthFile = "truth/cohort.json"
 
+// CohortReferenceFile is a cohort's single-cell reference, in its folder, when one is made.
+const CohortReferenceFile = "reference.zarr"
+
+// CohortReference writes a single-cell reference of a cohort's types over the panel every one of
+// its samples shares (WriteReference: perType cells of each type), to label its samples' cells
+// from.
+func CohortReference(c Cohort, path string, perType int) error {
+	return WriteReference(c.referenceParams(), path, perType, ReferenceDepth, c.Seed)
+}
+
+// referenceParams are the parameters a cohort's reference is drawn from: its section's, with the
+// panel's seed every sample's.
+func (c *Cohort) referenceParams() Params {
+	p := c.Section
+	p.Seed, p.PanelSeed = c.Seed, c.Seed
+	return p
+}
+
 // CohortSamplesFile is the samples' table, within it.
 const CohortSamplesFile = "samples.csv"
 
