@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Differential abundance · SituCraft</title>
+  <meta name="description" content="SituCraft compares each cell type's share and density between groups of samples with the sample or subject as the unit: quasi-likelihood models of the design, with its pairing and covariates, effect sizes with intervals, and p-values adjusted over the tests, the universe recorded." />
+  <link rel="canonical" href="https://robert-mcdermott.github.io/situcraft/docs/abundance.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Differential abundance" />
+  <meta property="og:description" content="SituCraft compares each cell type's share and density between groups of samples with the sample or subject as the unit: quasi-likelihood models of the design, with its pairing and covariates, effect sizes with intervals, and p-values adjusted over the tests, the universe recorded." />
+  <meta property="og:url" content="https://robert-mcdermott.github.io/situcraft/docs/abundance.html" />
+  <meta property="og:image" content="https://robert-mcdermott.github.io/situcraft/assets/img/og-image.jpg" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="theme-color" content="#07090e" />
+  <link rel="icon" href="../assets/img/logo.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="../assets/css/site.css" />
+  <script>try { const t = localStorage.getItem('situcraft-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+  <script src="../assets/js/site.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="container">
+      <a class="brand" href="../"><img src="../assets/img/logo.svg" alt="" width="30" height="30" /><span>Situ<b>Craft</b></span></a>
+      <nav class="site-nav" id="site-nav" aria-label="Main">
+        <a href="../#features">Features</a>
+        <a href="../docs/" aria-current="page">Documentation</a>
+        <a href="../install.html">Install</a>
+        <a href="../science.html">Science</a>
+      </nav>
+      <div class="header-actions">
+        <a class="icon-button" href="https://github.com/robert-mcdermott/situcraft" aria-label="SituCraft on GitHub">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.71 1.26 3.37.96.1-.75.4-1.26.73-1.55-2.56-.29-5.25-1.28-5.25-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.7 5.4-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"/></svg>
+        </a>
+        <button class="icon-button theme-toggle" type="button" aria-label="Switch between light and dark">
+          <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        </button>
+        <button class="icon-button nav-toggle" type="button" aria-label="Menu" aria-controls="site-nav" aria-expanded="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <div class="docs-layout">
+    <aside class="docs-sidebar" aria-label="Documentation">
+      <button class="btn docs-menu-toggle" type="button" aria-expanded="false">Documentation menu <span aria-hidden="true">▾</span></button>
+      <nav>
+        <h4>Start</h4>
+        <ul>
+          <li><a href="./">Overview</a></li>
+          <li><a href="getting-started.html">Getting started</a></li>
+          <li><a href="opening-data.html">Opening a bundle</a></li>
+        </ul>
+        <h4>The tissue</h4>
+        <ul>
+          <li><a href="viewer.html">The Viewer</a></li>
+          <li><a href="qc.html">Quality control</a></li>
+        </ul>
+        <h4>Segmentations</h4>
+        <ul>
+          <li><a href="segmentations.html">Segmentations</a></li>
+          <li><a href="refinement.html">Refinement</a></li>
+          <li><a href="comparing.html">Comparing and deciding</a></li>
+          <li><a href="exports.html">Exports</a></li>
+        </ul>
+        <h4>Cell types</h4>
+        <ul>
+          <li><a href="clusters.html">Clusters and the map</a></li>
+          <li><a href="labels.html">Labels</a></li>
+        </ul>
+        <h4>Pathology</h4>
+        <ul>
+          <li><a href="images.html">Images and alignment</a></li>
+          <li><a href="regions.html">Regions and reviews</a></li>
+        </ul>
+        <h4>Spatial</h4>
+        <ul>
+          <li><a href="spatial.html">Spatial analysis</a></li>
+          <li><a href="niches.html">Niches and genes</a></li>
+        </ul>
+        <h4>Cohorts</h4>
+        <ul>
+          <li><a href="samples.html">Samples</a></li>
+          <li><a href="designs.html">The design</a></li>
+          <li><a href="summaries.html">Sample summaries</a></li>
+          <li><a href="cohort-qc.html">Cohort QC</a></li>
+          <li><a href="abundance.html" aria-current="page">Differential abundance</a></li>
+          <li><a href="expression.html">Differential expression</a></li>
+          <li><a href="spatial-tests.html">Spatial statistics between groups</a></li>
+          <li><a href="error-rates.html">Error rates and scale</a></li>
+        </ul>
+        <h4>Reference</h4>
+        <ul>
+          <li><a href="remote-control.html">Remote control</a></li>
+          <li><a href="record.html">The record</a></li>
+          <li><a href="troubleshooting.html">Troubleshooting</a></li>
+        </ul>
+      </nav>
+    </aside>
+
+    <main id="main" class="doc">
+      <h1>Differential abundance</h1>
+      <p class="doc-lede">Does a cell type make up more of the tissue in one group than another? SituCraft answers with each sample (or subject) as one observation, never each cell, by a model of the design, and gives the effect with its interval, not only a p-value.</p>
+
+      <h2 id="unit">The sample is the unit</h2>
+      <p>A section holds thousands of cells, but its cells are not independent replicates: they share the subject, the slide and the run. Treated as replicates, they make tiny differences look certain. SituCraft compares <strong>the design's rows</strong> instead. Each row is a replicate unit, such as a subject, in a group, with its samples' cells combined (technical replicates). A paired design, such as each subject before and after, compares each subject with itself. See <a href="designs.html">The design</a>.</p>
+
+      <h2 id="models">The models</h2>
+      <p><strong>Compare the groups</strong> in the Cohort view's <strong>Differential abundance</strong> fits a model for each label of the cohort table (see <a href="summaries.html">Sample summaries</a>):</p>
+      <ul>
+        <li><strong>Shares of the labeled cells:</strong> the label's cells out of each row's labeled cells, by a quasi-binomial generalized linear model of the design (logit link). The effect is an odds ratio: for a label that is a small share it is close to the ratio of shares, and for a large one it is larger.</li>
+        <li><strong>Cells per mm² of tissue:</strong> the label's cells by a quasi-Poisson model (log link), with the log of each row's tissue area as offset (the tissue within its region, for a region sample). The effect is a density ratio.</li>
+        <li><strong>Niches' shares:</strong> each niche's cells out of the cells with a window, as a share. The niches are found across the samples together, so a niche is the same kind of place in every sample.</li>
+      </ul>
+      <p>The models are fitted as R's <code>glm</code> fits them. Samples vary more than the binomial or Poisson model alone allows, so the variation is measured, not assumed: the <strong>dispersion</strong> is Pearson's χ² over the residual degrees of freedom. Each contrast of the design (each group against the reference, or those chosen) is tested by a t test on those degrees of freedom. A label no sample has a cell of, or one a group has none of, is left untested, and the reason is said.</p>
+
+      <h2 id="results">Reading the results</h2>
+      <p>For each label and contrast the table gives the effect with its interval (95% by default), the p-value, and the p-value adjusted by Benjamini and Hochberg over the family's tests (all its labels and contrasts). The <strong>universe</strong> of tests is stated with the family, so the correction can be read. Rows whose adjusted p is below 0.05 are marked higher or lower.</p>
+      <p>Choosing a row plots each replicate unit's share or density by group, with each group's mean. A point opens its sample's cells of that label on its tissue in the Viewer, so a result can be traced to the cells behind it. <strong>The results (CSV)</strong> writes every test.</p>
+      <figure>
+        <div class="shot"><img class="shot-dark" src="../assets/img/abundance-dark.webp" width="2000" height="1250" loading="lazy" alt="The Cohort view's differential abundance of the simulated cohort: the four labels' odds ratios treated against control with their intervals and p-values, the endothelial-like row chosen, and its eight subjects' shares plotted by condition" /><img class="shot-light" src="../assets/img/abundance-light.webp" width="2000" height="1250" loading="lazy" alt="The Cohort view's differential abundance of the simulated cohort: the four labels' odds ratios treated against control with their intervals and p-values, the endothelial-like row chosen, and its eight subjects' shares plotted by condition" /></div>
+        <figcaption>The simulated cohort's subjects compared by condition: the endothelial-like cells' odds 1.75 times as high in the treated subjects, the interval wide with four subjects a group.</figcaption>
+      </figure>
+      <p>An interval that is wide, as with four subjects in a group, says how little the samples pin the effect down. A larger cohort, or pairing, narrows it. In the cohort before and after, where after treatment a cell is four times as likely to be endothelial-like, six subjects compared with themselves find the endothelial-like cells' odds 2.19 times as high after (1.54 to 3.12) and the epithelial-like cells' 0.48 times (0.27 to 0.84), near the 2.26 and 0.47 the true cells show: more endothelial-like and immune-like cells leave less room for epithelial-like ones.</p>
+      <p>Regions of one section compared as pseudo-samples (see <a href="designs.html#pseudo-samples">The design</a>) are marked so on every result: their tests describe the section's places, not subjects.</p>
+
+      <h2 id="reference">Labels from a reference</h2>
+      <p>The same steps on every sample (see <a href="summaries.html#steps">Sample summaries</a>) can label every sample from one labeled single-cell reference instead of a marker set: choose <strong>A reference on this computer…</strong> under <strong>Labels from</strong>. Every sample's labels then come from the same reference, with the same names. The start page's <strong>A simulated cohort</strong> includes a reference of its types, made with its panel.</p>
+
+      <h2 id="remote">By remote control</h2>
+      <p><code>compare_abundance</code> compares the samples (shares, densities and niches, by the design draft or a saved design) and answers every test. <code>show_sample_cells</code> shows a sample's cells of a label on its tissue. <code>cohort_steps</code> and <code>summarize_samples</code> take a <code>reference</code> to label from. See <a href="remote-control.html">Remote control</a>.</p>
+
+      <h2 id="checked">How it is checked</h2>
+      <ul>
+        <li><strong>Against statsmodels:</strong> on 19 cases (the simulated cohort's shares and densities, by condition and adjusted for the slide; a paired design; three groups with a contrast between two; densities over varying areas), every coefficient, standard error, dispersion, t, p and interval equals statsmodels 0.15.0's (and R's) to 10⁻⁸.</li>
+        <li><strong>On null tables:</strong> of 4,000 tables of overdispersed counts without a difference, the tests reject about as often as their level says (5.6% at 5%, 1.1% at 1%).</li>
+        <li><strong>In the page:</strong> on the simulated cohort, each effect equals the pooled ratio of its counts (as a model of the groups alone gives), and every interval covers the ratio the true cells show. A sample's cells of a label are shown as the summary counts them. A null cohort, labeled from its own reference (its shares within 0.08 of its true types'), finds nothing, and the start page's null cohort none of its 14 tests below a raw p of 0.05. The cohort before and after, paired, finds the shift its truth holds. Each is a worked example, walked to its end by the viewer suite.</li>
+        <li><strong>On simulated cohorts:</strong> of 2,000 null cohorts, the shares', densities' and niches' tests below 0.05 in 4.7% to 5.0% of them, weekly; see <a href="error-rates.html">Error rates and scale</a>.</li>
+      </ul>
+
+      <nav class="doc-pager" aria-label="Pages">
+        <a class="prev" href="cohort-qc.html"><span>Previous</span>Cohort QC</a>
+        <a class="next" href="expression.html"><span>Next</span>Differential expression</a>
+      </nav>
+    </main>
+
+    <aside class="toc" aria-label="On this page">
+      <h4>On this page</h4>
+      <ul></ul>
+    </aside>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-about">
+          <a class="brand" href="../"><img src="../assets/img/logo.svg" alt="" width="30" height="30" /><span>Situ<b>Craft</b></span></a>
+          <p>A local-first workbench for imaging-based spatial transcriptomics: Xenium bundles checked, segmented, typed, reviewed and analyzed on your own computer, every decision on record. Free and open source under the Apache License 2.0.</p>
+        </div>
+        <div>
+          <h4>Product</h4>
+          <ul>
+            <li><a href="../#features">Features</a></li>
+            <li><a href="../install.html">Install</a></li>
+            <li><a href="../science.html">Science</a></li>
+            <li><a href="https://github.com/robert-mcdermott/situcraft/blob/main/CHANGELOG.md">Changelog</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Documentation</h4>
+          <ul>
+            <li><a href="../docs/getting-started.html">Getting started</a></li>
+            <li><a href="../docs/segmentations.html">Segmentations</a></li>
+            <li><a href="../docs/clusters.html">Cell types</a></li>
+            <li><a href="../docs/spatial.html">Spatial analysis</a></li>
+            <li><a href="../docs/troubleshooting.html">Troubleshooting</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Project</h4>
+          <ul>
+            <li><a href="https://github.com/robert-mcdermott/situcraft">GitHub</a></li>
+            <li><a href="https://github.com/robert-mcdermott/situcraft/releases">Releases</a></li>
+            <li><a href="https://github.com/robert-mcdermott/situcraft/issues">Issues</a></li>
+            <li><a href="../science.html#cite">Cite SituCraft</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">SituCraft is licensed under the Apache License 2.0. It is for research use only: it is not a medical device and makes no diagnostic claims. See <a href="../science.html#credits">credits</a>.</div>
+    </div>
+  </footer>
+</body>
+</html>

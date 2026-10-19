@@ -82,6 +82,17 @@
           <li><a href="spatial.html">Spatial analysis</a></li>
           <li><a href="niches.html">Niches and genes</a></li>
         </ul>
+        <h4>Cohorts</h4>
+        <ul>
+          <li><a href="samples.html">Samples</a></li>
+          <li><a href="designs.html">The design</a></li>
+          <li><a href="summaries.html">Sample summaries</a></li>
+          <li><a href="cohort-qc.html">Cohort QC</a></li>
+          <li><a href="abundance.html">Differential abundance</a></li>
+          <li><a href="expression.html">Differential expression</a></li>
+          <li><a href="spatial-tests.html">Spatial statistics between groups</a></li>
+          <li><a href="error-rates.html">Error rates and scale</a></li>
+        </ul>
         <h4>Reference</h4>
         <ul>
           <li><a href="remote-control.html">Remote control</a></li>
@@ -100,9 +111,15 @@
       <ul>
         <li>its folder, its <code>experiment.xenium</code> file, or a <code>.zip</code> of it;</li>
         <li>on the command line, <code>situcraft /path/to/output-XETG00000__0000000__Region_1__20240101__000000</code> (several bundles, or a folder of them, at once);</li>
-        <li>or <strong>Open a bundle</strong> in the window (⌘O or Ctrl+O), typing or pasting its path.</li>
+        <li>or <strong>Open a bundle</strong> in the window (⌘O or Ctrl+O), choosing it on this computer.</li>
       </ul>
       <p>SituCraft reads a bundle where it is, and never changes, moves or copies it. Running <code>situcraft &lt;paths&gt;</code> while SituCraft is open hands them to the open window.</p>
+      <p><strong>Open a bundle</strong> shows this computer's folders. Start from a place on the left: your home folder, its Desktop, Documents and Downloads, SituCraft's examples, the computer's disks, or a folder you used lately. Then go into folders by double-clicking them, or go back up by the crumbs at the top. Each Xenium bundle is marked, with its run, region and cells, and what SituCraft cannot open is grayed. Double-click a bundle to open it, or choose several with ⌘ or Ctrl and press <strong>Open</strong>. A folder that holds bundles opens all of them. You can also type or paste a path, then press Enter.</p>
+      <p>From the keyboard, the arrows move through the folder, → goes into the folder chosen (a bundle too, to choose one of its files) and ← goes up, typing a name's first letters finds it, and Enter opens. The dialog opens where it was last used. A browser never tells a page where a file is on the computer, so the program lists the folders, and only for this computer: another computer reaching SituCraft can neither list folders nor open files. The fields that name a file elsewhere (a reference, a table of labels, an imported segmentation, a post-Xenium image, an export's folder) have the same dialog behind their <strong>Browse…</strong> buttons.</p>
+      <figure>
+        <div class="shot"><img class="shot-dark" src="../assets/img/open-dark.webp" width="2000" height="1250" loading="lazy" alt="The Open bundles dialog showing the examples folder: the places on the left, the folder's crumbs, its bundles marked with their runs, regions and cells, and the Lung bundle chosen" /><img class="shot-light" src="../assets/img/open-light.webp" width="2000" height="1250" loading="lazy" alt="The Open bundles dialog showing the examples folder: the places on the left, the folder's crumbs, its bundles marked with their runs, regions and cells, and the Lung bundle chosen" /></div>
+        <figcaption>Open a bundle: the examples folder, its bundles marked with their runs, regions and cells.</figcaption>
+      </figure>
 
       <h2 id="check">Check it: the Data view</h2>
       <figure>

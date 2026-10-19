@@ -4,11 +4,11 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Documentation · SituCraft</title>
-  <meta name="description" content="SituCraft's user guide: from installing it and opening a Xenium bundle to segmentations, cell types, post-Xenium images, regions, reviews and spatial analysis, a page a subject." />
+  <meta name="description" content="SituCraft's user guide: from installing it and opening a Xenium bundle to segmentations, cell types, post-Xenium images, regions, reviews, spatial analysis and cohorts, a page a subject." />
   <link rel="canonical" href="https://robert-mcdermott.github.io/situcraft/docs/" />
   <meta property="og:type" content="website" />
   <meta property="og:title" content="Documentation" />
-  <meta property="og:description" content="SituCraft's user guide: from installing it and opening a Xenium bundle to segmentations, cell types, post-Xenium images, regions, reviews and spatial analysis, a page a subject." />
+  <meta property="og:description" content="SituCraft's user guide: from installing it and opening a Xenium bundle to segmentations, cell types, post-Xenium images, regions, reviews, spatial analysis and cohorts, a page a subject." />
   <meta property="og:url" content="https://robert-mcdermott.github.io/situcraft/docs/" />
   <meta property="og:image" content="https://robert-mcdermott.github.io/situcraft/assets/img/og-image.jpg" />
   <meta name="twitter:card" content="summary_large_image" />
@@ -82,6 +82,17 @@
           <li><a href="spatial.html">Spatial analysis</a></li>
           <li><a href="niches.html">Niches and genes</a></li>
         </ul>
+        <h4>Cohorts</h4>
+        <ul>
+          <li><a href="samples.html">Samples</a></li>
+          <li><a href="designs.html">The design</a></li>
+          <li><a href="summaries.html">Sample summaries</a></li>
+          <li><a href="cohort-qc.html">Cohort QC</a></li>
+          <li><a href="abundance.html">Differential abundance</a></li>
+          <li><a href="expression.html">Differential expression</a></li>
+          <li><a href="spatial-tests.html">Spatial statistics between groups</a></li>
+          <li><a href="error-rates.html">Error rates and scale</a></li>
+        </ul>
         <h4>Reference</h4>
         <ul>
           <li><a href="remote-control.html">Remote control</a></li>
@@ -93,7 +104,7 @@
 
     <main id="main" class="doc">
       <h1>Documentation</h1>
-      <p class="doc-lede">SituCraft opens the output of a 10x Genomics Xenium run, checks it, and shows the tissue, its transcripts and its cells at any zoom. From there it segments, types and reviews the cells and asks how the tissue is organized, keeping every decision on record. Everything runs on your computer; your data are never uploaded.</p>
+      <p class="doc-lede">SituCraft opens the output of a 10x Genomics Xenium run, checks it, and shows the tissue, its transcripts and its cells at any zoom. From there it segments, types and reviews the cells, asks how the tissue is organized, and compares groups of subjects, keeping every decision on record. Everything runs on your computer; your data are never uploaded.</p>
 
       <h2 id="path">A path through it</h2>
       <p>Each page is a subject, in the order an analysis usually goes. Start with <a href="getting-started.html">Getting started</a> and an example; the worked examples there answer a question on each subject step by step.</p>
@@ -107,6 +118,7 @@
             <tr><td>Cell types</td><td><a href="clusters.html">Clusters and the map</a>, <a href="labels.html">Labels</a></td><td>Group cells by their expression, name them from markers or a reference, review the cells worth a look</td></tr>
             <tr><td>Pathology</td><td><a href="images.html">Images and alignment</a>, <a href="regions.html">Regions and reviews</a></td><td>Add the H&amp;E and immunofluorescence images, align them, draw regions with QuPath, record a pathologist's review</td></tr>
             <tr><td>Spatial</td><td><a href="spatial.html">Spatial analysis</a>, <a href="niches.html">Niches and genes</a></td><td>Which cells and types are neighbors, at what distances, in which regions; niches, spatially variable genes, and how much an answer depends on the segmentation</td></tr>
+            <tr><td>Cohorts</td><td><a href="samples.html">Samples</a>, <a href="designs.html">The design</a>, <a href="summaries.html">Sample summaries</a>, <a href="cohort-qc.html">Cohort QC</a>, <a href="abundance.html">Differential abundance</a>, <a href="expression.html">Differential expression</a>, <a href="spatial-tests.html">Spatial statistics between groups</a>, <a href="error-rates.html">Error rates and scale</a></td><td>A study's sections in one project, each a sample (or its regions, such as a tissue microarray's cores), described by your fields and its bundle's; the replicate unit, the groups compared and the covariates, before any comparison; every sample measured the same way and summarized in the cohort table; the samples side by side, their batches and panels; each cell type's share and density, its genes by pseudobulk, and the samples' spatial statistics compared between groups, the sample the unit; the tests' error rates on thousands of simulated cohorts, and why cells are never tested as replicates</td></tr>
             <tr><td>Reference</td><td><a href="remote-control.html">Remote control</a>, <a href="record.html">The record</a>, <a href="troubleshooting.html">Troubleshooting</a></td><td>Drive SituCraft from scripts; what is kept and where; what to do when something goes wrong</td></tr>
           </tbody>
         </table>

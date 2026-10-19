@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>The design · SituCraft</title>
+  <meta name="description" content="The experimental design of a SituCraft cohort: the replicate unit, the groups compared and their reference, contrasts, pairing, covariates and technical replicates; the design matrix in treatment coding, and the designs SituCraft refuses and why." />
+  <link rel="canonical" href="https://robert-mcdermott.github.io/situcraft/docs/designs.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="The design" />
+  <meta property="og:description" content="The experimental design of a SituCraft cohort: the replicate unit, the groups compared and their reference, contrasts, pairing, covariates and technical replicates; the design matrix in treatment coding, and the designs SituCraft refuses and why." />
+  <meta property="og:url" content="https://robert-mcdermott.github.io/situcraft/docs/designs.html" />
+  <meta property="og:image" content="https://robert-mcdermott.github.io/situcraft/assets/img/og-image.jpg" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="theme-color" content="#07090e" />
+  <link rel="icon" href="../assets/img/logo.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="../assets/css/site.css" />
+  <script>try { const t = localStorage.getItem('situcraft-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+  <script src="../assets/js/site.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="container">
+      <a class="brand" href="../"><img src="../assets/img/logo.svg" alt="" width="30" height="30" /><span>Situ<b>Craft</b></span></a>
+      <nav class="site-nav" id="site-nav" aria-label="Main">
+        <a href="../#features">Features</a>
+        <a href="../docs/" aria-current="page">Documentation</a>
+        <a href="../install.html">Install</a>
+        <a href="../science.html">Science</a>
+      </nav>
+      <div class="header-actions">
+        <a class="icon-button" href="https://github.com/robert-mcdermott/situcraft" aria-label="SituCraft on GitHub">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.71 1.26 3.37.96.1-.75.4-1.26.73-1.55-2.56-.29-5.25-1.28-5.25-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.7 5.4-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"/></svg>
+        </a>
+        <button class="icon-button theme-toggle" type="button" aria-label="Switch between light and dark">
+          <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        </button>
+        <button class="icon-button nav-toggle" type="button" aria-label="Menu" aria-controls="site-nav" aria-expanded="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <div class="docs-layout">
+    <aside class="docs-sidebar" aria-label="Documentation">
+      <button class="btn docs-menu-toggle" type="button" aria-expanded="false">Documentation menu <span aria-hidden="true">▾</span></button>
+      <nav>
+        <h4>Start</h4>
+        <ul>
+          <li><a href="./">Overview</a></li>
+          <li><a href="getting-started.html">Getting started</a></li>
+          <li><a href="opening-data.html">Opening a bundle</a></li>
+        </ul>
+        <h4>The tissue</h4>
+        <ul>
+          <li><a href="viewer.html">The Viewer</a></li>
+          <li><a href="qc.html">Quality control</a></li>
+        </ul>
+        <h4>Segmentations</h4>
+        <ul>
+          <li><a href="segmentations.html">Segmentations</a></li>
+          <li><a href="refinement.html">Refinement</a></li>
+          <li><a href="comparing.html">Comparing and deciding</a></li>
+          <li><a href="exports.html">Exports</a></li>
+        </ul>
+        <h4>Cell types</h4>
+        <ul>
+          <li><a href="clusters.html">Clusters and the map</a></li>
+          <li><a href="labels.html">Labels</a></li>
+        </ul>
+        <h4>Pathology</h4>
+        <ul>
+          <li><a href="images.html">Images and alignment</a></li>
+          <li><a href="regions.html">Regions and reviews</a></li>
+        </ul>
+        <h4>Spatial</h4>
+        <ul>
+          <li><a href="spatial.html">Spatial analysis</a></li>
+          <li><a href="niches.html">Niches and genes</a></li>
+        </ul>
+        <h4>Cohorts</h4>
+        <ul>
+          <li><a href="samples.html">Samples</a></li>
+          <li><a href="designs.html" aria-current="page">The design</a></li>
+          <li><a href="summaries.html">Sample summaries</a></li>
+          <li><a href="cohort-qc.html">Cohort QC</a></li>
+          <li><a href="abundance.html">Differential abundance</a></li>
+          <li><a href="expression.html">Differential expression</a></li>
+          <li><a href="spatial-tests.html">Spatial statistics between groups</a></li>
+          <li><a href="error-rates.html">Error rates and scale</a></li>
+        </ul>
+        <h4>Reference</h4>
+        <ul>
+          <li><a href="remote-control.html">Remote control</a></li>
+          <li><a href="record.html">The record</a></li>
+          <li><a href="troubleshooting.html">Troubleshooting</a></li>
+        </ul>
+      </nav>
+    </aside>
+
+    <main id="main" class="doc">
+      <h1>The design</h1>
+      <p class="doc-lede">Before any comparison of groups, the design names what replicates what: the subject (or patient, or animal) each sample comes from, the groups compared, and what else differs between samples. SituCraft refuses a design it cannot estimate, or whose groups a batch could explain, and says why.</p>
+
+      <h2 id="unit">The replicate unit</h2>
+      <p>A comparison of groups asks whether the groups differ by more than their members differ among themselves. The members are the <strong>replicate units</strong>: the subjects, patients or animals the samples come from, each one biological replicate. Cells are not replicates (thousands of cells of one section are one subject's cells), and neither are regions of one section. The design's <strong>Replicate unit</strong> is the field that names them, <code>subject</code> by default; see <a href="samples.html#fields">Describing the samples</a>.</p>
+      <ul>
+        <li><strong>Technical replicates:</strong> a unit's samples in one group, such as two sections of one subject's tumor, are one replicate; their numbers are combined before any test.</li>
+        <li><strong>Pairing:</strong> a unit in more than one group, such as a subject before and after treatment, is compared with itself: the units enter the model, and the comparison rests on each unit's own change.</li>
+        <li><strong>Regions of one section</strong> given different units are refused: they share a subject, a slide and a run. Give them one unit (their samples are combined), or compare sections.</li>
+      </ul>
+
+      <h3 id="pseudo-samples">Pseudo-samples, for teaching</h3>
+      <p>To try a cohort's comparisons on a single section, its regions can be kept as separate units by checking <strong>Regions of one section as pseudo-samples, for teaching only</strong>, which the design offers when the samples include regions. The design is then kept rather than refused, and says in its notes and its words that its units are pseudo-samples. Every comparison made of it carries a warning: its tests describe the section's regions, and their p-values are not evidence about subjects, of whom one section is one. The Breast example's worked example <em>Places in one section are not subjects</em> does this with three regions of its stroma and three of its tumor (see <a href="getting-started.html#worked-examples">Worked examples</a>).</p>
+
+      <h2 id="groups">Groups, contrasts and covariates</h2>
+      <p><strong>Groups compared</strong> is the field whose values are the groups, <code>condition</code> by default, and the <strong>Reference group</strong> the one the others are compared with (the first in alphabetical order if not chosen). Each group is compared with the reference unless other <strong>Contrasts</strong> are added, such as one treatment against another.</p>
+      <p><strong>Adjust for</strong> adds covariates: any field of the samples (a number as it is, text as a factor), or the bundles' run, slide or panel. A covariate is one value for a unit in a group. Samples without a value of a field the design reads are left out, and the design says which; <strong>Leave a sample out…</strong> leaves one out with its reason, which the design keeps.</p>
+
+      <h2 id="matrix">The design in words and as a matrix</h2>
+      <p>The design is said in sentences: what is compared, how many units each group has, whether it is paired, what it is adjusted for, and how many degrees of freedom are left for the variation between units. Below them is its matrix: a row for each unit in each group, with its samples, and a column for each of the model's coefficients.</p>
+      <p>The coding is treatment coding, as patsy and R write a model formula's: an intercept, then for each factor a column of ones and zeros for each level but its reference (the levels in alphabetical order, its first the reference unless chosen), named <code>field[T.level]</code>, then each number as it is. For the same formula the matrix is patsy's, column for column.</p>
+      <figure>
+        <div class="shot"><img class="shot-dark" src="../assets/img/design-dark.webp" width="2000" height="1250" loading="lazy" alt="The Cohort view's design of the simulated cohort: its subjects compared by condition, treated against control, adjusted for the slide, said in sentences, with its eight rows and three columns" /><img class="shot-light" src="../assets/img/design-light.webp" width="2000" height="1250" loading="lazy" alt="The Cohort view's design of the simulated cohort: its subjects compared by condition, treated against control, adjusted for the slide, said in sentences, with its eight rows and three columns" /></div>
+        <figcaption>The simulated cohort's subjects compared by condition and adjusted for the slide: three coefficients over eight rows, five degrees of freedom left.</figcaption>
+      </figure>
+
+      <h2 id="refused">What is refused</h2>
+      <p>A design that cannot be estimated, or whose answer would not mean what it says, is refused, and the view says why:</p>
+      <ul>
+        <li><strong>A group of fewer than two units:</strong> the variation between units cannot be measured.</li>
+        <li><strong>A covariate confounded with the groups or another term:</strong> its columns are combinations of those before them (every sample of batch B1 in control and every one of B2 in treated, say), so its effect cannot be told from theirs.</li>
+        <li><strong>The groups confounded with a slide, run or panel</strong> the design does not adjust for: each holds one group only, so a difference between the groups could be the batch's. A batch that holds the groups unevenly is noted instead.</li>
+        <li><strong>No degrees of freedom left:</strong> as many coefficients as rows.</li>
+        <li><strong>Regions of one section as separate units</strong> (above), unless they are marked pseudo-samples for teaching, and a covariate with two values for one unit in one group.</li>
+      </ul>
+      <p>A design with few degrees of freedom left (one or two) is kept but noted: its estimates of the variation between units will be rough.</p>
+      <p>The program refuses the same designs when a comparison is asked of it directly (by remote control, say): a group of one unit, a unit in two rows of one group, and regions of one section as separate units (unless the design marks them pseudo-samples). Each would make a test of cells rather than of replicates, and cells as replicates find differences that are not there (see <a href="error-rates.html#cells">Error rates</a>).</p>
+
+      <h2 id="saved">Saved designs</h2>
+      <p><strong>Save as …, version …</strong> keeps the design in the project as a version of its name, with the samples as they were (each one's unit, group and covariates) and the samples left out with their reasons. The project tree lists the designs; a saved design whose samples have changed since says so, and a new version records them as they are. Only a design that can be used is saved.</p>
+      <p>By remote control, <code>design</code> makes a design from its unit, group, reference, contrasts, covariates and samples left out (and <code>pseudo_samples</code> for teaching), answers it (in words, its rows and matrix, its degrees of freedom, and why it cannot be used if it cannot), and with <code>save</code> keeps it. See <a href="remote-control.html">Remote control</a>.</p>
+
+      <nav class="doc-pager" aria-label="Pages">
+        <a class="prev" href="samples.html"><span>Previous</span>Samples</a>
+        <a class="next" href="summaries.html"><span>Next</span>Sample summaries</a>
+      </nav>
+    </main>
+
+    <aside class="toc" aria-label="On this page">
+      <h4>On this page</h4>
+      <ul></ul>
+    </aside>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-about">
+          <a class="brand" href="../"><img src="../assets/img/logo.svg" alt="" width="30" height="30" /><span>Situ<b>Craft</b></span></a>
+          <p>A local-first workbench for imaging-based spatial transcriptomics: Xenium bundles checked, segmented, typed, reviewed and analyzed on your own computer, every decision on record. Free and open source under the Apache License 2.0.</p>
+        </div>
+        <div>
+          <h4>Product</h4>
+          <ul>
+            <li><a href="../#features">Features</a></li>
+            <li><a href="../install.html">Install</a></li>
+            <li><a href="../science.html">Science</a></li>
+            <li><a href="https://github.com/robert-mcdermott/situcraft/blob/main/CHANGELOG.md">Changelog</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Documentation</h4>
+          <ul>
+            <li><a href="../docs/getting-started.html">Getting started</a></li>
+            <li><a href="../docs/segmentations.html">Segmentations</a></li>
+            <li><a href="../docs/clusters.html">Cell types</a></li>
+            <li><a href="../docs/spatial.html">Spatial analysis</a></li>
+            <li><a href="../docs/troubleshooting.html">Troubleshooting</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Project</h4>
+          <ul>
+            <li><a href="https://github.com/robert-mcdermott/situcraft">GitHub</a></li>
+            <li><a href="https://github.com/robert-mcdermott/situcraft/releases">Releases</a></li>
+            <li><a href="https://github.com/robert-mcdermott/situcraft/issues">Issues</a></li>
+            <li><a href="../science.html#cite">Cite SituCraft</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">SituCraft is licensed under the Apache License 2.0. It is for research use only: it is not a medical device and makes no diagnostic claims. See <a href="../science.html#credits">credits</a>.</div>
+    </div>
+  </footer>
+</body>
+</html>

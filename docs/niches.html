@@ -82,6 +82,17 @@
           <li><a href="spatial.html">Spatial analysis</a></li>
           <li><a href="niches.html" aria-current="page">Niches and genes</a></li>
         </ul>
+        <h4>Cohorts</h4>
+        <ul>
+          <li><a href="samples.html">Samples</a></li>
+          <li><a href="designs.html">The design</a></li>
+          <li><a href="summaries.html">Sample summaries</a></li>
+          <li><a href="cohort-qc.html">Cohort QC</a></li>
+          <li><a href="abundance.html">Differential abundance</a></li>
+          <li><a href="expression.html">Differential expression</a></li>
+          <li><a href="spatial-tests.html">Spatial statistics between groups</a></li>
+          <li><a href="error-rates.html">Error rates and scale</a></li>
+        </ul>
         <h4>Reference</h4>
         <ul>
           <li><a href="remote-control.html">Remote control</a></li>
@@ -107,6 +118,7 @@
         <div class="shot"><img class="shot-dark" src="../assets/img/niches-tissue-dark.webp" width="2000" height="1250" loading="lazy" alt="The Viewer showing the Lung example's cells filled by their niche, the legend naming the six niches with their cells" /><img class="shot-light" src="../assets/img/niches-tissue-light.webp" width="2000" height="1250" loading="lazy" alt="The Viewer showing the Lung example's cells filled by their niche, the legend naming the six niches with their cells" /></div>
         <figcaption>The Lung cells filled by their niche.</figcaption>
       </figure>
+      <p>The <a href="getting-started.html#worked-examples">worked example</a> <em>Niches against the domains</em> finds the simulated tissue's niches and reads them against the domains the simulator laid it out in, then shows what the defaults find.</p>
 
       <h2 id="moran">Spatially variable genes</h2>
       <p><strong>Spatially variable genes</strong> asks which genes are expressed in a pattern across the tissue. It is of genes, not labels: choose a graph and ask. Each gene's <strong>Moran's I</strong> measures how alike its expression is in neighboring cells: near 1 when neighbors are alike, about 0 for no pattern, below 0 where neighbors differ. Each gene is tested against its values dealt to the cells at random, analytically and by permutation, and the p-values are adjusted over the genes. Genes of cell types that gather are in a pattern because their cells are.</p>
@@ -119,6 +131,7 @@
         <div class="shot"><img class="shot-dark" src="../assets/img/moran-tissue-dark.webp" width="2000" height="1250" loading="lazy" alt="The Viewer showing the Lung example's cells high among high in GJA5's expression, an artery's endothelium in the stroma at the section's top left, with GJA5's transcripts" /><img class="shot-light" src="../assets/img/moran-tissue-light.webp" width="2000" height="1250" loading="lazy" alt="The Viewer showing the Lung example's cells high among high in GJA5's expression, an artery's endothelium in the stroma at the section's top left, with GJA5's transcripts" /></div>
         <figcaption>GJA5's cells high among high: an artery's endothelium in the stroma.</figcaption>
       </figure>
+      <p>The <a href="getting-started.html#worked-examples">worked example</a> <em>Genes in a pattern</em> asks it of the Lung section's genes and shows GJA5's cells on the tissue.</p>
 
       <h2 id="remake">Under another segmentation</h2>
       <p>An answer depends on the cells it was asked of. To see how much, make it again on another segmentation of the dataset (an expansion, a refinement, an import): under the answer, <strong>Under another segmentation</strong>, choose one and <strong>Make it again on</strong>. SituCraft compares the two segmentations (or uses their comparison), makes the labels again on the other's cells from the same clustering and marker set, builds a graph of the same definition, and asks the same question with the same parameters and regions. Labels curated by hand, agreed among sets, imported for one segmentation's cells, or niches cannot be made again this way; it says what to do instead.</p>
@@ -128,6 +141,7 @@
         <figcaption>The Lung enrichment made again on a 3 µm expansion and read with the first, the cells behind its largest change.</figcaption>
       </figure>
       <p>A number that changes much between segmentations is a number of the segmentation as much as of the tissue. On the simulated tissue, the enrichment of its types and its niches hardly change between its true cells, the instrument's and a refinement; Moran's I of the marker genes nearly doubles under the instrument's expansion, whose cells take transcripts from their neighbors.</p>
+      <p>The <a href="getting-started.html#worked-examples">worked example</a> <em>An answer under another segmentation</em> makes the Lung classes' enrichment again on a 3 µm nucleus expansion and finds the cells behind its largest change.</p>
 
       <h2 id="large">Large sections</h2>
       <p>Every question is asked of a whole section's cells. On four cores, a million cells' graphs, enrichment, co-occurrence and niches take seconds, and Moran's I of a panel's genes, with its permutations and the leading genes' local Moran's I, about a minute and a half in about 1 GB. Nearest distances and Ripley's K keep every pair of cells within their reach (100 µm by default), 3 to 4 GB at a million cells: on a computer with less memory, ask them of a region, or with a smaller reach.</p>
@@ -135,7 +149,7 @@
 
       <nav class="doc-pager" aria-label="Pages">
         <a class="prev" href="spatial.html"><span>Previous</span>Spatial analysis</a>
-        <a class="next" href="remote-control.html"><span>Next</span>Remote control</a>
+        <a class="next" href="samples.html"><span>Next</span>Samples</a>
       </nav>
     </main>
 

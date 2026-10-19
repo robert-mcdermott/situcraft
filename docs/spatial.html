@@ -82,6 +82,17 @@
           <li><a href="spatial.html" aria-current="page">Spatial analysis</a></li>
           <li><a href="niches.html">Niches and genes</a></li>
         </ul>
+        <h4>Cohorts</h4>
+        <ul>
+          <li><a href="samples.html">Samples</a></li>
+          <li><a href="designs.html">The design</a></li>
+          <li><a href="summaries.html">Sample summaries</a></li>
+          <li><a href="cohort-qc.html">Cohort QC</a></li>
+          <li><a href="abundance.html">Differential abundance</a></li>
+          <li><a href="expression.html">Differential expression</a></li>
+          <li><a href="spatial-tests.html">Spatial statistics between groups</a></li>
+          <li><a href="error-rates.html">Error rates and scale</a></li>
+        </ul>
         <h4>Reference</h4>
         <ul>
           <li><a href="remote-control.html">Remote control</a></li>
@@ -130,6 +141,7 @@
       </figure>
       <p>Click a square, or a row of the tables, for the pair's numbers in words; <strong>Show these cells on the tissue</strong> opens the Viewer with the cells filled by their labels, the pair's cells (those with a neighbor of the other label) highlighted, and the edges between them drawn in color over the graph.</p>
       <p><strong>Co-occurrence across distances</strong> asks, from one label's cells, how much likelier each label's cells are within a distance (10 to 150 µm by default) than any cell is: above 1, found that near more often than their share. It counts the pairs within each distance as Squidpy does, or, to read each distance on its own, the pairs since the distance before. It is descriptive, without a test. Choose a label and a distance to show those cells on the tissue.</p>
+      <p>The <a href="getting-started.html#worked-examples">worked example</a> <em>Which cell types are neighbors</em> asks it of the Breast section's classes and then its lineages, and shows each pair's cells on the tissue.</p>
 
       <h2 id="distances">How far apart, and at what scale</h2>
       <p><strong>Nearest distances</strong> measures, for each label's cells, the distance to the nearest cell of each label (another of their own, for a label with itself), searched up to a reach (100 µm). The median is compared with the median when the labels are dealt again to the same cells: a shorter median says the two lie nearer each other than their numbers explain, a longer one that they keep apart. The heat map is red where nearer, blue where farther; it is not symmetric, since a rare label lies near a common one more surely than the other way. Choose a pair for the distribution of its distances (the share of cells whose nearest lies within each distance) against chance's envelope.</p>
@@ -154,6 +166,7 @@
       </figure>
       <p><strong>Show these cells on the tissue</strong> highlights a label's cells in a region, or in the core, at the margin or around.</p>
       <p>The intervals treat cells as placed independently. Cells cluster, so the true uncertainty is wider.</p>
+      <p>The <a href="getting-started.html#worked-examples">worked example</a> <em>Immune cells and a tumor's edge</em> draws a region around the Breast section's tumor and measures its immune cells in its core, at its margin and around it.</p>
 
       <nav class="doc-pager" aria-label="Pages">
         <a class="prev" href="regions.html"><span>Previous</span>Regions and reviews</a>

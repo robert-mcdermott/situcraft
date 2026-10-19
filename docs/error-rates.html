@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Error rates and scale · SituCraft</title>
+  <meta name="description" content="How often SituCraft's cohort tests find a difference that is not there, how often they find the ones that are, why cells are never tested as replicates, and a cohort of 2 million cells summarized and compared one section at a time." />
+  <link rel="canonical" href="https://robert-mcdermott.github.io/situcraft/docs/error-rates.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Error rates and scale" />
+  <meta property="og:description" content="How often SituCraft's cohort tests find a difference that is not there, how often they find the ones that are, why cells are never tested as replicates, and a cohort of 2 million cells summarized and compared one section at a time." />
+  <meta property="og:url" content="https://robert-mcdermott.github.io/situcraft/docs/error-rates.html" />
+  <meta property="og:image" content="https://robert-mcdermott.github.io/situcraft/assets/img/og-image.jpg" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="theme-color" content="#07090e" />
+  <link rel="icon" href="../assets/img/logo.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="../assets/css/site.css" />
+  <script>try { const t = localStorage.getItem('situcraft-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+  <script src="../assets/js/site.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="container">
+      <a class="brand" href="../"><img src="../assets/img/logo.svg" alt="" width="30" height="30" /><span>Situ<b>Craft</b></span></a>
+      <nav class="site-nav" id="site-nav" aria-label="Main">
+        <a href="../#features">Features</a>
+        <a href="../docs/" aria-current="page">Documentation</a>
+        <a href="../install.html">Install</a>
+        <a href="../science.html">Science</a>
+      </nav>
+      <div class="header-actions">
+        <a class="icon-button" href="https://github.com/robert-mcdermott/situcraft" aria-label="SituCraft on GitHub">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.71 1.26 3.37.96.1-.75.4-1.26.73-1.55-2.56-.29-5.25-1.28-5.25-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.7 5.4-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"/></svg>
+        </a>
+        <button class="icon-button theme-toggle" type="button" aria-label="Switch between light and dark">
+          <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        </button>
+        <button class="icon-button nav-toggle" type="button" aria-label="Menu" aria-controls="site-nav" aria-expanded="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <div class="docs-layout">
+    <aside class="docs-sidebar" aria-label="Documentation">
+      <button class="btn docs-menu-toggle" type="button" aria-expanded="false">Documentation menu <span aria-hidden="true">▾</span></button>
+      <nav>
+        <h4>Start</h4>
+        <ul>
+          <li><a href="./">Overview</a></li>
+          <li><a href="getting-started.html">Getting started</a></li>
+          <li><a href="opening-data.html">Opening a bundle</a></li>
+        </ul>
+        <h4>The tissue</h4>
+        <ul>
+          <li><a href="viewer.html">The Viewer</a></li>
+          <li><a href="qc.html">Quality control</a></li>
+        </ul>
+        <h4>Segmentations</h4>
+        <ul>
+          <li><a href="segmentations.html">Segmentations</a></li>
+          <li><a href="refinement.html">Refinement</a></li>
+          <li><a href="comparing.html">Comparing and deciding</a></li>
+          <li><a href="exports.html">Exports</a></li>
+        </ul>
+        <h4>Cell types</h4>
+        <ul>
+          <li><a href="clusters.html">Clusters and the map</a></li>
+          <li><a href="labels.html">Labels</a></li>
+        </ul>
+        <h4>Pathology</h4>
+        <ul>
+          <li><a href="images.html">Images and alignment</a></li>
+          <li><a href="regions.html">Regions and reviews</a></li>
+        </ul>
+        <h4>Spatial</h4>
+        <ul>
+          <li><a href="spatial.html">Spatial analysis</a></li>
+          <li><a href="niches.html">Niches and genes</a></li>
+        </ul>
+        <h4>Cohorts</h4>
+        <ul>
+          <li><a href="samples.html">Samples</a></li>
+          <li><a href="designs.html">The design</a></li>
+          <li><a href="summaries.html">Sample summaries</a></li>
+          <li><a href="cohort-qc.html">Cohort QC</a></li>
+          <li><a href="abundance.html">Differential abundance</a></li>
+          <li><a href="expression.html">Differential expression</a></li>
+          <li><a href="spatial-tests.html">Spatial statistics between groups</a></li>
+          <li><a href="error-rates.html" aria-current="page">Error rates and scale</a></li>
+        </ul>
+        <h4>Reference</h4>
+        <ul>
+          <li><a href="remote-control.html">Remote control</a></li>
+          <li><a href="record.html">The record</a></li>
+          <li><a href="troubleshooting.html">Troubleshooting</a></li>
+        </ul>
+      </nav>
+    </aside>
+
+    <main id="main" class="doc">
+      <h1>Error rates and scale</h1>
+      <p class="doc-lede">A test is only as good as its error rates. SituCraft measures its cohort tests on thousands of simulated cohorts whose truth is known: how often they find a difference that is not there, and how often they find one that is.</p>
+
+      <h2 id="study">The study</h2>
+      <p>Every week, SituCraft simulates 2,000 null cohorts: two groups of four subjects whose sections vary from one another as the simulated cohort's do, with no difference between the groups. It also simulates 500 cohorts with the standard simulated cohort's known effects. Each sample's true cells are labeled by their true types, summarized as the Cohort view summarizes them (see <a href="summaries.html">Sample summaries</a>), and compared by condition as it compares them: <a href="abundance.html">abundance</a>, <a href="expression.html">expression</a> and <a href="spatial-tests.html">spatial statistics</a>. A smaller study runs on every change to the program.</p>
+
+      <h2 id="null">False positives</h2>
+      <p>On the null cohorts, a test at 5% should find a difference in 5% of its tests, and a family adjusted by Benjamini and Hochberg should find anything in at most 5% of the cohorts:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Family</th><th>Tests</th><th>Below 0.05</th><th>Below 0.01</th><th>Cohorts finding anything</th></tr></thead>
+          <tbody>
+            <tr><td>Shares of the labeled cells</td><td>8,000</td><td>4.9%</td><td>1.0%</td><td>4.8%</td></tr>
+            <tr><td>Cells per mm²</td><td>8,000</td><td>5.0%</td><td>1.1%</td><td>5.5%</td></tr>
+            <tr><td>Niches' shares</td><td>12,000</td><td>4.7%</td><td>0.8%</td><td>3.9%</td></tr>
+            <tr><td>Expression (each label's genes)</td><td>703,142</td><td>5.1%</td><td>1.0%</td><td>5.8%</td></tr>
+            <tr><td>Neighbor enrichment</td><td>20,000</td><td>5.5%</td><td>1.2%</td><td>6.4%</td></tr>
+            <tr><td>Nearest distances</td><td>32,000</td><td>5.1%</td><td>1.1%</td><td>5.4%</td></tr>
+            <tr><td>Moran's I</td><td>233,350</td><td>5.3%</td><td>1.1%</td><td>4.2%</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Each rate is within half a percentage point of its level. Neighbor enrichment's and Moran's I's are slightly above it: their statistics' variances are moderated toward one, and those of rare pairs and sparse genes vary more than the rest. The study once also tested the niches' shares by a moderated linear model of the spatial statistics, which found a difference in 6.0% of them. Niches' shares are now compared only as counts, in Differential abundance.</p>
+
+      <h2 id="cells">Cells are not replicates</h2>
+      <p>The same null cohorts, tested as if each cell were a replicate (as a test of the groups' pooled cells does), find differences everywhere:</p>
+      <ul>
+        <li><strong>A label's share,</strong> by a two-proportion test of the groups' cells: 58% of the tests below 0.05, and a difference found in 88% of the cohorts.</li>
+        <li><strong>A gene in a label,</strong> by the Wilcoxon rank-sum test of the groups' cells: 24% of the tests below 0.05, and genes found in every cohort.</li>
+      </ul>
+      <p>The cells of a section share its subject, slide and run. The sections' own variation, which their cells cannot show, makes the groups differ by chance (Squair et al. 2021). SituCraft therefore never tests cells across groups. Every comparison is of the design's replicate units, and a design whose tests would be of cells is refused, saying why:</p>
+      <ul>
+        <li>a group with one unit;</li>
+        <li>a unit in two rows of one group (its samples are combined instead);</li>
+        <li>regions of one section given different units (see <a href="designs.html#refused">The design</a>).</li>
+      </ul>
+      <p>The tests of cells SituCraft does make are within one sample, such as a cluster's marker genes, and they are labeled exploratory.</p>
+
+      <h2 id="power">Power and coverage</h2>
+      <p>On the 500 cohorts with the standard cohort's effects, four subjects a group:</p>
+      <ul>
+        <li><strong>A gene raised 2.5-fold in one type</strong> (SIM033 in the epithelial-like cells) is found in 98% of the cohorts. Its estimates average 1.33 log2 (the truth is 1.32), and its 95% interval covers the truth in 95.0% of them.</li>
+        <li><strong>The immune-like cells mixed into epithelial-like domains</strong> raise the two types' neighbor enrichment, which is found in 47% of the cohorts.</li>
+        <li><strong>The endothelial-like cells' odds doubled</strong> against each other type move their share of all labeled cells less (an odds ratio of 1.5 on average), and are found in 17%.</li>
+        <li><strong>Among the genes found,</strong> 6.3% on average are not the raised gene. That is close to the 5% false discovery rate the adjustment aims at.</li>
+      </ul>
+      <p>Four subjects a group find a large change in a gene's expression nearly every time, but a modest change in a cell type's share or arrangement only sometimes. A larger cohort, or pairing, finds more. An interval says how much a cohort can tell.</p>
+
+      <h2 id="scale">At scale</h2>
+      <p>Every week, 24 simulated sections of about 84,000 cells each (2 million cells) are summarized and compared one section at a time, as the summary job reads them: each section's graph, enrichment, nearest distances and Moran's I with the defaults the page offers, its summary, then the niches across the sections, the summary written and checked, and the three comparisons. On four cores of a laptop this takes 4.2 minutes, most of it each section's Moran's I and nearest distances, with a peak of 0.65 GB of memory. The same steps for 6 of the sections peak at 0.54 GB: the memory needed barely grows with the sections, because one is held at a time. What each section leaves for the summary is small: its numbers, its pseudobulk, and its cells' positions and labels for the niches across the sections. Summarizing, writing the summary and comparing the groups take under a second.</p>
+
+      <h2 id="checked">How it is checked</h2>
+      <ul>
+        <li><strong>Weekly:</strong> the study of 2,000 null cohorts and 500 with effects. Each family's rates must be within four standard errors (and a fifth of the level) of 5% and 1%; each family must find anything in at most 5% of the null cohorts, within the binomial margin; the raised gene's interval must cover its truth 95% of the time and the gene must be found in at least 80% of the cohorts. The cohort at scale must stay within its budget (20 minutes and 1.5 GB on four cores, its peak at most 1.5 times 6 sections').</li>
+        <li><strong>On every change:</strong> 24 null cohorts and 6 with effects, held to the same rates within their wider standard errors, and the cell-by-cell tests far above them.</li>
+      </ul>
+
+      <nav class="doc-pager" aria-label="Pages">
+        <a class="prev" href="spatial-tests.html"><span>Previous</span>Spatial statistics between groups</a>
+        <a class="next" href="remote-control.html"><span>Next</span>Remote control</a>
+      </nav>
+    </main>
+
+    <aside class="toc" aria-label="On this page">
+      <h4>On this page</h4>
+      <ul></ul>
+    </aside>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-about">
+          <a class="brand" href="../"><img src="../assets/img/logo.svg" alt="" width="30" height="30" /><span>Situ<b>Craft</b></span></a>
+          <p>A local-first workbench for imaging-based spatial transcriptomics: Xenium bundles checked, segmented, typed, reviewed and analyzed on your own computer, every decision on record. Free and open source under the Apache License 2.0.</p>
+        </div>
+        <div>
+          <h4>Product</h4>
+          <ul>
+            <li><a href="../#features">Features</a></li>
+            <li><a href="../install.html">Install</a></li>
+            <li><a href="../science.html">Science</a></li>
+            <li><a href="https://github.com/robert-mcdermott/situcraft/blob/main/CHANGELOG.md">Changelog</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Documentation</h4>
+          <ul>
+            <li><a href="../docs/getting-started.html">Getting started</a></li>
+            <li><a href="../docs/segmentations.html">Segmentations</a></li>
+            <li><a href="../docs/clusters.html">Cell types</a></li>
+            <li><a href="../docs/spatial.html">Spatial analysis</a></li>
+            <li><a href="../docs/troubleshooting.html">Troubleshooting</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Project</h4>
+          <ul>
+            <li><a href="https://github.com/robert-mcdermott/situcraft">GitHub</a></li>
+            <li><a href="https://github.com/robert-mcdermott/situcraft/releases">Releases</a></li>
+            <li><a href="https://github.com/robert-mcdermott/situcraft/issues">Issues</a></li>
+            <li><a href="../science.html#cite">Cite SituCraft</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">SituCraft is licensed under the Apache License 2.0. It is for research use only: it is not a medical device and makes no diagnostic claims. See <a href="../science.html#credits">credits</a>.</div>
+    </div>
+  </footer>
+</body>
+</html>

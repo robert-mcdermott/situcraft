@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sample summaries · SituCraft</title>
+  <meta name="description" content="SituCraft summarizes every sample of a cohort the same way: the same clustering, labels, graph and questions for each, then the cohort table of each sample's cells by label, niches found across the samples together, quality, spatial statistics and pseudobulk, each number traced to the artifact it came from." />
+  <link rel="canonical" href="https://robert-mcdermott.github.io/situcraft/docs/summaries.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Sample summaries" />
+  <meta property="og:description" content="SituCraft summarizes every sample of a cohort the same way: the same clustering, labels, graph and questions for each, then the cohort table of each sample's cells by label, niches found across the samples together, quality, spatial statistics and pseudobulk, each number traced to the artifact it came from." />
+  <meta property="og:url" content="https://robert-mcdermott.github.io/situcraft/docs/summaries.html" />
+  <meta property="og:image" content="https://robert-mcdermott.github.io/situcraft/assets/img/og-image.jpg" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="theme-color" content="#07090e" />
+  <link rel="icon" href="../assets/img/logo.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="../assets/css/site.css" />
+  <script>try { const t = localStorage.getItem('situcraft-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+  <script src="../assets/js/site.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="container">
+      <a class="brand" href="../"><img src="../assets/img/logo.svg" alt="" width="30" height="30" /><span>Situ<b>Craft</b></span></a>
+      <nav class="site-nav" id="site-nav" aria-label="Main">
+        <a href="../#features">Features</a>
+        <a href="../docs/" aria-current="page">Documentation</a>
+        <a href="../install.html">Install</a>
+        <a href="../science.html">Science</a>
+      </nav>
+      <div class="header-actions">
+        <a class="icon-button" href="https://github.com/robert-mcdermott/situcraft" aria-label="SituCraft on GitHub">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.71 1.26 3.37.96.1-.75.4-1.26.73-1.55-2.56-.29-5.25-1.28-5.25-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.7 5.4-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"/></svg>
+        </a>
+        <button class="icon-button theme-toggle" type="button" aria-label="Switch between light and dark">
+          <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        </button>
+        <button class="icon-button nav-toggle" type="button" aria-label="Menu" aria-controls="site-nav" aria-expanded="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <div class="docs-layout">
+    <aside class="docs-sidebar" aria-label="Documentation">
+      <button class="btn docs-menu-toggle" type="button" aria-expanded="false">Documentation menu <span aria-hidden="true">▾</span></button>
+      <nav>
+        <h4>Start</h4>
+        <ul>
+          <li><a href="./">Overview</a></li>
+          <li><a href="getting-started.html">Getting started</a></li>
+          <li><a href="opening-data.html">Opening a bundle</a></li>
+        </ul>
+        <h4>The tissue</h4>
+        <ul>
+          <li><a href="viewer.html">The Viewer</a></li>
+          <li><a href="qc.html">Quality control</a></li>
+        </ul>
+        <h4>Segmentations</h4>
+        <ul>
+          <li><a href="segmentations.html">Segmentations</a></li>
+          <li><a href="refinement.html">Refinement</a></li>
+          <li><a href="comparing.html">Comparing and deciding</a></li>
+          <li><a href="exports.html">Exports</a></li>
+        </ul>
+        <h4>Cell types</h4>
+        <ul>
+          <li><a href="clusters.html">Clusters and the map</a></li>
+          <li><a href="labels.html">Labels</a></li>
+        </ul>
+        <h4>Pathology</h4>
+        <ul>
+          <li><a href="images.html">Images and alignment</a></li>
+          <li><a href="regions.html">Regions and reviews</a></li>
+        </ul>
+        <h4>Spatial</h4>
+        <ul>
+          <li><a href="spatial.html">Spatial analysis</a></li>
+          <li><a href="niches.html">Niches and genes</a></li>
+        </ul>
+        <h4>Cohorts</h4>
+        <ul>
+          <li><a href="samples.html">Samples</a></li>
+          <li><a href="designs.html">The design</a></li>
+          <li><a href="summaries.html" aria-current="page">Sample summaries</a></li>
+          <li><a href="cohort-qc.html">Cohort QC</a></li>
+          <li><a href="abundance.html">Differential abundance</a></li>
+          <li><a href="expression.html">Differential expression</a></li>
+          <li><a href="spatial-tests.html">Spatial statistics between groups</a></li>
+          <li><a href="error-rates.html">Error rates and scale</a></li>
+        </ul>
+        <h4>Reference</h4>
+        <ul>
+          <li><a href="remote-control.html">Remote control</a></li>
+          <li><a href="record.html">The record</a></li>
+          <li><a href="troubleshooting.html">Troubleshooting</a></li>
+        </ul>
+      </nav>
+    </aside>
+
+    <main id="main" class="doc">
+      <h1>Sample summaries</h1>
+      <p class="doc-lede">Before groups of samples can be compared, every sample has to be measured the same way. SituCraft runs the same steps on each, then writes the cohort table, a row for each number of each sample, with the artifact it came from.</p>
+
+      <h2 id="steps">The same steps on every sample</h2>
+      <p>The Cohort view's <strong>The same steps on every sample</strong> runs each step on every sample, with the same parameters:</p>
+      <ul>
+        <li><strong>Clustering and labels.</strong> Each dataset's cells are clustered with SituCraft's defaults (on its default segmentation) and labeled from one marker set or one reference. Every sample's labels then have the same names, and a sample with no cells of one type counts that type as none instead of leaving it out. <strong>Labels from</strong> chooses the set: one of the project's, SituCraft's starter set that fits the first sample's panel (then used for the rest), or a labeled single-cell reference on this computer, every sample labeled from it.</li>
+        <li><strong>A graph of each sample's cells.</strong> A region sample's graph is of its region's cells. Cells a review excluded are left out. See <a href="spatial.html">Spatial analysis</a>.</li>
+        <li><strong>The same questions of each:</strong> neighborhood enrichment over the graph, nearest distances, and spatially variable genes (Moran's I), with their defaults.</li>
+      </ul>
+      <p>A step made already is answered at once. Running the steps again after adding a sample makes only that sample's. The table below the button shows what each sample has: its labels, its graph and its answers.</p>
+
+      <h2 id="table">The cohort table</h2>
+      <p><strong>Summarize the samples</strong> writes the cohort table, an artifact of its own. For each sample it holds:</p>
+      <ul>
+        <li><strong>Cells by label:</strong> each label's cells, their share of the sample's labeled cells, and their density per mm² of its tissue. The tissue is the area within the tissue's outline, and a region sample's is the tissue within its region.</li>
+        <li><strong>Niches' shares:</strong> the share of its cells in each niche. The niches are found across the samples together (below).</li>
+        <li><strong>Quality:</strong> its cells, cells per mm², median transcripts, genes and cell and nucleus areas, the share of cells with a nucleus or without a transcript, and transcripts per 100 µm².</li>
+        <li><strong>Its graph's numbers:</strong> mean neighbors, median edge length, pieces, and the share of cells without a neighbor.</li>
+        <li><strong>Its answers' numbers:</strong> each pair of labels' enrichment ratio (neighbors found over expected), each label's median nearest distance to each, and each gene's Moran's I.</li>
+        <li><strong>Its pseudobulk:</strong> each label's cells' transcripts summed gene by gene, the counts a comparison between groups of samples starts from (Crowell et al. 2020). Where samples have different panels, a gene one panel lacks is left empty, never zero.</li>
+      </ul>
+      <p>Each number is traced to the artifact it came from: a count, share or density to the sample's labels, a quality number to its segmentation, and a graph's or answer's number to that graph or answer. The view shows one family of numbers at a time, with a sample per row; each cell's tip names its source.</p>
+      <figure>
+        <div class="shot"><img class="shot-dark" src="../assets/img/summary-dark.webp" width="2000" height="1250" loading="lazy" alt="The Cohort view's cohort table of the simulated cohort: each of its eight samples' shares of its four labels, with the summary's niches and the buttons that write the table and the pseudobulk as CSV" /><img class="shot-light" src="../assets/img/summary-light.webp" width="2000" height="1250" loading="lazy" alt="The Cohort view's cohort table of the simulated cohort: each of its eight samples' shares of its four labels, with the summary's niches and the buttons that write the table and the pseudobulk as CSV" /></div>
+        <figcaption>The simulated cohort's eight samples, each one's shares of its labeled cells.</figcaption>
+      </figure>
+
+      <h2 id="niches">Niches across the samples</h2>
+      <p>Niches found in each sample alone are numbered by each sample's own k-means: niche 3 of one sample need not be niche 3 of another. To make a niche the same kind of place in every sample, SituCraft finds them across the samples together. Each cell's window is its nearest labeled cells in its own sample. The windows of every sample are pooled, and one k-means groups them all. See <a href="niches.html#niches">Niches and genes</a> for the windows and k-means. A niche's share in a sample is then comparable between samples.</p>
+      <p>The view lists each niche's cells across the samples and the labels that define it: those whose share of its windows is at least 1.5 times their share of all the samples' labeled cells. Found for one sample alone, the niches are exactly those the Spatial view finds with the same parameters.</p>
+
+      <h2 id="files">The files</h2>
+      <p><strong>The cohort table (CSV)</strong> writes every number, a row each: the sample, its name, the family, what the number is of, its value, and the artifact it came from. <strong>The pseudobulk (CSV)</strong> writes a row for each sample's label, with its cells and a column for each gene. <strong>These as CSV</strong> writes the family shown as a wide table, a row a sample and a column each number. The summary's files are described in <a href="https://github.com/robert-mcdermott/situcraft/blob/main/docs/FORMATS.md#cohort-summaries">FORMATS.md</a>.</p>
+      <p>By remote control, <code>cohort_steps</code> runs the steps, <code>summarize_samples</code> makes the summary (of every sample, or those named), <code>cohort_table</code> reads one family of its numbers, and <code>export</code> writes the table or the pseudobulk. See <a href="remote-control.html">Remote control</a>.</p>
+
+      <h2 id="checked">How it is checked</h2>
+      <p>The validation suite summarizes the simulated cohort and checks:</p>
+      <ul>
+        <li>Every number equals the artifact's it came from: each label's cells its labels', each ratio, distance and Moran's I its answer's, each graph number the graph's.</li>
+        <li>Each sample's shares come within 0.03 of its true types' shares, and its tissue within 2% of the simulated section's area.</li>
+        <li>The pseudobulk's level of the gene the simulation raised in one type comes within 0.15 (natural log) of the truth's.</li>
+        <li>The niches found together agree with each sample's own, and for one sample alone are exactly its own.</li>
+      </ul>
+
+      <nav class="doc-pager" aria-label="Pages">
+        <a class="prev" href="designs.html"><span>Previous</span>The design</a>
+        <a class="next" href="cohort-qc.html"><span>Next</span>Cohort QC</a>
+      </nav>
+    </main>
+
+    <aside class="toc" aria-label="On this page">
+      <h4>On this page</h4>
+      <ul></ul>
+    </aside>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-about">
+          <a class="brand" href="../"><img src="../assets/img/logo.svg" alt="" width="30" height="30" /><span>Situ<b>Craft</b></span></a>
+          <p>A local-first workbench for imaging-based spatial transcriptomics: Xenium bundles checked, segmented, typed, reviewed and analyzed on your own computer, every decision on record. Free and open source under the Apache License 2.0.</p>
+        </div>
+        <div>
+          <h4>Product</h4>
+          <ul>
+            <li><a href="../#features">Features</a></li>
+            <li><a href="../install.html">Install</a></li>
+            <li><a href="../science.html">Science</a></li>
+            <li><a href="https://github.com/robert-mcdermott/situcraft/blob/main/CHANGELOG.md">Changelog</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Documentation</h4>
+          <ul>
+            <li><a href="../docs/getting-started.html">Getting started</a></li>
+            <li><a href="../docs/segmentations.html">Segmentations</a></li>
+            <li><a href="../docs/clusters.html">Cell types</a></li>
+            <li><a href="../docs/spatial.html">Spatial analysis</a></li>
+            <li><a href="../docs/troubleshooting.html">Troubleshooting</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Project</h4>
+          <ul>
+            <li><a href="https://github.com/robert-mcdermott/situcraft">GitHub</a></li>
+            <li><a href="https://github.com/robert-mcdermott/situcraft/releases">Releases</a></li>
+            <li><a href="https://github.com/robert-mcdermott/situcraft/issues">Issues</a></li>
+            <li><a href="../science.html#cite">Cite SituCraft</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">SituCraft is licensed under the Apache License 2.0. It is for research use only: it is not a medical device and makes no diagnostic claims. See <a href="../science.html#credits">credits</a>.</div>
+    </div>
+  </footer>
+</body>
+</html>
