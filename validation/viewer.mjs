@@ -2228,7 +2228,7 @@ export async function viewerSuite({ check, MissingData, verbose }) {
           const marked = Object.entries(own).map(([name, words]) => ({ name, words, row: walked.folder.find((r) => r.name === name) }));
           check('viewer', 'Open a bundle: the folder browser walks to the bundles\' folder, each bundle marked with its run, region and cells as its manifest says; a file\'s path lists its bundle with the file chosen; a bundle double-clicked opens where it is',
             `${JSON.stringify(marked.map((m) => [m.name, m.row?.kind]))}; inside ${JSON.stringify(walked.inside)}; opened ${openedNow.map((f) => f.name).join(', ')}`,
-            marked.length >= 2 && marked.every((m) => m.row && m.row.kind === (m.words || 'Xenium bundle') && !m.row.dim)
+            marked.length >= 1 && marked.every((m) => m.row && m.row.kind === (m.words || 'Xenium bundle') && !m.row.dim)
             && /xenium-lung-2fov is a Xenium bundle/.test(walked.inside.banner) && walked.inside.chosen.join() === 'gene_panel.json'
             && walked.closed && openedNow.some((f) => f.kind === 'bundle' && f.path === join(dataRoot, 'xenium-lung-2fov')),
             'every bundle marked as its manifest says; gene_panel.json chosen inside the Lung bundle; the Lung bundle opened');
@@ -2322,7 +2322,11 @@ export async function viewerSuite({ check, MissingData, verbose }) {
         // panel the same in every sample, the truth's cells each bundle's own, the table the
         // samples', and every effect as the truth measures it the suite's own from its counts.
         {
+          // In a project of its own (an empty one would take it in, whatever its name), reopened
+          // later by its id.
+          await act('new_project', {});
           const made = await act('open_example', { example: 'cohort' });
+          const cohortProject = await chrome.eval('window.situcraft.store.project.id');
           const listed = await act('samples');
           const cs = listed.data?.samples ?? [];
           const examplesNow = await json(`${url}/api/examples`);
@@ -2381,7 +2385,7 @@ export async function viewerSuite({ check, MissingData, verbose }) {
           await act('set_samples', { values: Object.fromEntries(cs.map((s, k) => [s.sample, { subject: `D${(k % 4) + 1}` }])) });
           const paired = await act('design', { unit: 'subject', group: 'condition', reference: 'control', save: 'Main' });
           await act('new_project', { name: 'Elsewhere' });
-          await act('open_project', { project: 'A simulated cohort example' });
+          await act('open_project', { project: cohortProject });
           const kept = await act('design');
           check('viewer', 'the design: the cohort\'s subjects compared by condition and adjusted for the slide; a field confounded with the condition, and a group of one subject, refused and not saved; the subjects paired; versions kept with the project', `${adjusted.message ?? adjusted.error} | ${confounded.message ?? confounded.error} | ${notSaved.message ?? notSaved.error} | ${one.message ?? one.error} | ${paired.message ?? paired.error} | ${kept.message ?? kept.error}`,
             adjusted.ok && ad.ok && ad.names?.join() === 'Intercept,condition[T.treated],slide[T.simulated slide 2]' && ad.rows.length === 8 && ad.rank === 3 && ad.df === 5 && ad.matrix[1].join() === '1,0,1' && /4 subjects in control, 4 subjects in treated/.test(adjusted.message)
@@ -2477,6 +2481,7 @@ export async function viewerSuite({ check, MissingData, verbose }) {
           const together = await cohortNiches(sd.id);
           const ownNiches = async (st) => {
             const own = await act('spatial_analysis', { question: 'niches', dataset: st.name, labels: st.labels, neighbors: 10, niches: 6, starts: 10, seeds: 4, seed: 20250 });
+            if (!own.ok) return new Map();
             const cv = new DataView(await (await fetch(`${url}/api/analyses/${encodeURIComponent(own.data?.id ?? '')}/cells`)).arrayBuffer());
             const m = cv.byteLength >= 4 ? cv.getUint32(0, true) : 0;
             const of = new Map();
@@ -2554,7 +2559,7 @@ export async function viewerSuite({ check, MissingData, verbose }) {
           // the ratio the true cells show; a sample's cells of a label shown on its tissue, as many as
           // the summary counts. A null cohort labeled from its own single-cell reference: its shares
           // the true types', and nothing found.
-          await act('open_project', { project: 'A simulated cohort example' });
+          await act('open_project', { project: cohortProject });
           await act('set_samples', { values: Object.fromEntries(cs.map((x) => [x.sample, { subject: x.sample }])) });
           await act('design', { unit: 'subject', group: 'condition', reference: 'control' });
           const da = await act('compare_abundance', { summary: sd.id });
@@ -2630,7 +2635,7 @@ export async function viewerSuite({ check, MissingData, verbose }) {
           const nullDE = await act('compare_expression', {});
           const nullSpatial = await act('compare_spatial', {});
           const nullFound = (nullDE.data?.labels ?? []).flatMap((l) => (l.contrasts ?? []).flatMap((c) => c.found));
-          await act('open_project', { project: 'A simulated cohort example' });
+          await act('open_project', { project: cohortProject });
           const de = await act('compare_expression', { summary: sd.id });
           const epi = (de.data?.labels ?? []).find((l) => l.label === 'epithelial-like');
           const sim033 = epi?.contrasts?.[0]?.found.find((x) => x.gene === 'SIM033');

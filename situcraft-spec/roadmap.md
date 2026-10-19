@@ -3352,6 +3352,12 @@ makes, which SituCraft refuses.
        cells, whose true expression did not change: transcripts read into their outlines. Found
        paired, not with the sections as units; stated in the worked example and on the expression
        page.
+     - **CI's viewer suite has the Lung bundle alone:** since the folder browser, three checks
+       assumed the Breast bundle too (two bundles to mark; the cohort's project named only when the
+       Breast checks had left one with datasets, then reopened by that name; an analysis's failure
+       read as a file), and CI failed on each push. Each now holds with the Lung bundle alone (the
+       cohort in a project of its own, reopened by its id), checked locally with
+       `SITUCRAFT_DATA` holding the Lung bundle alone.
 
 ## 0.8.0: figures and a provable record (wave 8)
 
