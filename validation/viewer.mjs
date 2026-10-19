@@ -70,6 +70,7 @@ import { fileURLToPath } from 'node:url';
 import { findChrome, launch, sleep } from './cdp.mjs';
 import { inflateSync } from 'node:zlib';
 import { attributeRange, readCells } from '../web/lib/viewer-data.js';
+import { contingency } from '../web/lib/clusterings.js';
 import { certaintyColor, readSegCells } from '../web/lib/segview.js';
 import { colormapLUT, hexToRgb } from '../web/lib/colormaps.js';
 import { placePoint } from '../web/lib/transforms.js';
@@ -2343,6 +2344,130 @@ export async function viewerSuite({ check, MissingData, verbose }) {
             && saved1.data?.saved?.version === 1 && paired.data?.paired === true && paired.data.df === 3 && paired.data.names.join() === 'Intercept,condition[T.treated],subject[T.D2],subject[T.D3],subject[T.D4]' && paired.data.saved?.version === 2
             && kept.ok && kept.data.paired === true && kept.data.df === 3,
             'adjusted: 3 coefficients over 8 rows, 5 df; refused twice; paired: 5 over 8, 3 df, version 2; kept');
+
+          // Summaries (wave 7, slice 4), on the simulated cohort: the same steps on every sample
+          // (clustered, labeled from one marker set, a graph and three questions each; asked again,
+          // answered at once), summarized; every number against the artifact it came from; the true
+          // values (each sample's shares its true types', its tissue the section's, the pseudobulk's
+          // SIM033 among epithelial-like transcripts the truth's); the niches found together against
+          // each sample's own (one sample alone: exactly its own), their defining labels the
+          // simulator's domain leaders.
+          const steps = await act('cohort_steps', { questions: ['enrichment', 'distances', 'moran'] });
+          const stepsAgain = await act('cohort_steps', { questions: ['enrichment', 'distances', 'moran'] });
+          const summary = await act('summarize_samples', {});
+          const sd = summary.data ?? {};
+          const art = (id, file) => json(`${url}/api/artifacts/${encodeURIComponent(id)}/files/${file}`);
+          const tableOf = async (family) => (await act('cohort_table', { family })).data;
+          const [tCells, tShare, tDensity, tQC, tGraph, tEnrichment, tNearest, tMoran] = await Promise.all(['cells', 'share', 'density', 'qc', 'graph', 'enrichment', 'nearest', 'moran'].map(tableOf));
+          const cohortNames = sd.labels?.names ?? [];
+          const off = [];
+          let compared = 0;
+          const agree = (ok, what) => {
+            compared += 1;
+            if (!ok) off.push(what);
+          };
+          for (const st of steps.data?.samples ?? []) {
+            const row = (t) => t?.samples.find((x) => x.sample === st.sample) ?? { values: {}, sources: {} };
+            const labelsDoc = await art(st.labels, 'labels.json');
+            for (const set of labelsDoc.sets) agree(row(tCells).values[set.name] === set.cells && row(tCells).sources[set.name] === st.labels, `${st.name} ${set.name} cells`);
+            const labeled = cohortNames.reduce((n, l) => n + row(tCells).values[l], 0);
+            agree(labeled === labelsDoc.cells.labeled[0], `${st.name} labeled`);
+            const tissueArea = row(tQC).values['tissue area µm²'];
+            for (const l of cohortNames) {
+              agree(row(tShare).values[l] === row(tCells).values[l] / labeled, `${st.name} ${l} share`);
+              agree(Math.abs(row(tDensity).values[l] - row(tCells).values[l] / (tissueArea / 1e6)) <= 1e-9 * row(tDensity).values[l], `${st.name} ${l} density`);
+            }
+            const gm = await json(`${url}/api/artifacts/${encodeURIComponent(st.graph)}`);
+            agree(row(tGraph).values['mean neighbors'] === gm.summary.meanDegree && row(tGraph).values['median edge µm'] === gm.summary.medianLength && row(tGraph).values.pieces === gm.summary.components && row(tGraph).sources['mean neighbors'] === st.graph, `${st.name} graph`);
+            for (const a of st.answers) {
+              const an = await art(a.id, 'analysis.json');
+              const n = an.labels?.names ?? [];
+              const K = n.length;
+              if (a.question === 'enrichment') {
+                for (let x = 0; x < K; x += 1) {
+                  for (let y = x; y < K; y += 1) {
+                    const q = x * K + y;
+                    const key = [n[x], n[y]].sort().join('|');
+                    if (an.enrichment.expected[q] > 0) agree(row(tEnrichment).values[key] === an.enrichment.count[q] / an.enrichment.expected[q] && row(tEnrichment).sources[key] === a.id, `${st.name} enrichment ${key}`);
+                  }
+                }
+              } else if (a.question === 'distances') {
+                for (let x = 0; x < K; x += 1) {
+                  for (let y = 0; y < K; y += 1) {
+                    const key = `${n[x]}→${n[y]}`;
+                    const v = an.nearest.median[x * K + y];
+                    agree(v === null ? row(tNearest).values[key] === null : row(tNearest).values[key] === v && row(tNearest).sources[key] === a.id, `${st.name} nearest ${key}`);
+                  }
+                }
+              } else an.moran.genes.forEach((g, k) => agree(row(tMoran).values[g] === an.moran.i[k], `${st.name} Moran's I of ${g}`));
+            }
+          }
+          // The true values.
+          const cohortTruth = JSON.parse(readFileSync(join(cohortDir, 'truth/cohort.json'), 'utf8'));
+          const pbRows = (await (await fetch(`${url}/api/artifacts/${encodeURIComponent(sd.id ?? '')}/files/pseudobulk.csv`)).text()).trim().split('\n').map((l) => l.split(','));
+          const pbGenes = pbRows[0].slice(4);
+          const truthOff = cohortTruth.samples.map((t) => {
+            const r = tCells?.samples.find((x) => x.name === t.name);
+            if (!r) return { sample: t.name, shares: Infinity, tissue: Infinity, level: Infinity };
+            const total = Object.values(t.cells_by_type).reduce((n, v) => n + v, 0);
+            const labeled = cohortNames.reduce((n, l) => n + r.values[l], 0);
+            const shares = Math.max(...cohortNames.map((l) => Math.abs(r.values[l] / labeled - (t.cells_by_type[l] ?? 0) / total)));
+            const tissueArea = tQC.samples.find((x) => x.name === t.name).values['tissue area µm²'];
+            const lv = t.levels.find((x) => x.type === 'epithelial-like' && x.gene === 'SIM033');
+            const pr = pbRows.find((x) => x[1] === t.name && x[2] === 'epithelial-like');
+            const sum = pbGenes.reduce((n, g, k) => n + Number(pr[4 + k]), 0);
+            const level = Math.log((Number(pr[4 + pbGenes.indexOf('SIM033')]) / sum) / (lv.transcripts / lv.type_transcripts));
+            return { sample: t.name, shares: Number(shares.toFixed(4)), tissue: Number((tissueArea / (250 * 250) - 1).toFixed(4)), level: Number(level.toFixed(4)) };
+          });
+          // The niches found together against each sample's own, with the same parameters.
+          // A summary's niches.bin (its envelope, then zlib: the cells, each one's row and niche).
+          const cohortNiches = async (id) => {
+            const raw = Buffer.from(await (await fetch(`${url}/api/artifacts/${encodeURIComponent(id ?? '')}/files/niches.bin`)).arrayBuffer());
+            if (raw.subarray(0, 4).toString() !== 'SCCN') return { n: 0, row: () => 0, niche: () => -1 };
+            const body = inflateSync(raw.subarray(16));
+            const n = body.readUInt32LE(0);
+            return { n, row: (i) => body.readUInt32LE(4 + 4 * i), niche: (i) => body.readInt32LE(4 + 4 * n + 4 * i) };
+          };
+          const together = await cohortNiches(sd.id);
+          const ownNiches = async (st) => {
+            const own = await act('spatial_analysis', { question: 'niches', dataset: st.name, labels: st.labels, neighbors: 10, niches: 6, starts: 10, seeds: 4, seed: 20250 });
+            const cv = new DataView(await (await fetch(`${url}/api/analyses/${encodeURIComponent(own.data?.id ?? '')}/cells`)).arrayBuffer());
+            const m = cv.byteLength >= 4 ? cv.getUint32(0, true) : 0;
+            const of = new Map();
+            for (let i = 0; i < m; i += 1) of.set(cv.getUint32(4 + 4 * i, true), cv.getInt32(4 + 8 * m + 4 * i, true) - 1);
+            return of;
+          };
+          const aris = [];
+          let at = 0;
+          for (const st of steps.data?.samples ?? []) {
+            const of = await ownNiches(st);
+            const n = sd.samples?.find((x) => x.sample === st.sample)?.cells ?? 0;
+            const a = [];
+            const b = [];
+            for (let i = at; i < at + n && i < together.n; i += 1) {
+              a.push(together.niche(i));
+              b.push(of.get(together.row(i)) ?? -1);
+            }
+            at += n;
+            aris.push(Number(contingency(a, b, 6, 6).ari.toFixed(3)));
+          }
+          const alone = await act('summarize_samples', { samples: ['S01'] });
+          const aloneNiches = await cohortNiches(alone.data?.id);
+          const aloneOwn = await ownNiches(steps.data?.samples?.[0] ?? {});
+          const aloneN = aloneNiches.n;
+          let aloneSame = 0;
+          for (let i = 0; i < aloneN; i += 1) if (aloneNiches.niche(i) === aloneOwn.get(aloneNiches.row(i))) aloneSame += 1;
+          const leaders = new Set(cohortTruth.samples.flatMap((t) => t.domains.map((x) => x.leader)));
+          const defining = new Set((sd.niches ?? []).flatMap((x) => x.defining));
+          check('viewer', 'the cohort summarized (wave 7, slice 4): the same steps on every sample, answered at once when asked again; every number the artifact\'s it came from; the shares, tissue and a gene\'s level the truth\'s; the niches found together near each sample\'s own, exactly its own for one sample alone, and defined by the simulator\'s domain leaders',
+            `${steps.message ?? steps.error} | ${summary.message ?? summary.error} | ${compared} numbers compared, off: ${off.slice(0, 5).join('; ') || 'none'} | truth ${JSON.stringify(truthOff)} | niches' ARI ${aris.join(' ')}; alone ${aloneSame} of ${aloneN} | leaders ${[...leaders].sort().join(', ')}; defining ${[...defining].sort().join(', ')}`,
+            steps.ok && steps.data.samples.length === 8 && steps.data.samples.every((x) => x.answers.length === 3) && stepsAgain.ok && JSON.stringify(stepsAgain.data) === JSON.stringify(steps.data)
+            && summary.ok && sd.samples.length === 8 && cohortNames.length === 4 && sd.niches?.length === 6 && sd.genes === 120
+            && compared >= 8 * (4 * 3 + 2 + 10 + 16 + 120) && off.length === 0
+            && truthOff.every((x) => x.shares < 0.03 && Math.abs(x.tissue) < 0.02 && Math.abs(x.level) < 0.15)
+            && aris.length === 8 && aris.every((x) => x > 0.45) && alone.ok && aloneN === sd.samples[0].cells && aloneSame === aloneN
+            && [...leaders].every((l) => defining.has(l)),
+            'every number its source\'s; shares within 0.03 of the truth\'s, tissue within 2%, SIM033 within 0.15 (log); ARI above 0.45 each; one sample alone exactly its own; every leader defines a niche');
         }
       }
 

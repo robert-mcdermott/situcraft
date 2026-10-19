@@ -625,6 +625,18 @@ const scenes = {
     await scrollTo('.cohort-design');
     await clearToasts();
   },
+  // Summaries (wave 7, slice 4): the same steps on every sample of the simulated cohort, the samples
+  // summarized, and the cohort table's shares of the labeled cells.
+  async summary() {
+    await act('open_example', { example: 'cohort' });
+    await act('cohort_steps', { questions: ['enrichment'] });
+    await act('summarize_samples', {});
+    await act('cohort_table', { family: 'share' });
+    await js(`document.getElementById('app').classList.add('inspector-closed')`);
+    await sleep(600);
+    await scrollTo('.cohort-summary');
+    await clearToasts();
+  },
   // The Jobs view after both examples were opened: each job's state and times, one's log open.
   async jobs() {
     await act('open_example', { example: 'lung' });

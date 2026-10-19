@@ -3052,18 +3052,53 @@ makes, which SituCraft refuses.
    - Found by slice 3:
      - **patsy orders a formula's numeric terms after its factors,** whatever their order in the
        formula; SituCraft orders them the same, so that the columns match.
-4. **Sample summaries (H2).**
-   - **The same steps on every sample in one step:** clustering and labels from the same marker set
-     or reference (so that labels have the same names), graphs and spatial questions with the same
-     parameters; niches found across the samples together, so that a niche is the same kind of
-     place in every sample.
-   - **The cohort table:** each sample's cells by label (counts, shares, densities per mm² of its
-     tissue), its niches' shares, its QC metrics, its graph's numbers, its spatial statistics (an
-     enrichment's ratios, nearest distances, a gene's Moran's I) and its pseudobulk counts by label
-     and gene; each number traced to the artifact it came from. An artifact of kind
-     `cohort-summary`; written as CSV.
-   - Validation: each number against its sample's own artifact; niches found together against each
-     sample's own; on the simulated cohort, the true values.
+4. **Sample summaries (H2): done.**
+   - **The same steps on every sample in one step** (`ui/cohort-summary.js`): each dataset's cells
+     clustered with SituCraft's defaults and labeled from one marker set (a starter resolved on the
+     first dataset, then used for the rest), so that labels have the same names; a graph of each
+     sample's cells (a region sample's, its region's; never those a review excluded) and the same
+     questions with the same parameters (neighborhood enrichment, nearest distances, Moran's I).
+     Every step is named by what it is made from, so a step made already is answered at once.
+   - **Niches across the samples** (`internal/spatial` `FindNichesAcross`, research.md §6.10): each
+     sample's windows on its own cells, pooled, one k-means (the same starts, seeds and agreement as
+     a sample's niches); for one sample, exactly that sample's niches.
+   - **The cohort table** (`internal/cohort`, `api_cohort.go`, `POST /api/cohort/summary`): each
+     sample's cells by label (counts, shares, densities per mm² of its tissue window, within its
+     region for a region sample), its niches' shares, its QC metrics, its graph's numbers, its
+     spatial statistics (an enrichment's ratios, nearest distances' medians, each gene's Moran's I)
+     and its pseudobulk by label and gene (a gene a panel lacks missing, not zero); each number
+     traced to the artifact it came from. An artifact of kind `cohort-summary`: `summary.json`,
+     `pseudobulk.bin`, `niches.bin`, `table.csv` (a row each number, with its source) and
+     `pseudobulk.csv`. The Cohort view shows a family at a time; the project tree's **Summaries**.
+     Remote control: `cohort_steps`, `summarize_samples`, `cohort_table`; `export` writes the table
+     and the pseudobulk.
+   - Validation:
+     - **By hand** (`internal/cohort`): five cells' counts, shares, densities, quality and pseudobulk
+       worked out; the tables read back to every digit, a gene a panel lacks empty; refusals.
+     - **Niches across samples** (`internal/spatial`): stripes of two samples found together
+       (adjusted Rand index 0.98 against the truth), each sample's windows its own, one sample alone
+       exactly its niches, a sample of one cell refused.
+     - **In Go** (`api_cohort_test.go`): a section and a region of it summarized; each count, the
+       pseudobulk's total, the region's tissue, the graph's and enrichment's numbers and the table
+       against the cells and the other artifacts; asked again, answered at once; six refusals.
+     - **In the page** (viewer suite): the simulated cohort's eight samples through the steps and
+       summarized; each of 1,280 numbers equal to the artifact's it came from; each sample's shares
+       within 0.03 of its true types' (0.015 at most), its tissue within 2% of the section's
+       (0.6%), the pseudobulk's SIM033 among epithelial-like transcripts within 0.15 of the truth's
+       on the log scale (0.065); the niches found together against each sample's own (adjusted
+       Rand index 0.56 to 0.82), one sample alone exactly its own; each domain's leading type
+       defining a niche.
+   - Found by slice 4:
+     - **Labels from a reference are not yet one of the steps:** the steps label from a marker set.
+       A reference's labels are named by the reference, so the same reference gives every sample
+       the same names; the steps will offer it with differential abundance (slice 6).
+     - **Joint niches are not each sample's own,** nor should they be: one k-means over the pooled
+       windows places the centers where all the samples' places are, so a sample's cells divide a
+       little differently (the Rand index above); what is gained is that niche 3 is one kind of
+       place in every sample.
+     - **The pseudobulk is of the cells' assigned transcripts:** a few of a type's transcripts land
+       in a neighbor's cell, so a gene raised in one type reads a little lower in its cells'
+       pseudobulk than in the true cells (0.04 to 0.065 on the log scale here).
 5. **Cohort QC, batches and panels (Q5, H4, H5).**
    - Each QC metric by sample, side by side and by batch; outlying samples flagged by robust
      z-scores (the median and the median absolute deviation) with the reason, no pass or fail; a
@@ -3082,6 +3117,7 @@ makes, which SituCraft refuses.
      Effect sizes (the share's ratio) with intervals, raw and Benjamini–Hochberg-adjusted p-values,
      the tests' universe recorded.
    - A result's samples as points by group; a sample's cells of that label on its tissue.
+   - The same steps on every sample also label from a reference (slice 4 labels from a marker set).
    - Validation: against statsmodels' GLM on the same tables; on simulated cohorts, the known
      shifts within their intervals, and error rates on null cohorts.
 7. **Differential expression and spatial statistics (H3).**

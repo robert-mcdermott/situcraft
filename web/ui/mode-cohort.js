@@ -1,8 +1,9 @@
 // The Cohort view (wave 7): a study's sections compared as samples. Slice 1: the samples, each
 // dataset a sample or its regions instead (a tissue microarray's cores, sections on one slide),
 // with the user's fields and those read from each bundle, written and read as CSV (lib/samples.js).
-// Slice 3: the design (ui/cohort-design.js). The samples' summaries and the comparisons come in the
-// slices after (situcraft-spec/roadmap.md, wave 7).
+// Slice 3: the design (ui/cohort-design.js). Slice 4: the same steps on every sample and the cohort
+// table (ui/cohort-summary.js). The comparisons come in the slices after (situcraft-spec/roadmap.md,
+// wave 7).
 
 import { h, icon, clear, downloadBlob, formatCount } from './dom.js';
 import { confirmDialog, toast } from './overlays.js';
@@ -11,6 +12,7 @@ import { area, cellsIn, regionsOf } from '../lib/regions.js';
 import { readCells } from '../lib/viewer-data.js';
 import { readSegCells } from '../lib/segview.js';
 import { designSection, setDraft } from './cohort-design.js';
+import { cohortSession, runSteps, stepsSection, summarize, summarySection, summaryTable, updateSummaryProgress } from './cohort-summary.js';
 import { BUNDLE_FIELDS, FIELD_KINDS, addSampleField, fieldValue, readSamplesTable, removeSampleField, renameSample, renameSampleField, sampleFields, samplesCSV, samplesOf, setFieldKind, setRegionSamples, setSampleField } from '../lib/samples.js';
 
 const exact = (v) => (Number.isFinite(v) ? v.toLocaleString('en-US') : '—');
@@ -271,6 +273,7 @@ export function mountCohort(app, container) {
     const regions = regionsSection(project, samples);
     if (regions) body.append(regions);
     body.append(designSection(app, { commit, redraw: () => schedule() }));
+    body.append(stepsSection(app, { cellsOf, redraw: () => schedule() }), summarySection(app, { cellsOf, redraw: () => schedule() }));
     const focus = app.store.ui.focus?.kind === 'sample' ? app.store.ui.focus.id : null;
     if (focus) body.querySelector(`tr[data-sample="${CSS.escape(focus)}"]`)?.scrollIntoView({ block: 'nearest' });
   }
@@ -317,6 +320,25 @@ export function mountCohort(app, container) {
       setDraft(app.store.project, spec, name);
       schedule();
     },
+    // Runs the same steps on every sample (cohort-summary.js runSteps): { markers, level, kind,
+    // questions }; answers what each sample has.
+    steps: (options = {}) => runSteps(app, cellsOf, options, (text, done, total) => {
+      cohortSession.running = done < total ? { text, done, total } : null;
+      schedule();
+    }).finally(() => {
+      cohortSession.running = null;
+      schedule();
+    }),
+    // Summarizes the samples (cohort-summary.js summarize): { markerSet, level, niches }; answers the
+    // summary's manifest, shown in the view.
+    summarize: (options = {}) => summarize(app, cellsOf, options, () => schedule()),
+    // A summary's table (lib/cohort.js readCohortTable), shown in the view.
+    table: async (id, family = null) => {
+      cohortSession.shown = id;
+      if (family) cohortSession.family = family;
+      schedule();
+      return summaryTable(id);
+    },
     // Each sample's cells as the table shows them, counted where they need counting.
     async cells() {
       for (let k = 0; k < 600; k += 1) {
@@ -332,12 +354,14 @@ export function mountCohort(app, container) {
     update(topics) {
       // A design chosen in the project tree is shown in the Design section.
       const focus = app.store.ui.focus;
+      if (topics.has('focus') && focus?.kind === 'cohort-summary') cohortSession.shown = focus.id;
       if (topics.has('focus') && focus?.kind === 'design' && focus.id !== shownDesign) {
         const d = app.store.project.artifacts.find((a) => a.kind === 'design' && a.id === focus.id);
         if (d) setDraft(app.store.project, d.spec, d.name);
         shownDesign = focus.id;
       }
       if (topics.has('project') || topics.has('project-loaded') || topics.has('focus') || topics.has('bundles') || topics.has('local') || topics.has('mode')) schedule();
+      else if (topics.has('jobs')) updateSummaryProgress(root, app);
     },
     destroy() {
       if (app.cohortView) delete app.cohortView;

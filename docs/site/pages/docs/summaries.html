@@ -1,0 +1,43 @@
+---
+title: Sample summaries
+description: SituCraft summarizes every sample of a cohort the same way: the same clustering, labels, graph and questions for each, then the cohort table of each sample's cells by label, niches found across the samples together, quality, spatial statistics and pseudobulk, each number traced to the artifact it came from.
+lede: Before groups of samples can be compared, every sample has to be measured the same way. SituCraft runs the same steps on each, then writes the cohort table, a row for each number of each sample, with the artifact it came from.
+---
+      <h2 id="steps">The same steps on every sample</h2>
+      <p>The Cohort view's <strong>The same steps on every sample</strong> runs each step on every sample, with the same parameters:</p>
+      <ul>
+        <li><strong>Clustering and labels.</strong> Each dataset's cells are clustered with SituCraft's defaults (on its default segmentation) and labeled from one marker set. Every sample's labels then have the same names, and a sample with no cells of one type counts that type as none instead of leaving it out. <strong>Labels from</strong> chooses the set: one of the project's, or SituCraft's starter set that fits the first sample's panel, which is then used for the rest.</li>
+        <li><strong>A graph of each sample's cells.</strong> A region sample's graph is of its region's cells. Cells a review excluded are left out. See <a href="spatial.html">Spatial analysis</a>.</li>
+        <li><strong>The same questions of each:</strong> neighborhood enrichment over the graph, nearest distances, and spatially variable genes (Moran's I), with their defaults.</li>
+      </ul>
+      <p>A step made already is answered at once. Running the steps again after adding a sample makes only that sample's. The table below the button shows what each sample has: its labels, its graph and its answers.</p>
+
+      <h2 id="table">The cohort table</h2>
+      <p><strong>Summarize the samples</strong> writes the cohort table, an artifact of its own. For each sample it holds:</p>
+      <ul>
+        <li><strong>Cells by label:</strong> each label's cells, their share of the sample's labeled cells, and their density per mm² of its tissue. The tissue is the area within the tissue's outline, and a region sample's is the tissue within its region.</li>
+        <li><strong>Niches' shares:</strong> the share of its cells in each niche. The niches are found across the samples together (below).</li>
+        <li><strong>Quality:</strong> its cells, cells per mm², median transcripts, genes and cell and nucleus areas, the share of cells with a nucleus or without a transcript, and transcripts per 100 µm².</li>
+        <li><strong>Its graph's numbers:</strong> mean neighbors, median edge length, pieces, and the share of cells without a neighbor.</li>
+        <li><strong>Its answers' numbers:</strong> each pair of labels' enrichment ratio (neighbors found over expected), each label's median nearest distance to each, and each gene's Moran's I.</li>
+        <li><strong>Its pseudobulk:</strong> each label's cells' transcripts summed gene by gene, the counts a comparison between groups of samples starts from (Crowell et al. 2020). Where samples have different panels, a gene one panel lacks is left empty, never zero.</li>
+      </ul>
+      <p>Each number is traced to the artifact it came from: a count, share or density to the sample's labels, a quality number to its segmentation, and a graph's or answer's number to that graph or answer. The view shows one family of numbers at a time, with a sample per row; each cell's tip names its source.</p>
+      <shot name="summary" alt="The Cohort view's cohort table of the simulated cohort: each of its eight samples' shares of its four labels, with the summary's niches and the buttons that write the table and the pseudobulk as CSV">The simulated cohort's eight samples, each one's shares of its labeled cells.</shot>
+
+      <h2 id="niches">Niches across the samples</h2>
+      <p>Niches found in each sample alone are numbered by each sample's own k-means: niche 3 of one sample need not be niche 3 of another. To make a niche the same kind of place in every sample, SituCraft finds them across the samples together. Each cell's window is its nearest labeled cells in its own sample. The windows of every sample are pooled, and one k-means groups them all. See <a href="niches.html#niches">Niches and genes</a> for the windows and k-means. A niche's share in a sample is then comparable between samples.</p>
+      <p>The view lists each niche's cells across the samples and the labels that define it: those whose share of its windows is at least 1.5 times their share of all the samples' labeled cells. Found for one sample alone, the niches are exactly those the Spatial view finds with the same parameters.</p>
+
+      <h2 id="files">The files</h2>
+      <p><strong>The cohort table (CSV)</strong> writes every number, a row each: the sample, its name, the family, what the number is of, its value, and the artifact it came from. <strong>The pseudobulk (CSV)</strong> writes a row for each sample's label, with its cells and a column for each gene. <strong>These as CSV</strong> writes the family shown as a wide table, a row a sample and a column each number. The summary's files are described in <a href="{{github}}/blob/main/docs/FORMATS.md#cohort-summaries">FORMATS.md</a>.</p>
+      <p>By remote control, <code>cohort_steps</code> runs the steps, <code>summarize_samples</code> makes the summary (of every sample, or those named), <code>cohort_table</code> reads one family of its numbers, and <code>export</code> writes the table or the pseudobulk. See <a href="remote-control.html">Remote control</a>.</p>
+
+      <h2 id="checked">How it is checked</h2>
+      <p>The validation suite summarizes the simulated cohort and checks:</p>
+      <ul>
+        <li>Every number equals the artifact's it came from: each label's cells its labels', each ratio, distance and Moran's I its answer's, each graph number the graph's.</li>
+        <li>Each sample's shares come within 0.03 of its true types' shares, and its tissue within 2% of the simulated section's area.</li>
+        <li>The pseudobulk's level of the gene the simulation raised in one type comes within 0.15 (natural log) of the truth's.</li>
+        <li>The niches found together agree with each sample's own, and for one sample alone are exactly its own.</li>
+      </ul>

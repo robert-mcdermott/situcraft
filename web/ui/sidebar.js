@@ -11,6 +11,7 @@ import { transformInUse } from '../lib/transforms.js';
 import { labelSetName, markerSetsOf } from '../lib/labels.js';
 import { samplesOf } from '../lib/samples.js';
 import { designsOf } from '../lib/design.js';
+import { summariesOf } from '../lib/cohort.js';
 
 // The icon of an item handed to the program, by its kind (local.go, fileKind and dirKind).
 export const KIND_ICONS = {
@@ -64,6 +65,17 @@ const SECTIONS = [
     items: (project) => designsOf(project),
     label: (d) => `${d.name} · v${d.version}`,
     meta: (d) => `${d.result.rows.length} rows, ${d.result.df} df`,
+    hideWhenEmpty: true,
+  },
+  {
+    kind: 'cohort-summary', title: 'Summaries', icon: 'table',
+    // The cohort's summaries (wave 7): the samples' numbers, the latest first.
+    items: (project) => summariesOf(project),
+    label: (r) => r.summary?.labels?.name ?? r.name,
+    meta: (r) => {
+      const n = r.summary?.samples?.length ?? r.samples?.length ?? 0;
+      return `${n} sample${n === 1 ? '' : 's'}${r.summary?.niches ? `, ${r.summary.niches} niches` : ''}`;
+    },
     hideWhenEmpty: true,
   },
   {
@@ -201,7 +213,7 @@ export function mountSidebar(app) {
             if (section.kind === 'filter') app.setMode('qc');
             if (section.kind === 'clustering') app.setMode('celltypes');
             if (section.kind === 'graph' || section.kind === 'spatial') app.setMode('spatial');
-            if (section.kind === 'sample' || section.kind === 'design') app.setMode('cohort');
+            if (section.kind === 'sample' || section.kind === 'design' || section.kind === 'cohort-summary') app.setMode('cohort');
             // An image is shown on its dataset's tissue; one not aligned yet, in the Alignment view.
             if (section.kind === 'image') {
               if (transformInUse(app.store.project, item.id)) {

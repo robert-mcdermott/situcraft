@@ -107,7 +107,10 @@ and read as CSV. Simulated cohorts (`situcraft simulate --cohort`, and the start
 simulated cohort**) are sections of subjects in groups whose differences are known, with their
 truth, for checking comparisons of groups. The design names the replicate unit, the groups and
 the covariates before any comparison, as a model matrix in treatment coding, and refuses what it
-cannot estimate or what a batch could explain.
+cannot estimate or what a batch could explain. Every sample is then measured the same way (the
+same labels, graph and questions) and summarized in the cohort table: its cells by label, niches
+found across the samples together, its quality, its spatial statistics and its pseudobulk, each
+number traced to the artifact it came from.
 
 ## A look around
 

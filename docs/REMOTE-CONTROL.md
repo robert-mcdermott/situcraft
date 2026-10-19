@@ -216,6 +216,17 @@ one slide), with the user's fields and those read from each bundle.
 | --- | --- | --- |
 | `design` | `unit` (the replicate unit's field, such as `subject`), `group` (the field compared, such as `condition`), `reference` (the first in code-point order if not given), `contrasts` (`[[a, b]]`, each a − b; each level against the reference if not given), `covariates` (fields, or `run`, `slide`, `panel`), `exclude` (`{sample: reason}`), `save` (a name) | Makes the experimental design in the Cohort view: the units in each group (a unit's samples in one group combined; a unit in more than one group pairing them), the matrix in treatment coding (as patsy's), its rank and residual degrees of freedom, the contrasts, the samples left out, notes, and why it cannot be used if it cannot (a group of fewer than two units, regions of one section as separate units, a term confounded with another, no degrees of freedom left, the groups confounded with a slide, run or panel). With `save`, keeps it as that name's next version. Without `unit` or `group`, answers the latest saved design |
 
+### Summaries
+
+Every sample summarized the same way, and the cohort table: each sample's numbers, each traced to the
+artifact it came from.
+
+| Action | Arguments | What it does |
+| --- | --- | --- |
+| `cohort_steps` | `markers` (a project set's name or ID, or a starter's ID; the starter that fits the first sample's panel if not given), `level` (1, the first, if not given), `graph` (`delaunay`, `knn`, `radius`, `contact`; `delaunay` if not given), `questions` (`enrichment`, `distances`, `moran`; `enrichment` if not given) | Runs the same steps on every sample in the Cohort view: each dataset's cells clustered with SituCraft's defaults and labeled from the one marker set (a starter resolved on the first dataset and used for the rest), then a graph of each sample's cells (a region sample's, its region's; never those a review excluded) and the questions asked of it with their defaults. A step made already is answered at once. Answers the marker set and each sample's clustering, labels, graph and answers |
+| `summarize_samples` | `markers` (by name or ID; the one the steps used, or the first that labels every sample, if not given), `level`, `niches` (6 if not given; 0 for none), `neighbors` (10 if not given), `closing` (µm; 10 if not given), `samples` (names or IDs; every sample if not given) | Summarizes the samples as an artifact of kind `cohort-summary`: each sample's cells by label (counts, shares, densities per mm² of its tissue), its niches' shares (niches found across the samples together), its quality, its graph's and answers' numbers and its pseudobulk. Answers the summary's ID, the cohort's labels, each sample's cells, labeled cells, counts, tissue, labels, graph, answers and niches' shares, the niches (each one's cells and defining labels) and the table's families |
+| `cohort_table` | `summary` (an ID; the latest if not given), `family` (`cells`, `share`, `density`, `niche`, `qc`, `graph`, `enrichment`, `nearest`, `moran`; `cells` if not given), `keys` (only these) | Reads one family of a summary's table and shows it: each sample's value by key and the artifact each came from |
+
 ### Quality control
 
 | Action | Arguments | What it does |
@@ -233,7 +244,7 @@ Cell attributes: `transcripts`, `genes`, `total`, `controls`, `area`, `nucleusAr
 | Action | Arguments | What it does |
 | --- | --- | --- |
 | `methods` | `dataset`, `filters` (names), `show` | The methods paragraph and its references; `show` shows it in the window |
-| `export` | `what` (`project`, `archive`, `methods`, `alignment`, `regions`, `reviews`, `samples`), `path` (absolute), `overwrite`, `dataset`; for an alignment `image`, `transform` (the one in use if not given), `format` (`matrix`, `keypoints`); for regions `coordinates`, `regions` (names or IDs; all if not given); for reviews `format` (`csv`, `json`) | Writes the project document (JSON), a project archive (`.scz`), the methods (Markdown), an image's alignment as Xenium Explorer reads it (CSV), a dataset's regions as QuPath imports annotations (GeoJSON), a dataset's reviews (CSV, a row a cell, cluster or region reviewed; JSON, the record), or the project's samples (CSV, a row a sample). Needs the token |
+| `export` | `what` (`project`, `archive`, `methods`, `alignment`, `regions`, `reviews`, `samples`, `cohort-table`, `pseudobulk`), `path` (absolute), `overwrite`, `dataset`; for an alignment `image`, `transform` (the one in use if not given), `format` (`matrix`, `keypoints`); for regions `coordinates`, `regions` (names or IDs; all if not given); for reviews `format` (`csv`, `json`); for a cohort table or pseudobulk `summary` (the latest if not given) | Writes the project document (JSON), a project archive (`.scz`), the methods (Markdown), an image's alignment as Xenium Explorer reads it (CSV), a dataset's regions as QuPath imports annotations (GeoJSON), a dataset's reviews (CSV, a row a cell, cluster or region reviewed; JSON, the record), the project's samples (CSV, a row a sample), or a cohort summary's table (CSV, a row each number of each sample with the artifact it came from) or pseudobulk (CSV, a row each sample's label, a column each gene). Needs the token |
 
 ## The documentation's screenshots
 

@@ -460,6 +460,16 @@
   "violations": []
  },
  {
+  "scene": "summary",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "summary",
+  "theme": "light",
+  "violations": []
+ },
+ {
   "scene": "jobs",
   "theme": "dark",
   "violations": []

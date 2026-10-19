@@ -15,6 +15,7 @@ package spatial
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math"
 	"sort"
 
@@ -116,6 +117,84 @@ func FindNiches(ctx context.Context, x, y []float32, label []int32, K int, p Nic
 		return nil, err
 	}
 	progress(0.2)
+	if err := fitNiches(ctx, out, comp, has, label, K, p, workers, progress); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// NicheCells are one sample's cells, for niches found across samples: centroids (µm) and labels
+// (0 to K − 1, or −1).
+type NicheCells struct {
+	X, Y  []float32
+	Label []int32
+}
+
+// FindNichesAcross finds niches across samples together (wave 7): each sample's windows of its own
+// cells, never another's, and all the samples' windows grouped by one k-means, so that a niche is
+// the same kind of place in every sample. The niches' cells are the samples' in order (Assign and
+// Composed concatenated); offsets says where each sample's start (len(samples) + 1 values).
+func FindNichesAcross(ctx context.Context, samples []NicheCells, K int, p NicheParams, workers int, progress func(float64)) (*Niches, []int, error) {
+	if err := p.Check(); err != nil {
+		return nil, nil, err
+	}
+	if len(samples) == 0 {
+		return nil, nil, errors.New("spatial: no sample")
+	}
+	if K < 1 || K > 1000 {
+		return nil, nil, errors.New("spatial: 1 to 1,000 labels")
+	}
+	if workers < 1 {
+		workers = 1
+	}
+	if progress == nil {
+		progress = func(float64) {}
+	}
+	out := &Niches{K: K, Count: p.Niches, Tissue: make([]float64, K)}
+	offsets := []int{0}
+	var comp []float64
+	var has []bool
+	var labels []int32
+	var all int
+	for s, sm := range samples {
+		if len(sm.X) != len(sm.Y) || len(sm.Label) != len(sm.X) {
+			return nil, nil, fmt.Errorf("spatial: sample %d's centroids and labels differ in length", s+1)
+		}
+		var labeled []int32
+		for i, l := range sm.Label {
+			if l < -1 || l >= int32(K) {
+				return nil, nil, errors.New("spatial: a label beyond the label set")
+			}
+			if l >= 0 {
+				labeled = append(labeled, int32(i))
+				out.Tissue[l]++
+			}
+		}
+		if len(labeled) < 2 {
+			return nil, nil, fmt.Errorf("spatial: sample %d has fewer than two labeled cells", s+1)
+		}
+		all += len(labeled)
+		c, h, err := nicheWindows(ctx, sm.X, sm.Y, sm.Label, K, labeled, p, workers)
+		if err != nil {
+			return nil, nil, err
+		}
+		comp, has, labels = append(comp, c...), append(has, h...), append(labels, sm.Label...)
+		offsets = append(offsets, offsets[len(offsets)-1]+len(sm.X))
+		progress(0.2 * float64(s+1) / float64(len(samples)))
+	}
+	for k := range out.Tissue {
+		out.Tissue[k] /= float64(all)
+	}
+	if err := fitNiches(ctx, out, comp, has, labels, K, p, workers, progress); err != nil {
+		return nil, nil, err
+	}
+	return out, offsets, nil
+}
+
+// fitNiches groups the cells' windows (comp: n × K, has: whether each cell has one) into p.Niches
+// niches by k-means, the largest first, and fills out's assignment, compositions, counts, cells,
+// inertias and agreements (out.K, out.Count and out.Tissue set before).
+func fitNiches(ctx context.Context, out *Niches, comp []float64, has []bool, label []int32, K int, p NicheParams, workers int, progress func(float64)) error {
 	var windowed []int
 	for i := range has {
 		if has[i] {
@@ -124,7 +203,7 @@ func FindNiches(ctx context.Context, x, y []float32, label []int32, K int, p Nic
 	}
 	out.Windows = len(windowed)
 	if len(windowed) < p.Niches {
-		return nil, errors.New("spatial: fewer windows than niches")
+		return errors.New("spatial: fewer windows than niches")
 	}
 	data := make([]float64, len(windowed)*K)
 	for r, i := range windowed {
@@ -132,13 +211,13 @@ func FindNiches(ctx context.Context, x, y []float32, label []int32, K int, p Nic
 	}
 	km, err := cluster.FitKMeans(ctx, data, len(windowed), K, p.Niches, p.Starts, p.Seed, workers)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	progress(0.5)
 	for s := 1; s <= p.Seeds; s++ {
 		other, err := cluster.FitKMeans(ctx, data, len(windowed), K, p.Niches, p.Starts, p.Seed+uint64(s), workers)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		out.Agreement = append(out.Agreement, cluster.AdjustedRand(km.Assign, other.Assign))
 		progress(0.5 + 0.45*float64(s)/float64(p.Seeds))
@@ -153,7 +232,7 @@ func FindNiches(ctx context.Context, x, y []float32, label []int32, K int, p Nic
 	for r, c := range order {
 		rank[c] = int32(r)
 	}
-	out.Assign = make([]int32, len(x))
+	out.Assign = make([]int32, len(has))
 	for i := range out.Assign {
 		out.Assign[i] = -1
 	}
@@ -173,7 +252,7 @@ func FindNiches(ctx context.Context, x, y []float32, label []int32, K int, p Nic
 	}
 	out.Inertia, out.Inertias = km.Inertia, km.Inertias
 	out.Composed = comp
-	return out, nil
+	return nil
 }
 
 // nicheWindows are each cell's window composition (n × K), and whether it has one: of its nearest

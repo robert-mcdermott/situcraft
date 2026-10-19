@@ -453,6 +453,30 @@ checksum and names, the regions' checksum, its window, the regions compared or c
 versions and polygons), the method's version and its parameters, so asking again answers it. The project records each analysis it uses (kind `spatial`, with its dataset,
 segmentation, graph, question, parameters and summary: the pairs most enriched and most depleted); one made again on another segmentation (from 0.6.0) records the analysis it was made from (`remakeOf`, its id) and the comparison of the two segmentations (`comparison`, its id), through which its numbers are read with that analysis's. Niches are a label set too: a fill `labels:<their analysis's id>:0` colors each cell by its niche.
 
+### Cohort summaries
+
+A cohort summary (from 0.7.0) is an artifact of kind `cohort-summary`: every sample summarized the
+same way, each number traced to the artifact it came from. Its files (the binary ones in the
+envelope above; arrays little-endian):
+
+| File | Magic | Holds |
+| --- | --- | --- |
+| `summary.json` | | `format` (`"situcraft-cohort-summary"`), `version`, `method`, `methodVersion`; the cohort's `labels` (the marker set's `name` and `level`, the `names` every sample is counted in, in order, and their `colors`): every label of the level, and those of coarser levels some sample's cells carry there; the `genes`, every sample's panel's, in the order first met; `samples`, each one's `sample` (its id), `name`, `dataset`, `segmentation` (id and name), `region` (id, name and version, for a region sample), the `labels` its cells carry (the set's `id`, `kind`, `name`, `level` and `checksum`), the cells chosen (`choice`: `checksum`, `regions`, `excluded`, as a graph records them), its tissue `window` (`kind` `tissue` or `region`, the tissue's `closing` radius and `grid`, the `area` in µm² and boundary `segments`), its `panelGenes`, its `cells` chosen and `labeled`, `tissueAreaUm2`, and by label `counts`, `shares` (of its labeled cells) and `densityPerMm2`; its quality (`qc`: `cells`, `cellsPerMm2`, `medianTranscripts`, `medianGenes`, `medianAreaUm2`, `medianNucleusAreaUm2`, `nucleusShare`, `transcriptsPer100um2`, `transcripts`, `noTranscriptShare`); with niches, its cells in each niche (`niches`), their `nicheShares` and the cells with a window (`nicheCells`); and its `statistics`, each `{family, key, value, source}`: its graph's (`graph`: `mean neighbors`, `median edge µm`, `pieces`, `without a neighbor`), an enrichment's ratio of neighbors found over expected by pair (`enrichment`, `A\|B`, the names in order), nearest distances' median from each label to each (`nearest`, `A→B`, µm) and Moran's I by gene (`moran`), the source its artifact's id; and, with niches, the `niches` found across the samples together: their `parameters` (as a niches analysis's), number (`niches`), each one's `composition` (N × K, its windows' mean, the k-means center), `cells` in all the samples, `tissue` (each label's share of all the samples' labeled cells), `windows`, k-means's `inertia`, the further seeds' `agreement` (adjusted Rand index) and each niche's `defining` labels (indices, as a niches analysis's) |
+| `pseudobulk.bin` | `SCCP` | The samples', labels' and genes' counts (u32 each: S, K, G, as `summary.json`'s), then for each sample, each label, each gene the transcripts of the sample's cells of that label (u32; `0xFFFFFFFF` for a gene the sample's panel has not) |
+| `niches.bin` | `SCCN` | With niches: the cells' count (u32), each cell's row of its segmentation (u32), then each one's niche (i32, −1 without a window); the samples' cells chosen, in the samples' order |
+| `table.csv` | | The cohort table, a row each number of each sample: `sample` (its id), `name`, `family` (`cells`, `share`, `density`, `niche`, `qc`, `graph`, `enrichment`, `nearest`, `moran`), `key` (a label, a niche as `niche 1`, a quality number's name, a pair, a gene), `value` (the shortest decimal that reads back as it) and `source` (the artifact it came from: the sample's labels for cells, shares and densities; its segmentation for quality; its graph or analysis for theirs; empty for a niche's share, the summary's own) |
+| `pseudobulk.csv` | | The pseudobulk as a table: a row each sample's label (`sample`, `name`, `label`, `cells`), a column each gene (empty for a gene its panel has not, never zero) |
+
+A sample's cells are those chosen (its dataset's, or its region's; never those a review excluded),
+each labeled in the cohort's names (a sample's label not among them is refused). Its tissue is the
+tissue window's area (the cells' footprints closed by the radius, 10 µm unless given), within its
+region for a region sample. A summary is named by its samples (each one's dataset, segmentation,
+cells' and labels' checksums, region, graph and analyses), the cohort's labels, the niches'
+parameters, the closing radius and the method's version, so summarizing again answers it. The
+project records each summary (kind `cohort-summary`: `{id, name, markerSet, level, samples, state,
+created, method, parameters, summary}`, `samples` the samples' ids, `markerSet` the marker set every
+sample is labeled from).
+
 ### Post-Xenium images
 
 A post-Xenium image (from 0.5.0) is an artifact of one file in its folder, `image.json`, and one in

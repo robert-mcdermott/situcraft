@@ -3067,6 +3067,37 @@ as theirs, and is refused unless the design adjusts for it (where the rank then 
 that holds the groups unevenly is noted. Regions of one section are not independent replicates
 (they share the subject, slide and run): given different units, they are refused.
 
+### 6.10 Sample summaries and niches across samples (verified, wave 7, slice 4)
+
+A comparison of groups starts from each sample's numbers, measured the same way in every sample
+(`internal/cohort`). Its cell-type composition is the labeled cells' counts by label in one
+vocabulary: every label of the marker set's level, so that a type a sample lacks is a zero, not a
+missing column (compositional tests need the zeros). Densities are per mm² of the tissue window
+(the cells' footprints closed by 10 µm), within the region for a region sample: a region's
+polygon drawn beyond the tissue would otherwise count glass as area. The pseudobulk sums each
+label's cells' transcripts gene by gene (Crowell et al. 2020; Squair et al. 2021): the counts a
+test with the sample as the unit reads. A gene one panel lacks is missing for that sample, never
+zero, so that a comparison across panels cannot read absence as no expression.
+
+**Niches across samples.** Niches found in each sample are numbered by each sample's own k-means:
+niche 3 of two samples need not be the same kind of place, and their shares cannot be compared.
+Following the cellular-neighborhood approach (Schürch et al. 2020), where windows of all the
+samples are clustered together, SituCraft computes each cell's window (its nearest labeled cells)
+in its own sample, pools every sample's windows, and runs one k-means with the same starts and
+seeds as a single sample's. A sample's niches then share their centers with every other sample's.
+For one sample alone the result is that sample's niches exactly (the same windows, starts and
+seeds), which the suite checks cell by cell; for eight simulated samples, each one's cells divide
+among the joint niches much as among its own (adjusted Rand index 0.56 to 0.82), the difference
+being the centers the samples share.
+
+**What is checked against what.** Every number in the table names its source (the labels, the
+segmentation, a graph, an analysis), and the suite compares each with that source: on the
+simulated cohort, 1,280 numbers, all equal. Against the truth: shares from marker labels within
+0.015 of the true types' (the labels' errors are few, and roughly balanced); the tissue within
+0.6% of the 250 µm section; the pseudobulk's level of the gene raised in one type 0.04 to 0.065
+lower (log) than the true cells', the transcripts of that type that segmentation assigns to a
+neighbor's cell.
+
 ## 7. Datasets
 
 | Dataset | Source | Size | License | Use |

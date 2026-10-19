@@ -14,6 +14,13 @@
   "overflow": 0
  },
  {
+  "page": "docs/designs.html",
+  "theme": "light",
+  "width": "desktop",
+  "violations": [],
+  "overflow": 0
+ },
+ {
   "page": "docs/exports.html",
   "theme": "light",
   "width": "desktop",
@@ -113,6 +120,13 @@
  },
  {
   "page": "docs/spatial.html",
+  "theme": "light",
+  "width": "desktop",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/summaries.html",
   "theme": "light",
   "width": "desktop",
   "violations": [],
@@ -168,6 +182,13 @@
   "overflow": 0
  },
  {
+  "page": "docs/designs.html",
+  "theme": "dark",
+  "width": "desktop",
+  "violations": [],
+  "overflow": 0
+ },
+ {
   "page": "docs/exports.html",
   "theme": "dark",
   "width": "desktop",
@@ -267,6 +288,13 @@
  },
  {
   "page": "docs/spatial.html",
+  "theme": "dark",
+  "width": "desktop",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/summaries.html",
   "theme": "dark",
   "width": "desktop",
   "violations": [],
@@ -322,6 +350,13 @@
   "overflow": 0
  },
  {
+  "page": "docs/designs.html",
+  "theme": "light",
+  "width": "phone",
+  "violations": [],
+  "overflow": 0
+ },
+ {
   "page": "docs/exports.html",
   "theme": "light",
   "width": "phone",
@@ -421,6 +456,13 @@
  },
  {
   "page": "docs/spatial.html",
+  "theme": "light",
+  "width": "phone",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/summaries.html",
   "theme": "light",
   "width": "phone",
   "violations": [],
@@ -476,6 +518,13 @@
   "overflow": 0
  },
  {
+  "page": "docs/designs.html",
+  "theme": "dark",
+  "width": "phone",
+  "violations": [],
+  "overflow": 0
+ },
+ {
   "page": "docs/exports.html",
   "theme": "dark",
   "width": "phone",
@@ -575,6 +624,13 @@
  },
  {
   "page": "docs/spatial.html",
+  "theme": "dark",
+  "width": "phone",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/summaries.html",
   "theme": "dark",
   "width": "phone",
   "violations": [],

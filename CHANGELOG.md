@@ -77,6 +77,35 @@ project, each a sample, compared with the sample or the subject, not the cell, a
     1.0.3's for the same formulas (`validation/reference/designs/`); in the page, the simulated
     cohort's designs (adjusted for the slide, paired, refused when confounded or with a group of
     one subject) and their versions kept with the project.
+- **Sample summaries (wave 7, slice 4).** Every sample measured the same way, and the cohort table
+  of their numbers, in the Cohort view.
+  - **The same steps on every sample:** each dataset's cells clustered with SituCraft's defaults and
+    labeled from one marker set (a starter resolved on the first and used for the rest), so that
+    every sample's labels have the same names; a graph of each sample's cells (a region sample's,
+    its region's) and the same questions asked of each with the same parameters (neighborhood
+    enrichment, nearest distances, Moran's I). A step made already is answered at once.
+  - **The cohort table,** an artifact of kind `cohort-summary`: each sample's cells by label
+    (counts, shares of its labeled cells, densities per mm² of its tissue, within its region for a
+    region sample; a label no cell carries counted as none), its niches' shares, its quality, its
+    graph's numbers, its answers' (an enrichment's ratios, nearest distances' medians, each gene's
+    Moran's I) and its pseudobulk (each label's transcripts gene by gene; a gene one panel lacks
+    left empty, never zero). Each number is traced to the artifact it came from.
+  - **Niches across the samples:** each cell's window of its nearest labeled cells in its own
+    sample, the windows of every sample pooled and grouped by one k-means, so that a niche is the
+    same kind of place in every sample; each niche's defining labels listed.
+  - **Shown** a family at a time, a sample a row, each number's tip naming its source; written as
+    CSV: the table (a row each number, with its source), the pseudobulk (a row each sample's
+    label, a column each gene) and the family shown. The project tree lists **Summaries**.
+  - **Remote control:** `cohort_steps`, `summarize_samples` (of every sample or those named),
+    `cohort_table`; `export` writes `cohort-table` and `pseudobulk`.
+  - **Validated:** a sample's numbers worked by hand; the tables read back to the last digit; the
+    niches found across samples the same as each sample's own when there is one; in Go, a section
+    and a region of it summarized, every number against the cells and the other artifacts; in the
+    page, the simulated cohort's eight samples through the steps and summarized, every one of
+    1,280 numbers equal to the artifact's it came from, each sample's shares within 0.03 of its
+    true types', its tissue within 2% of the section, the pseudobulk's raised gene within 0.15 (log)
+    of the truth's, the niches found together near each sample's own (and for one sample alone,
+    exactly its own), every domain's leading type defining a niche.
 
 ## 0.6.0 (2026-10-18)
 

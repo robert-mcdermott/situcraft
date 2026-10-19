@@ -28,10 +28,11 @@ import { labelSource, labelVersions, refOf } from './label-sources.js';
 import { defaultPair, impactLines, sideOf } from '../lib/impact.js';
 import { remakeOnSegmentation } from './remake.js';
 import { KINDS as GRAPH_KINDS, describeGraph, graphsOf } from '../lib/graphs.js';
-import { analysesOf, analysisNumbers, bandsOf, compareNumbers, nicheNames, rankCorrelation, rankPairs, rowNames, zoneBands } from '../lib/spatial.js';
+import { NICHES_DEFAULTS, analysesOf, analysisNumbers, bandsOf, compareNumbers, nicheNames, rankCorrelation, rankPairs, rowNames, zoneBands } from '../lib/spatial.js';
 import { ratioText } from './spatial-results.js';
 import { showAnalysisCells } from './spatial-cells.js';
 import { addDesign, designsOf, makeDesign } from '../lib/design.js';
+import { FAMILIES, summariesOf } from '../lib/cohort.js';
 import { BUNDLE_FIELDS, addSampleField, fieldValue, readSamplesTable, removeSampleField, renameSample, sampleFields, samplesCSV, samplesOf, setFieldKind, setRegionSamples, setSampleField } from '../lib/samples.js';
 
 export class ActionError extends Error {}
@@ -2279,8 +2280,111 @@ export function installRemote(app) {
       };
     },
 
+    // --- Summaries (wave 7) ---------------------------------------------------------------------
+
+    async cohort_steps(args) {
+      const options = {};
+      if (args.markers !== undefined) options.markers = String(args.markers);
+      if (args.level !== undefined) options.level = Math.max(0, Math.round(finite(args.level, 'level')) - 1);
+      if (args.graph !== undefined) options.kind = choose(String(args.graph), ['delaunay', 'knn', 'radius', 'contact'], 'graph');
+      if (args.questions !== undefined) {
+        if (!Array.isArray(args.questions)) throw new ActionError('questions is a list: enrichment, distances, moran.');
+        options.questions = args.questions.map((q) => choose(String(q), ['enrichment', 'distances', 'moran'], 'question'));
+      }
+      await settleMode('cohort');
+      let out;
+      try {
+        out = await app.cohortView.steps(options);
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      const set = project().artifacts.find((a) => a.kind === 'marker-set' && a.id === out.markerSet);
+      const answers = out.samples.reduce((n, x) => n + x.answers.length, 0);
+      return {
+        message: `${plural(out.samples.length, 'sample')} labeled from ${set?.name ?? out.markerSet}${(set?.set.levels?.length ?? 0) > 1 ? ` (${set.set.levels[out.level]})` : ''}, each with a graph of its cells${answers ? ` and ${plural(answers, 'answer')}` : ''}.`,
+        data: { markerSet: set ? { id: set.id, name: set.name, version: set.version } : null, level: out.level + 1, samples: out.samples },
+      };
+    },
+
+    async summarize_samples(args) {
+      const options = {};
+      const sets = project().artifacts.filter((a) => a.kind === 'marker-set');
+      if (args.markers !== undefined) {
+        const ref = String(args.markers);
+        const named = sets.filter((r) => r.id === ref || r.family === ref);
+        const byName = named.length ? named : sets.filter((r) => r.name === choose(ref, [...new Set(sets.map((x) => x.name))], 'marker set'));
+        // Of its versions, the latest whose labels every sample has.
+        const labeled = (r) => project().artifacts.some((a) => a.kind === 'labels' && a.markerSet === r.id);
+        const pick = [...byName].sort((x, y) => y.version - x.version);
+        options.markerSet = (pick.find(labeled) ?? pick[0]).id;
+      }
+      if (args.level !== undefined) options.level = Math.max(0, Math.round(finite(args.level, 'level')) - 1);
+      const niches = args.niches === undefined ? NICHES_DEFAULTS.niches : Math.round(finite(args.niches, 'niches'));
+      const neighbors = args.neighbors === undefined ? NICHES_DEFAULTS.neighbors : Math.round(finite(args.neighbors, 'neighbors'));
+      options.niches = niches > 0 ? { ...NICHES_DEFAULTS, niches, neighbors } : null;
+      if (args.closing !== undefined) options.closing = finite(args.closing, 'closing');
+      if (args.samples !== undefined) {
+        if (!Array.isArray(args.samples) || !args.samples.length) throw new ActionError('samples is a list of samples, by name or ID.');
+        const list = samplesOf(project());
+        options.samples = args.samples.map((ref) => (list.find((x) => x.id === String(ref)) ?? list.find((x) => x.name === choose(String(ref), list.map((y) => y.name), 'sample'))).id);
+      }
+      await settleMode('cohort');
+      let manifest;
+      try {
+        manifest = await app.cohortView.summarize(options);
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      const doc = await fetch(`/api/artifacts/${encodeURIComponent(manifest.id)}/files/summary.json`).then((r) => r.json());
+      const table = await app.cohortView.table(manifest.id);
+      const names = doc.labels.names;
+      const samples = doc.samples.map((x) => ({
+        sample: x.sample, name: x.name, cells: x.cells, labeled: x.labeled, tissueAreaUm2: x.tissueAreaUm2,
+        counts: Object.fromEntries(names.map((n, k) => [n, x.counts[k]])), labels: x.labels.id, graph: x.statistics.find((st) => st.family === 'graph')?.source ?? null,
+        answers: [...new Set(x.statistics.filter((st) => st.family !== 'graph').map((st) => st.source))],
+        ...(x.nicheShares ? { niches: x.nicheShares, nicheCells: x.nicheCells } : {}),
+      }));
+      const nicheList = doc.niches ? doc.niches.cells.map((cells, v) => ({ niche: v + 1, cells, defining: (doc.niches.defining[v] ?? []).map((k) => names[k]) })) : null;
+      await frames();
+      return {
+        message: `${manifest.name} (${manifest.id}): ${plural(samples.length, 'sample')}, ${plural(names.length, 'label')}, ${plural(doc.genes.length, 'gene')}${nicheList ? `, ${plural(nicheList.length, 'niche')} found across them` : ''}; ${samples.map((x) => `${x.name} ${plural(x.labeled, 'labeled cell')}`).join(', ')}.`,
+        data: { id: manifest.id, name: manifest.name, labels: doc.labels, genes: doc.genes.length, samples, niches: nicheList, families: table.families.map((f) => ({ family: f.id, label: f.label, keys: f.keys.length })) },
+      };
+    },
+
+    async cohort_table(args) {
+      const list = summariesOf(project());
+      if (!list.length) throw new ActionError('The project has no summary yet: summarize_samples makes one.');
+      const record = args.summary === undefined ? list[0] : list.find((r) => r.id === String(args.summary));
+      if (!record) throw new ActionError(`No summary ${args.summary}; the project's are ${list.map((r) => r.id).join(', ')}.`);
+      const family = args.family === undefined ? 'cells' : choose(String(args.family), FAMILIES.map((f) => f.id), 'family');
+      await settleMode('cohort');
+      const table = await app.cohortView.table(record.id, family);
+      const f = table.families.find((x) => x.id === family);
+      if (!f) throw new ActionError(`The summary has no ${family} numbers; its families are ${table.families.map((x) => x.id).join(', ')}.`);
+      const keys = Array.isArray(args.keys) ? args.keys.map((k) => choose(String(k), f.keys, 'key')) : f.keys;
+      const samples = table.samples.map((smp) => {
+        const v = f.values.get(smp.sample) ?? new Map();
+        return { sample: smp.sample, name: smp.name, values: Object.fromEntries(keys.map((k) => [k, v.get(k)?.value ?? null])), sources: Object.fromEntries(keys.map((k) => [k, v.get(k)?.source ?? null])) };
+      });
+      await frames();
+      return {
+        message: `${f.label} of ${plural(samples.length, 'sample')}: ${plural(keys.length, 'key')}${keys.length ? ` (${keys.slice(0, 4).join(', ')}${keys.length > 4 ? ', …' : ''})` : ''}.`,
+        data: { id: record.id, family, label: f.label, families: table.families.map((x) => x.id), keys, samples },
+      };
+    },
+
     async export(args) {
-      const what = choose(args.what, ['project', 'archive', 'methods', 'alignment', 'regions', 'reviews', 'samples'], 'kind of file');
+      const what = choose(args.what, ['project', 'archive', 'methods', 'alignment', 'regions', 'reviews', 'samples', 'cohort-table', 'pseudobulk'], 'kind of file');
+      if (what === 'cohort-table' || what === 'pseudobulk') {
+        const list = summariesOf(project());
+        if (!list.length) throw new ActionError('The project has no summary yet: summarize_samples makes one.');
+        const record = args.summary === undefined ? list[0] : list.find((r) => r.id === String(args.summary));
+        if (!record) throw new ActionError(`No summary ${args.summary}; the project's are ${list.map((r) => r.id).join(', ')}.`);
+        const response = await fetch(`/api/artifacts/${encodeURIComponent(record.id)}/files/${what === 'pseudobulk' ? 'pseudobulk.csv' : 'table.csv'}`);
+        if (!response.ok) throw new ActionError(`${record.id}: HTTP ${response.status}`);
+        return { file: await response.text(), message: what === 'pseudobulk' ? `${record.name}'s pseudobulk as CSV: a row each sample's label, its cells and a column each gene's transcripts (empty for a gene its panel has not).` : `${record.name}'s table as CSV: a row each number of each sample, with the artifact it came from.` };
+      }
       if (what === 'samples') {
         const n = samplesOf(project()).length;
         if (!project().datasets.length) throw new ActionError('The project has no sample yet: add its datasets first.');

@@ -231,6 +231,30 @@ export function mountInspector(app) {
         } }, icon('graph'), 'In the Spatial view')) : null);
   }
 
+  // A cohort summary: what it is of (its samples, labels and genes, the niches across them) and how
+  // it was made.
+  function summarySection(r) {
+    const s = r.summary ?? {};
+    const samples = s.samples ?? [];
+    const set = app.store.project.artifacts.find((a) => a.kind === 'marker-set' && a.id === r.markerSet);
+    return h('section.inspector-section',
+      h('h3', icon('table'), 'Cohort summary'),
+      h('dl.kv',
+        h('dt', 'Samples'), h('dd', `${samples.length}: ${samples.map((x) => x.name).join(', ')}`),
+        h('dt', 'Cells'), h('dd', `${samples.reduce((n, x) => n + (x.labeled ?? 0), 0).toLocaleString('en-US')} labeled of ${samples.reduce((n, x) => n + (x.cells ?? 0), 0).toLocaleString('en-US')}`),
+        h('dt', 'Labels'), h('dd', `${s.labels?.name ?? '—'} (${s.labels?.names?.length ?? '?'})`, set ? h('span.muted', ` · marker set v${set.version}`) : null),
+        h('dt', 'Genes'), h('dd', (s.genes ?? 0).toLocaleString('en-US')),
+        h('dt', 'Niches'), h('dd', s.niches ? `${s.niches}, found across the samples together` : 'none'),
+        h('dt', 'Method'), h('dd', `${r.method?.name ?? ''} ${r.method?.version ?? ''}`.trim()),
+        h('dt', 'Artifact'), h('dd.mono', r.id)),
+      h('div.btn-row', { style: { marginTop: '8px' } },
+        h('button.btn.small', { type: 'button', onclick: () => {
+          app.focusItem({ kind: 'cohort-summary', id: r.id });
+          app.setMode('cohort');
+        } }, icon('table'), 'In the Cohort view')),
+      r.method?.citation ? h('p.muted', { style: { margin: '8px 0 0', fontSize: '11.5px' } }, r.method.citation) : null);
+  }
+
   // A spatial analysis: its question, labels, what it is of, and what it found.
   function analysisSection(r) {
     const { project } = app.store;
@@ -386,6 +410,10 @@ export function mountInspector(app) {
     if (focus?.kind === 'spatial') {
       const r = app.store.project.artifacts.find((a) => a.kind === 'spatial' && a.id === focus.id);
       if (r) return analysisSection(r);
+    }
+    if (focus?.kind === 'cohort-summary') {
+      const r = app.store.project.artifacts.find((a) => a.kind === 'cohort-summary' && a.id === focus.id);
+      if (r) return summarySection(r);
     }
     if (focus?.kind === 'graph') {
       const g = app.store.project.artifacts.find((a) => a.kind === 'graph' && a.id === focus.id);
