@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { addPanel, checkFigure, createFigure, figureMarks, figurePDF, figureSVG, mm, panelLetters, pngSize, saveFigure, removeFigure, figuresOf } from './figures.js';
-import { channelTable, compositeStains, lengthText, legendLayout, niceLength, rasterSize, tissueLayout, tissuePanel } from './figure-tissue.js';
+import { channelTable, compositeImage, compositeStains, fieldAt, lengthText, legendLayout, niceLength, rasterSize, tissueLayout, tissuePanel } from './figure-tissue.js';
 import { buildManifest, checkManifest, compareManifest, embedPNG, embedSVG, pdfAttachment, readFigureManifest, viewArtifacts, withResolution } from './figure-manifest.js';
 import { encodePNG } from './png.js';
 
@@ -161,4 +161,40 @@ test('a drawing\'s digest: an image by its pixels, whatever compressed its PNG',
   const other = rgba.slice();
   other[0] = 201;
   assert.notEqual(a, panelDigests(one, drawn(other)).get('panel-1'));
+});
+
+test('a post-Xenium image composited: an H&E between its pixels at its opacity, a channel added, a deformation followed', () => {
+  // A 2 × 2 RGB image, a pixel a µm, at the region's origin; the raster four pixels across 4 µm.
+  const grid = { x0: 0, y0: 0, cols: 2, rows: 2, data: new Uint8Array([200, 0, 0, 0, 200, 0, 0, 0, 200, 100, 100, 100]) };
+  const identity = [[1, 0, 0], [0, 1, 0]];
+  const base = () => new Uint8Array(4 * 4 * 2).fill(0).map((v, i) => (i % 4 === 3 ? 255 : 0));
+  const one = base();
+  const covered = compositeImage(one, { width: 4, height: 2, region: { x0: 0, y0: 0, x1: 4, y1: 2 }, image: { kind: 'rgb', opacity: 1, inverse: identity, scale: [1, 1], size: [2, 2], deformation: null, grid } });
+  // The first two pixels' centers on the first two image pixels' centers: their colors exactly;
+  // beyond the image, untouched.
+  assert.equal(covered, 4);
+  assert.deepEqual([...one.subarray(0, 8)], [200, 0, 0, 255, 0, 200, 0, 255]);
+  assert.deepEqual([...one.subarray(8, 16)], [0, 0, 0, 255, 0, 0, 0, 255]);
+  const half = base();
+  compositeImage(half, { width: 4, height: 2, region: { x0: 0, y0: 0, x1: 4, y1: 2 }, image: { kind: 'rgb', opacity: 0.5, inverse: identity, scale: [1, 1], size: [2, 2], deformation: null, grid } });
+  assert.deepEqual([...half.subarray(0, 4)], [100, 0, 0, 255]);
+  // Between pixels: halfway from red to green at a center shifted half a pixel.
+  const between = base();
+  compositeImage(between, { width: 4, height: 2, region: { x0: 0.5, y0: 0, x1: 4.5, y1: 2 }, image: { kind: 'rgb', opacity: 1, inverse: identity, scale: [1, 1], size: [2, 2], deformation: null, grid } });
+  assert.deepEqual([...between.subarray(0, 4)], [100, 100, 0, 255]);
+  // A channel: its nearest sample windowed, its color added.
+  const channel = base();
+  channel[0] = 100;
+  compositeImage(channel, { width: 4, height: 2, region: { x0: 0, y0: 0, x1: 4, y1: 2 }, image: { kind: 'channel', opacity: 1, inverse: identity, scale: [1, 1], size: [2, 2], deformation: null, grid: { x0: 0, y0: 0, cols: 2, rows: 2, data: new Uint16Array([50, 100, 0, 0]) }, window: [0, 100], gamma: 1, color: '#ff0000' } });
+  assert.deepEqual([channel[0], channel[4]], [228, 255]);
+  // A deformation moving every point back by one µm across: the second pixel shows the first.
+  const deformation = { x0: 0, y0: 0, step: 10, nx: 2, ny: 2, field: new Float32Array([-1, 0, -1, 0, -1, 0, -1, 0]), max: 1 };
+  assert.deepEqual(fieldAt(deformation, 5, 5), [-1, 0]);
+  const moved = base();
+  compositeImage(moved, { width: 4, height: 2, region: { x0: 0, y0: 0, x1: 4, y1: 2 }, image: { kind: 'rgb', opacity: 1, inverse: identity, scale: [1, 1], size: [2, 2], deformation, grid } });
+  assert.deepEqual([...moved.subarray(4, 8)], [200, 0, 0, 255]);
+  // The field between its points, and clamped beyond them.
+  const ramp = { x0: 0, y0: 0, step: 10, nx: 2, ny: 1, field: new Float32Array([0, 0, 2, 4]), max: 4 };
+  assert.deepEqual(fieldAt(ramp, 5, 0), [1, 2]);
+  assert.deepEqual(fieldAt(ramp, 50, 0), [2, 4]);
 });

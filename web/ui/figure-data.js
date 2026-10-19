@@ -10,14 +10,20 @@ import { viewLayers } from '../lib/views.js';
 import { defaultLayers, cellFillColors, FILLS } from './viewer-panel.js';
 import { readCells, readPoints, attributeRange } from '../lib/viewer-data.js';
 import { readPolygonTile } from '../lib/polygons.js';
-import { readSegCells, SEG_FILLS } from '../lib/segview.js';
+import { readSegCells, SEG_FILLS, LIMITATIONS, SEVERAL, CERTAINTY_RANGE, certaintyColor } from '../lib/segview.js';
+import { cellReviewState, reviewColors, reviewsOf, STATUS_COLORS } from '../lib/review-record.js';
+import { segmentationFor } from './reviewing.js';
+import { regionsOf } from '../lib/regions.js';
 import { gridTileRange, imageLevel, tileUm } from '../lib/viewport.js';
 import { categoricalColor, colormapColor } from '../lib/colormaps.js';
 import { clusterColors, clusterNames, mergedOf, nameOf } from '../lib/clusterings.js';
 import { labelColor, labelColors, parseLabelFill } from '../lib/labels.js';
 import { labelSource, perCell, refOf } from './label-sources.js';
 import { panelBox } from '../lib/figures.js';
-import { rasterSize, tissueLayout, compositeStains } from '../lib/figure-tissue.js';
+import { rasterSize, tissueLayout, compositeStains, compositeImage, legendHeight } from '../lib/figure-tissue.js';
+import { placedImages } from '../lib/images.js';
+import { invert, levelScale, overlayLevel, overlayTileRange } from '../lib/overlays.js';
+import { resultPanelData } from './figure-results.js';
 
 const OUTLINE = { color: '#e8e8e8', width: 0.25, opacity: 0.75 };
 // More points than this are not drawn: a figure of hundreds of thousands of dots is not read.
@@ -59,7 +65,7 @@ async function cellsOf(item, desc, segmentation) {
 // The fill's colors per cell and what the legend says of them: { rgba, name, category (each
 // cell's, or null), categories: [{ name, color }] or null, scale: { name, colors, min, max } or
 // null }, or { note } for a fill figures do not draw yet.
-async function fillOf(app, project, dataset, cells, desc, fill) {
+async function fillOf(app, project, dataset, cells, desc, fill, segmentation = null) {
   if (!fill) return null;
   const labels = parseLabelFill(fill);
   if (labels) {
@@ -79,9 +85,38 @@ async function fillOf(app, project, dataset, cells, desc, fill) {
     const categories = data.sizes.map((_, k) => ({ name: nameOf(names, k), color: categoricalColor(merged[k]) }));
     return { rgba: clusterColors(data.cluster, (k) => merged[k]), name: 'clusters', category: Int32Array.from(data.cluster, (k) => (merged[k] ?? k)), categories };
   }
+  if (fill === 'review') {
+    // Each cell by its review, as the Viewer colors it (a cluster's reviews by its clusters).
+    const seg = segmentationFor(project, dataset.id, segmentation && segmentation !== 'instrument' ? segmentation : null);
+    const records = reviewsOf(project, dataset.id);
+    const needed = [...new Set(records.filter((r) => r.target === 'clusters' && r.segmentation?.id === seg?.id).map((r) => r.clusters.clustering))];
+    const clusters = new Map(await Promise.all(needed.map((id) => app.bundles.clusteringData(id).then((d) => [id, d.cluster]).catch(() => [id, null]))));
+    const st = cellReviewState(records, seg?.id, cells.n, (id) => clusters.get(id) ?? null);
+    const rgba = reviewColors(st);
+    const category = new Int32Array(cells.n).fill(-1);
+    for (let i = 0; i < cells.n; i += 1) {
+      if (rgba[4 * i + 3] === 0) continue;
+      category[i] = STATUS_COLORS.findIndex((c) => c.color[0] === rgba[4 * i] && c.color[1] === rgba[4 * i + 1] && c.color[2] === rgba[4 * i + 2]);
+    }
+    return { rgba, name: 'their review', category, categories: STATUS_COLORS.map((c) => ({ name: c.label, color: `#${c.color.map((v) => v.toString(16).padStart(2, '0')).join('')}` })) };
+  }
   const spec = (cells.kind === 'segmentation' ? SEG_FILLS : FILLS).find((f) => f.id === fill);
-  if (!spec || spec.scale || spec.id === 'limitations' || fill === 'review') return { note: `Cells filled by ${spec?.label?.toLowerCase() ?? fill} are not drawn in figures yet: they are drawn unfilled.` };
+  if (!spec) return { note: `The fill ${fill} is not the cells': they are drawn unfilled.` };
   const rgba = cellFillColors(fill, cells, desc);
+  if (rgba && spec.scale === 'certainty') {
+    const r3 = (v) => Number(v.toPrecision(3));
+    return { rgba, name: spec.label.toLowerCase(), category: null, categories: null, scale: { name: spec.label, colors: Array.from({ length: 16 }, (_, i) => certaintyColor(CERTAINTY_RANGE[0] + ((CERTAINTY_RANGE[1] - CERTAINTY_RANGE[0]) * i) / 15)), min: `${r3(CERTAINTY_RANGE[0])} or less`, max: r3(CERTAINTY_RANGE[1]) } };
+  }
+  if (rgba && spec.id === 'limitations') {
+    const category = new Int32Array(cells.n).fill(-1);
+    for (let i = 0; i < cells.n; i += 1) {
+      const flags = cells.limitations[i];
+      if (!flags) continue;
+      const one = LIMITATIONS.findIndex((l) => l.bit === flags);
+      category[i] = one >= 0 ? one : LIMITATIONS.length;
+    }
+    return { rgba, name: 'their limitations', category, categories: [...LIMITATIONS, SEVERAL].map((l) => ({ name: l.label, color: l.color })) };
+  }
   if (!rgba) return { note: `The fill ${fill} is not the cells'.` };
   if (spec.categorical) {
     const methods = desc.cells.methods ?? [];
@@ -150,6 +185,40 @@ async function stainGrid(desc, channel, level, region) {
   return { x0: range.tx0 * tileUm(grid, level), y0: range.ty0 * tileUm(grid, level), um, cols, rows, data };
 }
 
+// A post-Xenium image's samples around a region at a level, as one grid of the level's pixels:
+// { x0, y0, cols, rows, data } (RGB bytes, or a channel's 16-bit samples).
+async function imageGrid(id, desc, inverse, level, channel, rect) {
+  const levels = desc.image.levels;
+  const range = overlayTileRange(levels, level, inverse, rect);
+  if (!range) return null;
+  const lv = levels[level];
+  const rgb = desc.image.kind === 'rgb';
+  const cols = (range.tx1 - range.tx0 + 1) * lv.tileWidth;
+  const rows = (range.ty1 - range.ty0 + 1) * lv.tileHeight;
+  const data = rgb ? new Uint8Array(3 * cols * rows) : new Uint16Array(cols * rows);
+  const jobs = [];
+  for (let ty = range.ty0; ty <= range.ty1; ty += 1) {
+    for (let tx = range.tx0; tx <= range.tx1; tx += 1) {
+      jobs.push(getBuffer(`/api/images/${encodeURIComponent(id)}/tiles/${level}/${rgb ? 0 : channel}/${tx}/${ty}`).then(({ buffer, headers }) => {
+        const w = Number(headers.get('X-Tile-Width'));
+        const h = Number(headers.get('X-Tile-Height'));
+        const b = new Uint8Array(buffer);
+        const ox = (tx - range.tx0) * lv.tileWidth;
+        const oy = (ty - range.ty0) * lv.tileHeight;
+        for (let y = 0; y < h; y += 1) {
+          for (let x = 0; x < w; x += 1) {
+            const at = (oy + y) * cols + ox + x;
+            if (rgb) data.set(b.subarray(3 * (y * w + x), 3 * (y * w + x) + 3), 3 * at);
+            else data[at] = b[y * w + x] + 256 * b[w * h + y * w + x];
+          }
+        }
+      }));
+    }
+  }
+  await Promise.all(jobs);
+  return { x0: range.tx0 * lv.tileWidth, y0: range.ty0 * lv.tileHeight, cols, rows, data };
+}
+
 // The chosen genes' transcripts in a region: { x, y, gene (each one's slot among the genes) }.
 async function pointsIn(cells, grid, region, genes, minQ) {
   const range = gridTileRange(grid, 0, region);
@@ -191,9 +260,10 @@ function ringMeets(xy, region) {
   return x1 >= region.x0 && x0 <= region.x1 && y1 >= region.y0 && y0 <= region.y1;
 }
 
-// A tissue panel's data (lib/figure-tissue.js tissuePanel) for a figure, its stains at dpi dots
-// an inch. Throws when its view or dataset cannot be read.
-export async function tissuePanelData(app, fig, panel, { dpi = 300 } = {}) {
+// A tissue panel's legend and what it rests on (its view read, its cells, fill and outlines
+// around its region), before its stains and points: the panels of a row share their legends'
+// height. Throws when its view or dataset cannot be read.
+async function prepareTissue(app, fig, panel) {
   const project = app.store.project;
   const view = (project.views ?? []).find((v) => v.id === panel.view);
   if (!view) throw new Error(`The saved view ${panel.view} is not in the project.`);
@@ -214,52 +284,104 @@ export async function tissuePanelData(app, fig, panel, { dpi = 300 } = {}) {
   const cells = drawCells ? await cellsOf(item, desc, view.segmentation) : null;
   let fill = null;
   if (cells && c.fill) {
-    fill = await fillOf(app, project, dataset, cells.table, desc, c.fill);
+    fill = await fillOf(app, project, dataset, cells.table, desc, c.fill, view.segmentation);
     if (fill?.note) {
       notes.push(fill.note);
       fill = null;
     }
   }
   const box = panelBox(fig, panel);
-  // The legend: the stains, the genes, and the fill's categories among the cells drawn (found
-  // over the region the legend leaves, which the legend's own size sets: settled in a few rounds).
   const baseItems = [
     ...channels.map((ch) => ({ group: 'Stains', name: ch.name, kind: 'square', color: ch.color })),
     ...genes.map((g, i) => ({ group: 'Transcripts', name: genesAll[g]?.name ?? `gene ${g}`, kind: 'dot', color: categoricalColor(i) })),
   ];
-  let rings = [];
-  let items = baseItems;
-  let layout = tissueLayout(box, panel, items, fig.text);
-  if (cells) {
-    // Every ring the largest region could show, then those the settled region shows.
-    rings = await ringsAround(cells, 'cells', desc.grid, layout.region);
-    for (let round = 0; round < 3; round += 1) {
-      const fillItems = [];
-      if (fill?.categories) {
-        const present = new Set();
-        for (const r of rings) if (r.cell >= 0 && ringMeets(r.xy, layout.region) && fill.category[r.cell] >= 0) present.add(fill.category[r.cell]);
-        // Labels' unlabeled cells are their set's last category.
-        fill.categories.forEach((cat, k) => {
-          if (present.has(k)) fillItems.push({ group: 'Cells', name: cat.name, kind: 'square', color: cat.color });
-        });
-      } else if (fill?.scale) fillItems.push({ group: 'Cells', name: fill.scale.name, kind: 'scale', colors: fill.scale.colors, min: fill.scale.min, max: fill.scale.max });
-      const next = [...baseItems, ...fillItems];
-      const nextLayout = tissueLayout(box, panel, next, fig.text);
-      const same = JSON.stringify(next) === JSON.stringify(items);
-      items = next;
-      layout = nextLayout;
-      if (same) break;
-    }
+  // Every ring the largest region could show (the region with no legend below it).
+  const widest = tissueLayout(box, panel, [], fig.text);
+  const rings = cells ? await ringsAround(cells, 'cells', desc.grid, widest.region) : [];
+  // The fill's legend: its categories among the cells a region shows, or its scale.
+  const itemsIn = (region) => {
+    const fillItems = [];
+    if (fill?.categories) {
+      const present = new Set();
+      for (const r of rings) if (r.cell >= 0 && ringMeets(r.xy, region) && fill.category[r.cell] >= 0) present.add(fill.category[r.cell]);
+      fill.categories.forEach((cat, k) => {
+        if (present.has(k)) fillItems.push({ group: 'Cells', name: cat.name, kind: 'square', color: cat.color });
+      });
+    } else if (fill?.scale) fillItems.push({ group: 'Cells', name: fill.scale.name, kind: 'scale', colors: fill.scale.colors, min: fill.scale.min, max: fill.scale.max });
+    return [...baseItems, ...fillItems];
+  };
+  // Settled with the region it leaves, in a few rounds.
+  let items = itemsIn(widest.region);
+  for (let round = 0; round < 3; round += 1) {
+    const next = itemsIn(tissueLayout(box, panel, items, fig.text).region);
+    const same = JSON.stringify(next) === JSON.stringify(items);
+    items = next;
+    if (same) break;
+  }
+  // The post-Xenium images the view shows, each by the alignment in use (an image not aligned is
+  // not drawn, as in the Viewer).
+  const placed = placedImages(project, dataset.id);
+  const images = [];
+  for (const layer of view.images ?? []) {
+    if (!layer.visible || !(layer.opacity > 0)) continue;
+    const p = placed.find((x) => x.record.id === layer.id);
+    if (!p?.transform) continue;
+    const d = await app.bundles.imageDescription(layer.id);
+    const tf = await app.bundles.transformDescription(p.transform.id);
+    const deformation = tf?.deformation ? await app.bundles.inverseField(p.transform.id) : null;
+    images.push({ record: p.record, transform: p.transform, layer, desc: { ...d, transform: tf.transform }, deformation });
+  }
+  const imageItems = images.flatMap((im) => (im.desc.image.kind === 'rgb'
+    ? [{ group: 'Images', name: im.record.name, kind: 'square', color: '#c98fb7' }]
+    : im.layer.channels.map((ch, k) => (ch.visible ? { group: 'Images', name: `${im.record.name}: ${im.desc.image.channels[k]?.name ?? `channel ${k}`}`, kind: 'square', color: ch.color } : null)).filter(Boolean)));
+  baseItems.splice(channels.length, 0, ...imageItems);
+  // The dataset's regions the panel draws (all, or those named), each with its name and color.
+  const wanted = panel.regions === true || panel.regions === 'all' ? null : Array.isArray(panel.regions) ? new Set(panel.regions) : new Set();
+  const regions = regionsOf(project, dataset.id).filter((r) => !wanted || wanted.has(r.id)).map((r) => ({ id: r.id, name: r.name, color: `rgb(${r.color.join(', ')})`, geometry: r.geometry }));
+  items = itemsIn(tissueLayout(box, panel, items, fig.text).region);
+  return { view, dataset, item, desc, channels, genes, genesAll, t, c, cells, fill, rings, box, items, itemsIn, notes, regions, images };
+}
+
+// A tissue panel's data (lib/figure-tissue.js tissuePanel), its legend's height at least reserve,
+// its stains at dpi dots an inch.
+async function finishTissue(app, fig, panel, prep, { dpi = 300, reserve = 0 } = {}) {
+  const { desc, channels, genes, genesAll, t, c, cells, fill, rings, box, notes } = prep;
+  let items = prep.items;
+  let layout = tissueLayout(box, panel, items, fig.text, reserve);
+  // A taller reserve leaves a smaller region, which may show fewer of the fill's categories.
+  if (reserve) {
+    items = prep.itemsIn(layout.region);
+    layout = tissueLayout(box, panel, items, fig.text, reserve);
   }
   const region = layout.region;
   const raster = rasterSize(layout.image, dpi);
   let stains = null;
-  if (channels.length) {
-    const umPerPixel = (region.x1 - region.x0) / raster.width;
+  const umPerPixel = (region.x1 - region.x0) / raster.width;
+  if (channels.length || prep.images.length) {
     const level = imageLevel(desc.grid, { scale: 1 / umPerPixel });
     const grids = await Promise.all(channels.map((ch) => stainGrid(desc, ch.index, level, region)));
     const rgba = compositeStains({ width: raster.width, height: raster.height, region, channels: channels.map((ch, i) => ({ window: ch.window, gamma: ch.gamma, color: ch.color, grid: grids[i] })) });
-    stains = { width: raster.width, height: raster.height, rgba, level };
+    stains = { width: raster.width, height: raster.height, rgba, level, images: [] };
+  }
+  // The post-Xenium images over the stains, in the view's order, at the level whose pixels are no
+  // larger than the output's.
+  for (const im of prep.images) {
+    const levels = im.desc.image.levels;
+    const inverse = invert(im.desc.transform);
+    if (!inverse) continue;
+    const level = overlayLevel(levels, im.desc.transform, 1 / umPerPixel);
+    const grow = im.deformation?.max ?? 0;
+    const rect = { x0: region.x0 - grow, y0: region.y0 - grow, x1: region.x1 + grow, y1: region.y1 + grow };
+    const lv = levels[level];
+    const base = { width: raster.width, height: raster.height, region };
+    const parts = im.desc.image.kind === 'rgb' ? [{ kind: 'rgb', channel: 0 }] : im.layer.channels.map((ch, k) => (ch.visible ? { kind: 'channel', channel: k, ch } : null)).filter(Boolean);
+    let covered = 0;
+    for (const part of parts) {
+      const grid = await imageGrid(im.record.id, im.desc, inverse, level, part.channel, rect);
+      if (!grid) continue;
+      covered = Math.max(covered, compositeImage(stains.rgba, { ...base, image: { kind: part.kind, opacity: im.layer.opacity, inverse, scale: levelScale(levels, level), size: [lv.width, lv.height], deformation: im.deformation, grid, ...(part.ch ? { window: part.ch.window, gamma: part.ch.gamma, color: part.ch.color } : {}) } }));
+    }
+    stains.images.push({ id: im.record.id, name: im.record.name, transform: im.transform.id, level, covered });
   }
   let transcripts = null;
   if (genes.length) {
@@ -269,27 +391,58 @@ export async function tissuePanelData(app, fig, panel, { dpi = 300 } = {}) {
   }
   const nuclei = cells && c.nuclei ? (await ringsAround({ ...cells, polygonsBase: desc.polygonsBase ?? `/api/cache/${desc.entries.geometry}/polygons`, geometry: desc.geometry }, 'nuclei', desc.grid, region)) : null;
   return {
-    dataset: dataset.name,
-    view: view.name,
+    dataset: prep.dataset.name,
+    view: prep.view.name,
     background: '#000000',
     legend: items,
+    reserve,
     channels: channels.map((ch) => ch.name),
+    images: (stains?.images ?? []).map((im) => im.name),
+    // An RGB image (an H&E) laid over at half its opacity or more makes the tissue light.
+    light: prep.images.some((im) => im.desc.image.kind === 'rgb' && im.layer.opacity >= 0.5),
     stains,
     cells: cells && (c.outlines || fill) ? { rings, fill: fill?.rgba ?? null, fillName: fill?.name ?? null, opacity: c.opacity ?? 0.55, outline: c.outlines ? OUTLINE : null } : null,
     nuclei: nuclei ? { rings: nuclei, outline: { color: '#6fa8ff', width: 0.25, opacity: 0.75 } } : null,
     transcripts,
+    regions: prep.regions,
     notes,
-    source: { dataset: dataset.id, level: stains?.level ?? null, raster },
+    source: { dataset: prep.dataset.id, level: stains?.level ?? null, raster },
   };
 }
 
-// Every panel's data of a figure: Map(panel id → data, or { missing: why }).
+// A tissue panel's data alone (its legend its own height).
+export async function tissuePanelData(app, fig, panel, options = {}) {
+  return finishTissue(app, fig, panel, await prepareTissue(app, fig, panel), options);
+}
+
+// Every panel's data of a figure: Map(panel id → data, or { missing: why }). The tissue panels of a
+// row (the same top and height) reserve their tallest legend's height, so that their images are
+// as tall.
 export async function resolveFigure(app, fig, options = {}) {
   const out = new Map();
+  const prepared = new Map();
   for (const panel of fig.panels) {
-    if (panel.kind !== 'tissue') continue;
+    if (panel.kind === 'text') continue;
     try {
-      out.set(panel.id, await tissuePanelData(app, fig, panel, options));
+      if (panel.kind === 'tissue') prepared.set(panel.id, await prepareTissue(app, fig, panel));
+      else out.set(panel.id, await resultPanelData(app, panel));
+    } catch (error) {
+      out.set(panel.id, { missing: error.message });
+    }
+  }
+  const rowOf = (p) => `${Math.round(p.y)}|${Math.round(p.h)}`;
+  const reserves = new Map();
+  for (const panel of fig.panels) {
+    const prep = prepared.get(panel.id);
+    if (!prep) continue;
+    const h = legendHeight(prep.items, prep.box.w, fig.text);
+    reserves.set(rowOf(panel), Math.max(reserves.get(rowOf(panel)) ?? 0, h));
+  }
+  for (const panel of fig.panels) {
+    const prep = prepared.get(panel.id);
+    if (!prep) continue;
+    try {
+      out.set(panel.id, await finishTissue(app, fig, panel, prep, { ...options, reserve: reserves.get(rowOf(panel)) ?? 0 }));
     } catch (error) {
       out.set(panel.id, { missing: error.message });
     }

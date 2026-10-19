@@ -74,7 +74,40 @@ import { contingency } from '../web/lib/clusterings.js';
 import { certaintyColor, readSegCells } from '../web/lib/segview.js';
 import { colormapLUT, hexToRgb } from '../web/lib/colormaps.js';
 import { placePoint } from '../web/lib/transforms.js';
-import { invert } from '../web/lib/overlays.js';
+import { invert, readInverseField } from '../web/lib/overlays.js';
+import { divergingColor } from '../web/lib/spatial.js';
+import { log as dlog } from '../web/lib/dmath.js';
+
+// A figure's SVG read by the suite (wave 8): a lettered panel's part of it (from its group to the
+// next panel's), and an image embedded in a part decoded (8-bit RGBA, unfiltered rows, as
+// SituCraft writes them).
+function figurePanelSvg(svg, letter) {
+  const start = svg.indexOf(`aria-label="Panel ${letter}"`);
+  if (start < 0) return '';
+  const next = svg.indexOf('aria-label="Panel ', start + 10);
+  return svg.slice(start, next < 0 ? svg.length : next);
+}
+function embeddedImage(part) {
+  const m = /href="data:image\/png;base64,([^"]+)"/.exec(part);
+  if (!m) return null;
+  const b = Buffer.from(m[1], 'base64');
+  const chunks = [];
+  for (let at = 8; at + 8 <= b.length;) {
+    const n = b.readUInt32BE(at);
+    chunks.push({ type: b.toString('latin1', at + 4, at + 8), data: b.subarray(at + 8, at + 8 + n) });
+    at += 12 + n;
+  }
+  const head = chunks.find((x) => x.type === 'IHDR').data;
+  const width = head.readUInt32BE(0);
+  const height = head.readUInt32BE(4);
+  const raw = inflateSync(Buffer.concat(chunks.filter((x) => x.type === 'IDAT').map((x) => x.data)));
+  const rgba = new Uint8Array(width * height * 4);
+  for (let y = 0; y < height; y += 1) {
+    if (raw[y * (width * 4 + 1)] !== 0) return { width, height, filtered: true };
+    rgba.set(raw.subarray(y * (width * 4 + 1) + 1, (y + 1) * (width * 4 + 1)), y * width * 4);
+  }
+  return { width, height, rgba };
+}
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const BUNDLES = ['xenium-lung-2fov', 'xenium-breast-2fov'];
@@ -2214,6 +2247,87 @@ export async function viewerSuite({ check, MissingData, verbose }) {
             && lr.pixels === 90 && lr.transcripts === 95.45 && lr.numbers === 10 && lr.rho === 0.976 && lr.top.key === 'pair:Immune|Immune' && lr.top.a === 1.44 && lr.top.b === 1.94 && JSON.stringify(lr.immune) === '[249,227]' && lr.behind === '44 22',
             '29 clusters of 11,820 cells, 47% labeled; 7 of 10 pairs, stromal 3.99 with themselves, epithelial–endothelial 0.78, –stromal 0.79; the expansion 90.00% of pixels and 95.45% of transcripts alike; rank correlation 0.976; immune–immune 1.44 to 1.94 (249 and 227 immune cells; 44 and 22 behind it)');
           await act('tour', { end: true });
+
+          // Figures of results (wave 8, slice 2): the Lung's distribution of transcripts, its
+          // cells' map, its classes' enrichment and its genes in a pattern, one figure, written as
+          // SVG and read by the suite: the histogram's counts the suite's own binning of the cells
+          // (40 bins from the least to the 99.5th percentile), each bar's height its count; the map
+          // a point a cell it maps and its clusters named; the heat map a square for each pair with
+          // its ratio's color and a dot for each pair whose adjusted p is below 0.05; the bars the
+          // genes in a pattern, strongest first; no text below 6 pt.
+          {
+            await act('show_map', { dataset: 'xenium-lung-2fov' });
+            const ids = await chrome.eval(`(() => { const p = window.situcraft.store.project; const ds = p.datasets.find((x) => x.name === 'xenium-lung-2fov'); const sp = p.artifacts.filter((a) => a.kind === 'spatial' && a.dataset === ds.id && a.state === 'complete'); return { dataset: ds.id, enrichment: sp.find((a) => a.question === 'enrichment')?.id, moran: sp.find((a) => a.question === 'moran')?.id, map: p.artifacts.filter((a) => a.kind === 'embedding' && a.dataset === ds.id).at(-1)?.id }; })()`);
+            const made = await act('figure', { name: 'Results of the Lung', size: 'double', columns: 2, height_mm: 160, panels: [{ kind: 'qc', dataset: ids.dataset, metric: 'transcripts' }, { kind: 'map', map: ids.map, color: 'clusters' }, { kind: 'spatial', analysis: ids.enrichment }, { kind: 'spatial', analysis: ids.moran }] });
+            const svgPath = join(work, 'results.svg');
+            const jsonPath = join(work, 'results.json');
+            const w1 = await act('write_figure', { name: 'Results of the Lung', path: svgPath, format: 'svg', time: '2026-10-19T12:00:00Z', overwrite: true });
+            const w2 = await act('write_figure', { name: 'Results of the Lung', path: jsonPath, format: 'json', time: '2026-10-19T12:00:00Z', overwrite: true });
+            const svg = existsSync(svgPath) ? readFileSync(svgPath, 'utf8') : '';
+            const manifest = existsSync(jsonPath) ? JSON.parse(readFileSync(jsonPath, 'utf8')) : null;
+            // The suite's own histogram of the cells' transcripts.
+            const values = await chrome.eval(`(async () => {
+              const app = window.situcraft;
+              const ds = app.store.project.datasets.find((x) => x.name === 'xenium-lung-2fov');
+              const item = app.bundles.link(ds.id)?.item ?? app.bundles.itemByPath(ds.path);
+              const { readCells } = await import('/lib/viewer-data.js');
+              const cells = readCells(await fetch(item.url + '/cells').then((r) => r.arrayBuffer()));
+              return Array.from(cells.transcripts);
+            })()`);
+            const sorted = values.filter(Number.isFinite).sort((a, b) => a - b);
+            const lo = sorted[0];
+            const hi = Math.max(sorted[Math.floor(0.995 * (sorted.length - 1))], lo + 1);
+            const edges = hi - lo + 1 <= 40 ? Array.from({ length: hi - lo + 2 }, (_, k) => lo + k - 0.5) : Array.from({ length: 41 }, (_, k) => lo + ((hi - lo) * k) / 40);
+            const own = new Array(edges.length - 1).fill(0);
+            for (const v of values) {
+              if (!(v >= edges[0] && v <= edges.at(-1))) continue;
+              let k = edges.findIndex((e, i) => i < edges.length - 1 && v >= e && v < edges[i + 1]);
+              if (k < 0) k = edges.length - 2;
+              own[k] += 1;
+            }
+            const qcPart = figurePanelSvg(svg, 'A');
+            const bars = [...qcPart.matchAll(/<rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)" fill="#5b4ce6"\/>/g)].map((m) => Number(m[4]));
+            const nonzero = own.filter((c) => c > 0);
+            const top = Math.max(...own);
+            const heightsOff = bars.length === nonzero.length ? bars.filter((h, i) => Math.abs(h / Math.max(...bars) - nonzero[i] / top) > 0.01).length : -1;
+            // The map: a point each cell mapped, its clusters named.
+            const mapInfo = await chrome.eval(`(async () => { const d = await window.situcraft.bundles.mapData(${JSON.stringify(ids.map)}); const c = await window.situcraft.bundles.clusteringData(window.situcraft.store.project.artifacts.find((a) => a.id === ${JSON.stringify(ids.map)}).clustering); const present = new Set(); for (let i = 0; i < d.n; i += 1) if (c.cluster[d.cells[i]] >= 0) present.add(c.cluster[d.cells[i]]); return { n: d.n, clusters: present.size }; })()`);
+            const mapPart = figurePanelSvg(svg, 'B');
+            const mapPoints = (mapPart.match(/<rect [^>]*width="(0\.9|1\.4|0\.6)" height="(0\.9|1\.4|0\.6)"/g) ?? []).length;
+            const mapNames = [...mapPart.matchAll(/<text[^>]*text-anchor="middle"[^>]*>(\d+)<\/text>/g)].length;
+            // The heat map against the analysis's numbers.
+            const en = await (await fetch(`${url}/api/artifacts/${encodeURIComponent(ids.enrichment)}/files/analysis.json`)).json();
+            const K = en.labels.names.length;
+            const wantColors = [];
+            let wantDots = 0;
+            for (let i = 0; i < K; i += 1) {
+              for (let j = 0; j < K; j += 1) {
+                const q = i * K + j;
+                const r = en.enrichment.expected[q] > 0 ? en.enrichment.count[q] / en.enrichment.expected[q] : NaN;
+                if (Number.isNaN(r)) continue;
+                wantColors.push(divergingColor(r === 0 ? -Infinity : dlog(r) / 0.6931471805599453));
+                if ((en.enrichment.padj[q] ?? NaN) < 0.05) wantDots += 1;
+              }
+            }
+            const heatPart = figurePanelSvg(svg, 'C');
+            const squares = [...heatPart.matchAll(/<rect x="[\d.]+" y="[\d.]+" width="([\d.]+)" height="([\d.]+)" fill="(rgb\([^)]+\))"\/>/g)].filter((m) => m[1] === m[2]).map((m) => m[3]);
+            const heatDots = (heatPart.match(/<circle [^>]*fill="#171b26"/g) ?? []).length;
+            const colorsOff = squares.length === wantColors.length ? squares.filter((c, i) => c !== wantColors[i]).length : -1;
+            // The bars: the genes in a pattern, strongest first.
+            const mo = await (await fetch(`${url}/api/artifacts/${encodeURIComponent(ids.moran)}/files/analysis.json`)).json();
+            const pattern = [];
+            for (let g = 0; g < mo.moran.genes.length; g += 1) if ((mo.moran.padj[g] ?? NaN) < 0.05 && Number.isFinite(mo.moran.i[g]) && mo.moran.i[g] > mo.moran.expected) pattern.push(g);
+            pattern.sort((a, b) => mo.moran.i[b] - mo.moran.i[a]);
+            const moranPart = figurePanelSvg(svg, 'D');
+            const barNames = [...moranPart.matchAll(/<text[^>]*text-anchor="end"[^>]*>([A-Za-z0-9-]+)<\/text>/g)].map((m) => m[1]).filter((t) => !/^[\d.]+$/.test(t));
+            const sizes = [...svg.matchAll(/font-size="([\d.]+)"/g)].map((m) => Number(m[1]));
+            const facts = manifest?.panels?.map((p) => p.facts) ?? [];
+            check('viewer', 'a figure of results: the Lung\'s distribution of transcripts the suite\'s own binning, bar by bar; its map a point each cell mapped, its clusters named; its enrichment\'s heat map each pair\'s ratio in its color and a dot where it differs from chance; its genes in a pattern strongest first; no text below 6 pt', `${made.ok ? made.message.slice(0, 160) : made.message}; ${w1.ok && w2.ok ? 'written' : `${w1.message} ${w2.message}`}; QC ${bars.length} bars (${nonzero.length} the suite's), ${heightsOff} heights off, counts ${JSON.stringify(facts[0]?.counts) === JSON.stringify(own) ? 'the suite\'s' : 'other'}; map ${mapPoints} points of ${mapInfo.n}, ${mapNames} names of ${mapInfo.clusters}; heat map ${squares.length} squares of ${wantColors.length}, ${colorsOff} colors off, ${heatDots} dots of ${wantDots}; bars ${barNames.join(' ')} against ${pattern.slice(0, barNames.length).map((g) => mo.moran.genes[g]).join(' ')}; text ${Math.min(...sizes)} pt or more`,
+              made.ok && w1.ok && w2.ok && bars.length === nonzero.length && heightsOff === 0 && JSON.stringify(facts[0]?.counts) === JSON.stringify(own)
+              && mapPoints === mapInfo.n && mapNames === mapInfo.clusters && squares.length === wantColors.length && colorsOff === 0 && heatDots === wantDots
+              && barNames.length >= 5 && barNames.join() === pattern.slice(0, barNames.length).map((g) => mo.moran.genes[g]).join() && Math.min(...sizes) >= 6,
+              'every bar, point, square, dot and gene the suite\'s; 6 pt or more');
+          }
         }
 
         // The simulated example, made on this computer, and its worked example scoring the
@@ -2305,6 +2419,121 @@ export async function viewerSuite({ check, MissingData, verbose }) {
             && close2(av.automatic?.median, 0.41) && close2(av.automatic?.p90, 0.62) && close2(av.automatic?.trueMedian, 0.47) && close2(av.automatic?.trueP90, 0.75),
             'matrix 0.63/1.09 checked, 0.69/1.12 truly; landmarks 0.58/1.19, 0.72/1.22 (fit 0.57, left out 1.00); automatic 0.41/0.62, 0.47/0.75; the automatic version in use');
           await act('tour', { end: true });
+
+          // The H&E in a figure (wave 8, slice 2): a saved view of the simulated tissue showing its
+          // H&E by the alignment in use (the automatic one), drawn in a figure; each pixel of the
+          // stains' raster checked against the suite's own placing (the deformation's field
+          // interpolated by the suite, the transform inverted, the image's pixels interpolated from
+          // its tiles), and the Viewer's own pixels against the same placing within a few levels.
+          {
+            const he = await chrome.eval(`(async () => { const p = window.situcraft.store.project; const ds = p.datasets.find((x) => x.name === 'simulated-standard'); const im = p.artifacts.find((a) => a.kind === 'image' && a.dataset === ds.id && /H&E/.test(a.name)); const d = im ? await window.situcraft.bundles.imageDescription(im.id) : null; return im ? { id: im.id, name: im.name, levels: d.image.levels } : null; })()`);
+            await act('show_tissue', { dataset: 'simulated-standard', center: [250, 250], um_per_pixel: 0.25, genes: [], transcripts: false, outlines: false, nuclei: false, fill: 'none', images: { [he?.name]: { visible: true, opacity: 1 } } });
+            await act('save_view', { name: 'The H&E' });
+            const made = await act('figure', { name: 'The H&E', size: 'single', panels: [{ kind: 'tissue', view: 'The H&E', width_um: 160 }] });
+            const svgPath = join(work, 'he.svg');
+            const jsonPath = join(work, 'he.json');
+            const w1 = await act('write_figure', { name: 'The H&E', path: svgPath, format: 'svg', overwrite: true });
+            const w2 = await act('write_figure', { name: 'The H&E', path: jsonPath, format: 'json', overwrite: true });
+            const svg = existsSync(svgPath) ? readFileSync(svgPath, 'utf8') : '';
+            const manifest = existsSync(jsonPath) ? JSON.parse(readFileSync(jsonPath, 'utf8')) : null;
+            const facts = manifest?.panels?.[0]?.facts;
+            const placed = facts?.raster?.images?.[0];
+            const raster = embeddedImage(figurePanelSvg(svg, 'A'));
+            // The suite's own placing of the image: the transform in use, its deformation's field.
+            const tf = placed ? await (await fetch(`${url}/api/transforms/${encodeURIComponent(placed.transform)}`)).json() : null;
+            const field = tf?.deformation ? readInverseField(await (await fetch(`${url}/api/transforms/${encodeURIComponent(placed.transform)}/inverse`)).arrayBuffer()) : null;
+            const inv = tf ? invert(tf.transform) : null;
+            const tiles = new Map();
+            const pixelOf = async (level, x, y) => {
+              const lv = he.levels[level];
+              const tx = Math.floor(x / lv.tileWidth);
+              const ty = Math.floor(y / lv.tileHeight);
+              const key = `${level}/${tx}/${ty}`;
+              if (!tiles.has(key)) {
+                const r = await fetch(`${url}/api/images/${encodeURIComponent(he.id)}/tiles/${level}/0/${tx}/${ty}`);
+                tiles.set(key, r.ok ? { w: Number(r.headers.get('X-Tile-Width')), b: new Uint8Array(await r.arrayBuffer()) } : null);
+              }
+              const t = tiles.get(key);
+              const at = 3 * ((y - ty * lv.tileHeight) * t.w + (x - tx * lv.tileWidth));
+              return [t.b[at], t.b[at + 1], t.b[at + 2]];
+            };
+            const placeColor = async (level, x, y) => {
+              let px = x;
+              let py = y;
+              if (field) {
+                const gx = Math.min(field.nx - 1, Math.max(0, (x - field.x0) / field.step));
+                const gy = Math.min(field.ny - 1, Math.max(0, (y - field.y0) / field.step));
+                const i0 = Math.min(field.nx - 2, Math.floor(gx));
+                const j0 = Math.min(field.ny - 2, Math.floor(gy));
+                const v = (i, j, k) => field.field[2 * (j * field.nx + i) + k];
+                const fx = gx - i0;
+                const fy = gy - j0;
+                for (const k of [0, 1]) {
+                  const d = (v(i0, j0, k) * (1 - fx) + v(i0 + 1, j0, k) * fx) * (1 - fy) + (v(i0, j0 + 1, k) * (1 - fx) + v(i0 + 1, j0 + 1, k) * fx) * fy;
+                  if (k === 0) px += d;
+                  else py += d;
+                }
+              }
+              const lv = he.levels[level];
+              const sx = he.levels[0].width / lv.width;
+              const sy = he.levels[0].height / lv.height;
+              const lx = (inv[0][0] * px + inv[0][1] * py + inv[0][2]) / sx - 0.5;
+              const ly = (inv[1][0] * px + inv[1][1] * py + inv[1][2]) / sy - 0.5;
+              const x0 = Math.max(0, Math.min(lv.width - 1, Math.floor(lx)));
+              const y0 = Math.max(0, Math.min(lv.height - 1, Math.floor(ly)));
+              const x1 = Math.min(lv.width - 1, x0 + 1);
+              const y1 = Math.min(lv.height - 1, y0 + 1);
+              const ax = Math.min(1, Math.max(0, lx - x0));
+              const ay = Math.min(1, Math.max(0, ly - y0));
+              const [p00, p10, p01, p11] = await Promise.all([pixelOf(level, x0, y0), pixelOf(level, x1, y0), pixelOf(level, x0, y1), pixelOf(level, x1, y1)]);
+              return [0, 1, 2].map((k) => (p00[k] * (1 - ax) + p10[k] * ax) * (1 - ay) + (p01[k] * (1 - ax) + p11[k] * ax) * ay);
+            };
+            let rasterOff = -1;
+            let probed = 0;
+            if (raster?.rgba && placed && inv) {
+              rasterOff = 0;
+              const r = facts.region;
+              for (let k = 0; k < 60; k += 1) {
+                const px = Math.floor(((k * 37) % 97) / 97 * (raster.width - 20)) + 10;
+                const py = Math.floor(((k * 53) % 89) / 89 * (raster.height - 20)) + 10;
+                const want = await placeColor(placed.level, r.x0 + (px + 0.5) * ((r.x1 - r.x0) / raster.width), r.y0 + (py + 0.5) * ((r.y1 - r.y0) / raster.height));
+                const i = 4 * (py * raster.width + px);
+                if (want.some((c, j) => Math.abs(Math.round(c) - raster.rgba[i + j]) > 1)) rasterOff += 1;
+                probed += 1;
+              }
+            }
+            // The Viewer's own pixels of the same view, at its level.
+            await act('open_view', { view: 'The H&E' });
+            const probes = await chrome.eval(`(async () => {
+              const v = window.situcraftViewer;
+              await v.settled();
+              const r = v.renderer;
+              const [w, h] = r.size();
+              const { screenToWorld } = await import('/lib/viewport.js');
+              const { overlayLevel } = await import('/lib/overlays.js');
+              const o = r.overlays[0];
+              const level = overlayLevel(o.desc.image.levels, o.desc.transform, r.camera.scale);
+              const kept = [r.selected, r.highlight];
+              r.selected = null;
+              r.highlight = null;
+              const out = [];
+              for (const [fx, fy] of [[0.2, 0.2], [0.35, 0.6], [0.5, 0.5], [0.62, 0.31], [0.71, 0.77], [0.8, 0.45], [0.27, 0.83], [0.9, 0.15], [0.45, 0.9]]) {
+                const sx = Math.floor(w * fx), sy = Math.floor(h * fy);
+                const [x, y] = screenToWorld(r.camera, w, h, sx + 0.5, sy + 0.5);
+                out.push({ x, y, color: r.readColor(sx, sy).slice(0, 3) });
+              }
+              [r.selected, r.highlight] = kept;
+              return { level, out };
+            })()`);
+            let viewerOff = 0;
+            for (const p of probes.out) {
+              const want = await placeColor(probes.level, p.x, p.y);
+              if (want.some((c, j) => Math.abs(c - p.color[j]) > 4)) viewerOff += 1;
+            }
+            check('viewer', 'a figure of the H&E: placed by the alignment in use, its pixels the suite\'s own placing of the image through the deformation and the transform, and the Viewer\'s within a few levels', `${made.ok ? made.message.slice(0, 220) : made.message}; ${w1.ok && w2.ok ? 'written' : `${w1.message} ${w2.message}`}; ${placed ? `image at level ${placed.level}, ${placed.covered} pixels covered, by ${placed.transform}${field ? ' (deformed)' : ''}` : 'no image'}; ${rasterOff} of ${probed} raster pixels off; the Viewer at level ${probes.level}, ${viewerOff} of ${probes.out.length} probes off`,
+              made.ok && w1.ok && w2.ok && placed && placed.covered === raster?.width * raster?.height && rasterOff === 0 && probed === 60 && viewerOff === 0 && /H&E/.test(made.message ?? ''),
+              'the image over every pixel; every probe the suite\'s placing; the Viewer within 4 levels');
+          }
 
           const regionSteps = await card('regions-qupath');
           const drawn = await chrome.eval(`(async () => {
@@ -2890,6 +3119,45 @@ export async function viewerSuite({ check, MissingData, verbose }) {
             && gene.ok && gene.data.rows.length === 8 && mean(byGroup('treated')) > mean(byGroup('control'))
             && sp.ok && Object.keys(spf).sort().join() === 'enrichment,moran,nearest' && spf.enrichment.tests.length === 10 && spf.moran.tests.length === 120 && mixed?.ratio > 1 && mixed.ratioLo > 1,
             'the null cohort nothing below 0.05, its spatial statistics refused; SIM033 found in the epithelial-like cells, its interval covering the truth, at most one other gene; treated above control; three families, the epithelial–immune enrichment above 1');
+
+          // A figure of the cohort's comparisons (wave 8, slice 2): the labels' shares by condition
+          // (each estimate with its interval on a log axis), the epithelial-like cells' volcano,
+          // SIM033 by group and the neighbor enrichments by condition, written as SVG and read by
+          // the suite: a row each label, its estimate where its ratio is on the axis's log scale,
+          // those found red; a point each gene tested, those found red and SIM033 named; a dot each
+          // unit; no text below 6 pt.
+          {
+            const made = await act('figure', { name: 'The cohort compared', size: 'double', columns: 2, height_mm: 160, panels: [{ kind: 'cohort', comparison: da.data?.id, plot: 'forest', family: 'share' }, { kind: 'cohort', comparison: de.data?.id, plot: 'volcano', label: 'epithelial-like' }, { kind: 'cohort', comparison: de.data?.id, plot: 'gene', label: 'epithelial-like', gene: 'SIM033' }, { kind: 'cohort', comparison: sp.data?.id, plot: 'forest', family: 'enrichment' }] });
+            const svgPath = join(work, 'cohort.svg');
+            const wrote = await act('write_figure', { name: 'The cohort compared', path: svgPath, format: 'svg', overwrite: true });
+            const svg = existsSync(svgPath) ? readFileSync(svgPath, 'utf8') : '';
+            const abu = await (await fetch(`${url}/api/artifacts/${encodeURIComponent(da.data?.id)}/files/abundance.json`)).json();
+            const share = abu.families.find((f) => f.family === 'share');
+            const contrast = abu.design.contrasts[0].name;
+            const tests = share.tests.filter((t) => t.contrast === contrast);
+            const forest = [...figurePanelSvg(svg, 'A').matchAll(/<rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)" fill="(#171b26|#d63b4a)"\/>/g)].filter((m) => m[3] === m[4]).map((m) => ({ x: Number(m[1]) + Number(m[3]) / 2, red: m[5] === '#d63b4a' }));
+            // On a log axis, the estimates' places differ as their logs do.
+            const tested = tests.filter((t) => t.tested);
+            const slope = forest.length >= 2 ? (forest[1].x - forest[0].x) / (Math.log(tested[1].ratio) - Math.log(tested[0].ratio)) : NaN;
+            const placesOff = forest.filter((f, i) => Math.abs(f.x - forest[0].x - slope * (Math.log(tested[i].ratio) - Math.log(tested[0].ratio))) > 0.05).length;
+            const ex = await (await fetch(`${url}/api/artifacts/${encodeURIComponent(de.data?.id)}/files/expression.json`)).json();
+            const epiResult = ex.results.find((r) => r.label === 'epithelial-like');
+            const epiContrast = epiResult.contrasts.find((c) => c.contrast === contrast) ?? epiResult.contrasts[0];
+            const genesFound = epiContrast.padj.filter((p) => p < 0.05).length;
+            const volcano = figurePanelSvg(svg, 'B');
+            const vPoints = (volcano.match(/<circle /g) ?? []).length;
+            const vRed = (volcano.match(/<circle [^>]*fill="#d63b4a"/g) ?? []).length;
+            const dots = (figurePanelSvg(svg, 'C').match(/<circle /g) ?? []).length;
+            const spDoc = await (await fetch(`${url}/api/artifacts/${encodeURIComponent(sp.data?.id)}/files/spatial-tests.json`)).json();
+            const enr = spDoc.families.find((f) => f.family === 'enrichment').tests.filter((t) => t.contrast === contrast);
+            const spRows = [...figurePanelSvg(svg, 'D').matchAll(/<rect x="[\d.]+" y="[\d.]+" width="([\d.]+)" height="([\d.]+)" fill="(#171b26|#d63b4a)"\/>/g)].filter((m) => m[1] === m[2]);
+            const sizes = [...svg.matchAll(/font-size="([\d.]+)"/g)].map((m) => Number(m[1]));
+            check('viewer', 'a figure of a cohort\'s comparisons: each label\'s share by condition on a log axis, those found red; the epithelial-like cells\' volcano a point each gene tested, those found red and SIM033 named; SIM033 a dot each unit; the enrichments by condition; no text below 6 pt', `${made.ok ? made.message.slice(0, 200) : made.message}; ${wrote.ok ? 'written' : wrote.message}; forest ${forest.length} of ${tests.length} labels, ${placesOff} places off the log scale, ${forest.filter((f) => f.red).length} red of ${tests.filter((t) => t.padj < 0.05).length} found; volcano ${vPoints} points of ${epiResult.genes.length}, ${vRed} red of ${genesFound}; ${dots} units; enrichment ${spRows.length} rows of ${enr.length}, ${spRows.filter((m) => m[3] === '#d63b4a').length} red of ${enr.filter((t) => t.padj < 0.05).length}; text ${Math.min(...sizes)} pt or more`,
+              made.ok && wrote.ok && forest.length === tested.length && tested.length === 4 && placesOff === 0 && forest.filter((f) => f.red).length === tests.filter((t) => t.padj < 0.05).length
+              && vPoints === epiResult.genes.length && vRed === genesFound && /<text[^>]*>SIM033<\/text>/.test(volcano) && dots === 8
+              && spRows.length >= 5 && spRows.length <= enr.length && spRows.filter((m) => m[3] === '#d63b4a').length === enr.slice(0, spRows.length).filter((t) => t.padj < 0.05).length && Math.min(...sizes) >= 6,
+              'four labels on the log scale, the found red; a point each gene, the found red, SIM033 named; 8 units; the enrichments; 6 pt or more');
+          }
 
           // Worked examples on the simulated cohorts (wave 7, slice 9), each run step by step and
           // every number its cards state checked against the comparison's own document: a gene

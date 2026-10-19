@@ -98,3 +98,16 @@ test('PDF: the marks on a page of points, text as text, the rotation turned to t
   assert.deepEqual(bytes, await writePDF([pdfPage(marks, 100, 50)], { title: 'Figure 1', date: new Date('2026-10-12T00:00:00Z') }));
   await assert.rejects(writePDF([pdfPage(marks, 100, 50)], { title: 'x' }), /creation date/);
 });
+
+test('a path filled by the even-odd rule: its hole in SVG and in PDF (SituCraft)', async () => {
+  const marks = [{ type: 'path', d: 'M0 0H10V10H0ZM3 3H7V7H3Z', fill: '#ff0000', rule: 'evenodd' }];
+  const svg = await marksToSVG(marks, 10, 10);
+  assert.match(svg, /fill="#ff0000" fill-rule="evenodd"/);
+  const pdf = await writePDF([pdfPage(marks, 10, 10)], { date: new Date('2026-10-19T00:00:00Z') });
+  const text = new TextDecoder('latin1').decode(pdf);
+  const at = text.indexOf('<< /Filter /FlateDecode /Length');
+  const length = Number(text.slice(at).match(/\/Length (\d+)/)[1]);
+  const start = text.indexOf('stream\n', at) + 'stream\n'.length;
+  const ops = inflateSync(Buffer.from(pdf.slice(start, start + length))).toString('latin1');
+  assert.match(ops, /\nf\*$/);
+});

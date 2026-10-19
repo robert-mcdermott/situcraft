@@ -306,8 +306,16 @@ letters, panels, created}`: `size` one of `single`, `onehalf`, `double` or `slid
 `height` the page in points (1/72 inch); `text` its text size in points (6 to 36); `letters` whether
 its panels are lettered. Each panel is `{id, kind, x, y, w, h}`, its place on the page in points,
 and what it shows: a `tissue` panel's `view` (a saved view's id), `region` (`{cx, cy, width}`, its
-center and width in µm), and optionally `scaleBar` (µm) and `pointSize` (pt); a `text` panel's
-`text`, `size`, `bold` and `align`. A panel with `letter: false` is not lettered. A figure holds no
+center and width in µm), and optionally `scaleBar` (µm), `pointSize` (pt) and `regions` (`true`
+for all the dataset's regions, or a list of their ids); a `qc` panel's `dataset`, `metric`
+(`transcripts`, `total`, `area` or `nucleusArea`), and optionally `log`, `filter` (a filter's id,
+whose thresholds are drawn) and `segmentation`; a `map` panel's `map` (a map's id) and `color`
+(`clusters`, or `labels:<label set id>:<level>`); a `spatial` panel's `analysis` (an enrichment's,
+nearest distances' or Moran's I's id); a `cohort` panel's `comparison` (a comparison of abundance,
+expression or spatial statistics), `plot` (`forest`, `units`, `volcano` or `gene`) and optionally
+`family`, `label`, `gene`, `contrast` and `key` (a spatial statistic, as `a|b`); a `text` panel's
+`text`, `size`, `bold` and `align`. Any panel may have a `title`. A panel with `letter: false` is
+not lettered. A figure holds no
 data: it is drawn from the project whenever it is shown or written.
 
 ### Figures
@@ -329,7 +337,7 @@ or as the manifest alone (JSON):
 | `project` | `{id, name}` |
 | `figure` | The figure as the project holds it (above) |
 | `description` | The figure in words, panel by panel |
-| `panels` | Each `{id, letter, kind, shows, drawing, inputs, facts}`: `shows` in a few words; `drawing` the SHA-256 of the panel's marks written as SVG, each image in it stood in for by its size and the SHA-256 of its RGBA pixels (so that it does not depend on how a PNG is compressed); `inputs` what it was drawn from (a tissue panel's `dataset`: `{id, name, run, experimentUuid, fingerprint}`, the fingerprint the SHA-256 of the dataset's file fingerprint as canonical JSON; `view`: `{id, name, made}`, `made` the SHA-256 of the saved view as canonical JSON; `region`; `artifacts`: the segmentation, label set or clustering drawn, `{id, kind, name, files?}`); `facts` what a tissue panel drew (`region` `{x0, y0, x1, y1}` in µm, `umPerPt`, `scaleBar` `{um, pt}`, `cells` and `transcripts` drawn, `raster` `{width, height, level}` of its stains or null) |
+| `panels` | Each `{id, letter, kind, shows, drawing, inputs, facts}`: `shows` in a few words; `drawing` the SHA-256 of the panel's marks written as SVG, each image in it stood in for by its size and the SHA-256 of its RGBA pixels (so that it does not depend on how a PNG is compressed); `inputs` what it was drawn from (a tissue panel's `dataset`: `{id, name, run, experimentUuid, fingerprint}`, the fingerprint the SHA-256 of the dataset's file fingerprint as canonical JSON; `view`: `{id, name, made}`, `made` the SHA-256 of the saved view as canonical JSON; `region`; `artifacts`: the segmentation, label set or clustering drawn, each post-Xenium image shown and the alignment in use, `{id, kind, name, files?}`; a result panel's `dataset` and `artifacts`, the analysis, map or comparison it draws and what colors it); `facts` what it drew (a tissue panel's `region` `{x0, y0, x1, y1}` in µm, `umPerPt`, `scaleBar` `{um, pt}`, `cells`, `transcripts` and `regions` drawn, `raster` `{width, height, level, images?}` of its stains or null, each image `{id, name, transform, level, covered}`; a result panel's `chart` and what it counted, such as a distribution's `counts`) |
 | `drawing` | The SHA-256 of the panels' drawings' list as canonical JSON |
 | `fingerprint` | The SHA-256 of everything else as canonical JSON (every object's keys sorted): a manifest edited after it was written does not match it |
 

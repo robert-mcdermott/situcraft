@@ -11,6 +11,7 @@ import { sha256 } from './sha256.js';
 import { marksToSVGSync } from './draw.js';
 import { pngChunk } from './png.js';
 import { panelLetters, panelSummary } from './figures.js';
+import { transformInUse } from './transforms.js';
 
 export const MANIFEST_FORMAT = 'situcraft-figure-manifest';
 export const MANIFEST_VERSION = 1;
@@ -60,17 +61,45 @@ export function viewArtifacts(view) {
   return out;
 }
 
-// The inputs a panel is drawn from, as the project holds them now.
+// The inputs a panel is drawn from, as the project holds them now: a tissue panel's dataset, saved
+// view, region and artifacts; a result panel's dataset and artifacts (the analysis, map or
+// comparison it draws, and what colors it); a text panel's none.
 export function panelInputs(project, panel) {
-  if (panel.kind !== 'tissue') return {};
-  const view = (project.views ?? []).find((v) => v.id === panel.view);
-  if (!view) return { view: { id: panel.view, missing: true } };
-  return {
-    dataset: datasetRef(project, view.dataset),
-    view: { id: view.id, name: view.name, made: digest(view) },
-    region: panel.region,
-    artifacts: viewArtifacts(view).map((a) => artifactRef(project, a.id, a.kind)),
-  };
+  if (panel.kind === 'tissue') {
+    const view = (project.views ?? []).find((v) => v.id === panel.view);
+    if (!view) return { view: { id: panel.view, missing: true } };
+    return {
+      dataset: datasetRef(project, view.dataset),
+      view: { id: view.id, name: view.name, made: digest(view) },
+      region: panel.region,
+      artifacts: [
+        ...viewArtifacts(view).map((a) => artifactRef(project, a.id, a.kind)),
+        // The post-Xenium images it shows, each with the alignment in use.
+        ...(view.images ?? []).filter((l) => l.visible && l.opacity > 0).flatMap((l) => {
+          const t = transformInUse(project, l.id);
+          return [artifactRef(project, l.id, 'image'), ...(t ? [artifactRef(project, t.record.id, 'transform')] : [])];
+        }),
+      ],
+    };
+  }
+  const refs = [];
+  let dataset = null;
+  if (panel.kind === 'qc') {
+    dataset = datasetRef(project, panel.dataset);
+    if (panel.segmentation && panel.segmentation !== 'instrument') refs.push(artifactRef(project, panel.segmentation, 'segmentation'));
+    if (panel.filter) refs.push(artifactRef(project, panel.filter, 'filter'));
+  }
+  if (panel.kind === 'map') {
+    refs.push(artifactRef(project, panel.map, 'embedding'));
+    const labels = /^labels:([^:]+)/.exec(panel.color ?? '');
+    const map = project.artifacts.find((a) => a.id === panel.map);
+    if (labels) refs.push(artifactRef(project, labels[1], 'labels'));
+    else if (map?.clustering) refs.push(artifactRef(project, map.clustering, 'clustering'));
+  }
+  if (panel.kind === 'spatial') refs.push(artifactRef(project, panel.analysis, 'spatial'));
+  if (panel.kind === 'cohort') refs.push(artifactRef(project, panel.comparison, 'comparison'));
+  if (!refs.length && !dataset) return {};
+  return { ...(dataset ? { dataset } : {}), artifacts: refs };
 }
 
 // --- The manifest --------------------------------------------------------------------------------
@@ -120,7 +149,8 @@ export function buildManifest(project, fig, drawn, context = {}) {
 // (exactly: they are the same numbers on every computer), the scale bar, the cells and transcripts
 // drawn and the stains' pixels and level.
 function factsOf(f) {
-  return { region: f.region, umPerPt: f.umPerPt, scaleBar: f.scaleBar, cells: f.cells, transcripts: f.transcripts, raster: f.raster };
+  if (f.chart) return { chart: f.chart, ...f.gathered };
+  return { region: f.region, umPerPt: f.umPerPt, scaleBar: f.scaleBar, cells: f.cells, transcripts: f.transcripts, ...(f.regions ? { regions: f.regions } : {}), raster: f.raster };
 }
 
 // Whether a manifest is as it was written: { ok, problem? }.
@@ -256,29 +286,32 @@ export function readFigureManifest(input) {
 export function compareManifest(record, project) {
   const check = checkManifest(record);
   const panels = record.panels.map((p) => {
-    if (p.kind !== 'tissue') return { id: p.id, letter: p.letter, shows: p.shows, status: 'unchanged', changes: [] };
-    const now = panelInputs(project, { kind: 'tissue', view: p.inputs?.view?.id, region: p.inputs?.region });
+    if (p.kind === 'text') return { id: p.id, letter: p.letter, shows: p.shows, status: 'unchanged', changes: [] };
+    const inputs = p.inputs ?? {};
+    const now = p.kind === 'tissue' ? panelInputs(project, { kind: 'tissue', view: inputs.view?.id, region: inputs.region }) : null;
     const changes = [];
     let missing = false;
-    if (!now.view || now.view.missing) {
-      missing = true;
-      changes.push(`the saved view "${p.inputs?.view?.name ?? p.inputs?.view?.id}" is not in this project`);
-    } else {
-      if (now.view.made !== p.inputs.view.made) changes.push(`the saved view "${now.view.name}" was saved again since`);
-      if (now.dataset.missing) {
+    if (p.kind === 'tissue') {
+      if (!now.view || now.view.missing) {
         missing = true;
-        changes.push('its dataset is not in this project');
-      } else if (now.dataset.fingerprint !== p.inputs.dataset.fingerprint) changes.push(`${now.dataset.name}'s bundle is not the one it was drawn from`);
-      for (const a of p.inputs.artifacts ?? []) {
-        const found = now.artifacts.find((x) => x.id === a.id);
-        if (!found || found.missing) {
-          missing = true;
-          changes.push(`the ${a.kind} ${a.name ?? a.id} is not in this project`);
-        } else if (found.files !== a.files) changes.push(`the ${a.kind} ${a.name ?? a.id} has other files`);
-      }
+        changes.push(`the saved view "${inputs.view?.name ?? inputs.view?.id}" is not in this project`);
+      } else if (now.view.made !== inputs.view.made) changes.push(`the saved view "${now.view.name}" was saved again since`);
+    }
+    if (inputs.dataset) {
+      const d = datasetRef(project, inputs.dataset.id);
+      if (d.missing) {
+        missing = true;
+        changes.push(`the dataset ${inputs.dataset.name ?? inputs.dataset.id} is not in this project`);
+      } else if (d.fingerprint !== inputs.dataset.fingerprint) changes.push(`${d.name}'s bundle is not the one it was drawn from`);
+    }
+    for (const a of inputs.artifacts ?? []) {
+      const found = artifactRef(project, a.id, a.kind);
+      if (found.missing) {
+        missing = true;
+        changes.push(`the ${a.kind} ${a.name ?? a.id} is not in this project`);
+      } else if (found.files !== a.files) changes.push(`the ${a.kind} ${a.name ?? a.id} has other files`);
     }
     return { id: p.id, letter: p.letter, shows: p.shows, status: missing ? 'missing' : changes.length ? 'changed' : 'unchanged', changes };
   });
   return { intact: check.ok, problem: check.problem ?? null, sameProject: record.project?.id === project.id, panels };
 }
-

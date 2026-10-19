@@ -6,8 +6,9 @@
 // with the project: what changed since, and whether each panel draws the same now.
 
 import { h, icon, clear, downloadBlob, debounce } from './dom.js';
-import { confirmDialog, promptDialog, showDialog, toast } from './overlays.js';
-import { FIGURE_SIZES, addPanel, createFigure, figureSize, figuresOf, panelLetters, panelSummary, removeFigure, removePanel, saveFigure, toMM, updatePanel } from '../lib/figures.js';
+import { confirmDialog, promptDialog, showDialog, showMenu, toast } from './overlays.js';
+import { COHORT_PLOTS, FIGURE_SIZES, addPanel, createFigure, figureSize, figuresOf, panelLetters, panelSummary, removeFigure, removePanel, saveFigure, toMM, updatePanel } from '../lib/figures.js';
+import { QC_METRICS } from './figure-results.js';
 import { drawFigure, paintFigure, readBackFigure, writeFigure } from './figures.js';
 
 // A tissue panel's region from a saved view: its center, and the width a Viewer a thousand CSS
@@ -19,6 +20,34 @@ export function viewRegion(view) {
 // The project's saved views a tissue panel can show (the Viewer's).
 export function tissueViews(project) {
   return (project.views ?? []).filter((v) => (v.mode ?? 'viewer') === 'viewer');
+}
+
+// What the project's result panels can draw: its maps, spatial answers drawn in figures, and
+// comparisons of groups.
+export function resultSources(project) {
+  const of = (kinds) => project.artifacts.filter((a) => kinds.includes(a.kind) && (a.state ?? 'complete') === 'complete');
+  return {
+    maps: of(['embedding']),
+    analyses: of(['spatial']).filter((a) => ['enrichment', 'distances', 'moran'].includes(a.question ?? a.summary?.question)),
+    comparisons: of(['abundance', 'expression', 'spatial-comparison']),
+  };
+}
+
+// A new panel of a kind, of the first thing of that kind the project has.
+export function newPanel(project, kind) {
+  const src = resultSources(project);
+  if (kind === 'tissue') {
+    const v = tissueViews(project)[0];
+    return v ? { kind, view: v.id, region: viewRegion(v) } : null;
+  }
+  if (kind === 'qc') return project.datasets[0] ? { kind, dataset: project.datasets[0].id, metric: 'transcripts' } : null;
+  if (kind === 'map') return src.maps[0] ? { kind, map: src.maps.at(-1).id, color: 'clusters' } : null;
+  if (kind === 'spatial') return src.analyses[0] ? { kind, analysis: src.analyses.at(-1).id } : null;
+  if (kind === 'cohort') {
+    const c = src.comparisons.at(-1);
+    return c ? { kind, comparison: c.id, plot: c.kind === 'expression' ? 'volcano' : 'forest' } : null;
+  }
+  return { kind: 'text', text: 'Text', h: 40 };
 }
 
 export function mountReports(app, container) {
@@ -124,6 +153,49 @@ export function mountReports(app, container) {
     return h('label.field', h('span', label), h('input.input.small', { type: 'number', value: value ?? '', ...attrs, onchange: (e) => onchange(e.target.value === '' ? null : Number(e.target.value)) }));
   }
 
+  // The fields of a result panel: what it draws, chosen among the project's.
+  function resultFields(panel, change) {
+    const p = project();
+    const src = resultSources(p);
+    const select = (label, value, options, onchange) => h('label.field', h('span', label), h('select.input.small', { onchange: (e) => onchange(e.target.value) },
+      ...options.map(([v, text]) => h('option', { value: v, selected: v === value }, text))));
+    const text = (label, value, onchange) => h('label.field', h('span', label), h('input.input.small', { type: 'text', value: value ?? '', onchange: (e) => onchange(e.target.value.trim()) }));
+    if (panel.kind === 'qc') {
+      return [
+        select('Dataset', panel.dataset, p.datasets.map((d) => [d.id, d.name]), (v) => change({ dataset: v, filter: undefined }, 'Choose a panel\'s dataset')),
+        select('Metric', panel.metric, QC_METRICS.map((m) => [m.id, m.label]), (v) => change({ metric: v }, 'Choose a panel\'s metric')),
+        select('Scale', panel.log ? 'log' : 'linear', [['linear', 'Linear'], ['log', 'Logarithmic']], (v) => change({ log: v === 'log' ? true : undefined }, 'Choose a panel\'s scale')),
+        select('Thresholds of a filter', panel.filter ?? '', [['', 'None'], ...p.artifacts.filter((a) => a.kind === 'filter' && a.dataset === panel.dataset).map((a) => [a.id, `${a.name}, version ${a.version}`])], (v) => change({ filter: v || undefined }, 'Choose a panel\'s filter')),
+      ];
+    }
+    if (panel.kind === 'map') {
+      const map = src.maps.find((m) => m.id === panel.map);
+      const labels = p.artifacts.filter((a) => a.kind === 'labels' && a.segmentation === map?.segmentation);
+      return [
+        select('Map', panel.map, src.maps.map((m) => [m.id, m.name]), (v) => change({ map: v, color: 'clusters' }, 'Choose a panel\'s map')),
+        select('Colored by', panel.color ?? 'clusters', [['clusters', 'Its clusters'], ...labels.flatMap((l) => (l.summary?.levels ?? ['Labels']).map((lv, k) => [`labels:${l.id}:${k}`, `${l.summary?.markers ?? l.name}: ${String(lv).toLowerCase()}`]))], (v) => change({ color: v }, 'Color a panel\'s map')),
+      ];
+    }
+    if (panel.kind === 'spatial') return [select('Answer', panel.analysis, src.analyses.map((a) => [a.id, a.name]), (v) => change({ analysis: v }, 'Choose a panel\'s answer'))];
+    if (panel.kind === 'cohort') {
+      const c = src.comparisons.find((x) => x.id === panel.comparison);
+      const plots = Object.entries(COHORT_PLOTS).filter(([k]) => (c?.kind === 'expression' ? ['volcano', 'gene'].includes(k) : ['forest', 'units'].includes(k)));
+      const fields = [
+        select('Comparison', panel.comparison, src.comparisons.map((x) => [x.id, x.name]), (v) => {
+          const next = src.comparisons.find((x) => x.id === v);
+          change({ comparison: v, plot: next?.kind === 'expression' ? 'volcano' : 'forest', family: undefined, label: undefined, gene: undefined, key: undefined }, 'Choose a panel\'s comparison');
+        }),
+        select('Plot', panel.plot, plots, (v) => change({ plot: v }, 'Choose a panel\'s plot')),
+      ];
+      if (c?.kind !== 'expression') fields.push(text('Family (share, density, niche; enrichment, nearest, moran)', panel.family, (v) => change({ family: v || undefined }, 'Choose a panel\'s family')));
+      if (panel.plot === 'units' && c?.kind === 'spatial-comparison') fields.push(text('Statistic (as a|b)', panel.key, (v) => change({ key: v || undefined }, 'Choose a panel\'s statistic')));
+      else if (panel.plot === 'units' || c?.kind === 'expression') fields.push(text('Label', panel.label, (v) => change({ label: v || undefined }, 'Choose a panel\'s label')));
+      if (panel.plot === 'gene') fields.push(text('Gene', panel.gene, (v) => v && change({ gene: v }, 'Choose a panel\'s gene')));
+      return fields;
+    }
+    return [];
+  }
+
   function panelEditor(fig, panel, letter) {
     const views = tissueViews(project());
     const change = (patch, what) => commit(updatePanel(fig, panel.id, patch), what);
@@ -140,9 +212,12 @@ export function mountReports(app, container) {
           numberField('Center y (µm)', r.cy, (v) => Number.isFinite(v) && change({ region: { ...r, cy: v } }, 'Move a panel'), { step: 'any' }),
           numberField('Width (µm)', r.width, (v) => v > 0 && change({ region: { ...r, width: v } }, 'Size a panel\'s region'), { step: 'any', min: '1' }),
           numberField('Scale bar (µm; empty: chosen)', panel.scaleBar ?? null, (v) => change({ scaleBar: v > 0 ? v : undefined }, 'Set a scale bar'), { step: 'any', min: '0' }),
-          numberField('Transcripts\' points (pt)', panel.pointSize ?? 1.2, (v) => v > 0 && v <= 12 && change({ pointSize: v }, 'Size the points'), { step: '0.1', min: '0.1', max: '12' })));
+          numberField('Transcripts\' points (pt)', panel.pointSize ?? 1.2, (v) => v > 0 && v <= 12 && change({ pointSize: v }, 'Size the points'), { step: '0.1', min: '0.1', max: '12' })),
+        h('label.viewer-toggle', h('input', { type: 'checkbox', checked: panel.regions === true, onchange: (e) => change({ regions: e.target.checked ? true : undefined }, 'Draw a panel\'s regions') }), 'Draw the dataset\'s regions'));
     } else if (panel.kind === 'text') {
       body.push(h('label.field', h('span', 'Text'), h('textarea.input', { rows: 2, onchange: (e) => change({ text: e.target.value }, 'Edit a text panel') }, panel.text)));
+    } else {
+      body.push(h('div.reports-fields', ...resultFields(panel, change)));
     }
     body.push(h('div.reports-fields',
       numberField('Width (pt)', panel.w, (v) => v >= 20 && change({ w: v }, 'Size a panel'), { step: 'any' }),
@@ -181,11 +256,23 @@ export function mountReports(app, container) {
         numberField('Height (mm)', toMM(fig.height), (v) => v >= 25.4 && v <= 700 && change({ height: Math.round(((v * 72) / 25.4) * 100) / 100 }, `Size figure ${fig.name}`), { step: '1' }),
         numberField('Text (pt)', fig.text, (v) => v >= 6 && v <= 36 && change({ text: v }, `Set the text of ${fig.name}`), { step: '0.5', min: '6', max: '36' })),
       h('div.btn-row',
-        h('button.btn.small', { type: 'button', disabled: !views.length, onclick: () => {
-          const v = views[0];
-          commit(addPanel(fig, { kind: 'tissue', view: v.id, region: viewRegion(v) }, { columns: 2 }).figure, `Add a panel to ${fig.name}`);
-        } }, icon('plus'), 'Add a tissue panel'),
-        h('button.btn.small', { type: 'button', onclick: () => commit(addPanel(fig, { kind: 'text', text: 'Text' }, { columns: 2, h: 40 }).figure, `Add a text panel to ${fig.name}`) }, icon('plus'), 'Add text')),
+        h('button.btn.small', { type: 'button', 'aria-haspopup': 'menu', onclick: (e) => {
+          const p = project();
+          const src = resultSources(p);
+          const add = (kind, what) => {
+            const panel = newPanel(p, kind);
+            if (panel) commit(addPanel(fig, panel, { columns: 2 }).figure, `Add ${what} to ${fig.name}`);
+          };
+          showMenu(e.currentTarget, [
+            { label: 'The tissue (a saved view)', icon: 'eye', disabled: !views.length, hint: views.length ? '' : 'save a view in the Viewer', onSelect: () => add('tissue', 'a tissue panel') },
+            { label: 'A QC distribution', icon: 'qc', disabled: !p.datasets.length, onSelect: () => add('qc', 'a QC panel') },
+            { label: 'The cells\' map', icon: 'tag', disabled: !src.maps.length, hint: src.maps.length ? '' : 'map a clustering in Cell types', onSelect: () => add('map', 'a map') },
+            { label: 'A spatial answer', icon: 'graph', disabled: !src.analyses.length, hint: src.analyses.length ? '' : 'enrichment, distances or Moran\'s I', onSelect: () => add('spatial', 'a spatial answer') },
+            { label: 'A cohort\'s comparison', icon: 'samples', disabled: !src.comparisons.length, onSelect: () => add('cohort', 'a comparison') },
+            '-',
+            { label: 'Text', icon: 'edit', onSelect: () => add('text', 'a text panel') },
+          ]);
+        } }, icon('plus'), 'Add a panel')),
       h('div.reports-preview-wrap', preview),
       description,
       notes,

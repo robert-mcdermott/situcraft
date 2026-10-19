@@ -10,6 +10,7 @@
 import { marksToSVG, pdfPage, textMarks, textWidth } from './draw.js';
 import { writePDF } from './pdf.js';
 import { tissuePanel, MIN_TEXT } from './figure-tissue.js';
+import { chartPanel } from './charts.js';
 
 export const mm = (v) => (v * 72) / 25.4;
 export const toMM = (pt) => Math.round(((pt * 25.4) / 72) * 10) / 10;
@@ -26,8 +27,15 @@ export const FIGURE_SIZES = [
 
 export const PANEL_KINDS = {
   tissue: 'The tissue (a saved view)',
+  qc: 'A QC distribution',
+  map: 'The cells\' map',
+  spatial: 'A spatial answer',
+  cohort: 'A cohort\'s comparison',
   text: 'Text',
 };
+
+// What a cohort panel can draw of each kind of comparison.
+export const COHORT_PLOTS = { forest: 'The effects with their intervals', units: 'A label\'s or statistic\'s units by group', volcano: 'A label\'s genes (a volcano)', gene: 'A gene by group' };
 
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 const INK = '#171b26';
@@ -74,6 +82,21 @@ function checkPanel(p, fig) {
     if (!r || !Number.isFinite(r.cx) || !Number.isFinite(r.cy) || !(r.width > 0)) throw new Error(`Panel ${p.id}: a tissue panel's region is its center and width in µm.`);
     if (p.scaleBar !== undefined && p.scaleBar !== null && !(p.scaleBar > 0)) throw new Error(`Panel ${p.id}: the scale bar's length is in µm, above 0.`);
     if (p.pointSize !== undefined && !(p.pointSize > 0 && p.pointSize <= 12)) throw new Error(`Panel ${p.id}: the transcripts' points are 0 to 12 pt across.`);
+    if (p.regions !== undefined && p.regions !== true && p.regions !== 'all' && !(Array.isArray(p.regions) && p.regions.every((r) => typeof r === 'string'))) throw new Error(`Panel ${p.id}: regions is true (all of them) or a list of their ids.`);
+  }
+  const named = (field, what) => {
+    if (typeof p[field] !== 'string' || !p[field]) throw new Error(`Panel ${p.id}: a ${PANEL_KINDS[p.kind].toLowerCase()} panel names its ${what}.`);
+  };
+  if (p.kind === 'qc') {
+    named('dataset', 'dataset');
+    named('metric', 'metric');
+  }
+  if (p.kind === 'map') named('map', 'map');
+  if (p.kind === 'spatial') named('analysis', 'analysis');
+  if (p.kind === 'cohort') {
+    named('comparison', 'comparison');
+    if (!COHORT_PLOTS[p.plot]) throw new Error(`Panel ${p.id}: a cohort panel draws ${Object.keys(COHORT_PLOTS).join(', ')}, not "${p.plot}".`);
+    if (p.plot === 'gene') named('gene', 'gene');
   }
 }
 
@@ -233,6 +256,11 @@ export function panelSummary(panel, project = null) {
     const view = project?.views?.find((v) => v.id === panel.view);
     return `the saved view "${view?.name ?? panel.view}", ${round(panel.region.width)} µm across`;
   }
+  const artifact = (id) => project?.artifacts?.find((a) => a.id === id)?.name ?? id;
+  if (panel.kind === 'qc') return `the distribution of ${panel.metric} in ${project?.datasets?.find((d) => d.id === panel.dataset)?.name ?? panel.dataset}${panel.log ? ' (log scale)' : ''}`;
+  if (panel.kind === 'map') return `the map "${artifact(panel.map)}" colored by ${panel.color ?? 'clusters'}`;
+  if (panel.kind === 'spatial') return `the answer "${artifact(panel.analysis)}"`;
+  if (panel.kind === 'cohort') return `${COHORT_PLOTS[panel.plot].replace(/^The /, 'the ').replace(/^A /, 'a ')} of "${artifact(panel.comparison)}"${panel.label ? `, ${panel.label}` : ''}${panel.gene ? `, ${panel.gene}` : ''}`;
   return panel.kind;
 }
 
@@ -253,6 +281,7 @@ export function figureMarks(fig, resolved) {
     if (panel.kind === 'text') drawn = textPanel(box, panel, fig);
     else if (!data || data.missing) drawn = missingPanel(box, data?.missing ?? 'Not drawn yet', fig);
     else if (panel.kind === 'tissue') drawn = tissuePanel(box, data, { ...panel, text: fig.text });
+    else if (data.chart) drawn = chartPanel(box, data, { text: fig.text, ...(panel.title !== undefined ? { title: panel.title } : {}) });
     else drawn = missingPanel(box, `SituCraft does not draw "${panel.kind}" panels.`, fig);
     if (data?.notes?.length) drawn = { ...drawn, notes: [...data.notes, ...(drawn.notes ?? [])] };
     const children = [...drawn.marks];

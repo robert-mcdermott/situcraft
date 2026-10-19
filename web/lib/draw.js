@@ -7,7 +7,8 @@
 //   { type: 'rect', x, y, w, h, fill?, stroke?, width?, radius?, dash?, opacity?, title? }
 //   { type: 'hatch', x, y, w, h, fill, stroke, spacing?, width?, title? }   diagonal lines on a fill
 //   { type: 'line', x1, y1, x2, y2, stroke, width?, dash?, opacity? }
-//   { type: 'path', d, fill?, stroke?, width?, dash?, opacity?, title? }    d: absolute M L H V C Z
+//   { type: 'path', d, fill?, stroke?, width?, dash?, opacity?, rule?, title? }   d: absolute M L H V C Z;
+//       rule 'evenodd' fills by the even-odd rule (holes), else nonzero
 //   { type: 'circle', x, y, r, fill?, stroke?, width?, opacity?, title? }
 //   { type: 'text', x, y, text, size, bold?, fill?, anchor?, baseline?, rotate?, title? }
 //       anchor 'start' | 'middle' | 'end'; baseline 'alphabetic' | 'middle' | 'top'; rotate in
@@ -17,8 +18,8 @@
 // Text is set in Helvetica (Arial where the system has no Helvetica), whose widths textWidth gives
 // for layout; PDF writes it as text in the standard font every reader has.
 //
-// Adapted from MaveScape 0.8.0 (web/lib/draw.js, Apache-2.0, the same author), unchanged but for
-// these comments.
+// Adapted from MaveScape 0.8.0 (web/lib/draw.js, Apache-2.0, the same author). Changed: a path's
+// fill rule.
 
 import { PDFPage, ellipsizeText, parseColor, textWidth } from './pdf.js';
 import { encodePNG } from './png.js';
@@ -202,7 +203,7 @@ export function marksToSVGSync(marks, width, height, options = {}) {
         out.push(`<line x1="${num(m.x1)}" y1="${num(m.y1)}" x2="${num(m.x2)}" y2="${num(m.y2)}" stroke="${m.stroke}" stroke-width="${num(m.width ?? 1)}"${m.dash ? ` stroke-dasharray="${m.dash.map(num).join(' ')}"` : ''}${m.opacity !== undefined && m.opacity < 1 ? ` opacity="${num(m.opacity)}"` : ''}/>`);
       } else if (m.type === 'path') {
         const close = m.title ? `>${title(m)}</path>` : '/>';
-        out.push(`<path d="${pathText(parsePath(m.d))}"${paint(m)}${close}`);
+        out.push(`<path d="${pathText(parsePath(m.d))}"${paint(m)}${m.rule === 'evenodd' ? ' fill-rule="evenodd"' : ''}${close}`);
       } else if (m.type === 'circle') {
         out.push(`<circle cx="${num(m.x)}" cy="${num(m.y)}" r="${num(m.r)}"${paint(m)}/>`);
       } else if (m.type === 'text') {
@@ -254,7 +255,7 @@ export function paintMarks(ctx, marks, { imageOf = null } = {}) {
     }
     if (m.fill && m.fill !== 'none') {
       ctx.fillStyle = m.fill;
-      ctx.fill();
+      ctx.fill(m.rule === 'evenodd' ? 'evenodd' : 'nonzero');
     }
     if (m.stroke) {
       ctx.strokeStyle = m.stroke;
@@ -372,7 +373,7 @@ export function marksToPDF(page, marks) {
         else if (s.op === 'C') page.curveTo(...s.args);
         else page.closePath();
       }
-      page.draw({ fill: m.fill === 'none' ? null : m.fill, stroke: m.stroke ?? null, width: m.width ?? 1, dash: m.dash ?? null, join: 1 });
+      page.draw({ fill: m.fill === 'none' ? null : m.fill, stroke: m.stroke ?? null, width: m.width ?? 1, dash: m.dash ?? null, join: 1, evenOdd: m.rule === 'evenodd' });
     } else if (m.type === 'circle') {
       const k = 0.5523 * m.r;
       page.moveTo(m.x + m.r, m.y);

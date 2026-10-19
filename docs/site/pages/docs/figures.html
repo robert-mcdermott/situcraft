@@ -1,32 +1,45 @@
 ---
 title: Figures
-description: SituCraft's figures: saved views of the tissue drawn at a journal's column width with a scale bar and a legend, laid out as lettered panels, and written as SVG, PDF or PNG, each carrying what it was drawn from so that SituCraft can read it back and say whether the project still draws it the same.
-lede: A figure of the tissue is drawn from the project, not copied from the screen. Each panel is a saved view at the figure's size, its place in µm, with a scale bar and a legend of what it shows, and every file written carries what it was drawn from.
+description: SituCraft's figures: saved views of the tissue and plots of results (QC, the cells' map, spatial answers, a cohort's comparisons) drawn at a journal's column width, laid out as lettered panels, and written as SVG, PDF or PNG, each carrying what it was drawn from so that SituCraft can read it back and say whether the project still draws it the same.
+lede: A figure is drawn from the project, not copied from the screen: saved views of the tissue at the figure's size, placed in µm with a scale bar and a legend, beside plots of the results they led to. Every file written carries what it was drawn from.
 ---
       <h2 id="figure">A figure</h2>
-      <p>The <strong>Reports</strong> view keeps the project's figures. A figure is a page of panels, at a journal's column width (one column, 85 mm; one and a half, 114 mm; two, 174 mm) or a 16:9 slide, its text 7 pt by default and never below 6 pt. Its panels are lettered A, B, C in reading order. <strong>New figure</strong> makes one of the first saved view; <strong>Add a tissue panel</strong> and <strong>Add text</strong> add panels beside the last one, and each panel's place and size on the page (in points, 1/72 inch) can be set. The preview draws the figure as it will print. The project tree lists the figures, and a figure opens the Reports view at it.</p>
+      <p>The <strong>Reports</strong> view keeps the project's figures. A figure is a page of panels, at a journal's column width (one column, 85 mm; one and a half, 114 mm; two, 174 mm) or a 16:9 slide, its text 7 pt by default and never below 6 pt. Its panels are lettered A, B, C in reading order. <strong>New figure</strong> makes one of the first saved view; <strong>Add a panel</strong> adds a panel of the tissue, of a result (below) or of text beside the last one, and each panel's place and size on the page (in points, 1/72 inch) can be set. The tissue panels of a row keep their images as tall as each other, whatever their legends hold. The preview draws the figure as it will print. The project tree lists the figures, and a figure opens the Reports view at it.</p>
       <shot name="figures" alt="The Reports view: a figure of the Lung example selected, its size, text and panels, and its preview: the Lung section's DAPI stain with the cells outlined and filled by lineage and three genes' transcripts, a scale bar of 50 µm and a legend of the stains, the transcripts and the lineages">A figure of the Lung section: one tissue panel, its preview as it will print, and the buttons that write it.</shot>
 
       <h2 id="tissue">A tissue panel</h2>
       <p>A tissue panel is a saved view of the Viewer (see <a href="viewer.html#saved-views">Saved views</a>) drawn at the panel's size. Its <strong>region</strong> is a center and a width in µm, at first the view's center and the width a Viewer a thousand pixels wide shows at its zoom; its height follows the panel's shape. The panel draws what the view shows:</p>
       <ul>
         <li><strong>The stains,</strong> each visible channel's sample under each pixel windowed, raised to its gamma and given its color, the channels added, as the Viewer's shader composites them, at 300 dots an inch (the pyramid level whose samples are no larger than the output's pixels). They are one image, as the stains are measured.</li>
-        <li><strong>The cells,</strong> from their full-resolution outlines: outlined, and filled as the view fills them (by a label set, clusters or niches, or by a number such as the cell's area, on viridis over its 1st to 99th percentile), as paths placed in µm. A fill the panels do not draw yet (a refinement's certainties or limitations, the review status) leaves the cells unfilled, and the panel says so.</li>
+        <li><strong>Post-Xenium images</strong> the view shows (an H&amp;E or an immunofluorescence image), each placed by the alignment in use, through its deformation if it has one, as the Viewer places it: an H&amp;E laid over at its opacity, an immunofluorescence image's channels added in their colors.</li>
+        <li><strong>The cells,</strong> from their full-resolution outlines: outlined, and filled as the view fills them (by a label set, clusters or niches, a number such as the cell's area on viridis over its 1st to 99th percentile, a refinement's certainties or limitations, or each cell's review), as paths placed in µm; the nuclei outlined when the view shows them.</li>
+        <li><strong>The regions</strong> of the dataset, when asked (<strong>Draw the dataset's regions</strong>): each outlined in its class's color, faintly filled, and named.</li>
         <li><strong>The transcripts</strong> of the view's genes, of quality 20 or more, each a point in its gene's color. A region holding more than 250,000 of them is not drawn: show a smaller one, or fewer genes.</li>
         <li><strong>A scale bar</strong> of a round length (1, 2 or 5 times a power of ten µm, about a fifth of the width), bottom right, white over the tissue; its length can be set.</li>
         <li><strong>A legend</strong> below: the stains, the genes, and the fill's labels among the cells drawn, or its scale with its range.</li>
       </ul>
       <p>Each panel is described in words (the dataset, the view, the width shown, the stains, how many cells and transcripts it draws, the scale bar), and the description is written with the figure.</p>
 
+      <h2 id="results">Results</h2>
+      <p>A result panel draws a plot of what the project holds, at the figure's text size and never below 6 pt, from the same numbers its view shows:</p>
+      <ul>
+        <li><strong>A QC distribution:</strong> a dataset's cells' transcripts, all transcripts, area or nucleus area, in the QC view's 40 bins from the least to the 99.5th percentile (on a log scale if asked), with a filter's thresholds.</li>
+        <li><strong>The cells' map:</strong> a clustering's map (UMAP), each cell a point colored by its cluster or a label set's labels; many clusters are named on the map, at their cells' middle, rather than in a legend.</li>
+        <li><strong>A spatial answer:</strong> an enrichment's or nearest distances' heat map (each pair's ratio against chance, red more and blue fewer, a dot where the adjusted p is below 0.05), or Moran's I's genes in a pattern, strongest first.</li>
+        <li><strong>A cohort's comparison:</strong> its effects with their intervals (each label's odds or density ratio on a log scale, or each spatial statistic's), a label's or statistic's units by group, a label's volcano with the strongest genes named, or a gene by group. Those found (an adjusted p below 0.05) are red.</li>
+      </ul>
+      <p>A plot that has more rows than its panel holds at 6 pt draws those that fit and says how many it left out.</p>
+      <shot name="figure-results" alt="The Reports view: a figure of the Lung example's results, four panels: the distribution of transcripts per cell, the cells' map colored by cluster with the clusters numbered on it, the classes' neighbor enrichment as a heat map with dots where a pair differs from chance, and the genes in a pattern by Moran's I as bars">A figure of results: the transcripts per cell, the cells' map, the classes' enrichment and the genes in a pattern.</shot>
+
       <h2 id="writing">Writing it</h2>
       <p><strong>SVG</strong> and <strong>PDF</strong> are vector: the cells, points, legend and text are drawn as shapes and text (the PDF's text in Helvetica, which every reader has), and the stains as one image of 300 dots an inch. <strong>PNG</strong> is 300 dots an inch, its print size recorded in it. The same figure written at the same time is the same bytes in SVG and PDF.</p>
-      <p>Every file carries the figure's <strong>manifest</strong>: the figure, and for each panel what it shows, what it was drawn from (the dataset by its bundle's run and fingerprint, the saved view as it was, the label set or clustering drawn), what it drew (the region in µm, µm a point, the scale bar, the cells and transcripts, the stains' pixels and level) and a digest of its drawing; SituCraft's version and commit; when it was written; and a fingerprint of all of it. It is in an SVG's metadata, a PDF's attached file and a PNG's text chunk, and <strong>Its manifest</strong> writes it alone as JSON.</p>
+      <p>Every file carries the figure's <strong>manifest</strong>: the figure, and for each panel what it shows, what it was drawn from (the dataset by its bundle's run and fingerprint, the saved view as it was, the label set, clustering, image and alignment drawn; a result's analysis, map or comparison), what it drew (a tissue panel's region in µm, µm a point, the scale bar, the cells, transcripts and regions, the stains' pixels and level and each image's; a plot's counts) and a digest of its drawing; SituCraft's version and commit; when it was written; and a fingerprint of all of it. It is in an SVG's metadata, a PDF's attached file and a PNG's text chunk, and <strong>Its manifest</strong> writes it alone as JSON.</p>
 
       <h2 id="read-back">Reading a figure back</h2>
       <p><strong>Read a figure back…</strong> opens a figure SituCraft wrote and compares it with the project: whether its manifest is as it was written (its fingerprint), whether each panel's saved view, dataset and artifacts are still those it was drawn from, and whether each panel, drawn again now, is drawn the same.</p>
 
       <h2 id="remote">By remote control</h2>
-      <p><code>figure</code> makes a figure of saved views side by side (or changes one) and answers what each panel draws; <code>write_figure</code> writes it as SVG, PDF, PNG or its manifest, with a fixed time when asked; <code>read_figure</code> reads one back. See <a href="remote-control.html">Remote control</a>.</p>
+      <p><code>figure</code> makes a figure of saved views side by side, or of any panels (the tissue, a QC distribution, the cells' map, a spatial answer, a cohort's comparison, text) laid out in rows, or changes one, and answers what each panel draws; <code>write_figure</code> writes it as SVG, PDF, PNG or its manifest, with a fixed time when asked; <code>read_figure</code> reads one back. See <a href="remote-control.html">Remote control</a>.</p>
 
       <h2 id="checked">How it is checked</h2>
       <p>The validation suite makes a figure of a saved view of the Lung example (its DAPI stain, three genes, the cells filled by their lineage), writes it in every format, and reads each with its own readers:</p>
@@ -37,3 +50,13 @@ lede: A figure of the tissue is drawn from the project, not copied from the scre
         <li>No text is below 6 pt, and the PDF's text is the SVG's.</li>
         <li>Read back, the figure is unchanged and draws the same.</li>
       </ul>
+      <p>For results, it draws the Lung's transcripts per cell, its cells' map, its classes' enrichment and its genes in a pattern, and the simulated cohort's shares, volcano, SIM033 by group and enrichments by condition:</p>
+      <ul>
+        <li>The histogram's counts are the suite's own binning of the cells, bar by bar.</li>
+        <li>The map has a point for each cell mapped, and its clusters are named.</li>
+        <li>The heat map has a square for each pair in its ratio's color, and a dot for each pair found.</li>
+        <li>The bars name the genes in a pattern, strongest first.</li>
+        <li>The forest puts each label's estimate where its ratio falls on the log axis, and those found are red.</li>
+        <li>The volcano has a point for each gene tested, those found red and SIM033 named, and the gene by group has a dot for each unit.</li>
+      </ul>
+      <p>With the simulated tissue's H&amp;E, each of 60 pixels of the figure matches the suite's own placing of the image (through the alignment's deformation and transform, the image's pixels interpolated from its tiles). The Viewer's own pixels match the same placing within four levels of 255.</p>

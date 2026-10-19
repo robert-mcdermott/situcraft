@@ -765,6 +765,24 @@ const scenes = {
     await scrollTo('.reports-figure');
     await clearToasts();
   },
+  // A figure of results (wave 8, slice 2): the Lung's transcripts per cell, its cells' map, its
+  // classes' enrichment and its genes in a pattern, its preview in the Reports view.
+  async 'figure-results'() {
+    await act('open_example', { example: 'lung' });
+    await act('cluster_cells', {});
+    await act('label_cells', { markers: 'lung' });
+    await act('show_map', { dataset: 'xenium-lung-2fov' });
+    await act('build_graph', { dataset: 'xenium-lung-2fov' });
+    const ids = await js(`(() => { const p = window.situcraft.store.project; return { labels: p.artifacts.find((a) => a.kind === 'labels')?.id, map: p.artifacts.filter((a) => a.kind === 'embedding').at(-1)?.id }; })()`);
+    const enrichment = await act('spatial_analysis', { question: 'enrichment', dataset: 'xenium-lung-2fov', labels: ids.labels, level: 1 });
+    const moran = await act('spatial_analysis', { question: 'moran', dataset: 'xenium-lung-2fov' });
+    await act('figure', { name: 'Results', size: 'double', columns: 2, height_mm: 150, panels: [{ kind: 'qc', metric: 'transcripts', log: true }, { kind: 'map', map: ids.map, color: 'clusters' }, { kind: 'spatial', analysis: enrichment.data?.id }, { kind: 'spatial', analysis: moran.data?.id }] });
+    await waitFor(`Number(window.situcraft.reportsView?.drawn?.() ?? 0) > 0`);
+    await js(`document.getElementById('app').classList.add('inspector-closed')`);
+    await sleep(400);
+    await scrollTo('.reports-preview-wrap');
+    await clearToasts();
+  },
   // The Jobs view after both examples were opened: each job's state and times, one's log open.
   async jobs() {
     await act('open_example', { example: 'lung' });

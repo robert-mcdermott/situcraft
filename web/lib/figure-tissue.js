@@ -79,14 +79,22 @@ export function legendLayout(items, width, size) {
 
 // --- Layout --------------------------------------------------------------------------------------
 
+// The height a legend takes below a panel's image (pt): its rows and a gap, or nothing.
+export function legendHeight(legend, width, text) {
+  const size = Math.max(MIN_TEXT, text);
+  const laid = legendLayout(legend ?? [], width, size);
+  return laid.rows.length ? laid.height + size * 0.4 : 0;
+}
+
 // Where a tissue panel draws: its image (the region, filling the box's width) above its legend,
 // and the region in µm. panel: { region: { cx, cy, width } }; legend: its items; text: the
-// figure's text size. Returns { image: { x, y, w, h } (pt), region: { x0, y0, x1, y1 } (µm),
-// umPerPt, legend: { x, y, w, layout } }.
-export function tissueLayout(box, panel, legend, text) {
+// figure's text size; reserve: the least height left for the legend (the panels of a row reserve
+// their tallest legend's, so that their images are as tall). Returns { image: { x, y, w, h }
+// (pt), region: { x0, y0, x1, y1 } (µm), umPerPt, legend: { x, y, w, layout } }.
+export function tissueLayout(box, panel, legend, text, reserve = 0) {
   const size = Math.max(MIN_TEXT, text);
   const laid = legendLayout(legend ?? [], box.w, size);
-  const legendH = laid.rows.length ? laid.height + size * 0.4 : 0;
+  const legendH = Math.max(reserve, laid.rows.length ? laid.height + size * 0.4 : 0);
   const image = { x: box.x, y: box.y, w: box.w, h: Math.max(10, box.h - legendH) };
   const umPerPt = panel.region.width / image.w;
   const height = image.h * umPerPt;
@@ -165,6 +173,89 @@ export function compositeStains({ width, height, region, channels }) {
   return out;
 }
 
+// --- Post-Xenium images --------------------------------------------------------------------------
+
+// A deformation's inverse field at a point (µm): its displacement there, interpolated between the
+// grid's points (clamped at its edges), as the shader's linear texture reads it.
+export function fieldAt(def, x, y) {
+  const gx = Math.min(def.nx - 1, Math.max(0, (x - def.x0) / def.step));
+  const gy = Math.min(def.ny - 1, Math.max(0, (y - def.y0) / def.step));
+  const i0 = Math.min(def.nx - 2, Math.floor(gx));
+  const j0 = Math.min(def.ny - 2, Math.floor(gy));
+  const fx = def.nx > 1 ? gx - Math.max(0, i0) : 0;
+  const fy = def.ny > 1 ? gy - Math.max(0, j0) : 0;
+  const at = (i, j, k) => def.field[2 * (Math.min(def.ny - 1, Math.max(0, j)) * def.nx + Math.min(def.nx - 1, Math.max(0, i))) + k];
+  const lerp = (k) => {
+    const a = at(i0, j0, k) * (1 - fx) + at(i0 + 1, j0, k) * fx;
+    const b = at(i0, j0 + 1, k) * (1 - fx) + at(i0 + 1, j0 + 1, k) * fx;
+    return a * (1 - fy) + b * fy;
+  };
+  return [lerp(0), lerp(1)];
+}
+
+// A post-Xenium image composited over a raster (8-bit RGBA, changed in place), as the Viewer draws
+// it over the stains: each pixel's center (µm) moved back by the deformation's inverse field (if
+// any), to the image's full-resolution pixels by the transform's inverse, to the level's pixels by
+// its scale. An RGB image (an H&E) sampled between its pixels and laid over at its opacity; an
+// immunofluorescence channel's nearest sample windowed, raised to its gamma, colored and added at
+// its opacity. image: { kind: 'rgb' | 'channel', opacity, inverse (rows), scale: [sx, sy], size:
+// [w, h] (the level's pixels), deformation or null, grid: { x0, y0 (level pixels), cols, rows,
+// data (RGB bytes, or 16-bit samples) }, window, gamma, color }. Returns the pixels it covered.
+export function compositeImage(rgba, { width, height, region, image }) {
+  const umX = (region.x1 - region.x0) / width;
+  const umY = (region.y1 - region.y0) / height;
+  const inv = image.inverse;
+  const [sx, sy] = image.scale;
+  const [lw, lh] = image.size;
+  const g = image.grid;
+  const op = image.opacity ?? 1;
+  const table = image.kind === 'channel' ? channelTable(image.window, image.gamma ?? 1) : null;
+  const color = image.kind === 'channel' ? rgbOf(image.color) : null;
+  let covered = 0;
+  for (let py = 0; py < height; py += 1) {
+    for (let px = 0; px < width; px += 1) {
+      let x = region.x0 + (px + 0.5) * umX;
+      let y = region.y0 + (py + 0.5) * umY;
+      if (image.deformation) {
+        const [dx, dy] = fieldAt(image.deformation, x, y);
+        x += dx;
+        y += dy;
+      }
+      const lx = (inv[0][0] * x + inv[0][1] * y + inv[0][2]) / sx;
+      const ly = (inv[1][0] * x + inv[1][1] * y + inv[1][2]) / sy;
+      if (!(lx >= 0 && ly >= 0 && lx < lw && ly < lh)) continue;
+      const i = 4 * (py * width + px);
+      if (image.kind === 'rgb') {
+        // Between the four nearest pixels' centers, clamped to those the grid holds.
+        const fx = Math.min(g.cols - 1, Math.max(0, lx - 0.5 - g.x0));
+        const fy = Math.min(g.rows - 1, Math.max(0, ly - 0.5 - g.y0));
+        const x0 = Math.floor(fx);
+        const y0 = Math.floor(fy);
+        const x1 = Math.min(g.cols - 1, x0 + 1);
+        const y1 = Math.min(g.rows - 1, y0 + 1);
+        const ax = fx - x0;
+        const ay = fy - y0;
+        for (let k = 0; k < 3; k += 1) {
+          const v00 = g.data[3 * (y0 * g.cols + x0) + k];
+          const v10 = g.data[3 * (y0 * g.cols + x1) + k];
+          const v01 = g.data[3 * (y1 * g.cols + x0) + k];
+          const v11 = g.data[3 * (y1 * g.cols + x1) + k];
+          const v = (v00 * (1 - ax) + v10 * ax) * (1 - ay) + (v01 * (1 - ax) + v11 * ax) * ay;
+          rgba[i + k] = Math.round(v * op + rgba[i + k] * (1 - op));
+        }
+      } else {
+        const cx = Math.floor(lx) - g.x0;
+        const cy = Math.floor(ly) - g.y0;
+        if (cx < 0 || cy < 0 || cx >= g.cols || cy >= g.rows) continue;
+        const n = table[g.data[cy * g.cols + cx]];
+        for (let k = 0; k < 3; k += 1) rgba[i + k] = Math.round(Math.min(255, rgba[i + k] + 255 * color[k] * op * n));
+      }
+      covered += 1;
+    }
+  }
+  return covered;
+}
+
 // --- Drawing -------------------------------------------------------------------------------------
 
 const hex2 = (v) => v.toString(16).padStart(2, '0');
@@ -236,7 +327,7 @@ function legendMarks(legend, size) {
 // text. Returns { marks, description, notes, facts }.
 export function tissuePanel(box, data, options) {
   const size = Math.max(MIN_TEXT, options.text ?? 7);
-  const layout = tissueLayout(box, options, data.legend ?? [], size);
+  const layout = tissueLayout(box, options, data.legend ?? [], size, data.reserve ?? 0);
   const { image, region, umPerPt } = layout;
   const X = (x) => image.x + (x - region.x0) / umPerPt;
   const Y = (y) => image.y + (y - region.y0) / umPerPt;
@@ -277,6 +368,25 @@ export function tissuePanel(box, data, options) {
     const shown = cells.rings.filter((r) => ringMeets(r.xy, region));
     if (shown.length) inner.push({ type: 'path', d: shown.map((r) => ringPath(r.xy, X, Y)).join(''), fill: 'none', stroke: cells.outline.color, width: cells.outline.width ?? 0.25, opacity: cells.outline.opacity ?? 1 });
   }
+  // Regions: each a dark casing under its outline, its class's color faintly filled (holes by
+  // the even-odd rule) and outlined, and its name at its top left, as the Viewer draws them.
+  let regionsDrawn = 0;
+  for (const r of data.regions ?? []) {
+    const rings = r.geometry.flat();
+    if (!rings.some((ring) => ringMeets(Float64Array.from(ring.flat()), region))) continue;
+    const d = rings.map((ring) => ringPath(Float64Array.from(ring.flat()), X, Y)).join('');
+    inner.push({ type: 'path', d, fill: 'none', stroke: '#000000', width: 1.4, opacity: 0.55 });
+    inner.push({ type: 'path', d, fill: r.color, opacity: 0.12, rule: 'evenodd' });
+    inner.push({ type: 'path', d, fill: 'none', stroke: r.color, width: 0.8 });
+    let x0 = Infinity;
+    let y0 = Infinity;
+    for (const ring of rings) for (const [x, y] of ring) {
+      x0 = Math.min(x0, x);
+      y0 = Math.min(y0, y);
+    }
+    inner.push({ type: 'text', x: Math.max(image.x + 2, X(x0) + 2), y: Math.max(image.y + 2, Y(y0) + 2), text: r.name, size, bold: true, fill: r.color, baseline: 'top' });
+    regionsDrawn += 1;
+  }
   // Transcripts: a point each, of its gene's color, those in the region.
   let pointsDrawn = 0;
   const t = data.transcripts;
@@ -294,7 +404,8 @@ export function tissuePanel(box, data, options) {
   const barUm = options.scaleBar ?? niceLength(region.x1 - region.x0);
   const barPt = barUm / umPerPt;
   const margin = Math.max(4, size * 0.6);
-  const ink = luminanceOf(data.background ?? '#000000') < 0.5 ? '#ffffff' : INK;
+  // Light over a dark tissue; dark over a light one (an opaque H&E).
+  const ink = data.light || luminanceOf(data.background ?? '#000000') >= 0.5 ? INK : '#ffffff';
   const barY = image.y + image.h - margin - 1.5;
   const barX = image.x + image.w - margin - barPt;
   if (barPt > image.w - 2 * margin) notes.push(`The scale bar (${lengthText(barUm)}) is wider than the tissue shown.`);
@@ -306,15 +417,17 @@ export function tissuePanel(box, data, options) {
   marks.push(...legendMarks(layout.legend, size));
   const parts = [];
   if (data.channels?.length) parts.push(`the ${joinList(data.channels)} stain${data.channels.length > 1 ? 's' : ''}`);
+  if (data.images?.length) parts.push(`the post-Xenium image${data.images.length > 1 ? 's' : ''} ${joinList(data.images.map((n) => `"${n}"`))} placed by ${data.images.length > 1 ? 'their alignments' : 'its alignment'}`);
   if (cells) parts.push(`${cellsDrawn.toLocaleString('en-US')} cells${cells.outline ? ' outlined' : ''}${cells.fill ? `${cells.outline ? ' and' : ''} filled by ${cells.fillName}` : ''}`);
   if (t) parts.push(`${pointsDrawn.toLocaleString('en-US')} transcripts of ${joinList(t.genes.map((g) => g.name))}`);
+  if (regionsDrawn) parts.push(`${regionsDrawn === 1 ? 'the region' : `${regionsDrawn} regions`} ${joinList((data.regions ?? []).filter((r) => r.geometry.flat().some((ring) => ringMeets(Float64Array.from(ring.flat()), region))).map((r) => `"${r.name}"`))}`);
   const across = lengthText(region.x1 - region.x0);
   const description = `The tissue of ${data.dataset}${data.view ? ` (the saved view "${data.view}")` : ''}, ${across} across${parts.length ? `: ${parts.join('; ')}` : ''}; the scale bar ${lengthText(barUm)}.`;
   return {
     marks,
     description,
     notes,
-    facts: { region, umPerPt, image, scaleBar: { um: barUm, pt: barPt }, cells: cellsDrawn, transcripts: pointsDrawn, raster: data.stains ? { width: data.stains.width, height: data.stains.height, level: data.stains.level ?? null } : null },
+    facts: { region, umPerPt, image, scaleBar: { um: barUm, pt: barPt }, cells: cellsDrawn, transcripts: pointsDrawn, regions: regionsDrawn, raster: data.stains ? { width: data.stains.width, height: data.stains.height, level: data.stains.level ?? null, ...(data.stains.images?.length ? { images: data.stains.images } : {}) } : null },
   };
 }
 

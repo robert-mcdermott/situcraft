@@ -36,6 +36,34 @@ a result, a certificate checked by making the result again, and a package that o
     scale bar its length, the cells and their fills and the transcripts the suite's own, no text
     below 6 pt, the PDF's text the SVG's.
 
+- **Figures of results (wave 8, slice 2).** A figure's panels can be plots of results beside the
+  tissue, drawn from the same numbers their views show, at the figure's text size and never below
+  6 pt.
+  - **A QC distribution** of a dataset's cells (transcripts, all transcripts, area, nucleus area),
+    in the QC view's 40 bins, on a log scale if asked, with a filter's thresholds.
+  - **The cells' map** (UMAP), colored by clusters or a label set; many clusters named on the map.
+  - **A spatial answer:** an enrichment's or nearest distances' heat map, a dot where a pair differs
+    from chance, or Moran's I's genes in a pattern as bars.
+  - **A cohort's comparison:** its effects with their intervals (on a log scale for ratios), a
+    label's or statistic's units by group, a volcano with the strongest genes named, or a gene by
+    group; those found red.
+  - **More on the tissue:** post-Xenium images placed by their alignment (through its deformation),
+    an H&E laid over at its opacity and immunofluorescence channels added; the dataset's regions
+    outlined and named; every fill the Viewer draws, certainties, limitations and the review
+    status among them; the scale bar dark over a light H&E.
+  - **Laid out in rows:** the tissue panels of a row keep their images as tall as each other; a
+    plot with more rows than its panel holds at 6 pt says how many it left out.
+  - **The Reports view** adds a panel of any kind and chooses what it draws; remote control's
+    `figure` takes `panels` and `columns`.
+  - **Validated:** in Node, the charts' ticks, bars, forests on log axes, heat maps, volcanoes,
+    dots and maps, and an image composited (at its opacity, between its pixels, a channel added, a
+    deformation followed); in the page, a figure of the Lung's results (every histogram bar the
+    suite's own binning, every map point and cluster, every heat map square's color and dot, the
+    genes in a pattern in order), of the simulated cohort's comparisons (each estimate on the log
+    scale, the found red, a volcano point each gene, a dot each unit), and of the simulated tissue's
+    H&E (60 pixels the suite's own placing of the image through its deformation and transform, and
+    the Viewer's within four levels).
+
 ## 0.7.0 (2026-10-19)
 
 Wave 7 of the [roadmap](situcraft-spec/roadmap.md): samples and cohorts. A study's sections in one

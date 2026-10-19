@@ -182,6 +182,54 @@ export function installRemote(app) {
     return found;
   }
 
+  // A figure's panel from remote control's spec of it: what it draws found by name or ID.
+  function figurePanel(spec, i, regionOf, extras) {
+    if (!spec || typeof spec !== 'object') throw new ActionError(`Panel ${i + 1} is not an object.`);
+    const kind = choose(String(spec.kind ?? ''), ['tissue', 'qc', 'map', 'spatial', 'cohort', 'text'], `panel ${i + 1}'s kind`);
+    const p = project();
+    const find = (list, ref, what) => {
+      const value = String(ref ?? '');
+      if (!value) throw new ActionError(`Panel ${i + 1} names its ${what}.`);
+      return list.find((x) => x.id === value) ?? list.find((x) => x.name === choose(value, list.map((y) => y.name), what));
+    };
+    const title = spec.title !== undefined ? { title: String(spec.title) } : {};
+    if (kind === 'text') return { kind, text: String(spec.text ?? ''), h: 40, ...title };
+    if (kind === 'tissue') {
+      const view = find(tissueViews(p), spec.view, 'saved view');
+      const r = regionOf({ ...view, ...(spec.width_um !== undefined || spec.center !== undefined ? { camera: { ...view.camera } } : {}) });
+      if (spec.width_um !== undefined) r.width = finite(spec.width_um, 'width_um');
+      if (spec.center !== undefined) [r.cx, r.cy] = [finite(spec.center[0], 'center'), finite(spec.center[1], 'center')];
+      // Its dataset's regions drawn: all (true), or those named.
+      let regions;
+      if (spec.regions === true || spec.regions === 'all') regions = true;
+      else if (Array.isArray(spec.regions)) {
+        const list = regionsOf(p, view.dataset);
+        regions = spec.regions.map((ref) => (list.find((x) => x.id === String(ref)) ?? list.find((x) => x.name === choose(String(ref), list.map((y) => y.name), 'region'))).id);
+      }
+      return { kind, view: view.id, region: r, ...extras, ...(regions !== undefined ? { regions } : {}), ...title };
+    }
+    if (kind === 'qc') {
+      const dataset = find(p.datasets, spec.dataset ?? (p.datasets.length === 1 ? p.datasets[0].id : ''), 'dataset');
+      const metric = choose(String(spec.metric ?? 'transcripts'), ['transcripts', 'total', 'area', 'nucleusArea'], 'metric');
+      const filters = p.artifacts.filter((a) => a.kind === 'filter' && a.dataset === dataset.id);
+      const filter = spec.filter === undefined ? null : filters.find((a) => a.id === String(spec.filter)) ?? filters.filter((a) => a.name === String(spec.filter)).sort((a, b) => b.version - a.version)[0];
+      if (spec.filter !== undefined && !filter) throw new ActionError(`${dataset.name} has no filter ${spec.filter}.`);
+      return { kind, dataset: dataset.id, metric, ...(spec.log ? { log: true } : {}), ...(filter ? { filter: filter.id } : {}), ...(spec.segmentation ? { segmentation: String(spec.segmentation) } : {}), ...title };
+    }
+    if (kind === 'map') {
+      const map = find(p.artifacts.filter((a) => a.kind === 'embedding'), spec.map ?? p.artifacts.filter((a) => a.kind === 'embedding').at(-1)?.id, 'map');
+      return { kind, map: map.id, color: String(spec.color ?? 'clusters'), ...title };
+    }
+    if (kind === 'spatial') {
+      const analysis = find(p.artifacts.filter((a) => a.kind === 'spatial'), spec.analysis, 'spatial answer');
+      return { kind, analysis: analysis.id, ...title };
+    }
+    const comparison = find(p.artifacts.filter((a) => ['abundance', 'expression', 'spatial-comparison'].includes(a.kind)), spec.comparison, 'comparison');
+    const plot = choose(String(spec.plot ?? (comparison.kind === 'expression' ? 'volcano' : 'forest')), ['forest', 'units', 'volcano', 'gene'], 'plot');
+    const keep = Object.fromEntries(['family', 'label', 'gene', 'contrast', 'key'].filter((k) => spec[k] !== undefined).map((k) => [k, String(spec[k])]));
+    return { kind, comparison: comparison.id, plot, ...keep, ...title };
+  }
+
   function resolveExample(ref) {
     const list = app.examples.list() ?? [];
     const names = list.map((e) => e.name);
@@ -2614,7 +2662,16 @@ export function installRemote(app) {
         ...(args.scale_bar !== undefined ? { scaleBar: finite(args.scale_bar, 'scale_bar') } : {}),
         ...(args.point_size !== undefined ? { pointSize: finite(args.point_size, 'point_size') } : {}),
       };
-      if (args.views !== undefined) {
+      if (args.panels !== undefined) {
+        if (!Array.isArray(args.panels) || !args.panels.length) throw new ActionError('panels is a list of panels, each an object with its kind.');
+        const specs = args.panels.map((spec, i) => figurePanel(spec, i, region, extras));
+        let next = createFigure(ref ?? `Figure ${figs.length + 1}`, size ?? fig?.size ?? 'double', { ...(fig ? { id: fig.id, now: fig.created } : {}), ...(args.text !== undefined ? { text: finite(args.text, 'text') } : {}) });
+        const columns = args.columns === undefined ? Math.min(3, specs.length) : Math.max(1, Math.round(finite(args.columns, 'columns')));
+        for (const panel of specs) next = addPanel(next, panel, { columns }).figure;
+        const bottom = next.panels.reduce((y, p) => Math.max(y, p.y + p.h), 0);
+        next.height = args.height_mm !== undefined ? Math.round(mm(finite(args.height_mm, 'height_mm')) * 100) / 100 : Math.round((bottom + 8) * 100) / 100;
+        fig = next;
+      } else if (args.views !== undefined) {
         if (!Array.isArray(args.views) || !args.views.length) throw new ActionError('views is a list of saved views, by name or ID.');
         const list = tissueViews(project());
         if (!list.length) throw new ActionError('The project has no saved view of the tissue: save_view saves the Viewer\'s.');

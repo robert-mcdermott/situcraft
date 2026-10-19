@@ -9,7 +9,8 @@
 // can read them back (a figure's manifest).
 //
 // Adapted from MaveScape 0.8.0 (web/lib/pdf.js, Apache-2.0, the same author), itself from
-// CytoWeave 0.8.0. Changed: SituCraft as the creator and producer.
+// CytoWeave 0.8.0. Changed: SituCraft as the creator and producer; paths filled by the even-odd
+// rule when asked (a region with holes).
 
 const encoder = new TextEncoder();
 
@@ -202,7 +203,7 @@ export class PDFPage {
     this.closePath();
   }
 
-  draw({ fill = null, stroke = null, width = 1, dash = null, cap = 0, join = 0 } = {}) {
+  draw({ fill = null, stroke = null, width = 1, dash = null, cap = 0, join = 0, evenOdd = false } = {}) {
     if (!this.path.length) return;
     const f = fill ? parseColor(fill) : null;
     const s = stroke ? parseColor(stroke) : null;
@@ -217,7 +218,7 @@ export class PDFPage {
     }
     if (f) this.setFill(fill);
     if (s) this.setStroke(stroke, width, { dash, cap, join });
-    this.ops.push(this.path.join(' '), f && s ? 'B' : f ? 'f' : 'S');
+    this.ops.push(this.path.join(' '), f && s ? (evenOdd ? 'B*' : 'B') : f ? (evenOdd ? 'f*' : 'f') : 'S');
     if (translucent) this.restore();
     this.path = [];
   }

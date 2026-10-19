@@ -3467,11 +3467,54 @@ left in it.
      - **The Viewer's fill colors belong to the Viewer:** a figure draws without it, so the fill's
        dispatch (labels, clusters, attributes) is gathered again from the same coloring
        functions, and the suite compares the two cell by cell.
-2. **Figures of results (E6).** Panels of the analyses' plots: QC distributions and maps, the
-   cells' map (UMAP), markers, a spatial answer (enrichment's heat map, distances, Moran's I), a
-   cohort's comparison (abundance, a volcano, a gene by group); several panels laid out on a page,
-   the panels of a row sharing their images' height; post-Xenium images, regions and the fills
-   not drawn yet (certainties, limitations, review status) on a tissue panel.
+2. **Figures of results (E6): done.**
+   - **Charts as marks** (`web/lib/charts.js`; its axes, ticks, bars and legend after MaveScape
+     0.8.0's `plots.js`): a histogram, horizontal bars, a scatter (a map's: one unit the same both
+     ways, its groups named at their points' median), a heat map with names on two sides and a
+     color bar, a forest of estimates with their intervals on a log or linear axis, a volcano,
+     dots by group with their means; a chart panel with its title and a legend of at most a third
+     of it. No text below 6 pt: bars and forests draw the rows that fit and say how many more.
+   - **Result panels** (`web/ui/figure-results.js`; `figures.js`' kinds `qc`, `map`, `spatial`,
+     `cohort`), from what the views read: a dataset's cells' metric in the QC view's 40 bins
+     (from the least to the 99.5th percentile, on a log scale if asked) with a filter's
+     thresholds; a map's points colored by its clustering or a label set; an enrichment's or
+     nearest distances' heat map (`divergingColor`, a dot where the adjusted p is below 0.05) or
+     Moran's I's genes in a pattern; a comparison's effects (abundance's odds or density ratios,
+     spatial statistics' ratios or differences), its units by group (`rowsByGroup`,
+     `statisticByGroup`), a volcano (`volcanoPoints`) or a gene by group. The manifest records
+     each panel's analysis, map or comparison and what colors it.
+   - **Rows:** the tissue panels of a row (the same top and height) reserve their tallest
+     legend's height, so that their images are as tall; each panel's legend gathered first, then
+     its stains and points.
+   - **More on the tissue:** post-Xenium images the view shows (`compositeImage`): each pixel's
+     center moved back by the deformation's inverse field (interpolated, as the shader's linear
+     texture), to the image's pixels by the transform's inverse, an H&E sampled between its
+     pixels and laid over at its opacity, an immunofluorescence channel's nearest sample windowed
+     and added, at the level whose pixels are no larger than the output's; the dataset's regions
+     (a casing, a faint fill by the even-odd rule, the outline and the name, as the Viewer draws
+     them); every fill (certainty scales, limitations, review status); the scale bar dark over a
+     light H&E. The drawing core fills paths by the even-odd rule when asked (SVG, canvas, PDF).
+   - **The Reports view** adds a panel of any kind the project has and chooses what it draws;
+     remote control's `figure` takes `panels` (each naming what it draws) and `columns`.
+   - Validation:
+     - **In Node** (`charts.test.mjs`, `figures.test.mjs`, `draw.test.mjs`): ticks; a
+       histogram's heights; a forest's places on a log axis; a heat map's squares and dots; a
+       volcano's order and names; dots and their means; a map's aspect; a figure of result
+       panels; an image at full and half opacity, between its pixels, a channel added, a
+       deformation followed, the field interpolated and clamped; the even-odd rule in SVG and PDF.
+     - **In the page** (viewer suite): the Lung's results (every histogram bar the suite's own
+       binning of the cells, every map point and cluster named, every heat map square's color
+       and dot, the genes in a pattern in order); the simulated cohort's comparisons (each label's
+       estimate on the log scale, the found red, a volcano point each gene and SIM033 named, a dot
+       each unit, the enrichments); the simulated tissue's H&E by its automatic alignment (60
+       pixels the suite's own placing through the deformation and transform, and the Viewer's
+       within four levels); no text below 6 pt in any.
+   - Found by slice 2:
+     - **Rounding at a label's width:** a label given exactly its width was cut to nothing, and
+       ticks of a step of 0.5 became 1, both by floating-point rounding; widths and steps are
+       compared with a little slack.
+     - **A map's legend of 29 clusters took the panel:** clusters past twelve are named on the
+       map instead, and a legend never takes more than a third of its panel.
 3. **What made a result (E9).** A result's record: each step from the bundles to it, its method,
    version, parameters, seed, software and reference, in the Reports view and the inspector; the
    references kept in one place, each publication's DOI checked against a recorded copy of its
