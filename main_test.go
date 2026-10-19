@@ -954,11 +954,19 @@ func TestExamplesDownloadOnlyWhenAsked(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil || rec.Code != http.StatusOK {
 		t.Fatalf("listing: %d %s", rec.Code, rec.Body)
 	}
-	if len(listed.Examples) != 3 || listed.Examples[0].State != "absent" || listed.Examples[0].License == "" || !strings.HasPrefix(listed.Dir, a.examples.Dir) {
+	if len(listed.Examples) != 6 || listed.Examples[0].State != "absent" || listed.Examples[0].License == "" || !strings.HasPrefix(listed.Dir, a.examples.Dir) {
 		t.Errorf("listed %+v", listed)
 	}
-	if g := listed.Examples[2]; g.Name != simulatedExample || !g.Generated || g.State != "absent" || g.Download != 0 {
+	if g := listed.Examples[2]; g.Name != simulatedExample || !g.Generated || g.State != "absent" || g.Download != 0 || g.Kind != "" {
 		t.Errorf("the simulated example listed as %+v", g)
+	}
+	if g := listed.Examples[3]; g.Name != cohortExample || !g.Generated || g.State != "absent" || g.Kind != "cohort" {
+		t.Errorf("the simulated cohort listed as %+v", g)
+	}
+	for k, name := range []string{nullCohortExample, pairedCohortExample} {
+		if g := listed.Examples[4+k]; g.Name != name || !g.Generated || g.State != "absent" || g.Kind != "cohort" {
+			t.Errorf("%s listed as %+v", name, g)
+		}
 	}
 	// Downloading and removing write on this computer: only it may ask.
 	local := func(method, target string) *httptest.ResponseRecorder {

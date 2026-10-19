@@ -15,7 +15,7 @@
 // Needs Go (to build SituCraft) and Chrome, Chromium, Edge or Brave (CHROME=path).
 
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -33,6 +33,7 @@ const SHOWN = {
   examples: '~/Library/Application Support/SituCraft/examples',
   cache: '~/Library/Caches/situcraft',
   exports: '~/Documents/SituCraft exports',
+  home: '~',
   references: '~/Documents/references',
 };
 
@@ -66,11 +67,13 @@ let places = {};
 // Started per scene on an empty library, so that no scene sees another's projects. examples: the
 // folder of examples (the development bundles by default; an empty one shows them to download).
 // cache: a cache of the scene's own (the jobs scene, whose jobs build what the shared one holds).
-async function startSituCraft({ examples = DATA, cache = CACHE } = {}) {
+// home: a home folder of the scene's own (the Open dialog's), else the user's.
+async function startSituCraft({ examples = DATA, cache = CACHE, home = null } = {}) {
   const library = mkdtempSync(join(temp, 'library-'));
-  places = { library, examples, cache, exports: mkdtempSync(join(temp, 'exports-')) };
+  places = { library, examples, cache, exports: mkdtempSync(join(temp, 'exports-')), ...(home ? { home } : {}) };
   const flags = ['--remote-control', '--window', 'none', '--port', String(PORT), '--data-dir', library, '--cache-dir', cache, '--examples-dir', examples];
-  const server = spawn(binary, flags, { cwd: temp, stdio: ['ignore', 'pipe', 'inherit'] });
+  const env = home ? { ...process.env, HOME: home, USERPROFILE: home } : process.env;
+  const server = spawn(binary, flags, { cwd: temp, env, stdio: ['ignore', 'pipe', 'inherit'] });
   let output = '';
   server.stdout.on('data', (chunk) => { output += chunk; });
   const stop = async () => {
@@ -138,13 +141,42 @@ async function showPlaces() {
   })()`);
 }
 
+// A home folder for the Open dialog's picture: its Desktop, Documents and Downloads, and a folder of
+// Xenium data holding the development bundles (links to them).
+function makeHome() {
+  const home = mkdtempSync(join(temp, 'home-'));
+  for (const d of ['Desktop', 'Documents', 'Downloads']) mkdirSync(join(home, d));
+  const data = join(home, 'Xenium data');
+  mkdirSync(data);
+  for (const name of ['xenium-breast-2fov', 'xenium-lung-2fov', 'simulated-standard', 'simulated-cohort']) {
+    if (existsSync(join(DATA, name))) symlinkSync(join(DATA, name), join(data, name));
+  }
+  return home;
+}
+
 // --- Scenes ---------------------------------------------------------------------------------------
 
 const scenes = {
   // The start page: the examples to download or make, what to bring.
   async start() {
     await act('set_mode', { mode: 'start' });
-    await waitFor(`document.querySelectorAll('.card.example').length === 3`);
+    await waitFor(`document.querySelectorAll('.card.example').length === 6`);
+  },
+  // Open a bundle: a home folder's data folder, its bundles marked with their runs, regions and
+  // cells, the Lung bundle chosen; the places but the computer's own disks.
+  async open() {
+    await act('set_mode', { mode: 'start' });
+    await js(`[...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Open a bundle')?.click()`);
+    await waitFor(`Boolean(document.querySelector('.picker-crumb'))`);
+    await js(`(() => { const i = document.querySelector('.picker-path'); i.value = ${JSON.stringify(join(places.home ?? '', 'Xenium data'))}; i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return true; })()`);
+    await waitFor(`document.querySelector('.picker-crumb.current')?.textContent === 'Xenium data'`);
+    await js(`(() => {
+      [...document.querySelectorAll('.picker-row')].find((r) => r.querySelector('.picker-name').textContent === 'xenium-lung-2fov')?.click();
+      const shown = ['Home', 'Desktop', 'Documents', 'Downloads', "SituCraft's examples", 'This computer'];
+      for (const p of document.querySelectorAll('.picker-place')) if (!shown.includes(p.textContent.trim())) p.remove();
+      return true;
+    })()`);
+    await sleep(400);
   },
   // The Lung example checked: what the run was, its findings, its derived data.
   async data() {
@@ -599,6 +631,125 @@ const scenes = {
     await act('export_segmentation', { formats: ['spatialdata', 'anndata', 'xenium-ranger'], folder: join(places.exports, 'xenium-lung-2fov-instrument') });
     await scrollTo('.seg-exports', 'end');
   },
+  // The Cohort view (wave 7, slice 1): the Lung and Breast sections added together as a project's
+  // samples, named, with a field given them and those read from their bundles.
+  async samples() {
+    await act('new_project', { name: 'Two sections' });
+    await act('open_paths', { paths: ['xenium-lung-2fov', 'xenium-breast-2fov'].map((name) => join(DATA, name)), add: true });
+    await act('set_samples', {
+      fields: [{ name: 'tissue', kind: 'text' }],
+      names: { 'xenium-lung-2fov': 'Lung section', 'xenium-breast-2fov': 'Breast section' },
+      values: { 'xenium-lung-2fov': { tissue: 'lung' }, 'xenium-breast-2fov': { tissue: 'breast' } },
+    });
+    await act('samples');
+    // The inspector closed (⇧⌘\), so that the table shows every column.
+    await js(`document.getElementById('app').classList.add('inspector-closed')`);
+    await clearToasts();
+    await sleep(400);
+  },
+  // The design (wave 7, slice 3): the simulated cohort's subjects compared by condition, adjusted
+  // for the slide, said in words with its rows and matrix.
+  async design() {
+    await act('open_example', { example: 'cohort' });
+    await act('design', { unit: 'subject', group: 'condition', reference: 'control', covariates: ['slide'] });
+    await js(`document.getElementById('app').classList.add('inspector-closed')`);
+    await sleep(600);
+    await scrollTo('.cohort-design');
+    await clearToasts();
+  },
+  // Summaries (wave 7, slice 4): the same steps on every sample of the simulated cohort, the samples
+  // summarized, and the cohort table's shares of the labeled cells.
+  async summary() {
+    await act('open_example', { example: 'cohort' });
+    await act('cohort_steps', { questions: ['enrichment'] });
+    await act('summarize_samples', {});
+    await act('cohort_table', { family: 'share' });
+    await js(`document.getElementById('app').classList.add('inspector-closed')`);
+    await sleep(600);
+    await scrollTo('.cohort-summary');
+    await clearToasts();
+  },
+  // Cohort QC (wave 7, slice 5): a simulated cohort with a planted outlier, its samples' conditions
+  // read from its table, the same steps and the summary; the sixth sample found far out.
+  async 'cohort-qc'() {
+    const dir = join(temp, 'planted-cohort');
+    if (!existsSync(dir)) {
+      await new Promise((done, fail) => spawn(binary, ['simulate', '--quiet', '--cohort', 'outlier', dir], { cwd: temp, stdio: 'ignore' }).on('exit', (code) => (code ? fail(new Error('situcraft simulate --cohort outlier failed')) : done())));
+    }
+    await act('new_project', { name: 'A planted outlier' });
+    await act('open_paths', { paths: [dir], add: true });
+    await act('set_samples', { table: readFileSync(join(dir, 'samples.csv'), 'utf8') });
+    await act('design', { unit: 'subject', group: 'condition', reference: 'control' });
+    await act('cohort_steps', { questions: [] });
+    await act('summarize_samples', { niches: 0 });
+    await act('cohort_qc', {});
+    await js(`document.getElementById('app').classList.add('inspector-closed')`);
+    await sleep(800);
+    await scrollTo('.cohort-qc');
+    await clearToasts();
+  },
+  // Differential abundance (wave 7, slice 6): the simulated cohort's subjects compared by condition,
+  // the endothelial-like cells' result chosen and its subjects plotted.
+  async abundance() {
+    await act('open_example', { example: 'cohort' });
+    await act('design', { unit: 'subject', group: 'condition', reference: 'control' });
+    await act('cohort_steps', { questions: [] });
+    await act('summarize_samples', { niches: 0 });
+    await act('compare_abundance', {});
+    await waitFor(`Boolean(document.querySelector('.cohort-abundance-table tr[data-test^="endothelial-like"]'))`);
+    await js(`document.querySelector('.cohort-abundance-table tr[data-test^="endothelial-like"]').click()`);
+    await waitFor(`Boolean(document.querySelector('.cohort-dots'))`);
+    await js(`document.getElementById('app').classList.add('inspector-closed')`);
+    await sleep(600);
+    await scrollTo('.cohort-abundance');
+    await clearToasts();
+  },
+  // Differential expression (wave 7, slice 7): the simulated cohort's subjects compared by
+  // condition, the epithelial-like cells' genes, their volcano, and SIM033's subjects by group.
+  async expression() {
+    await act('open_example', { example: 'cohort' });
+    await act('design', { unit: 'subject', group: 'condition', reference: 'control' });
+    await act('cohort_steps', { questions: [] });
+    await act('summarize_samples', { niches: 0 });
+    await act('compare_expression', {});
+    await act('show_gene', { gene: 'SIM033', label: 'epithelial-like' });
+    await waitFor(`Boolean(document.querySelector('.cohort-expression .cohort-volcano')) && Boolean(document.querySelector('.cohort-expression .cohort-pick .cohort-dots'))`);
+    await js(`document.getElementById('app').classList.add('inspector-closed')`);
+    await sleep(600);
+    await scrollTo('.cohort-expression .cohort-results');
+    await clearToasts();
+  },
+  // Spatial statistics between groups (wave 7, slice 7): the simulated cohort's neighbor enrichment
+  // compared by condition, the epithelial-like and immune-like cells' result chosen and plotted.
+  async 'spatial-tests'() {
+    await act('open_example', { example: 'cohort' });
+    await act('design', { unit: 'subject', group: 'condition', reference: 'control' });
+    await act('cohort_steps', { questions: ['enrichment'] });
+    await act('summarize_samples', { niches: 0 });
+    await act('compare_spatial', {});
+    await waitFor(`Boolean(document.querySelector('.cohort-spatial-tests tr[data-test^="epithelial-like|immune-like"]'))`);
+    await js(`document.querySelector('.cohort-spatial-tests tr[data-test^="epithelial-like|immune-like"]').click()`);
+    await waitFor(`Boolean(document.querySelector('.cohort-spatial-tests .cohort-dots'))`);
+    await js(`document.getElementById('app').classList.add('inspector-closed')`);
+    await sleep(600);
+    await scrollTo('.cohort-spatial-tests .cohort-results');
+    await clearToasts();
+  },
+  // A cohort's worked example (wave 7, slice 9): the cohort before and after compared by a paired
+  // design, the endothelial-like cells' share chosen and its subjects plotted, the example's card
+  // at the foot of the window.
+  async 'worked-cohort'() {
+    await act('open_example', { example: 'paired-cohort' });
+    await act('tour', { example: 'paired-cohort', name: 'cohort-shift' });
+    let step = null;
+    for (let k = 0; k < 5; k += 1) step = await act('tour', { run: true });
+    if (step?.data?.step !== 6) throw new Error(`the worked example stopped at step ${step?.data?.step}: ${step?.message}`);
+    await waitFor(`Boolean(document.querySelector('.cohort-abundance .cohort-dots'))`);
+    await js(`document.getElementById('app').classList.add('inspector-closed')`);
+    await sleep(600);
+    await scrollTo('.cohort-abundance');
+    await clearToasts();
+  },
   // The Jobs view after both examples were opened: each job's state and times, one's log open.
   async jobs() {
     await act('open_example', { example: 'lung' });
@@ -647,7 +798,7 @@ try {
       b = null;
       try {
         // The start page shows the examples as a first run does: not yet downloaded.
-        situcraft = await startSituCraft(name === 'start' ? { examples: mkdtempSync(join(temp, 'examples-')) } : name === 'jobs' ? { cache: mkdtempSync(join(temp, 'cache-')) } : {});
+        situcraft = await startSituCraft(name === 'start' ? { examples: mkdtempSync(join(temp, 'examples-')) } : name === 'jobs' ? { cache: mkdtempSync(join(temp, 'cache-')) } : name === 'open' ? { home: makeHome() } : {});
         // A Chrome that does not start is started again once; a scene that cannot start fails
         // alone, not the scenes after it.
         b = await launch({ width: 1600, height: 1000, scale: 1.25 }).catch(async () => {

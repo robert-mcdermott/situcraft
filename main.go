@@ -36,7 +36,7 @@ import (
 //go:embed web/index.html web/styles.css web/app.js web/favicon.svg web/lib/*.js web/ui/*.js web/render/*.js
 var content embed.FS
 
-var version = "0.6.0"
+var version = "0.7.0"
 
 // commit is the source revision the program was built from. Release builds set it with
 // -ldflags "-X main.commit=..."; otherwise it comes from the version-control stamp Go records
@@ -536,6 +536,7 @@ func (a *app) registerAPI(mux *http.ServeMux) {
 	})
 	mux.HandleFunc("GET /api/local/{index}", a.files.serve)
 	mux.HandleFunc("POST /api/open", a.openPaths)
+	mux.HandleFunc("GET /api/browse", a.browse)
 	a.store.register(mux)
 	a.registerDatasets(mux)
 	a.registerCache(mux)
@@ -557,6 +558,7 @@ func (a *app) registerAPI(mux *http.ServeMux) {
 	a.registerClusterings(mux)
 	a.registerGraphs(mux)
 	a.registerSpatial(mux)
+	a.registerCohort(mux)
 	a.registerMaps(mux)
 	a.registerLabels(mux)
 	a.registerWorkspace(mux)

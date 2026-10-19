@@ -128,3 +128,78 @@ func TestNichesFindStripes(t *testing.T) {
 		}
 	}
 }
+
+// stripes are cells in vertical stripes of 200 µm, each stripe's kind of place a mix of labels.
+func stripes(seed uint64, n int, kinds []int) (x, y []float32, label, kind []int32) {
+	s := random.New(seed, 2)
+	const K = 4
+	mixes := [3][K]float64{{0.8, 0.1, 0.1, 0}, {0.1, 0.8, 0, 0.1}, {0, 0.1, 0.45, 0.45}}
+	x, y, label, kind = make([]float32, n), make([]float32, n), make([]int32, n), make([]int32, n)
+	for i := 0; i < n; i++ {
+		x[i], y[i] = float32(float64(200*len(kinds))*s.Float64()), float32(400*s.Float64())
+		kind[i] = int32(kinds[int(x[i]/200)])
+		u := s.Float64()
+		label[i] = K - 1
+		for k, w := range mixes[kind[i]] {
+			if u < w {
+				label[i] = int32(k)
+				break
+			}
+			u -= w
+		}
+	}
+	return x, y, label, kind
+}
+
+// Niches across samples: each sample's windows of its own cells (a second sample on the same
+// coordinates changes none of the first's), one k-means over all, so that the same kind of place
+// is the same niche in both; one sample alone the niches of FindNiches.
+func TestNichesAcrossSamples(t *testing.T) {
+	p := NicheParams{Neighbors: 15, Niches: 3, Starts: 5, Seeds: 2, Seed: 7}
+	ax, ay, al, ak := stripes(11, 3000, []int{0, 1})
+	bx, by, bl, bk := stripes(12, 3000, []int{1, 2})
+	got, offsets, err := FindNichesAcross(context.Background(), []NicheCells{{ax, ay, al}, {bx, by, bl}}, 4, p, 8, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(offsets) != 3 || offsets[1] != 3000 || offsets[2] != 6000 || len(got.Assign) != 6000 {
+		t.Fatalf("offsets %v, %d cells", offsets, len(got.Assign))
+	}
+	kinds := append(append([]int32{}, ak...), bk...)
+	ari := cluster.AdjustedRand(got.Assign, kinds)
+	t.Logf("the three kinds found across the samples with an adjusted Rand index of %.3f", ari)
+	if !(ari > 0.85) {
+		t.Errorf("the kinds of place across the samples: adjusted Rand index %.3f", ari)
+	}
+	// Each sample's windows are its own: as FindNiches makes them on that sample alone.
+	for s, one := range []NicheCells{{ax, ay, al}, {bx, by, bl}} {
+		alone, err := FindNiches(context.Background(), one.X, one.Y, one.Label, 4, p, 1, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i := range alone.Composed {
+			if got.Composed[offsets[s]*4+i] != alone.Composed[i] {
+				t.Fatalf("sample %d's windows differ from its own", s+1)
+			}
+		}
+	}
+	// One sample: FindNiches's niches.
+	solo, _, err := FindNichesAcross(context.Background(), []NicheCells{{ax, ay, al}}, 4, p, 4, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	alone, _ := FindNiches(context.Background(), ax, ay, al, 4, p, 4, nil)
+	for i := range alone.Assign {
+		if solo.Assign[i] != alone.Assign[i] {
+			t.Fatal("one sample's niches across samples differ from its own")
+		}
+	}
+	for i := range alone.Composition {
+		if solo.Composition[i] != alone.Composition[i] {
+			t.Fatal("one sample's niche compositions differ")
+		}
+	}
+	if _, _, err := FindNichesAcross(context.Background(), []NicheCells{{ax, ay, al}, {[]float32{1}, []float32{1}, []int32{0}}}, 4, p, 1, nil); err == nil {
+		t.Error("a sample of one labeled cell accepted")
+	}
+}

@@ -116,3 +116,30 @@ func TestIntervalCoverage(t *testing.T) {
 		t.Errorf("Koopman's interval held the ratio %.3f of the time", f)
 	}
 }
+
+// Student's t against R's pt and qt (R 4.6.1): two-sided p-values and quantiles to 1e-10.
+func TestStudentT(t *testing.T) {
+	for _, c := range []struct{ t, df, p float64 }{
+		{2.0, 6, 0.092426311531675},    // 2 * pt(-2, 6)
+		{-3.5, 4, 0.0248961634602228},  // 2 * pt(-3.5, 4)
+		{0.5, 30, 0.620723004885127},   // 2 * pt(-0.5, 30)
+		{12, 2.5, 0.00283621503007832}, // 2 * pt(-12, 2.5)
+	} {
+		if got := StudentTTwoSided(c.t, c.df); math.Abs(got-c.p) > 1e-10 {
+			t.Errorf("t %g, df %g: p %.12f, R %.12f", c.t, c.df, got, c.p)
+		}
+	}
+	for _, c := range []struct{ p, df, q float64 }{
+		{0.975, 6, 2.44691185114497},   // qt(0.975, 6)
+		{0.975, 1, 12.7062047361747},   // qt(0.975, 1)
+		{0.025, 13, -2.16036865646279}, // qt(0.025, 13)
+		{0.95, 3.5, 2.2224334936496},   // qt(0.95, 3.5)
+	} {
+		if got := StudentTQuantile(c.p, c.df); math.Abs(got-c.q) > 1e-9*math.Max(1, math.Abs(c.q)) {
+			t.Errorf("p %g, df %g: quantile %.12f, R %.12f", c.p, c.df, got, c.q)
+		}
+	}
+	if StudentTTwoSided(math.Inf(1), 3) != 0 || !math.IsNaN(StudentTTwoSided(1, 0)) || StudentTQuantile(0.5, 4) != 0 {
+		t.Error("edges")
+	}
+}

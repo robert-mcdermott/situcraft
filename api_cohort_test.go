@@ -1,0 +1,522 @@
+package main
+
+import (
+	"bytes"
+	"context"
+	"encoding/csv"
+	"encoding/json"
+	"fmt"
+	"math"
+	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"situcraft/internal/artifacts"
+	"situcraft/internal/cohort"
+	"situcraft/internal/segment"
+	"situcraft/internal/spatial"
+	"situcraft/internal/xenium"
+)
+
+// A cohort of two samples of a small simulated tissue, the whole section and its left part as a
+// region, labeled by turns: summarized by a job (each sample's cells by label, its tissue, its
+// pseudobulk, its graph's and enrichment's numbers, niches across both), every number checked
+// against the cells, the counts and the other artifacts; asked again, answered at once; what
+// cannot be summarized refused.
+func TestCohortSummary(t *testing.T) {
+	f := newRefineFixture(t, true)
+	all, _ := f.a.artifacts.List()
+	var seg artifacts.Manifest
+	for _, m := range all {
+		if m.Kind == "segmentation" && isBundleOwn(m) {
+			seg = m
+		}
+	}
+	b, err := xenium.Open(f.folder, xenium.Options{CacheDir: f.a.cacheDir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir, err := f.a.segmentationFolder(context.Background(), b, seg)
+	b.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cells, _ := segment.ReadCells(dir)
+	counts, _ := segment.ReadCounts(dir)
+	n := len(cells)
+	labels := make([]int32, n)
+	all1, left := make([]bool, n), make([]bool, n)
+	for i := range labels {
+		labels[i] = int32(i%3) - 1 // a third without a label
+		all1[i] = true
+		left[i] = cells[i].X < 40
+	}
+	codes, sum := codesOf(labels)
+	// The sample's labels name B, C (codes 0, 1); the cohort's vocabulary is A, B, C.
+	labelsJSON := fmt.Sprintf(`{"id":"lab-x","kind":"labels","name":"By turns","level":0,"names":["B","C"],"codes":%q,"checksum":%q}`, codes, sum)
+	var g struct {
+		ID  string
+		Job *struct{ ID string }
+	}
+	json.NewDecoder(f.post("/api/local/0/graph", fmt.Sprintf(`{"segmentation":%q,"parameters":{"kind":"delaunay"},"cells":%s}`, seg.ID, chosenCells(all1, ""))).Body).Decode(&g)
+	if g.Job != nil {
+		f.wait(g.Job.ID)
+	}
+	var e struct {
+		ID  string
+		Job *struct{ ID string }
+	}
+	erec := f.post("/api/local/0/spatial", fmt.Sprintf(`{"question":"enrichment","segmentation":%q,"graph":%q,"labels":%s,"parameters":{"permutations":100,"seed":3}}`, seg.ID, g.ID, labelsJSON))
+	etext := erec.Body.String()
+	if err := json.Unmarshal([]byte(etext), &e); err != nil || e.ID == "" {
+		t.Fatalf("the enrichment: %d %s", erec.Code, etext)
+	}
+	if e.Job != nil {
+		f.wait(e.Job.ID)
+	}
+	region := `{"kind":"region","region":{"id":"r-1","name":"Left","version":1},"geometry":[[[[0,0],[40,0],[40,60],[0,60]]]]}`
+	body := fmt.Sprintf(`{"labels":{"name":"By turns","level":0,"names":["A","B","C"]},"niches":{"neighbors":5,"niches":2,"starts":2,"seeds":1,"seed":4},"samples":[
+		{"sample":"s-1","name":"Whole","dataset":"d-1","item":"0","segmentation":%q,"cells":%s,"labels":%s,"graph":%q,"analyses":[%q]},
+		{"sample":"s-2","name":"Left","dataset":"d-1","item":"0","segmentation":%q,"cells":%s,"labels":%s,"region":%s}]}`,
+		seg.ID, chosenCells(all1, ""), labelsJSON, g.ID, e.ID, seg.ID, chosenCells(left, ""), labelsJSON, region)
+	rec := f.post("/api/cohort/summary", body)
+	var answer struct {
+		ID       string
+		Artifact *artifacts.Manifest
+		Job      *struct{ ID string }
+	}
+	text := rec.Body.String()
+	if err := json.Unmarshal([]byte(text), &answer); err != nil || answer.ID == "" || answer.Job == nil {
+		t.Fatalf("%d: %v %s", rec.Code, err, text)
+	}
+	f.wait(answer.Job.ID)
+	m, err := f.a.artifacts.Get(answer.ID)
+	if err != nil || m.State != artifacts.Complete || m.Kind != "cohort-summary" || !strings.HasPrefix(m.ID, "coh-") {
+		t.Fatalf("the summary: %v %+v", err, m.Findings)
+	}
+	p, _ := f.a.artifacts.Path(m.ID, cohort.FileSummary)
+	sdir := filepath.Dir(p)
+	d, pb, err := cohort.Read(sdir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Each sample's cells by label, the suite's own; its pseudobulk its labeled cells' transcripts.
+	for s, keep := range [][]bool{all1, left} {
+		sd := d.Samples[s]
+		want := make([]int, 3)
+		chosen, labeled := 0, 0
+		var transcripts uint64
+		for i := range cells {
+			if !keep[i] {
+				continue
+			}
+			chosen++
+			if labels[i] >= 0 {
+				labeled++
+				want[labels[i]+1]++
+				transcripts += uint64(cells[i].Transcripts)
+			}
+		}
+		if sd.Cells != chosen || sd.Labeled != labeled || fmt.Sprint(sd.Counts) != fmt.Sprint(want) || want[0] != 0 {
+			t.Errorf("%s: %d cells, %d labeled, counts %v; want %d, %d, %v", sd.Name, sd.Cells, sd.Labeled, sd.Counts, chosen, labeled, want)
+		}
+		var total uint64
+		for k := range pb[s] {
+			for _, v := range pb[s][k] {
+				total += uint64(v)
+			}
+		}
+		if total != transcripts {
+			t.Errorf("%s: the pseudobulk holds %d transcripts; its labeled cells %d", sd.Name, total, transcripts)
+		}
+		if sd.PanelGenes != len(counts.Genes) || len(d.Genes) != len(counts.Genes) {
+			t.Errorf("%s: %d panel genes", sd.Name, sd.PanelGenes)
+		}
+	}
+	whole, part := d.Samples[0], d.Samples[1]
+	if !(part.Tissue > 0 && part.Tissue < whole.Tissue && part.Tissue <= 40*60+1e-6) || whole.Window.Kind != "tissue" || part.Window.Kind != "region" || part.Region.Name != "Left" {
+		t.Errorf("tissue: %g of %g µm², windows %s and %s", part.Tissue, whole.Tissue, whole.Window.Kind, part.Window.Kind)
+	}
+	// The graph's and the enrichment's numbers, their own.
+	gm, _ := f.a.artifacts.Get(g.ID)
+	var gs spatial.Summary
+	json.Unmarshal(gm.Summary, &gs)
+	ap, _ := f.a.artifacts.Path(e.ID, spatial.FileAnalysis)
+	an, _ := spatial.ReadAnalysis(filepath.Dir(ap))
+	stats := map[string]cohort.Statistic{}
+	for _, st := range whole.Statistics {
+		stats[st.Family+":"+st.Key] = st
+	}
+	if st := stats["graph:mean neighbors"]; st.Value != gs.MeanDegree || st.Source != g.ID {
+		t.Errorf("the graph's mean neighbors: %+v", st)
+	}
+	if st := stats["enrichment:B|C"]; st.Source != e.ID || math.Abs(st.Value-an.Enrichment.Count[1]/an.Enrichment.Expected[1]) > 1e-12 {
+		t.Errorf("the enrichment's B–C ratio: %+v", st)
+	}
+	if len(part.Statistics) != 0 {
+		t.Errorf("the region asked nothing: %+v", part.Statistics)
+	}
+	// Niches across the two: each sample's cells in them, and every cell's niche in niches.bin.
+	if d.Niches == nil || d.Niches.Niches != 2 || len(d.Niches.Composition) != 6 {
+		t.Fatalf("niches: %+v", d.Niches)
+	}
+	for _, sd := range d.Samples {
+		if sd.Niches[0]+sd.Niches[1] != sd.NicheCells || sd.NicheCells == 0 || math.Abs(sd.NicheShares[0]+sd.NicheShares[1]-1) > 1e-12 {
+			t.Errorf("%s's niches: %v of %d", sd.Name, sd.Niches, sd.NicheCells)
+		}
+	}
+	// The table: each sample's cells by label as its counts, each from its labels.
+	table, _ := os.ReadFile(filepath.Join(sdir, cohort.FileTable))
+	trows, err := csv.NewReader(bytes.NewReader(table)).ReadAll()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range trows[1:] {
+		if r[2] != "cells" {
+			continue
+		}
+		sd := d.Samples[map[string]int{"s-1": 0, "s-2": 1}[r[0]]]
+		k := map[string]int{"A": 0, "B": 1, "C": 2}[r[3]]
+		if r[4] != fmt.Sprint(sd.Counts[k]) || r[5] != "lab-x" {
+			t.Errorf("the table's %s %s: %v", sd.Name, r[3], r)
+		}
+	}
+	nrows, nniches, err := cohort.ReadNiches(sdir)
+	if err != nil || len(nrows) != whole.Cells+part.Cells || len(nniches) != len(nrows) {
+		t.Errorf("niches.bin holds %d cells: %v", len(nrows), err)
+	}
+	// Each sample's bundle (its run and panel), the instrument's nuclei from the bundle's cells
+	// table, the panels compared (one), the batches (one slide), no sample far out among two, and
+	// the pseudobulk's one principal component over the panel's genes.
+	for _, sd := range d.Samples {
+		if sd.Bundle.Panel.Genes < len(counts.Genes) || sd.Bundle.Run == "" || sd.QC.NucleusShare == nil || *sd.QC.NucleusShare <= 0 || sd.QC.MedianNucleusArea == nil || *sd.QC.MedianNucleusArea <= 0 {
+			t.Errorf("%s: bundle %+v, nuclei %+v", sd.Name, sd.Bundle, sd.QC)
+		}
+	}
+	if d.Panels == nil || len(d.Panels.Panels) != 1 || len(d.Panels.Shared) != d.Samples[0].Bundle.Panel.Genes || len(d.Panels.Panels[0].Samples) != 2 {
+		t.Errorf("panels: %+v", d.Panels)
+	}
+	if len(d.Outliers) != 0 || d.OutlierRule.Z != 3.5 || len(d.Batches) != 3 || len(d.Batches[0].Samples) != 2 {
+		t.Errorf("quality: %+v %+v", d.Outliers, d.Batches)
+	}
+	if d.PCA == nil || len(d.PCA.Variance) != 1 || math.Abs(d.PCA.Variance[0]-1) > 1e-12 || len(d.PCA.Scores) != 2 || math.Abs(d.PCA.Scores[0][0]+d.PCA.Scores[1][0]) > 1e-9 {
+		t.Errorf("principal components: %+v", d.PCA)
+	}
+	// The panels compared before any summary.
+	prec := f.post("/api/cohort/panels", `{"samples":[{"sample":"s-1","name":"Whole","item":"0"},{"sample":"s-2","name":"Again","item":"0"}]}`)
+	var pd cohort.PanelsDoc
+	if err := json.Unmarshal(prec.Body.Bytes(), &pd); err != nil || prec.Code != 200 || len(pd.Panels) != 1 || len(pd.Shared) != d.Samples[0].Bundle.Panel.Genes {
+		t.Errorf("the panels compared: %d %s", prec.Code, prec.Body.String())
+	}
+	if prec := f.post("/api/cohort/panels", `{"samples":[{"sample":"s-1","name":"Whole","item":"9"}]}`); prec.Code != 400 || !strings.Contains(prec.Body.String(), "not open") {
+		t.Errorf("a bundle not open: %d %s", prec.Code, prec.Body.String())
+	}
+	// Asked again: answered at once.
+	var again struct {
+		ID       string
+		Artifact *artifacts.Manifest
+	}
+	json.NewDecoder(f.post("/api/cohort/summary", body).Body).Decode(&again)
+	if again.ID != answer.ID || again.Artifact == nil {
+		t.Error("asked again: not answered at once")
+	}
+	// Refused, saying why.
+	for want, bad := range map[string]string{
+		"not open on this computer":  strings.Replace(body, `"item":"0"`, `"item":"9"`, 1),
+		"is not one of the cohort's": strings.Replace(body, `"names":["A","B","C"]`, `"names":["A","B"]`, 1),
+		"the niches":                 strings.Replace(body, `"niches":2`, `"niches":1`, 1),
+		"no spatial":                 strings.Replace(body, e.ID, "spa-nothing", 1),
+		"1 to 500 samples":           `{"labels":{"name":"x","names":["A"]},"samples":[]}`,
+		"each once":                  strings.Replace(body, `"names":["A","B","C"]`, `"names":["B","B","C"]`, 1),
+	} {
+		rec := f.post("/api/cohort/summary", bad)
+		if rec.Code != 400 || !strings.Contains(rec.Body.String(), want) {
+			t.Errorf("%s: %d %s", want, rec.Code, rec.Body.String())
+		}
+	}
+}
+
+// fourRegions summarizes four region samples of the small simulated tissue (two on each side; with
+// niches when asked, and with each region's graph and enrichment when spatial) and answers the
+// summary's id and a design comparing the sides.
+func fourRegions(t *testing.T, f *refineFixture, niches string, spatial bool) (string, string) {
+	t.Helper()
+	all, _ := f.a.artifacts.List()
+	var seg artifacts.Manifest
+	for _, m := range all {
+		if m.Kind == "segmentation" && isBundleOwn(m) {
+			seg = m
+		}
+	}
+	b, err := xenium.Open(f.folder, xenium.Options{CacheDir: f.a.cacheDir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir, err := f.a.segmentationFolder(context.Background(), b, seg)
+	b.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cells, _ := segment.ReadCells(dir)
+	n := len(cells)
+	labels := make([]int32, n)
+	for i := range labels {
+		labels[i] = int32(i % 2)
+	}
+	codes, sum := codesOf(labels)
+	labelsJSON := fmt.Sprintf(`{"id":"lab-x","kind":"labels","name":"By turns","level":0,"names":["A","B"],"codes":%q,"checksum":%q}`, codes, sum)
+	rect := func(x0, y0, x1, y1 float64) string {
+		return fmt.Sprintf(`[[[[%g,%g],[%g,%g],[%g,%g],[%g,%g]]]]`, x0, y0, x1, y0, x1, y1, x0, y1)
+	}
+	type part struct {
+		id, name       string
+		x0, y0, x1, y1 float64
+	}
+	parts := []part{{"s-1", "Left top", 0, 0, 40, 30}, {"s-2", "Left bottom", 0, 30, 40, 120}, {"s-3", "Right top", 40, 0, 120, 30}, {"s-4", "Right bottom", 40, 30, 120, 120}}
+	var samples []string
+	for k, p := range parts {
+		keep := make([]bool, n)
+		for i, c := range cells {
+			keep[i] = float64(c.X) >= p.x0 && float64(c.X) < p.x1 && float64(c.Y) >= p.y0 && float64(c.Y) < p.y1
+		}
+		analyses := ""
+		if spatial {
+			// The region's cells' graph, and its labels' enrichment over it.
+			var g, e struct {
+				ID  string
+				Job *struct{ ID string }
+			}
+			json.NewDecoder(f.post("/api/local/0/graph", fmt.Sprintf(`{"segmentation":%q,"parameters":{"kind":"delaunay"},"cells":%s}`, seg.ID, chosenCells(keep, ""))).Body).Decode(&g)
+			if g.Job != nil {
+				f.wait(g.Job.ID)
+			}
+			json.NewDecoder(f.post("/api/local/0/spatial", fmt.Sprintf(`{"question":"enrichment","segmentation":%q,"graph":%q,"labels":%s,"parameters":{"permutations":100,"seed":3}}`, seg.ID, g.ID, labelsJSON)).Body).Decode(&e)
+			if e.Job != nil {
+				f.wait(e.Job.ID)
+			}
+			if g.ID == "" || e.ID == "" {
+				t.Fatalf("%s: no graph or enrichment", p.name)
+			}
+			analyses = fmt.Sprintf(`,"graph":%q,"analyses":[%q]`, g.ID, e.ID)
+		}
+		samples = append(samples, fmt.Sprintf(`{"sample":%q,"name":%q,"dataset":"d-1","item":"0","segmentation":%q,"cells":%s,"labels":%s,"region":{"kind":"region","region":{"id":"r-%d","name":%q,"version":1},"geometry":%s}%s}`,
+			p.id, p.name, seg.ID, chosenCells(keep, ""), labelsJSON, k, p.name, rect(p.x0, p.y0, p.x1, p.y1), analyses))
+	}
+	var answer struct {
+		ID  string
+		Job *struct{ ID string }
+	}
+	rec := f.post("/api/cohort/summary", fmt.Sprintf(`{"labels":{"name":"By turns","level":0,"names":["A","B"]},%s"samples":[%s]}`, niches, strings.Join(samples, ",")))
+	if err := json.Unmarshal(rec.Body.Bytes(), &answer); err != nil || answer.ID == "" {
+		t.Fatalf("the summary: %d %s", rec.Code, rec.Body.String())
+	}
+	if answer.Job != nil {
+		f.wait(answer.Job.ID)
+	}
+	// Regions of one section as samples: pseudo-samples, as a teaching example's are.
+	design := `{"pseudoSamples":true,"names":["Intercept","side[T.right]"],"rows":[{"unit":"1","group":"left","samples":["s-1"],"x":[1,0]},{"unit":"2","group":"left","samples":["s-2"],"x":[1,0]},{"unit":"3","group":"right","samples":["s-3"],"x":[1,1]},{"unit":"4","group":"right","samples":["s-4"],"x":[1,1]}],"contrasts":[{"name":"right − left","vector":[0,1]}]}`
+	return answer.ID, design
+}
+
+// A comparison of four region samples of the small simulated tissue (two on each side): the job
+// records an artifact of kind abundance made from the summary, its tests those internal/cohort
+// makes of the summary's own numbers; asked again, answered at once; what cannot be compared
+// refused.
+func TestAbundanceAPI(t *testing.T) {
+	f := newRefineFixture(t, true)
+	summaryID, design := fourRegions(t, f, "", false)
+	answer := struct{ ID string }{summaryID}
+	body := fmt.Sprintf(`{"summary":%q,"design":%s}`, answer.ID, design)
+	var started struct {
+		ID       string
+		Artifact *artifacts.Manifest
+		Job      *struct{ ID string }
+	}
+	rec := f.post("/api/cohort/abundance", body)
+	if err := json.Unmarshal(rec.Body.Bytes(), &started); err != nil || started.Job == nil || !strings.HasPrefix(started.ID, "abu-") {
+		t.Fatalf("the comparison: %d %s", rec.Code, rec.Body.String())
+	}
+	f.wait(started.Job.ID)
+	m, err := f.a.artifacts.Get(started.ID)
+	if err != nil || m.State != artifacts.Complete || m.Kind != "abundance" || len(m.Lineage.Parents) != 1 || m.Lineage.Parents[0].ID != answer.ID {
+		t.Fatalf("the artifact: %v %+v", err, m)
+	}
+	p, _ := f.a.artifacts.Path(m.ID, cohort.FileAbundance)
+	got, err := cohort.ReadComparison(filepath.Dir(p))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sp, _ := f.a.artifacts.Path(answer.ID, cohort.FileSummary)
+	doc, _, _ := cohort.Read(filepath.Dir(sp))
+	var design0 cohort.ComparisonDesign
+	json.Unmarshal([]byte(design), &design0)
+	want, err := cohort.Abundance(doc, design0, []string{cohort.FamilyShare, cohort.FamilyDensity}, 0.95)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Families) != 2 || got.Summary.ID != answer.ID || got.Level != 0.95 {
+		t.Fatalf("the comparison: %+v", got.Summary)
+	}
+	for fi := range want.Families {
+		for k, w := range want.Families[fi].Tests {
+			g := got.Families[fi].Tests[k]
+			if g.Tested != w.Tested || g.Estimate != w.Estimate || g.P != w.P || g.PAdj != w.PAdj {
+				t.Errorf("%s %s: %+v, want %+v", got.Families[fi].Family, g.Label, g, w)
+			}
+		}
+	}
+	if !got.Families[0].Tests[1].Tested || got.Families[0].Tests[1].DF != 2 {
+		t.Errorf("B's share: %+v", got.Families[0].Tests[1])
+	}
+	var again struct {
+		ID       string
+		Artifact *artifacts.Manifest
+	}
+	json.Unmarshal(f.post("/api/cohort/abundance", body).Body.Bytes(), &again)
+	if again.ID != started.ID || again.Artifact == nil {
+		t.Error("asked again: not answered at once")
+	}
+	for want, bad := range map[string]string{
+		"no cohort summary":          strings.Replace(body, answer.ID, "coh-nothing", 1),
+		"not in the summary":         strings.Replace(body, `"s-4"`, `"s-9"`, 1),
+		"no niches to compare":       strings.Replace(body, `"design":`, `"families":["niche"],"design":`, 1),
+		"no family":                  strings.Replace(body, `"design":`, `"families":["mass"],"design":`, 1),
+		"no degrees of freedom":      strings.Replace(strings.Replace(body, `,{"unit":"4","group":"right","samples":["s-4"],"x":[1,1]}`, "", 1), `{"unit":"2","group":"left","samples":["s-2"],"x":[1,0]},`, "", 1),
+		"regions of one section":     strings.Replace(body, `"pseudoSamples":true,`, "", 1),
+		"right has 1 replicate unit": strings.Replace(body, `,{"unit":"4","group":"right","samples":["s-4"],"x":[1,1]}`, "", 1),
+	} {
+		rec := f.post("/api/cohort/abundance", bad)
+		if rec.Code != 400 || !strings.Contains(rec.Body.String(), want) {
+			t.Errorf("%s: %d %s", want, rec.Code, rec.Body.String())
+		}
+	}
+}
+
+// The expression and spatial comparisons of four region samples (with niches): each job records an
+// artifact made from the summary, its tests those internal/cohort makes of the summary's own
+// pseudobulk and numbers; a gene's values by row answered; asked again, answered at once; what
+// cannot be compared refused.
+func TestExpressionAndSpatialAPI(t *testing.T) {
+	f := newRefineFixture(t, true)
+	summaryID, design := fourRegions(t, f, `"niches":{"neighbors":5,"niches":2,"starts":2,"seeds":1,"seed":4},`, true)
+	sp, _ := f.a.artifacts.Path(summaryID, cohort.FileSummary)
+	doc, pb, err := cohort.Read(filepath.Dir(sp))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var design0 cohort.ComparisonDesign
+	json.Unmarshal([]byte(design), &design0)
+	type started struct {
+		ID       string
+		Artifact *artifacts.Manifest
+		Job      *struct{ ID string }
+	}
+	start := func(path, body, prefix string) artifacts.Manifest {
+		t.Helper()
+		var s started
+		rec := f.post(path, body)
+		if err := json.Unmarshal(rec.Body.Bytes(), &s); err != nil || s.Job == nil || !strings.HasPrefix(s.ID, prefix) {
+			t.Fatalf("%s: %d %s", path, rec.Code, rec.Body.String())
+		}
+		f.wait(s.Job.ID)
+		m, err := f.a.artifacts.Get(s.ID)
+		if err != nil || m.State != artifacts.Complete || len(m.Lineage.Parents) != 1 || m.Lineage.Parents[0].ID != summaryID {
+			t.Fatalf("%s's artifact: %v %+v", path, err, m)
+		}
+		var again started
+		json.Unmarshal(f.post(path, body).Body.Bytes(), &again)
+		if again.ID != s.ID || again.Artifact == nil {
+			t.Errorf("%s asked again: not answered at once", path)
+		}
+		return m
+	}
+
+	// Expression, with rows of a single cell of a label tested (the tissue is small).
+	body := fmt.Sprintf(`{"summary":%q,"design":%s,"minCells":1}`, summaryID, design)
+	m := start("/api/cohort/expression", body, "exp-")
+	if m.Kind != "expression" || m.Lineage.Job.Kind != "expression" {
+		t.Errorf("the expression artifact: %+v", m)
+	}
+	p, _ := f.a.artifacts.Path(m.ID, cohort.FileExpression)
+	got, err := cohort.ReadExpression(filepath.Dir(p))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := cohort.CompareExpression(doc, pb, design0, 0.95, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Summary.ID != summaryID || got.Tests != want.Tests || got.Tests == 0 || len(got.Genes) != len(cohort.SharedGenes(doc, pb)) || len(got.Genes) < 100 {
+		t.Fatalf("the comparison: %d tests, want %d; %d genes", got.Tests, want.Tests, len(got.Genes))
+	}
+	var label, gene string
+	for k, r := range want.Results {
+		if r.Tested != got.Results[k].Tested {
+			t.Fatalf("%s tested %v, want %v", r.Label, got.Results[k].Tested, r.Tested)
+		}
+		if r.Tested {
+			label, gene = r.Label, want.Genes[r.Genes[0]]
+			for c := range r.Contrasts {
+				if fmt.Sprint(r.Contrasts[c].P) != fmt.Sprint(got.Results[k].Contrasts[c].P) || fmt.Sprint(r.Contrasts[c].PAdj) != fmt.Sprint(got.Results[k].Contrasts[c].PAdj) {
+					t.Errorf("%s: its tests differ", r.Label)
+				}
+			}
+		}
+	}
+	rec := request(t, f.handler, http.MethodGet, "/api/cohort/expression/values?id="+m.ID+"&label="+url.QueryEscape(label)+"&gene="+url.QueryEscape(gene), nil, nil)
+	var values struct {
+		Gene string
+		Rows []struct {
+			Unit, Group string
+			Count       float64
+			LogCPM      float64
+		}
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &values); err != nil || values.Gene != gene || len(values.Rows) == 0 || values.Rows[0].Unit != "1" || values.Rows[0].Group != "left" {
+		t.Errorf("a gene's values: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := request(t, f.handler, http.MethodGet, "/api/cohort/expression/values?id="+m.ID+"&label=Nothing&gene="+url.QueryEscape(gene), nil, nil); rec.Code != 400 {
+		t.Errorf("an unknown label's values: %d", rec.Code)
+	}
+	for want, bad := range map[string]string{
+		"no cohort summary":     strings.Replace(body, summaryID, "coh-nothing", 1),
+		"not in the summary":    strings.Replace(body, `"s-4"`, `"s-9"`, 1),
+		"1 to 10,000":           strings.Replace(body, `"minCells":1`, `"minCells":-2`, 1),
+		"above 0.5 and below 1": strings.Replace(body, `"minCells":1`, `"level":2`, 1),
+	} {
+		rec := f.post("/api/cohort/expression", bad)
+		if rec.Code != 400 || !strings.Contains(rec.Body.String(), want) {
+			t.Errorf("%s: %d %s", want, rec.Code, rec.Body.String())
+		}
+	}
+
+	// Spatial statistics: each region's enrichment of its labels.
+	body = fmt.Sprintf(`{"summary":%q,"design":%s}`, summaryID, design)
+	m = start("/api/cohort/spatial-tests", body, "spt-")
+	if m.Kind != "spatial-comparison" || m.Lineage.Job.Kind != "spatial-tests" {
+		t.Errorf("the spatial artifact: %+v", m)
+	}
+	p, _ = f.a.artifacts.Path(m.ID, cohort.FileSpatialTests)
+	sc, err := cohort.ReadSpatialComparison(filepath.Dir(p))
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantSC, _ := cohort.CompareSpatial(doc, design0, []string{cohort.FamilyEnrichment}, 0.95)
+	if len(sc.Families) != 1 || sc.Families[0].Family != cohort.FamilyEnrichment || len(sc.Families[0].Keys) != 3 || fmt.Sprint(sc.Families[0].Tests) != fmt.Sprint(wantSC.Families[0].Tests) {
+		t.Errorf("the spatial comparison: %+v", sc.Families)
+	}
+	for want, bad := range map[string]string{
+		"no moran statistics":          strings.Replace(body, `"design":`, `"families":["moran"],"design":`, 1),
+		"compared with the abundances": strings.Replace(body, `"design":`, `"families":["niche"],"design":`, 1),
+		"twice":                        strings.Replace(body, `"design":`, `"families":["enrichment","enrichment"],"design":`, 1),
+	} {
+		rec := f.post("/api/cohort/spatial-tests", bad)
+		if rec.Code != 400 || !strings.Contains(rec.Body.String(), want) {
+			t.Errorf("%s: %d %s", want, rec.Code, rec.Body.String())
+		}
+	}
+
+}

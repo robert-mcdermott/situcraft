@@ -2884,15 +2884,480 @@ as in waves 3 and 4.
 
 ## 0.7.0: samples and cohorts (wave 7)
 
-Outline.
-- Several datasets per project (D10); the experimental design (H1); sample summaries (H2); cohort
-  QC (Q5).
-- Sample-level inference with effect sizes, intervals and recorded corrections (H3); batch and
-  panel checks (H4, H5).
-- Data plan: simulated cohorts with known effects (labeled simulated), plus regions of the
-  development bundles treated as pseudo-samples only in clearly labeled teaching examples.
-- Validation: inference on simulated designs reaches its nominal error rates; cell-level
-  pseudoreplication is refused.
+Sections compared as samples. A project holds a study's sections, each a sample with what is known
+of it (its subject, condition, slide and run); the design says which samples are replicates of
+what; every sample is summarized the same way (its cell types' shares, its niches, its quality, its
+spatial statistics, its expression); and groups are compared with the sample, or the subject, as
+the unit: effect sizes with intervals, raw and adjusted p-values, and the correction and the tests
+it ran over recorded. Batches and panels are shown, never corrected silently.
+
+**What a sample is.** A dataset (one section), or a region of one: a core of a tissue microarray, or
+one of several sections placed on a slide. A sample's numbers come from its dataset's artifacts
+(its promoted segmentation, a label set, its analyses), restricted to its region when it has one.
+Regions of one section are not independent samples; the design says so when they are used as if
+they were, and only teaching examples, labeled as such, compare them.
+
+**What a cohort's statistics say.** Cells are not replicates (conventions: no inferential
+statistic across groups until the design names its replicate unit). Each test is of samples'
+numbers (Crowell et al. 2020; Squair et al. 2021): a cell type's share by a quasi-binomial model of
+its cells against the sample's, a gene's expression in a cell type by its pseudobulk counts with
+voom's weights and limma's moderated statistics (Law et al. 2014; Smyth 2004), a spatial statistic
+by a linear model of its per-sample values. Pairing and covariates enter through the design; a
+batch is a covariate only when the design names it. Per-cell tests, where shown, are labeled
+exploratory. The statistics are implemented from their publications, each cited in the code.
+
+**Where the work runs.** As in waves 4 and 6: each sample's numbers come from jobs on its dataset
+(the same steps run on every sample in one step); the cohort's summaries and tests run in the
+program as jobs (`internal/cohort`), each an artifact named by its inputs: the samples and their
+fields, the design, the artifacts each number came from and the parameters. The page holds the
+samples and the design, draws the results, and opens a result's samples and, in each, its cells
+on the tissue.
+
+**Data.** Simulated cohorts with known effects (labeled simulated): sections whose composition,
+expression and arrangement differ between groups by known amounts, with sample-to-sample variation
+of known size. The development bundles serve as samples of different panels and runs, and their
+regions as pseudo-samples only in clearly labeled teaching examples.
+
+**Validation.** Each model against an independent implementation on the same tables (statsmodels;
+limma in R, run apart as an external reference); on many simulated null cohorts, each test's
+false-positive rate at its nominal level and Benjamini–Hochberg's false discovery rate controlled;
+on simulated cohorts with effects, the effects recovered within their intervals at their stated
+coverage; the same data tested cell by cell, to show the false positives that pseudoreplication
+makes, which SituCraft refuses.
+
+### Wave 7
+
+1. **Samples (D10): done.**
+   - **A project of several sections:** bundles opened together (several, or a folder of them, which
+     the program already lists bundle by bundle) and added in one step (`app.bundles.addOpen`: each
+     checked, those with a fatal problem refused with their reason), in the Data view and the
+     Cohort view. A dataset now records its slide and its panel's design (`panel_design_id`).
+   - **Samples** (`web/lib/samples.js`; `docs/FORMATS.md`): each dataset a sample until regions of
+     it are made its samples instead, in the order drawn, named by their regions until named; a
+     record only for a sample something was said of (`project.samples`: id, dataset, region, name,
+     fields), so that earlier projects open unchanged, each dataset a sample. A region removed
+     leaves its sample flagged and left out. Names unique (a repeated one numbered).
+   - **Fields:** subject and condition, and any added (`project.sampleFields`), as text or numbers
+     (a number field takes only finite numbers; a field becomes one only when every value is one;
+     missing values absent, never zero); renamed in every sample, retyped, removed with their
+     values. The bundle's run, slide, Xenium region, panel and software read from the dataset,
+     never stored again.
+   - **The Cohort view** (`ui/mode-cohort.js`): the samples table (each sample's name, dataset,
+     region, cells under its dataset's default segmentation, counted in its region, its region's
+     area, its fields as cells to type in, and its bundle's run, slide and panel); the fields; the
+     regions of each dataset to make samples, or the whole section again. Edits are kept as a
+     cell is left, Tab moving on as in a spreadsheet; each is in the history and undone by undo.
+     The project tree lists **Samples** once there are two or more.
+   - **Tables:** the samples written as CSV (sample, dataset, region, the fields, the bundle's
+     fields for reference) and read back, CSV or tab-separated: rows matched to samples by name
+     (exactly, then ignoring case), fields set (an empty cell clears), new columns added as fields
+     (numbers when every value is one), the table's own and the bundle's columns left alone; refused,
+     with nothing changed, when no column names the samples, a column is repeated, two rows name one
+     sample or a value does not fit.
+   - Remote control: `samples`, `set_samples` (regions, fields, names, a table and values, in one
+     step); `export` writes `samples`.
+   - Validation:
+     - **By hand** (`web/lib/samples.test.mjs`, 11 tests): defaults without records, fields set and
+       cleared, numbers' refusals, fields renamed, retyped and removed, names and repeated names,
+       regions as samples (kept, dropped, removed, the dataset a sample again with its fields), the
+       CSV written and read back to the byte, tables matched and refused, the project document.
+     - **In the page** (viewer suite): the Lung and Breast bundles added together, each a sample
+       (11,898 and 7,275 cells; panels hLung_v1.1 and hBreast_v1); fields set by remote control,
+       written as CSV and read back to the same file; refusals changing nothing; two regions of the
+       Lung as its samples (134 and 1,252 cells), their cells the suite's own count by centroid and
+       their areas their outlines'; all kept with the project; every earlier release's project
+       (0.2.0 to 0.6.0) opening with each dataset a sample.
+   - Found by slice 1:
+     - **A table's edits lost the keyboard's place:** a value is kept as its cell is left, and
+       the table drawn again took the focus from the cell Tab had moved to. The view draws again
+       once the focus has settled, and gives it back to the same cell, its text selected.
+     - **A bundle's slide was not recorded:** the samples' batches need it; a dataset records it
+       (and its panel's design) from now on. A dataset added by an earlier release shows them as
+       not recorded until it is added again; slice 5, which compares batches and panels, reads them
+       from the bundle.
+2. **Simulated cohorts (data plan): done.**
+   - **`situcraft simulate --cohort`** (`internal/simulate/cohort.go`; research.md §3.4b;
+     `docs/FORMATS.md`): groups, the first the reference; subjects in each, or paired subjects in
+     every group; slides as batches, an unpaired group's sections dealt to them in turn and a paired
+     subject's together, each slide's detection efficiency log-normal. Each section a simulated
+     bundle of its own layout, cells and molecules, sharing the panel and the domains' mixes
+     (`panel_seed`, `mix_seed`), its candidate cells refused for crowding trying other places in
+     their domain (`placement_retries`) so that the types placed are the types drawn.
+   - **Effects and variation** on the model's knobs (`type_odds`, `domain_odds`, `level_folds`):
+     a type's weight in every domain's mix or in another type's domains (its odds against each other
+     type), and a gene's expected count in a type; from section to section, log-normal (share_sd,
+     level_sd), a paired subject's sections sharing a part (subject_share).
+   - **The truth:** `truth/cohort.json` (the design, each effect with what the true cells show of
+     it, each section's true cells by domain and type and its transcripts), `samples.csv` and
+     `situcraft-cohort.json`. Presets `standard`, `null` and `paired`.
+   - **The start page's A simulated cohort** (`api_examples.go`: a generated example made by
+     `RunCohort`, ready once `situcraft-cohort.json` is there): opened, each sample's bundle added
+     with its subject and condition (`ui/examples.js`). Remote control: `open_example` with `cohort`.
+   - Validation:
+     - **By hand and by chance** (`internal/simulate/cohort_test.go`): the tiny cohort pinned by
+       digest (the same on arm64 and amd64, on one worker or many); the design's names, groups and
+       slides; the folder (each section's region, run and slide, one panel, the truth's cells each
+       bundle's own, the parameters read back); over 24 sections each effect within three standard
+       errors of the fold asked, and the null cohort's groups alike; a gene's fold exact in each
+       section (spread below 0.1); over 100 sections the variation's spread within 15% and 2% of
+       share_sd and level_sd, a paired subject's sections correlating by the subject share within
+       0.03; refusals.
+     - **In the page** (viewer suite): the cohort made and opened by remote control, each sample with
+       its subject, condition, slide and run; from its files, one panel, the truth's cells each
+       bundle's own, `samples.csv` the samples' fields, and every effect the suite's own from the
+       truth's counts.
+   - Found by slice 2:
+     - **A section's own domain mixes made a variation nobody asked for:** a minor type's weight in
+       a domain is a gamma draw, so a type's share of a kind of place differed several-fold from
+       section to section, and an effect within a kind of domain could not be told from it (a
+       standard error of 0.6 on the log scale). The cohort's sections share the mixes, each with its
+       own domains' places.
+     - **An effect on one type changes the others' odds against the rest:** a fold multiplies a
+       type's odds against each other type; where another type's weight changes too, its odds
+       against all the others change by less (0.19 and 0.24 below the log folds over 20 cohorts).
+       The truth measures each effect against the types no effect changes, domain by domain; over
+       20 cohorts 0.06 below the log folds remain (small domains' counts, and crowding).
+     - **A type's share of all the cells is not the effect:** odds are not collapsible, and the
+       types change places; the standard cohort's endothelial-like ×2 makes it 1.5 times as common
+       in all, and the immune-like type less common, though ×4 in the epithelial-like domains. The
+       example says what is doubled: a cell's odds of being of the type.
+3. **The design (H1): done.**
+   - **`web/lib/design.js`** (research.md §6.9): from the samples and a specification (the
+     replicate unit, the groups compared and their reference, contrasts, covariates, samples left
+     out with their reasons), the rows (units in groups, a unit's samples in one group combined),
+     pairing (a unit in more than one group: the units a factor of the model), and the matrix in
+     treatment coding (levels in code-point order, the reference first; factors before numbers, as
+     patsy orders terms); its rank found term by term, so that a term whose columns add nothing is
+     named; the residual degrees of freedom; the contrasts as vectors over the columns.
+   - **Refusals, saying why:** a group of fewer than two units; a term confounded with those before
+     it; no degrees of freedom left; the groups confounded with a slide, run or panel not adjusted
+     for (uneven ones noted); regions of one section as separate units; a covariate of two values
+     for a unit in a group. Samples without a value the design reads left out, and said.
+   - **The Cohort view's Design** (`ui/cohort-design.js`): the choices, the design in words, its
+     refusals and notes, its rows and matrix; saved as versions of a name (kind `design`, with the
+     samples as they were), each saying whether the samples have changed since; the project tree's
+     **Designs**. Remote control: `design`.
+   - Validation:
+     - **By hand** (`web/lib/design.test.mjs`, 14 tests): unpaired, paired, partly paired,
+       unbalanced, covariates of both kinds, three groups with a contrast between two, technical
+       replicates; each refusal; samples left out; versions and changes; the rank.
+     - **Against patsy** (`validation/reference/designs/`: `compare.sh` runs patsy 1.0.3 on six
+       designs, `web/lib/design-reference.test.mjs` compares on every commit): every column name
+       and value the same.
+     - **In the page** (viewer suite): the simulated cohort's subjects compared by condition and
+       adjusted for the slide (3 coefficients over 8 rows, 5 degrees of freedom); a field
+       confounded with the condition, and a group of one subject, refused and not saved; the
+       subjects paired (5 coefficients, 3 degrees of freedom); versions kept with the project.
+   - Found by slice 3:
+     - **patsy orders a formula's numeric terms after its factors,** whatever their order in the
+       formula; SituCraft orders them the same, so that the columns match.
+4. **Sample summaries (H2): done.**
+   - **The same steps on every sample in one step** (`ui/cohort-summary.js`): each dataset's cells
+     clustered with SituCraft's defaults and labeled from one marker set (a starter resolved on the
+     first dataset, then used for the rest), so that labels have the same names; a graph of each
+     sample's cells (a region sample's, its region's; never those a review excluded) and the same
+     questions with the same parameters (neighborhood enrichment, nearest distances, Moran's I).
+     Every step is named by what it is made from, so a step made already is answered at once.
+   - **Niches across the samples** (`internal/spatial` `FindNichesAcross`, research.md §6.10): each
+     sample's windows on its own cells, pooled, one k-means (the same starts, seeds and agreement as
+     a sample's niches); for one sample, exactly that sample's niches.
+   - **The cohort table** (`internal/cohort`, `api_cohort.go`, `POST /api/cohort/summary`): each
+     sample's cells by label (counts, shares, densities per mm² of its tissue window, within its
+     region for a region sample), its niches' shares, its QC metrics, its graph's numbers, its
+     spatial statistics (an enrichment's ratios, nearest distances' medians, each gene's Moran's I)
+     and its pseudobulk by label and gene (a gene a panel lacks missing, not zero); each number
+     traced to the artifact it came from. An artifact of kind `cohort-summary`: `summary.json`,
+     `pseudobulk.bin`, `niches.bin`, `table.csv` (a row each number, with its source) and
+     `pseudobulk.csv`. The Cohort view shows a family at a time; the project tree's **Summaries**.
+     Remote control: `cohort_steps`, `summarize_samples`, `cohort_table`; `export` writes the table
+     and the pseudobulk.
+   - Validation:
+     - **By hand** (`internal/cohort`): five cells' counts, shares, densities, quality and pseudobulk
+       worked out; the tables read back to every digit, a gene a panel lacks empty; refusals.
+     - **Niches across samples** (`internal/spatial`): stripes of two samples found together
+       (adjusted Rand index 0.98 against the truth), each sample's windows its own, one sample alone
+       exactly its niches, a sample of one cell refused.
+     - **In Go** (`api_cohort_test.go`): a section and a region of it summarized; each count, the
+       pseudobulk's total, the region's tissue, the graph's and enrichment's numbers and the table
+       against the cells and the other artifacts; asked again, answered at once; six refusals.
+     - **In the page** (viewer suite): the simulated cohort's eight samples through the steps and
+       summarized; each of 1,280 numbers equal to the artifact's it came from; each sample's shares
+       within 0.03 of its true types' (0.015 at most), its tissue within 2% of the section's
+       (0.6%), the pseudobulk's SIM033 among epithelial-like transcripts within 0.15 of the truth's
+       on the log scale (0.065); the niches found together against each sample's own (adjusted
+       Rand index 0.56 to 0.82), one sample alone exactly its own; each domain's leading type
+       defining a niche.
+   - Found by slice 4:
+     - **Labels from a reference are not yet one of the steps:** the steps label from a marker set.
+       A reference's labels are named by the reference, so the same reference gives every sample
+       the same names; the steps will offer it with differential abundance (slice 6).
+     - **Joint niches are not each sample's own,** nor should they be: one k-means over the pooled
+       windows places the centers where all the samples' places are, so a sample's cells divide a
+       little differently (the Rand index above); what is gained is that niche 3 is one kind of
+       place in every sample.
+     - **The pseudobulk is of the cells' assigned transcripts:** a few of a type's transcripts land
+       in a neighbor's cell, so a gene raised in one type reads a little lower in its cells'
+       pseudobulk than in the true cells (0.04 to 0.065 on the log scale here).
+5. **Cohort QC, batches and panels (Q5, H4, H5): done.**
+   - **Each QC metric by sample** (`internal/cohort` `Outliers`, `ui/cohort-qc.js`), side by side
+     with its slide, run and panel and by batch (`Batches`): eight numbers of a sample's quality,
+     not its size; a sample far out flagged by its robust z-score (the median absolute deviation's,
+     as Iglewicz and Hoaglin's modified z-score, 3.5) and a difference that matters (20% for a
+     quantity on a log scale, 5 points for a share), the reason in words, no pass or fail; five
+     samples at least. Left out of the design only with a reason, which the design keeps.
+   - **Batches shown:** the numbers' medians by slide, run and panel; each batch's samples by the
+     design's groups, a group confounded with a batch stated (the design's own check); the
+     pseudobulk's principal components (`PseudobulkPCA`: log2 counts per million over the genes
+     every panel has, the 500 most variable, Jacobi's rotations), plotted colored by any field and
+     in the cohort table; no correction unless the design names the batch.
+   - **Panels** (`ComparePanels`, `POST /api/cohort/panels`, and in every summary): genes matched by
+     name; those in every panel, the only ones compared across samples; the others listed, with
+     shared genes read by other codewords and genes with other Ensembl IDs or names.
+   - **A planted outlier** in simulated cohorts (`outliers`, the `outlier` preset). Remote control:
+     `cohort_qc`, `compare_panels`.
+   - Validation:
+     - **By hand** (`internal/cohort`): the rule's robust z-scores, the mean absolute deviation where
+       half agree, a difference too small to matter, too few samples; batches; two panels' shared,
+       partial, codeword and ID differences.
+     - **Against numpy** (`validation/reference/pca/`: `compare.sh` runs numpy 2.5.4 on the
+       simulated cohort's pseudobulk, twelve drawn samples of 800 genes in two batches and three of
+       five; compared on every commit): the same genes kept, every score and share within 10⁻¹³.
+     - **In the simulator:** a planted outlier detects its factor of the transcripts, its cells and
+       the other samples unchanged.
+     - **In the page** (viewer suite): the simulated cohort with no sample far out, each slide and
+       run holding both groups, seven principal components over its one panel; its groups made to
+       follow the slides said to be confounded; the planted outlier cohort's sixth sample alone
+       found far out (median transcripts 0.39 times the others', robust z −9.5; its median genes and
+       transcripts per 100 µm² too); the Lung and Breast panels' 67 shared genes, 435 in one panel
+       only and 67 read by other codewords, as the suite counts them from the panels' files.
+   - Found by slice 5:
+     - **The instrument's segmentation records no nuclei of its own:** slice 4's summaries gave its
+       samples a nucleus share and area of 0. They are read from the bundle's cells table now, and a
+       segmentation without nuclei leaves them out.
+     - **A robust z-score alone flags differences too small to matter** where the samples agree
+       closely (simulated sections' tissue areas within 0.1% of each other), hence the second
+       condition; and a section's size is not its quality (cells, transcripts and tissue in all are
+       not compared).
+     - **Every gene the Lung and Breast panels share is read by other codewords:** codewords are
+       each panel's own assignment, so a difference says the probes may differ, not that the gene
+       is another.
+6. **Differential abundance (H3): done.**
+   - **Each label's share between groups** (`internal/cohort` `FitQuasi`, `Abundance`;
+     `api_abundance.go`, `POST /api/cohort/abundance`): its cells against the row's labeled cells,
+     by a quasi-binomial generalized linear model of the design's matrix (its pairing and
+     covariates; a unit's samples in a group combined); densities by a quasi-Poisson model with the
+     log of the tissue's area as offset; niches' shares as shares. Fitted by iteratively reweighted
+     least squares as R's glm (its starting values, a tighter tolerance); the dispersion Pearson's χ²
+     over the residual degrees of freedom; each contrast a t test on those degrees of freedom
+     (`internal/stats` Student's t, against R). Effect sizes as ratios (odds, densities) with
+     intervals, raw and Benjamini–Hochberg-adjusted p-values over each family's tests, the universe
+     stated; what cannot be tested (no cells; a group with none) said. An artifact of kind
+     `abundance` (`abundance.json`, `results.csv`); the project tree's **Abundance compared**.
+   - **A result's units as points by group** (`ui/cohort-abundance.js`); a point opens its sample's
+     cells of that label on its tissue (the summary's label set, its cells chosen).
+   - **The same steps on every sample also label from a reference** (a label set's source: its
+     marker set, or a reference by its file's SHA-256 and column); `situcraft simulate --cohort …
+     --reference N` and the start page's cohort example write a reference over the cohort's panel.
+   - Remote control: `compare_abundance`, `show_sample_cells`; `cohort_steps` and `summarize_samples`
+     take a `reference`. The cohort's summary and comparison jobs are resumed after a restart.
+   - Validation:
+     - **Against statsmodels** (`validation/reference/abundance/`: `compare.sh` runs statsmodels
+       0.15.0 on 19 models, the simulated cohort's shares and densities by condition and adjusted
+       for the slide, a paired design, three groups with a contrast between two, densities over
+       varying areas; compared on every commit): every coefficient, standard error, dispersion,
+       contrast estimate, t, p and interval within 10⁻⁸ (2·10⁻¹⁴ found).
+     - **Calibration** (`TestAbundanceCalibration`): 4,000 null tables of beta-binomial shares and
+       negative binomial densities, four samples against four: rejections 5.6% and 5.6% at 5%, 1.1%
+       and 0.97% at 1%.
+     - **In the page** (viewer suite): the simulated cohort's subjects by condition, each effect the
+       pooled ratio of its labeled counts (as a model of the groups alone gives) and each interval
+       covering the true cells' ratio (endothelial-like 1.75, interval 0.84 to 3.64, the true cells
+       1.74); a sample's cells of a label shown, as many as the summary counts; a null cohort
+       labeled from its own reference, its shares within 0.08 of its true types', none of its 14
+       tests below an adjusted p of 0.05.
+   - Found by slice 6:
+     - **statsmodels' two-column binomial leaves the trials out of Pearson's χ²:** its dispersion is
+       then the binomial's divided by the trials (0.005 here, against R's 3.63). The proportions
+       weighted by their trials (`var_weights`) give R's; the reference uses them.
+     - **The planted effect is not the share's odds ratio:** the standard cohort's endothelial-like
+       type has its odds against each other type doubled, but the immune-like type's change in the
+       epithelial-led domains moves the labeled cells it is a share of, so its odds ratio among all
+       labeled cells is 1.74 in the true cells; the comparison estimates that (1.75).
+     - **Four subjects a group give wide intervals:** with the samples' own spread (dispersions of 4
+       to 26 on 6 degrees of freedom), the endothelial-like doubling is not significant here. The
+       interval says so; slice 8 states power at the known effects.
+     - **A reference's labels are less exact than the starter markers here** (shares within 0.053
+       against 0.015): its profiles leave out each sample's own levels.
+7. **Differential expression and spatial statistics (H3): done.**
+   - **Pseudobulk expression** (`internal/cohort` `CompareExpression`, `limma.go`;
+     `api_expression.go`, `POST /api/cohort/expression`): each label's counts summed over each
+     design row's samples, over the genes every panel has, in the rows with at least 10 of its cells
+     (`minCells`); genes filtered by expression (Chen, Lun and Smyth 2016: a count per million of 10
+     over the median library size in the smallest group's number of rows, 1 over the largest
+     leverage, and 15 in all); TMM factors (Robinson and Oshlack 2010); voom's log counts per million
+     and weights from a lowess trend (Cleveland 1979; R's defaults, its span chosen by the genes'
+     number) (Law et al. 2014); each gene's weighted least squares and the moderated t, the prior by
+     the moments of the log variances and the trigamma function inverted by Newton's method
+     (Smyth 2004); each contrast's log2 fold change with its interval (its own covariance under its
+     weights), Benjamini–Hochberg over every label, gene and contrast tested, the universe stated. A
+     label in too few rows, or whose rows leave the design unfittable, untested with why. An
+     artifact of kind `expression` (`expression.json`, `results.csv`); a gene's values by row
+     (`GET /api/cohort/expression/values`), read from the summary's pseudobulk.
+   - **Spatial statistics between groups** (`CompareSpatial`, `POST /api/cohort/spatial-tests`):
+     each sample's neighbor enrichments and nearest distances (log2), niches' shares (left to the
+     abundances by slice 8) and Moran's I, a row's value its samples' mean, a statistic some row lacks untested; ordinary least squares of
+     the design, each family's variances moderated across its statistics (one statistic: its own),
+     Benjamini–Hochberg over each family. An artifact of kind `spatial-comparison`
+     (`spatial-tests.json`, `results.csv`).
+   - **In the page** (`ui/cohort-expression.js`): each label's genes by p or fold, found by name, a
+     volcano, a gene's rows by group; each family's statistics, a statistic's rows by group. The
+     project tree's **Expression compared** and **Spatial statistics compared**. Remote control:
+     `compare_expression`, `show_gene`, `compare_spatial`; both jobs resumed after a restart.
+   - Validation:
+     - **Against limma and edgeR in R** (`validation/reference/limma/`: `compare.sh` runs limma
+       3.68.5 and edgeR 4.10.5 apart, as a reference, on nine pseudobulk tables, the simulated
+       cohort's four labels by condition and one by condition and slide, four subjects paired, three
+       groups with a contrast between two, libraries tenfold apart with a few genes making up much
+       of some, 40 genes; each contrast compared as a coefficient of the design reparametrized; and
+       on ten cases of spatial statistics; compared on every commit): the genes kept the same; the
+       TMM factors, span, weights (stored to 10 digits), residual deviations, prior and every log
+       fold change, interval, t and p within 10⁻⁹ (5·10⁻¹⁰ found); the spatial cases within 10⁻¹³;
+       lowess on six curves within 10⁻¹⁰ of R's; digamma, trigamma and their inverse against R's.
+     - **Against statsmodels:** each spatial statistic's ordinary least squares (coefficients,
+       residual deviation, each contrast's estimate, interval, t and p) within 10⁻¹³.
+     - **Calibration** (`TestExpressionCalibration`): 40 null tables of 200 negative binomial
+       genes, four rows against four: rejections 5.1% at 5% and 1.2% at 1%.
+     - **In the page** (viewer suite): the standard cohort's SIM033 found higher in the
+       epithelial-like cells (+0.94 log2, 0.59 to 1.30, adjusted p 0.005) and no other gene; its
+       interval covering the true cells' fold (0.97 log2); the gene's rows by group; every spatial
+       family compared, the epithelial-like and immune-like enrichment 1.35 times as high in the
+       treated subjects (1.07 to 1.70); the null cohort finding no gene and no niche's share.
+   - Found by slice 7:
+     - **TMM's ranks see floating-point ties:** genes whose counts are in the same ratio tie only
+       if their log-ratios are computed as the log of the ratio of proportions, as the method
+       defines M; a difference of logs splits some ties and moves the trimmed set (factors 0.1% off
+       on the composition table).
+     - **With no variance to learn, the prior is the variances' mean:** when the genes' log
+       variances vary no more than chance, every gene takes the mean of the variances; a family of
+       one statistic has no prior (its own variance, 0 degrees of freedom).
+     - **The spatial change is real but not significant with four subjects a group:** the
+       epithelial–immune enrichment is the family's strongest change, its interval above 1, but
+       adjusted over the ten pairs it is 0.084. Slice 8 states power at the known effects.
+     - **The pseudobulk fold is below the asked one:** SIM033's 2.5-fold (1.32 log2) reads as 0.97
+       in the true cells (each subject's own level folds) and 0.94 in the pseudobulk.
+8. **Error rates, pseudoreplication and scale: done.**
+   - **The study** (`validation/cohort_errors_test.go`): simulated cohorts made in memory
+     (`simulate.CohortSamples`, each sample's true cells by `simulate.Cells`, their true types the
+     labels), each sample summarized as the job summarizes it (the job's assembly moved into
+     `cohort.Builder`, which keeps only what each sample leaves; its statistics by the analyses'
+     own parameters through `cohort.EnrichmentStatistics` and its siblings), niches across the
+     samples, and the abundance, expression and spatial comparisons. Weekly 2,000 null cohorts and
+     500 with the standard cohort's effects (the data workflow's job `cohort-errors`, 15 minutes
+     on ten cores); on every commit 24 and 6 (8 and 2 under the race detector).
+   - **Error rates** (2,000 null cohorts, four subjects a group): below 0.05 in shares 4.90%,
+     densities 4.98%, niches' shares 4.74%, expression 5.12%, enrichment 5.47%, nearest distances
+     5.08%, Moran's I 5.26%; below 0.01 in 0.79% to 1.23%; a family finding anything after
+     Benjamini and Hochberg in 3.9% to 6.4% of the cohorts. Held weekly within four standard errors
+     (the cohorts the clusters) and a fifth of the level, and the families' chance of finding
+     anything within 0.05 and a binomial margin.
+   - **Power and coverage** (500 cohorts with effects): SIM033's 2.5-fold found in 98.0%, its
+     estimates' mean 1.327 log2 against 1.322, its interval covering the truth in 95.0%; the
+     epithelial–immune enrichment found in 47.0%; the endothelial-like share in 16.8% (its odds
+     ratio among the labeled cells 1.50 on average, the immune-like cells' change moving the rest);
+     among the genes found, 6.25% not SIM033 on average.
+   - **Pseudoreplication shown:** the same null cohorts tested cell by cell, each cell a
+     replicate: a label's share by the two-proportion test of the groups' pooled cells, 58.2% of
+     the tests below 0.05 (a difference in 87.6% of the cohorts); a gene in a label by the Wilcoxon
+     rank-sum test of the groups' cells, 23.7% (genes found in every cohort). The guide's **Error
+     rates and scale** shows them. Refused across groups in the program as well as the page
+     (`cohort.CheckDesign`): a group of one unit, a unit in two rows of one group, regions of one
+     section given different units (a teaching example's design marks them `pseudoSamples`).
+   - **Scale** (`validation/cohort_scale_test.go`, the data workflow's scale job): 24 sections of
+     3 by 3 fields of the large preset's (2,019,439 cells; their true cells written as a
+     segmentation keeps them), summarized and compared in a process of its own one section at a
+     time, each section's graph, enrichment, nearest distances and Moran's I with the page's
+     defaults: 251 s on four cores of a 10-core laptop (Moran's I 139 s in all, nearest distances 77 s,
+     enrichment 11 s, the graphs 6 s, the niches across 2 million cells 15 s; summarized, written
+     and compared in under a second), a peak of 0.65 GB against 0.54 GB for 6 sections (516,718
+     cells): one section held at a time. Budgets 1,200 s and 1.5 GB, the peak at most 1.5 times
+     6 sections'. At 12 subjects a group, SIM033 found.
+   - Found by slice 8:
+     - **A cohort's panel is its seed's:** with each cohort a new seed, the effect gene was in
+       some cohorts barely expressed (or a marker of another type) and filtered out; the cohorts
+       with effects keep the standard cohort's panel, their sections the new seed's.
+     - **Niches' shares as moderated spatial statistics were too often significant** (6.0% at 5%,
+       6.9% of the cohorts finding something; as log odds, 6.2%): six niches' unlike variances
+       moderated toward one. They are compared only as counts, with the abundances (4.74%).
+     - **Enrichment and Moran's I are slightly liberal** (5.47% and 5.26%): rare pairs' and sparse
+       genes' variances, larger than the rest's, are moderated toward them; within the tolerance,
+       stated.
+     - **The cohort's sections may be mosaics** when their true cells alone are made: a mosaic's
+       fields share the cohort's mixes.
+9. **Examples, documentation, release 0.7.0: done.**
+   - **Two more cohorts on the start page** (`api_examples.go`): `simulated-null-cohort` (the
+     standard design without effects) and `simulated-paired-cohort` (six subjects before and
+     after, twelve sections, the endothelial-like type's odds ×4 after, the other effects the
+     standard's). Every preset shares the standard cohort's panel (`Cohort.PanelSeed`,
+     `panel_seed`), so SIM033 is an epithelial-like gene in each.
+   - **Worked examples of cohorts** (`web/lib/tours.js`; the steps' jobs in `web/ui/tour.js`): a
+     step sets the samples' fields or makes a section's regions its samples, describes and saves a
+     design (or shows one refused), runs the same steps on every sample, summarizes them, and makes
+     a comparison of the saved design; a display step shows the Cohort view's samples, design,
+     summary, QC or a comparison with its family, label or gene. A design step is done only when
+     the view's draft is that design, of which comparisons are made.
+     - *A gene changed in one cell type* (`cohort-gene`, the standard cohort): SIM033 in the
+       epithelial-like cells +0.94 log2 (0.59 to 1.30, adjusted p 0.005), the only one of 424
+       tests found; the true cells 0.97.
+     - *A comparison where nothing differs* (`cohort-null`): 14 abundance tests, none below a raw p
+       of 0.05 (the lowest 0.31); 423 expression tests, 11 below 0.05 and 1 below 0.01 (SIM015,
+       p 0.0006, adjusted 0.25); 10 enrichment tests, the lowest adjusted 0.36.
+     - *A composition shift found* (`cohort-shift`, paired): the endothelial-like share's odds ratio
+       2.19 (1.54 to 3.12, adjusted 0.009), density 1.80 (1.39 to 2.33); the epithelial-like 0.48
+       (0.27 to 0.84); the true cells' pooled odds ratios 2.26 and 0.47.
+     - *Each subject compared with itself* (`cohort-paired`): SIM033 1.08 log2 either way, 0.75 to
+       1.41 with the twelve sections as units (one gene of 427 tests found) and 0.84 to 1.31 paired
+       (22 of 442; the true cells 1.24).
+     - *Places in one section are not subjects* (`pseudo-samples`, the Breast data, for teaching):
+       three regions of stroma and three of tumor, each a subject, refused; marked pseudo-samples
+       (`design.pseudoSamples`, honored by `cohort.CheckDesign`), compared: the immune cells' odds
+       8.37 times in the stroma (1.58 to 44.5), the epithelial 0.04; the adipocytes untested. Every
+       comparison of such a design shows a banner, and its design's words and notes say so.
+   - **Documentation:** the guide's examples and worked examples; pseudo-samples on the design's
+     and samples' pages; pairing and neighbors' transcripts on the expression page; the worked
+     examples' findings on the abundance, expression and spatial tests' pages; FORMATS (the
+     presets, `panel_seed`), remote control (`open_example`'s cohorts, `design`'s
+     `pseudo_samples`, `tour`'s cohort steps), the README, the CHANGELOG; the home page's
+     release line, a cohorts feature, the validation table's cohort rows and the releases.
+   - **Release 0.7.0:** a cohort project as 0.7.0 saves it (the standard cohort's samples, the
+     design *By condition*, the steps with all three spatial questions, the summary and the three
+     comparisons) kept as `validation/projects/0.7.0-cohort.situcraft.json` and reopened by every
+     later release: its eight bundles found, its samples and design as saved, the steps, summary
+     and comparisons made again with the same ids, and the 52 artifacts it records the same by
+     their summaries. The product site built for it.
+   - **Validated** in the viewer suite: each worked example walked to its end and each number its
+     cards state checked against the comparisons' files and the cohorts' truth; the 0.2.0 to 0.6.0
+     Lung projects and the 0.7.0 cohort reopened, their artifacts made again.
+   - Found by slice 9:
+     - **The presets' panels were their seeds':** the null and paired cohorts, each with a seed of
+       its own, had other panels, in which SIM033 was not an epithelial-like gene; the panel's seed
+       is now a parameter of its own, the standard cohort's in every preset.
+     - **Four subjects paired were too few for a composition shift:** at the standard cohort's
+       effects the paired cohort's endothelial-like share was not found; six subjects and its odds
+       ×4 find it, and still show what pairing gains.
+     - **An absent label's estimate is infinite:** a label with no cells in one group (the Breast
+       regions' adipocytes in the tumor) gave an infinite ratio, which JSON cannot hold, and the
+       comparison failed; such a test is untested, with why, in every family.
+     - **Neighbors' transcripts in a label's pseudobulk:** with more endothelial-like cells after,
+       their markers (SIM025 to SIM030) are found higher in the epithelial-like and immune-like
+       cells, whose true expression did not change: transcripts read into their outlines. Found
+       paired, not with the sections as units; stated in the worked example and on the expression
+       page.
+     - **CI's viewer suite has the Lung bundle alone:** since the folder browser, three checks
+       assumed the Breast bundle too (two bundles to mark; the cohort's project named only when the
+       Breast checks had left one with datasets, then reopened by that name; an analysis's failure
+       read as a file), and CI failed on each push. Each now holds with the Lung bundle alone (the
+       cohort in a project of its own, reopened by its id), checked locally with
+       `SITUCRAFT_DATA` holding the Lung bundle alone.
 
 ## 0.8.0: figures and a provable record (wave 8)
 

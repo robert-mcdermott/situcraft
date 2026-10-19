@@ -65,11 +65,12 @@ import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { findChrome, launch, sleep } from './cdp.mjs';
 import { inflateSync } from 'node:zlib';
 import { attributeRange, readCells } from '../web/lib/viewer-data.js';
+import { contingency } from '../web/lib/clusterings.js';
 import { certaintyColor, readSegCells } from '../web/lib/segview.js';
 import { colormapLUT, hexToRgb } from '../web/lib/colormaps.js';
 import { placePoint } from '../web/lib/transforms.js';
@@ -385,8 +386,8 @@ export async function viewerSuite({ check, MissingData, verbose }) {
     const downloads = examples.examples.filter((e) => !e.generated);
     const generated = examples.examples.filter((e) => e.generated);
     check('viewer', 'the example datasets are listed, and none is downloaded or made unasked', examples.examples.map((e) => `${e.name}: ${e.state}`).join(', '),
-      downloads.length === 2 && downloads.every((e) => e.state === 'absent' && e.download > 0 && e.license) && generated.length === 1 && generated[0].name === 'simulated-standard' && generated[0].state === 'absent' && !generated[0].download,
-      'two to download and one to make, all absent');
+      downloads.length === 2 && downloads.every((e) => e.state === 'absent' && e.download > 0 && e.license) && generated.map((e) => `${e.name}:${e.kind ?? ''}`).join() === 'simulated-standard:,simulated-cohort:cohort,simulated-null-cohort:cohort,simulated-paired-cohort:cohort' && generated.every((e) => e.state === 'absent' && !e.download),
+      'two to download and four to make (a tissue and three cohorts), all absent');
     for (const name of info.files.map((f) => f.name)) {
       const toured = await chrome.eval(`(async () => {
         const app = window.situcraft;
@@ -1662,26 +1663,14 @@ export async function viewerSuite({ check, MissingData, verbose }) {
             `${behindOwn?.counts?.join(' and ')} cells`);
         }
 
-        // The projects as 0.2.0 to 0.5.0 saved them
-        // (validation/projects/<version>-lung.situcraft.json): this release's written when asked
-        // (SITUCRAFT_WRITE_FIXTURE=1), the places of this run's folders made neutral and given its
-        // own id; then each reopened, and every artifact SituCraft made that it records made again by
-        // this build with the same files' checksums (a comparison by its differences: its
-        // comparison.json records the jobs' times; a clustering, a map, a label set from markers, a
-        // graph and a spatial analysis, whose records keep no checksums, by their summaries, which
-        // hold their numbers exactly; those of a drawn region left out).
+        // The Lung project as 0.2.0 to 0.6.0 saved it (validation/projects/<version>-lung.situcraft.json;
+        // from 0.7.0 a release's fixture is a cohort's, below), each reopened, and every artifact
+        // SituCraft made that it records made again by this build with the same files' checksums (a
+        // comparison by its differences: its comparison.json records the jobs' times; a clustering,
+        // a map, a label set from markers, a graph and a spatial analysis, whose records keep no
+        // checksums, by their summaries, which hold their numbers exactly; those of a drawn region
+        // left out).
         const fixtureOf = (v) => join(root, 'validation', 'projects', `${v}-lung.situcraft.json`);
-        if (process.env.SITUCRAFT_WRITE_FIXTURE) {
-          const doc = await chrome.eval(`(async () => {
-            const app = window.situcraft;
-            const { rename, serializeProject } = await import('/lib/project.js');
-            app.store.commit(rename(app.store.project, 'Lung example, as SituCraft 0.6.0 saved it'), 'Rename');
-            return serializeProject(app.store.project);
-          })()`);
-          // Its own id: it grew from the 0.1.0 project in this run.
-          const neutral = JSON.parse(doc.split(join(dataRoot, 'xenium-lung-2fov')).join('/data/examples/xenium-lung-2fov').split(work).join('/data/work'));
-          writeFileSync(fixtureOf('0.6.0'), `${JSON.stringify({ ...neutral, id: 'p-situcraft-0-6-0-lung' }, null, 1)}\n`);
-        }
         for (const v of ['0.2.0', '0.3.0', '0.4.0', '0.5.0', '0.6.0']) {
           if (!existsSync(fixtureOf(v))) continue;
           const text = readFileSync(fixtureOf(v), 'utf8');
@@ -1720,6 +1709,7 @@ export async function viewerSuite({ check, MissingData, verbose }) {
           const reopened = await chrome.eval(`(async () => {
             const app = window.situcraft;
             const { promotedSegmentation, exportsOf } = await import('/lib/segmentations.js');
+            const { samplesOf } = await import('/lib/samples.js');
             const wait = async (f) => { for (let k = 0; k < 300; k += 1) { const v = f(); if (v) return v; await new Promise((r) => setTimeout(r, 100)); } return null; };
             const doc = ${JSON.stringify(text)};
             const saved = JSON.parse(doc);
@@ -1729,11 +1719,11 @@ export async function viewerSuite({ check, MissingData, verbose }) {
             const before = (await wait(() => { const l = app.bundles.link(dataset.id); return l && l.state !== 'checking' ? l : null; }))?.state;
             const link = await app.bundles.locate(dataset.id, ${JSON.stringify(join(dataRoot, 'xenium-lung-2fov'))});
             const p = app.store.project;
-            return { before, after: link?.state, segmentations: p.artifacts.filter((a) => a.kind === 'segmentation').length, comparisons: p.artifacts.filter((a) => a.kind === 'comparison').length, decisions: p.decisions.length, exports: exportsOf(p, dataset.id).length, default: promotedSegmentation(p, dataset.id)?.record.id, saved: promotedSegmentation(saved, saved.datasets[0].id)?.record.id, regions: JSON.stringify(p.regions ?? []), reviews: JSON.stringify(p.reviews ?? []) };
+            return { before, after: link?.state, segmentations: p.artifacts.filter((a) => a.kind === 'segmentation').length, comparisons: p.artifacts.filter((a) => a.kind === 'comparison').length, decisions: p.decisions.length, exports: exportsOf(p, dataset.id).length, default: promotedSegmentation(p, dataset.id)?.record.id, saved: promotedSegmentation(saved, saved.datasets[0].id)?.record.id, regions: JSON.stringify(p.regions ?? []), reviews: JSON.stringify(p.reviews ?? []), samples: samplesOf(p).map((s) => (s.region ? 'region ' + s.name : s.name)).join(), datasetNames: p.datasets.map((d) => d.name).join() };
           })()`);
           // From 0.5.0, its regions and reviews as they were saved.
           const kept = v < '0.5.0' || (reopened.regions === JSON.stringify(fixture.regions ?? []) && reopened.reviews === JSON.stringify(fixture.reviews ?? []) && (fixture.regions ?? []).length >= 2 && (fixture.reviews ?? []).length >= 3);
-          check('viewer', `${v} Lung project: it opens and finds its moved bundle; its segmentations, comparisons, decisions, exports${v < '0.5.0' ? '' : ', regions and reviews'} are there, and its default`, JSON.stringify({ ...reopened, regions: (fixture.regions ?? []).length, reviews: (fixture.reviews ?? []).length }), reopened.before === 'missing' && reopened.after === 'ok' && reopened.segmentations === fixture.artifacts.filter((a) => a.kind === 'segmentation').length && reopened.comparisons >= 2 && reopened.decisions === fixture.decisions.length && reopened.exports >= 1 && reopened.default && reopened.default === reopened.saved && kept, 'missing, then ok; all there');
+          check('viewer', `${v} Lung project: it opens and finds its moved bundle; its segmentations, comparisons, decisions, exports${v < '0.5.0' ? '' : ', regions and reviews'} are there, and its default; each dataset a sample`, JSON.stringify({ ...reopened, regions: (fixture.regions ?? []).length, reviews: (fixture.reviews ?? []).length }), reopened.samples === reopened.datasetNames && reopened.before === 'missing' && reopened.after === 'ok' && reopened.segmentations === fixture.artifacts.filter((a) => a.kind === 'segmentation').length && reopened.comparisons >= 2 && reopened.decisions === fixture.decisions.length && reopened.exports >= 1 && reopened.default && reopened.default === reopened.saved && kept, 'missing, then ok; all there');
         }
 
         // A worked example started in the page (here the bundles are the project's datasets, not
@@ -2199,6 +2189,640 @@ export async function viewerSuite({ check, MissingData, verbose }) {
             && sn.six.niches === 6 && sn.six.neighbors === 10 && Math.min(...ag) === 0.66 && Math.max(...ag) === 0.93
             && /^Niches of/.test(fills[0]?.name ?? '') && JSON.stringify(fills[0]?.counts) === '[1078,887,554,511]' && /domain/.test(fills[1]?.name ?? '') && fills[1]?.counts.length === 6 && fills[1].counts.reduce((s, v) => s + v, 0) === 3030,
             'epithelial-like 47% of 1,078, endothelial-like 53% of 887, immune-like 72% of 554, fibroblast-like 44% of 511; the seeds agree (1.00); 96.5% in their domain\'s niche (93% to 99%), domains 0 and 4 sharing one, 1 and 5 another; six niches of 10 agree 0.66 to 0.93; filled by 4 niches, then 6 domains');
+        }
+
+        // Open a bundle, the folder browser (browse.go, ui/file-picker.js): the development bundles'
+        // folder walked to in the dialog, each bundle marked with its run, region and cells as the
+        // suite reads them from its manifest; a file's path typed lists its bundle's folder with it
+        // chosen; a bundle double-clicked is opened where it is.
+        if (present.includes('xenium-lung-2fov')) {
+          await act('new_project', { name: 'Opening' });
+          await act('set_mode', { mode: 'data' });
+          const own = Object.fromEntries(present.filter((name) => existsSync(join(dataRoot, name, 'experiment.xenium'))).map((name) => {
+            const m = JSON.parse(readFileSync(join(dataRoot, name, 'experiment.xenium'), 'utf8'));
+            return [name, [m.run_name, m.region_name, Number.isFinite(m.num_cells) ? `${m.num_cells.toLocaleString('en-US')} cells` : ''].filter(Boolean).join(' · ')];
+          }));
+          const walked = await chrome.eval(`(async () => {
+            const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+            const until = async (test) => { for (let k = 0; k < 100 && !test(); k += 1) await sleep(50); return test(); };
+            [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Open a bundle').click();
+            await until(() => document.querySelector('.picker-crumb'));
+            const go = async (path, last) => {
+              const input = document.querySelector('.picker-path');
+              input.value = path;
+              input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+              await until(() => document.querySelector('.picker-crumb.current')?.textContent === last);
+            };
+            await go(${JSON.stringify(dataRoot)}, ${JSON.stringify(basename(dataRoot))});
+            const rows = () => [...document.querySelectorAll('.picker-row')].map((r) => ({ name: r.querySelector('.picker-name').textContent, kind: r.querySelector('.picker-kind').textContent, icon: r.querySelector('.picker-icon svg')?.outerHTML.length ?? 0, selected: r.getAttribute('aria-selected') === 'true', dim: r.classList.contains('dim') }));
+            const folder = rows();
+            await go(${JSON.stringify(join(dataRoot, 'xenium-lung-2fov', 'gene_panel.json'))}, 'xenium-lung-2fov');
+            const inside = { banner: document.querySelector('.picker-inside:not([hidden])')?.textContent ?? '', chosen: rows().filter((r) => r.selected).map((r) => r.name), note: document.querySelector('.picker-note').textContent };
+            await go(${JSON.stringify(dataRoot)}, ${JSON.stringify(basename(dataRoot))});
+            [...document.querySelectorAll('.picker-row')].find((r) => r.querySelector('.picker-name').textContent === 'xenium-lung-2fov').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+            await until(() => !document.querySelector('.picker'));
+            await sleep(400);
+            return { folder, inside, closed: !document.querySelector('.picker') };
+          })()`);
+          const openedNow = (await json(`${url}/api/info`)).files ?? [];
+          const marked = Object.entries(own).map(([name, words]) => ({ name, words, row: walked.folder.find((r) => r.name === name) }));
+          check('viewer', 'Open a bundle: the folder browser walks to the bundles\' folder, each bundle marked with its run, region and cells as its manifest says; a file\'s path lists its bundle with the file chosen; a bundle double-clicked opens where it is',
+            `${JSON.stringify(marked.map((m) => [m.name, m.row?.kind]))}; inside ${JSON.stringify(walked.inside)}; opened ${openedNow.map((f) => f.name).join(', ')}`,
+            marked.length >= 1 && marked.every((m) => m.row && m.row.kind === (m.words || 'Xenium bundle') && !m.row.dim)
+            && /xenium-lung-2fov is a Xenium bundle/.test(walked.inside.banner) && walked.inside.chosen.join() === 'gene_panel.json'
+            && walked.closed && openedNow.some((f) => f.kind === 'bundle' && f.path === join(dataRoot, 'xenium-lung-2fov')),
+            'every bundle marked as its manifest says; gene_panel.json chosen inside the Lung bundle; the Lung bundle opened');
+        }
+
+        // Samples (wave 7, slice 1): the Lung and Breast bundles added together, each a sample with
+        // its bundle's run, slide and panel; fields set by remote control, written as CSV and read
+        // back exactly, values that do not fit refused with nothing changed; two regions of the Lung
+        // made its samples, their cells the suite's own count by centroid and their areas their
+        // outlines'; all kept when the project is opened again; the Lung one sample again, with its
+        // fields.
+        if (present.includes('xenium-breast-2fov')) {
+          await act('new_project', { name: 'Samples' });
+          const opened = await act('open_paths', { paths: ['xenium-lung-2fov', 'xenium-breast-2fov'].map((b) => join(dataRoot, b)), add: true });
+          const listed = await act('samples');
+          const ls = listed.data?.samples ?? [];
+          check('viewer', 'remote control: bundles opened together are added as a project\'s samples, each a sample of its own with its bundle\'s run, slide and panel', `${opened.message ?? opened.error}; ${listed.message ?? listed.error}`,
+            opened.ok && listed.ok && ls.length === 2 && ls.every((s) => s.region === null && s.bundle.run && s.bundle.slide) && ls.map((s) => s.bundle.panel).join() === 'hLung_v1.1,hBreast_v1' && ls[0].cells === 11898 && ls[1].cells === 7275, 'two samples, 11,898 and 7,275 cells; panels hLung_v1.1 and hBreast_v1');
+          // Their panels compared (wave 7, slice 5) against the suite's own reading of each bundle's
+          // gene_panel.json: the genes both have, in the Lung panel's order; those one has; the shared
+          // genes read by other codewords; those with other Ensembl IDs.
+          const panelsCompared = await act('compare_panels');
+          const panelGenes = (name) => Object.fromEntries(JSON.parse(readFileSync(join(dataRoot, name, 'gene_panel.json'), 'utf8')).payload.targets.filter((tg) => tg.type.descriptor === 'gene').map((tg) => [tg.type.data.name, { id: tg.type.data.id, codewords: [...tg.codewords].sort((x, y) => x - y).join() }]));
+          const lungGenes = panelGenes('xenium-lung-2fov');
+          const breastGenes = panelGenes('xenium-breast-2fov');
+          const bothGenes = Object.keys(lungGenes).filter((g) => breastGenes[g]);
+          const oneGene = Object.keys(lungGenes).length + Object.keys(breastGenes).length - 2 * bothGenes.length;
+          const pc = panelsCompared.data ?? {};
+          check('viewer', 'the samples\' panels compared before any gene is: the genes in both the Lung and the Breast panel, those in one only, and the shared genes read by other codewords, each the suite\'s own count from the panels\' files',
+            `${panelsCompared.message ?? panelsCompared.error}; the suite: ${bothGenes.length} in both, ${oneGene} in one`,
+            panelsCompared.ok && pc.panels?.length === 2 && JSON.stringify(pc.shared) === JSON.stringify(bothGenes) && pc.partial?.length === oneGene
+            && pc.codewords?.length === bothGenes.filter((g) => lungGenes[g].codewords !== breastGenes[g].codewords).length && pc.ids?.length === bothGenes.filter((g) => lungGenes[g].id !== breastGenes[g].id).length,
+            `${bothGenes.length} genes in both panels (in order), ${oneGene} in one; codewords and IDs as the files say`);
+          const set = await act('set_samples', { fields: [{ name: 'age', kind: 'number' }, { name: 'notes', kind: 'text' }], values: { 'xenium-lung-2fov': { subject: 'P1', condition: 'tumor', age: 0.1 + 0.2, notes: 'said "fine",\nthen left' }, 'xenium-breast-2fov': { subject: 'P2', condition: 'normal', age: 0 } } });
+          const csvPath = join(work, 'samples.csv');
+          const written = await act('export', { what: 'samples', path: csvPath, overwrite: true });
+          const csv = existsSync(csvPath) ? readFileSync(csvPath, 'utf8') : '';
+          // Cleared, then read back from the file as a table.
+          await act('set_samples', { remove_fields: ['age', 'notes'], values: { 'xenium-lung-2fov': { subject: null, condition: null }, 'xenium-breast-2fov': { subject: '', condition: '' } } });
+          const cleared = await act('samples');
+          const back = await act('set_samples', { table: csv });
+          await act('export', { what: 'samples', path: csvPath, overwrite: true });
+          const again = existsSync(csvPath) ? readFileSync(csvPath, 'utf8') : '';
+          const fb = back.data?.samples?.map((s) => s.fields) ?? [];
+          check('viewer', 'samples\' fields set by remote control, written as CSV and read back exactly (quotes, a line break, a number\'s every digit, a zero)', `${set.message ?? set.error}; ${written.message ?? written.error}; ${back.message ?? back.error}`,
+            set.ok && written.ok && back.ok && csv.length > 0 && again === csv && cleared.data?.samples.every((s) => s.fields.subject === null && !('age' in s.fields)) && fb[0]?.age === 0.30000000000000004 && fb[0]?.notes === 'said "fine",\nthen left' && fb[1]?.age === 0 && fb[1]?.notes === null && back.data.fields.map((f) => `${f.name}:${f.kind}`).join() === 'subject:text,condition:text,age:number,notes:text',
+            'the same file written again; 0.30000000000000004 and 0 read back as numbers');
+          const badValue = await act('set_samples', { values: { 'xenium-breast-2fov': { condition: 'tumor', age: 'old' } } });
+          const badTable = await act('set_samples', { table: 'sample,subject\nxenium-lung-2fov,P8\nXENIUM-LUNG-2FOV,P9\n' });
+          const unchanged = await act('samples');
+          check('viewer', 'samples\' values that do not fit are refused, saying why, and nothing is changed', `${badValue.message ?? badValue.error}; ${badTable.message ?? badTable.error}`,
+            !badValue.ok && /not a number/.test(badValue.message ?? badValue.error ?? '') && !badTable.ok && /Two rows name/.test(badTable.message ?? badTable.error ?? '') && unchanged.data?.samples[1].fields.condition === 'normal' && unchanged.data.samples[0].fields.subject === 'P1', 'refused; normal and P1 still');
+          // Two regions of the Lung as its samples: cells by centroid, as the suite counts them.
+          const coreA = [[100, 100], [400, 100], [400, 400], [100, 400]];
+          const coreB = [[700, 300], [1000, 320], [950, 600], [720, 560]];
+          await act('draw_region', { dataset: 'xenium-lung-2fov', name: 'Core A', rectangle: [100, 100, 400, 400] });
+          await act('draw_region', { dataset: 'xenium-lung-2fov', name: 'Core B', polygon: coreB });
+          const asRegions = await act('set_samples', { regions: { dataset: 'xenium-lung-2fov', regions: ['Core B', 'Core A'] }, values: { 'Core A': { subject: 'P1', condition: 'tumor' } } });
+          await act('show_tissue', { dataset: 'xenium-lung-2fov', segmentation: 'instrument' });
+          const drawnCells = await chrome.eval('(() => { const c = window.situcraftViewer.cellsDrawn(); return { x: Array.from(c.x), y: Array.from(c.y) }; })()');
+          const inRing = (ring, px, py) => {
+            let inside = false;
+            for (let i = 0, j = ring.length - 1; i < ring.length; j = i, i += 1) {
+              const [xi, yi] = ring[i];
+              const [xj, yj] = ring[j];
+              if ((yi > py) !== (yj > py) && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) inside = !inside;
+            }
+            return inside;
+          };
+          const ownCells = (ring) => drawnCells.x.reduce((n, x, i) => n + (inRing(ring, x, drawnCells.y[i]) ? 1 : 0), 0);
+          const shoelace = (ring) => Math.abs(ring.reduce((s, [x, y], i) => s + x * ring[(i + 1) % ring.length][1] - ring[(i + 1) % ring.length][0] * y, 0)) / 2;
+          const regionSamples = await act('samples');
+          const rs = regionSamples.data?.samples ?? [];
+          const counted = { a: ownCells(coreA), b: ownCells(coreB) };
+          check('viewer', 'a section\'s regions made its samples, in the order drawn: their cells the suite\'s own count by centroid, their areas their outlines\'', `${asRegions.message ?? asRegions.error}; ${JSON.stringify(rs.map((s) => [s.sample, s.region, s.cells, s.area_um2]))}; the suite counts ${JSON.stringify(counted)}`,
+            asRegions.ok && rs.length === 3 && rs.map((s) => s.sample).join() === 'Core A,Core B,xenium-breast-2fov' && rs[0].cells === counted.a && rs[1].cells === counted.b && counted.a > 100 && counted.b > 100 && Math.abs(rs[0].area_um2 - 90000) < 1e-6 && Math.abs(rs[1].area_um2 - shoelace(coreB)) < 1e-6 && rs[0].fields.subject === 'P1',
+            `${counted.a} and ${counted.b} cells; 90,000 and ${Math.round(shoelace(coreB)).toLocaleString('en-US')} µm²`);
+          // Kept with the project.
+          await act('new_project', { name: 'Elsewhere' });
+          await act('open_project', { project: 'Samples' });
+          const reopened = await act('samples');
+          const whole = await act('set_samples', { regions: { dataset: 'xenium-lung-2fov', regions: [] } });
+          const ws = whole.data?.samples ?? [];
+          check('viewer', 'samples and their fields are kept with the project; a section made one sample again has its fields back', `${reopened.message ?? reopened.error}; ${whole.message ?? whole.error}`,
+            reopened.ok && JSON.stringify(reopened.data.samples.map((s) => [s.sample, s.cells, s.fields])) === JSON.stringify(rs.map((s) => [s.sample, s.cells, s.fields])) && whole.ok && ws.length === 2 && ws[0].sample === 'xenium-lung-2fov' && ws[0].fields.age === 0.30000000000000004 && ws[0].fields.subject === 'P1',
+            'the same samples, cells and fields; the Lung one sample with its own');
+        }
+
+        // A simulated cohort (wave 7, slice 2): made here and opened, each sample's bundle added
+        // with its subject and condition, and its slide and run read from it; from its files, the
+        // panel the same in every sample, the truth's cells each bundle's own, the table the
+        // samples', and every effect as the truth measures it the suite's own from its counts.
+        {
+          // In a project of its own (an empty one would take it in, whatever its name), reopened
+          // later by its id.
+          await act('new_project', {});
+          const made = await act('open_example', { example: 'cohort' });
+          const cohortProject = await chrome.eval('window.situcraft.store.project.id');
+          const listed = await act('samples');
+          const cs = listed.data?.samples ?? [];
+          const examplesNow = await json(`${url}/api/examples`);
+          const cohortDir = examplesNow.examples.find((e) => e.name === 'simulated-cohort')?.path;
+          const own = cohortDir ? (() => {
+            const read = (p) => JSON.parse(readFileSync(join(cohortDir, p), 'utf8'));
+            const truth = read('truth/cohort.json');
+            const desc = read('situcraft-cohort.json');
+            const panels = new Set(desc.samples.map((s) => readFileSync(join(cohortDir, s.name, 'gene_panel.json'), 'utf8')));
+            const countsMatch = truth.samples.every((s) => {
+              const m = read(`${s.name}/situcraft-simulation.json`).made;
+              return m.cells === s.cells && JSON.stringify(Object.entries(m.cells_by_type).sort()) === JSON.stringify(Object.entries(s.cells_by_type).sort());
+            });
+            const table = readFileSync(join(cohortDir, 'samples.csv'), 'utf8').trim().split('\n').slice(1).map((l) => l.split(','));
+            // Each effect from the truth's counts: the type's log odds against the cells of the
+            // types no share effect changes, in each domain the effect holds in, averaged; or the
+            // gene's log odds among its type's transcripts; the groups' means' difference.
+            const changed = (type, leader) => truth.effects.some((x) => x.kind === 'share' && x.type === type && (!x.within || x.within === leader));
+            const value = (e, s) => {
+              if (e.kind === 'level') {
+                const l = s.levels.find((x) => x.type === e.type && x.gene === e.gene);
+                return Math.log((l.transcripts + 0.5) / (l.type_transcripts - l.transcripts + 0.5));
+              }
+              const vs = s.domains.filter((d) => !e.within || d.leader === e.within).map((d) => {
+                const rest = Object.entries(d.cells_by_type).filter(([type]) => type !== e.type && !changed(type, d.leader)).reduce((a, [, v]) => a + v, 0);
+                return Math.log(((d.cells_by_type[e.type] ?? 0) + 0.5) / (rest + 0.5));
+              });
+              return vs.reduce((a, v) => a + v, 0) / vs.length;
+            };
+            const mean = (v) => v.reduce((a, x) => a + x, 0) / v.length;
+            const effects = truth.effects.map((e) => {
+              const of = (g) => truth.samples.filter((s) => s.group === g).map((s) => value(e, s));
+              const measured = mean(of(e.group)) - mean(of(truth.design.groups[0]));
+              return { of: `${e.kind} ${e.type}${e.within ? ` in ${e.within}` : ''}${e.gene ? ` ${e.gene}` : ''} ×${e.fold}`, measured: Math.exp(measured), off: Math.abs(measured - e.measured_log_fold), z: (e.measured_log_fold - e.log_fold) / e.std_error };
+            });
+            return { panels: panels.size, countsMatch, table, effects, samples: truth.samples.length, slides: truth.design.slides };
+          })() : null;
+          check('viewer', 'a simulated cohort made here and opened: each sample added with its subject, condition, slide and run; its panel the same in every sample, the truth\'s cells each bundle\'s own, and each effect the truth measures the suite\'s own from its counts', `${made.message ?? made.error}; ${JSON.stringify(cs.map((s) => [s.sample, s.fields.subject, s.fields.condition, s.bundle.slide]))}; ${JSON.stringify(own && { ...own, table: own.table.length })}`,
+            made.ok && cs.length === 8 && cs.map((s) => s.sample).join() === 'S01,S02,S03,S04,S05,S06,S07,S08' && cs.every((s, k) => s.fields.subject === s.sample && s.fields.condition === (k < 4 ? 'control' : 'treated') && s.bundle.slide === `simulated slide ${(k % 2) + 1}` && s.bundle.run === `simulated run ${(k % 2) + 1}` && s.cells > 500)
+            && own && own.panels === 1 && own.countsMatch && own.samples === 8 && own.table.every(([name, subject, condition], k) => name === cs[k].sample && subject === cs[k].fields.subject && condition === cs[k].fields.condition)
+            && own.effects.length === 3 && own.effects.every((e) => e.off < 1e-9 && Math.abs(e.z) < 3),
+            'eight samples, four of each group, on two slides; one panel; the counts and every effect as recorded');
+
+          // The design (wave 7, slice 3), on the simulated cohort: its subjects compared by
+          // condition, adjusted for the slide; a field confounded with the condition refused and not
+          // saved; the subjects paired; a group of one subject refused; versions kept with the
+          // project.
+          const adjusted = await act('design', { unit: 'subject', group: 'condition', reference: 'control', covariates: ['slide'] });
+          const ad = adjusted.data ?? {};
+          await act('set_samples', { fields: [{ name: 'batch', kind: 'text' }], values: Object.fromEntries(cs.map((s, k) => [s.sample, { batch: k < 4 ? 'B1' : 'B2' }])) });
+          const confounded = await act('design', { unit: 'subject', group: 'condition', covariates: ['batch'] });
+          const notSaved = await act('design', { unit: 'subject', group: 'condition', covariates: ['batch'], save: 'Confounded' });
+          const one = await act('design', { unit: 'subject', group: 'condition', exclude: { S06: 'testing', S07: 'testing', S08: 'testing' } });
+          const saved1 = await act('design', { unit: 'subject', group: 'condition', reference: 'control', covariates: ['slide'], save: 'Main' });
+          // Paired: each control sample's subject that of a treated one.
+          await act('set_samples', { values: Object.fromEntries(cs.map((s, k) => [s.sample, { subject: `D${(k % 4) + 1}` }])) });
+          const paired = await act('design', { unit: 'subject', group: 'condition', reference: 'control', save: 'Main' });
+          await act('new_project', { name: 'Elsewhere' });
+          await act('open_project', { project: cohortProject });
+          const kept = await act('design');
+          check('viewer', 'the design: the cohort\'s subjects compared by condition and adjusted for the slide; a field confounded with the condition, and a group of one subject, refused and not saved; the subjects paired; versions kept with the project', `${adjusted.message ?? adjusted.error} | ${confounded.message ?? confounded.error} | ${notSaved.message ?? notSaved.error} | ${one.message ?? one.error} | ${paired.message ?? paired.error} | ${kept.message ?? kept.error}`,
+            adjusted.ok && ad.ok && ad.names?.join() === 'Intercept,condition[T.treated],slide[T.simulated slide 2]' && ad.rows.length === 8 && ad.rank === 3 && ad.df === 5 && ad.matrix[1].join() === '1,0,1' && /4 subjects in control, 4 subjects in treated/.test(adjusted.message)
+            && confounded.ok && confounded.data.ok === false && /batch is confounded with condition/.test(confounded.message) && !notSaved.ok && /cannot be saved/.test(notSaved.message ?? notSaved.error ?? '')
+            && one.ok && one.data.ok === false && /treated has 1 subject/.test(one.message) && one.data.excluded.length === 3
+            && saved1.data?.saved?.version === 1 && paired.data?.paired === true && paired.data.df === 3 && paired.data.names.join() === 'Intercept,condition[T.treated],subject[T.D2],subject[T.D3],subject[T.D4]' && paired.data.saved?.version === 2
+            && kept.ok && kept.data.paired === true && kept.data.df === 3,
+            'adjusted: 3 coefficients over 8 rows, 5 df; refused twice; paired: 5 over 8, 3 df, version 2; kept');
+
+          // Summaries (wave 7, slice 4), on the simulated cohort: the same steps on every sample
+          // (clustered, labeled from one marker set, a graph and three questions each; asked again,
+          // answered at once), summarized; every number against the artifact it came from; the true
+          // values (each sample's shares its true types', its tissue the section's, the pseudobulk's
+          // SIM033 among epithelial-like transcripts the truth's); the niches found together against
+          // each sample's own (one sample alone: exactly its own), their defining labels the
+          // simulator's domain leaders.
+          const steps = await act('cohort_steps', { questions: ['enrichment', 'distances', 'moran'] });
+          const stepsAgain = await act('cohort_steps', { questions: ['enrichment', 'distances', 'moran'] });
+          const summary = await act('summarize_samples', {});
+          const sd = summary.data ?? {};
+          const art = (id, file) => json(`${url}/api/artifacts/${encodeURIComponent(id)}/files/${file}`);
+          const tableOf = async (family) => (await act('cohort_table', { family })).data;
+          const [tCells, tShare, tDensity, tQC, tGraph, tEnrichment, tNearest, tMoran] = await Promise.all(['cells', 'share', 'density', 'qc', 'graph', 'enrichment', 'nearest', 'moran'].map(tableOf));
+          const cohortNames = sd.labels?.names ?? [];
+          const off = [];
+          let compared = 0;
+          const agree = (ok, what) => {
+            compared += 1;
+            if (!ok) off.push(what);
+          };
+          for (const st of steps.data?.samples ?? []) {
+            const row = (t) => t?.samples.find((x) => x.sample === st.sample) ?? { values: {}, sources: {} };
+            const labelsDoc = await art(st.labels, 'labels.json');
+            for (const set of labelsDoc.sets) agree(row(tCells).values[set.name] === set.cells && row(tCells).sources[set.name] === st.labels, `${st.name} ${set.name} cells`);
+            const labeled = cohortNames.reduce((n, l) => n + row(tCells).values[l], 0);
+            agree(labeled === labelsDoc.cells.labeled[0], `${st.name} labeled`);
+            const tissueArea = row(tQC).values['tissue area µm²'];
+            for (const l of cohortNames) {
+              agree(row(tShare).values[l] === row(tCells).values[l] / labeled, `${st.name} ${l} share`);
+              agree(Math.abs(row(tDensity).values[l] - row(tCells).values[l] / (tissueArea / 1e6)) <= 1e-9 * row(tDensity).values[l], `${st.name} ${l} density`);
+            }
+            const gm = await json(`${url}/api/artifacts/${encodeURIComponent(st.graph)}`);
+            agree(row(tGraph).values['mean neighbors'] === gm.summary.meanDegree && row(tGraph).values['median edge µm'] === gm.summary.medianLength && row(tGraph).values.pieces === gm.summary.components && row(tGraph).sources['mean neighbors'] === st.graph, `${st.name} graph`);
+            for (const a of st.answers) {
+              const an = await art(a.id, 'analysis.json');
+              const n = an.labels?.names ?? [];
+              const K = n.length;
+              if (a.question === 'enrichment') {
+                for (let x = 0; x < K; x += 1) {
+                  for (let y = x; y < K; y += 1) {
+                    const q = x * K + y;
+                    const key = [n[x], n[y]].sort().join('|');
+                    if (an.enrichment.expected[q] > 0) agree(row(tEnrichment).values[key] === an.enrichment.count[q] / an.enrichment.expected[q] && row(tEnrichment).sources[key] === a.id, `${st.name} enrichment ${key}`);
+                  }
+                }
+              } else if (a.question === 'distances') {
+                for (let x = 0; x < K; x += 1) {
+                  for (let y = 0; y < K; y += 1) {
+                    const key = `${n[x]}→${n[y]}`;
+                    const v = an.nearest.median[x * K + y];
+                    agree(v === null ? row(tNearest).values[key] === null : row(tNearest).values[key] === v && row(tNearest).sources[key] === a.id, `${st.name} nearest ${key}`);
+                  }
+                }
+              } else an.moran.genes.forEach((g, k) => agree(row(tMoran).values[g] === an.moran.i[k], `${st.name} Moran's I of ${g}`));
+            }
+          }
+          // The true values.
+          const cohortTruth = JSON.parse(readFileSync(join(cohortDir, 'truth/cohort.json'), 'utf8'));
+          const pbRows = (await (await fetch(`${url}/api/artifacts/${encodeURIComponent(sd.id ?? '')}/files/pseudobulk.csv`)).text()).trim().split('\n').map((l) => l.split(','));
+          const pbGenes = pbRows[0].slice(4);
+          const truthOff = cohortTruth.samples.map((t) => {
+            const r = tCells?.samples.find((x) => x.name === t.name);
+            if (!r) return { sample: t.name, shares: Infinity, tissue: Infinity, level: Infinity };
+            const total = Object.values(t.cells_by_type).reduce((n, v) => n + v, 0);
+            const labeled = cohortNames.reduce((n, l) => n + r.values[l], 0);
+            const shares = Math.max(...cohortNames.map((l) => Math.abs(r.values[l] / labeled - (t.cells_by_type[l] ?? 0) / total)));
+            const tissueArea = tQC.samples.find((x) => x.name === t.name).values['tissue area µm²'];
+            const lv = t.levels.find((x) => x.type === 'epithelial-like' && x.gene === 'SIM033');
+            const pr = pbRows.find((x) => x[1] === t.name && x[2] === 'epithelial-like');
+            const sum = pbGenes.reduce((n, g, k) => n + Number(pr[4 + k]), 0);
+            const level = Math.log((Number(pr[4 + pbGenes.indexOf('SIM033')]) / sum) / (lv.transcripts / lv.type_transcripts));
+            return { sample: t.name, shares: Number(shares.toFixed(4)), tissue: Number((tissueArea / (250 * 250) - 1).toFixed(4)), level: Number(level.toFixed(4)) };
+          });
+          // The niches found together against each sample's own, with the same parameters.
+          // A summary's niches.bin (its envelope, then zlib: the cells, each one's row and niche).
+          const cohortNiches = async (id) => {
+            const raw = Buffer.from(await (await fetch(`${url}/api/artifacts/${encodeURIComponent(id ?? '')}/files/niches.bin`)).arrayBuffer());
+            if (raw.subarray(0, 4).toString() !== 'SCCN') return { n: 0, row: () => 0, niche: () => -1 };
+            const body = inflateSync(raw.subarray(16));
+            const n = body.readUInt32LE(0);
+            return { n, row: (i) => body.readUInt32LE(4 + 4 * i), niche: (i) => body.readInt32LE(4 + 4 * n + 4 * i) };
+          };
+          const together = await cohortNiches(sd.id);
+          const ownNiches = async (st) => {
+            const own = await act('spatial_analysis', { question: 'niches', dataset: st.name, labels: st.labels, neighbors: 10, niches: 6, starts: 10, seeds: 4, seed: 20250 });
+            if (!own.ok) return new Map();
+            const cv = new DataView(await (await fetch(`${url}/api/analyses/${encodeURIComponent(own.data?.id ?? '')}/cells`)).arrayBuffer());
+            const m = cv.byteLength >= 4 ? cv.getUint32(0, true) : 0;
+            const of = new Map();
+            for (let i = 0; i < m; i += 1) of.set(cv.getUint32(4 + 4 * i, true), cv.getInt32(4 + 8 * m + 4 * i, true) - 1);
+            return of;
+          };
+          const aris = [];
+          let at = 0;
+          for (const st of steps.data?.samples ?? []) {
+            const of = await ownNiches(st);
+            const n = sd.samples?.find((x) => x.sample === st.sample)?.cells ?? 0;
+            const a = [];
+            const b = [];
+            for (let i = at; i < at + n && i < together.n; i += 1) {
+              a.push(together.niche(i));
+              b.push(of.get(together.row(i)) ?? -1);
+            }
+            at += n;
+            aris.push(Number(contingency(a, b, 6, 6).ari.toFixed(3)));
+          }
+          const alone = await act('summarize_samples', { samples: ['S01'] });
+          const aloneNiches = await cohortNiches(alone.data?.id);
+          const aloneOwn = await ownNiches(steps.data?.samples?.[0] ?? {});
+          const aloneN = aloneNiches.n;
+          let aloneSame = 0;
+          for (let i = 0; i < aloneN; i += 1) if (aloneNiches.niche(i) === aloneOwn.get(aloneNiches.row(i))) aloneSame += 1;
+          const leaders = new Set(cohortTruth.samples.flatMap((t) => t.domains.map((x) => x.leader)));
+          const defining = new Set((sd.niches ?? []).flatMap((x) => x.defining));
+          check('viewer', 'the cohort summarized (wave 7, slice 4): the same steps on every sample, answered at once when asked again; every number the artifact\'s it came from; the shares, tissue and a gene\'s level the truth\'s; the niches found together near each sample\'s own, exactly its own for one sample alone, and defined by the simulator\'s domain leaders',
+            `${steps.message ?? steps.error} | ${summary.message ?? summary.error} | ${compared} numbers compared, off: ${off.slice(0, 5).join('; ') || 'none'} | truth ${JSON.stringify(truthOff)} | niches' ARI ${aris.join(' ')}; alone ${aloneSame} of ${aloneN} | leaders ${[...leaders].sort().join(', ')}; defining ${[...defining].sort().join(', ')}`,
+            steps.ok && steps.data.samples.length === 8 && steps.data.samples.every((x) => x.answers.length === 3) && stepsAgain.ok && JSON.stringify(stepsAgain.data) === JSON.stringify(steps.data)
+            && summary.ok && sd.samples.length === 8 && cohortNames.length === 4 && sd.niches?.length === 6 && sd.genes === 120
+            && compared >= 8 * (4 * 3 + 2 + 10 + 16 + 120) && off.length === 0
+            && truthOff.every((x) => x.shares < 0.03 && Math.abs(x.tissue) < 0.02 && Math.abs(x.level) < 0.15)
+            && aris.length === 8 && aris.every((x) => x > 0.45) && alone.ok && aloneN === sd.samples[0].cells && aloneSame === aloneN
+            && [...leaders].every((l) => defining.has(l)),
+            'every number its source\'s; shares within 0.03 of the truth\'s, tissue within 2%, SIM033 within 0.15 (log); ARI above 0.45 each; one sample alone exactly its own; every leader defines a niche');
+
+          // Cohort QC (wave 7, slice 5): the standard cohort's quality side by side, no sample far out,
+          // its batches (two slides and runs, one panel) holding both groups, its pseudobulk's
+          // principal components; the groups made to follow the slides, said to be confounded with
+          // them; and a cohort with a sample planted to detect 40% of its transcripts, that sample
+          // alone found far out, on its transcripts and genes.
+          const qcStandard = await act('cohort_qc', { summary: sd.id });
+          const qs = qcStandard.data ?? {};
+          const slideOf = Object.fromEntries((qs.samples ?? []).map((x) => [x.name, x.bundle?.slide]));
+          await act('set_samples', { values: Object.fromEntries(cs.map((x) => [x.sample, { condition: slideOf[x.sample] === 'simulated slide 1' ? 'control' : 'treated' }])) });
+          const qcConfounded = await act('cohort_qc', { summary: sd.id });
+          await act('set_samples', { values: Object.fromEntries(cs.map((x, k) => [x.sample, { condition: k < 4 ? 'control' : 'treated' }])) });
+          const plantedDir = join(work, 'planted-cohort');
+          rmSync(plantedDir, { recursive: true, force: true });
+          execFileSync(bin, ['simulate', '--cohort', 'outlier', '--quiet', plantedDir]);
+          const plantedTruth = JSON.parse(readFileSync(join(plantedDir, 'truth', 'cohort.json'), 'utf8'));
+          await act('new_project', { name: 'A planted outlier' });
+          const plantedOpened = await act('open_paths', { paths: [plantedDir], add: true });
+          await act('cohort_steps', { questions: [] });
+          const plantedSummary = await act('summarize_samples', { niches: 0 });
+          const qcPlanted = await act('cohort_qc', {});
+          const far = qcPlanted.data?.outliers ?? [];
+          const planted = plantedTruth.samples.filter((x) => x.planted).map((x) => x.name);
+          const variance = qs.pca?.variance ?? [];
+          check('viewer', 'cohort QC: the simulated cohort\'s quality by sample, no sample far out, its slides and runs each holding both groups, its pseudobulk\'s principal components over its one panel; the groups made to follow the slides said to be confounded with them; a planted sample alone found far out, on its transcripts and genes, each with its reason',
+            `${qcStandard.message ?? qcStandard.error} | ${qcConfounded.message ?? qcConfounded.error} | ${plantedOpened.message ?? plantedOpened.error} ${plantedSummary.message ?? plantedSummary.error} | ${qcPlanted.message ?? qcPlanted.error}`,
+            qcStandard.ok && qs.samples?.length === 8 && qs.outliers?.length === 0 && qs.metrics?.length === 8 && (qs.batches ?? []).filter((x) => x.kind === 'slide').length === 2 && (qs.batches ?? []).filter((x) => x.kind === 'panel').length === 1
+            && qs.design?.statements?.length === 0 && qs.panels?.panels?.length === 1 && qs.panels.shared === 120 && variance.length === 7 && variance.every((v, k) => v > 0 && (k === 0 || v <= variance[k - 1])) && variance.reduce((x, v) => x + v, 0) <= 1 + 1e-9
+            && qs.samples.every((x) => x.qc.nucleusShare > 0 && x.qc.medianNucleusAreaUm2 > 0 && x.pca?.length === 7)
+            && qcConfounded.ok && (qcConfounded.data?.design?.statements ?? []).some((st) => st.kind === 'confounded' && /condition is confounded with the slide/.test(st.text))
+            && plantedOpened.ok && plantedSummary.ok && planted.join() === 'S06' && far.length >= 2 && far.every((o) => o.name === 'S06' && o.z < 0)
+            && ['medianTranscripts', 'transcriptsPer100um2'].every((m) => far.some((o) => o.metric === m && /times the samples' median/.test(o.reason))),
+            'none far out; 2 slides, 1 panel of 120 genes; 7 components; confounded when the groups follow the slides; S06 alone far out, below, on its median transcripts and transcripts per 100 µm²');
+
+          // Differential abundance (wave 7, slice 6): the standard cohort's subjects compared by
+          // condition (each subject a sample: unpaired); each label's share and density effect the
+          // pooled ratio of its counts (as a model of the groups alone gives), its interval covering
+          // the ratio the true cells show; a sample's cells of a label shown on its tissue, as many as
+          // the summary counts. A null cohort labeled from its own single-cell reference: its shares
+          // the true types', and nothing found.
+          await act('open_project', { project: cohortProject });
+          await act('set_samples', { values: Object.fromEntries(cs.map((x) => [x.sample, { subject: x.sample }])) });
+          await act('design', { unit: 'subject', group: 'condition', reference: 'control' });
+          const da = await act('compare_abundance', { summary: sd.id });
+          const daf = Object.fromEntries((da.data?.families ?? []).map((f) => [f.family, f]));
+          const groupOf = (name) => (cs.findIndex((x) => x.sample === name) < 4 ? 'control' : 'treated');
+          const pooled = (count, total) => {
+            const by = { control: [0, 0], treated: [0, 0] };
+            for (const x of sd.samples ?? []) {
+              const g = by[groupOf(x.name)];
+              g[0] += count(x);
+              g[1] += total(x);
+            }
+            return by;
+          };
+          const daOff = [];
+          for (const l of cohortNames) {
+            const share = daf.share?.tests.find((t) => t.label === l);
+            const dens = daf.density?.tests.find((t) => t.label === l);
+            const lab = pooled((x) => x.counts[l], (x) => x.labeled);
+            const odds = (g) => g[0] / (g[1] - g[0]);
+            const area = pooled((x) => x.counts[l], (x) => x.tissueAreaUm2 / 1e6);
+            if (!share || Math.abs(share.ratio - odds(lab.treated) / odds(lab.control)) > 1e-9 * share.ratio) daOff.push(`${l}: odds ratio ${share?.ratio}`);
+            if (!dens || Math.abs(dens.ratio - (area.treated[0] / area.treated[1]) / (area.control[0] / area.control[1])) > 1e-9 * dens.ratio) daOff.push(`${l}: density ratio ${dens?.ratio}`);
+            // The true cells' pooled ratios (every section the same area).
+            const tr = { control: [0, 0], treated: [0, 0] };
+            for (const ts of cohortTruth.samples) {
+              const g = tr[ts.group];
+              g[0] += ts.cells_by_type[l] ?? 0;
+              g[1] += Object.values(ts.cells_by_type).reduce((n, v) => n + v, 0);
+            }
+            const trueOdds = odds(tr.treated) / odds(tr.control);
+            const trueDensity = tr.treated[0] / tr.control[0];
+            if (!(share?.lo <= trueOdds && trueOdds <= share?.hi)) daOff.push(`${l}: the true odds ratio ${trueOdds.toFixed(3)} outside ${share?.lo}–${share?.hi}`);
+            if (!(dens?.lo <= trueDensity && trueDensity <= dens?.hi)) daOff.push(`${l}: the true density ratio ${trueDensity.toFixed(3)} outside ${dens?.lo}–${dens?.hi}`);
+          }
+          const endo = daf.share?.tests.find((t) => t.label === 'endothelial-like');
+          const shown = await act('show_sample_cells', { summary: sd.id, sample: 'S05', label: 'endothelial-like' });
+          const s05 = (sd.samples ?? []).find((x) => x.name === 'S05');
+          const nullDir = join(work, 'null-cohort');
+          rmSync(nullDir, { recursive: true, force: true });
+          execFileSync(bin, ['simulate', '--cohort', 'null', '--reference', '300', '--quiet', nullDir]);
+          const nullTruth = JSON.parse(readFileSync(join(nullDir, 'truth', 'cohort.json'), 'utf8'));
+          await act('new_project', { name: 'A null cohort' });
+          await act('open_paths', { paths: [nullDir], add: true });
+          await act('set_samples', { table: readFileSync(join(nullDir, 'samples.csv'), 'utf8') });
+          await act('design', { unit: 'subject', group: 'condition', reference: 'control' });
+          const refSteps = await act('cohort_steps', { questions: [], reference: join(nullDir, 'reference.zarr') });
+          const refSummary = await act('summarize_samples', { reference: join(nullDir, 'reference.zarr') });
+          const nullDA = await act('compare_abundance', { families: ['share', 'density', 'niche'] });
+          const refShares = (refSummary.data?.samples ?? []).map((x, k) => {
+            const ts = nullTruth.samples[k];
+            const total = Object.values(ts.cells_by_type).reduce((n, v) => n + v, 0);
+            return Math.max(...Object.entries(x.counts).map(([l, v]) => Math.abs(v / x.labeled - (ts.cells_by_type[l] ?? 0) / total)));
+          });
+          const nullTests = (nullDA.data?.families ?? []).flatMap((f) => f.tests.filter((t) => t.padj !== undefined));
+          check('viewer', 'differential abundance: each label\'s share and density compared by condition, each effect the pooled ratio of its counts and its interval covering the true cells\' ratio; a sample\'s cells of a label shown on its tissue as the summary counts them; a null cohort labeled from its own reference, its shares the true types\', and nothing found',
+            `${da.message ?? da.error} | off: ${daOff.join('; ') || 'none'} | ${shown.message ?? shown.error} | ${refSteps.message ?? refSteps.error} ${refSummary.message ?? refSummary.error} | shares off the truth by ${Math.max(...refShares).toFixed(4)} at most | ${nullDA.message ?? nullDA.error}`,
+            da.ok && daf.share?.tests.length === 4 && daf.density?.tests.length === 4 && daOff.length === 0 && endo?.ratio > 1 && endo?.df === 6
+            && shown.ok && shown.data.cells === s05?.counts['endothelial-like']
+            && refSteps.ok && refSteps.data.reference?.labelColumn === 'cell_type' && refSummary.ok && refShares.length === 8 && Math.max(...refShares) < 0.08
+            && nullDA.ok && nullTests.length === 14 && nullTests.every((t) => t.padj >= 0.05),
+            'odds and density ratios their pooled counts\', every interval covering the truth; S05\'s endothelial cells the summary\'s; reference labels within 0.08 of the truth; the null cohort\'s 14 tests none below 0.05');
+
+          // Differential expression and spatial statistics between groups (wave 7, slice 7): the null
+          // cohort (open now) finds no gene below an adjusted p of 0.05, and its spatial statistics,
+          // which its steps did not ask for, cannot be compared. The
+          // standard cohort's subjects compared by condition: SIM033 higher in the epithelial-like
+          // cells, its log2 fold's interval covering the one the true cells show, and few other
+          // genes found; the gene's values by unit; the spatial statistics of every family, the
+          // epithelial-like and immune-like cells' neighbor enrichment higher in the treated subjects
+          // (where the simulator mixes immune-like cells into epithelial-like domains), its interval
+          // above 1.
+          const nullDE = await act('compare_expression', {});
+          const nullSpatial = await act('compare_spatial', {});
+          const nullFound = (nullDE.data?.labels ?? []).flatMap((l) => (l.contrasts ?? []).flatMap((c) => c.found));
+          await act('open_project', { project: cohortProject });
+          const de = await act('compare_expression', { summary: sd.id });
+          const epi = (de.data?.labels ?? []).find((l) => l.label === 'epithelial-like');
+          const sim033 = epi?.contrasts?.[0]?.found.find((x) => x.gene === 'SIM033');
+          const trueLevel = (cohortTruth.effects ?? []).find((e) => e.kind === 'level' && e.gene === 'SIM033');
+          const trueLog2 = trueLevel ? trueLevel.measured_log_fold / Math.LN2 : NaN;
+          const others = (de.data?.labels ?? []).flatMap((l) => (l.contrasts ?? []).flatMap((c) => c.found.filter((x) => !(l.label === 'epithelial-like' && x.gene === 'SIM033'))));
+          const gene = await act('show_gene', { gene: 'SIM033', label: 'epithelial-like' });
+          const byGroup = (g) => (gene.data?.rows ?? []).filter((r) => r.group === g).map((r) => r.logCPM);
+          const mean = (v) => v.reduce((a, x) => a + x, 0) / Math.max(1, v.length);
+          const sp = await act('compare_spatial', { summary: sd.id });
+          const spf = Object.fromEntries((sp.data?.families ?? []).map((f) => [f.family, f]));
+          const mixed = spf.enrichment?.tests.find((t) => t.key === 'epithelial-like|immune-like');
+          check('viewer', 'differential expression and spatial statistics between groups: the null cohort finds nothing (and has no spatial statistics to compare); the standard cohort finds SIM033 higher in the epithelial-like cells, its interval covering the true cells\' fold, few other genes; the gene\'s values by unit; every family of spatial statistics compared, the epithelial-like and immune-like cells\' enrichment higher where the simulator mixes them',
+            `${nullDE.message ?? nullDE.error} | ${nullSpatial.message ?? nullSpatial.error} | ${de.message ?? de.error} | true log2 fold ${trueLog2.toFixed(3)} | ${gene.message ?? gene.error} | ${sp.message ?? sp.error} | enrichment ${JSON.stringify(mixed)}`,
+            nullDE.ok && nullDE.data.labels.length === 4 && nullFound.length === 0 && !nullSpatial.ok && /no spatial statistics/.test(nullSpatial.message ?? nullSpatial.error ?? '')
+            && de.ok && de.data.genes === 120 && de.data.labels.every((l) => l.rows?.length === 8 && l.genes > 80) && sim033?.logFC > 0 && sim033.padj < 0.05 && sim033.lo <= trueLog2 && trueLog2 <= sim033.hi && others.length <= 1
+            && gene.ok && gene.data.rows.length === 8 && mean(byGroup('treated')) > mean(byGroup('control'))
+            && sp.ok && Object.keys(spf).sort().join() === 'enrichment,moran,nearest' && spf.enrichment.tests.length === 10 && spf.moran.tests.length === 120 && mixed?.ratio > 1 && mixed.ratioLo > 1,
+            'the null cohort nothing below 0.05, its spatial statistics refused; SIM033 found in the epithelial-like cells, its interval covering the truth, at most one other gene; treated above control; three families, the epithelial–immune enrichment above 1');
+
+          // Worked examples on the simulated cohorts (wave 7, slice 9), each run step by step and
+          // every number its cards state checked against the comparison's own document: a gene
+          // changed in one cell type (the standard cohort, open now), a comparison where nothing
+          // differs (the null cohort), and a composition shift found and each subject compared with
+          // itself (the cohort before and after, its true cells' odds the suite's own from its truth).
+          const walkCohort = async (example, name) => {
+            const steps = [await act('tour', { example, name })];
+            for (let k = 0; k < 20 && steps.at(-1).ok && !steps.at(-1).data?.finished; k += 1) steps.push(await act('tour', { run: true }));
+            await act('tour', { end: true });
+            return steps;
+          };
+          const walked = (steps) => steps.every((x) => x.ok) && steps.at(-1)?.data?.finished === true;
+          const shownAt = (steps, n) => steps.find((x) => x.ok && x.data?.step === n)?.data?.cohort?.comparison ?? null;
+          const artifactDoc = async (id, file) => (id ? json(`${url}/api/artifacts/${encodeURIComponent(id)}/files/${file}`) : null);
+          const geneOf = (e, label, gene) => {
+            const r = e?.results.find((x) => x.label === label);
+            const i = r?.genes?.findIndex((g) => e.genes[g] === gene) ?? -1;
+            return i >= 0 ? { logFC: r.contrasts[0].logFC[i], lo: r.contrasts[0].lo[i], hi: r.contrasts[0].hi[i], padj: r.contrasts[0].padj[i] } : null;
+          };
+          const foundOf = (e) => (e?.results ?? []).flatMap((r) => (r.contrasts ?? []).flatMap((c) => c.padj.map((q, i) => [q, `${r.label} ${e.genes[r.genes[i]]}`]).filter(([q]) => q < 0.05).map(([, k]) => k)));
+          const r2 = (v) => Math.round(100 * v) / 100;
+          const geneSteps = await walkCohort('simulated-cohort', 'cohort-gene');
+          const geneDoc = await artifactDoc(shownAt(geneSteps, 6), 'expression.json');
+          const sim = geneOf(geneDoc, 'epithelial-like', 'SIM033');
+          check('viewer', 'the worked example A gene changed in one cell type: the standard cohort\'s subjects compared by condition, SIM033 the only gene found, in the epithelial-like cells, as its card states', `${geneSteps.map((x) => (x.ok ? `step ${x.data?.step ?? 'finished'}` : x.message)).join('; ')}; ${JSON.stringify({ tests: geneDoc?.tests, found: foundOf(geneDoc), sim })}`,
+            walked(geneSteps) && geneDoc?.tests === 424 && foundOf(geneDoc).join() === 'epithelial-like SIM033' && r2(sim.logFC) === 0.94 && r2(sim.lo) === 0.59 && r2(sim.hi) === 1.3 && sim.padj < 0.005,
+            '424 tests; SIM033 +0.94 log2 (0.59 to 1.30), adjusted p 0.005, alone');
+          await act('open_example', { example: 'simulated-null-cohort' });
+          const nullWalk = await walkCohort('simulated-null-cohort', 'cohort-null');
+          const nullAbu = await artifactDoc(shownAt(nullWalk, 6), 'abundance.json');
+          const nullExp = await artifactDoc(shownAt(nullWalk, 8), 'expression.json');
+          const nullSpt = await artifactDoc(shownAt(nullWalk, 10), 'spatial-tests.json');
+          const abuTests = (nullAbu?.families ?? []).flatMap((f) => f.tests.filter((t) => t.tested));
+          const expP = (nullExp?.results ?? []).flatMap((r) => (r.contrasts ?? []).flatMap((c) => c.p.map((p, i) => ({ p, padj: c.padj[i], key: `${r.label} ${nullExp.genes[r.genes[i]]}` }))));
+          const lowest = [...expP].sort((a, b) => a.p - b.p)[0];
+          const sptTests = (nullSpt?.families ?? []).flatMap((f) => f.tests.filter((t) => t.tested));
+          check('viewer', 'the worked example A comparison where nothing differs: the null cohort\'s abundance, expression and arrangement, nothing found, as its cards state', `${nullWalk.map((x) => (x.ok ? `step ${x.data?.step ?? 'finished'}` : x.message)).join('; ')}; abundance ${abuTests.length} tests, lowest p ${Math.min(...abuTests.map((t) => t.p))}; expression ${expP.length} tests, ${expP.filter((x) => x.p < 0.05).length} below 0.05, lowest ${JSON.stringify(lowest)}; enrichment ${sptTests.length}, lowest adjusted ${Math.min(...sptTests.map((t) => t.padj))}`,
+            walked(nullWalk) && abuTests.length === 14 && abuTests.every((t) => t.p >= 0.05) && expP.length === 423 && expP.filter((x) => x.p < 0.05).length === 11 && expP.every((x) => x.padj >= 0.05) && lowest?.key === 'epithelial-like SIM015' && r2(lowest.padj) === 0.25
+            && sptTests.length === 10 && sptTests.every((t) => t.padj >= 0.05) && r2(Math.min(...sptTests.map((t) => t.padj))) === 0.36,
+            '14 abundance tests, none below 0.05; 423 of expression, 11 raw below 0.05, SIM015 the lowest, adjusted 0.25; 10 of enrichment, the lowest adjusted 0.36');
+          await act('open_example', { example: 'simulated-paired-cohort' });
+          const pairedDir = (await json(`${url}/api/examples`)).examples.find((e) => e.name === 'simulated-paired-cohort')?.path;
+          const pairedTruth = pairedDir ? JSON.parse(readFileSync(join(pairedDir, 'truth', 'cohort.json'), 'utf8')) : null;
+          const trueOdds = (type) => {
+            const by = { before: [0, 0], after: [0, 0] };
+            for (const t of pairedTruth?.samples ?? []) {
+              by[t.group][0] += t.cells_by_type[type] ?? 0;
+              by[t.group][1] += Object.values(t.cells_by_type).reduce((n, v) => n + v, 0);
+            }
+            const odds = (g) => g[0] / (g[1] - g[0]);
+            return odds(by.after) / odds(by.before);
+          };
+          const shiftWalk = await walkCohort('simulated-paired-cohort', 'cohort-shift');
+          const shiftAbu = await artifactDoc(shownAt(shiftWalk, 6), 'abundance.json');
+          const testOf = (doc, family, label) => doc?.families.find((f) => f.family === family)?.tests.find((t) => t.label === label);
+          const endoShare = testOf(shiftAbu, 'share', 'endothelial-like'), epiShare = testOf(shiftAbu, 'share', 'epithelial-like'), endoD = testOf(shiftAbu, 'density', 'endothelial-like');
+          check('viewer', 'the worked example A composition shift found: the cohort before and after compared by a paired design, more endothelial-like cells and fewer epithelial-like ones, near the true cells\' odds, as its cards state', `${shiftWalk.map((x) => (x.ok ? `step ${x.data?.step ?? 'finished'}` : x.message)).join('; ')}; ${JSON.stringify({ endoShare, epiShare, endoD })}; true ${r2(trueOdds('endothelial-like'))} and ${r2(trueOdds('epithelial-like'))}`,
+            walked(shiftWalk) && r2(endoShare?.ratio) === 2.19 && r2(endoShare.lo) === 1.54 && r2(endoShare.hi) === 3.12 && endoShare.padj < 0.01 && r2(epiShare?.ratio) === 0.48 && r2(epiShare.lo) === 0.27 && r2(epiShare.hi) === 0.84 && epiShare.padj < 0.05
+            && r2(endoD?.ratio) === 1.8 && r2(endoD.lo) === 1.39 && r2(endoD.hi) === 2.33 && r2(trueOdds('endothelial-like')) === 2.26 && r2(trueOdds('epithelial-like')) === 0.47,
+            'endothelial-like 2.19× (1.54 to 3.12), density 1.80× (1.39 to 2.33); epithelial-like 0.48× (0.27 to 0.84); the true cells 2.26 and 0.47');
+          const pairWalk = await walkCohort('simulated-paired-cohort', 'cohort-paired');
+          const sectionsExp = await artifactDoc(shownAt(pairWalk, 7), 'expression.json');
+          const pairedExp = await artifactDoc(shownAt(pairWalk, 10), 'expression.json');
+          const s1 = geneOf(sectionsExp, 'epithelial-like', 'SIM033'), s2 = geneOf(pairedExp, 'epithelial-like', 'SIM033');
+          const pairedFound = foundOf(pairedExp);
+          check('viewer', 'the worked example Each subject compared with itself: SIM033 with the sections as units and paired, its interval narrower paired, and the endothelial-like markers in their neighbors found, as its cards state', `${pairWalk.map((x) => (x.ok ? `step ${x.data?.step ?? 'finished'}` : x.message)).join('; ')}; sections ${JSON.stringify(s1)} (${foundOf(sectionsExp).length} found); paired ${JSON.stringify(s2)} (${pairedFound.length} found: ${pairedFound.filter((k) => k.startsWith('epithelial-like')).join(', ')})`,
+            walked(pairWalk) && r2(s1?.logFC) === 1.08 && r2(s1.lo) === 0.75 && r2(s1.hi) === 1.41 && foundOf(sectionsExp).join() === 'epithelial-like SIM033'
+            && r2(s2?.logFC) === 1.08 && r2(s2.lo) === 0.84 && r2(s2.hi) === 1.31 && pairedFound.length === 22 && ['SIM025', 'SIM026', 'SIM027', 'SIM028', 'SIM029', 'SIM030'].every((g) => pairedFound.includes(`epithelial-like ${g}`)) && pairedExp.design.names.length === 7,
+            'sections: +1.08 log2 (0.75 to 1.41), only SIM033; paired: (0.84 to 1.31), 22 genes, the endothelial-like markers SIM025 to SIM030 among them');
+
+          // The project as 0.7.0 saves a cohort (validation/projects/0.7.0-cohort.situcraft.json):
+          // the simulated cohort's samples with their subjects and conditions, a saved design, the
+          // same steps on every sample, its summary and its comparisons of abundance, expression and
+          // arrangement. Written when asked (SITUCRAFT_WRITE_FIXTURE=1), its folders' places made
+          // neutral and given its own id. Then reopened: each sample's bundle found again where this
+          // run made it, its samples, fields and design as saved; and the steps, summary and
+          // comparisons made again by this build with the same ids, each artifact the project
+          // records the same by its summary (a cohort's records keep no checksums; their summaries
+          // hold the samples' counts and the comparisons' tests and genes found).
+          const cohortFixture = join(root, 'validation', 'projects', '0.7.0-cohort.situcraft.json');
+          const cohortHome = (await json(`${url}/api/examples`)).examples.find((e) => e.name === 'simulated-cohort')?.path;
+          const cohortFlow = async () => [
+            await act('cohort_steps', { questions: ['enrichment', 'distances', 'moran'] }),
+            await act('summarize_samples', {}),
+            await act('compare_abundance', { families: ['share', 'density', 'niche'], design: 'By condition' }),
+            await act('compare_expression', { design: 'By condition' }),
+            await act('compare_spatial', { design: 'By condition' }),
+          ];
+          if (process.env.SITUCRAFT_WRITE_FIXTURE && cohortHome) {
+            await act('new_project', { name: 'Simulated cohort, as SituCraft 0.7.0 saved it' });
+            await act('open_example', { example: 'cohort' });
+            await act('design', { unit: 'subject', group: 'condition', reference: 'control', save: 'By condition' });
+            await cohortFlow();
+            const doc = await chrome.eval(`(async () => (await import('/lib/project.js')).serializeProject(window.situcraft.store.project))()`);
+            const neutral = JSON.parse(doc.split(cohortHome).join('/data/examples/simulated-cohort').split(work).join('/data/work'));
+            writeFileSync(cohortFixture, `${JSON.stringify({ ...neutral, id: 'p-situcraft-0-7-0-cohort' }, null, 1)}\n`);
+          }
+          if (existsSync(cohortFixture) && cohortHome) {
+            const text = readFileSync(cohortFixture, 'utf8');
+            const fixture = JSON.parse(text);
+            const reopened = await chrome.eval(`(async () => {
+              const app = window.situcraft;
+              const { samplesOf } = await import('/lib/samples.js');
+              const { designsOf } = await import('/lib/design.js');
+              const doc = ${JSON.stringify(text)};
+              const saved = JSON.parse(doc);
+              await app.library.saveProject(saved.id, doc);
+              await app.openProject(saved.id);
+              const states = [];
+              for (const d of app.store.project.datasets) states.push((await app.bundles.locate(d.id, ${JSON.stringify(cohortHome)} + '/' + d.path.split('/').pop()))?.state);
+              const p = app.store.project;
+              return { states, samples: samplesOf(p).map((x) => [x.name, x.fields.subject, x.fields.condition].join(' ')).join(', '), designs: designsOf(p).map((d) => d.name + ' v' + d.version).join() };
+            })()`);
+            const flow = await cohortFlow();
+            // A comparison's record keeps its summary's id as summary and the manifest's as summaryOf.
+            const kinds = new Set(['cohort-summary', 'abundance', 'expression', 'spatial-comparison']);
+            const perSample = (a) => ['clustering', 'labels', 'graph', 'spatial'].includes(a.kind) && a.state === 'complete' && !a.source && !a.reference;
+            const made = fixture.artifacts.filter((a) => kinds.has(a.kind) || perSample(a));
+            const differing = [];
+            for (const a of made) {
+              const m = await fetch(`${url}/api/artifacts/${encodeURIComponent(a.id)}`).then((r) => (r.ok ? r.json() : null));
+              if (!m) differing.push(`${a.name}: not made again`);
+              else if (JSON.stringify(m.summary) !== JSON.stringify(a.summaryOf ?? a.summary)) differing.push(`${a.name}: another summary`);
+            }
+            // The summary and comparisons made now are the fixture's, by their ids.
+            const ids = flow.slice(1).map((x) => x.data?.id);
+            check('viewer', '0.7.0 cohort project: it opens and finds its moved bundles, its samples and design as saved; its steps, summary and comparisons made again the same', `${JSON.stringify(reopened)}; ${flow.map((x) => (x.ok ? x.data?.id ?? 'ok' : x.message)).join('; ')}; ${made.length} artifacts${differing.length ? `; ${differing.slice(0, 4).join('; ')}` : ', all the same'}`,
+              reopened.states.length === 8 && reopened.states.every((st) => st === 'ok') && /S01 S01 control/.test(reopened.samples) && reopened.designs === 'By condition v1'
+              && flow.every((x) => x.ok) && ids.length === 4 && ids.every((id) => fixture.artifacts.some((a) => a.id === id && kinds.has(a.kind))) && made.filter((a) => kinds.has(a.kind)).length === 4 && made.length === 52 && differing.length === 0,
+              '8 bundles found; S01 a control subject; By condition v1; the summary and three comparisons, and the samples\' 48 clusterings, label sets, graphs and analyses, the same');
+          }
+
+          // The teaching example on the Breast section (wave 7, slice 9), in a project of its own:
+          // six regions as samples, each its own subject, refused; marked pseudo-samples, compared,
+          // every result saying so; the places' differences as its cards state.
+          if (existsSync(join(dataRoot, 'xenium-breast-2fov', 'experiment.xenium'))) {
+            await act('new_project', { name: 'Places in one section' });
+            await act('open_paths', { paths: [join(dataRoot, 'xenium-breast-2fov')], add: true });
+            await chrome.eval(`(async () => {
+              const app = window.situcraft;
+              const { guideFor } = await import('/lib/tours.js');
+              const { startTour } = await import('/ui/tour.js');
+              const dataset = app.store.project.datasets.find((d) => d.name === 'xenium-breast-2fov');
+              for (let k = 0; k < 600 && !app.store.project.artifacts.some((a) => a.kind === 'segmentation' && a.dataset === dataset.id); k += 1) await new Promise((r) => setTimeout(r, 100));
+              startTour(app, { tour: guideFor('xenium-breast-2fov', 'pseudo-samples'), dataset: dataset.id });
+              return true;
+            })()`);
+            const teach = [];
+            for (let k = 0; k < 20; k += 1) {
+              const x = await act('tour', { run: true });
+              teach.push(x);
+              if (!x.ok || x.data?.finished) break;
+            }
+            const placesAbu = await artifactDoc(teach.find((x) => x.ok && x.data?.step === 10)?.data?.cohort?.comparison, 'abundance.json');
+            const refused = await chrome.eval(`(async () => {
+              const { makeDesign } = await import('/lib/design.js');
+              const d = makeDesign(window.situcraft.store.project, { unit: 'subject', group: 'place', reference: 'tumor' });
+              return d.problems.join(' ');
+            })()`);
+            // The comparison the last step shows, its warning on the page.
+            const banner = await chrome.eval(`document.querySelector('.cohort-pseudo-note')?.textContent ?? ''`);
+            const immune = testOf(placesAbu, 'share', 'Immune'), epithelial = testOf(placesAbu, 'share', 'Epithelial'), adipocyte = testOf(placesAbu, 'share', 'Adipocyte');
+            check('viewer', 'the teaching example Places in one section are not subjects: six Breast regions as samples refused, then marked pseudo-samples and compared, every result saying so, the places\' differences as its cards state', `${teach.map((x) => (x.ok ? `step ${x.data?.step ?? 'finished'}` : x.message)).join('; ')}; refused: ${refused.slice(0, 120)}; ${JSON.stringify({ pseudo: placesAbu?.design?.pseudoSamples, banner: banner.slice(0, 60), immune, epithelial, adipocyte: adipocyte?.note })}`,
+              teach.every((x) => x.ok) && teach.at(-1)?.data?.finished === true && /are regions of one section \(xenium-breast-2fov\) given different subjects/.test(refused) && placesAbu?.design?.pseudoSamples === true && placesAbu.design.rows.length === 6 && /^Pseudo-samples, for teaching\. .*not independent replicates/.test(banner)
+              && r2(immune?.ratio) === 8.37 && r2(immune.lo) === 1.58 && r2(immune.hi) === 44.49 && r2(immune.padj) === 0.03 && r2(epithelial?.ratio) === 0.04 && adipocyte && !adipocyte.tested && /not estimable/.test(adipocyte.note),
+              'refused as subjects; pseudo-samples, 6 rows, the warning shown; immune 8.37× (1.58 to 44.49), adjusted p 0.03; epithelial 0.04×; adipocytes not estimable');
+          }
         }
       }
 

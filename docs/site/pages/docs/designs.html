@@ -1,0 +1,40 @@
+---
+title: The design
+description: The experimental design of a SituCraft cohort: the replicate unit, the groups compared and their reference, contrasts, pairing, covariates and technical replicates; the design matrix in treatment coding, and the designs SituCraft refuses and why.
+lede: Before any comparison of groups, the design names what replicates what: the subject (or patient, or animal) each sample comes from, the groups compared, and what else differs between samples. SituCraft refuses a design it cannot estimate, or whose groups a batch could explain, and says why.
+---
+      <h2 id="unit">The replicate unit</h2>
+      <p>A comparison of groups asks whether the groups differ by more than their members differ among themselves. The members are the <strong>replicate units</strong>: the subjects, patients or animals the samples come from, each one biological replicate. Cells are not replicates (thousands of cells of one section are one subject's cells), and neither are regions of one section. The design's <strong>Replicate unit</strong> is the field that names them, <code>subject</code> by default; see <a href="samples.html#fields">Describing the samples</a>.</p>
+      <ul>
+        <li><strong>Technical replicates:</strong> a unit's samples in one group, such as two sections of one subject's tumor, are one replicate; their numbers are combined before any test.</li>
+        <li><strong>Pairing:</strong> a unit in more than one group, such as a subject before and after treatment, is compared with itself: the units enter the model, and the comparison rests on each unit's own change.</li>
+        <li><strong>Regions of one section</strong> given different units are refused: they share a subject, a slide and a run. Give them one unit (their samples are combined), or compare sections.</li>
+      </ul>
+
+      <h3 id="pseudo-samples">Pseudo-samples, for teaching</h3>
+      <p>To try a cohort's comparisons on a single section, its regions can be kept as separate units by checking <strong>Regions of one section as pseudo-samples, for teaching only</strong>, which the design offers when the samples include regions. The design is then kept rather than refused, and says in its notes and its words that its units are pseudo-samples. Every comparison made of it carries a warning: its tests describe the section's regions, and their p-values are not evidence about subjects, of whom one section is one. The Breast example's worked example <em>Places in one section are not subjects</em> does this with three regions of its stroma and three of its tumor (see <a href="getting-started.html#worked-examples">Worked examples</a>).</p>
+
+      <h2 id="groups">Groups, contrasts and covariates</h2>
+      <p><strong>Groups compared</strong> is the field whose values are the groups, <code>condition</code> by default, and the <strong>Reference group</strong> the one the others are compared with (the first in alphabetical order if not chosen). Each group is compared with the reference unless other <strong>Contrasts</strong> are added, such as one treatment against another.</p>
+      <p><strong>Adjust for</strong> adds covariates: any field of the samples (a number as it is, text as a factor), or the bundles' run, slide or panel. A covariate is one value for a unit in a group. Samples without a value of a field the design reads are left out, and the design says which; <strong>Leave a sample out…</strong> leaves one out with its reason, which the design keeps.</p>
+
+      <h2 id="matrix">The design in words and as a matrix</h2>
+      <p>The design is said in sentences: what is compared, how many units each group has, whether it is paired, what it is adjusted for, and how many degrees of freedom are left for the variation between units. Below them is its matrix: a row for each unit in each group, with its samples, and a column for each of the model's coefficients.</p>
+      <p>The coding is treatment coding, as patsy and R write a model formula's: an intercept, then for each factor a column of ones and zeros for each level but its reference (the levels in alphabetical order, its first the reference unless chosen), named <code>field[T.level]</code>, then each number as it is. For the same formula the matrix is patsy's, column for column.</p>
+      <shot name="design" alt="The Cohort view's design of the simulated cohort: its subjects compared by condition, treated against control, adjusted for the slide, said in sentences, with its eight rows and three columns">The simulated cohort's subjects compared by condition and adjusted for the slide: three coefficients over eight rows, five degrees of freedom left.</shot>
+
+      <h2 id="refused">What is refused</h2>
+      <p>A design that cannot be estimated, or whose answer would not mean what it says, is refused, and the view says why:</p>
+      <ul>
+        <li><strong>A group of fewer than two units:</strong> the variation between units cannot be measured.</li>
+        <li><strong>A covariate confounded with the groups or another term:</strong> its columns are combinations of those before them (every sample of batch B1 in control and every one of B2 in treated, say), so its effect cannot be told from theirs.</li>
+        <li><strong>The groups confounded with a slide, run or panel</strong> the design does not adjust for: each holds one group only, so a difference between the groups could be the batch's. A batch that holds the groups unevenly is noted instead.</li>
+        <li><strong>No degrees of freedom left:</strong> as many coefficients as rows.</li>
+        <li><strong>Regions of one section as separate units</strong> (above), unless they are marked pseudo-samples for teaching, and a covariate with two values for one unit in one group.</li>
+      </ul>
+      <p>A design with few degrees of freedom left (one or two) is kept but noted: its estimates of the variation between units will be rough.</p>
+      <p>The program refuses the same designs when a comparison is asked of it directly (by remote control, say): a group of one unit, a unit in two rows of one group, and regions of one section as separate units (unless the design marks them pseudo-samples). Each would make a test of cells rather than of replicates, and cells as replicates find differences that are not there (see <a href="error-rates.html#cells">Error rates</a>).</p>
+
+      <h2 id="saved">Saved designs</h2>
+      <p><strong>Save as …, version …</strong> keeps the design in the project as a version of its name, with the samples as they were (each one's unit, group and covariates) and the samples left out with their reasons. The project tree lists the designs; a saved design whose samples have changed since says so, and a new version records them as they are. Only a design that can be used is saved.</p>
+      <p>By remote control, <code>design</code> makes a design from its unit, group, reference, contrasts, covariates and samples left out (and <code>pseudo_samples</code> for teaching), answers it (in words, its rows and matrix, its degrees of freedom, and why it cannot be used if it cannot), and with <code>save</code> keeps it. See <a href="remote-control.html">Remote control</a>.</p>

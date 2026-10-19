@@ -1,13 +1,13 @@
 ---
 title: SituCraft
 head: SituCraft: spatial transcriptomics you can check
-description: A local-first workbench for imaging-based spatial transcriptomics, starting with 10x Genomics Xenium: bundles checked, a tissue viewer, quality control, segmentations made, compared and decided, cell types, pathology images and regions, and spatial statistics, in one program on your own computer.
+description: A local-first workbench for imaging-based spatial transcriptomics, starting with 10x Genomics Xenium: bundles checked, a tissue viewer, quality control, segmentations made, compared and decided, cell types, pathology images and regions, spatial statistics, and cohorts compared with the subject as the unit, in one program on your own computer.
 ---
     <section class="hero">
       <div class="container hero-grid">
-        <a class="eyebrow" href="{{github}}/releases/tag/v{{version}}"><span class="pill">v{{version}}</span> Niches and spatial statistics: which cells are neighbors, at what distances, at a region's edge, the tissue's niches and the genes that follow space</a>
+        <a class="eyebrow" href="{{github}}/releases/tag/v{{version}}"><span class="pill">v{{version}}</span> Samples and cohorts: several sections in a project, their design, and groups compared with the subject, not the cell, as the unit</a>
         <h1>Spatial transcriptomics <span class="accent">you can check</span></h1>
-        <p class="lede">SituCraft opens the output of a 10x Genomics Xenium run, checks it, and shows the tissue, its transcripts and its cells at any zoom. It makes and compares cell segmentations, types and reviews the cells, brings in the H&amp;E, and asks how the tissue is organized, keeping every decision on record. It runs on your own computer as one self-contained program, installed with a single command: no account, Python or R, and your data never leave your machine.</p>
+        <p class="lede">SituCraft opens the output of a 10x Genomics Xenium run, checks it, and shows the tissue, its transcripts and its cells at any zoom. It makes and compares cell segmentations, types and reviews the cells, brings in the H&amp;E, asks how the tissue is organized, and compares groups of subjects, keeping every decision on record. It runs on your own computer as one self-contained program, installed with a single command: no account, Python or R, and your data never leave your machine.</p>
         <shot name="viewer-genes" alt="SituCraft's Viewer on the Lung example: transcripts of EPCAM, COL5A2, PLVAP and CD68 over the gray DAPI stain and the cells' outlines, a selected cell's transcripts by gene in the inspector" window eager>The Xenium human Lung section (10x Genomics, CC BY 4.0), one of the examples: four genes' transcripts over the DAPI stain and the cells, one cell in the inspector.</shot>
         <div class="btn-row">
           <a class="btn btn-primary" href="install.html">
@@ -63,8 +63,8 @@ description: A local-first workbench for imaging-based spatial transcriptomics, 
       <div class="container">
         <div class="section-head">
           <span class="kicker">What it does</span>
-          <h2 id="features-title">From the instrument's bundle to how the tissue is organized</h2>
-          <p>Open a Xenium bundle, check it, look at the tissue, decide which cells to trust, name them, bring in the pathology, and ask which cells are neighbors and where, each step kept on record.</p>
+          <h2 id="features-title">From the instrument's bundle to a cohort compared</h2>
+          <p>Open a Xenium bundle, check it, look at the tissue, decide which cells to trust, name them, bring in the pathology, ask which cells are neighbors and where, and compare groups of subjects, each step kept on record.</p>
         </div>
 
         <article class="feature">
@@ -157,6 +157,21 @@ description: A local-first workbench for imaging-based spatial transcriptomics, 
           </div>
           <shot name="enrichment" alt="The Spatial view's answer on the Lung example: a heat map of the four classes' pairs, colored by the ratio of neighbors found to expected, and tables of the pairs most and least often neighbors with their counts, expectations, ratios, z-scores and adjusted p-values">The Lung classes' neighborhood enrichment: neighbors found over expected, pair by pair.</shot>
         </article>
+
+        <article class="feature">
+          <div class="feature-text">
+            <span class="kicker">Samples and cohorts</span>
+            <h3>Groups compared with the subject as the unit</h3>
+            <p>Bring a study's sections into one project, describe each sample, and state the design: the subject each came from, the groups, pairing and batches. The same steps run on every sample, and their cell types' abundances, genes and spatial statistics are compared between groups with each subject, not each cell, as one observation, every effect with its interval.</p>
+            <ul class="checklist">
+              <li>Expression's tests equal to limma's and edgeR's within 10⁻⁹</li>
+              <li>On 2,000 simulated null cohorts, each family's tests below 0.05 in 4.7% to 5.5% of them</li>
+              <li>Designs a batch could explain, or whose tests would be of cells, refused with why</li>
+            </ul>
+            <a class="more-link" href="docs/designs.html">The design</a>
+          </div>
+          <shot name="expression" alt="The Cohort view's differential expression of the simulated cohort's epithelial-like cells: the volcano with SIM033 far above the rest, SIM033's subjects by condition, and the genes ranked by p-value with SIM033 first and marked higher">The simulated cohort's subjects compared by condition: SIM033, raised in the treated subjects' epithelial-like cells, the only gene found.</shot>
+        </article>
       </div>
     </section>
 
@@ -170,7 +185,7 @@ description: A local-first workbench for imaging-based spatial transcriptomics, 
           <a class="card" href="docs/getting-started.html#worked-examples">
             <span class="icon-badge mint"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6M10 3v6L4 19a1 1 0 0 0 .9 1.5h14.2A1 1 0 0 0 20 19l-6-10V3"/></svg></span>
             <h3>Examples with known answers</h3>
-            <p>Two public Xenium sections, and a simulated tissue whose every cell, transcript and type is known, with an H&amp;E and an immunofluorescence image of it. Fifteen worked examples, each a question answered step by step.</p>
+            <p>Two public Xenium sections; a simulated tissue whose every cell, transcript and type is known, with an H&amp;E and an immunofluorescence image of it; and three simulated cohorts with known effects, or none. Twenty worked examples, each a question answered step by step.</p>
           </a>
           <a class="card" href="docs/remote-control.html">
             <span class="icon-badge"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 9-4 3 4 3M16 9l4 3-4 3M13 6l-2 12"/></svg></span>
@@ -180,7 +195,7 @@ description: A local-first workbench for imaging-based spatial transcriptomics, 
           <a class="card" href="docs/niches.html#large">
             <span class="icon-badge pink"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 6-6"/></svg></span>
             <h3>Whole sections</h3>
-            <p>Refinements in patches of 55 million transcripts, 380,000 cells typed in minutes, and a million cells' spatial analyses, measured every week against stated budgets of time and memory.</p>
+            <p>Refinements in patches of 55 million transcripts, 380,000 cells typed in minutes, a million cells' spatial analyses, and a cohort of 2 million cells summarized and compared, measured every week against stated budgets of time and memory.</p>
           </a>
         </div>
       </div>
@@ -213,7 +228,12 @@ description: A local-first workbench for imaging-based spatial transcriptomics, 
               <tr><td><strong>Regions measured</strong></td><td>Shapely</td><td class="agree">every area to 2 × 10⁻⁷; every count</td></tr>
               <tr><td><strong>Niches</strong></td><td>scikit-learn's k-means; the simulated tissue's domains</td><td class="agree">inertia within 0.2%; the kinds of domain found (adjusted Rand index 0.92)</td></tr>
               <tr><td><strong>Moran's I</strong></td><td>Squidpy 1.8.3; an independent computation of both variances</td><td class="agree">every gene's I to 10⁻¹⁵; variances to 10⁻¹²</td></tr>
-              <tr><td><strong>Scale</strong></td><td>A million generated cells, each analysis in a process of its own</td><td class="agree">within budget: Moran's I in 88 s and 0.94 GB on four cores</td></tr>
+              <tr><td><strong>Design matrices</strong></td><td>patsy</td><td class="agree">column for column</td></tr>
+              <tr><td><strong>Differential abundance</strong></td><td>statsmodels 0.15.0 (and R) on 19 cases</td><td class="agree">every coefficient, interval and p to 10⁻⁸</td></tr>
+              <tr><td><strong>Differential expression</strong></td><td>limma 3.68.5 and edgeR 4.10.5 on nine pseudobulk tables</td><td class="agree">the same genes kept; every fold change, interval, t and p within 10⁻⁹</td></tr>
+              <tr><td><strong>Spatial statistics compared</strong></td><td>limma 3.68.5 and statsmodels 0.15.0 on ten cases</td><td class="agree">within 10⁻¹³</td></tr>
+              <tr><td><strong>Error rates</strong></td><td>2,000 simulated null cohorts and 500 with known effects</td><td class="agree">each family within half a point of 5%; the effect gene found in 98%, its interval covering the truth in 95.0%</td></tr>
+              <tr><td><strong>Scale</strong></td><td>A million generated cells, each analysis in a process of its own; a cohort of 2 million cells</td><td class="agree">within budget: Moran's I in 88 s and 0.94 GB on four cores; the cohort in 4.2 minutes and 0.65 GB</td></tr>
             </tbody>
           </table>
         </div>
@@ -238,7 +258,8 @@ description: A local-first workbench for imaging-based spatial transcriptomics, 
               <tr><td><strong>0.4.0</strong></td><td>Cell identities: clusters, a map, labels from markers, a reference or elsewhere, reviewed with their evidence and read under two segmentations</td></tr>
               <tr><td><strong>0.5.0</strong></td><td>The pathology bridge: post-Xenium images aligned and checked in µm, regions exchanged with QuPath, and reviews with their provenance</td></tr>
               <tr><td><strong>0.6.0</strong></td><td>Niches and spatial statistics: graphs, enrichment, distances, regions measured, niches, spatially variable genes, and any answer made again on another segmentation</td></tr>
-              <tr><td><strong>0.7.0</strong> (coming)</td><td>Samples and cohorts: several sections in a project, their design, and comparisons with the sample as the unit, with effect sizes and intervals</td></tr>
+              <tr><td><strong>0.7.0</strong></td><td>Samples and cohorts: several sections in a project, their QC and design, and abundances, expression and spatial statistics compared between groups with the subject as the unit, their error rates measured</td></tr>
+              <tr><td><strong>0.8.0</strong> (coming)</td><td>Figures and a provable record: figures with scale bars, legends and provenance, the full methods text, and a certificate that a result is what it says</td></tr>
             </tbody>
           </table>
         </div>
@@ -250,7 +271,7 @@ description: A local-first workbench for imaging-based spatial transcriptomics, 
         <div class="cta">
           <div>
             <h2 id="get-title">Get started in a minute</h2>
-            <p>Install with one command, then run <code>situcraft</code>. It opens its own window, with two public Xenium sections and a simulated tissue ready to explore.</p>
+            <p>Install with one command, then run <code>situcraft</code>. It opens its own window, with two public Xenium sections, a simulated tissue and simulated cohorts ready to explore.</p>
             <div class="btn-row">
               <a class="btn btn-primary" href="docs/getting-started.html">Getting started</a>
               <a class="btn" href="{{github}}/releases/latest">All downloads</a>

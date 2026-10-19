@@ -1,4 +1,4 @@
-// The project tree: what the project holds, by kind (datasets, segmentations, comparisons,
+// The project tree: what the project holds, by kind (datasets, samples, designs, segmentations, comparisons,
 // clusterings, label sets, marker sets, graphs, spatial analyses, filters, saved views), and what was handed to SituCraft on
 // this computer but is not in the project yet.
 // Selecting an item focuses it (store.ui.focus): the inspector describes it, and the views that
@@ -9,6 +9,11 @@ import { describeGraph } from '../lib/graphs.js';
 import { promotedSegmentation } from '../lib/segmentations.js';
 import { transformInUse } from '../lib/transforms.js';
 import { labelSetName, markerSetsOf } from '../lib/labels.js';
+import { samplesOf } from '../lib/samples.js';
+import { designsOf } from '../lib/design.js';
+import { summariesOf } from '../lib/cohort.js';
+import { comparisonsOf } from '../lib/abundance.js';
+import { testsOf } from '../lib/expression.js';
 
 // The icon of an item handed to the program, by its kind (local.go, fileKind and dirKind).
 export const KIND_ICONS = {
@@ -43,6 +48,64 @@ const SECTIONS = [
     },
     empty: 'Xenium output bundles you open appear here, each checked before it is used.',
     action: { label: 'Open a bundle', run: (app) => app.openPathDialog() },
+  },
+  {
+    kind: 'sample', title: 'Samples', icon: 'samples',
+    // A project of several samples (wave 7): each dataset, or its regions, with its condition.
+    items: (project) => {
+      const samples = samplesOf(project);
+      return samples.length > 1 ? samples : [];
+    },
+    label: (s) => s.name,
+    itemIcon: (s) => (s.removed ? 'warning' : 'samples'),
+    meta: (s) => (s.removed ? 'region removed' : [s.fields.condition, s.fields.subject].filter((v) => v !== undefined && v !== '').join(' · ') || (s.region ? 'region' : '')),
+    hideWhenEmpty: true,
+  },
+  {
+    kind: 'design', title: 'Designs', icon: 'samples',
+    // The cohort's designs (wave 7): each name's latest version.
+    items: (project) => designsOf(project),
+    label: (d) => `${d.name} · v${d.version}`,
+    meta: (d) => `${d.result.rows.length} rows, ${d.result.df} df`,
+    hideWhenEmpty: true,
+  },
+  {
+    kind: 'cohort-summary', title: 'Summaries', icon: 'table',
+    // The cohort's summaries (wave 7): the samples' numbers, the latest first.
+    items: (project) => summariesOf(project),
+    label: (r) => r.summary?.labels?.name ?? r.name,
+    meta: (r) => {
+      const n = r.summary?.samples?.length ?? r.samples?.length ?? 0;
+      return `${n} sample${n === 1 ? '' : 's'}${r.summary?.niches ? `, ${r.summary.niches} niches` : ''}`;
+    },
+    hideWhenEmpty: true,
+  },
+  {
+    kind: 'abundance', title: 'Abundance compared', icon: 'compare',
+    // The cohort's comparisons of abundance (wave 7), the latest first.
+    items: (project) => comparisonsOf(project),
+    label: (r) => r.name.replace(/^Abundance compared: /, ''),
+    meta: (r) => {
+      const n = r.summaryOf?.found?.length ?? 0;
+      return `${r.summaryOf?.tests ?? '?'} tests, ${n} found`;
+    },
+    hideWhenEmpty: true,
+  },
+  {
+    kind: 'expression', title: 'Expression compared', icon: 'compare',
+    // The cohort's comparisons of expression (wave 7), the latest first.
+    items: (project) => testsOf(project, 'expression'),
+    label: (r) => r.name.replace(/^Expression compared: /, ''),
+    meta: (r) => `${r.summaryOf?.tests ?? '?'} tests, ${r.summaryOf?.below ?? 0} found`,
+    hideWhenEmpty: true,
+  },
+  {
+    kind: 'spatial-comparison', title: 'Spatial statistics compared', icon: 'compare',
+    // The cohort's comparisons of spatial statistics (wave 7), the latest first.
+    items: (project) => testsOf(project, 'spatial-comparison'),
+    label: (r) => r.name.replace(/^Spatial statistics compared: /, ''),
+    meta: (r) => `${r.summaryOf?.tests ?? '?'} tests, ${r.summaryOf?.found?.length ?? 0} found`,
+    hideWhenEmpty: true,
   },
   {
     kind: 'segmentation', title: 'Segmentations', icon: 'segment',
@@ -179,6 +242,7 @@ export function mountSidebar(app) {
             if (section.kind === 'filter') app.setMode('qc');
             if (section.kind === 'clustering') app.setMode('celltypes');
             if (section.kind === 'graph' || section.kind === 'spatial') app.setMode('spatial');
+            if (['sample', 'design', 'cohort-summary', 'abundance', 'expression', 'spatial-comparison'].includes(section.kind)) app.setMode('cohort');
             // An image is shown on its dataset's tissue; one not aligned yet, in the Alignment view.
             if (section.kind === 'image') {
               if (transformInUse(app.store.project, item.id)) {

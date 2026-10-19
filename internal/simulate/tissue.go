@@ -77,13 +77,19 @@ func newTissue(p Params) *tissue {
 
 func (t *tissue) makeDomains(s *random.Stream) {
 	p := t.p
+	// The mixes' draws: the layout's own, or, for a cohort's sample, a stream the cohort's sections
+	// share (each section's domains in other places, with the same mixes).
+	mixes := s
+	if p.MixSeed != 0 {
+		mixes = random.New(p.MixSeed, streamMixes)
+	}
 	for d := 0; d < p.Domains; d++ {
 		dm := domain{x: mul(s.Float64(), p.WidthUm), y: mul(s.Float64(), p.HeightUm), mix: make([]float64, len(p.Types))}
 		dominant := d % len(p.Types)
 		var rest float64
 		for k := range dm.mix {
 			if k != dominant {
-				dm.mix[k] = s.Gamma(1, 1)
+				dm.mix[k] = mixes.Gamma(1, 1)
 				rest += dm.mix[k]
 			}
 		}
@@ -98,7 +104,32 @@ func (t *tissue) makeDomains(s *random.Stream) {
 			}
 		}
 		dm.dx, dm.dy = unit(s)
+		t.weigh(dm.mix, dominant)
 		t.domains = append(t.domains, dm)
+	}
+}
+
+// weigh multiplies a domain's mix by a cohort's sample's odds (its types' everywhere, and those in
+// the domains its leader leads), then normalizes it; without them it leaves the mix alone.
+func (t *tissue) weigh(mix []float64, leader int) {
+	p := t.p
+	if p.TypeOdds == nil && len(p.DomainOdds) == 0 {
+		return
+	}
+	var sum float64
+	for k := range mix {
+		if p.TypeOdds != nil {
+			mix[k] = mul(mix[k], p.TypeOdds[k])
+		}
+		for _, d := range p.DomainOdds {
+			if d.Leader == leader && d.Type == k {
+				mix[k] = mul(mix[k], d.Odds)
+			}
+		}
+		sum += mix[k]
+	}
+	for k := range mix {
+		mix[k] /= sum
 	}
 }
 
@@ -135,7 +166,16 @@ func (t *tissue) placeCells(s *random.Stream) {
 		ty := p.Types[k]
 		area := s.LogNormal(dmath.Log(ty.AreaUm2), ty.AreaSpread)
 		r := math.Sqrt(area / math.Pi)
-		if grid.crowded(x, y, r, t.cells) {
+		crowded := grid.crowded(x, y, r, t.cells)
+		// A cohort's sample: a candidate refused tries other places in its domain, keeping its type
+		// and size, so that the types placed are the types drawn, whatever their sizes.
+		for try := 0; crowded && try < p.Retries; try++ {
+			nx, ny := mul(s.Float64(), p.WidthUm), mul(s.Float64(), p.HeightUm)
+			if t.domainOf(nx, ny) == di && !grid.crowded(nx, ny, r, t.cells) {
+				x, y, crowded = nx, ny, false
+			}
+		}
+		if crowded {
 			misses++
 			continue
 		}

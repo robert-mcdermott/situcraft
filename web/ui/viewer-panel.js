@@ -7,6 +7,7 @@
 
 import { h, icon, clear, formatCount } from './dom.js';
 import { showMenu } from './overlays.js';
+import { pathField } from './file-picker.js';
 import { categoricalColor, colormapLUT, colormapCSS } from '../lib/colormaps.js';
 import { attributeRange } from '../lib/viewer-data.js';
 import { CERTAINTY_RANGE, LIMITATIONS, NO_PROBABILITY_COLOR, SEVERAL, certaintyCSS, segFillColors, segFills } from '../lib/segview.js';
@@ -291,8 +292,8 @@ export function mountViewerPanel(host, { desc, layers, cells, onChange, segmenta
       }
     });
     addForm = h('details.viewer-add-image', h('summary', 'Add a post-Xenium image'),
-      h('label.viewer-slider', 'Image (OME-TIFF)', imagePath),
-      h('label.viewer-slider', 'Alignment (CSV, optional)', alignmentPath),
+      h('label.viewer-slider', 'Image (OME-TIFF)', pathField(imagePath, { title: 'A post-Xenium image' })),
+      h('label.viewer-slider', 'Alignment (CSV, optional)', pathField(alignmentPath, { title: 'The image\'s alignment' })),
       h('div.btn-row', checkBtn, add), found);
   }
 

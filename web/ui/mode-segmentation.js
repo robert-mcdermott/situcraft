@@ -9,6 +9,7 @@
 
 import { h, icon, clear, formatBytes, formatCount, relativeTime } from './dom.js';
 import { toast } from './overlays.js';
+import { pathField } from './file-picker.js';
 import { EXPORT_FORMATS, comparisonsOf, exportsOf, promotedSegmentation, segmentationsOf } from '../lib/segmentations.js';
 import { createStudio } from './refine-studio.js';
 
@@ -53,7 +54,7 @@ export const IMPORT_FORMATS = {
   },
   situcraft: {
     label: 'SituCraft segmentation',
-    paths: [{ label: 'Folder', placeholder: '/data/refined', hint: 'the folder situcraft refine wrote' }],
+    paths: [{ label: 'Folder', placeholder: '/data/refined', hint: 'the folder situcraft refine wrote', choose: 'folder' }],
     about: 'SituCraft\'s own segmentation files, as the terminal\'s situcraft refine writes them: checked against this dataset\'s image and transcripts and recorded as they are, with the method that made them.',
     options: [],
   },
@@ -419,9 +420,12 @@ export function mountSegmentation(app, container) {
     units.addEventListener('change', () => {
       state.units = units.value;
     });
-    const paths = spec.paths.map((p, i) => field(`seg-import-path-${i}`, `${p.label}${p.optional ? ' (optional)' : ''}`, text(`seg-import-path-${i}`, state.paths[i] ?? '', p.placeholder, (v) => {
-      state.paths[i] = v;
-    }), p.hint));
+    const paths = spec.paths.map((p, i) => {
+      const input = text(`seg-import-path-${i}`, state.paths[i] ?? '', p.placeholder, (v) => {
+        state.paths[i] = v;
+      });
+      return field(`seg-import-path-${i}`, `${p.label}${p.optional ? ' (optional)' : ''}`, pathField(input, { name: p.label, title: `${spec.label}: ${p.label.toLowerCase()}`, choose: p.choose ?? 'file' }), p.hint);
+    });
     const advanced = spec.options.map((key) => field(`seg-import-${key}`, OPTION_LABELS[key][0], text(`seg-import-${key}`, state.fields[key] ?? '', OPTION_LABELS[key][1], (v) => {
       state.fields[key] = v;
     })));
@@ -653,7 +657,7 @@ export function mountSegmentation(app, container) {
         h('p', 'A segmentation written for other tools, in one folder with situcraft-export.json: what was exported, from what and by which SituCraft, every file by its SHA-256, and fingerprints of the cells, counts and assignments that every format holds the same. Coordinates are in µm.'),
         h('div.seg-import-grid',
           h('label.field', { for: 'seg-export-segmentation' }, h('span', 'Segmentation'), pick),
-          h('label.field', { for: 'seg-export-folder' }, h('span', 'Into the folder'), folder, h('span.muted.seg-hint', 'made by the export; an absolute path'))),
+          h('label.field', { for: 'seg-export-folder' }, h('span', 'Into the folder'), pathField(folder, { name: 'Into the folder', title: 'Export into a new folder', confirm: 'Choose', save: (v) => v.split(/[\\/]/).filter(Boolean).at(-1) || 'export' }), h('span.muted.seg-hint', 'made by the export; an absolute path'))),
         formats,
         h('label.seg-check', { for: 'seg-export-overwrite' }, overwrite, h('span', 'Replace an earlier export in that folder')),
         h('div.btn-row', go, !t.item ? h('span.muted.seg-note', `${t.dataset.name}'s bundle was not found where the project records it.`) : null),

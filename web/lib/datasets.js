@@ -30,6 +30,8 @@ export function datasetRecord(item, report, options = {}) {
     tissue: s.tissue ?? '',
     run: s.run ?? '',
     region: s.region ?? '',
+    slide: s.slide ?? '',
+    panelDesign: s.panelDesign ?? '',
     runStart: s.runStart ?? '',
     cells: s.cells,
     transcripts: s.transcripts,

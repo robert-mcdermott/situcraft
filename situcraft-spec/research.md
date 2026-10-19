@@ -1743,6 +1743,85 @@ A half-pixel error in the truth's convention would put the nuclei 0.26 µm (H&E)
 On the standard preset the images are 1,675 × 1,672 (6.4 MB) and 913 × 914 (2.8 MB), and the
 simulation takes 4.5 s with them.
 
+### 3.4b Simulated cohorts (verified, wave 7, slice 2)
+
+A test that compares groups of samples is checked only on samples whose differences are known:
+how often it finds a difference that is not there, how often one that is, and whether its
+intervals cover the truth as often as they say. `situcraft simulate --cohort` makes cohorts of
+simulated sections for that (`internal/simulate/cohort.go`; FORMATS.md), each section a tissue of
+§3.4 with its own layout, cells and molecules.
+
+**The design.** Groups, the first the reference; subjects in each, one section a subject, or,
+paired, each subject a section in every group. Slides as batches: an unpaired group's sections
+dealt to the slides in turn (every slide holds every group, so a slide is never confounded with a
+group), a paired subject's sections on one slide. A slide's detection efficiency is log-normal and
+multiplies its cells' densities and the ambient background.
+
+**What the sections share.** The panel (its stream's seed is the cohort's) and the domains' mixes
+(likewise): the domain numbered d is the same kind of place in every section, in another place and
+of another size. A section's own domain mixes, drawn from its layout's stream as a tissue of its
+own draws them, would add a variation nobody asked for, and a large one: a minor type's weight in a
+domain is a gamma draw, so a type's share of a kind of place would differ several-fold from section
+to section. Twelve domains (each type leading three) on 250 µm average the domains' sizes out.
+
+**Variation and effects** are multiplicative, on the knobs of §3.4's model:
+- **A type's weight in the domains' mixes.** Multiplying one type's weight by r, then normalizing,
+  multiplies its odds against each other type by r in that domain, whatever the others' weights;
+  its odds against all the other types together change by less where another type's weight changes
+  too. A section's variation multiplies each type's weight by exp(σ_share Z) in every domain; a share
+  effect by its fold in every domain, or, with *within*, in the domains another type leads (how much
+  it mixes into them).
+- **A gene's expected count in a type's cells.** The type's profile (its genes' shares, summing to
+  one) is multiplied gene by gene, without normalizing again, so a fold on one gene multiplies its
+  expected count, and its odds among the type's transcripts, exactly. A section's variation
+  multiplies each gene in each type by exp(σ_level Z); a level effect by its fold.
+- **Pairing.** A paired subject's sections share part of each draw: √ρ times the subject's plus
+  √(1 − ρ) times the section's own, ρ the subject share, so that their draws correlate by ρ.
+- **Placement.** A section's candidate cell refused for crowding tries up to 200 other places in its
+  domain, keeping its type and size, before it is dropped (a tissue of its own drops it at once), so
+  that the types placed are nearly the types drawn whatever their sizes.
+
+Each draw comes from a stream of the cohort's seed (a subject's, a section's, a slide's), and each
+section's seed from another: the same cohort on any computer, byte for byte (pinned in the tests,
+on arm64 and amd64), whatever the number of workers making its sections.
+
+**What is true.** The folds are on the model's knobs, and the truth measures each effect where its
+fold acts: a type's log odds against the cells of the types no share effect changes, in each domain
+the effect holds in, averaged over those domains; and a gene's log odds among its type's
+transcripts. Two other measures were tried and set aside. A type's odds against all the other types
+are lowered wherever another effect raises another type (in the standard cohort, the immune-like
+type's ×4 in the epithelial-like type's domains lowers the endothelial-like type's odds against the
+rest there): over 20 cohorts of 12 subjects a group, the endothelial-like ×2 measured 0.19 below its
+log fold that way, and the immune-like ×4 0.24 below. Pooling a kind of domain's cells before taking
+the odds mixes domains of different base shares, and odds are not collapsible: 0.23 below. Each
+section's value, the groups' means, their difference and its standard error (from the sections'
+spread; paired, from the subjects' differences) are in `truth/cohort.json`, beside the fold asked: a
+cohort's own difference, which its sections' variation and its counts move away from the fold by
+chance, is what a perfect analysis of its true cells would find.
+
+**What remains.** Over 20 cohorts of 12 subjects a group (250 µm sections), the share effects
+measure 0.06 below their log folds on average (the endothelial-like ×2's 0.693, the immune-like
+×4's 1.386; about half a standard error of one cohort): a small domain's few cells of a minor type,
+whose +½ in the log odds pulls the difference toward zero, and crowding, which the retries reduce
+but do not end. The level effect measures 0.035 below its 0.916, within chance. A type's share of
+all the cells is another quantity again: the standard cohort's endothelial-like cells are 1.5 times
+as common in its treated sections as in its controls, not 2, and its immune-like cells less common
+(0.85 times), the endothelial-like cells taking their place outside the epithelial-like domains.
+
+**Validated** (`internal/simulate/cohort_test.go`):
+- **Effects as asked:** over a cohort of 12 subjects a group (200 µm sections), each effect as the
+  true cells show it is within three standard errors of the fold asked; the null cohort's groups
+  differ in no type's odds beyond three standard errors.
+- **A gene's fold exact:** in each section, the gene's log odds among its type's transcripts less
+  the log of the fold asked of that section are the same in every section but for counting (spread
+  below 0.1, with over 300 transcripts of it a section).
+- **The variation as asked:** over 100 sections, each type's log weight spreads by share_sd (within
+  15%) and each gene's log level by level_sd (within 2%), centered on zero; a paired subject's
+  sections correlate by the subject share (within 0.03), unpaired sections not at all.
+- **The folder:** each section a bundle naming its region, run and slide; one panel, byte for byte,
+  in every section; the truth's cells each bundle's own; the parameters read back as given; and
+  what a cohort cannot be refused, saying why.
+
 ## 4. Comparing segmentations (verified, wave 2, slice 5)
 
 Every segmentation is compared as SituCraft's own files (§3.1, §3.3): the instrument's is written
@@ -2597,8 +2676,9 @@ H&E placed by its automatic version, labels imported with a confidence each):
   Commun* 11:6077), motivated by the pseudoreplication problem (Squair et al. 2021, *Nat Commun*
   12:5692).
 - **Multiple testing:** Benjamini–Hochberg (1995, *J R Stat Soc B* 57:289–300).
-- **Moderated statistics:** where used, from MaveScape's `limma.js` (Smyth 2004, *Stat Appl Genet
-  Mol Biol* 3:3).
+- **Moderated statistics:** Smyth 2004 (*Stat Appl Genet Mol Biol* 3:3), with TMM normalization
+  (Robinson and Oshlack 2010, *Genome Biol* 11:R25) and voom's weights (Law et al. 2014, *Genome
+  Biol* 15:R29) for pseudobulk counts (§6.13).
 
 ### 6.1 Cell graphs (verified, wave 6, slice 1)
 
@@ -2960,6 +3040,245 @@ Spatial view asks them, with its defaults, in one SituCraft: the Delaunay graph 
 graph from the instrument's mask in 2 s each, the labels' enrichment in 2 s, niches with their
 genes in 3 s, Moran's I of 120 genes with local Moran's I in 23 s; 33 s in all at a peak of 1.17 GB
 on ten cores (budget: 10 minutes and 2 GB on four).
+
+### 6.9 The experimental design (verified, wave 7, slice 3)
+
+A comparison of groups is of replicate units: the samples' subjects, not their cells (Squair et al.
+2021, on the false discoveries cells counted as replicates make; Crowell et al. 2020). The design
+(`web/lib/design.js`) is made before any test and says what the units are.
+
+**Rows and columns.** A row is a unit in a group, its samples there (technical replicates)
+combined, as a pseudobulk sums a sample's cells. The columns are a linear model's: an intercept;
+the groups in treatment coding against the reference; when any unit is in more than one group,
+the units as a factor (a paired design: each unit compared with itself, as limma's and edgeR's
+paired designs add the subject to the model); and the covariates, factors in treatment coding and
+numbers as they are, the factors before the numbers. Levels are in code-point order, the first the
+reference unless one is given. This is patsy's (and R's `model.matrix`'s) default coding, and for
+the same formula the matrix is patsy's (`validation/reference/designs/`: patsy 1.0.3 on six
+designs, unpaired, paired, with covariates of both kinds, three groups with another reference, a
+factor of three levels, and paired with a number; every column name and value the same).
+
+**What it refuses, and why.** A coefficient is estimable only if its column is not a combination of
+the others: the rank is found column by column (modified Gram–Schmidt, twice, a column adding to
+it when more than 10⁻⁹ of its norm is left), term by term in order, so that a term whose columns add
+nothing is named, with the terms before it. A group of fewer than two units leaves its variation
+unmeasured; as many coefficients as rows leave no degrees of freedom. A batch (the bundles' slide,
+run or panel) that holds one group only makes a difference between the groups the batch's as much
+as theirs, and is refused unless the design adjusts for it (where the rank then refuses it); one
+that holds the groups unevenly is noted. Regions of one section are not independent replicates
+(they share the subject, slide and run): given different units, they are refused.
+
+### 6.10 Sample summaries and niches across samples (verified, wave 7, slice 4)
+
+A comparison of groups starts from each sample's numbers, measured the same way in every sample
+(`internal/cohort`). Its cell-type composition is the labeled cells' counts by label in one
+vocabulary: every label of the marker set's level, so that a type a sample lacks is a zero, not a
+missing column (compositional tests need the zeros). Densities are per mm² of the tissue window
+(the cells' footprints closed by 10 µm), within the region for a region sample: a region's
+polygon drawn beyond the tissue would otherwise count glass as area. The pseudobulk sums each
+label's cells' transcripts gene by gene (Crowell et al. 2020; Squair et al. 2021): the counts a
+test with the sample as the unit reads. A gene one panel lacks is missing for that sample, never
+zero, so that a comparison across panels cannot read absence as no expression.
+
+**Niches across samples.** Niches found in each sample are numbered by each sample's own k-means:
+niche 3 of two samples need not be the same kind of place, and their shares cannot be compared.
+Following the cellular-neighborhood approach (Schürch et al. 2020), where windows of all the
+samples are clustered together, SituCraft computes each cell's window (its nearest labeled cells)
+in its own sample, pools every sample's windows, and runs one k-means with the same starts and
+seeds as a single sample's. A sample's niches then share their centers with every other sample's.
+For one sample alone the result is that sample's niches exactly (the same windows, starts and
+seeds), which the suite checks cell by cell; for eight simulated samples, each one's cells divide
+among the joint niches much as among its own (adjusted Rand index 0.56 to 0.82), the difference
+being the centers the samples share.
+
+**What is checked against what.** Every number in the table names its source (the labels, the
+segmentation, a graph, an analysis), and the suite compares each with that source: on the
+simulated cohort, 1,280 numbers, all equal. Against the truth: shares from marker labels within
+0.015 of the true types' (the labels' errors are few, and roughly balanced); the tissue within
+0.6% of the 250 µm section; the pseudobulk's level of the gene raised in one type 0.04 to 0.065
+lower (log) than the true cells', the transcripts of that type that segmentation assigns to a
+neighbor's cell.
+
+### 6.11 Cohort QC, batches and panels (verified, wave 7, slice 5)
+
+**Far-out samples.** A cohort's samples are few (often under twenty), so a mean and standard
+deviation are pulled by the very sample one hopes to find. The median and the median absolute
+deviation are not: a sample's robust z-score, its distance from the median over 1.4826 times the
+median absolute deviation (the factor that makes it a standard deviation for normal data), is
+Iglewicz and Hoaglin's modified z-score (*How to Detect and Handle Outliers*, ASQC 1993), and their
+threshold of 3.5 is kept. Quantities (cells per mm², median transcripts and genes, transcripts per
+area, areas) vary by factors, so they are compared as log(1 + value); shares as they are. Two
+cautions found on the simulated cohort: where the samples agree closely a small difference gets a
+large z (sections' tissue areas within 0.1% of each other), so a difference must also matter (20% of
+the median, or 5 points of a share); and where half the samples agree exactly the median absolute
+deviation is 0, so the mean absolute deviation (times 1.2533, its factor for normal data) is the
+spread. A section's size is not its quality: its cells, transcripts and tissue in all are not
+compared. A planted sample detecting 40% of its transcripts is found on its median transcripts
+(robust z −9.5), its median genes (−13.8) and its transcripts per area (−11.6), and no other sample is
+flagged. Flags are reasons to look, never verdicts; a sample leaves a comparison only with a reason,
+which the design keeps.
+
+**Batches.** A batch (slide, run, panel) that holds only one group makes the groups' difference the
+batch's; the design refuses it unless it adjusts for that batch (§6.9), and the QC states it
+beforehand with each batch's samples by group. Nothing is corrected silently: no batch correction
+(ComBat-style or otherwise) is applied to the numbers or the pseudobulk; a batch enters only as a
+covariate of the design.
+
+**The pseudobulk's principal components.** Each sample's labeled cells' transcripts, summed over its
+labels, of the genes every panel has, as log2(1 + counts per million): the 500 most variable genes,
+as DESeq2's `plotPCA` keeps its `ntop` (Love, Huber and Anders 2014, *Genome Biol* 15:550), centered
+and decomposed. With few samples and many genes the decomposition is of the samples' Gram matrix
+(S × S), by Jacobi's cyclic rotations (Golub and Van Loan, *Matrix Computations*, §8.5),
+deterministic, its products rounded so that every processor gives the same scores; a component's
+sign makes the sample farthest along it positive (as scikit-learn's `svd_flip`). Against numpy's SVD
+on the simulated cohort's pseudobulk, twelve drawn samples of 800 genes in two batches, and three of
+five genes: the same genes kept and every score within 10⁻¹³.
+
+**Panels.** Xenium panels are designed per tissue, and a custom panel adds genes: the Lung and Breast
+development panels share 67 of 289 and 280 genes. Transcripts carry a gene's name, so panels are
+matched by name, with their Ensembl IDs compared (a gene renamed between panel versions keeps its
+ID); only genes every panel has are compared across samples, and a gene one panel lacks is missing
+for its samples, never zero. Codewords are each panel's own assignment of barcodes to probes, so every
+gene the two development panels share is read by other codewords: a difference says the probes may
+differ, and with them the detection, not that the gene is another.
+
+### 6.12 Differential abundance (verified, wave 7, slice 6)
+
+**The unit.** Cells of one section are not replicates of a condition: they share the subject, the
+slide and the run, and treating them as replicates makes chance differences between sections look
+certain (Squair et al. 2021; the pseudoreplication slice 8 shows). Each cell type's count is
+therefore a count per replicate unit, the design's rows (§6.9), a unit's samples in a group
+combined, and compared across units.
+
+**The models.** A share of the labeled cells is a binomial count with more than binomial variation
+between samples (the samples' compositions differ), so a quasi-binomial generalized linear model
+(Wedderburn 1974; McCullagh and Nelder 1989) of the design's matrix: the logit of the share linear
+in the design, the variance the binomial's times a dispersion estimated as Pearson's χ² over the
+residual degrees of freedom. A density is a count over an area: a quasi-Poisson model with the log
+of the tissue's area as offset. Contrasts are t tests on the residual degrees of freedom (as R's
+`summary.glm` for a quasi family), so few units give wide intervals rather than false certainty.
+This is the model the field's composition tests reduce to for a sample-level design (propeller
+transforms the shares and uses limma, Phipson et al. 2022; scCODA is Bayesian, Büttner et al.
+2021); a model of the counts keeps each sample's weight its cells. The effect is the model's: an
+odds ratio (close to the share's ratio for a label that is a small share) and a density ratio. The
+p-values of each family (its labels and contrasts) are adjusted by Benjamini and Hochberg, and the
+number of tests stated.
+
+**Checked.** Against statsmodels 0.15.0 (and R 4.6.1's `glm` with `quasibinomial`), 19 models to
+10⁻⁸; note that statsmodels' two-column binomial form computes Pearson's χ² on the proportions
+without the trials, giving a dispersion divided by the trials (0.005 against 3.63 on the simulated
+cohort), so the reference weights the proportions by their trials, which gives R's. On 4,000 null
+tables of beta-binomial shares (four samples against four, a concentration of 150) and negative
+binomial densities (dispersion 20, areas varying threefold), the tests reject 5.6% at 5% and about
+1% at 1%: slightly liberal, as quasi-likelihood's t approximation is with few units. On the
+simulated cohort, the estimates are the pooled ratios of the labeled counts (exactly, for a design
+of the groups alone) and every interval covers the ratio the true cells show.
+
+### 6.13 Differential expression and spatial statistics (verified, wave 7, slice 7)
+
+**Pseudobulk.** A label's expression in a replicate unit is its cells' transcripts of each gene
+summed over the unit's samples (Crowell et al. 2020), compared across units as bulk RNA-seq compares
+samples; tests of cells as replicates find differences between sections that are chance (Squair et
+al. 2021). Only genes every panel has are compared (§6.11), and a unit with fewer than 10 of a
+label's cells is left out of that label's comparison, its pseudobulk too small to stand for the
+label. The steps are those the field's pseudobulk analyses use, each from its publication:
+
+- **Filtering by expression** (Chen, Lun and Smyth 2016, *F1000Research* 5:1438): a gene is kept
+  with a count per million of at least 10 over the median library size in as many units as the
+  smallest group has (for a design, 1 over its largest leverage; above 10, 10 plus 70% of the rest)
+  and a total count of 15. A gene too rare to be tested would add only noise and multiplicity.
+- **TMM** (Robinson and Oshlack 2010): each library's factor its weighted mean log-ratio against a
+  reference library (the one whose upper quartile of counts per million is nearest the mean), the
+  log-ratios trimmed 30% at each end and the mean log-expressions 5%, weighted by the inverse of
+  their binomial variances (by the delta method); genes absent in either library left out; the
+  factors scaled to multiply to 1. M is the log of the ratio of proportions as the paper defines it:
+  genes whose counts are in the same ratio then tie exactly, and the trimming's ranks see the ties
+  (a difference of logs splits some, and on a table with many small counts moves the factors by
+  0.1%).
+- **voom** (Law et al. 2014): log2((count + 0.5) / (library + 1) × 10⁶) with the library its
+  effective size (count total × factor); each gene's least squares fit of the design; a lowess
+  trend (Cleveland 1979: three robustness iterations, points within 1% of the range interpolated)
+  of the square root of its residual deviation against its mean log count, with the span 0.3 + 0.7
+  (50 / genes)^⅓ (1 for 50 genes or fewer), as limma now chooses it; each value weighted by the
+  inverse of the trend's variance at its fitted log count.
+- **The moderated t** (Smyth 2004): each gene's weighted least squares; its residual variance
+  combined with a scaled inverse χ² prior fitted to all the genes' by the moments of their logs
+  (the prior's degrees of freedom by inverting the trigamma function with Newton's method, as the
+  paper's appendix gives it; infinite, every gene the variances' mean, when the log variances vary
+  no more than chance); t on the residual and the prior's degrees of freedom together. A contrast's
+  standard error is each gene's own, from its weighted design: exact where weights differ by gene
+  (limma's `contrasts.fit` approximates it for designs that are not orthogonal, so the reference
+  compares each contrast as a coefficient of the design reparametrized).
+
+Each contrast's log2 fold change has its interval (the moderated t's quantile), and the p-values of
+every label, gene and contrast tested are adjusted together by Benjamini and Hochberg.
+
+**Spatial statistics between groups.** A sample's neighbor enrichments, nearest distances and
+Moran's I (§6.2, §6.3, §6.6) are numbers of the sample, so they are compared as the units' values:
+ratios on the log2 scale (an enrichment of found over expected, a median distance), Moran's I as it
+is; a unit's value the mean of its samples'. Each statistic is an ordinary least squares model of
+the design, and a family's statistics (its pairs, distances or genes) share a moderated variance as
+genes do (Smyth 2004), which steadies the many tests of few units; a family of one statistic is
+tested by its own variance alone. P-values are adjusted within each family. A niche's share
+(§6.10) is a count of cells, compared with the abundances (§6.12): slice 7 also tested the niches'
+shares by a moderated linear model, which slice 8's study found too often significant (§6.14).
+
+**Checked.** Against limma 3.68.5 and edgeR 4.10.5 (R 4.6.1), run apart from SituCraft as a
+reference on nine pseudobulk tables: the genes kept the same, and the TMM factors, voom's span and
+weights, each gene's residual deviation, the prior and every log fold change, interval, t and p
+within 10⁻⁹. On ten cases of spatial statistics, limma's `lmFit` and `eBayes` within 10⁻¹³, and
+each statistic's unmoderated fit against statsmodels 0.15.0's OLS within 10⁻¹³. Lowess on six
+curves (ties, spans from 0.1 to 1, skipping by delta, no robustness) within 10⁻¹⁰ of R's. On 40
+null tables of 200 negative binomial genes (four rows against four), the tests reject 5.1% at 5%
+and 1.2% at 1%. On the standard simulated cohort, the gene the simulator raises 2.5-fold in one
+type (SIM033 in the epithelial-like cells; 0.97 log2 in the true cells, each subject's own level
+varying) is found at +0.94 (0.59 to 1.30), and no other gene; the enrichment of the epithelial-like
+and immune-like cells, which the simulator mixes in the treated subjects, is 1.35 times as high
+(1.07 to 1.70), the family's strongest change, though not below an adjusted p of 0.05 over the ten
+pairs with four subjects a group; a null cohort finds nothing.
+
+### 6.14 Error rates, pseudoreplication and scale (verified, wave 7, slice 8)
+
+**The study.** A test's error rates are measured where the truth is known: simulated cohorts whose
+sections vary from one another as real sections do (each type's share and each gene's level drawn
+for each sample, a slide's efficiency) and whose groups differ by known effects, or not at all.
+Each sample's true cells are made without writing a bundle (§6.9's simulator, its true types the
+labels), summarized as the summary job summarizes them, and compared as the page compares them. On
+null cohorts, a test at level α should reject in a share α of its tests; a family adjusted by
+Benjamini and Hochberg should find anything in at most α of the cohorts (its false discovery rate
+when nothing differs). A cohort's tests are not independent (they share its samples), so a rate's
+standard error is the cohorts': each cohort's rejections against the rate times its tests, the
+ratio estimator's.
+
+**What it found** (2,000 null cohorts of two groups of four subjects): the quasi-likelihood models
+of shares, densities and niches' shares reject 4.7% to 5.0% at 5% and 0.8% to 1.1% at 1%; voom and
+the moderated t over each label's genes 5.12% and 1.03%; the moderated spatial statistics 5.08%
+(nearest distances), 5.26% (Moran's I) and 5.47% (enrichment). The last two are slightly liberal: a
+family's variances moderated toward one common prior shrink the rare pairs' and the sparse genes'
+larger variances. A trend of the prior with the statistics' precision (limma's trend; Law et al.
+2014 compare it with voom) would answer this; it is not needed at half a percentage point. Niches'
+shares as spatial statistics were liberal enough to matter (6.0%; their log odds 6.2%), six unlike
+variances moderated toward one; they are compared only as counts. On 500 cohorts with the standard
+cohort's effects: the gene raised 2.5-fold found in 98%, its intervals covering the truth in 95.0%
+(the estimates' mean 1.327 log2 against 1.322), so the expression tests are calibrated where the
+truth is exact; the share and arrangement effects found in 17% and 47%: four subjects a group
+measure modest changes in composition and arrangement poorly, which their intervals say.
+
+**Pseudoreplication.** The same null cohorts tested with cells as replicates (the groups' pooled
+cells: a label's share by the two-proportion z-test, a gene by the Wilcoxon rank-sum test as
+single-cell tools test markers) reject 58% and 24% at 5%: the sections' own variation, which their
+cells cannot show, makes the groups differ by chance, as Squair et al. (2021) showed for
+single-cell expression. SituCraft has no test of cells across groups; the comparisons refuse a
+design that would make one (a group of one unit; a unit twice in a group; regions of one section
+as separate units, unless a teaching example says they are pseudo-samples).
+
+**Scale.** A cohort's summary holds one section at a time: each section's cells and counts are
+read, its analyses asked, its numbers kept (its document, its pseudobulk over its genes, its cells'
+centroids and labels for the niches across sections, 12 bytes a cell) and the rest let go. At 24
+sections of 84,000 cells (2 million), with each section's graph and spatial questions asked as it
+is read: 251 s on four cores and a peak of 0.65 GB, against 0.54 GB for 6 sections; most of the
+time is each section's Moran's I (its permutations) and nearest distances, and the summary and the
+three comparisons together take under a second.
 
 ## 7. Datasets
 

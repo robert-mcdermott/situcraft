@@ -1268,3 +1268,124 @@ td div.studio-problem { padding: 2px 6px; margin-top: 4px; font-size: 11.5px; }
 .lb-edit-table td.muted { padding-top: 9px; white-space: nowrap; }
 .lb-edit-table td:first-child .input { min-width: 150px; }
 .inspector-list { margin: 4px 0 0 16px; padding: 0; font-size: 12.5px; color: var(--text-2); }
+
+/* The Cohort view (wave 7): the samples table, its fields and regions as samples. */
+.seg-body.cohort-body { max-width: 1240px; }
+.cohort-table input.input.small { width: 104px; }
+.cohort-table input.input.cohort-name { width: 170px; }
+.cohort-table th:first-child, .cohort-table td:first-child { position: sticky; left: 0; z-index: 2; background: var(--panel); }
+.cohort-table tr.selected td:first-child { background: var(--active); }
+.cohort-add input.input.small { width: 240px; }
+.cohort-add select.input.small { width: 130px; }
+.cohort-table input.r { text-align: right; }
+.cohort-table td { vertical-align: middle; white-space: nowrap; }
+.cohort-table .cohort-bundle { color: var(--text-3); }
+.cohort-regions { display: flex; flex-direction: column; gap: 8px; padding-top: 6px; border-top: 1px solid var(--line); }
+.cohort-boxes { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.cohort-list { margin: 0 0 6px; padding-left: 18px; font-size: 12.5px; }
+.cohort-list li { margin: 2px 0; }
+.cohort-words p { margin: 0 0 4px; font-size: 12.5px; line-height: 1.5; }
+.cohort-matrix td.r, .cohort-matrix th.r { font-variant-numeric: tabular-nums; }
+.cohort-design .btn-row > .input.small { width: 240px; flex: none; }
+.cohort-steps .btn-row > .input.small, .cohort-summary .btn-row > select.input.small { width: 260px; flex: none; }
+.cohort-steps .btn-row > .muted, .cohort-summary .btn-row > .muted { font-size: 12.5px; }
+.cohort-numbers th.r { max-width: 120px; white-space: normal; overflow-wrap: anywhere; vertical-align: bottom; }
+.cohort-summary .btn-row > select.input.small.cohort-family { width: 400px; }
+.cohort-niches { margin: 6px 0 0; padding-left: 18px; font-size: 12.5px; }
+
+/* Choosing a place on this computer (ui/file-picker.js). */
+.picker { display: flex; flex-direction: column; gap: 10px; }
+.picker-name-field input.input { width: 100%; }
+.picker-bar { display: flex; align-items: center; gap: 6px; min-height: 30px; }
+.picker-crumbs { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; min-width: 0; font-size: 13px; }
+.picker-crumb { background: none; border: 0; padding: 3px 6px; border-radius: var(--radius-sm); color: var(--text-2); cursor: pointer; font: inherit; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.picker-crumb:hover { background: var(--hover); color: var(--text); }
+.picker-crumb.current { color: var(--text); font-weight: 650; }
+.picker-sep { color: var(--text-3); }
+.picker-main { display: grid; grid-template-columns: 190px 1fr; gap: 10px; height: min(52vh, 460px); min-height: 220px; }
+.picker-places { display: flex; flex-direction: column; gap: 1px; overflow: auto; padding-right: 4px; border-right: 1px solid var(--line); }
+.picker-heading { font-size: 11px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-3); padding: 8px 8px 4px; }
+.picker-heading:first-child { padding-top: 2px; }
+.picker-place { display: flex; align-items: center; gap: 8px; background: none; border: 0; padding: 5px 8px; border-radius: var(--radius-sm); color: var(--text-2); font: inherit; font-size: 13px; cursor: pointer; text-align: left; }
+.picker-place span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.picker-place .icon { width: 15px; height: 15px; flex: none; }
+.picker-place:hover { background: var(--hover); color: var(--text); }
+.picker-place.current { background: var(--active); color: var(--text); }
+.picker-pane { display: flex; flex-direction: column; min-height: 0; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+.picker-pane:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.picker-list { flex: 1; min-height: 0; overflow: auto; outline: none; padding: 3px; }
+.picker-list[hidden], .picker-inside[hidden], .picker-empty[hidden] { display: none; }
+.picker-row { display: grid; grid-template-columns: 20px minmax(120px, 1.4fr) minmax(0, 1.6fr) 74px 96px; align-items: center; gap: 8px; padding: 5px 8px; border-radius: var(--radius-sm); font-size: 13px; cursor: default; user-select: none; }
+.picker-row:hover { background: var(--hover); }
+.picker-row.selected { background: var(--active); }
+.picker-row.active { box-shadow: inset 0 0 0 1px var(--accent); }
+.picker-row.dim { color: var(--text-3); }
+.picker-icon .icon { width: 16px; height: 16px; display: block; }
+.picker-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 550; }
+.picker-row.dim .picker-name { font-weight: 400; }
+.picker-kind { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); }
+.picker-size, .picker-date { color: var(--text-3); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; font-size: 12px; }
+.picker-empty { color: var(--text-3); font-size: 13px; padding: 14px 10px; margin: 0; }
+.picker-inside { display: flex; align-items: center; gap: 8px; margin: 5px 5px 2px; padding: 7px 10px; border-radius: var(--radius-sm); background: var(--accent-soft); color: var(--accent-text); font-size: 12.5px; }
+.picker-inside .icon { width: 16px; height: 16px; flex: none; }
+.picker-type { display: flex; align-items: center; gap: 8px; }
+.picker-type .picker-path { flex: 1; min-width: 0; font-family: var(--mono); font-size: 12px; }
+.picker-type .check { white-space: nowrap; font-size: 12.5px; }
+.picker-note { margin: 0; min-height: 18px; font-size: 12.5px; color: var(--text-2); }
+.picker-hint { margin: 0; font-size: 12px; }
+.picker-field { display: flex; align-items: center; gap: 6px; }
+.picker-field > input { flex: 1; min-width: 0; }
+.picker-field > .picker-browse { flex: none; }
+@media (max-width: 720px) {
+  .picker-main { grid-template-columns: 1fr; height: auto; }
+  .picker-places { flex-direction: row; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--line); padding-bottom: 6px; max-height: 96px; }
+  .picker-heading { display: none; }
+  .picker-pane { height: 46vh; }
+  .picker-row { grid-template-columns: 20px 1fr 70px; }
+  .picker-kind, .picker-date { display: none; }
+}
+
+/* Cohort QC (ui/cohort-qc.js). */
+.cohort-qc .seg-card-title { margin-top: 14px; }
+.cohort-qc-table td { white-space: nowrap; }
+.cohort-qc-table th.r { max-width: 110px; white-space: normal; vertical-align: bottom; }
+.cohort-qc-table td.cohort-flag { background: var(--warn-soft); color: var(--warn-text); font-weight: 650; }
+.cohort-flags li { line-height: 1.6; }
+.cohort-flags .btn { margin-left: 4px; }
+table.data.cohort-balance { width: auto; min-width: 360px; margin-bottom: 8px; }
+.cohort-qc .btn-row > select.input.small { width: auto; flex: none; }
+.cohort-pca { width: min(560px, 100%); height: auto; display: block; margin: 6px 0 4px; background: var(--plot-bg); border: 1px solid var(--line); border-radius: var(--radius); }
+.cohort-axis { stroke: var(--line-strong); stroke-width: 1; }
+.cohort-zero { stroke: var(--line); stroke-dasharray: 3 3; }
+.cohort-axis-label { fill: var(--text-3); font-size: 11px; }
+.cohort-point { stroke: var(--bg-elev); stroke-width: 1.5; }
+.cohort-point-label { fill: var(--text-2); font-size: 10.5px; }
+.cohort-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--text-2); }
+.cohort-legend > span { display: inline-flex; align-items: center; gap: 6px; }
+.cohort-swatch { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.cohort-details { margin: 6px 0; font-size: 12.5px; }
+.cohort-details summary { cursor: pointer; color: var(--text-2); }
+.cohort-genes { columns: 3 220px; }
+
+/* Differential abundance (ui/cohort-abundance.js). */
+.cohort-abundance .btn-row > select.input.small { width: auto; flex: none; }
+.cohort-abundance .btn-row > select.input.small.cohort-family { width: 400px; }
+.cohort-abundance-table tr { cursor: pointer; }
+.cohort-abundance-table tr.cohort-sig td:first-child { font-weight: 650; }
+.cohort-abundance-table tr:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.cohort-pick { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); }
+.cohort-dots { width: min(480px, 100%); height: auto; display: block; margin: 6px 0 4px; background: var(--plot-bg); border: 1px solid var(--line); border-radius: var(--radius); }
+.cohort-dots circle[role="button"] { cursor: pointer; }
+.cohort-dots circle[role="button"]:focus-visible { outline: none; stroke: var(--accent); stroke-width: 3; }
+.cohort-mean { stroke: var(--text-2); stroke-width: 2; }
+
+/* Differential expression and spatial statistics between groups (ui/cohort-expression.js). */
+.cohort-expression .btn-row > input.input.small.cohort-min-cells { width: 80px; flex: none; }
+.cohort-expression .btn-row > input.input.small.cohort-gene-find { width: 180px; flex: none; }
+.cohort-expression .btn-row > label.muted, .cohort-expression .btn-row > span.muted { font-size: 12.5px; }
+.cohort-plots { display: flex; flex-wrap: wrap; gap: 4px 20px; align-items: flex-start; }
+.cohort-plots > div { flex: 1 1 400px; max-width: 480px; }
+.cohort-plots > .cohort-pick { margin-top: 0; padding-top: 0; border-top: 0; }
+.cohort-volcano-point { fill: var(--text-3); fill-opacity: 0.45; cursor: pointer; }
+.cohort-volcano-point.found { fill: var(--accent); fill-opacity: 0.85; }
+.cohort-volcano-point.chosen { fill-opacity: 1; stroke: var(--text); stroke-width: 1.5; }

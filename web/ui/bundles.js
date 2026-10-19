@@ -87,6 +87,22 @@ export function createBundles(app) {
     return record;
   }
 
+  // Every bundle open on this computer and not in the project yet, added (wave 7: a study's
+  // sections together), each checked first: { added: [records], refused: [{ name, reason }] }.
+  async function addOpen() {
+    const added = [];
+    const refused = [];
+    for (const item of items()) {
+      if (findDataset(app.store.project, { path: item.path })) continue;
+      try {
+        added.push(await add(item));
+      } catch (error) {
+        refused.push({ name: item.name, reason: error.message });
+      }
+    }
+    return { added, refused };
+  }
+
   // The instrument's segmentation of a dataset's bundle, registered as an artifact by a job
   // (api_segmentations.go), then recorded in the project (and promoted when the dataset has no
   // promoted segmentation). Resolves with the artifact, or null.
@@ -1105,6 +1121,9 @@ export function createBundles(app) {
     itemByPath,
     validate,
     add,
+    addOpen,
+    // The bundles open on this computer and not in the project.
+    notAdded: () => items().filter((item) => !findDataset(app.store.project, { path: item.path })),
     remove,
     reconnect,
     locate,

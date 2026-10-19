@@ -75,8 +75,8 @@ test('a dataset is known as its example by its manifest, wherever it is', () => 
 });
 
 test('every worked example asks its question, says what to expect, and its steps can be done', () => {
-  // The downloaded examples', and the simulated one made on this computer (api_examples.go).
-  assert.deepEqual(Object.keys(WORKED).sort(), [...Object.keys(sources), 'simulated-standard'].sort());
+  // The downloaded examples', and the simulated ones made on this computer (api_examples.go).
+  assert.deepEqual(Object.keys(WORKED).sort(), [...Object.keys(sources), 'simulated-standard', 'simulated-cohort', 'simulated-null-cohort', 'simulated-paired-cohort'].sort());
   const roles = new Set(['instrument', 'expansion-5', 'expansion-3', 'planted', 'refined', 'truth']);
   // A spatial question as a step asks it: its question, segmentation, labels and level, region,
   // niches' window and count.
@@ -90,8 +90,11 @@ test('every worked example asks its question, says what to expect, and its steps
       // What the steps have made: segmentations by role, comparisons (a|b), clusterings and labels
       // of a segmentation (clustering:role, labels:role).
       const made = new Set(['instrument']);
+      // A cohort's: the design drafted (its name), the steps run, the summary made, comparisons
+      // made of a design.
+      let drafted = null;
       for (const step of w.steps) {
-        assert.ok(['segmentation', 'compare', 'viewer', 'qc', 'data', 'celltypes', 'alignment', 'spatial'].includes(step.mode), step.title);
+        assert.ok(['segmentation', 'compare', 'viewer', 'qc', 'data', 'celltypes', 'alignment', 'spatial', 'cohort'].includes(step.mode), step.title);
         assert.ok(step.mode !== 'alignment' || step.alignment, `${step.title}: an Alignment view step says what it shows`);
         assert.ok(step.title && step.text.length > 40, step.title);
         if (step.do) {
@@ -165,6 +168,30 @@ test('every worked example asks its question, says what to expect, and its steps
             assert.ok(made.has('truth'), `${step.title}: the truth is imported before`);
             made.add('domains:truth');
           }
+          // Cohorts: in the Cohort view; regions made samples once drawn; the design before the
+          // comparisons (each found by the design's name), the steps before the summary, the
+          // summary before the comparisons.
+          if (['sample-fields', 'region-samples', 'cohort-design', 'cohort-steps', 'summarize', 'compare-abundance', 'compare-expression', 'compare-spatial'].includes(d.action)) assert.equal(step.mode, 'cohort', step.title);
+          if (d.action === 'region-samples') assert.ok(d.regions.every((r) => made.has(`region:${r}`)), `${step.title}: its regions are drawn before`);
+          if (d.action === 'cohort-design') {
+            assert.ok(d.unit && d.group && d.reference && (d.refused || d.save), step.title);
+            drafted = d.refused ? null : d.save;
+          }
+          if (d.action === 'cohort-steps') made.add('cohort:steps');
+          if (d.action === 'summarize') {
+            assert.ok(made.has('cohort:steps'), `${step.title}: the steps are run before`);
+            made.add('cohort:summary');
+          }
+          if (d.action.startsWith('compare-')) {
+            assert.ok(made.has('cohort:summary') && drafted, `${step.title}: the summary and a design are made before`);
+            made.add(`${d.action.slice('compare-'.length)}:${drafted}`);
+          }
+        }
+        if (step.cohort) {
+          const c = step.cohort;
+          assert.ok(step.mode === 'cohort' && ['samples', 'design', 'steps', 'summary', 'qc', 'abundance', 'expression', 'spatial'].includes(c.show), step.title);
+          // A comparison shown is made before (by its step, which shows its section while it runs).
+          if (['abundance', 'expression', 'spatial'].includes(c.show) && !step.do?.action?.startsWith('compare-')) assert.ok(made.has(`${c.show}:${c.design}`), `${step.title}: its comparison is made before`);
         }
         if (step.spatial) {
           assert.equal(step.mode, 'spatial', step.title);

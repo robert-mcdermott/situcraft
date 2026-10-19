@@ -9,6 +9,7 @@
 
 import { h, icon, clear, formatCount, relativeTime } from './dom.js';
 import { toast } from './overlays.js';
+import { browseButton } from './file-picker.js';
 import { reviewSections } from './review-card.js';
 import { remakeOnSegmentation, remaking } from './remake.js';
 import { clusterNames, nameClusters, nameOf } from '../lib/clusterings.js';
@@ -465,7 +466,7 @@ export function labelsSections(app, ctx) {
     };
     const parts = [
       h('p', 'A labeled single-cell reference: an AnnData object in Zarr (a .zarr folder, or a zip of one) whose cells carry their labels in obs, or a table of each label\'s mean expression (CSV, TSV or Parquet; a row per label, or a row per gene). Each cell is correlated with each label\'s profile over the genes that set the labels apart, then again on the leading labels\' own genes until one is left. An .h5ad file is read once written as Zarr (anndata\'s write_zarr).'),
-      h('div.lb-import-row', h('label.field', { for: 'lb-ref-path' }, h('span', 'Reference'), pathInput), h('button.btn', { type: 'button', disabled: rf.busy, 'data-action': 'read-reference', onclick: () => read() }, icon('file'), rf.busy ? 'Reading…' : 'Read')),
+      h('div.lb-import-row', h('label.field', { for: 'lb-ref-path' }, h('span', 'Reference'), pathInput), browseButton(pathInput, { title: 'A labeled single-cell reference' }), h('button.btn', { type: 'button', disabled: rf.busy, 'data-action': 'read-reference', onclick: () => read() }, icon('file'), rf.busy ? 'Reading…' : 'Read')),
     ];
     if (rf.read) parts.push(...referenceReadout(rf, read, doMap));
     if (rf.problem) parts.push(h('div.lb-missing', icon('warning'), h('span', rf.problem)));
@@ -579,7 +580,7 @@ export function labelsSections(app, ctx) {
     };
     const parts = [
       h('p', `Labels from another tool or an earlier analysis, matched to the cells of ${seg.name.toLowerCase()} by their ids: a CSV or TSV table, a Parquet file, an AnnData object's obs in Zarr (or a SpatialData store's table), or Xenium Explorer's cell groups (cell_id, group, color). A table naming cells this segmentation does not have is refused; its cells the table does not name are counted.`),
-      h('div.lb-import-row', h('label.field', { for: 'lb-import-path' }, h('span', 'Table'), pathInput), h('button.btn', { type: 'button', disabled: im.busy, 'data-action': 'read-labels', onclick: () => read() }, icon('file'), im.busy ? 'Reading…' : 'Read')),
+      h('div.lb-import-row', h('label.field', { for: 'lb-import-path' }, h('span', 'Table'), pathInput), browseButton(pathInput, { title: 'A table of labels' }), h('button.btn', { type: 'button', disabled: im.busy, 'data-action': 'read-labels', onclick: () => read() }, icon('file'), im.busy ? 'Reading…' : 'Read')),
     ];
     if (im.read) parts.push(...readout(im, seg, read, doImport));
     if (im.problem) parts.push(h('div.lb-missing', icon('warning'), h('span', im.problem)));

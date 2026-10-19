@@ -1117,7 +1117,426 @@ const LUNG_REMAKE = {
   ],
 };
 
-export const WORKED = { 'xenium-breast-2fov': [BREAST_COMPARE, BREAST_REFINE, BREAST_LABELS, BREAST_NEIGHBORS, BREAST_EDGE], 'xenium-lung-2fov': [LUNG_PLANTED, LUNG_CELL_TYPES, LUNG_MORAN, LUNG_REMAKE], 'simulated-standard': [SIMULATED_TRUTH, SIMULATED_LABELS, SIMULATED_ALIGN, SIMULATED_REGIONS, SIMULATED_REVIEW, SIMULATED_NICHES] };
+// --- Cohorts' worked examples (wave 7) --------------------------------------------------------------
+//
+// A cohort's steps are in the Cohort view: the samples' fields set (sample-fields: each sample's
+// name as a field, or values by sample name), a dataset's regions made its samples
+// (region-samples), the design described (cohort-design: saved under a name, so that the
+// comparisons made of it are found by it; refused: drafted and shown, not saved), the same steps on
+// every sample (cohort-steps), the summary (summarize) and the comparisons (compare-abundance,
+// compare-expression, compare-spatial); a step shows a section of the view (cohort: the samples,
+// design, steps or summary, or a comparison of a design, a family and a result chosen, a label and
+// gene).
+
+const COHORT_GENE = {
+  id: 'cohort-gene',
+  note: 'The cohort is simulated: its effects, and every sample\'s truth, are known.',
+  title: 'A gene changed in one cell type',
+  simulated: true,
+  question: 'Does the treated subjects\' expression of any gene change in one cell type, with each subject, not each cell, the unit?',
+  expect: 'SIM033 is higher in the treated subjects\' epithelial-like cells: +0.94 log2, 1.9 times (0.59 to 1.30 log2), the only one of 424 tests below an adjusted p of 0.05. The true cells show +0.97 log2: the simulator asked 2.5 times (1.32 log2), and each subject\'s own level varies about it.',
+  steps: [
+    {
+      mode: 'cohort',
+      title: 'Eight subjects, two conditions',
+      text: 'Each section of the simulated cohort is a sample, its subject and condition read in with it: four control subjects and four treated, on two slides. In the treated subjects\' epithelial-like cells the simulator raised one gene, SIM033, 2.5 times. SituCraft is not told which.',
+      cohort: { show: 'samples' },
+    },
+    {
+      mode: 'cohort',
+      title: 'The design',
+      text: 'Each subject is a replicate, and the treated subjects are compared with the controls: the subject, not the cell, is the unit.',
+      do: { action: 'cohort-design', unit: 'subject', group: 'condition', reference: 'control', save: 'By condition' },
+      label: 'Describe the design',
+      cohort: { show: 'design' },
+    },
+    {
+      mode: 'cohort',
+      title: 'The same steps on every sample',
+      text: 'Each section\'s cells are clustered and labeled from the same starter marker set, with a graph of them and their neighbor enrichment: every sample measured the same way.',
+      do: { action: 'cohort-steps', markers: 'simulated', questions: ['enrichment'] },
+      label: 'Run the steps',
+      cohort: { show: 'steps' },
+    },
+    {
+      mode: 'cohort',
+      title: 'Summarize the samples',
+      text: 'The summary counts each sample\'s cells by label and sums each label\'s cells\' transcripts gene by gene: the label\'s pseudobulk in that sample.',
+      do: { action: 'summarize' },
+      label: 'Summarize them',
+      cohort: { show: 'summary' },
+    },
+    {
+      mode: 'cohort',
+      title: 'Compare the expression',
+      text: 'Each label\'s pseudobulk is compared between the conditions, gene by gene: genes too little expressed left out, libraries normalized by TMM, each value weighted by voom, each gene tested by limma\'s moderated t. Each change is a log2 fold change with its interval.',
+      do: { action: 'compare-expression' },
+      label: 'Compare them',
+      cohort: { show: 'expression', design: 'By condition' },
+    },
+    {
+      mode: 'cohort',
+      title: 'SIM033 in the epithelial-like cells',
+      text: 'SIM033 is higher in the treated subjects\' epithelial-like cells: +0.94 log2 (1.9 times), its 95% interval 0.59 to 1.30, adjusted p 0.005. Each point is a subject\'s pseudobulk: the treated subjects\' all lie above the controls\'. The true cells show +0.97 log2, inside the interval.',
+      cohort: { show: 'expression', design: 'By condition', label: 'epithelial-like', gene: 'SIM033' },
+    },
+    {
+      mode: 'cohort',
+      title: 'And nothing else',
+      text: 'On the volcano, SIM033 stands apart. Of the 424 tests (each label\'s genes expressed enough to test, over four labels), it alone is below an adjusted p of 0.05. With four subjects a group an interval spans most of a log2 unit: the subjects\' own variation, which a test of cells would hide.',
+      cohort: { show: 'expression', design: 'By condition', label: 'epithelial-like' },
+    },
+  ],
+};
+
+const COHORT_NULL = {
+  id: 'cohort-null',
+  note: 'The cohort is simulated: its effects, and every sample\'s truth, are known.',
+  title: 'A comparison where nothing differs',
+  simulated: true,
+  question: 'What does a comparison find when the groups do not differ?',
+  expect: 'Nothing below an adjusted p of 0.05: none of 14 tests of abundance (shares, densities, niches), 423 of expression or 10 of neighbor enrichment. By chance 11 genes\' raw p-values are below 0.05, fewer than the 21 chance alone gives on average, and the lowest (SIM015 in the epithelial-like cells, p 0.0006) is adjusted to 0.25 over the tests.',
+  steps: [
+    {
+      mode: 'cohort',
+      title: 'Two groups that do not differ',
+      text: 'The null cohort is the standard cohort\'s design (four subjects in each condition, on two slides) without its effects: its sections differ from one another only by chance, as sections of different subjects do.',
+      cohort: { show: 'samples' },
+    },
+    {
+      mode: 'cohort',
+      title: 'The design',
+      text: 'The subjects compared by condition, each subject a replicate.',
+      do: { action: 'cohort-design', unit: 'subject', group: 'condition', reference: 'control', save: 'By condition' },
+      label: 'Describe the design',
+      cohort: { show: 'design' },
+    },
+    {
+      mode: 'cohort',
+      title: 'The same steps, and the summary',
+      text: 'Each section\'s cells labeled from the starter marker set, with their graph and neighbor enrichment; then each sample summarized, with niches found across the samples together.',
+      do: { action: 'cohort-steps', markers: 'simulated', questions: ['enrichment'] },
+      label: 'Run the steps',
+      cohort: { show: 'steps' },
+    },
+    {
+      mode: 'cohort',
+      title: 'Summarize the samples',
+      text: 'Each sample\'s cells by label and by niche, its pseudobulk, and its neighbor enrichment, in the cohort table.',
+      do: { action: 'summarize' },
+      label: 'Summarize them',
+      cohort: { show: 'summary' },
+    },
+    {
+      mode: 'cohort',
+      title: 'Compare the abundances',
+      text: 'Each label\'s share of the labeled cells and density, and each niche\'s share, between the conditions.',
+      do: { action: 'compare-abundance', families: ['share', 'density', 'niche'] },
+      label: 'Compare them',
+      cohort: { show: 'abundance', design: 'By condition' },
+    },
+    {
+      mode: 'cohort',
+      title: 'No abundance found changed',
+      text: 'None of the 14 tests is below an adjusted p of 0.05, nor any raw p below 0.05: each effect\'s interval holds 1, a ratio of no change.',
+      cohort: { show: 'abundance', design: 'By condition', family: 'share' },
+    },
+    {
+      mode: 'cohort',
+      title: 'Compare the expression',
+      text: 'Each label\'s genes between the conditions, by its pseudobulk.',
+      do: { action: 'compare-expression' },
+      label: 'Compare the expression',
+      cohort: { show: 'expression', design: 'By condition' },
+    },
+    {
+      mode: 'cohort',
+      title: 'No gene found changed',
+      text: 'Of 423 tests, 11 raw p-values are below 0.05, as chance gives some (21 on average), and none survives the adjustment over the tests: the lowest, SIM015 in the epithelial-like cells (p 0.0006), is adjusted to 0.25. A raw p below 0.05 among hundreds of tests is not a finding.',
+      cohort: { show: 'expression', design: 'By condition', label: 'epithelial-like' },
+    },
+    {
+      mode: 'cohort',
+      title: 'Compare the arrangement',
+      text: 'Each sample\'s neighbor enrichment of each pair of labels, compared between the conditions as log2 ratios.',
+      do: { action: 'compare-spatial' },
+      label: 'Compare the arrangement',
+      cohort: { show: 'spatial', design: 'By condition' },
+    },
+    {
+      mode: 'cohort',
+      title: 'Nothing found, as it should be',
+      text: 'None of the 10 pairs is below an adjusted p of 0.05 (the lowest 0.36). A family of tests here finds something in about 5% of such cohorts, as its level says: SituCraft measures that on thousands of them every week (see Error rates and scale).',
+      cohort: { show: 'spatial', design: 'By condition', family: 'enrichment' },
+    },
+  ],
+};
+
+const COHORT_SHIFT = {
+  id: 'cohort-shift',
+  note: 'The cohort is simulated: its effects, and every sample\'s truth, are known.',
+  title: 'A composition shift found',
+  simulated: true,
+  question: 'After treatment, are some cell types more common in the same subjects\' tissue?',
+  expect: 'The endothelial-like cells\' odds among the labeled cells 2.19 times as high after (1.54 to 3.12, adjusted p 0.009), their density 1.80 times (1.39 to 2.33); the epithelial-like cells\' odds 0.48 times (0.27 to 0.84). The true cells show 2.26 and 0.47: the simulator made a cell four times as likely to be endothelial-like after, and more endothelial-like and immune-like cells leave less room for epithelial-like ones.',
+  steps: [
+    {
+      mode: 'cohort',
+      title: 'Six subjects, before and after',
+      text: 'Each of six subjects was sampled before and after: twelve sections. After, the simulator made a cell four times as likely to be endothelial-like, and immune-like cells four times as likely where epithelial-like cells lead.',
+      cohort: { show: 'samples' },
+    },
+    {
+      mode: 'cohort',
+      title: 'A paired design',
+      text: 'Each subject is in both conditions, so the design pairs them: each subject is compared with itself, its own level entering the model.',
+      do: { action: 'cohort-design', unit: 'subject', group: 'condition', reference: 'before', save: 'Paired' },
+      label: 'Describe the design',
+      cohort: { show: 'design' },
+    },
+    {
+      mode: 'cohort',
+      title: 'The same steps on every sample',
+      text: 'Each section\'s cells labeled from the starter marker set, with their graph and neighbor enrichment.',
+      do: { action: 'cohort-steps', markers: 'simulated', questions: ['enrichment'] },
+      label: 'Run the steps',
+      cohort: { show: 'steps' },
+    },
+    {
+      mode: 'cohort',
+      title: 'Summarize the samples',
+      text: 'Each sample\'s cells by label, and its tissue.',
+      do: { action: 'summarize' },
+      label: 'Summarize them',
+      cohort: { show: 'summary' },
+    },
+    {
+      mode: 'cohort',
+      title: 'Compare the abundances',
+      text: 'Each label\'s share of the labeled cells by a quasi-binomial model of the design, and its density per mm² by a quasi-Poisson model.',
+      do: { action: 'compare-abundance', families: ['share', 'density'] },
+      label: 'Compare them',
+      cohort: { show: 'abundance', design: 'Paired' },
+    },
+    {
+      mode: 'cohort',
+      title: 'More endothelial-like cells after',
+      text: 'The endothelial-like cells\' odds among the labeled cells are 2.19 times as high after (1.54 to 3.12), adjusted p 0.009: found. The true cells show 2.26. The lines are the groups\' means; each point is a subject\'s section, and every subject\'s after lies above its before.',
+      cohort: { show: 'abundance', design: 'Paired', family: 'share', pick: 'endothelial-like|after − before' },
+    },
+    {
+      mode: 'cohort',
+      title: 'Fewer epithelial-like cells',
+      text: 'The epithelial-like cells\' odds fall to 0.48 times (0.27 to 0.84), adjusted p 0.04: the simulator did not lower them, but more endothelial-like and immune-like cells leave less room for them (the true cells show 0.47). A share is of all the labeled cells: one type\'s rise lowers the others\'.',
+      cohort: { show: 'abundance', design: 'Paired', family: 'share', pick: 'epithelial-like|after − before' },
+    },
+    {
+      mode: 'cohort',
+      title: 'Per mm² of tissue',
+      text: 'The endothelial-like cells\' density is 1.80 times as high after (1.39 to 2.33), adjusted p 0.009: per area of tissue, not a share, so not moved by the other types.',
+      cohort: { show: 'abundance', design: 'Paired', family: 'density', pick: 'endothelial-like|after − before' },
+    },
+  ],
+};
+
+const COHORT_PAIRED = {
+  id: 'cohort-paired',
+  note: 'The cohort is simulated: its effects, and every sample\'s truth, are known.',
+  title: 'Each subject compared with itself',
+  simulated: true,
+  question: 'Six subjects each sampled before and after: what does comparing each subject with itself gain over treating the twelve sections as separate units?',
+  expect: 'SIM033 in the epithelial-like cells: +1.08 log2 either way, its interval 0.75 to 1.41 with the sections as units and 0.84 to 1.31 paired, 0.47 log2 wide instead of 0.66 (the true cells show +1.24). Paired, 22 genes are found against one: besides SIM033, the endothelial-like cells\' markers SIM025 to SIM030 in the epithelial-like and immune-like cells, transcripts of their more numerous endothelial-like neighbors read into their outlines.',
+  steps: [
+    {
+      mode: 'cohort',
+      title: 'Six subjects, before and after',
+      text: 'Each subject\'s two sections share part of their variation: a subject\'s level of each gene, as one person\'s tissue does. A paired design removes it.',
+      cohort: { show: 'samples' },
+    },
+    {
+      mode: 'cohort',
+      title: 'The same steps, and the summary',
+      text: 'Each section\'s cells labeled from the starter marker set.',
+      do: { action: 'cohort-steps', markers: 'simulated', questions: [] },
+      label: 'Run the steps',
+      cohort: { show: 'steps' },
+    },
+    {
+      mode: 'cohort',
+      title: 'Summarize the samples',
+      text: 'Each label\'s pseudobulk in each sample: its cells\' transcripts summed, gene by gene.',
+      do: { action: 'summarize' },
+      label: 'Summarize them',
+      cohort: { show: 'summary' },
+    },
+    {
+      mode: 'cohort',
+      title: 'Each section its own unit',
+      text: 'First as if each section came from a different subject: a field, section, names each one, and is the replicate unit.',
+      do: { action: 'sample-fields', name: 'section' },
+      label: 'Name each section',
+      cohort: { show: 'samples' },
+    },
+    {
+      mode: 'cohort',
+      title: 'Twelve sections as units',
+      text: 'Six sections in each condition, compared as if unrelated.',
+      do: { action: 'cohort-design', unit: 'section', group: 'condition', reference: 'before', save: 'Sections' },
+      label: 'Describe it',
+      cohort: { show: 'design' },
+    },
+    {
+      mode: 'cohort',
+      title: 'Compare the expression',
+      text: 'Each label\'s genes, with the sections as units.',
+      do: { action: 'compare-expression' },
+      label: 'Compare them',
+      cohort: { show: 'expression', design: 'Sections' },
+    },
+    {
+      mode: 'cohort',
+      title: 'SIM033, the sections as units',
+      text: 'SIM033 in the epithelial-like cells: +1.08 log2, its interval 0.75 to 1.41 (0.66 wide). Found, the only gene; the subjects\' own levels are part of its variation.',
+      cohort: { show: 'expression', design: 'Sections', label: 'epithelial-like', gene: 'SIM033' },
+    },
+    {
+      mode: 'cohort',
+      title: 'Each subject paired with itself',
+      text: 'Now the subject is the unit, in both conditions: the design pairs each subject\'s sections.',
+      do: { action: 'cohort-design', unit: 'subject', group: 'condition', reference: 'before', save: 'Paired' },
+      label: 'Pair the subjects',
+      cohort: { show: 'design' },
+    },
+    {
+      mode: 'cohort',
+      title: 'Compare again',
+      text: 'The same pseudobulk, the same genes, the paired design.',
+      do: { action: 'compare-expression' },
+      label: 'Compare them',
+      cohort: { show: 'expression', design: 'Paired' },
+    },
+    {
+      mode: 'cohort',
+      title: 'SIM033, paired',
+      text: 'SIM033: +1.08 log2 again, its interval 0.84 to 1.31, 0.47 wide instead of 0.66: comparing each subject with itself takes the subjects\' own levels out of the variation. The true cells show +1.24.',
+      cohort: { show: 'expression', design: 'Paired', label: 'epithelial-like', gene: 'SIM033' },
+    },
+    {
+      mode: 'cohort',
+      title: 'Not every gene found is the cells\' own',
+      text: 'Paired, 22 genes are found. Besides SIM033, SIM025 to SIM030 are higher in the epithelial-like (and immune-like) cells after: they are the endothelial-like cells\' markers. After, there are more endothelial-like cells, and their transcripts reach the outlines of the cells beside them. A label\'s pseudobulk holds what its cells\' outlines hold: a change in its neighbors can read as a change in it. Check a gene found against the other types\' markers, and the segmentation.',
+      cohort: { show: 'expression', design: 'Paired', label: 'epithelial-like', gene: 'SIM026' },
+    },
+  ],
+};
+
+// The Breast section's places: three regions in its stroma (beside the tumor and below it) and
+// three in its tumor (wave 7: a teaching example of regions as pseudo-samples).
+const BREAST_PLACES = [
+  { name: 'Stroma upper left', place: 'stroma', rectangle: [5, 5, 245, 370] },
+  { name: 'Stroma lower left', place: 'stroma', rectangle: [5, 380, 245, 740] },
+  { name: 'Stroma below', place: 'stroma', rectangle: [730, 530, 1040, 740] },
+  { name: 'Tumor 1', place: 'tumor', rectangle: [300, 50, 550, 300] },
+  { name: 'Tumor 2', place: 'tumor', rectangle: [600, 50, 850, 300] },
+  { name: 'Tumor 3', place: 'tumor', rectangle: [950, 50, 1200, 300] },
+];
+
+const BREAST_PSEUDO = {
+  id: 'pseudo-samples',
+  note: 'For teaching: its regions are pseudo-samples, not replicates, and every result says so.',
+  title: 'Places in one section are not subjects',
+  teaching: true,
+  question: 'Can regions of one section stand in for samples, to try a cohort\'s comparisons on real data, and what may be said of what they find?',
+  expect: 'Six regions of the Breast section, three of its stroma and three of its tumor, each given its own subject: refused. Marked pseudo-samples, for teaching, they find the stroma\'s cells 8.4 times as likely to be immune (1.6 to 44.5) and 0.04 times as likely to be epithelial: true of this section\'s places, and no evidence about patients, of whom one section is one.',
+  steps: [
+    {
+      mode: 'viewer',
+      title: 'One section, one patient',
+      text: 'The Breast section is one patient\'s tissue: its tumor fills most of it, with stroma along its left edge and below. A cohort compares subjects; with one section there is one subject.',
+      transcripts: { genes: [] },
+      channels: GRAY_NUCLEI_ONLY,
+    },
+    {
+      mode: 'viewer',
+      title: 'Six places',
+      text: 'Three regions of the stroma and three of the tumor.',
+      do: { action: 'draw-regions', regions: BREAST_PLACES.map((r) => ({ name: r.name, cls: r.place === 'tumor' ? 'Tumor' : 'Stroma', rectangle: r.rectangle, layer: 'the stains' })) },
+      label: 'Draw the regions',
+      transcripts: { genes: [] },
+      channels: GRAY_NUCLEI_ONLY,
+    },
+    {
+      mode: 'cohort',
+      title: 'The regions as samples',
+      text: 'Each region becomes a sample of the section, in the Cohort view.',
+      do: { action: 'region-samples', regions: BREAST_PLACES.map((r) => r.name) },
+      label: 'Make them samples',
+      cohort: { show: 'samples' },
+    },
+    {
+      mode: 'cohort',
+      title: 'Each its own subject',
+      text: 'Each region given a subject of its own, and its place: stroma or tumor.',
+      do: { action: 'sample-fields', values: Object.fromEntries(BREAST_PLACES.map((r) => [r.name, { subject: r.name, place: r.place }])) },
+      label: 'Set their fields',
+      cohort: { show: 'samples' },
+    },
+    {
+      mode: 'cohort',
+      title: 'Refused',
+      text: 'The places compared, each region a subject: refused. Regions of one section of one tissue are not independent replicates; tested as if they were, any difference between places looks like a difference between patients.',
+      do: { action: 'cohort-design', unit: 'subject', group: 'place', reference: 'tumor', refused: true },
+      label: 'Try the design',
+      cohort: { show: 'design' },
+    },
+    {
+      mode: 'cohort',
+      title: 'Pseudo-samples, for teaching',
+      text: 'For teaching only, the regions can be marked pseudo-samples: the design is kept, says so first, and every comparison made of it says so above its results.',
+      do: { action: 'cohort-design', unit: 'subject', group: 'place', reference: 'tumor', pseudoSamples: true, save: 'Pseudo-samples' },
+      label: 'Mark them pseudo-samples',
+      cohort: { show: 'design' },
+    },
+    {
+      mode: 'cohort',
+      title: 'The same steps on every sample',
+      text: 'The section\'s cells clustered and labeled from the Breast panel\'s starter marker set, once for its six regions.',
+      do: { action: 'cohort-steps', markers: 'breast', questions: [] },
+      label: 'Run the steps',
+      cohort: { show: 'steps' },
+    },
+    {
+      mode: 'cohort',
+      title: 'Summarize the regions',
+      text: 'Each region\'s cells by label, and its tissue.',
+      do: { action: 'summarize', niches: 0 },
+      label: 'Summarize them',
+      cohort: { show: 'summary' },
+    },
+    {
+      mode: 'cohort',
+      title: 'Compare the places',
+      text: 'Each label\'s share and density, stroma against tumor.',
+      do: { action: 'compare-abundance', families: ['share', 'density'] },
+      label: 'Compare them',
+      cohort: { show: 'abundance', design: 'Pseudo-samples' },
+    },
+    {
+      mode: 'cohort',
+      title: 'What they find',
+      text: 'The stroma\'s cells are 8.4 times as likely to be immune (1.6 to 44.5) and 0.04 times as likely to be epithelial, adjusted p 0.03: this section\'s stroma holds more immune cells than its tumor. Adipocytes, in the stroma alone, cannot be compared. The banner above the results says what these are.',
+      cohort: { show: 'abundance', design: 'Pseudo-samples', family: 'share', pick: 'Immune|stroma − tumor' },
+    },
+    {
+      mode: 'cohort',
+      title: 'What may be said',
+      text: 'These p-values say this section\'s stroma and tumor differ by more than its regions vary: a fact about one patient\'s tissue. Whether tumors\' stroma holds more immune cells than tumors do, in patients, needs patients: sections of several, each a replicate.',
+      cohort: { show: 'abundance', design: 'Pseudo-samples', family: 'density', pick: 'Immune|stroma − tumor' },
+    },
+  ],
+};
+
+export const WORKED = { 'xenium-breast-2fov': [BREAST_COMPARE, BREAST_REFINE, BREAST_LABELS, BREAST_NEIGHBORS, BREAST_EDGE, BREAST_PSEUDO], 'xenium-lung-2fov': [LUNG_PLANTED, LUNG_CELL_TYPES, LUNG_MORAN, LUNG_REMAKE], 'simulated-standard': [SIMULATED_TRUTH, SIMULATED_LABELS, SIMULATED_ALIGN, SIMULATED_REGIONS, SIMULATED_REVIEW, SIMULATED_NICHES], 'simulated-cohort': [COHORT_GENE], 'simulated-null-cohort': [COHORT_NULL], 'simulated-paired-cohort': [COHORT_SHIFT, COHORT_PAIRED] };
 
 export function workedExamples(example) {
   return WORKED[example] ?? [];

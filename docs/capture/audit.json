@@ -10,6 +10,16 @@
   "violations": []
  },
  {
+  "scene": "open",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "open",
+  "theme": "light",
+  "violations": []
+ },
+ {
   "scene": "data",
   "theme": "dark",
   "violations": []
@@ -436,6 +446,86 @@
  },
  {
   "scene": "export",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "samples",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "samples",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "design",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "design",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "summary",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "summary",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "cohort-qc",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "cohort-qc",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "abundance",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "abundance",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "expression",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "expression",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "spatial-tests",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "spatial-tests",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "worked-cohort",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "worked-cohort",
   "theme": "light",
   "violations": []
  },

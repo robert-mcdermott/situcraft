@@ -7,7 +7,9 @@ name: Real data
 # fixture too (2.8 GB: an XOA 1.0.1 bundle's files and its post-Xenium H&E and immunofluorescence
 # images), its images against tifffile. And the scale tests: a simulated tissue of 55 million
 # transcripts made, refined and drawn, its cells typed and their spatial analyses asked, then
-# deleted; and the spatial analyses of a million generated cells.
+# deleted; the spatial analyses of a million generated cells; and a cohort of 24 sections and 2
+# million cells summarized and compared. And the cohort tests' error rates on thousands of
+# simulated cohorts.
 on:
   schedule:
     - cron: '17 6 * * 1'
@@ -95,3 +97,19 @@ jobs:
         run: go test -v -timeout 4h -run 'TestScale$' ./validation/
       - name: The spatial analyses of a million generated cells, each in a process of its own within its time and memory budgets (validation/spatial_scale_test.go)
         run: go test -v -timeout 1h -run 'TestSpatialScale$' ./validation/
+      - name: A cohort of 24 sections and 2 million cells summarized and compared one section at a time, within its time and memory budgets, its peak no higher for 24 sections than for 6 (validation/cohort_scale_test.go)
+        run: go test -v -timeout 2h -run 'TestCohortScale$' ./validation/
+
+  cohort-errors:
+    name: The cohort tests' error rates on 2,000 null cohorts
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Each family's false-positive rates at their levels, the false discovery rate controlled, the effects' power and the expression effect's coverage, and the same null cohorts tested cell by cell (validation/cohort_errors_test.go)
+        env:
+          SITUCRAFT_COHORT_ERRORS: '2000'
+        run: go test -v -timeout 4h -run 'TestCohortErrorRates$' ./validation/

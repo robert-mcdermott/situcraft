@@ -57,3 +57,43 @@ func TestSimulateChecksItsParameters(t *testing.T) {
 		t.Errorf("--print-params: exit %d, %s", code, out.String())
 	}
 }
+
+// --cohort: the parameters printed and read back, a cohort written with its truth and table,
+// and what a cohort cannot have refused.
+func TestSimulateWritesACohort(t *testing.T) {
+	dir := t.TempDir()
+	var out, errs bytes.Buffer
+	if code := runSimulate([]string{"--cohort", "standard", "--print-params"}, &out, &errs); code != 0 {
+		t.Fatalf("print: exit %d: %s", code, errs.String())
+	}
+	var c simulate.Cohort
+	if err := json.Unmarshal(out.Bytes(), &c); err != nil || len(c.Effects) != 3 || c.Subjects != 4 {
+		t.Fatalf("the printed parameters: %v", err)
+	}
+	// Smaller, read from a file.
+	c.Subjects, c.Slides = 2, 0
+	params := filepath.Join(dir, "cohort.json")
+	raw, _ := json.Marshal(c)
+	os.WriteFile(params, raw, 0o644)
+	folder := filepath.Join(dir, "cohort")
+	out.Reset()
+	if code := runSimulate([]string{"--cohort", "standard", "--params", params, "--width", "100", "--height", "100", "--quiet", folder}, &out, &errs); code != 0 {
+		t.Fatalf("exit %d: %s", code, errs.String())
+	}
+	if !strings.Contains(out.String(), "Simulated a cohort of 4 sections (2 subjects in each of control and treated)") || !strings.Contains(out.String(), "Effect: level of SIM033 in epithelial-like, ×2.5 in treated") {
+		t.Errorf("summary: %s", out.String())
+	}
+	for _, name := range []string{simulate.CohortFile, simulate.CohortTruthFile, simulate.CohortSamplesFile, "S01/experiment.xenium", "S04/experiment.xenium"} {
+		if _, err := os.Stat(filepath.Join(folder, name)); err != nil {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	errs.Reset()
+	if code := runSimulate([]string{"--cohort", "standard", "--post-xenium", filepath.Join(dir, "x")}, &out, &errs); code != 2 || !strings.Contains(errs.String(), "no post-Xenium images") {
+		t.Errorf("--post-xenium: exit %d, %s", code, errs.String())
+	}
+	errs.Reset()
+	if code := runSimulate([]string{"--cohort", "huge", filepath.Join(dir, "y")}, &out, &errs); code != 2 || !strings.Contains(errs.String(), "null, outlier, paired, standard") {
+		t.Errorf("an unknown cohort: exit %d, %s", code, errs.String())
+	}
+}

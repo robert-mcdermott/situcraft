@@ -1,0 +1,58 @@
+---
+title: Error rates and scale
+description: How often SituCraft's cohort tests find a difference that is not there, how often they find the ones that are, why cells are never tested as replicates, and a cohort of 2 million cells summarized and compared one section at a time.
+lede: A test is only as good as its error rates. SituCraft measures its cohort tests on thousands of simulated cohorts whose truth is known: how often they find a difference that is not there, and how often they find one that is.
+---
+      <h2 id="study">The study</h2>
+      <p>Every week, SituCraft simulates 2,000 null cohorts: two groups of four subjects whose sections vary from one another as the simulated cohort's do, with no difference between the groups. It also simulates 500 cohorts with the standard simulated cohort's known effects. Each sample's true cells are labeled by their true types, summarized as the Cohort view summarizes them (see <a href="summaries.html">Sample summaries</a>), and compared by condition as it compares them: <a href="abundance.html">abundance</a>, <a href="expression.html">expression</a> and <a href="spatial-tests.html">spatial statistics</a>. A smaller study runs on every change to the program.</p>
+
+      <h2 id="null">False positives</h2>
+      <p>On the null cohorts, a test at 5% should find a difference in 5% of its tests, and a family adjusted by Benjamini and Hochberg should find anything in at most 5% of the cohorts:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Family</th><th>Tests</th><th>Below 0.05</th><th>Below 0.01</th><th>Cohorts finding anything</th></tr></thead>
+          <tbody>
+            <tr><td>Shares of the labeled cells</td><td>8,000</td><td>4.9%</td><td>1.0%</td><td>4.8%</td></tr>
+            <tr><td>Cells per mm²</td><td>8,000</td><td>5.0%</td><td>1.1%</td><td>5.5%</td></tr>
+            <tr><td>Niches' shares</td><td>12,000</td><td>4.7%</td><td>0.8%</td><td>3.9%</td></tr>
+            <tr><td>Expression (each label's genes)</td><td>703,142</td><td>5.1%</td><td>1.0%</td><td>5.8%</td></tr>
+            <tr><td>Neighbor enrichment</td><td>20,000</td><td>5.5%</td><td>1.2%</td><td>6.4%</td></tr>
+            <tr><td>Nearest distances</td><td>32,000</td><td>5.1%</td><td>1.1%</td><td>5.4%</td></tr>
+            <tr><td>Moran's I</td><td>233,350</td><td>5.3%</td><td>1.1%</td><td>4.2%</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Each rate is within half a percentage point of its level. Neighbor enrichment's and Moran's I's are slightly above it: their statistics' variances are moderated toward one, and those of rare pairs and sparse genes vary more than the rest. The study once also tested the niches' shares by a moderated linear model of the spatial statistics, which found a difference in 6.0% of them. Niches' shares are now compared only as counts, in Differential abundance.</p>
+
+      <h2 id="cells">Cells are not replicates</h2>
+      <p>The same null cohorts, tested as if each cell were a replicate (as a test of the groups' pooled cells does), find differences everywhere:</p>
+      <ul>
+        <li><strong>A label's share,</strong> by a two-proportion test of the groups' cells: 58% of the tests below 0.05, and a difference found in 88% of the cohorts.</li>
+        <li><strong>A gene in a label,</strong> by the Wilcoxon rank-sum test of the groups' cells: 24% of the tests below 0.05, and genes found in every cohort.</li>
+      </ul>
+      <p>The cells of a section share its subject, slide and run. The sections' own variation, which their cells cannot show, makes the groups differ by chance (Squair et al. 2021). SituCraft therefore never tests cells across groups. Every comparison is of the design's replicate units, and a design whose tests would be of cells is refused, saying why:</p>
+      <ul>
+        <li>a group with one unit;</li>
+        <li>a unit in two rows of one group (its samples are combined instead);</li>
+        <li>regions of one section given different units (see <a href="designs.html#refused">The design</a>).</li>
+      </ul>
+      <p>The tests of cells SituCraft does make are within one sample, such as a cluster's marker genes, and they are labeled exploratory.</p>
+
+      <h2 id="power">Power and coverage</h2>
+      <p>On the 500 cohorts with the standard cohort's effects, four subjects a group:</p>
+      <ul>
+        <li><strong>A gene raised 2.5-fold in one type</strong> (SIM033 in the epithelial-like cells) is found in 98% of the cohorts. Its estimates average 1.33 log2 (the truth is 1.32), and its 95% interval covers the truth in 95.0% of them.</li>
+        <li><strong>The immune-like cells mixed into epithelial-like domains</strong> raise the two types' neighbor enrichment, which is found in 47% of the cohorts.</li>
+        <li><strong>The endothelial-like cells' odds doubled</strong> against each other type move their share of all labeled cells less (an odds ratio of 1.5 on average), and are found in 17%.</li>
+        <li><strong>Among the genes found,</strong> 6.3% on average are not the raised gene. That is close to the 5% false discovery rate the adjustment aims at.</li>
+      </ul>
+      <p>Four subjects a group find a large change in a gene's expression nearly every time, but a modest change in a cell type's share or arrangement only sometimes. A larger cohort, or pairing, finds more. An interval says how much a cohort can tell.</p>
+
+      <h2 id="scale">At scale</h2>
+      <p>Every week, 24 simulated sections of about 84,000 cells each (2 million cells) are summarized and compared one section at a time, as the summary job reads them: each section's graph, enrichment, nearest distances and Moran's I with the defaults the page offers, its summary, then the niches across the sections, the summary written and checked, and the three comparisons. On four cores of a laptop this takes 4.2 minutes, most of it each section's Moran's I and nearest distances, with a peak of 0.65 GB of memory. The same steps for 6 of the sections peak at 0.54 GB: the memory needed barely grows with the sections, because one is held at a time. What each section leaves for the summary is small: its numbers, its pseudobulk, and its cells' positions and labels for the niches across the sections. Summarizing, writing the summary and comparing the groups take under a second.</p>
+
+      <h2 id="checked">How it is checked</h2>
+      <ul>
+        <li><strong>Weekly:</strong> the study of 2,000 null cohorts and 500 with effects. Each family's rates must be within four standard errors (and a fifth of the level) of 5% and 1%; each family must find anything in at most 5% of the null cohorts, within the binomial margin; the raised gene's interval must cover its truth 95% of the time and the gene must be found in at least 80% of the cohorts. The cohort at scale must stay within its budget (20 minutes and 1.5 GB on four cores, its peak at most 1.5 times 6 sections').</li>
+        <li><strong>On every change:</strong> 24 null cohorts and 6 with effects, held to the same rates within their wider standard errors, and the cell-by-cell tests far above them.</li>
+      </ul>

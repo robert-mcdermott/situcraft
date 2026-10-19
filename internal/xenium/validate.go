@@ -45,6 +45,8 @@ type Finding struct {
 type Summary struct {
 	Run                string    `json:"run,omitempty"`
 	Region             string    `json:"region,omitempty"`
+	Slide              string    `json:"slide,omitempty"`
+	PanelDesign        string    `json:"panelDesign,omitempty"`
 	RunStart           string    `json:"runStart,omitempty"`
 	Software           string    `json:"software,omitempty"`
 	Panel              string    `json:"panel,omitempty"`
@@ -221,6 +223,7 @@ func sortFindings(f []Finding) {
 func (v *validator) summary() {
 	e, s := v.b.Experiment, &v.report.Summary
 	s.Run, s.Region, s.RunStart, s.Software = e.RunName, e.RegionName, e.RunStartTime, e.AnalysisSoftware
+	s.Slide, s.PanelDesign = e.SlideID, e.PanelDesignID
 	s.Panel, s.Organism, s.Tissue, s.Preservation = e.PanelName, e.PanelOrganism, e.PanelTissueType, e.PreservationMethod
 	s.PixelSize, s.Zipped = e.PixelSize, v.b.Zipped
 	for _, f := range v.b.Files {

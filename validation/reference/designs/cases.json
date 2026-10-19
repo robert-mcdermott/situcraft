@@ -1,0 +1,310 @@
+[
+ {
+  "name": "unpaired",
+  "spec": {
+   "unit": "subject",
+   "group": "condition",
+   "reference": "control"
+  },
+  "rows": [
+   {
+    "subject": "P1",
+    "condition": "control"
+   },
+   {
+    "subject": "P2",
+    "condition": "control"
+   },
+   {
+    "subject": "P3",
+    "condition": "control"
+   },
+   {
+    "subject": "P4",
+    "condition": "control"
+   },
+   {
+    "subject": "P5",
+    "condition": "treated"
+   },
+   {
+    "subject": "P6",
+    "condition": "treated"
+   },
+   {
+    "subject": "P7",
+    "condition": "treated"
+   },
+   {
+    "subject": "P8",
+    "condition": "treated"
+   }
+  ]
+ },
+ {
+  "name": "paired",
+  "spec": {
+   "unit": "subject",
+   "group": "condition",
+   "reference": "before"
+  },
+  "rows": [
+   {
+    "subject": "S1",
+    "condition": "before"
+   },
+   {
+    "subject": "S1",
+    "condition": "after"
+   },
+   {
+    "subject": "S2",
+    "condition": "before"
+   },
+   {
+    "subject": "S2",
+    "condition": "after"
+   },
+   {
+    "subject": "S3",
+    "condition": "before"
+   },
+   {
+    "subject": "S3",
+    "condition": "after"
+   },
+   {
+    "subject": "S4",
+    "condition": "before"
+   },
+   {
+    "subject": "S4",
+    "condition": "after"
+   }
+  ]
+ },
+ {
+  "name": "covariates",
+  "spec": {
+   "unit": "subject",
+   "group": "condition",
+   "reference": "control",
+   "covariates": [
+    "age",
+    "sex"
+   ]
+  },
+  "numbers": [
+   "age"
+  ],
+  "rows": [
+   {
+    "subject": "P1",
+    "condition": "control",
+    "age": 61,
+    "sex": "F"
+   },
+   {
+    "subject": "P2",
+    "condition": "control",
+    "age": 55,
+    "sex": "M"
+   },
+   {
+    "subject": "P3",
+    "condition": "control",
+    "age": 70,
+    "sex": "F"
+   },
+   {
+    "subject": "P4",
+    "condition": "treated",
+    "age": 48,
+    "sex": "M"
+   },
+   {
+    "subject": "P5",
+    "condition": "treated",
+    "age": 66,
+    "sex": "F"
+   },
+   {
+    "subject": "P6",
+    "condition": "treated",
+    "age": 59,
+    "sex": "M"
+   },
+   {
+    "subject": "P7",
+    "condition": "treated",
+    "age": 52.5,
+    "sex": "F"
+   }
+  ]
+ },
+ {
+  "name": "three groups",
+  "spec": {
+   "unit": "subject",
+   "group": "condition",
+   "reference": "b"
+  },
+  "rows": [
+   {
+    "subject": "P0",
+    "condition": "a"
+   },
+   {
+    "subject": "P1",
+    "condition": "a"
+   },
+   {
+    "subject": "P2",
+    "condition": "a"
+   },
+   {
+    "subject": "P3",
+    "condition": "b"
+   },
+   {
+    "subject": "P4",
+    "condition": "b"
+   },
+   {
+    "subject": "P5",
+    "condition": "c"
+   },
+   {
+    "subject": "P6",
+    "condition": "c"
+   },
+   {
+    "subject": "P7",
+    "condition": "c"
+   },
+   {
+    "subject": "P8",
+    "condition": "c"
+   }
+  ]
+ },
+ {
+  "name": "a factor of three levels",
+  "spec": {
+   "unit": "subject",
+   "group": "condition",
+   "reference": "treated",
+   "covariates": [
+    "batch"
+   ]
+  },
+  "rows": [
+   {
+    "subject": "P1",
+    "condition": "treated",
+    "batch": "slide 1"
+   },
+   {
+    "subject": "P2",
+    "condition": "control",
+    "batch": "slide 2"
+   },
+   {
+    "subject": "P3",
+    "condition": "treated",
+    "batch": "slide 3"
+   },
+   {
+    "subject": "P4",
+    "condition": "control",
+    "batch": "slide 1"
+   },
+   {
+    "subject": "P5",
+    "condition": "treated",
+    "batch": "slide 2"
+   },
+   {
+    "subject": "P6",
+    "condition": "control",
+    "batch": "slide 3"
+   },
+   {
+    "subject": "P7",
+    "condition": "treated",
+    "batch": "slide 1"
+   },
+   {
+    "subject": "P8",
+    "condition": "control",
+    "batch": "slide 2"
+   }
+  ]
+ },
+ {
+  "name": "paired with a covariate",
+  "spec": {
+   "unit": "subject",
+   "group": "condition",
+   "reference": "pre",
+   "covariates": [
+    "dose"
+   ]
+  },
+  "numbers": [
+   "dose"
+  ],
+  "rows": [
+   {
+    "subject": "S1",
+    "condition": "pre",
+    "dose": 0.5
+   },
+   {
+    "subject": "S1",
+    "condition": "post",
+    "dose": 1.85
+   },
+   {
+    "subject": "S2",
+    "condition": "pre",
+    "dose": 1.0
+   },
+   {
+    "subject": "S2",
+    "condition": "post",
+    "dose": 2.45
+   },
+   {
+    "subject": "S3",
+    "condition": "pre",
+    "dose": 1.5
+   },
+   {
+    "subject": "S3",
+    "condition": "post",
+    "dose": 2.75
+   },
+   {
+    "subject": "S4",
+    "condition": "pre",
+    "dose": 2.0
+   },
+   {
+    "subject": "S4",
+    "condition": "post",
+    "dose": 3.35
+   },
+   {
+    "subject": "S5",
+    "condition": "pre",
+    "dose": 2.5
+   },
+   {
+    "subject": "S5",
+    "condition": "post",
+    "dose": 3.95
+   }
+  ]
+ }
+]

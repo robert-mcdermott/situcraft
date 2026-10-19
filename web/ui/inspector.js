@@ -11,6 +11,7 @@ import { promotedSegmentation } from '../lib/segmentations.js';
 import { KIND_ICONS, KIND_LABELS } from './sidebar.js';
 import { askRemoveComparison } from './comparisons.js';
 import { describeLabels, markerSetFile, markerSetVersions } from '../lib/labels.js';
+import { signed } from '../lib/expression.js';
 
 export function mountInspector(app) {
   const root = document.getElementById('inspector');
@@ -231,6 +232,80 @@ export function mountInspector(app) {
         } }, icon('graph'), 'In the Spatial view')) : null);
   }
 
+  // A cohort summary: what it is of (its samples, labels and genes, the niches across them) and how
+  // it was made.
+  function summarySection(r) {
+    const s = r.summary ?? {};
+    const samples = s.samples ?? [];
+    const set = app.store.project.artifacts.find((a) => a.kind === 'marker-set' && a.id === r.markerSet);
+    return h('section.inspector-section',
+      h('h3', icon('table'), 'Cohort summary'),
+      h('dl.kv',
+        h('dt', 'Samples'), h('dd', `${samples.length}: ${samples.map((x) => x.name).join(', ')}`),
+        h('dt', 'Cells'), h('dd', `${samples.reduce((n, x) => n + (x.labeled ?? 0), 0).toLocaleString('en-US')} labeled of ${samples.reduce((n, x) => n + (x.cells ?? 0), 0).toLocaleString('en-US')}`),
+        h('dt', 'Labels'), h('dd', `${s.labels?.name ?? '—'} (${s.labels?.names?.length ?? '?'})`, set ? h('span.muted', ` · marker set v${set.version}`) : null),
+        h('dt', 'Genes'), h('dd', (s.genes ?? 0).toLocaleString('en-US')),
+        h('dt', 'Niches'), h('dd', s.niches ? `${s.niches}, found across the samples together` : 'none'),
+        h('dt', 'Method'), h('dd', `${r.method?.name ?? ''} ${r.method?.version ?? ''}`.trim()),
+        h('dt', 'Artifact'), h('dd.mono', r.id)),
+      h('div.btn-row', { style: { marginTop: '8px' } },
+        h('button.btn.small', { type: 'button', onclick: () => {
+          app.focusItem({ kind: 'cohort-summary', id: r.id });
+          app.setMode('cohort');
+        } }, icon('table'), 'In the Cohort view')),
+      r.method?.citation ? h('p.muted', { style: { margin: '8px 0 0', fontSize: '11.5px' } }, r.method.citation) : null);
+  }
+
+  // A comparison of abundance: what it compared and what it found.
+  function abundanceSection(r) {
+    const s = r.summaryOf ?? {};
+    const summary = app.store.project.artifacts.find((a) => a.kind === 'cohort-summary' && a.id === r.summary);
+    return h('section.inspector-section',
+      h('h3', icon('compare'), 'Differential abundance'),
+      h('dl.kv',
+        h('dt', 'Contrasts'), h('dd', r.name.replace(/^Abundance compared: /, '')),
+        h('dt', 'Of'), h('dd', summary?.name ?? r.summary ?? '—'),
+        h('dt', 'Design'), h('dd', r.design ? `${r.design.name}, version ${r.design.version}` : 'the draft, unsaved'),
+        h('dt', 'Tests'), h('dd', `${s.tests ?? '?'}${s.untested ? `, ${s.untested} untested` : ''}`),
+        h('dt', 'Found'), h('dd', (s.found ?? []).length ? s.found.map((f) => `${f.label} ${f.ratio.toFixed(2)}× (${f.family}, adjusted p ${f.padj < 1e-4 ? f.padj.toExponential(1) : f.padj.toFixed(4)})`).join('; ') : 'none below an adjusted p of 0.05'),
+        h('dt', 'Method'), h('dd', `${r.method?.name ?? ''} ${r.method?.version ?? ''}`.trim()),
+        h('dt', 'Artifact'), h('dd.mono', r.id)),
+      h('div.btn-row', { style: { marginTop: '8px' } },
+        h('button.btn.small', { type: 'button', onclick: () => {
+          app.focusItem({ kind: 'abundance', id: r.id });
+          app.setMode('cohort');
+        } }, icon('compare'), 'In the Cohort view')),
+      r.method?.citation ? h('p.muted', { style: { margin: '8px 0 0', fontSize: '11.5px' } }, r.method.citation) : null);
+  }
+
+  // A comparison of expression or of spatial statistics: what it compared and what it found.
+  function testSection(r) {
+    const s = r.summaryOf ?? {};
+    const summary = app.store.project.artifacts.find((a) => a.kind === 'cohort-summary' && a.id === r.summary);
+    const expression = r.kind === 'expression';
+    const q = (v) => (v < 1e-4 ? v.toExponential(1) : v.toFixed(4));
+    const found = expression
+      ? (s.found ?? []).map((f) => `${f.gene} in ${f.label} ${signed(f.logFC)} log2 (adjusted p ${q(f.padj)})`)
+      : (s.found ?? []).map((f) => `${f.key} ${f.ratio ? `${f.ratio.toFixed(2)}×` : signed(f.estimate, 3)} (${f.family}, adjusted p ${q(f.padj)})`);
+    const below = expression ? s.below ?? 0 : found.length;
+    return h('section.inspector-section',
+      h('h3', icon('compare'), expression ? 'Differential expression' : 'Spatial statistics compared'),
+      h('dl.kv',
+        h('dt', 'Contrasts'), h('dd', r.name.replace(/^(Expression|Spatial statistics) compared: /, '')),
+        h('dt', 'Of'), h('dd', summary?.name ?? r.summary ?? '—'),
+        h('dt', 'Design'), h('dd', r.design ? `${r.design.name}, version ${r.design.version}` : 'the draft, unsaved'),
+        h('dt', 'Tests'), h('dd', `${s.tests ?? '?'}${expression && s.untested?.length ? `; ${s.untested.join(', ')} untested` : !expression && s.untested ? `, ${s.untested} untested` : ''}`),
+        h('dt', 'Found'), h('dd', found.length ? `${found.join('; ')}${below > found.length ? `; ${below - found.length} more` : ''}` : 'none below an adjusted p of 0.05'),
+        h('dt', 'Method'), h('dd', `${r.method?.name ?? ''} ${r.method?.version ?? ''}`.trim()),
+        h('dt', 'Artifact'), h('dd.mono', r.id)),
+      h('div.btn-row', { style: { marginTop: '8px' } },
+        h('button.btn.small', { type: 'button', onclick: () => {
+          app.focusItem({ kind: r.kind, id: r.id });
+          app.setMode('cohort');
+        } }, icon('compare'), 'In the Cohort view')),
+      r.method?.citation ? h('p.muted', { style: { margin: '8px 0 0', fontSize: '11.5px' } }, r.method.citation) : null);
+  }
+
   // A spatial analysis: its question, labels, what it is of, and what it found.
   function analysisSection(r) {
     const { project } = app.store;
@@ -386,6 +461,18 @@ export function mountInspector(app) {
     if (focus?.kind === 'spatial') {
       const r = app.store.project.artifacts.find((a) => a.kind === 'spatial' && a.id === focus.id);
       if (r) return analysisSection(r);
+    }
+    if (focus?.kind === 'abundance') {
+      const r = app.store.project.artifacts.find((a) => a.kind === 'abundance' && a.id === focus.id);
+      if (r) return abundanceSection(r);
+    }
+    if (focus?.kind === 'expression' || focus?.kind === 'spatial-comparison') {
+      const r = app.store.project.artifacts.find((a) => a.kind === focus.kind && a.id === focus.id);
+      if (r) return testSection(r);
+    }
+    if (focus?.kind === 'cohort-summary') {
+      const r = app.store.project.artifacts.find((a) => a.kind === 'cohort-summary' && a.id === focus.id);
+      if (r) return summarySection(r);
     }
     if (focus?.kind === 'graph') {
       const g = app.store.project.artifacts.find((a) => a.kind === 'graph' && a.id === focus.id);

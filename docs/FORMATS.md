@@ -189,13 +189,14 @@ A project is one JSON document, saved automatically in the library (`<data dir>/
 | --- | --- |
 | `format`, `version` | `"situcraft-project"`, `1` |
 | `id`, `name`, `created`, `modified` | Its identity |
-| `datasets` | Each bundle: its place, run and analysis identifiers, panel, tissue, counts, pixel size, channels, a fingerprint of its files (each file's size; the SHA-256 of its manifest, metrics and panel), and its validation summary and findings |
+| `datasets` | Each bundle: its place, run and analysis identifiers, run, slide and Xenium region names, panel (its name and design), tissue, counts, pixel size, channels, a fingerprint of its files (each file's size; the SHA-256 of its manifest, metrics and panel), and its validation summary and findings |
 | `artifacts` | Results: filters (a name, a version, its parent version, its conditions, and its result: the number of cells, how many it keeps, and a checksum of which), from 0.2.0 segmentations and comparisons, and from 0.4.0 clusterings, their names and maps, marker sets, label sets, and curated and consensus labels (below) |
 | `decisions` | Recorded choices, with their reasons (from 0.2.0) |
 | `views` | Saved views (below) |
 | `exports` | The exports written from its segmentations (from 0.2.0; absent until the first) |
 | `regions` | The regions drawn on its datasets, each with its versions (from 0.5.0; absent until the first; below) |
 | `reviews` | The reviews of its cells and regions, appended and never changed (from 0.5.0; absent until the first; below) |
+| `samples`, `sampleFields` | What is known of its samples, and the fields that say it (from 0.7.0; absent until the first; below) |
 | `history` | Every change, with its time |
 
 A filter's checksum is the SHA-256 of the cell count (32-bit unsigned, little-endian) followed by
@@ -240,6 +241,37 @@ polygons, each a list of rings (its outer ring, then its holes), each ring a lis
 does not repeat its first point. `tool` is how it was made (`rectangle`, `polygon`, `freehand`,
 `brush` or `imported`), `layer` what it was drawn over. No two of a dataset's regions (those not
 removed) have the same name.
+
+`samples` records what is known of the project's samples (from 0.7.0). Each dataset is a sample
+until regions of it are made its samples instead; a sample nothing was said of has no record.
+A record is `{id, dataset, region, name, fields}`: `id` is `s-` and the dataset's id (or the
+region's, for a region sample), `region` the region's id or `null` for the whole dataset, `name`
+present only when one was given (else the dataset's or region's), and `fields` the sample's values
+by field name (text, or a number for a number field; a missing value is absent, never zero). A
+dataset with region samples is not a sample itself; its own record is kept for when it is again.
+`sampleFields` lists the fields in order, `[{name, kind}]` with `kind` `text` or `number`, and is
+absent while they are the first two, `subject` and `condition`. The run, slide, Xenium region,
+panel and software of a sample are read from its dataset and not stored again.
+
+A design (from 0.7.0) is recorded in `artifacts` as kind `design`: `{id, name, version, parent,
+created, spec, samples, excluded, result}`, each saved design a new version of its name. `spec` is
+what was asked: `unit` (the replicate unit's field), `group` (the field compared), `reference`,
+`contrasts` (`[a, b]` pairs, each a − b; empty for each level against the reference),
+`covariates` (fields, or `run`, `slide`, `panel`) and `exclude` (samples left out: `{sample id:
+reason}`). `samples` holds the samples as they were: each one's `id`, `name`, `dataset`, `region`,
+`unit`, `group`, covariate `values` and `row`; `excluded` each sample left out, `{id, name,
+reason}`. `result` is the design: `levels` (the reference first), `reference`, `paired`, `rows`
+(each a unit in a group, `{unit, group, samples}`, a unit's samples in one group combined),
+`names` (the columns: `Intercept`, `field[T.level]` for each factor level but the reference, a
+number field by its name; factors before numbers), `matrix` (a row for each of `rows`), `rank`,
+`df` (the residual degrees of freedom), `contrasts` (`{name, a, b, vector}`, the vector over the
+columns), `words` and `notes`. Only a design that can be estimated is saved.
+
+The samples' table, written and read as CSV, has a row for each sample: `sample` (its name),
+`dataset`, `region` (its name, or empty), the fields in order, then the bundle's `run`, `slide`,
+`xenium_region`, `panel` and `software` (written for reference, never read). Text is quoted when
+it holds a comma, a quote, a line break or space at either end; numbers are written so that they
+read back exactly.
 
 `reviews` records each review of a dataset's cells, clusters or regions (from 0.5.0), appended and
 never changed or removed (taking one back is another review):
@@ -420,6 +452,107 @@ An analysis is named by its question, segmentation, graph (or the cells' checksu
 checksum and names, the regions' checksum, its window, the regions compared or crossed (their
 versions and polygons), the method's version and its parameters, so asking again answers it. The project records each analysis it uses (kind `spatial`, with its dataset,
 segmentation, graph, question, parameters and summary: the pairs most enriched and most depleted); one made again on another segmentation (from 0.6.0) records the analysis it was made from (`remakeOf`, its id) and the comparison of the two segmentations (`comparison`, its id), through which its numbers are read with that analysis's. Niches are a label set too: a fill `labels:<their analysis's id>:0` colors each cell by its niche.
+
+### Cohort summaries
+
+A cohort summary (from 0.7.0) is an artifact of kind `cohort-summary`: every sample summarized the
+same way, each number traced to the artifact it came from. Its files (the binary ones in the
+envelope above; arrays little-endian):
+
+| File | Magic | Holds |
+| --- | --- | --- |
+| `summary.json` | | `format` (`"situcraft-cohort-summary"`), `version`, `method`, `methodVersion`; the cohort's `labels` (the marker set's `name` and `level`, the `names` every sample is counted in, in order, and their `colors`): every label of the level, and those of coarser levels some sample's cells carry there; the `genes`, every sample's panel's, in the order first met; `samples`, each one's `sample` (its id), `name`, `dataset`, `segmentation` (id and name), `region` (id, name and version, for a region sample), the `labels` its cells carry (the set's `id`, `kind`, `name`, `level` and `checksum`), the cells chosen (`choice`: `checksum`, `regions`, `excluded`, as a graph records them), its tissue `window` (`kind` `tissue` or `region`, the tissue's `closing` radius and `grid`, the `area` in µm² and boundary `segments`), its `panelGenes` (the genes counted in it), its `bundle` (the `run`, `slide`, Xenium `region` and analysis `software` its bundle names, and its `panel`'s `name`, `design`, `version` and `genes`), its `cells` chosen and `labeled`, `tissueAreaUm2`, and by label `counts`, `shares` (of its labeled cells) and `densityPerMm2`; its quality (`qc`: `cells`, `cellsPerMm2`, `medianTranscripts`, `medianGenes`, `medianAreaUm2`, `medianNucleusAreaUm2`, `nucleusShare`, `transcriptsPer100um2`, `transcripts`, `noTranscriptShare`; the nuclei's numbers `null` where the segmentation records no nucleus, the instrument's segmentation's read from the bundle's cells table); with niches, its cells in each niche (`niches`), their `nicheShares` and the cells with a window (`nicheCells`); and its `statistics`, each `{family, key, value, source}`: its graph's (`graph`: `mean neighbors`, `median edge µm`, `pieces`, `without a neighbor`), an enrichment's ratio of neighbors found over expected by pair (`enrichment`, `A\|B`, the names in order), nearest distances' median from each label to each (`nearest`, `A→B`, µm) and Moran's I by gene (`moran`), the source its artifact's id; and, with niches, the `niches` found across the samples together: their `parameters` (as a niches analysis's), number (`niches`), each one's `composition` (N × K, its windows' mean, the k-means center), `cells` in all the samples, `tissue` (each label's share of all the samples' labeled cells), `windows`, k-means's `inertia`, the further seeds' `agreement` (adjusted Rand index) and each niche's `defining` labels (indices, as a niches analysis's); the samples' quality compared (from 0.7.0's method 2): `qcMetrics` (each `{key, name, share}`: the numbers compared), `outlierRule` (`z`, `fold`, `points`, `minSamples`), `outliers` (each sample far out on a number: `sample`, `name`, `metric`, `value`, the samples' `median`, the `spread` and the robust `z` on the scale compared, log(1 + value) for a quantity, and the `reason` in words; strongest first) and `batches` (each slide's, run's and panel's `kind`, `name`, `samples` and the `medians` of the numbers over them); `panels`, the samples' panels compared (`panels`, each one's `name`, `design`, `version`, `genes`, a `checksum` of its genes, their IDs and codewords, and the `samples` read with it; `shared`, the genes every panel has, in the first panel's order; `partial`, each gene some panel lacks, its `id` and the `panels` (indices) that have it; `codewords`, the shared genes read by other codewords, by panel; `ids`, genes named alike with other Ensembl `ids`, or an `id` under other `names`); and `pca`, the pseudobulk's principal components (`normalization`, `top`, the `genes` used, each component's share of the `variance`, each sample's `scores`), absent for one sample |
+| `pseudobulk.bin` | `SCCP` | The samples', labels' and genes' counts (u32 each: S, K, G, as `summary.json`'s), then for each sample, each label, each gene the transcripts of the sample's cells of that label (u32; `0xFFFFFFFF` for a gene the sample's panel has not) |
+| `niches.bin` | `SCCN` | With niches: the cells' count (u32), each cell's row of its segmentation (u32), then each one's niche (i32, −1 without a window); the samples' cells chosen, in the samples' order |
+| `table.csv` | | The cohort table, a row each number of each sample: `sample` (its id), `name`, `family` (`cells`, `share`, `density`, `niche`, `qc`, `graph`, `enrichment`, `nearest`, `moran`, `pca`), `key` (a label, a niche as `niche 1`, a quality number's name, a pair, a gene, a component as `PC1`), `value` (the shortest decimal that reads back as it) and `source` (the artifact it came from: the sample's labels for cells, shares and densities; its segmentation for quality; its graph or analysis for theirs; empty for a niche's share or a component's score, the summary's own; a number the segmentation does not record is left out) |
+| `pseudobulk.csv` | | The pseudobulk as a table: a row each sample's label (`sample`, `name`, `label`, `cells`), a column each gene (empty for a gene its panel has not, never zero) |
+
+The samples' quality is compared on the numbers that do not follow a section's size: a sample is far
+out on one when its robust z-score (its distance from the samples' median over 1.4826 times their
+median absolute deviation, or where that is 0, over 1.2533 times their mean absolute deviation; on a
+log scale for a quantity) is at least 3.5 and it differs by at least 20% of the median (a quantity)
+or 5 points (a share); with fewer than five samples none is. The principal components are of each
+sample's transcripts of the genes every panel has, summed over its labels, as log2(1 + counts per
+million of their total), the 500 most variable genes kept (ties to the first), centered, by the
+eigenvectors of their Gram matrix (Jacobi's rotations); a component's sign makes the sample farthest
+along it positive.
+
+A sample's cells are those chosen (its dataset's, or its region's; never those a review excluded),
+each labeled in the cohort's names (a sample's label not among them is refused). Its tissue is the
+tissue window's area (the cells' footprints closed by the radius, 10 µm unless given), within its
+region for a region sample. A summary is named by its samples (each one's dataset, segmentation,
+cells' and labels' checksums, region, graph and analyses), the cohort's labels, the niches'
+parameters, the closing radius and the method's version, so summarizing again answers it. The
+project records each summary (kind `cohort-summary`: `{id, name, labelsFrom, markerSet, level,
+samples, state, created, method, parameters, summary}`, `samples` the samples' ids, `labelsFrom` what
+every sample is labeled from: a marker set's record id, which `markerSet` repeats, or a reference as
+`ref:` its file's SHA-256 and its column of labels).
+
+### Comparisons of abundance
+
+A comparison of abundance (from 0.7.0) is an artifact of kind `abundance`, made from a cohort
+summary: each label's cells compared between a design's groups, the replicate unit the unit.
+
+| File | Holds |
+| --- | --- |
+| `abundance.json` | `format` (`"situcraft-abundance"`), `version`, `method`, `methodVersion`; the `summary` (`id`, `name`); the summary's `labels`; the `design`: its `name` and `version` when saved, its `spec`, the columns' `names`, its `rows` (each a replicate unit in a group: `unit`, `group`, the `samples` combined by id, the columns' values `x`), its `contrasts` (each `name` and `vector` over the columns), the samples it leaves out with their reasons (`excluded`), and `pseudoSamples` (from 0.7.0's slice 8) when its units are regions of one section compared as samples for teaching, not independent replicates; the intervals' `level`; and the `families` compared (`share`, `density`, `niche`), each its `name`, `model`, `effect` (`odds ratio`, `density ratio`), `labels`, each row's `counts` of each label (labels × rows), its `totals` (labeled cells; tissue in mm²; cells with a window) and `values` (count over total), its `tests` and their `universe` in words, and the tests `untested`. A test is a label's of a contrast: `tested`, or a `note` saying why not (no sample has a cell of it; every cell is of it; a group with none of it, or nothing else); the `estimate` on the link's scale (log odds, log density), its `se`, `t`, residual degrees of freedom `df`, two-sided `p`, the Benjamini–Hochberg `padj` over the family's tests, the effect as a `ratio` with its interval (`lo`, `hi`) and the model's `dispersion` |
+| `results.csv` | A row each test: `family`, `label`, `contrast`, `tested`, `estimate`, `se`, `t`, `df`, `p`, `padj`, `ratio`, `lo`, `hi`, `dispersion`, `note` |
+
+A share is a quasi-binomial generalized linear model of the label's cells out of the row's labeled
+cells (logit link), a density a quasi-Poisson model of its cells with the log of the row's tissue
+in mm² an offset (log link), each fitted by iteratively reweighted least squares as R's `glm` fits
+it; the dispersion is Pearson's χ² over the residual degrees of freedom, and a contrast's test a t
+test on those degrees of freedom. A comparison is named by its summary, design (rows, matrix and
+contrasts), families, level and method version, so comparing again answers it. Every comparison
+(of abundance, expression or spatial statistics) refuses a design whose tests would be of cells
+rather than of replicates: a group of one unit, a unit in two rows of one group, and regions of
+one section given different units unless the design marks them `pseudoSamples`. The project records
+each comparison (kind `abundance`: `{id, name, summary, design, state, created, method,
+parameters, summaryOf}`, `summaryOf` the manifest's summary: the tests, those untested, and those
+`found`, each `family`, `label`, `contrast`, `ratio` and `padj`, below an adjusted p of 0.05).
+
+### Comparisons of expression
+
+A comparison of expression (from 0.7.0) is an artifact of kind `expression`, made from a cohort
+summary: each label's pseudobulk compared between a design's groups, the replicate unit the unit.
+
+| File | Holds |
+| --- | --- |
+| `expression.json` | `format` (`"situcraft-expression"`), `version`, `method`, `methodVersion`; the `summary` (`id`, `name`); the summary's `labels`; the `design` (as `abundance.json` has it); the intervals' `level`; `minCells`, the fewest cells of a label a row is tested with; the `genes` compared (those every panel has); the `results`, one per label; the `tests` and their `universe` in words. A label's result: `label`; `tested`, or a `note` saying why not; each design row's `cells` of the label and the `rows` used (those with `minCells` or more); then, tested, the used rows' `library` sizes (the tested genes' transcripts) and TMM `factors`; the `genes` tested (indices into `genes`), each one's `aveLogCPM` (mean log2 count per million), the genes `filtered` as too little expressed; voom's lowess `span`; the variances' prior (`s2Prior`, and `dfPrior`, null when infinite: the variances agree beyond chance), the tests' degrees of freedom `dfTotal`; and its `contrasts`, each `contrast` (its name) with arrays one per tested gene: `logFC`, its interval `lo` and `hi`, the moderated `t`, two-sided `p` and Benjamini–Hochberg `padj` over every label, gene and contrast tested; and the genes `up` and `down` below an adjusted p of 0.05 |
+| `results.csv` | A row each test: `label`, `contrast`, `gene`, `tested`, `aveLogCPM`, `logFC`, `lo`, `hi`, `t`, `df`, `p`, `padj`, `note`; and a row each label untested, with its note |
+
+A label's pseudobulk in a row is its cells' transcripts of each gene summed over the row's samples.
+Genes are kept with a count per million of at least 10 over the median library size in as many
+rows as the smallest group has (1 over the design's largest leverage) and a total count of 15;
+library sizes are normalized by TMM (log-ratios trimmed 30% at each end and mean log-expressions 5%,
+weighted by their binomial variances, against the row whose upper quartile is nearest the rows');
+voom's values are log2((count + 0.5) / (library × factor + 1) × 10⁶), its weights the inverse of a
+lowess trend of the genes' square-root residual deviations (its span 0.3 + 0.7 (50 / genes)^⅓, or 1
+for 50 genes or fewer) at each value's fitted log count, raised to the fourth power; each gene's
+model is weighted least squares, and its variance is moderated by the prior fitted to the genes'
+log variances by their moments. A comparison is named by its summary, design, level, `minCells` and
+method version, so comparing again answers it. The project records each comparison (kind
+`expression`: `{id, name, summary, design, state, created, method, parameters, summaryOf}`,
+`summaryOf` the manifest's summary: the `tests`, the labels `untested`, the tests `below` an
+adjusted p of 0.05, and the 10 lowest `found`, each `label`, `gene`, `contrast`, `logFC` and
+`padj`).
+
+### Comparisons of spatial statistics
+
+A comparison of spatial statistics (from 0.7.0) is an artifact of kind `spatial-comparison`, made
+from a cohort summary: each sample's spatial statistics compared between a design's groups.
+
+| File | Holds |
+| --- | --- |
+| `spatial-tests.json` | `format` (`"situcraft-spatial-tests"`), `version`, `method`, `methodVersion`; the `summary`; the summary's `labels`; the `design` (as `abundance.json` has it); the intervals' `level`; and the `families` compared (`enrichment`, `nearest`, `moran`), each its `name`, `effect`, whether it is compared as log2 ratios (`log`), its statistics' `keys` (a pair `A\|B`, a distance `A→B`, a gene), each row's `values` of each (keys × rows; log2 for a log family; null where none of the row's samples has it), the variances' prior (`s2Prior`; `dfPrior`, null when infinite and 0 for a family of one statistic) and `dfTotal`, its `tests`, their `universe` in words, and the tests `untested`. A test is a statistic's of a contrast: `key`, `contrast`, `tested` or a `note` saying why not (a row has none of it; no variation left to test); the `estimate` (a log2 ratio or a difference) with its interval (`lo`, `hi`), the moderated `t`, two-sided `p`, the Benjamini–Hochberg `padj` over the family's tests; for a log family, the effect as a `ratio` with its interval (`ratioLo`, `ratioHi`) |
+| `results.csv` | A row each test: `family`, `key`, `contrast`, `tested`, `estimate`, `lo`, `hi`, `t`, `df`, `p`, `padj`, `ratio`, `ratio_lo`, `ratio_hi`, `note` |
+
+A row's value is the mean of its samples' (a ratio of 0 counted as none). Each statistic's model is
+ordinary least squares, and each family's variances are moderated by the prior fitted to their log
+variances by their moments. A comparison is named by its summary, design, families, level and
+method version. The project records each comparison (kind `spatial-comparison`, as an expression
+comparison is recorded; `summaryOf` the `tests`, those `untested`, and those `found` below an
+adjusted p of 0.05, each `family`, `key`, `contrast`, `estimate`, `ratio` and `padj`).
 
 ### Post-Xenium images
 
@@ -703,6 +836,7 @@ are in [research.md](../situcraft-spec/research.md) §3.4.
 | `--quiet` | | Print only the summary |
 | `--reference` | 0 | Also write a single-cell reference of the tissue's types, this many cells of each, as `<folder>-reference.zarr` (below) |
 | `--post-xenium` | | Also make post-Xenium images of the section, an H&E and an immunofluorescence image, each placed by a known transform and deformation (below); not for a mosaic |
+| `--cohort` | | A simulated cohort instead of one tissue: `standard`, `null` or `paired` (below); `--params` then reads the cohort's parameters, `--seed` its seed and `--width`, `--height` its sections' size |
 
 The folder must not exist: it is written under a temporary name beside it and renamed into place
 when complete, so an interrupted run (Ctrl+C) leaves nothing behind.
@@ -743,3 +877,41 @@ Other tools read a simulated bundle as they read Xenium's: spatialdata-io's Xeni
 its table, transcripts, labels, boundaries and image with no warning, and tifffile and pyarrow
 its image and tables (`validation/reference/read_simulation.py` checks each against what the
 simulation made).
+
+### Simulated cohorts (`situcraft simulate --cohort`)
+
+`situcraft simulate --cohort <name> <new folder>` writes a simulated cohort: sections of subjects
+in groups, each a simulated bundle of its own layout, cells and molecules, with one panel; the
+sections differ from one another by stated amounts and between groups by known effects. The model
+and its validation are in [research.md](../situcraft-spec/research.md) §3.4b.
+
+| Cohort | Holds |
+| --- | --- |
+| `standard` | Four subjects in each of two groups, `control` and `treated`, on two slides; sections of 250 × 250 µm with twelve domains (about 750 cells each), with effects in the treated group: the endothelial-like type's odds against each other type ×2 in every domain, the immune-like type's ×4 in the domains the epithelial-like type leads, and `SIM033` ×2.5 in epithelial-like cells. About 3 s and 64 MB |
+| `null` | The same design and panel, its own seed, without effects: the groups differ only by chance (the start page's **A simulated null cohort**). About 3 s and 68 MB |
+| `paired` | Six subjects, each a section `before` and `after` (twelve sections), the same panel, the effects after, the endothelial-like type's odds ×4; a subject's sections share 60% of their variation, and lie on one slide (the start page's **A simulated cohort, before and after**). About 4 s and 95 MB |
+| `outlier` | The standard cohort with its sixth sample (`S06`) planted to detect 40% of the transcripts it would, as a failed run would: for checking that cohort QC finds it |
+
+Its parameters (`--print-params` prints them; `--params` reads them back):
+
+| Parameter | Sets |
+| --- | --- |
+| `seed`, `panel_seed` | The cohort's seed: each sample's seed and draws come from it; and the panel's stream (the seed if not given). The presets share the standard cohort's panel |
+| `groups`, `subjects`, `paired` | The groups (2 to 10; the first the reference) and the subjects in each, or, paired, the subjects each sampled in every group |
+| `slides`, `slide_sd` | Slides as batches (0 for none): an unpaired group's samples dealt to them in turn, a paired subject's together; each slide's detection efficiency log-normal with this σ, multiplying its cells' densities and the ambient background |
+| `share_sd`, `level_sd`, `subject_share` | Sample-to-sample variation on the log scale: of each type's weight in the domains' mixes, and of each gene's expected count in each type; in a paired design, the share of each draw's variance a subject's samples have in common |
+| `outliers` | Samples made far out on purpose: each `{sample, detection}`, the sample by its number (`S01` is 1) and the factor its detection efficiency is multiplied by (its cells' densities and the ambient background, as a slide's efficiency multiplies them), above 0 and at most 10 |
+| `effects` | Each `{kind, group, type, within, gene, fold}`: `share` multiplies a type's weight in every domain's mix (its odds against each other type, in every domain), or with `within` in the domains another type leads; `level` multiplies a gene's expected count in a type's cells; in `group`, against the first group |
+| `section` | Every section's parameters, as `--print-params` lists a tissue's (but its seed, odds, levels, names and densities, which each sample sets). Each section has its own domains' places and its own cells, and the same domains' mixes as the others (the domain numbered *d* is the same kind of place in every section) |
+
+| File | Holds |
+| --- | --- |
+| `situcraft-cohort.json` | `format` (`"situcraft-cohort"`), `version` (1), `simulated`, `software`, `about`, `truth`, `samples` (each one's `name`, `subject`, `group` and `slide`) and `parameters` |
+| `samples.csv` | Each sample's `sample`, `subject` and `condition` (its group), as SituCraft reads a table of samples |
+| `reference.zarr` | With `--reference N` (and in the start page's example, 300): a single-cell reference of the cohort's types over the panel every sample shares, N cells of each type, as the tissue's reference is (an AnnData object in Zarr: `cell_type` in obs), each sample's own levels aside |
+| `truth/cohort.json` | `design` (the groups, subjects, pairing, slides and variation); `effects`, each as asked with what the true cells show of it (each group's mean of its samples' values, their difference `measured_log_fold` against `log_fold`, and its `std_error` from the samples' spread; paired: of the subjects' differences), the value being a type's log odds against the cells of the types no share effect changes, in each domain the effect holds in (averaged over them), or a gene's log odds among its type's transcripts, both of which the fold multiplies; and `samples`, each one's seed, `detection` (its slide's efficiency times, for a planted outlier, its factor, which `planted` gives), `type_odds`, true `cells`, `cells_by_type`, `domains` (each domain's `leader`, the type that leads it, and its `cells_by_type`) and, for each level effect, its `fold` and its type's `cells`, `transcripts` of the gene and `type_transcripts` |
+| `<sample>/` | A simulated bundle (above): its `experiment.xenium` names the sample's region, its run (`simulated run 1` for `simulated slide 1`) and its `slide_id`; its `situcraft-simulation.json` records its parameters, among them the cohort's `panel_seed` and `mix_seed`, its `placement_retries`, `type_odds`, `domain_odds` and `level_folds` |
+
+Opened in SituCraft (the start page's **A simulated cohort**, or the folder's bundles added
+together and `samples.csv` read in the Cohort view), each section is a sample with its subject,
+condition and slide.

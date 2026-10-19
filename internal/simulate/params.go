@@ -94,16 +94,51 @@ type Params struct {
 	// immunofluorescence image, or both, each placed by a known transform.
 	PostXenium *PostXenium `json:"post_xenium,omitempty"`
 
+	// A sample of a simulated cohort (cohort.go) differs from its cohort's other sections by these;
+	// each is absent for a tissue of its own.
+	//   - PanelSeed: the panel's stream's seed, shared by the cohort's sections (the seed's own if 0).
+	//   - MixSeed: the seed of the domains' mixes' stream, shared likewise (the layout's own if 0);
+	//     a mosaic's fields share it too (their domains in other places, with the same mixes).
+	//   - Retries: how many other places in its domain a candidate cell refused for crowding tries
+	//     before it is dropped (0: dropped at once).
+	//   - TypeOdds: each type's weight in every domain's mix multiplied by it, then the mix
+	//     normalized: the type's odds against each other type multiplied by it, in every domain.
+	//   - DomainOdds: a type's weight multiplied likewise, in the domains another type leads.
+	//   - LevelFolds: each type's expected count of each gene multiplied (by type, over the genes).
+	//   - RunName, RegionName, SlideID: what experiment.xenium and the metrics name the run, the
+	//     region and the slide.
+	PanelSeed  uint64       `json:"panel_seed,omitempty"`
+	MixSeed    uint64       `json:"mix_seed,omitempty"`
+	Retries    int          `json:"placement_retries,omitempty"`
+	TypeOdds   []float64    `json:"type_odds,omitempty"`
+	DomainOdds []DomainOdds `json:"domain_odds,omitempty"`
+	LevelFolds [][]float64  `json:"level_folds,omitempty"`
+	RunName    string       `json:"run_name,omitempty"`
+	RegionName string       `json:"region_name,omitempty"`
+	SlideID    string       `json:"slide_id,omitempty"`
+
 	// part is a mosaic's tile, from 0: its streams' own (the first tile's, a single field's, are
 	// the seed's).
 	part uint64
 }
 
+// DomainOdds multiplies a type's weight in the mixes of the domains another type leads (its
+// odds against each other type there).
+type DomainOdds struct {
+	Leader int     `json:"leader"`
+	Type   int     `json:"type"`
+	Odds   float64 `json:"odds"`
+}
+
 // tiles are the mosaic's tiles across and down (1 and 1 for one field).
 func (p Params) tiles() (int, int) { return max(1, p.TilesAcross), max(1, p.TilesDown) }
 
-// seed is a stream's seed: the panel's is the seed itself, every other stream's the tile's.
+// seed is a stream's seed: the panel's is the panel seed (the seed itself without one), every
+// other stream's the tile's.
 func (p Params) seed(stream uint64) uint64 {
+	if stream == streamPanel && p.PanelSeed != 0 {
+		return p.PanelSeed
+	}
 	if stream == streamPanel || p.part == 0 {
 		return p.Seed
 	}
@@ -204,6 +239,26 @@ func (p *Params) Check() error {
 	if across, down := p.tiles(); across*down > 1 {
 		w, h := int(math.Ceil(p.WidthUm/p.PixelUm)), int(math.Ceil(p.HeightUm/p.PixelUm))
 		need(w%mosaicBlock == 0 && h%mosaicBlock == 0, fmt.Sprintf("a mosaic's tiles whole %d-pixel blocks each way (%d × %d pixels asked; %.1f µm is %d at %g µm)", mosaicBlock, w, h, float64(mosaicBlock)*8*p.PixelUm, 8*mosaicBlock, p.PixelUm))
+	}
+	need(p.Retries >= 0 && p.Retries <= 10000, "0 to 10,000 placement retries")
+	positive := func(v float64) bool { return v > 0 && !math.IsInf(v, 0) }
+	if p.TypeOdds != nil {
+		need(len(p.TypeOdds) == len(p.Types), "type odds for every cell type")
+		for _, v := range p.TypeOdds {
+			need(positive(v), "type odds above 0")
+		}
+	}
+	for _, d := range p.DomainOdds {
+		need(d.Leader >= 0 && d.Leader < len(p.Types) && d.Type >= 0 && d.Type < len(p.Types) && positive(d.Odds), "domain odds of a leading type and a type, above 0")
+	}
+	if p.LevelFolds != nil {
+		need(len(p.LevelFolds) == len(p.Types), "level folds for every cell type")
+		for _, row := range p.LevelFolds {
+			need(len(row) == p.Genes, "level folds for every gene")
+			for _, v := range row {
+				need(positive(v), "level folds above 0")
+			}
+		}
 	}
 	if px := p.PostXenium; px != nil {
 		across, down := p.tiles()

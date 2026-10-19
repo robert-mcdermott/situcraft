@@ -82,19 +82,22 @@ func uuidOf(text string) string {
 
 // written is what the bundle holds, for the summary and the metrics.
 type written struct {
-	trueCells         int
-	instrumentCells   int
-	transcripts       int
-	q20Genes          int64
-	q20GenesAssigned  int64
-	q20GenesNuclear   int64
-	genesAnyQuality   int64
-	nucleusPixels     int64
-	cellArea          float64
-	transcriptCounts  []int64
-	controlCounts     []int64
-	genesPerCell      []int64
-	trueCellsByType   map[string]int
+	trueCells        int
+	instrumentCells  int
+	transcripts      int
+	q20Genes         int64
+	q20GenesAssigned int64
+	q20GenesNuclear  int64
+	genesAnyQuality  int64
+	nucleusPixels    int64
+	cellArea         float64
+	transcriptCounts []int64
+	controlCounts    []int64
+	genesPerCell     []int64
+	trueCellsByType  map[string]int
+	// A single field's true values, for a cohort's sample (Summary).
+	cellsByDomainType [][]int
+	geneCountsByType  [][]int64
 	visibleNuclei     int
 	moleculesByOrigin map[string]int
 	wide              int
@@ -158,15 +161,35 @@ func runParams(p Params) string {
 // runOf is experiment.xenium's description of the run, but its cells.
 func runOf(p Params, software string) map[string]any {
 	experiment := uuidOf("situcraft simulation experiment\n" + runParams(p))
-	return map[string]any{
+	run := map[string]any{
 		"major_version": 5, "minor_version": 0, "patch_version": 0,
-		"run_name": "SituCraft simulation", "region_name": fmt.Sprintf("simulated tissue, seed %d", p.Seed),
+		"run_name": runName(p), "region_name": regionName(p),
 		"preservation_method": "", "panel_name": "SituCraft simulated panel", "panel_design_id": "situcraft-simulated",
 		"panel_organism": "Simulated", "panel_tissue_type": "", "pixel_size": p.PixelUm,
 		"instrument_sn": "simulated", "instrument_sw_version": "simulated", "analysis_sw_version": analysisSoftware(software),
 		"experiment_uuid": experiment, "z_step_size": zStepUm, "segmentation_stain": "DAPI",
 		"images": map[string]any{"morphology_focus_filepath": "morphology_focus/morphology_focus_0000.ome.tif"},
 	}
+	if p.SlideID != "" {
+		run["slide_id"] = p.SlideID
+	}
+	return run
+}
+
+// runName and regionName are what the bundle names its run and region: a cohort's sample's own,
+// else the simulation's.
+func runName(p Params) string {
+	if p.RunName != "" {
+		return p.RunName
+	}
+	return "SituCraft simulation"
+}
+
+func regionName(p Params) string {
+	if p.RegionName != "" {
+		return p.RegionName
+	}
+	return fmt.Sprintf("simulated tissue, seed %d", p.Seed)
 }
 
 func (wr *writer) writeAll(progress func(float64, string)) error {
@@ -862,8 +885,8 @@ func (wr *writer) writeDescription() error {
 		name  string
 		value any
 	}{
-		{"run_name", "SituCraft simulation"},
-		{"region_name", fmt.Sprintf("simulated tissue, seed %d", p.Seed)},
+		{"run_name", runName(p)},
+		{"region_name", regionName(p)},
 		{"region_area", region},
 		{"total_cell_area", w.cellArea},
 		{"num_cells_detected", w.instrumentCells},

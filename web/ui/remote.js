@@ -28,9 +28,14 @@ import { labelSource, labelVersions, refOf } from './label-sources.js';
 import { defaultPair, impactLines, sideOf } from '../lib/impact.js';
 import { remakeOnSegmentation } from './remake.js';
 import { KINDS as GRAPH_KINDS, describeGraph, graphsOf } from '../lib/graphs.js';
-import { analysesOf, analysisNumbers, bandsOf, compareNumbers, nicheNames, rankCorrelation, rankPairs, rowNames, zoneBands } from '../lib/spatial.js';
+import { NICHES_DEFAULTS, analysesOf, analysisNumbers, bandsOf, compareNumbers, nicheNames, rankCorrelation, rankPairs, rowNames, zoneBands } from '../lib/spatial.js';
 import { ratioText } from './spatial-results.js';
 import { showAnalysisCells } from './spatial-cells.js';
+import { addDesign, designsOf, makeDesign } from '../lib/design.js';
+import { FAMILIES, summariesOf } from '../lib/cohort.js';
+import { spatialEffectWords, testsOf } from '../lib/expression.js';
+import { expressionDocument as expressionDocumentOf } from './cohort-expression.js';
+import { BUNDLE_FIELDS, addSampleField, fieldValue, readSamplesTable, removeSampleField, renameSample, sampleFields, samplesCSV, samplesOf, setFieldKind, setRegionSamples, setSampleField } from '../lib/samples.js';
 
 export class ActionError extends Error {}
 
@@ -112,6 +117,23 @@ export function installRemote(app) {
   let author = 'a program on this computer';
   let counter = 0;
 
+  // The samples as answers give them: each with its dataset, region, cells (under its dataset's
+  // default segmentation; cells: the Cohort view's counts), area, fields and its bundle's fields.
+  function samplesAnswer(cells = []) {
+    const list = samplesOf(project());
+    const fields = sampleFields(project());
+    const rows = list.map((s, k) => ({
+      sample: s.name, id: s.id, dataset: s.dataset.name, region: s.region?.name ?? null, removed: s.removed,
+      cells: Number.isFinite(cells[k]) ? cells[k] : null, area_um2: s.region ? area(s.region.geometry) : null,
+      fields: Object.fromEntries(fields.map((f) => [f.name, fieldValue(s, f.name) === '' ? null : fieldValue(s, f.name)])),
+      bundle: Object.fromEntries(BUNDLE_FIELDS.map((f) => [f.key, f.of(s.dataset) || null])),
+    }));
+    return {
+      message: `${plural(list.length, 'sample')} from ${plural(project().datasets.length, 'dataset')}${list.length ? `: ${rows.map((r) => `${r.sample}${r.region ? ` (a region of ${r.dataset})` : ''}${Object.entries(r.fields).filter(([, v]) => v !== null).map(([k, v]) => `, ${k} ${v}`).join('')}`).join('; ')}` : ''}. Fields: ${fields.map((f) => `${f.name} (${f.kind})`).join(', ') || 'none'}.`,
+      data: { samples: rows, fields },
+    };
+  }
+
   // --- Resolution of names --------------------------------------------------------------------
 
   // A dataset by name or id; by default the one in focus (or a focused view's or filter's), else
@@ -161,7 +183,7 @@ export function installRemote(app) {
     const list = app.examples.list() ?? [];
     const names = list.map((e) => e.name);
     const text = String(ref ?? '').trim().toLowerCase();
-    const short = { lung: 'xenium-lung-2fov', breast: 'xenium-breast-2fov', simulated: 'simulated-standard' }[text];
+    const short = { lung: 'xenium-lung-2fov', breast: 'xenium-breast-2fov', simulated: 'simulated-standard', cohort: 'simulated-cohort', 'null-cohort': 'simulated-null-cohort', 'paired-cohort': 'simulated-paired-cohort' }[text];
     return list.find((e) => e.name === choose(short ?? ref, names, 'example'));
   }
 
@@ -209,6 +231,13 @@ export function installRemote(app) {
   async function settleMode(mode) {
     if (store.ui.mode !== mode) await app.setMode(mode);
     await frames();
+  }
+
+  // A saved design's specification, by name (its latest version).
+  function savedDesign(name) {
+    const saved = designsOf(project()).filter((d) => d.name === String(name));
+    if (!saved.length) throw new ActionError(`No saved design ${name}; the project's are ${[...new Set(designsOf(project()).map((d) => d.name))].join(', ') || 'none'}.`);
+    return saved[0].spec;
   }
 
   // Waits for a bundle's derived data to be built (the job the page started when it was added).
@@ -392,6 +421,16 @@ export function installRemote(app) {
         });
         example = resolveExample(example.name);
       }
+      // A simulated cohort: each sample's bundle added, with its subject and condition.
+      if (example.kind === 'cohort') {
+        const { items, datasets } = await app.examples.inProject(example.name);
+        for (const [k, item] of items.entries()) {
+          await derivedData(item);
+          await app.bundles.registerSegmentation(item, datasets[k].id);
+        }
+        await settleMode('cohort');
+        return { message: `Opened ${example.title} in ${project().name}: ${plural(datasets.length, 'sample')}, each with its subject and condition.`, data: { project: project().name, datasets: datasets.map(datasetData) } };
+      }
       const { dataset, item } = await app.examples.inProject(example.name);
       await derivedData(item);
       await app.bundles.registerSegmentation(item, dataset.id);
@@ -408,7 +447,7 @@ export function installRemote(app) {
       if (!app.examples.list()) await app.examples.refresh();
       let card = app.tour?.open?.() ? app.tour : null;
       if (args.example !== undefined || !card) {
-        if (args.example === undefined) throw new ActionError('Name the example whose tour to take (xenium-lung-2fov, xenium-breast-2fov or simulated-standard).');
+        if (args.example === undefined) throw new ActionError('Name the example whose tour or worked example to take (xenium-lung-2fov, xenium-breast-2fov, simulated-standard, simulated-cohort, simulated-null-cohort or simulated-paired-cohort).');
         const example = resolveExample(args.example);
         if (example.state !== 'ready') throw new ActionError(`${example.title} is not on this computer: ${example.generated ? 'open_example makes it' : 'open_example with download: true downloads it'}.`);
         const names = ['tour', ...workedExamples(example.name).map((w) => w.id)];
@@ -416,10 +455,12 @@ export function installRemote(app) {
         if (example.outdated && workedExamples(example.name).find((w) => w.id === name)?.images) throw new ActionError(`${example.outdated} open_example with remake: true makes it again.`);
         card = await app.examples.tour(example.name, name);
         if (!card) throw new ActionError(`${example.title}'s ${name === 'tour' ? 'tour' : `worked example ${name}`} could not start.`);
-        const { item, dataset } = await app.examples.inProject(example.name);
-        await derivedData(item);
-        // A worked example's steps start from the dataset's segmentation.
-        await app.bundles.registerSegmentation(item, dataset.id);
+        // A worked example's steps start from each dataset's segmentation (a cohort's every sample's).
+        const { item, dataset, items, datasets } = await app.examples.inProject(example.name);
+        for (const [k, it] of (items ?? [item]).entries()) {
+          await derivedData(it);
+          await app.bundles.registerSegmentation(it, (datasets ?? [dataset])[k].id);
+        }
       }
       const steps = card.tour.steps;
       if (args.step !== undefined) {
@@ -459,6 +500,8 @@ export function installRemote(app) {
       }
       // A spatial step: its answer (and that answer made again), and the cells it shows on the tissue.
       if (step.spatial || step.cells_of) data.spatial = card.answers();
+      // A cohort step: the summary, and the comparison it shows.
+      if (step.mode === 'cohort') data.cohort = card.cohort?.() ?? null;
       if (step.cells_of) {
         for (let k = 0; k < 200 && !window.situcraftViewer?.focus?.(); k += 1) await sleep(25);
         data.focus = window.situcraftViewer?.focus?.() ?? null;
@@ -2134,8 +2177,430 @@ export function installRemote(app) {
       return { message: written.text, data: { dataset: dataset.name, text: written.text, references: written.references, filters: chosen.map(filterData) } };
     },
 
+    // --- Samples (wave 7) ---------------------------------------------------------------------
+
+    async samples() {
+      await settleMode('cohort');
+      const cells = await app.cohortView?.cells?.() ?? [];
+      return samplesAnswer(cells);
+    },
+
+    async set_samples(args) {
+      let next = project();
+      const done = [];
+      // A sample by its ID or its name, as it is now in the call or as it was named before it.
+      const before = samplesOf(next);
+      const sampleNamed = (ref) => {
+        const list = samplesOf(next);
+        const text = String(ref);
+        const hit = list.find((s) => s.id === text) ?? list.find((s) => s.name === text) ?? list.find((s) => s.id === before.find((b) => b.name === text)?.id);
+        if (hit) return hit;
+        const name = choose(text, list.map((s) => s.name), 'sample');
+        return list.find((s) => s.name === name);
+      };
+      try {
+        if (args.regions) {
+          const dataset = resolveDataset(args.regions.dataset);
+          const regions = regionsOf(next, dataset.id);
+          const ids = (args.regions.regions ?? []).map((ref) => {
+            const byId = regions.find((r) => r.id === ref);
+            if (byId) return byId.id;
+            const name = choose(String(ref), regions.map((r) => r.name), 'region');
+            return regions.find((r) => r.name === name).id;
+          });
+          next = setRegionSamples(next, dataset.id, ids);
+          done.push(ids.length ? `${plural(ids.length, 'region')} of ${dataset.name} as samples` : `${dataset.name} one sample`);
+        }
+        for (const f of args.fields ?? []) {
+          const kind = f.kind ?? 'text';
+          const have = sampleFields(next).find((x) => x.name === f.name);
+          if (!have) {
+            next = addSampleField(next, f.name, kind);
+            done.push(`field ${f.name} (${kind}) added`);
+          } else if (have.kind !== kind) {
+            next = setFieldKind(next, f.name, kind);
+            done.push(`field ${f.name} made ${kind}`);
+          }
+        }
+        for (const name of args.remove_fields ?? []) {
+          next = removeSampleField(next, name);
+          done.push(`field ${name} removed`);
+        }
+        for (const [ref, name] of Object.entries(args.names ?? {})) {
+          const sample = sampleNamed(ref);
+          next = renameSample(next, sample.id, name);
+          done.push(`${sample.name} named ${String(name).trim() || 'as before'}`);
+        }
+        if (args.table !== undefined) {
+          const read = readSamplesTable(next, String(args.table));
+          next = read.project;
+          done.push(`a table read: ${plural(read.matched.length, 'sample')} matched${read.unmatched.length ? `; no sample is named ${read.unmatched.join(', ')}` : ''}${read.added.length ? `; fields added: ${read.added.map((f) => f.name).join(', ')}` : ''}`);
+        }
+        for (const [ref, values] of Object.entries(args.values ?? {})) {
+          const sample = sampleNamed(ref);
+          for (const [field, value] of Object.entries(values ?? {})) {
+            try {
+              next = setSampleField(next, sample.id, field, value);
+            } catch (error) {
+              throw new Error(`${sample.name}, ${field}: ${error.message}`);
+            }
+          }
+          done.push(`${sample.name}'s ${Object.keys(values ?? {}).join(', ')} set`);
+        }
+      } catch (error) {
+        if (error instanceof ActionError) throw error;
+        throw new ActionError(`${error.message.replace(/\.?$/, '.')} Nothing was changed.`);
+      }
+      if (!done.length) throw new ActionError('Say what to set: regions, fields, remove_fields, names, table or values.');
+      store.commit(next, 'Set the samples');
+      await settleMode('cohort');
+      const cells = await app.cohortView?.cells?.() ?? [];
+      const answer = samplesAnswer(cells);
+      return { ...answer, message: `${done.join('; ')}. ${answer.message}` };
+    },
+
+    async design(args) {
+      const asked = ['unit', 'group', 'reference', 'contrasts', 'covariates', 'exclude', 'pseudo_samples'].some((k) => args[k] !== undefined);
+      const latest = designsOf(project())[0];
+      if (!asked && !latest) throw new ActionError('The project has no design yet: name its unit and group (design with unit and group).');
+      // Samples left out, by name or ID.
+      const list = samplesOf(project());
+      const exclude = {};
+      for (const [ref, reason] of Object.entries(args.exclude ?? {})) {
+        const s = list.find((x) => x.id === ref) ?? list.find((x) => x.name === choose(String(ref), list.map((y) => y.name), 'sample'));
+        if (!String(reason ?? '').trim()) throw new ActionError(`Say why ${s.name} is left out.`);
+        exclude[s.id] = String(reason).trim();
+      }
+      const spec = asked ? { unit: args.unit ?? latest?.spec.unit, group: args.group ?? latest?.spec.group, reference: args.reference ?? '', contrasts: args.contrasts ?? [], covariates: args.covariates ?? [], exclude, ...(args.pseudo_samples ? { pseudoSamples: true } : {}) } : latest.spec;
+      const d = makeDesign(project(), spec);
+      let saved = null;
+      if (args.save !== undefined) {
+        if (!d.ok) throw new ActionError(`The design cannot be saved: ${d.problems.join(' ')}`);
+        const { project: next, record } = addDesign(project(), d, { name: String(args.save).trim() || 'Design' });
+        store.commit(next, `Save design ${record.name}`);
+        saved = { id: record.id, name: record.name, version: record.version };
+      }
+      await settleMode('cohort');
+      app.cohortView?.showDesign?.(d.spec, saved?.name);
+      const nameOf = new Map(d.samples.map((s) => [s.id, s.name]));
+      return {
+        message: `${d.ok ? d.words.join(' ') : `This design cannot be used: ${d.problems.join(' ')}`}${d.notes.length ? ` Notes: ${d.notes.join(' ')}` : ''}${saved ? ` Saved as ${saved.name}, version ${saved.version}.` : ''}`,
+        data: {
+          ok: d.ok, problems: d.problems, notes: d.notes, words: d.words, levels: d.levels, reference: d.reference, paired: d.paired, pseudoSamples: d.pseudoSamples,
+          names: d.names, rows: d.rows.map((r) => ({ unit: r.unit, group: r.group, samples: r.samples.map((id) => nameOf.get(id)) })), matrix: d.matrix, rank: d.rank, df: d.df,
+          contrasts: d.contrasts, excluded: d.excluded.map((e) => ({ sample: e.name, reason: e.reason })), saved,
+        },
+      };
+    },
+
+    // --- Summaries (wave 7) ---------------------------------------------------------------------
+
+    async cohort_steps(args) {
+      const options = {};
+      if (args.markers !== undefined && args.reference !== undefined) throw new ActionError('The samples are labeled from a marker set or a reference: give one.');
+      if (args.markers !== undefined) options.markers = String(args.markers);
+      if (args.reference !== undefined) options.reference = String(args.reference);
+      if (args.level !== undefined) options.level = Math.max(0, Math.round(finite(args.level, 'level')) - 1);
+      if (args.graph !== undefined) options.kind = choose(String(args.graph), ['delaunay', 'knn', 'radius', 'contact'], 'graph');
+      if (args.questions !== undefined) {
+        if (!Array.isArray(args.questions)) throw new ActionError('questions is a list: enrichment, distances, moran.');
+        options.questions = args.questions.map((q) => choose(String(q), ['enrichment', 'distances', 'moran'], 'question'));
+      }
+      await settleMode('cohort');
+      let out;
+      try {
+        out = await app.cohortView.steps(options);
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      const set = project().artifacts.find((a) => a.kind === 'marker-set' && a.id === out.markerSet);
+      const reference = out.source?.startsWith('ref:') ? project().artifacts.find((a) => a.kind === 'labels' && a.reference && `ref:${a.reference.sha256}:${a.reference.labelColumn ?? ''}` === out.source)?.reference : null;
+      const answers = out.samples.reduce((n, x) => n + x.answers.length, 0);
+      const from = set ? `${set.name}${(set.set.levels?.length ?? 0) > 1 ? ` (${set.set.levels[out.level]})` : ''}` : reference ? `the reference ${reference.file.split(/[\\/]/).at(-1)} (its ${reference.labelColumn})` : out.source;
+      return {
+        message: `${plural(out.samples.length, 'sample')} labeled from ${from}, each with a graph of its cells${answers ? ` and ${plural(answers, 'answer')}` : ''}.`,
+        data: { source: out.source, markerSet: set ? { id: set.id, name: set.name, version: set.version } : null, reference: reference ? { file: reference.file, sha256: reference.sha256, labelColumn: reference.labelColumn } : null, level: out.level + 1, samples: out.samples },
+      };
+    },
+
+    async summarize_samples(args) {
+      const options = {};
+      const sets = project().artifacts.filter((a) => a.kind === 'marker-set');
+      if (args.markers !== undefined) {
+        const ref = String(args.markers);
+        const named = sets.filter((r) => r.id === ref || r.family === ref);
+        const byName = named.length ? named : sets.filter((r) => r.name === choose(ref, [...new Set(sets.map((x) => x.name))], 'marker set'));
+        // Of its versions, the latest whose labels every sample has.
+        const labeled = (r) => project().artifacts.some((a) => a.kind === 'labels' && a.markerSet === r.id);
+        const pick = [...byName].sort((x, y) => y.version - x.version);
+        options.source = (pick.find(labeled) ?? pick[0]).id;
+      }
+      if (args.reference !== undefined) {
+        const ref = String(args.reference);
+        // By its path or SHA-256 (a label set records the reference's file by its name).
+        const base = (x) => String(x).split(/[\\/]/).filter(Boolean).at(-1);
+        const made = project().artifacts.filter((a) => a.kind === 'labels' && a.reference && (a.reference.sha256 === ref || a.reference.file === ref || base(a.reference.file) === base(ref)));
+        if (!made.length) throw new ActionError(`No sample is labeled from the reference ${ref}: cohort_steps with reference labels them.`);
+        options.source = `ref:${made[0].reference.sha256}:${made[0].reference.labelColumn ?? ''}`;
+      }
+      if (args.level !== undefined) options.level = Math.max(0, Math.round(finite(args.level, 'level')) - 1);
+      const niches = args.niches === undefined ? NICHES_DEFAULTS.niches : Math.round(finite(args.niches, 'niches'));
+      const neighbors = args.neighbors === undefined ? NICHES_DEFAULTS.neighbors : Math.round(finite(args.neighbors, 'neighbors'));
+      options.niches = niches > 0 ? { ...NICHES_DEFAULTS, niches, neighbors } : null;
+      if (args.closing !== undefined) options.closing = finite(args.closing, 'closing');
+      if (args.samples !== undefined) {
+        if (!Array.isArray(args.samples) || !args.samples.length) throw new ActionError('samples is a list of samples, by name or ID.');
+        const list = samplesOf(project());
+        options.samples = args.samples.map((ref) => (list.find((x) => x.id === String(ref)) ?? list.find((x) => x.name === choose(String(ref), list.map((y) => y.name), 'sample'))).id);
+      }
+      await settleMode('cohort');
+      let manifest;
+      try {
+        manifest = await app.cohortView.summarize(options);
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      const doc = await fetch(`/api/artifacts/${encodeURIComponent(manifest.id)}/files/summary.json`).then((r) => r.json());
+      const table = await app.cohortView.table(manifest.id);
+      const names = doc.labels.names;
+      const samples = doc.samples.map((x) => ({
+        sample: x.sample, name: x.name, cells: x.cells, labeled: x.labeled, tissueAreaUm2: x.tissueAreaUm2,
+        counts: Object.fromEntries(names.map((n, k) => [n, x.counts[k]])), labels: x.labels.id, graph: x.statistics.find((st) => st.family === 'graph')?.source ?? null,
+        answers: [...new Set(x.statistics.filter((st) => st.family !== 'graph').map((st) => st.source))],
+        ...(x.nicheShares ? { niches: x.nicheShares, nicheCells: x.nicheCells } : {}),
+      }));
+      const nicheList = doc.niches ? doc.niches.cells.map((cells, v) => ({ niche: v + 1, cells, defining: (doc.niches.defining[v] ?? []).map((k) => names[k]) })) : null;
+      await frames();
+      return {
+        message: `${manifest.name} (${manifest.id}): ${plural(samples.length, 'sample')}, ${plural(names.length, 'label')}, ${plural(doc.genes.length, 'gene')}${nicheList ? `, ${plural(nicheList.length, 'niche')} found across them` : ''}; ${samples.map((x) => `${x.name} ${plural(x.labeled, 'labeled cell')}`).join(', ')}.`,
+        data: { id: manifest.id, name: manifest.name, labels: doc.labels, genes: doc.genes.length, samples, niches: nicheList, families: table.families.map((f) => ({ family: f.id, label: f.label, keys: f.keys.length })) },
+      };
+    },
+
+    async cohort_table(args) {
+      const list = summariesOf(project());
+      if (!list.length) throw new ActionError('The project has no summary yet: summarize_samples makes one.');
+      const record = args.summary === undefined ? list[0] : list.find((r) => r.id === String(args.summary));
+      if (!record) throw new ActionError(`No summary ${args.summary}; the project's are ${list.map((r) => r.id).join(', ')}.`);
+      const family = args.family === undefined ? 'cells' : choose(String(args.family), FAMILIES.map((f) => f.id), 'family');
+      await settleMode('cohort');
+      const table = await app.cohortView.table(record.id, family);
+      const f = table.families.find((x) => x.id === family);
+      if (!f) throw new ActionError(`The summary has no ${family} numbers; its families are ${table.families.map((x) => x.id).join(', ')}.`);
+      const keys = Array.isArray(args.keys) ? args.keys.map((k) => choose(String(k), f.keys, 'key')) : f.keys;
+      const samples = table.samples.map((smp) => {
+        const v = f.values.get(smp.sample) ?? new Map();
+        return { sample: smp.sample, name: smp.name, values: Object.fromEntries(keys.map((k) => [k, v.get(k)?.value ?? null])), sources: Object.fromEntries(keys.map((k) => [k, v.get(k)?.source ?? null])) };
+      });
+      await frames();
+      return {
+        message: `${f.label} of ${plural(samples.length, 'sample')}: ${plural(keys.length, 'key')}${keys.length ? ` (${keys.slice(0, 4).join(', ')}${keys.length > 4 ? ', …' : ''})` : ''}.`,
+        data: { id: record.id, family, label: f.label, families: table.families.map((x) => x.id), keys, samples },
+      };
+    },
+
+    async cohort_qc(args) {
+      const list = summariesOf(project());
+      if (!list.length) throw new ActionError('The project has no summary yet: summarize_samples makes one.');
+      const record = args.summary === undefined ? list[0] : list.find((r) => r.id === String(args.summary));
+      if (!record) throw new ActionError(`No summary ${args.summary}; the project's are ${list.map((r) => r.id).join(', ')}.`);
+      await settleMode('cohort');
+      let qc;
+      try {
+        qc = await app.cohortView.qc(record.id);
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      const { doc, design } = qc;
+      const metrics = doc.qcMetrics ?? [];
+      const samples = doc.samples.map((s) => ({
+        sample: s.sample, name: s.name, bundle: s.bundle,
+        qc: Object.fromEntries(metrics.map((m) => [m.key, s.qc?.[m.key] ?? null])),
+        far: (doc.outliers ?? []).filter((o) => o.sample === s.sample).map((o) => ({ metric: o.metric, z: o.z, reason: o.reason })),
+        pca: doc.pca?.scores?.[doc.samples.indexOf(s)] ?? null,
+      }));
+      const panels = doc.panels ? { panels: doc.panels.panels.map((p) => ({ name: p.name, design: p.design, version: p.version, genes: p.genes, samples: p.samples })), shared: doc.panels.shared.length, partial: doc.panels.partial.map((g) => g.gene), codewords: doc.panels.codewords.map((g) => g.gene), ids: doc.panels.ids.length } : null;
+      const far = doc.outliers ?? [];
+      const batchWords = design.statements.length ? design.statements.map((st) => st.text).join(' ') : design.group ? `No slide, run or panel separates the ${design.group}s.` : 'The design names no groups yet.';
+      await frames();
+      return {
+        message: `${record.name} (${record.id}): ${far.length ? `${plural(new Set(far.map((o) => o.sample)).size, 'sample')} far out: ${far.slice(0, 4).map((o) => `${o.name}, ${o.reason}`).join('; ')}${far.length > 4 ? '; …' : ''}` : 'no sample far out'}. ${batchWords} ${doc.panels ? (doc.panels.panels.length > 1 ? `${doc.panels.panels.length} panels, ${doc.panels.shared.length} genes in every one.` : 'One panel.') : ''}${doc.pca?.variance?.length ? ` PC1 ${(100 * doc.pca.variance[0]).toFixed(1)}% of the variance.` : ''}`,
+        data: {
+          id: record.id, metrics, rule: doc.outlierRule, samples, outliers: far, batches: doc.batches,
+          design: { group: design.group, levels: design.levels, statements: design.statements, balance: design.balance.map((b) => ({ field: b.field, table: b.table })) },
+          pca: doc.pca ? { genes: doc.pca.genes.length, top: doc.pca.top, variance: doc.pca.variance, normalization: doc.pca.normalization } : null,
+          panels,
+        },
+      };
+    },
+
+    async compare_abundance(args) {
+      const families = args.families === undefined ? ['share', 'density'] : (Array.isArray(args.families) ? args.families : [args.families]).map((f) => choose(String(f), ['share', 'density', 'niche'], 'family'));
+      const options = { families };
+      if (args.summary !== undefined) options.summary = String(args.summary);
+      if (args.level !== undefined) options.level = finite(args.level, 'level');
+      if (args.design !== undefined) options.spec = savedDesign(args.design);
+      await settleMode('cohort');
+      let manifest;
+      try {
+        manifest = await app.cohortView.abundance(options);
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      const c = await app.cohortView.comparison(manifest.id);
+      const fams = c.families.map((f) => ({
+        family: f.family, name: f.name, model: f.model, effect: f.effect, universe: f.universe, labels: f.labels,
+        tests: f.tests.map((t) => (t.tested ? { label: t.label, contrast: t.contrast, ratio: t.ratio, lo: t.lo, hi: t.hi, estimate: t.estimate, se: t.se, t: t.t, df: t.df, p: t.p, padj: t.padj, dispersion: t.dispersion } : { label: t.label, contrast: t.contrast, untested: t.note })),
+      }));
+      const found = fams.flatMap((f) => f.tests.filter((t) => t.padj < 0.05).map((t) => `${t.label} ${t.ratio.toFixed(2)}× (${f.family}, adjusted p ${t.padj < 1e-4 ? t.padj.toExponential(1) : t.padj.toFixed(4)})`));
+      await frames();
+      return {
+        message: `${manifest.name} (${manifest.id}), of ${c.summary.name}: ${fams.map((f) => `${f.name.toLowerCase()}, ${f.universe}`).join('; ')}. ${found.length ? `Below an adjusted p of 0.05: ${found.join('; ')}.` : 'None below an adjusted p of 0.05.'}`,
+        data: { id: manifest.id, summary: c.summary, level: c.level, design: { names: c.design.names, rows: c.design.rows.map((r) => ({ unit: r.unit, group: r.group, samples: r.samples })), contrasts: c.design.contrasts }, families: fams },
+      };
+    },
+
+    async compare_expression(args) {
+      const options = {};
+      if (args.summary !== undefined) options.summary = String(args.summary);
+      if (args.level !== undefined) options.level = finite(args.level, 'level');
+      if (args.min_cells !== undefined) options.minCells = Math.round(finite(args.min_cells, 'min_cells'));
+      if (args.design !== undefined) options.spec = savedDesign(args.design);
+      await settleMode('cohort');
+      let manifest;
+      try {
+        manifest = await app.cohortView.expression(options);
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      const e = await app.cohortView.expressionResult(manifest.id);
+      const q = (v) => (v < 1e-4 ? v.toExponential(1) : v.toFixed(4));
+      const labels = e.results.map((r) => {
+        if (!r.tested) return { label: r.label, untested: r.note, cells: r.cells };
+        return {
+          label: r.label, cells: r.cells, rows: r.rows, genes: r.genes.length, filtered: r.filtered, span: r.span, s2Prior: r.s2Prior, dfPrior: r.dfPrior, dfTotal: r.dfTotal,
+          contrasts: r.contrasts.map((c) => {
+            const rows = r.genes.map((g, i) => ({ gene: e.genes[g], aveLogCPM: r.aveLogCPM[i], logFC: c.logFC[i], lo: c.lo[i], hi: c.hi[i], t: c.t[i], p: c.p[i], padj: c.padj[i] })).sort((a, b) => a.p - b.p);
+            return { contrast: c.contrast, up: c.up, down: c.down, found: rows.filter((x) => x.padj < 0.05), lowest: rows.slice(0, 10) };
+          }),
+        };
+      });
+      const found = labels.flatMap((l) => (l.contrasts ?? []).flatMap((c) => c.found.map((x) => `${x.gene} in ${l.label} ${x.logFC > 0 ? '+' : '−'}${Math.abs(x.logFC).toFixed(2)} log2 (adjusted p ${q(x.padj)})`)));
+      const untested = labels.filter((l) => l.untested);
+      await frames();
+      return {
+        message: `${manifest.name} (${manifest.id}), of ${e.summary.name}: ${e.universe}. ${found.length ? `Below an adjusted p of 0.05: ${found.slice(0, 12).join('; ')}${found.length > 12 ? `; and ${found.length - 12} more` : ''}.` : 'None below an adjusted p of 0.05.'}${untested.length ? ` Untested: ${untested.map((l) => `${l.label} (${l.untested})`).join('; ')}.` : ''}`,
+        data: { id: manifest.id, summary: e.summary, level: e.level, minCells: e.minCells, genes: e.genes.length, tests: e.tests, universe: e.universe, design: { names: e.design.names, rows: e.design.rows.map((r) => ({ unit: r.unit, group: r.group, samples: r.samples })), contrasts: e.design.contrasts }, labels },
+      };
+    },
+
+    async show_gene(args) {
+      const list = testsOf(project(), 'expression');
+      if (!list.length) throw new ActionError('The project has no expression comparison yet: compare_expression makes one.');
+      const record = args.comparison === undefined ? list[0] : list.find((r) => r.id === String(args.comparison));
+      if (!record) throw new ActionError(`No expression comparison ${args.comparison}.`);
+      await settleMode('cohort');
+      const e = await expressionDocumentOf(record.id);
+      const label = choose(String(args.label ?? ''), e.results.map((r) => r.label), 'label');
+      const r = e.results.find((x) => x.label === label);
+      if (!r.tested) throw new ActionError(`${label} is untested: ${r.note}.`);
+      const gene = choose(String(args.gene ?? ''), r.genes.map((g) => e.genes[g]), 'tested gene');
+      await app.cohortView.expressionResult(record.id, { label, gene });
+      let values;
+      try {
+        values = await app.cohortView.geneValues(record.id, label, gene);
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      const i = r.genes.findIndex((g) => e.genes[g] === gene);
+      const tests = r.contrasts.map((c) => ({ contrast: c.contrast, logFC: c.logFC[i], lo: c.lo[i], hi: c.hi[i], t: c.t[i], p: c.p[i], padj: c.padj[i] }));
+      await frames();
+      return {
+        message: `${gene} in ${label}: ${tests.map((t) => `${t.contrast} ${t.logFC > 0 ? '+' : '−'}${Math.abs(t.logFC).toFixed(2)} log2 (${t.lo.toFixed(2)} to ${t.hi.toFixed(2)}), adjusted p ${t.padj < 1e-4 ? t.padj.toExponential(1) : t.padj.toFixed(4)}`).join('; ')}; ${values.rows.length} units shown by group.`,
+        data: { comparison: record.id, label, gene, aveLogCPM: r.aveLogCPM[i], tests, rows: values.rows },
+      };
+    },
+
+    async compare_spatial(args) {
+      // Every family the summary has unless named (not the page's choice).
+      const options = { families: [] };
+      if (args.families !== undefined) options.families = (Array.isArray(args.families) ? args.families : [args.families]).map((f) => choose(String(f), ['enrichment', 'nearest', 'moran'], 'family'));
+      if (args.summary !== undefined) options.summary = String(args.summary);
+      if (args.level !== undefined) options.level = finite(args.level, 'level');
+      if (args.design !== undefined) options.spec = savedDesign(args.design);
+      await settleMode('cohort');
+      let manifest;
+      try {
+        manifest = await app.cohortView.spatial(options);
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      const c = await app.cohortView.spatialResult(manifest.id);
+      const fams = c.families.map((f) => ({
+        family: f.family, name: f.name, effect: f.effect, log: f.log, universe: f.universe, s2Prior: f.s2Prior, dfPrior: f.dfPrior, dfTotal: f.dfTotal, keys: f.keys,
+        tests: f.tests.map((t) => (t.tested ? { key: t.key, contrast: t.contrast, estimate: t.estimate, lo: t.lo, hi: t.hi, ...(f.log ? { ratio: t.ratio, ratioLo: t.ratioLo, ratioHi: t.ratioHi } : {}), t: t.t, p: t.p, padj: t.padj } : { key: t.key, contrast: t.contrast, untested: t.note })),
+      }));
+      const found = c.families.flatMap((f) => f.tests.filter((t) => t.tested && t.padj < 0.05).map((t) => `${t.key} ${spatialEffectWords(f, t)} (${f.family}, adjusted p ${t.padj < 1e-4 ? t.padj.toExponential(1) : t.padj.toFixed(4)})`));
+      await frames();
+      return {
+        message: `${manifest.name} (${manifest.id}), of ${c.summary.name}: ${fams.map((f) => `${f.name}: ${f.universe}`).join('; ')}. ${found.length ? `Below an adjusted p of 0.05: ${found.join('; ')}.` : 'None below an adjusted p of 0.05.'}`,
+        data: { id: manifest.id, summary: c.summary, level: c.level, design: { names: c.design.names, rows: c.design.rows.map((r) => ({ unit: r.unit, group: r.group, samples: r.samples })), contrasts: c.design.contrasts }, families: fams },
+      };
+    },
+
+    async show_sample_cells(args) {
+      const list = summariesOf(project());
+      if (!list.length) throw new ActionError('The project has no summary yet: summarize_samples makes one.');
+      const record = args.summary === undefined ? list[0] : list.find((r) => r.id === String(args.summary));
+      if (!record) throw new ActionError(`No summary ${args.summary}.`);
+      const samples = samplesOf(project());
+      const ref = String(args.sample ?? '');
+      const sample = samples.find((x) => x.id === ref) ?? samples.find((x) => x.name === choose(ref, samples.map((y) => y.name), 'sample'));
+      if (args.label === undefined) throw new ActionError('Name the label whose cells to show.');
+      let shown;
+      try {
+        shown = await app.cohortView.sampleCells(record.id, sample.id, String(args.label));
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      await frames();
+      return { message: `Showing ${plural(shown.cells, 'cell')} of ${shown.label} in ${shown.sample}, on its tissue.`, data: shown };
+    },
+
+    async compare_panels() {
+      if (!project().datasets.length) throw new ActionError('The project has no sample yet: add its datasets first.');
+      await settleMode('cohort');
+      let d;
+      try {
+        d = await app.cohortView.panels();
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      const nameOf = (k) => d.panels[k]?.design || d.panels[k]?.name || `panel ${k + 1}`;
+      return {
+        message: d.panels.length > 1
+          ? `${plural(d.panels.length, 'panel')} (${d.panels.map((p) => `${p.design || p.name} ${p.version}, ${plural(p.genes, 'gene')}, ${plural(p.samples.length, 'sample')}`).join('; ')}): ${plural(d.shared.length, 'gene')} in every panel, compared across samples; ${plural(d.partial.length, 'gene')} in some only, not compared${d.codewords.length ? `; ${plural(d.codewords.length, 'shared gene')} read by other codewords` : ''}${d.ids.length ? `; ${plural(d.ids.length, 'gene')} named or identified differently` : ''}.`
+          : `One panel (${d.panels[0]?.design || d.panels[0]?.name} ${d.panels[0]?.version ?? ''}): all ${plural(d.shared.length, 'gene')} compared across the samples.`,
+        data: { panels: d.panels, shared: d.shared, partial: d.partial.map((g) => ({ gene: g.gene, id: g.id, panels: g.panels.map(nameOf) })), codewords: d.codewords, ids: d.ids },
+      };
+    },
+
     async export(args) {
-      const what = choose(args.what, ['project', 'archive', 'methods', 'alignment', 'regions', 'reviews'], 'kind of file');
+      const what = choose(args.what, ['project', 'archive', 'methods', 'alignment', 'regions', 'reviews', 'samples', 'cohort-table', 'pseudobulk'], 'kind of file');
+      if (what === 'cohort-table' || what === 'pseudobulk') {
+        const list = summariesOf(project());
+        if (!list.length) throw new ActionError('The project has no summary yet: summarize_samples makes one.');
+        const record = args.summary === undefined ? list[0] : list.find((r) => r.id === String(args.summary));
+        if (!record) throw new ActionError(`No summary ${args.summary}; the project's are ${list.map((r) => r.id).join(', ')}.`);
+        const response = await fetch(`/api/artifacts/${encodeURIComponent(record.id)}/files/${what === 'pseudobulk' ? 'pseudobulk.csv' : 'table.csv'}`);
+        if (!response.ok) throw new ActionError(`${record.id}: HTTP ${response.status}`);
+        return { file: await response.text(), message: what === 'pseudobulk' ? `${record.name}'s pseudobulk as CSV: a row each sample's label, its cells and a column each gene's transcripts (empty for a gene its panel has not).` : `${record.name}'s table as CSV: a row each number of each sample, with the artifact it came from.` };
+      }
+      if (what === 'samples') {
+        const n = samplesOf(project()).length;
+        if (!project().datasets.length) throw new ActionError('The project has no sample yet: add its datasets first.');
+        return { file: samplesCSV(project()), message: `${plural(n, 'sample')} with their fields, as CSV (a row a sample; the bundles' fields for reference).` };
+      }
       if (what === 'reviews') {
         const dataset = resolveDataset(args.dataset);
         const format = args.format === undefined ? 'csv' : choose(String(args.format), ['csv', 'json'], 'format');

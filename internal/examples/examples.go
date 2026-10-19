@@ -89,6 +89,9 @@ type Generated struct {
 	// not is listed as outdated, with Outdated saying what making it again adds.
 	Current  func(dir string) bool
 	Outdated string
+	// Marker is the file whose presence says it is made (experiment.xenium if empty), and Kind
+	// what it is: "" a bundle, "cohort" a folder of bundles (wave 7).
+	Marker, Kind string
 }
 
 // Library is the examples folder.
@@ -126,6 +129,8 @@ type State struct {
 	Generated bool `json:"generated,omitempty"`
 	// Outdated: a generated example made by an earlier SituCraft, and what making it again adds.
 	Outdated string `json:"outdated,omitempty"`
+	// Kind: "cohort" for a folder of bundles, a simulated cohort; absent for a bundle.
+	Kind string `json:"kind,omitempty"`
 }
 
 func (s Source) diskSize() int64 {
@@ -181,11 +186,15 @@ func (l *Library) List() []State {
 		}
 		out = append(out, st)
 	}
-	// A generated example is ready once made; its experiment.xenium names it.
+	// A generated example is ready once made; its experiment.xenium (or its marker) names it.
 	for _, g := range l.Generated {
-		st := State{Name: g.Name, Title: g.Title, Summary: g.Summary, Size: g.Size, State: "absent", Generated: true}
+		st := State{Name: g.Name, Title: g.Title, Summary: g.Summary, Size: g.Size, State: "absent", Generated: true, Kind: g.Kind}
 		dir := filepath.Join(l.Dir, g.Name)
-		if raw, err := os.ReadFile(filepath.Join(dir, "experiment.xenium")); err == nil {
+		marker := g.Marker
+		if marker == "" {
+			marker = "experiment.xenium"
+		}
+		if raw, err := os.ReadFile(filepath.Join(dir, marker)); err == nil {
 			sum := sha256.Sum256(raw)
 			st.ManifestSHA256, st.State, st.Path = hex.EncodeToString(sum[:]), "ready", dir
 			if g.Current != nil && !g.Current(dir) {
