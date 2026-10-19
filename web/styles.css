@@ -1282,3 +1282,8 @@ td div.studio-problem { padding: 2px 6px; margin-top: 4px; font-size: 11.5px; }
 .cohort-table .cohort-bundle { color: var(--text-3); }
 .cohort-regions { display: flex; flex-direction: column; gap: 8px; padding-top: 6px; border-top: 1px solid var(--line); }
 .cohort-boxes { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.cohort-list { margin: 0 0 6px; padding-left: 18px; font-size: 12.5px; }
+.cohort-list li { margin: 2px 0; }
+.cohort-words p { margin: 0 0 4px; font-size: 12.5px; line-height: 1.5; }
+.cohort-matrix td.r, .cohort-matrix th.r { font-variant-numeric: tabular-nums; }
+.cohort-design .btn-row > .input.small { width: 240px; flex: none; }

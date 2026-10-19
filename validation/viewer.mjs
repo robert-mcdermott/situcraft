@@ -2318,6 +2318,31 @@ export async function viewerSuite({ check, MissingData, verbose }) {
             && own && own.panels === 1 && own.countsMatch && own.samples === 8 && own.table.every(([name, subject, condition], k) => name === cs[k].sample && subject === cs[k].fields.subject && condition === cs[k].fields.condition)
             && own.effects.length === 3 && own.effects.every((e) => e.off < 1e-9 && Math.abs(e.z) < 3),
             'eight samples, four of each group, on two slides; one panel; the counts and every effect as recorded');
+
+          // The design (wave 7, slice 3), on the simulated cohort: its subjects compared by
+          // condition, adjusted for the slide; a field confounded with the condition refused and not
+          // saved; the subjects paired; a group of one subject refused; versions kept with the
+          // project.
+          const adjusted = await act('design', { unit: 'subject', group: 'condition', reference: 'control', covariates: ['slide'] });
+          const ad = adjusted.data ?? {};
+          await act('set_samples', { fields: [{ name: 'batch', kind: 'text' }], values: Object.fromEntries(cs.map((s, k) => [s.sample, { batch: k < 4 ? 'B1' : 'B2' }])) });
+          const confounded = await act('design', { unit: 'subject', group: 'condition', covariates: ['batch'] });
+          const notSaved = await act('design', { unit: 'subject', group: 'condition', covariates: ['batch'], save: 'Confounded' });
+          const one = await act('design', { unit: 'subject', group: 'condition', exclude: { S06: 'testing', S07: 'testing', S08: 'testing' } });
+          const saved1 = await act('design', { unit: 'subject', group: 'condition', reference: 'control', covariates: ['slide'], save: 'Main' });
+          // Paired: each control sample's subject that of a treated one.
+          await act('set_samples', { values: Object.fromEntries(cs.map((s, k) => [s.sample, { subject: `D${(k % 4) + 1}` }])) });
+          const paired = await act('design', { unit: 'subject', group: 'condition', reference: 'control', save: 'Main' });
+          await act('new_project', { name: 'Elsewhere' });
+          await act('open_project', { project: 'A simulated cohort example' });
+          const kept = await act('design');
+          check('viewer', 'the design: the cohort\'s subjects compared by condition and adjusted for the slide; a field confounded with the condition, and a group of one subject, refused and not saved; the subjects paired; versions kept with the project', `${adjusted.message ?? adjusted.error} | ${confounded.message ?? confounded.error} | ${notSaved.message ?? notSaved.error} | ${one.message ?? one.error} | ${paired.message ?? paired.error} | ${kept.message ?? kept.error}`,
+            adjusted.ok && ad.ok && ad.names?.join() === 'Intercept,condition[T.treated],slide[T.simulated slide 2]' && ad.rows.length === 8 && ad.rank === 3 && ad.df === 5 && ad.matrix[1].join() === '1,0,1' && /4 subjects in control, 4 subjects in treated/.test(adjusted.message)
+            && confounded.ok && confounded.data.ok === false && /batch is confounded with condition/.test(confounded.message) && !notSaved.ok && /cannot be saved/.test(notSaved.message ?? notSaved.error ?? '')
+            && one.ok && one.data.ok === false && /treated has 1 subject/.test(one.message) && one.data.excluded.length === 3
+            && saved1.data?.saved?.version === 1 && paired.data?.paired === true && paired.data.df === 3 && paired.data.names.join() === 'Intercept,condition[T.treated],subject[T.D2],subject[T.D3],subject[T.D4]' && paired.data.saved?.version === 2
+            && kept.ok && kept.data.paired === true && kept.data.df === 3,
+            'adjusted: 3 coefficients over 8 rows, 5 df; refused twice; paired: 5 over 8, 3 df, version 2; kept');
         }
       }
 

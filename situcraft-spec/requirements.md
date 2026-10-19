@@ -146,7 +146,7 @@ Status: **planned (wave N)** until built. Then **done**, **partial** (the gap no
 
 | # | Requirement | Status |
 | --- | --- | --- |
-| H1 | An experimental design (biological and technical replicates, pairing, covariates, contrasts) before any group inference | planned (wave 7) |
+| H1 | An experimental design (biological and technical replicates, pairing, covariates, contrasts) before any group inference | done (wave 7, slice 3: the replicate unit, the groups and their reference, contrasts, covariates and samples left out; technical replicates combined, pairing by units in more than one group; the matrix in treatment coding, patsy's for the same formula; refused, saying why, when it cannot be estimated or a batch could explain the groups; saved as versions) |
 | H2 | Sample summaries: composition, niches, QC, graph metrics, marker expression | planned (wave 7) |
 | H3 | Sample- or patient-level inference by default; effect sizes and intervals; raw and adjusted p-values; the correction and universe of tests recorded | planned (wave 7) |
 | H4 | Batch and panel differences shown; no silent correction | planned (wave 7) |

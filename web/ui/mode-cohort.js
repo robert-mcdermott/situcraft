@@ -1,8 +1,8 @@
 // The Cohort view (wave 7): a study's sections compared as samples. Slice 1: the samples, each
 // dataset a sample or its regions instead (a tissue microarray's cores, sections on one slide),
 // with the user's fields and those read from each bundle, written and read as CSV (lib/samples.js).
-// The design, the samples' summaries and the comparisons come in the slices after
-// (situcraft-spec/roadmap.md, wave 7).
+// Slice 3: the design (ui/cohort-design.js). The samples' summaries and the comparisons come in the
+// slices after (situcraft-spec/roadmap.md, wave 7).
 
 import { h, icon, clear, downloadBlob, formatCount } from './dom.js';
 import { confirmDialog, toast } from './overlays.js';
@@ -10,6 +10,7 @@ import { promotedSegmentation } from '../lib/segmentations.js';
 import { area, cellsIn, regionsOf } from '../lib/regions.js';
 import { readCells } from '../lib/viewer-data.js';
 import { readSegCells } from '../lib/segview.js';
+import { designSection, setDraft } from './cohort-design.js';
 import { BUNDLE_FIELDS, FIELD_KINDS, addSampleField, fieldValue, readSamplesTable, removeSampleField, renameSample, renameSampleField, sampleFields, samplesCSV, samplesOf, setFieldKind, setRegionSamples, setSampleField } from '../lib/samples.js';
 
 const exact = (v) => (Number.isFinite(v) ? v.toLocaleString('en-US') : '—');
@@ -269,17 +270,23 @@ export function mountCohort(app, container) {
     body.append(samplesSection(project, samples), fieldsSection(project));
     const regions = regionsSection(project, samples);
     if (regions) body.append(regions);
+    body.append(designSection(app, { commit, redraw: () => schedule() }));
     const focus = app.store.ui.focus?.kind === 'sample' ? app.store.ui.focus.id : null;
     if (focus) body.querySelector(`tr[data-sample="${CSS.escape(focus)}"]`)?.scrollIntoView({ block: 'nearest' });
   }
 
+  // The design last shown from the project tree.
+  let shownDesign = null;
+
   // Renders, the focus kept on the control of the same name.
   function renderKeepingFocus() {
     const active = document.activeElement;
-    const label = root.contains(active) ? active.getAttribute('aria-label') : null;
-    const range = label && active.matches('input') ? [active.selectionStart, active.selectionEnd] : null;
+    const inside = root.contains(active) && active !== body;
+    const label = inside ? active.getAttribute('aria-label') : null;
+    const id = inside ? active.id : '';
+    const range = (label || id) && active.matches('input') ? [active.selectionStart, active.selectionEnd] : null;
     render();
-    const next = label ? body.querySelector(`[aria-label="${CSS.escape(label)}"]`) : null;
+    const next = label ? body.querySelector(`[aria-label="${CSS.escape(label)}"]`) : id ? body.querySelector(`#${CSS.escape(id)}`) : null;
     next?.focus();
     // The text as the keyboard left it selected (Tab selects a cell's whole value).
     if (next && range && next.matches('input')) next.setSelectionRange(range[0], range[1]);
@@ -305,6 +312,11 @@ export function mountCohort(app, container) {
   app.cohortView = {
     // Reads a samples' table (as text), as Read a table does.
     readTable,
+    // Shows a design's specification (and its name) in the Design section.
+    showDesign(spec, name) {
+      setDraft(app.store.project, spec, name);
+      schedule();
+    },
     // Each sample's cells as the table shows them, counted where they need counting.
     async cells() {
       for (let k = 0; k < 600; k += 1) {
@@ -318,6 +330,13 @@ export function mountCohort(app, container) {
 
   return {
     update(topics) {
+      // A design chosen in the project tree is shown in the Design section.
+      const focus = app.store.ui.focus;
+      if (topics.has('focus') && focus?.kind === 'design' && focus.id !== shownDesign) {
+        const d = app.store.project.artifacts.find((a) => a.kind === 'design' && a.id === focus.id);
+        if (d) setDraft(app.store.project, d.spec, d.name);
+        shownDesign = focus.id;
+      }
       if (topics.has('project') || topics.has('project-loaded') || topics.has('focus') || topics.has('bundles') || topics.has('local') || topics.has('mode')) schedule();
     },
     destroy() {

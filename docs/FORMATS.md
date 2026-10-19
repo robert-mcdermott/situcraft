@@ -253,6 +253,20 @@ dataset with region samples is not a sample itself; its own record is kept for w
 absent while they are the first two, `subject` and `condition`. The run, slide, Xenium region,
 panel and software of a sample are read from its dataset and not stored again.
 
+A design (from 0.7.0) is recorded in `artifacts` as kind `design`: `{id, name, version, parent,
+created, spec, samples, excluded, result}`, each saved design a new version of its name. `spec` is
+what was asked: `unit` (the replicate unit's field), `group` (the field compared), `reference`,
+`contrasts` (`[a, b]` pairs, each a − b; empty for each level against the reference),
+`covariates` (fields, or `run`, `slide`, `panel`) and `exclude` (samples left out: `{sample id:
+reason}`). `samples` holds the samples as they were: each one's `id`, `name`, `dataset`, `region`,
+`unit`, `group`, covariate `values` and `row`; `excluded` each sample left out, `{id, name,
+reason}`. `result` is the design: `levels` (the reference first), `reference`, `paired`, `rows`
+(each a unit in a group, `{unit, group, samples}`, a unit's samples in one group combined),
+`names` (the columns: `Intercept`, `field[T.level]` for each factor level but the reference, a
+number field by its name; factors before numbers), `matrix` (a row for each of `rows`), `rank`,
+`df` (the residual degrees of freedom), `contrasts` (`{name, a, b, vector}`, the vector over the
+columns), `words` and `notes`. Only a design that can be estimated is saved.
+
 The samples' table, written and read as CSV, has a row for each sample: `sample` (its name),
 `dataset`, `region` (its name, or empty), the fields in order, then the bundle's `run`, `slide`,
 `xenium_region`, `panel` and `software` (written for reference, never read). Text is quoted when

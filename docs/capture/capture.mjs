@@ -615,6 +615,16 @@ const scenes = {
     await clearToasts();
     await sleep(400);
   },
+  // The design (wave 7, slice 3): the simulated cohort's subjects compared by condition, adjusted
+  // for the slide, said in words with its rows and matrix.
+  async design() {
+    await act('open_example', { example: 'cohort' });
+    await act('design', { unit: 'subject', group: 'condition', reference: 'control', covariates: ['slide'] });
+    await js(`document.getElementById('app').classList.add('inspector-closed')`);
+    await sleep(600);
+    await scrollTo('.cohort-design');
+    await clearToasts();
+  },
   // The Jobs view after both examples were opened: each job's state and times, one's log open.
   async jobs() {
     await act('open_example', { example: 'lung' });

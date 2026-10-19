@@ -3022,17 +3022,36 @@ makes, which SituCraft refuses.
        types change places; the standard cohort's endothelial-like ×2 makes it 1.5 times as common
        in all, and the immune-like type less common, though ×4 in the epithelial-like domains. The
        example says what is doubled: a cell's odds of being of the type.
-3. **The design (H1).**
-   - In the Cohort view: the replicate unit (a field, such as subject), the groups (a field and its
-     levels), the contrasts, pairing, covariates, and technical replicates (several samples of one
-     unit in one group, combined before inference); the design matrix shown and described in words
-     (what it can estimate, with how many units each), as MaveScape's designs are.
-   - Refused, saying why: a design that cannot be estimated (fewer than two units in a group, a
-     contrast confounded with a batch or a covariate, a matrix of less than full rank), and cells or
-     regions of one section as replicate units.
-   - An artifact of kind `design`, kept as versions; remote control `design`.
-   - Validation: unpaired, paired, covariate and unbalanced designs by hand; each refusal; the
-     matrix against statsmodels' (patsy's) for the same formula.
+3. **The design (H1): done.**
+   - **`web/lib/design.js`** (research.md §6.9): from the samples and a specification (the
+     replicate unit, the groups compared and their reference, contrasts, covariates, samples left
+     out with their reasons), the rows (units in groups, a unit's samples in one group combined),
+     pairing (a unit in more than one group: the units a factor of the model), and the matrix in
+     treatment coding (levels in code-point order, the reference first; factors before numbers, as
+     patsy orders terms); its rank found term by term, so that a term whose columns add nothing is
+     named; the residual degrees of freedom; the contrasts as vectors over the columns.
+   - **Refusals, saying why:** a group of fewer than two units; a term confounded with those before
+     it; no degrees of freedom left; the groups confounded with a slide, run or panel not adjusted
+     for (uneven ones noted); regions of one section as separate units; a covariate of two values
+     for a unit in a group. Samples without a value the design reads left out, and said.
+   - **The Cohort view's Design** (`ui/cohort-design.js`): the choices, the design in words, its
+     refusals and notes, its rows and matrix; saved as versions of a name (kind `design`, with the
+     samples as they were), each saying whether the samples have changed since; the project tree's
+     **Designs**. Remote control: `design`.
+   - Validation:
+     - **By hand** (`web/lib/design.test.mjs`, 14 tests): unpaired, paired, partly paired,
+       unbalanced, covariates of both kinds, three groups with a contrast between two, technical
+       replicates; each refusal; samples left out; versions and changes; the rank.
+     - **Against patsy** (`validation/reference/designs/`: `compare.sh` runs patsy 1.0.3 on six
+       designs, `web/lib/design-reference.test.mjs` compares on every commit): every column name
+       and value the same.
+     - **In the page** (viewer suite): the simulated cohort's subjects compared by condition and
+       adjusted for the slide (3 coefficients over 8 rows, 5 degrees of freedom); a field
+       confounded with the condition, and a group of one subject, refused and not saved; the
+       subjects paired (5 coefficients, 3 degrees of freedom); versions kept with the project.
+   - Found by slice 3:
+     - **patsy orders a formula's numeric terms after its factors,** whatever their order in the
+       formula; SituCraft orders them the same, so that the columns match.
 4. **Sample summaries (H2).**
    - **The same steps on every sample in one step:** clustering and labels from the same marker set
      or reference (so that labels have the same names), graphs and spatial questions with the same

@@ -55,6 +55,28 @@ project, each a sample, compared with the sample or the subject, not the cell, a
     spread and a paired subject's correlation as asked; in the page, the cohort made and opened,
     each sample with its subject, condition, slide and run, one panel in every section, the truth's
     cells each bundle's own and every effect the suite's own from the truth's counts.
+- **The design (wave 7, slice 3).** Before any comparison of groups, the Cohort view's **Design**
+  names what replicates what.
+  - **The replicate unit** (a field, `subject` by default), the **groups compared** (a field,
+    `condition` by default) and their reference, **contrasts** (each group against the reference,
+    or others), **covariates** (any field, numbers as they are and text as factors, or the bundles'
+    run, slide and panel) and **samples left out** with their reasons.
+  - **Rows** are units in groups, a unit's samples in one group (technical replicates) combined; a
+    unit in more than one group pairs them, and the units enter the model.
+  - **Said in words** (what is compared, the units in each group, pairing, covariates, the degrees
+    of freedom left) **and as a matrix** in treatment coding, column for column patsy's.
+  - **Refused, saying why:** a group of fewer than two units, a term confounded with another (its
+    columns combinations of those before), the groups confounded with a slide, run or panel, no
+    degrees of freedom left, regions of one section as separate units, and a covariate with two
+    values for one unit in a group. Uneven batches and few degrees of freedom are noted.
+  - **Saved as versions** of a name, with the samples as they were and those left out; a saved
+    design whose samples have changed says so. The project tree lists **Designs**.
+  - **Remote control:** `design`.
+  - **Validated:** unpaired, paired, partly paired, unbalanced, covariate, three-group and
+    technical-replicate designs and every refusal by hand; six designs' matrices against patsy
+    1.0.3's for the same formulas (`validation/reference/designs/`); in the page, the simulated
+    cohort's designs (adjusted for the slide, paired, refused when confounded or with a group of
+    one subject) and their versions kept with the project.
 
 ## 0.6.0 (2026-10-18)
 

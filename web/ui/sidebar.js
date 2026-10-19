@@ -1,4 +1,4 @@
-// The project tree: what the project holds, by kind (datasets, samples, segmentations, comparisons,
+// The project tree: what the project holds, by kind (datasets, samples, designs, segmentations, comparisons,
 // clusterings, label sets, marker sets, graphs, spatial analyses, filters, saved views), and what was handed to SituCraft on
 // this computer but is not in the project yet.
 // Selecting an item focuses it (store.ui.focus): the inspector describes it, and the views that
@@ -10,6 +10,7 @@ import { promotedSegmentation } from '../lib/segmentations.js';
 import { transformInUse } from '../lib/transforms.js';
 import { labelSetName, markerSetsOf } from '../lib/labels.js';
 import { samplesOf } from '../lib/samples.js';
+import { designsOf } from '../lib/design.js';
 
 // The icon of an item handed to the program, by its kind (local.go, fileKind and dirKind).
 export const KIND_ICONS = {
@@ -55,6 +56,14 @@ const SECTIONS = [
     label: (s) => s.name,
     itemIcon: (s) => (s.removed ? 'warning' : 'samples'),
     meta: (s) => (s.removed ? 'region removed' : [s.fields.condition, s.fields.subject].filter((v) => v !== undefined && v !== '').join(' · ') || (s.region ? 'region' : '')),
+    hideWhenEmpty: true,
+  },
+  {
+    kind: 'design', title: 'Designs', icon: 'samples',
+    // The cohort's designs (wave 7): each name's latest version.
+    items: (project) => designsOf(project),
+    label: (d) => `${d.name} · v${d.version}`,
+    meta: (d) => `${d.result.rows.length} rows, ${d.result.df} df`,
     hideWhenEmpty: true,
   },
   {
@@ -192,7 +201,7 @@ export function mountSidebar(app) {
             if (section.kind === 'filter') app.setMode('qc');
             if (section.kind === 'clustering') app.setMode('celltypes');
             if (section.kind === 'graph' || section.kind === 'spatial') app.setMode('spatial');
-            if (section.kind === 'sample') app.setMode('cohort');
+            if (section.kind === 'sample' || section.kind === 'design') app.setMode('cohort');
             // An image is shown on its dataset's tissue; one not aligned yet, in the Alignment view.
             if (section.kind === 'image') {
               if (transformInUse(app.store.project, item.id)) {

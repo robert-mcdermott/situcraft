@@ -450,6 +450,16 @@
   "violations": []
  },
  {
+  "scene": "design",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "design",
+  "theme": "light",
+  "violations": []
+ },
+ {
   "scene": "jobs",
   "theme": "dark",
   "violations": []

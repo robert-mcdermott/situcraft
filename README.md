@@ -105,7 +105,9 @@ its regions, such as a tissue microarray's cores), described by the subject it c
 condition and any field added, beside its run, slide and panel read from its bundle, and written
 and read as CSV. Simulated cohorts (`situcraft simulate --cohort`, and the start page's **A
 simulated cohort**) are sections of subjects in groups whose differences are known, with their
-truth, for checking comparisons of groups.
+truth, for checking comparisons of groups. The design names the replicate unit, the groups and
+the covariates before any comparison, as a model matrix in treatment coding, and refuses what it
+cannot estimate or what a batch could explain.
 
 ## A look around
 

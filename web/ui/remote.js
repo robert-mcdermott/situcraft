@@ -31,6 +31,7 @@ import { KINDS as GRAPH_KINDS, describeGraph, graphsOf } from '../lib/graphs.js'
 import { analysesOf, analysisNumbers, bandsOf, compareNumbers, nicheNames, rankCorrelation, rankPairs, rowNames, zoneBands } from '../lib/spatial.js';
 import { ratioText } from './spatial-results.js';
 import { showAnalysisCells } from './spatial-cells.js';
+import { addDesign, designsOf, makeDesign } from '../lib/design.js';
 import { BUNDLE_FIELDS, addSampleField, fieldValue, readSamplesTable, removeSampleField, renameSample, sampleFields, samplesCSV, samplesOf, setFieldKind, setRegionSamples, setSampleField } from '../lib/samples.js';
 
 export class ActionError extends Error {}
@@ -2242,6 +2243,40 @@ export function installRemote(app) {
       const cells = await app.cohortView?.cells?.() ?? [];
       const answer = samplesAnswer(cells);
       return { ...answer, message: `${done.join('; ')}. ${answer.message}` };
+    },
+
+    async design(args) {
+      const asked = ['unit', 'group', 'reference', 'contrasts', 'covariates', 'exclude'].some((k) => args[k] !== undefined);
+      const latest = designsOf(project())[0];
+      if (!asked && !latest) throw new ActionError('The project has no design yet: name its unit and group (design with unit and group).');
+      // Samples left out, by name or ID.
+      const list = samplesOf(project());
+      const exclude = {};
+      for (const [ref, reason] of Object.entries(args.exclude ?? {})) {
+        const s = list.find((x) => x.id === ref) ?? list.find((x) => x.name === choose(String(ref), list.map((y) => y.name), 'sample'));
+        if (!String(reason ?? '').trim()) throw new ActionError(`Say why ${s.name} is left out.`);
+        exclude[s.id] = String(reason).trim();
+      }
+      const spec = asked ? { unit: args.unit ?? latest?.spec.unit, group: args.group ?? latest?.spec.group, reference: args.reference ?? '', contrasts: args.contrasts ?? [], covariates: args.covariates ?? [], exclude } : latest.spec;
+      const d = makeDesign(project(), spec);
+      let saved = null;
+      if (args.save !== undefined) {
+        if (!d.ok) throw new ActionError(`The design cannot be saved: ${d.problems.join(' ')}`);
+        const { project: next, record } = addDesign(project(), d, { name: String(args.save).trim() || 'Design' });
+        store.commit(next, `Save design ${record.name}`);
+        saved = { id: record.id, name: record.name, version: record.version };
+      }
+      await settleMode('cohort');
+      app.cohortView?.showDesign?.(d.spec, saved?.name);
+      const nameOf = new Map(d.samples.map((s) => [s.id, s.name]));
+      return {
+        message: `${d.ok ? d.words.join(' ') : `This design cannot be used: ${d.problems.join(' ')}`}${d.notes.length ? ` Notes: ${d.notes.join(' ')}` : ''}${saved ? ` Saved as ${saved.name}, version ${saved.version}.` : ''}`,
+        data: {
+          ok: d.ok, problems: d.problems, notes: d.notes, words: d.words, levels: d.levels, reference: d.reference, paired: d.paired,
+          names: d.names, rows: d.rows.map((r) => ({ unit: r.unit, group: r.group, samples: r.samples.map((id) => nameOf.get(id)) })), matrix: d.matrix, rank: d.rank, df: d.df,
+          contrasts: d.contrasts, excluded: d.excluded.map((e) => ({ sample: e.name, reason: e.reason })), saved,
+        },
+      };
     },
 
     async export(args) {

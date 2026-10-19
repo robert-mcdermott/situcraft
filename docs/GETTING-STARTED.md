@@ -18,7 +18,8 @@ The guide is on SituCraft's website, a page a subject:
   [regions and reviews](https://robert-mcdermott.github.io/situcraft/docs/regions.html).
 - **Spatial:** [spatial analysis](https://robert-mcdermott.github.io/situcraft/docs/spatial.html);
   [niches and genes](https://robert-mcdermott.github.io/situcraft/docs/niches.html).
-- **Cohorts:** [samples](https://robert-mcdermott.github.io/situcraft/docs/samples.html).
+- **Cohorts:** [samples](https://robert-mcdermott.github.io/situcraft/docs/samples.html);
+  [the design](https://robert-mcdermott.github.io/situcraft/docs/designs.html).
 - **Reference:** [remote control](https://robert-mcdermott.github.io/situcraft/docs/remote-control.html);
   [the record](https://robert-mcdermott.github.io/situcraft/docs/record.html);
   [troubleshooting](https://robert-mcdermott.github.io/situcraft/docs/troubleshooting.html).

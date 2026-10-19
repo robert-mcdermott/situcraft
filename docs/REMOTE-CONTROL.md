@@ -210,6 +210,12 @@ one slide), with the user's fields and those read from each bundle.
 | `samples` | none | Lists the samples in the Cohort view: each one's name, dataset, region (a region removed flagged), cells under its dataset's default segmentation (counted in its region), its region's area in µm², its fields (missing values `null`, never zero) and its bundle's run, slide, Xenium region, panel and software; and the fields with their kinds |
 | `set_samples` | `regions` (`{dataset, regions}`: a dataset's regions by name or ID as its samples; none for the whole section), `fields` (`[{name, kind}]`, `text` or `number`: added, or retyped), `remove_fields` (names), `names` (`{sample: name}`; empty for the dataset's or region's), `table` (CSV or tab-separated text with a `sample` column), `values` (`{sample: {field: value}}`; `null` or empty clears) | Sets them in that order, in one step: if any part is refused, nothing changes. A table's rows are matched to samples by name (ignoring case), its fields' columns set (an empty cell clears), its other columns added as fields (numbers when every value is one), the bundle's columns left alone; rows naming no sample are said. Samples are named as they are, or as they were before the call. Answers the samples, as `samples` does |
 
+### Designs
+
+| Action | Arguments | What it does |
+| --- | --- | --- |
+| `design` | `unit` (the replicate unit's field, such as `subject`), `group` (the field compared, such as `condition`), `reference` (the first in code-point order if not given), `contrasts` (`[[a, b]]`, each a − b; each level against the reference if not given), `covariates` (fields, or `run`, `slide`, `panel`), `exclude` (`{sample: reason}`), `save` (a name) | Makes the experimental design in the Cohort view: the units in each group (a unit's samples in one group combined; a unit in more than one group pairing them), the matrix in treatment coding (as patsy's), its rank and residual degrees of freedom, the contrasts, the samples left out, notes, and why it cannot be used if it cannot (a group of fewer than two units, regions of one section as separate units, a term confounded with another, no degrees of freedom left, the groups confounded with a slide, run or panel). With `save`, keeps it as that name's next version. Without `unit` or `group`, answers the latest saved design |
+
 ### Quality control
 
 | Action | Arguments | What it does |

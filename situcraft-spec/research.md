@@ -3040,6 +3040,33 @@ graph from the instrument's mask in 2 s each, the labels' enrichment in 2 s, nic
 genes in 3 s, Moran's I of 120 genes with local Moran's I in 23 s; 33 s in all at a peak of 1.17 GB
 on ten cores (budget: 10 minutes and 2 GB on four).
 
+### 6.9 The experimental design (verified, wave 7, slice 3)
+
+A comparison of groups is of replicate units: the samples' subjects, not their cells (Squair et al.
+2021, on the false discoveries cells counted as replicates make; Crowell et al. 2020). The design
+(`web/lib/design.js`) is made before any test and says what the units are.
+
+**Rows and columns.** A row is a unit in a group, its samples there (technical replicates)
+combined, as a pseudobulk sums a sample's cells. The columns are a linear model's: an intercept;
+the groups in treatment coding against the reference; when any unit is in more than one group,
+the units as a factor (a paired design: each unit compared with itself, as limma's and edgeR's
+paired designs add the subject to the model); and the covariates, factors in treatment coding and
+numbers as they are, the factors before the numbers. Levels are in code-point order, the first the
+reference unless one is given. This is patsy's (and R's `model.matrix`'s) default coding, and for
+the same formula the matrix is patsy's (`validation/reference/designs/`: patsy 1.0.3 on six
+designs, unpaired, paired, with covariates of both kinds, three groups with another reference, a
+factor of three levels, and paired with a number; every column name and value the same).
+
+**What it refuses, and why.** A coefficient is estimable only if its column is not a combination of
+the others: the rank is found column by column (modified Gram–Schmidt, twice, a column adding to
+it when more than 10⁻⁹ of its norm is left), term by term in order, so that a term whose columns add
+nothing is named, with the terms before it. A group of fewer than two units leaves its variation
+unmeasured; as many coefficients as rows leave no degrees of freedom. A batch (the bundles' slide,
+run or panel) that holds one group only makes a difference between the groups the batch's as much
+as theirs, and is refused unless the design adjusts for it (where the rank then refuses it); one
+that holds the groups unevenly is noted. Regions of one section are not independent replicates
+(they share the subject, slide and run): given different units, they are refused.
+
 ## 7. Datasets
 
 | Dataset | Source | Size | License | Use |
