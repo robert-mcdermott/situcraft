@@ -599,6 +599,22 @@ const scenes = {
     await act('export_segmentation', { formats: ['spatialdata', 'anndata', 'xenium-ranger'], folder: join(places.exports, 'xenium-lung-2fov-instrument') });
     await scrollTo('.seg-exports', 'end');
   },
+  // The Cohort view (wave 7, slice 1): the Lung and Breast sections added together as a project's
+  // samples, named, with a field given them and those read from their bundles.
+  async samples() {
+    await act('new_project', { name: 'Two sections' });
+    await act('open_paths', { paths: ['xenium-lung-2fov', 'xenium-breast-2fov'].map((name) => join(DATA, name)), add: true });
+    await act('set_samples', {
+      fields: [{ name: 'tissue', kind: 'text' }],
+      names: { 'xenium-lung-2fov': 'Lung section', 'xenium-breast-2fov': 'Breast section' },
+      values: { 'xenium-lung-2fov': { tissue: 'lung' }, 'xenium-breast-2fov': { tissue: 'breast' } },
+    });
+    await act('samples');
+    // The inspector closed (⇧⌘\), so that the table shows every column.
+    await js(`document.getElementById('app').classList.add('inspector-closed')`);
+    await clearToasts();
+    await sleep(400);
+  },
   // The Jobs view after both examples were opened: each job's state and times, one's log open.
   async jobs() {
     await act('open_example', { example: 'lung' });

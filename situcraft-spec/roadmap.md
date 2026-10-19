@@ -2884,15 +2884,176 @@ as in waves 3 and 4.
 
 ## 0.7.0: samples and cohorts (wave 7)
 
-Outline.
-- Several datasets per project (D10); the experimental design (H1); sample summaries (H2); cohort
-  QC (Q5).
-- Sample-level inference with effect sizes, intervals and recorded corrections (H3); batch and
-  panel checks (H4, H5).
-- Data plan: simulated cohorts with known effects (labeled simulated), plus regions of the
-  development bundles treated as pseudo-samples only in clearly labeled teaching examples.
-- Validation: inference on simulated designs reaches its nominal error rates; cell-level
-  pseudoreplication is refused.
+Sections compared as samples. A project holds a study's sections, each a sample with what is known
+of it (its subject, condition, slide and run); the design says which samples are replicates of
+what; every sample is summarized the same way (its cell types' shares, its niches, its quality, its
+spatial statistics, its expression); and groups are compared with the sample, or the subject, as
+the unit: effect sizes with intervals, raw and adjusted p-values, and the correction and the tests
+it ran over recorded. Batches and panels are shown, never corrected silently.
+
+**What a sample is.** A dataset (one section), or a region of one: a core of a tissue microarray, or
+one of several sections placed on a slide. A sample's numbers come from its dataset's artifacts
+(its promoted segmentation, a label set, its analyses), restricted to its region when it has one.
+Regions of one section are not independent samples; the design says so when they are used as if
+they were, and only teaching examples, labeled as such, compare them.
+
+**What a cohort's statistics say.** Cells are not replicates (conventions: no inferential
+statistic across groups until the design names its replicate unit). Each test is of samples'
+numbers (Crowell et al. 2020; Squair et al. 2021): a cell type's share by a quasi-binomial model of
+its cells against the sample's, a gene's expression in a cell type by its pseudobulk counts with
+voom's weights and limma's moderated statistics (Law et al. 2014; Smyth 2004), a spatial statistic
+by a linear model of its per-sample values. Pairing and covariates enter through the design; a
+batch is a covariate only when the design names it. Per-cell tests, where shown, are labeled
+exploratory. The statistics are adapted from CytoWeave's sample-level comparisons and MaveScape's
+moderated linear models, as noted in the code.
+
+**Where the work runs.** As in waves 4 and 6: each sample's numbers come from jobs on its dataset
+(the same steps run on every sample in one step); the cohort's summaries and tests run in the
+program as jobs (`internal/cohort`), each an artifact named by its inputs: the samples and their
+fields, the design, the artifacts each number came from and the parameters. The page holds the
+samples and the design, draws the results, and opens a result's samples and, in each, its cells
+on the tissue.
+
+**Data.** Simulated cohorts with known effects (labeled simulated): sections whose composition,
+expression and arrangement differ between groups by known amounts, with sample-to-sample variation
+of known size. The development bundles serve as samples of different panels and runs, and their
+regions as pseudo-samples only in clearly labeled teaching examples.
+
+**Validation.** Each model against an independent implementation on the same tables (statsmodels;
+limma in R, run apart as an external reference); on many simulated null cohorts, each test's
+false-positive rate at its nominal level and Benjamini–Hochberg's false discovery rate controlled;
+on simulated cohorts with effects, the effects recovered within their intervals at their stated
+coverage; the same data tested cell by cell, to show the false positives that pseudoreplication
+makes, which SituCraft refuses.
+
+### Wave 7
+
+1. **Samples (D10): done.**
+   - **A project of several sections:** bundles opened together (several, or a folder of them, which
+     the program already lists bundle by bundle) and added in one step (`app.bundles.addOpen`: each
+     checked, those with a fatal problem refused with their reason), in the Data view and the
+     Cohort view. A dataset now records its slide and its panel's design (`panel_design_id`).
+   - **Samples** (`web/lib/samples.js`; `docs/FORMATS.md`): each dataset a sample until regions of
+     it are made its samples instead, in the order drawn, named by their regions until named; a
+     record only for a sample something was said of (`project.samples`: id, dataset, region, name,
+     fields), so that earlier projects open unchanged, each dataset a sample. A region removed
+     leaves its sample flagged and left out. Names unique (a repeated one numbered).
+   - **Fields:** subject and condition, and any added (`project.sampleFields`), as text or numbers
+     (a number field takes only finite numbers; a field becomes one only when every value is one;
+     missing values absent, never zero); renamed in every sample, retyped, removed with their
+     values. The bundle's run, slide, Xenium region, panel and software read from the dataset,
+     never stored again.
+   - **The Cohort view** (`ui/mode-cohort.js`): the samples table (each sample's name, dataset,
+     region, cells under its dataset's default segmentation, counted in its region, its region's
+     area, its fields as cells to type in, and its bundle's run, slide and panel); the fields; the
+     regions of each dataset to make samples, or the whole section again. Edits are kept as a
+     cell is left, Tab moving on as in a spreadsheet; each is in the history and undone by undo.
+     The project tree lists **Samples** once there are two or more.
+   - **Tables:** the samples written as CSV (sample, dataset, region, the fields, the bundle's
+     fields for reference) and read back, CSV or tab-separated: rows matched to samples by name
+     (exactly, then ignoring case), fields set (an empty cell clears), new columns added as fields
+     (numbers when every value is one), the table's own and the bundle's columns left alone; refused,
+     with nothing changed, when no column names the samples, a column is repeated, two rows name one
+     sample or a value does not fit.
+   - Remote control: `samples`, `set_samples` (regions, fields, names, a table and values, in one
+     step); `export` writes `samples`.
+   - Validation:
+     - **By hand** (`web/lib/samples.test.mjs`, 11 tests): defaults without records, fields set and
+       cleared, numbers' refusals, fields renamed, retyped and removed, names and repeated names,
+       regions as samples (kept, dropped, removed, the dataset a sample again with its fields), the
+       CSV written and read back to the byte, tables matched and refused, the project document.
+     - **In the page** (viewer suite): the Lung and Breast bundles added together, each a sample
+       (11,898 and 7,275 cells; panels hLung_v1.1 and hBreast_v1); fields set by remote control,
+       written as CSV and read back to the same file; refusals changing nothing; two regions of the
+       Lung as its samples (134 and 1,252 cells), their cells the suite's own count by centroid and
+       their areas their outlines'; all kept with the project; every earlier release's project
+       (0.2.0 to 0.6.0) opening with each dataset a sample.
+   - Found by slice 1:
+     - **A table's edits lost the keyboard's place:** a value is kept as its cell is left, and
+       the table drawn again took the focus from the cell Tab had moved to. The view draws again
+       once the focus has settled, and gives it back to the same cell, its text selected.
+     - **A bundle's slide was not recorded:** the samples' batches need it; a dataset records it
+       (and its panel's design) from now on. A dataset added by an earlier release shows them as
+       not recorded until it is added again; slice 5, which compares batches and panels, reads them
+       from the bundle.
+2. **Simulated cohorts (data plan).**
+   - `situcraft simulate --cohort`: subjects in groups (or paired: each subject before and after),
+     each sample a section of its own layout, its types' shares and genes' levels varying from
+     sample to sample by a stated amount, and between groups by known effects: a type's share, a
+     gene's level in a type, how much one type mixes into another's domains. Slides as batches,
+     optionally. Small sections, so that a cohort of a dozen samples takes little disk.
+   - `truth/cohort.json`: the design, each effect, and each sample's true values; the start page's
+     example **A simulated cohort**, made in seconds.
+   - Validation: the effects measured from the true cells against those asked, within sampling
+     error; the sample-to-sample variation as asked; the same cohort from the same seed, byte for
+     byte.
+3. **The design (H1).**
+   - In the Cohort view: the replicate unit (a field, such as subject), the groups (a field and its
+     levels), the contrasts, pairing, covariates, and technical replicates (several samples of one
+     unit in one group, combined before inference); the design matrix shown and described in words
+     (what it can estimate, with how many units each), as MaveScape's designs are.
+   - Refused, saying why: a design that cannot be estimated (fewer than two units in a group, a
+     contrast confounded with a batch or a covariate, a matrix of less than full rank), and cells or
+     regions of one section as replicate units.
+   - An artifact of kind `design`, kept as versions; remote control `design`.
+   - Validation: unpaired, paired, covariate and unbalanced designs by hand; each refusal; the
+     matrix against statsmodels' (patsy's) for the same formula.
+4. **Sample summaries (H2).**
+   - **The same steps on every sample in one step:** clustering and labels from the same marker set
+     or reference (so that labels have the same names), graphs and spatial questions with the same
+     parameters; niches found across the samples together, so that a niche is the same kind of
+     place in every sample.
+   - **The cohort table:** each sample's cells by label (counts, shares, densities per mm² of its
+     tissue), its niches' shares, its QC metrics, its graph's numbers, its spatial statistics (an
+     enrichment's ratios, nearest distances, a gene's Moran's I) and its pseudobulk counts by label
+     and gene; each number traced to the artifact it came from. An artifact of kind
+     `cohort-summary`; written as CSV.
+   - Validation: each number against its sample's own artifact; niches found together against each
+     sample's own; on the simulated cohort, the true values.
+5. **Cohort QC, batches and panels (Q5, H4, H5).**
+   - Each QC metric by sample, side by side and by batch; outlying samples flagged by robust
+     z-scores (the median and the median absolute deviation) with the reason, no pass or fail; a
+     sample left out of inference only with a reason, recorded.
+   - **Batches shown:** summaries by slide and run, the pseudobulk's principal components colored
+     by batch and group; a group confounded with a batch stated before any test; no correction
+     unless the design names the batch as a covariate.
+   - **Panels:** before any gene is compared across samples, every sample's panel compared (genes,
+     codewords, the panel's version): only genes in every panel are compared, the others listed.
+   - Validation: outliers planted in a simulated cohort found; a confounded design detected; the
+     Lung and Breast panels' shared genes (two runs and panels) by hand.
+6. **Differential abundance (H3).**
+   - Each label's share between groups: its cells against the sample's labeled cells, by a
+     quasi-binomial generalized linear model with the design's pairing and covariates; densities by
+     a model of log counts with the sample's tissue area as offset; niches' shares the same way.
+     Effect sizes (the share's ratio) with intervals, raw and Benjamini–Hochberg-adjusted p-values,
+     the tests' universe recorded.
+   - A result's samples as points by group; a sample's cells of that label on its tissue.
+   - Validation: against statsmodels' GLM on the same tables; on simulated cohorts, the known
+     shifts within their intervals, and error rates on null cohorts.
+7. **Differential expression and spatial statistics (H3).**
+   - **Pseudobulk expression:** each label's counts by sample, filtered for expression, normalized
+     (TMM; Robinson and Oshlack 2010), voom's weights and limma's moderated t (Law et al. 2014;
+     Smyth 2004), with the design's pairing and covariates; log fold changes with intervals,
+     adjusted over the genes and labels tested; only genes on every panel.
+   - **Spatial statistics between groups:** each sample's value (an enrichment's log ratio, a
+     nearest distance, a niche's share, a gene's Moran's I) in a linear model of the design,
+     moderated across the statistics compared.
+   - Validation: against limma in R, run apart, and statsmodels' OLS; on simulated cohorts, the
+     known changes in expression and arrangement found.
+8. **Error rates, pseudoreplication and scale.**
+   - **Error rates:** thousands of simulated null cohorts (weekly), each test's false-positive rate
+     within binomial error of its level, the false discovery rate controlled; power at the known
+     effects, stated; intervals covering the true effect as often as stated.
+   - **Pseudoreplication shown:** the same null cohorts tested cell by cell, their false positives
+     counted, as the documentation shows; such tests are refused across groups.
+   - **Scale:** a cohort of dozens of sections and millions of cells summarized and tested within a
+     stated budget of time and memory, one dataset held at a time.
+9. **Examples, documentation, release 0.7.0.**
+   - Worked examples on the simulated cohort (a composition shift found, a null comparison found
+     null, a gene changed in one type, a paired design), and a teaching example of the development
+     bundles' regions as pseudo-samples, labeled as such.
+   - The project fixture `validation/projects/0.7.0-*.situcraft.json`; the guide's pages for the
+     wave; CHANGELOG; release, and the product site published for it.
 
 ## 0.8.0: figures and a provable record (wave 8)
 

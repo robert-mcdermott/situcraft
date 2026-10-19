@@ -102,6 +102,19 @@ export function mountData(app, container) {
       const active = !target?.dataset && target?.item?.url === item.url;
       chips.push(h(`button.chip${active ? '.active' : ''}`, { type: 'button', onclick: () => app.focusItem({ kind: 'local', id: item.url }) }, icon('folder'), item.name, h('span.count', 'not added')));
     }
+    // A study's sections opened together (several, or a folder of them): added in one step.
+    const waiting = app.bundles.notAdded();
+    if (waiting.length > 1) {
+      chips.push(h('button.btn.small', {
+        type: 'button',
+        title: 'Check each bundle and add those without a fatal problem, each a sample of the project',
+        onclick: async () => {
+          const { added, refused } = await app.bundles.addOpen();
+          if (added.length) toast(`${added.length} bundle${added.length === 1 ? '' : 's'} added to the project.`, { kind: 'ok' });
+          for (const r of refused) toast(`${r.name}: ${r.reason}`, { kind: 'error' });
+        },
+      }, icon('plus'), `Add all ${waiting.length} to the project`));
+    }
     return chips.length > 1 ? h('div.bundle-chips', ...chips) : null;
   }
 

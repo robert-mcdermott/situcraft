@@ -1268,3 +1268,17 @@ td div.studio-problem { padding: 2px 6px; margin-top: 4px; font-size: 11.5px; }
 .lb-edit-table td.muted { padding-top: 9px; white-space: nowrap; }
 .lb-edit-table td:first-child .input { min-width: 150px; }
 .inspector-list { margin: 4px 0 0 16px; padding: 0; font-size: 12.5px; color: var(--text-2); }
+
+/* The Cohort view (wave 7): the samples table, its fields and regions as samples. */
+.seg-body.cohort-body { max-width: 1240px; }
+.cohort-table input.input.small { width: 104px; }
+.cohort-table input.input.cohort-name { width: 170px; }
+.cohort-table th:first-child, .cohort-table td:first-child { position: sticky; left: 0; z-index: 2; background: var(--panel); }
+.cohort-table tr.selected td:first-child { background: var(--active); }
+.cohort-add input.input.small { width: 240px; }
+.cohort-add select.input.small { width: 130px; }
+.cohort-table input.r { text-align: right; }
+.cohort-table td { vertical-align: middle; white-space: nowrap; }
+.cohort-table .cohort-bundle { color: var(--text-3); }
+.cohort-regions { display: flex; flex-direction: column; gap: 8px; padding-top: 6px; border-top: 1px solid var(--line); }
+.cohort-boxes { display: flex; flex-wrap: wrap; gap: 6px 16px; }

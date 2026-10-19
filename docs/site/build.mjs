@@ -53,6 +53,7 @@ const DOCS = [
   { group: 'Cell types', pages: [['clusters', 'Clusters and the map'], ['labels', 'Labels']] },
   { group: 'Pathology', pages: [['images', 'Images and alignment'], ['regions', 'Regions and reviews']] },
   { group: 'Spatial', pages: [['spatial', 'Spatial analysis'], ['niches', 'Niches and genes']] },
+  { group: 'Cohorts', pages: [['samples', 'Samples']] },
   { group: 'Reference', pages: [['remote-control', 'Remote control'], ['record', 'The record'], ['troubleshooting', 'Troubleshooting']] },
 ];
 const ORDER = DOCS.flatMap((g) => g.pages);

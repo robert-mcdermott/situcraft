@@ -1720,6 +1720,7 @@ export async function viewerSuite({ check, MissingData, verbose }) {
           const reopened = await chrome.eval(`(async () => {
             const app = window.situcraft;
             const { promotedSegmentation, exportsOf } = await import('/lib/segmentations.js');
+            const { samplesOf } = await import('/lib/samples.js');
             const wait = async (f) => { for (let k = 0; k < 300; k += 1) { const v = f(); if (v) return v; await new Promise((r) => setTimeout(r, 100)); } return null; };
             const doc = ${JSON.stringify(text)};
             const saved = JSON.parse(doc);
@@ -1729,11 +1730,11 @@ export async function viewerSuite({ check, MissingData, verbose }) {
             const before = (await wait(() => { const l = app.bundles.link(dataset.id); return l && l.state !== 'checking' ? l : null; }))?.state;
             const link = await app.bundles.locate(dataset.id, ${JSON.stringify(join(dataRoot, 'xenium-lung-2fov'))});
             const p = app.store.project;
-            return { before, after: link?.state, segmentations: p.artifacts.filter((a) => a.kind === 'segmentation').length, comparisons: p.artifacts.filter((a) => a.kind === 'comparison').length, decisions: p.decisions.length, exports: exportsOf(p, dataset.id).length, default: promotedSegmentation(p, dataset.id)?.record.id, saved: promotedSegmentation(saved, saved.datasets[0].id)?.record.id, regions: JSON.stringify(p.regions ?? []), reviews: JSON.stringify(p.reviews ?? []) };
+            return { before, after: link?.state, segmentations: p.artifacts.filter((a) => a.kind === 'segmentation').length, comparisons: p.artifacts.filter((a) => a.kind === 'comparison').length, decisions: p.decisions.length, exports: exportsOf(p, dataset.id).length, default: promotedSegmentation(p, dataset.id)?.record.id, saved: promotedSegmentation(saved, saved.datasets[0].id)?.record.id, regions: JSON.stringify(p.regions ?? []), reviews: JSON.stringify(p.reviews ?? []), samples: samplesOf(p).map((s) => (s.region ? 'region ' + s.name : s.name)).join(), datasetNames: p.datasets.map((d) => d.name).join() };
           })()`);
           // From 0.5.0, its regions and reviews as they were saved.
           const kept = v < '0.5.0' || (reopened.regions === JSON.stringify(fixture.regions ?? []) && reopened.reviews === JSON.stringify(fixture.reviews ?? []) && (fixture.regions ?? []).length >= 2 && (fixture.reviews ?? []).length >= 3);
-          check('viewer', `${v} Lung project: it opens and finds its moved bundle; its segmentations, comparisons, decisions, exports${v < '0.5.0' ? '' : ', regions and reviews'} are there, and its default`, JSON.stringify({ ...reopened, regions: (fixture.regions ?? []).length, reviews: (fixture.reviews ?? []).length }), reopened.before === 'missing' && reopened.after === 'ok' && reopened.segmentations === fixture.artifacts.filter((a) => a.kind === 'segmentation').length && reopened.comparisons >= 2 && reopened.decisions === fixture.decisions.length && reopened.exports >= 1 && reopened.default && reopened.default === reopened.saved && kept, 'missing, then ok; all there');
+          check('viewer', `${v} Lung project: it opens and finds its moved bundle; its segmentations, comparisons, decisions, exports${v < '0.5.0' ? '' : ', regions and reviews'} are there, and its default; each dataset a sample`, JSON.stringify({ ...reopened, regions: (fixture.regions ?? []).length, reviews: (fixture.reviews ?? []).length }), reopened.samples === reopened.datasetNames && reopened.before === 'missing' && reopened.after === 'ok' && reopened.segmentations === fixture.artifacts.filter((a) => a.kind === 'segmentation').length && reopened.comparisons >= 2 && reopened.decisions === fixture.decisions.length && reopened.exports >= 1 && reopened.default && reopened.default === reopened.saved && kept, 'missing, then ok; all there');
         }
 
         // A worked example started in the page (here the bundles are the project's datasets, not
@@ -2199,6 +2200,74 @@ export async function viewerSuite({ check, MissingData, verbose }) {
             && sn.six.niches === 6 && sn.six.neighbors === 10 && Math.min(...ag) === 0.66 && Math.max(...ag) === 0.93
             && /^Niches of/.test(fills[0]?.name ?? '') && JSON.stringify(fills[0]?.counts) === '[1078,887,554,511]' && /domain/.test(fills[1]?.name ?? '') && fills[1]?.counts.length === 6 && fills[1].counts.reduce((s, v) => s + v, 0) === 3030,
             'epithelial-like 47% of 1,078, endothelial-like 53% of 887, immune-like 72% of 554, fibroblast-like 44% of 511; the seeds agree (1.00); 96.5% in their domain\'s niche (93% to 99%), domains 0 and 4 sharing one, 1 and 5 another; six niches of 10 agree 0.66 to 0.93; filled by 4 niches, then 6 domains');
+        }
+
+        // Samples (wave 7, slice 1): the Lung and Breast bundles added together, each a sample with
+        // its bundle's run, slide and panel; fields set by remote control, written as CSV and read
+        // back exactly, values that do not fit refused with nothing changed; two regions of the Lung
+        // made its samples, their cells the suite's own count by centroid and their areas their
+        // outlines'; all kept when the project is opened again; the Lung one sample again, with its
+        // fields.
+        if (present.includes('xenium-breast-2fov')) {
+          await act('new_project', { name: 'Samples' });
+          const opened = await act('open_paths', { paths: ['xenium-lung-2fov', 'xenium-breast-2fov'].map((b) => join(dataRoot, b)), add: true });
+          const listed = await act('samples');
+          const ls = listed.data?.samples ?? [];
+          check('viewer', 'remote control: bundles opened together are added as a project\'s samples, each a sample of its own with its bundle\'s run, slide and panel', `${opened.message ?? opened.error}; ${listed.message ?? listed.error}`,
+            opened.ok && listed.ok && ls.length === 2 && ls.every((s) => s.region === null && s.bundle.run && s.bundle.slide) && ls.map((s) => s.bundle.panel).join() === 'hLung_v1.1,hBreast_v1' && ls[0].cells === 11898 && ls[1].cells === 7275, 'two samples, 11,898 and 7,275 cells; panels hLung_v1.1 and hBreast_v1');
+          const set = await act('set_samples', { fields: [{ name: 'age', kind: 'number' }, { name: 'notes', kind: 'text' }], values: { 'xenium-lung-2fov': { subject: 'P1', condition: 'tumor', age: 0.1 + 0.2, notes: 'said "fine",\nthen left' }, 'xenium-breast-2fov': { subject: 'P2', condition: 'normal', age: 0 } } });
+          const csvPath = join(work, 'samples.csv');
+          const written = await act('export', { what: 'samples', path: csvPath, overwrite: true });
+          const csv = existsSync(csvPath) ? readFileSync(csvPath, 'utf8') : '';
+          // Cleared, then read back from the file as a table.
+          await act('set_samples', { remove_fields: ['age', 'notes'], values: { 'xenium-lung-2fov': { subject: null, condition: null }, 'xenium-breast-2fov': { subject: '', condition: '' } } });
+          const cleared = await act('samples');
+          const back = await act('set_samples', { table: csv });
+          await act('export', { what: 'samples', path: csvPath, overwrite: true });
+          const again = existsSync(csvPath) ? readFileSync(csvPath, 'utf8') : '';
+          const fb = back.data?.samples?.map((s) => s.fields) ?? [];
+          check('viewer', 'samples\' fields set by remote control, written as CSV and read back exactly (quotes, a line break, a number\'s every digit, a zero)', `${set.message ?? set.error}; ${written.message ?? written.error}; ${back.message ?? back.error}`,
+            set.ok && written.ok && back.ok && csv.length > 0 && again === csv && cleared.data?.samples.every((s) => s.fields.subject === null && !('age' in s.fields)) && fb[0]?.age === 0.30000000000000004 && fb[0]?.notes === 'said "fine",\nthen left' && fb[1]?.age === 0 && fb[1]?.notes === null && back.data.fields.map((f) => `${f.name}:${f.kind}`).join() === 'subject:text,condition:text,age:number,notes:text',
+            'the same file written again; 0.30000000000000004 and 0 read back as numbers');
+          const badValue = await act('set_samples', { values: { 'xenium-breast-2fov': { condition: 'tumor', age: 'old' } } });
+          const badTable = await act('set_samples', { table: 'sample,subject\nxenium-lung-2fov,P8\nXENIUM-LUNG-2FOV,P9\n' });
+          const unchanged = await act('samples');
+          check('viewer', 'samples\' values that do not fit are refused, saying why, and nothing is changed', `${badValue.message ?? badValue.error}; ${badTable.message ?? badTable.error}`,
+            !badValue.ok && /not a number/.test(badValue.message ?? badValue.error ?? '') && !badTable.ok && /Two rows name/.test(badTable.message ?? badTable.error ?? '') && unchanged.data?.samples[1].fields.condition === 'normal' && unchanged.data.samples[0].fields.subject === 'P1', 'refused; normal and P1 still');
+          // Two regions of the Lung as its samples: cells by centroid, as the suite counts them.
+          const coreA = [[100, 100], [400, 100], [400, 400], [100, 400]];
+          const coreB = [[700, 300], [1000, 320], [950, 600], [720, 560]];
+          await act('draw_region', { dataset: 'xenium-lung-2fov', name: 'Core A', rectangle: [100, 100, 400, 400] });
+          await act('draw_region', { dataset: 'xenium-lung-2fov', name: 'Core B', polygon: coreB });
+          const asRegions = await act('set_samples', { regions: { dataset: 'xenium-lung-2fov', regions: ['Core B', 'Core A'] }, values: { 'Core A': { subject: 'P1', condition: 'tumor' } } });
+          await act('show_tissue', { dataset: 'xenium-lung-2fov', segmentation: 'instrument' });
+          const drawnCells = await chrome.eval('(() => { const c = window.situcraftViewer.cellsDrawn(); return { x: Array.from(c.x), y: Array.from(c.y) }; })()');
+          const inRing = (ring, px, py) => {
+            let inside = false;
+            for (let i = 0, j = ring.length - 1; i < ring.length; j = i, i += 1) {
+              const [xi, yi] = ring[i];
+              const [xj, yj] = ring[j];
+              if ((yi > py) !== (yj > py) && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) inside = !inside;
+            }
+            return inside;
+          };
+          const ownCells = (ring) => drawnCells.x.reduce((n, x, i) => n + (inRing(ring, x, drawnCells.y[i]) ? 1 : 0), 0);
+          const shoelace = (ring) => Math.abs(ring.reduce((s, [x, y], i) => s + x * ring[(i + 1) % ring.length][1] - ring[(i + 1) % ring.length][0] * y, 0)) / 2;
+          const regionSamples = await act('samples');
+          const rs = regionSamples.data?.samples ?? [];
+          const counted = { a: ownCells(coreA), b: ownCells(coreB) };
+          check('viewer', 'a section\'s regions made its samples, in the order drawn: their cells the suite\'s own count by centroid, their areas their outlines\'', `${asRegions.message ?? asRegions.error}; ${JSON.stringify(rs.map((s) => [s.sample, s.region, s.cells, s.area_um2]))}; the suite counts ${JSON.stringify(counted)}`,
+            asRegions.ok && rs.length === 3 && rs.map((s) => s.sample).join() === 'Core A,Core B,xenium-breast-2fov' && rs[0].cells === counted.a && rs[1].cells === counted.b && counted.a > 100 && counted.b > 100 && Math.abs(rs[0].area_um2 - 90000) < 1e-6 && Math.abs(rs[1].area_um2 - shoelace(coreB)) < 1e-6 && rs[0].fields.subject === 'P1',
+            `${counted.a} and ${counted.b} cells; 90,000 and ${Math.round(shoelace(coreB)).toLocaleString('en-US')} µm²`);
+          // Kept with the project.
+          await act('new_project', { name: 'Elsewhere' });
+          await act('open_project', { project: 'Samples' });
+          const reopened = await act('samples');
+          const whole = await act('set_samples', { regions: { dataset: 'xenium-lung-2fov', regions: [] } });
+          const ws = whole.data?.samples ?? [];
+          check('viewer', 'samples and their fields are kept with the project; a section made one sample again has its fields back', `${reopened.message ?? reopened.error}; ${whole.message ?? whole.error}`,
+            reopened.ok && JSON.stringify(reopened.data.samples.map((s) => [s.sample, s.cells, s.fields])) === JSON.stringify(rs.map((s) => [s.sample, s.cells, s.fields])) && whole.ok && ws.length === 2 && ws[0].sample === 'xenium-lung-2fov' && ws[0].fields.age === 0.30000000000000004 && ws[0].fields.subject === 'P1',
+            'the same samples, cells and fields; the Lung one sample with its own');
         }
       }
 

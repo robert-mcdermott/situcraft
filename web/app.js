@@ -36,14 +36,7 @@ const MODES = [
   'sep',
   { id: 'celltypes', label: 'Cell types', icon: 'tag', load: () => import('./ui/mode-celltypes.js').then((m) => m.mountCellTypes) },
   { id: 'spatial', label: 'Spatial', icon: 'graph', load: () => import('./ui/mode-spatial.js').then((m) => m.mountSpatial) },
-  {
-    id: 'cohort', label: 'Cohort', icon: 'samples',
-    load: async () => plannedMode({
-      title: 'Cohort', icon: 'samples',
-      purpose: 'Samples compared with the sample or patient, not the cell, as the unit: composition, niches and expression across conditions, with effect sizes and intervals, once the experimental design names its replicates.',
-      steps: ['Add the samples\' datasets to the project.', 'Describe the design: samples, patients, conditions, batches.', 'Compare, with corrections recorded.'],
-    }),
-  },
+  { id: 'cohort', label: 'Cohort', icon: 'samples', load: () => import('./ui/mode-cohort.js').then((m) => m.mountCohort) },
   {
     id: 'reports', label: 'Reports', icon: 'report',
     load: async () => plannedMode({

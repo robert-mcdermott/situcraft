@@ -1,0 +1,35 @@
+---
+title: Samples
+description: A SituCraft project of several Xenium sections, each a sample (or its regions, such as a tissue microarray's cores), described by fields of your own and those read from each bundle, written and read as CSV.
+lede: A study's sections in one project, each a sample: described by the subject it came from, its condition and any field you add, beside its run, slide and panel read from its bundle. A section's regions can be its samples instead, such as a tissue microarray's cores.
+---
+      <h2 id="sections">Several sections in a project</h2>
+      <p>A project holds as many sections as a study has, each a dataset recorded from its own bundle. Open them together: choose several bundles at once, or a folder that holds them, and SituCraft lists every bundle in it. <strong>Add all to the project</strong>, in the Data view or the <strong>Cohort</strong> view, checks each one and adds those without a fatal problem. The views work on one dataset at a time: the one in focus in the project tree.</p>
+      <p>Each dataset is a <strong>sample</strong> of the project until its regions are made samples instead (see <a href="#regions">Regions as samples</a>). The project tree lists the samples once there are two or more, each with its condition and subject.</p>
+
+      <h2 id="fields">Describing the samples</h2>
+      <p>The Cohort view's <strong>Samples</strong> table has a row for each sample: its name, its dataset, its region, its cells under its dataset's default segmentation, and its fields.</p>
+      <ul>
+        <li><strong>Your fields:</strong> subject and condition to begin with, and any you add under <strong>Fields</strong> (age, treatment, batch). A field holds text or a number. A number field takes only numbers, and a field becomes one only when every value it holds is a number. A value left empty is missing, never zero.</li>
+        <li><strong>The bundle's fields:</strong> the run, the slide and the panel, read from each bundle's <code>experiment.xenium</code> (with the Xenium region and the software, shown when you point at them). They show which samples share a run, a slide or a panel, and are not edited.</li>
+      </ul>
+      <p>Type in a cell and leave it (Tab moves to the next) to keep a value. Rename a sample in its first cell; an empty name gives it back its dataset's or its region's. Every change is in the project's history, and undo takes it back.</p>
+      <shot name="samples" alt="The Cohort view: two samples, the Lung and Breast sections, each with its dataset, cells, a tissue field and the run, slide and panel read from its bundle, and the fields listed below">The Lung and Breast sections as samples, with a field of their own and those read from their bundles.</shot>
+
+      <h2 id="tables">Tables of samples</h2>
+      <p>A study's samples are often described in a spreadsheet already. <strong>Write CSV</strong> writes the table: a row for each sample, with its name, dataset and region, your fields, and the bundle's fields for reference. Fill it in elsewhere and read it back with <strong>Read a table…</strong> (CSV or tab-separated):</p>
+      <ul>
+        <li>Its <code>sample</code> column names the samples; each row is matched to the sample of that name (ignoring case).</li>
+        <li>Its columns that are fields set those fields; an empty cell clears a value.</li>
+        <li>Its other columns are added as fields: numbers when every value is one, text otherwise.</li>
+        <li>The table's own columns (dataset, region) and the bundle's are left alone.</li>
+      </ul>
+      <p>SituCraft says which samples it matched, which rows named no sample, and which samples the table left as they were. A table that names one sample twice, repeats a column, or puts text in a number field is refused, saying why, and nothing is changed.</p>
+
+      <h2 id="regions">Regions as samples</h2>
+      <p>One section can hold several samples: the cores of a tissue microarray, or sections placed side by side on one slide. Draw a region around each (or read them from QuPath; see <a href="regions.html">Regions and reviews</a>), then in <strong>Regions as samples</strong> choose them and <strong>Make the chosen regions samples</strong>. The section is then no longer a sample itself; its regions are, in the order they were drawn, each named by its region until you name it. A region sample's cells are those of its dataset's default segmentation whose centers lie in the region.</p>
+      <p>A region removed later leaves its sample flagged, and it is left out of a cohort. <strong>The whole section as one sample</strong> makes the section a sample again, with the fields it had.</p>
+      <p>Regions of one section of one tissue are not independent samples: they share a subject, a slide and a run, and their cells' differences are not differences between subjects.</p>
+
+      <h2 id="remote">By remote control</h2>
+      <p><code>samples</code> lists the samples with their cells, fields and bundles' fields. <code>set_samples</code> makes a dataset's regions its samples, adds, retypes and removes fields, names samples, reads a table and sets values, all in one step: if any part is refused, nothing changes. <code>export</code> with <code>samples</code> writes the table. See <a href="remote-control.html">Remote control</a>.</p>

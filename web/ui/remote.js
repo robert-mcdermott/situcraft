@@ -31,6 +31,7 @@ import { KINDS as GRAPH_KINDS, describeGraph, graphsOf } from '../lib/graphs.js'
 import { analysesOf, analysisNumbers, bandsOf, compareNumbers, nicheNames, rankCorrelation, rankPairs, rowNames, zoneBands } from '../lib/spatial.js';
 import { ratioText } from './spatial-results.js';
 import { showAnalysisCells } from './spatial-cells.js';
+import { BUNDLE_FIELDS, addSampleField, fieldValue, readSamplesTable, removeSampleField, renameSample, sampleFields, samplesCSV, samplesOf, setFieldKind, setRegionSamples, setSampleField } from '../lib/samples.js';
 
 export class ActionError extends Error {}
 
@@ -111,6 +112,23 @@ export function installRemote(app) {
   // Who sent the action being performed (what the script calls itself).
   let author = 'a program on this computer';
   let counter = 0;
+
+  // The samples as answers give them: each with its dataset, region, cells (under its dataset's
+  // default segmentation; cells: the Cohort view's counts), area, fields and its bundle's fields.
+  function samplesAnswer(cells = []) {
+    const list = samplesOf(project());
+    const fields = sampleFields(project());
+    const rows = list.map((s, k) => ({
+      sample: s.name, id: s.id, dataset: s.dataset.name, region: s.region?.name ?? null, removed: s.removed,
+      cells: Number.isFinite(cells[k]) ? cells[k] : null, area_um2: s.region ? area(s.region.geometry) : null,
+      fields: Object.fromEntries(fields.map((f) => [f.name, fieldValue(s, f.name) === '' ? null : fieldValue(s, f.name)])),
+      bundle: Object.fromEntries(BUNDLE_FIELDS.map((f) => [f.key, f.of(s.dataset) || null])),
+    }));
+    return {
+      message: `${plural(list.length, 'sample')} from ${plural(project().datasets.length, 'dataset')}${list.length ? `: ${rows.map((r) => `${r.sample}${r.region ? ` (a region of ${r.dataset})` : ''}${Object.entries(r.fields).filter(([, v]) => v !== null).map(([k, v]) => `, ${k} ${v}`).join('')}`).join('; ')}` : ''}. Fields: ${fields.map((f) => `${f.name} (${f.kind})`).join(', ') || 'none'}.`,
+      data: { samples: rows, fields },
+    };
+  }
 
   // --- Resolution of names --------------------------------------------------------------------
 
@@ -2134,8 +2152,95 @@ export function installRemote(app) {
       return { message: written.text, data: { dataset: dataset.name, text: written.text, references: written.references, filters: chosen.map(filterData) } };
     },
 
+    // --- Samples (wave 7) ---------------------------------------------------------------------
+
+    async samples() {
+      await settleMode('cohort');
+      const cells = await app.cohortView?.cells?.() ?? [];
+      return samplesAnswer(cells);
+    },
+
+    async set_samples(args) {
+      let next = project();
+      const done = [];
+      // A sample by its ID or its name, as it is now in the call or as it was named before it.
+      const before = samplesOf(next);
+      const sampleNamed = (ref) => {
+        const list = samplesOf(next);
+        const text = String(ref);
+        const hit = list.find((s) => s.id === text) ?? list.find((s) => s.name === text) ?? list.find((s) => s.id === before.find((b) => b.name === text)?.id);
+        if (hit) return hit;
+        const name = choose(text, list.map((s) => s.name), 'sample');
+        return list.find((s) => s.name === name);
+      };
+      try {
+        if (args.regions) {
+          const dataset = resolveDataset(args.regions.dataset);
+          const regions = regionsOf(next, dataset.id);
+          const ids = (args.regions.regions ?? []).map((ref) => {
+            const byId = regions.find((r) => r.id === ref);
+            if (byId) return byId.id;
+            const name = choose(String(ref), regions.map((r) => r.name), 'region');
+            return regions.find((r) => r.name === name).id;
+          });
+          next = setRegionSamples(next, dataset.id, ids);
+          done.push(ids.length ? `${plural(ids.length, 'region')} of ${dataset.name} as samples` : `${dataset.name} one sample`);
+        }
+        for (const f of args.fields ?? []) {
+          const kind = f.kind ?? 'text';
+          const have = sampleFields(next).find((x) => x.name === f.name);
+          if (!have) {
+            next = addSampleField(next, f.name, kind);
+            done.push(`field ${f.name} (${kind}) added`);
+          } else if (have.kind !== kind) {
+            next = setFieldKind(next, f.name, kind);
+            done.push(`field ${f.name} made ${kind}`);
+          }
+        }
+        for (const name of args.remove_fields ?? []) {
+          next = removeSampleField(next, name);
+          done.push(`field ${name} removed`);
+        }
+        for (const [ref, name] of Object.entries(args.names ?? {})) {
+          const sample = sampleNamed(ref);
+          next = renameSample(next, sample.id, name);
+          done.push(`${sample.name} named ${String(name).trim() || 'as before'}`);
+        }
+        if (args.table !== undefined) {
+          const read = readSamplesTable(next, String(args.table));
+          next = read.project;
+          done.push(`a table read: ${plural(read.matched.length, 'sample')} matched${read.unmatched.length ? `; no sample is named ${read.unmatched.join(', ')}` : ''}${read.added.length ? `; fields added: ${read.added.map((f) => f.name).join(', ')}` : ''}`);
+        }
+        for (const [ref, values] of Object.entries(args.values ?? {})) {
+          const sample = sampleNamed(ref);
+          for (const [field, value] of Object.entries(values ?? {})) {
+            try {
+              next = setSampleField(next, sample.id, field, value);
+            } catch (error) {
+              throw new Error(`${sample.name}, ${field}: ${error.message}`);
+            }
+          }
+          done.push(`${sample.name}'s ${Object.keys(values ?? {}).join(', ')} set`);
+        }
+      } catch (error) {
+        if (error instanceof ActionError) throw error;
+        throw new ActionError(`${error.message.replace(/\.?$/, '.')} Nothing was changed.`);
+      }
+      if (!done.length) throw new ActionError('Say what to set: regions, fields, remove_fields, names, table or values.');
+      store.commit(next, 'Set the samples');
+      await settleMode('cohort');
+      const cells = await app.cohortView?.cells?.() ?? [];
+      const answer = samplesAnswer(cells);
+      return { ...answer, message: `${done.join('; ')}. ${answer.message}` };
+    },
+
     async export(args) {
-      const what = choose(args.what, ['project', 'archive', 'methods', 'alignment', 'regions', 'reviews'], 'kind of file');
+      const what = choose(args.what, ['project', 'archive', 'methods', 'alignment', 'regions', 'reviews', 'samples'], 'kind of file');
+      if (what === 'samples') {
+        const n = samplesOf(project()).length;
+        if (!project().datasets.length) throw new ActionError('The project has no sample yet: add its datasets first.');
+        return { file: samplesCSV(project()), message: `${plural(n, 'sample')} with their fields, as CSV (a row a sample; the bundles' fields for reference).` };
+      }
       if (what === 'reviews') {
         const dataset = resolveDataset(args.dataset);
         const format = args.format === undefined ? 'csv' : choose(String(args.format), ['csv', 'json'], 'format');

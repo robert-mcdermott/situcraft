@@ -189,13 +189,14 @@ A project is one JSON document, saved automatically in the library (`<data dir>/
 | --- | --- |
 | `format`, `version` | `"situcraft-project"`, `1` |
 | `id`, `name`, `created`, `modified` | Its identity |
-| `datasets` | Each bundle: its place, run and analysis identifiers, panel, tissue, counts, pixel size, channels, a fingerprint of its files (each file's size; the SHA-256 of its manifest, metrics and panel), and its validation summary and findings |
+| `datasets` | Each bundle: its place, run and analysis identifiers, run, slide and Xenium region names, panel (its name and design), tissue, counts, pixel size, channels, a fingerprint of its files (each file's size; the SHA-256 of its manifest, metrics and panel), and its validation summary and findings |
 | `artifacts` | Results: filters (a name, a version, its parent version, its conditions, and its result: the number of cells, how many it keeps, and a checksum of which), from 0.2.0 segmentations and comparisons, and from 0.4.0 clusterings, their names and maps, marker sets, label sets, and curated and consensus labels (below) |
 | `decisions` | Recorded choices, with their reasons (from 0.2.0) |
 | `views` | Saved views (below) |
 | `exports` | The exports written from its segmentations (from 0.2.0; absent until the first) |
 | `regions` | The regions drawn on its datasets, each with its versions (from 0.5.0; absent until the first; below) |
 | `reviews` | The reviews of its cells and regions, appended and never changed (from 0.5.0; absent until the first; below) |
+| `samples`, `sampleFields` | What is known of its samples, and the fields that say it (from 0.7.0; absent until the first; below) |
 | `history` | Every change, with its time |
 
 A filter's checksum is the SHA-256 of the cell count (32-bit unsigned, little-endian) followed by
@@ -240,6 +241,23 @@ polygons, each a list of rings (its outer ring, then its holes), each ring a lis
 does not repeat its first point. `tool` is how it was made (`rectangle`, `polygon`, `freehand`,
 `brush` or `imported`), `layer` what it was drawn over. No two of a dataset's regions (those not
 removed) have the same name.
+
+`samples` records what is known of the project's samples (from 0.7.0). Each dataset is a sample
+until regions of it are made its samples instead; a sample nothing was said of has no record.
+A record is `{id, dataset, region, name, fields}`: `id` is `s-` and the dataset's id (or the
+region's, for a region sample), `region` the region's id or `null` for the whole dataset, `name`
+present only when one was given (else the dataset's or region's), and `fields` the sample's values
+by field name (text, or a number for a number field; a missing value is absent, never zero). A
+dataset with region samples is not a sample itself; its own record is kept for when it is again.
+`sampleFields` lists the fields in order, `[{name, kind}]` with `kind` `text` or `number`, and is
+absent while they are the first two, `subject` and `condition`. The run, slide, Xenium region,
+panel and software of a sample are read from its dataset and not stored again.
+
+The samples' table, written and read as CSV, has a row for each sample: `sample` (its name),
+`dataset`, `region` (its name, or empty), the fields in order, then the bundle's `run`, `slide`,
+`xenium_region`, `panel` and `software` (written for reference, never read). Text is quoted when
+it holds a comma, a quote, a line break or space at either end; numbers are written so that they
+read back exactly.
 
 `reviews` records each review of a dataset's cells, clusters or regions (from 0.5.0), appended and
 never changed or removed (taking one back is another review):

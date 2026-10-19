@@ -100,6 +100,11 @@ graphs, enrichment and niches take seconds on four cores, and their Moran's I un
 immune cells enter its tumor, read the simulated tissue's niches against its domains, find the Lung
 genes in a pattern, and make an answer again under another segmentation.
 
+In development for 0.7.0: samples and cohorts. A study's sections in one project, each a sample (or
+its regions, such as a tissue microarray's cores), described by the subject it came from, its
+condition and any field added, beside its run, slide and panel read from its bundle, and written
+and read as CSV.
+
 ## A look around
 
 <picture>

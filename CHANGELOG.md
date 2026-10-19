@@ -1,5 +1,35 @@
 # Changelog
 
+## Unreleased (0.7.0)
+
+Wave 7 of the [roadmap](situcraft-spec/roadmap.md): samples and cohorts. A study's sections in one
+project, each a sample, compared with the sample or the subject, not the cell, as the unit.
+
+### Added
+
+- **Samples (wave 7, slice 1).** A project of several sections, each a sample, in the **Cohort**
+  view.
+  - **Sections added together:** bundles chosen at once, or a folder of them, added in one step
+    (**Add all to the project**, in the Data and Cohort views), each checked first.
+  - **Samples:** each dataset is a sample, or its regions are instead (a tissue microarray's cores,
+    sections placed on one slide), named by their regions until named; a region removed leaves its
+    sample flagged and left out. The project tree lists the samples.
+  - **Fields:** subject and condition, and any added, as text or numbers (a number field takes only
+    numbers; missing values stay empty, never zero); fields renamed, retyped and removed. The run,
+    slide, Xenium region, panel and software read from each bundle beside them; a dataset now
+    records its slide and its panel's design.
+  - **Tables:** the samples written as CSV and read back (CSV or tab-separated), rows matched to
+    samples by name, new columns added as fields, what did not match said; a table naming a sample
+    twice, or a value that does not fit, refused with nothing changed.
+  - **Each sample's cells** under its dataset's default segmentation, counted in its region, and a
+    region's area.
+  - **Remote control:** `samples`, `set_samples`; `export` writes `samples`.
+  - **Validated:** fields, names, regions and tables by hand, the CSV read back byte for byte
+    (quotes, line breaks, every digit of a number, a zero); in the page, the Lung and Breast bundles
+    added together, fields written and read back, refusals changing nothing, two regions of the
+    Lung as samples, their cells the suite's own count by centroid, all kept with the project; every
+    earlier release's project opening with each dataset a sample.
+
 ## 0.6.0 (2026-10-18)
 
 Wave 6 of the [roadmap](situcraft-spec/roadmap.md): niches and spatial statistics. How the tissue is
