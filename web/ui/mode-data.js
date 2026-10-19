@@ -4,7 +4,8 @@
 // to the project, which builds its derived data.
 
 import { h, icon, clear, formatCount, formatBytes, relativeTime } from './dom.js';
-import { confirmDialog, promptDialog, toast } from './overlays.js';
+import { confirmDialog, toast } from './overlays.js';
+import { pickPaths } from './file-picker.js';
 import { cacheJobKey, countText } from './bundles.js';
 import { showMethods } from './methods.js';
 
@@ -296,7 +297,8 @@ export function mountData(app, container) {
   let usageAsked = false;
 
   async function locate(dataset) {
-    const path = await promptDialog({ title: `Locate ${dataset.name}`, label: 'Path on this computer', value: dataset.path ?? '', hint: 'Where the bundle is now: its folder or .zip. SituCraft checks it is the same run before using it.', confirm: 'Locate' });
+    const chosen = await pickPaths({ title: `Locate ${dataset.name}`, choose: 'file', start: dataset.path ?? null, hint: 'Where the bundle is now: its folder or .zip. SituCraft checks it is the same run before using it.', confirm: 'Locate' });
+    const path = chosen?.[0];
     if (!path) return;
     try {
       await app.bundles.locate(dataset.id, path);

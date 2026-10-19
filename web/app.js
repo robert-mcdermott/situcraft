@@ -12,6 +12,7 @@ import { plannedMode } from './ui/mode-planned.js';
 import { openPalette } from './ui/palette.js';
 import { WorkerClient } from './ui/workers.js';
 import { createBundles } from './ui/bundles.js';
+import { pickPaths } from './ui/file-picker.js';
 import { createJobs } from './ui/jobs.js';
 import { createExamples } from './ui/examples.js';
 import { colorVisionFriendly, setColorVisionFriendly } from './lib/colormaps.js';
@@ -219,36 +220,37 @@ async function start() {
     app.setMode('data');
   }
 
-  // A browser does not tell a page where a folder is, so a bundle is named by its path (or on the
-  // situcraft command line); the program reads it where it is.
+  // A browser does not tell a page where a folder is, so the program lists this computer's folders
+  // and the page walks them (ui/file-picker.js); the program reads what is chosen where it is.
   app.openPathDialog = async () => {
-    const path = await promptDialog({
-      title: 'Open a bundle',
-      label: 'Path on this computer',
-      placeholder: '/data/Xenium_V1_human_Lung_2fov_outs',
-      hint: 'A Xenium output bundle (its folder, its .zip or its experiment.xenium), an image, a table, polygons, or a folder of them. SituCraft reads it where it is and never changes it.',
+    const paths = await pickPaths({
+      title: 'Open bundles',
       confirm: 'Open',
+      choose: 'open',
+      multiple: true,
+      hint: 'A Xenium output bundle (its folder, its .zip or its experiment.xenium), an image, a table, polygons, a project, or a folder of them; several at once with ⌘ or Ctrl. SituCraft reads them where they are and never changes them.',
     });
-    if (!path) return;
+    if (!paths?.length) return;
     try {
-      const answer = await openPaths([path]);
+      const answer = await openPaths(paths);
       const added = setLocalItems(answer.files);
       for (const problem of answer.problems ?? []) {
         toast(problem, { kind: 'error' });
         app.log(problem);
       }
       const archive = added.find((item) => item.kind === 'project');
-      const bundle = added.find((item) => item.kind === 'bundle' || item.kind === 'archive');
+      const bundles = added.filter((item) => item.kind === 'bundle' || item.kind === 'archive');
       if (archive) {
         await openArchive(archive);
-      } else if (bundle) {
-        showBundle(bundle);
+      } else if (bundles.length) {
+        showBundle(bundles[0]);
+        if (added.length > 1) toast(`Opened ${added.length} items; they are listed under On this computer.`, { timeout: 4000 });
       } else if (added.length) {
         toast(`Opened ${added.length === 1 ? added[0].name : `${added.length} items`}; they are listed under On this computer.`, { timeout: 4000 });
         app.focusItem({ kind: 'local', id: added[0].url });
       } else {
         // Already open: show it.
-        const known = app.localItems.find((item) => item.path === path || item.path === path.replace(/\/+$/, ''));
+        const known = app.localItems.find((item) => paths.some((path) => item.path === path || item.path === path.replace(/[\\/]+$/, '')));
         if (known?.kind === 'project') await openArchive(known);
         else if (known && (known.kind === 'bundle' || known.kind === 'archive')) showBundle(known);
         else if (!(answer.problems ?? []).length) toast('Already open.', { timeout: 1800 });
@@ -486,14 +488,15 @@ async function start() {
     const first = project.datasets[0]?.path;
     const dir = first ? first.replace(/[\\/]+$/, '').replace(/[\\/][^\\/]*$/, '') : library.location;
     const name = project.name.replace(/[^\w.-]+/g, '_') || 'project';
-    const path = await promptDialog({
+    const chosen = await pickPaths({
       title: 'Save a project archive',
-      label: 'Path of the archive (.scz)',
-      value: `${dir}/${name}.scz`,
+      save: `${name}.scz`,
+      start: dir,
       hint: 'Written on this computer: the project (datasets, filters, saved views, history), not the bundles. Each bundle is also recorded by its place relative to the archive, so a folder holding both can be moved or shared.',
       confirm: 'Save',
     });
-    if (!path) return;
+    if (!chosen?.length) return;
+    const path = /\.scz$/i.test(chosen[0]) ? chosen[0] : `${chosen[0]}.scz`;
     const post = (overwrite) => fetch('/api/project-archive', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path, project, overwrite }) });
     try {
       let response = await post(false);

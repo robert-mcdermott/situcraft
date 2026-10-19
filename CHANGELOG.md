@@ -106,6 +106,24 @@ project, each a sample, compared with the sample or the subject, not the cell, a
     true types', its tissue within 2% of the section, the pseudobulk's raised gene within 0.15 (log)
     of the truth's, the niches found together near each sample's own (and for one sample alone,
     exactly its own), every domain's leading type defining a niche.
+- **Open by browsing.** **Open a bundle** shows this computer's folders instead of asking for a
+  path.
+  - **Places** to start from (the home folder, its Desktop, Documents and Downloads, SituCraft's
+    examples, the disks and mounted volumes) and the folders lately used; the folder's crumbs; its
+    contents, folders first, each Xenium bundle marked with its run, region and cells from its
+    manifest, what SituCraft cannot open grayed. A path can still be typed or pasted.
+  - **Several at once** with ⌘ or Ctrl (a cohort's sections); a folder that holds bundles opens
+    them all. From the keyboard: the arrows, → into a folder (a bundle too, to choose a file in
+    it), ← up, a name's first letters, Enter. It opens where it was last used.
+  - **Browse… buttons** beside every field that names a file: a reference, a table of labels, an
+    imported segmentation, a post-Xenium image and its alignment, an export's folder; locating a
+    moved bundle and saving a project archive use the same dialog (a folder and a name; never
+    inside a bundle).
+  - **Only this computer** may list its folders, as only it may open files (`GET /api/browse`).
+  - **Validated:** in Go, a folder of a bundle, a store, a link, tables, images, a project and
+    hidden files, each as SituCraft reads it, a file's path, the home folder, and refusals; in the
+    page, the dialog walked to the development bundles, each marked as its manifest says, a file's
+    path typed, and a bundle double-clicked opened.
 
 ## 0.6.0 (2026-10-18)
 

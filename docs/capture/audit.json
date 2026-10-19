@@ -10,6 +10,16 @@
   "violations": []
  },
  {
+  "scene": "open",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "open",
+  "theme": "light",
+  "violations": []
+ },
+ {
   "scene": "data",
   "theme": "dark",
   "violations": []

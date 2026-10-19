@@ -536,6 +536,7 @@ func (a *app) registerAPI(mux *http.ServeMux) {
 	})
 	mux.HandleFunc("GET /api/local/{index}", a.files.serve)
 	mux.HandleFunc("POST /api/open", a.openPaths)
+	mux.HandleFunc("GET /api/browse", a.browse)
 	a.store.register(mux)
 	a.registerDatasets(mux)
 	a.registerCache(mux)

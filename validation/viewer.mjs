@@ -65,7 +65,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { findChrome, launch, sleep } from './cdp.mjs';
 import { inflateSync } from 'node:zlib';
@@ -2201,6 +2201,49 @@ export async function viewerSuite({ check, MissingData, verbose }) {
             && sn.six.niches === 6 && sn.six.neighbors === 10 && Math.min(...ag) === 0.66 && Math.max(...ag) === 0.93
             && /^Niches of/.test(fills[0]?.name ?? '') && JSON.stringify(fills[0]?.counts) === '[1078,887,554,511]' && /domain/.test(fills[1]?.name ?? '') && fills[1]?.counts.length === 6 && fills[1].counts.reduce((s, v) => s + v, 0) === 3030,
             'epithelial-like 47% of 1,078, endothelial-like 53% of 887, immune-like 72% of 554, fibroblast-like 44% of 511; the seeds agree (1.00); 96.5% in their domain\'s niche (93% to 99%), domains 0 and 4 sharing one, 1 and 5 another; six niches of 10 agree 0.66 to 0.93; filled by 4 niches, then 6 domains');
+        }
+
+        // Open a bundle, the folder browser (browse.go, ui/file-picker.js): the development bundles'
+        // folder walked to in the dialog, each bundle marked with its run, region and cells as the
+        // suite reads them from its manifest; a file's path typed lists its bundle's folder with it
+        // chosen; a bundle double-clicked is opened where it is.
+        if (present.includes('xenium-lung-2fov')) {
+          await act('new_project', { name: 'Opening' });
+          await act('set_mode', { mode: 'data' });
+          const own = Object.fromEntries(present.filter((name) => existsSync(join(dataRoot, name, 'experiment.xenium'))).map((name) => {
+            const m = JSON.parse(readFileSync(join(dataRoot, name, 'experiment.xenium'), 'utf8'));
+            return [name, [m.run_name, m.region_name, Number.isFinite(m.num_cells) ? `${m.num_cells.toLocaleString('en-US')} cells` : ''].filter(Boolean).join(' · ')];
+          }));
+          const walked = await chrome.eval(`(async () => {
+            const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+            const until = async (test) => { for (let k = 0; k < 100 && !test(); k += 1) await sleep(50); return test(); };
+            [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Open a bundle').click();
+            await until(() => document.querySelector('.picker-crumb'));
+            const go = async (path, last) => {
+              const input = document.querySelector('.picker-path');
+              input.value = path;
+              input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+              await until(() => document.querySelector('.picker-crumb.current')?.textContent === last);
+            };
+            await go(${JSON.stringify(dataRoot)}, ${JSON.stringify(basename(dataRoot))});
+            const rows = () => [...document.querySelectorAll('.picker-row')].map((r) => ({ name: r.querySelector('.picker-name').textContent, kind: r.querySelector('.picker-kind').textContent, icon: r.querySelector('.picker-icon svg')?.outerHTML.length ?? 0, selected: r.getAttribute('aria-selected') === 'true', dim: r.classList.contains('dim') }));
+            const folder = rows();
+            await go(${JSON.stringify(join(dataRoot, 'xenium-lung-2fov', 'gene_panel.json'))}, 'xenium-lung-2fov');
+            const inside = { banner: document.querySelector('.picker-inside:not([hidden])')?.textContent ?? '', chosen: rows().filter((r) => r.selected).map((r) => r.name), note: document.querySelector('.picker-note').textContent };
+            await go(${JSON.stringify(dataRoot)}, ${JSON.stringify(basename(dataRoot))});
+            [...document.querySelectorAll('.picker-row')].find((r) => r.querySelector('.picker-name').textContent === 'xenium-lung-2fov').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+            await until(() => !document.querySelector('.picker'));
+            await sleep(400);
+            return { folder, inside, closed: !document.querySelector('.picker') };
+          })()`);
+          const openedNow = (await json(`${url}/api/info`)).files ?? [];
+          const marked = Object.entries(own).map(([name, words]) => ({ name, words, row: walked.folder.find((r) => r.name === name) }));
+          check('viewer', 'Open a bundle: the folder browser walks to the bundles\' folder, each bundle marked with its run, region and cells as its manifest says; a file\'s path lists its bundle with the file chosen; a bundle double-clicked opens where it is',
+            `${JSON.stringify(marked.map((m) => [m.name, m.row?.kind]))}; inside ${JSON.stringify(walked.inside)}; opened ${openedNow.map((f) => f.name).join(', ')}`,
+            marked.length >= 2 && marked.every((m) => m.row && m.row.kind === (m.words || 'Xenium bundle') && !m.row.dim)
+            && /xenium-lung-2fov is a Xenium bundle/.test(walked.inside.banner) && walked.inside.chosen.join() === 'gene_panel.json'
+            && walked.closed && openedNow.some((f) => f.kind === 'bundle' && f.path === join(dataRoot, 'xenium-lung-2fov')),
+            'every bundle marked as its manifest says; gene_panel.json chosen inside the Lung bundle; the Lung bundle opened');
         }
 
         // Samples (wave 7, slice 1): the Lung and Breast bundles added together, each a sample with

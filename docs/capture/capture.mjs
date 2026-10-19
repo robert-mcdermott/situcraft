@@ -15,7 +15,7 @@
 // Needs Go (to build SituCraft) and Chrome, Chromium, Edge or Brave (CHROME=path).
 
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -33,6 +33,7 @@ const SHOWN = {
   examples: '~/Library/Application Support/SituCraft/examples',
   cache: '~/Library/Caches/situcraft',
   exports: '~/Documents/SituCraft exports',
+  home: '~',
   references: '~/Documents/references',
 };
 
@@ -66,11 +67,13 @@ let places = {};
 // Started per scene on an empty library, so that no scene sees another's projects. examples: the
 // folder of examples (the development bundles by default; an empty one shows them to download).
 // cache: a cache of the scene's own (the jobs scene, whose jobs build what the shared one holds).
-async function startSituCraft({ examples = DATA, cache = CACHE } = {}) {
+// home: a home folder of the scene's own (the Open dialog's), else the user's.
+async function startSituCraft({ examples = DATA, cache = CACHE, home = null } = {}) {
   const library = mkdtempSync(join(temp, 'library-'));
-  places = { library, examples, cache, exports: mkdtempSync(join(temp, 'exports-')) };
+  places = { library, examples, cache, exports: mkdtempSync(join(temp, 'exports-')), ...(home ? { home } : {}) };
   const flags = ['--remote-control', '--window', 'none', '--port', String(PORT), '--data-dir', library, '--cache-dir', cache, '--examples-dir', examples];
-  const server = spawn(binary, flags, { cwd: temp, stdio: ['ignore', 'pipe', 'inherit'] });
+  const env = home ? { ...process.env, HOME: home, USERPROFILE: home } : process.env;
+  const server = spawn(binary, flags, { cwd: temp, env, stdio: ['ignore', 'pipe', 'inherit'] });
   let output = '';
   server.stdout.on('data', (chunk) => { output += chunk; });
   const stop = async () => {
@@ -138,6 +141,19 @@ async function showPlaces() {
   })()`);
 }
 
+// A home folder for the Open dialog's picture: its Desktop, Documents and Downloads, and a folder of
+// Xenium data holding the development bundles (links to them).
+function makeHome() {
+  const home = mkdtempSync(join(temp, 'home-'));
+  for (const d of ['Desktop', 'Documents', 'Downloads']) mkdirSync(join(home, d));
+  const data = join(home, 'Xenium data');
+  mkdirSync(data);
+  for (const name of ['xenium-breast-2fov', 'xenium-lung-2fov', 'simulated-standard', 'simulated-cohort']) {
+    if (existsSync(join(DATA, name))) symlinkSync(join(DATA, name), join(data, name));
+  }
+  return home;
+}
+
 // --- Scenes ---------------------------------------------------------------------------------------
 
 const scenes = {
@@ -145,6 +161,22 @@ const scenes = {
   async start() {
     await act('set_mode', { mode: 'start' });
     await waitFor(`document.querySelectorAll('.card.example').length === 4`);
+  },
+  // Open a bundle: a home folder's data folder, its bundles marked with their runs, regions and
+  // cells, the Lung bundle chosen; the places but the computer's own disks.
+  async open() {
+    await act('set_mode', { mode: 'start' });
+    await js(`[...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Open a bundle')?.click()`);
+    await waitFor(`Boolean(document.querySelector('.picker-crumb'))`);
+    await js(`(() => { const i = document.querySelector('.picker-path'); i.value = ${JSON.stringify(join(places.home ?? '', 'Xenium data'))}; i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return true; })()`);
+    await waitFor(`document.querySelector('.picker-crumb.current')?.textContent === 'Xenium data'`);
+    await js(`(() => {
+      [...document.querySelectorAll('.picker-row')].find((r) => r.querySelector('.picker-name').textContent === 'xenium-lung-2fov')?.click();
+      const shown = ['Home', 'Desktop', 'Documents', 'Downloads', "SituCraft's examples", 'This computer'];
+      for (const p of document.querySelectorAll('.picker-place')) if (!shown.includes(p.textContent.trim())) p.remove();
+      return true;
+    })()`);
+    await sleep(400);
   },
   // The Lung example checked: what the run was, its findings, its derived data.
   async data() {
@@ -685,7 +717,7 @@ try {
       b = null;
       try {
         // The start page shows the examples as a first run does: not yet downloaded.
-        situcraft = await startSituCraft(name === 'start' ? { examples: mkdtempSync(join(temp, 'examples-')) } : name === 'jobs' ? { cache: mkdtempSync(join(temp, 'cache-')) } : {});
+        situcraft = await startSituCraft(name === 'start' ? { examples: mkdtempSync(join(temp, 'examples-')) } : name === 'jobs' ? { cache: mkdtempSync(join(temp, 'cache-')) } : name === 'open' ? { home: makeHome() } : {});
         // A Chrome that does not start is started again once; a scene that cannot start fails
         // alone, not the scenes after it.
         b = await launch({ width: 1600, height: 1000, scale: 1.25 }).catch(async () => {
