@@ -399,3 +399,52 @@ func TestCohortReference(t *testing.T) {
 		t.Errorf("the reference's store: %v", err)
 	}
 }
+
+// A cohort's samples' parameters, as RunCohort makes them, and their true cells by Cells: the
+// subjects' types as the truth draws them.
+func TestCohortSamplesAndCells(t *testing.T) {
+	c := CohortPresets["standard"]
+	samples, params, err := CohortSamples(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(samples) != 8 || samples[4].Group != "treated" || samples[0].Slide != "simulated slide 1" || params[4].LevelFolds == nil {
+		t.Fatalf("samples %+v", samples)
+	}
+	want := c.design()
+	for k := range want {
+		if want[k].Name != samples[k].Name || !reflect.DeepEqual(c.sampleParams(k, want[k]), params[k]) {
+			t.Errorf("sample %d: not RunCohort's", k)
+		}
+	}
+	truth, err := c.trueCohort()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tc, err := Cells(context.Background(), params[5], 1, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byType := map[string]int{}
+	for _, ty := range tc.Type {
+		byType[tc.Types[ty]]++
+	}
+	if !reflect.DeepEqual(byType, truth.Samples[5].ByType) {
+		t.Errorf("S06's true cells by type %v, the truth's %v", byType, truth.Samples[5].ByType)
+	}
+	bad := c
+	bad.Subjects = 0
+	if _, _, err := CohortSamples(bad); err == nil {
+		t.Error("a cohort without subjects accepted")
+	}
+	// Sections of several fields: their true cells made a field at a time, never written.
+	mosaic := c
+	mosaic.Section.TilesAcross, mosaic.Section.TilesDown = 2, 1
+	mosaic.Section.WidthUm, mosaic.Section.HeightUm = 512*mosaic.Section.PixelUm, 512*mosaic.Section.PixelUm
+	if _, _, err := CohortSamples(mosaic); err != nil {
+		t.Errorf("a mosaic's samples: %v", err)
+	}
+	if err := mosaic.Check(); err == nil {
+		t.Error("a cohort of mosaics accepted for writing")
+	}
+}

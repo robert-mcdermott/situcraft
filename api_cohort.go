@@ -231,15 +231,10 @@ func (a *app) cohortSummaryJob(spec cohortSummarySpec, id string) jobs.Func {
 		for k, n := range spec.Labels.Names {
 			index[n] = int32(k)
 		}
-		doc := &cohort.Document{Format: "situcraft-cohort-summary", Version: 1, Method: "SituCraft cohort summary", MethodVersion: cohort.MethodVersion, Labels: spec.Labels, Genes: []string{}}
-		geneAt := map[string]int{}
-		var bySample [][][]uint64 // each sample's pseudobulk, over its own genes
-		var genesOf [][]string
-		var nicheCells []spatial.NicheCells
-		var nicheRows [][]uint32
-		var panels []cohort.Panel
+		b := cohort.NewBuilder(spec.Labels, spec.Niches)
 		parents := []artifacts.Parent{}
 		S := len(spec.Samples)
+		// One sample at a time: what each leaves is its document, pseudobulk and chosen cells.
 		for s, sr := range spec.Samples {
 			if ctx.Err() != nil {
 				return ctx.Err()
@@ -249,106 +244,25 @@ func (a *app) cohortSummaryJob(spec cohortSummarySpec, id string) jobs.Func {
 			if err != nil {
 				return fmt.Errorf("%s: %w", sr.Name, err)
 			}
-			for _, g := range genes {
-				if _, ok := geneAt[g]; !ok {
-					geneAt[g] = len(doc.Genes)
-					doc.Genes = append(doc.Genes, g)
-				}
-			}
-			bySample, genesOf = append(bySample, pb), append(genesOf, genes)
-			doc.Samples = append(doc.Samples, *sd)
-			panels = append(panels, cells.panel)
+			b.Add(*sd, pb, genes, cells.panel, cells.niche, cells.rows)
 			parents = append(parents, artifacts.Parent{Kind: "segmentation", ID: sd.Segmentation.ID, Name: sd.Segmentation.Name})
-			if spec.Niches != nil {
-				nicheCells = append(nicheCells, cells.niche)
-				nicheRows = append(nicheRows, cells.rows)
-			}
 			r.Log("info", "%s: %d cells, %d labeled; %s µm² of tissue; %d genes.", sr.Name, sd.Cells, sd.Labeled, formatArea(sd.Tissue), len(genes))
 		}
-		// The pseudobulk over every sample's genes, Missing where a sample's panel has not one.
-		G := len(doc.Genes)
-		pseudobulk := make([][][]uint32, S)
-		for s := range pseudobulk {
-			pseudobulk[s] = make([][]uint32, K)
-			has := make([]bool, G)
-			for _, g := range genesOf[s] {
-				has[geneAt[g]] = true
-			}
-			for k := range pseudobulk[s] {
-				row := make([]uint32, G)
-				for g := range row {
-					if !has[g] {
-						row[g] = cohort.Missing
-					}
-				}
-				for j, g := range genesOf[s] {
-					v := bySample[s][k][j]
-					if v >= cohort.Missing {
-						return fmt.Errorf("%s: %d transcripts of %s in %s, more than the pseudobulk holds", spec.Samples[s].Name, v, g, spec.Labels.Names[k])
-					}
-					row[geneAt[g]] = uint32(v)
-				}
-				pseudobulk[s][k] = row
-			}
-		}
-		// The niches across the samples together.
-		var rows []uint32
-		var niches []int32
 		if spec.Niches != nil {
 			p := *spec.Niches
 			r.Log("info", "Niches across the %d samples: windows of each cell's %d nearest labeled cells in its own sample, %d niches, the best of %d k-means starts (seed %d), %d further seeds.", S, p.Neighbors, p.Niches, p.Starts, p.Seed, p.Seeds)
-			nc, offsets, err := spatial.FindNichesAcross(ctx, nicheCells, K, p, runtime.NumCPU(), func(f float64) { r.Progress(0.8+0.15*f, "Finding the niches across the samples") })
-			if err != nil {
-				return fmt.Errorf("the niches: %w", err)
-			}
-			nd := &cohort.NichesDoc{Parameters: p, Niches: nc.Count, Composition: nc.Composition, Cells: nc.Cells, Tissue: nc.Tissue, Windows: nc.Windows, Inertia: nc.Inertia, Agreement: nc.Agreement}
-			if nd.Agreement == nil {
-				nd.Agreement = []float64{}
-			}
-			for v := 0; v < nc.Count; v++ {
-				nd.Defining = append(nd.Defining, spatial.DefiningLabels(nc.Composition[v*K:(v+1)*K], nc.Tissue))
-			}
-			doc.Niches = nd
-			for s := range doc.Samples {
-				counts := make([]int, nc.Count)
-				windowed := 0
-				for _, v := range nc.Assign[offsets[s]:offsets[s+1]] {
-					if v >= 0 {
-						counts[v]++
-						windowed++
-					}
-				}
-				shares := make([]float64, nc.Count)
-				for v := range shares {
-					if windowed > 0 {
-						shares[v] = float64(counts[v]) / float64(windowed)
-					}
-				}
-				doc.Samples[s].Niches, doc.Samples[s].NicheShares, doc.Samples[s].NicheCells = counts, shares, windowed
-				rows = append(rows, nicheRows[s]...)
-			}
-			niches = nc.Assign
 		}
-		// The samples' panels compared; their quality side by side; their pseudobulk's principal
-		// components over the genes every panel has.
-		ids := make([]string, S)
-		for k := range doc.Samples {
-			ids[k] = doc.Samples[k].Sample
+		built, err := b.Finish(ctx, runtime.NumCPU(), func(f float64) { r.Progress(0.8+0.15*f, "Finding the niches across the samples") })
+		if err != nil {
+			return err
 		}
-		doc.Panels = cohort.ComparePanels(ids, panels)
+		doc, pseudobulk, rows, niches := built.Doc, built.Pseudobulk, built.Rows, built.Niches
 		r.Log("info", "The samples' panels: %s.", doc.Panels.PanelWords())
-		doc.QCMetrics, doc.OutlierRule = cohort.QCMetrics, cohort.DefaultOutlierRule
-		doc.Outliers, doc.Batches = cohort.Outliers(doc.Samples, doc.OutlierRule), cohort.Batches(doc.Samples)
 		for _, o := range doc.Outliers {
 			r.Log("info", "%s is far out: %s.", o.Name, o.Reason)
 		}
-		if S >= 2 {
-			pca, err := cohort.PseudobulkPCA(cohort.SharedCounts(doc, pseudobulk, doc.Panels.Shared), doc.Panels.Shared, cohort.PCATop, cohort.PCAComponents)
-			if err != nil {
-				r.Log("warn", "No principal components: %v.", err)
-			} else {
-				doc.PCA = pca
-			}
+		if built.NoPCA != nil {
+			r.Log("warn", "No principal components: %v.", built.NoPCA)
 		}
 		stage, err := a.artifacts.Stage(id)
 		if err != nil {

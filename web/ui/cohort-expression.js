@@ -3,7 +3,7 @@
 // replicate unit's samples) by voom and limma's moderated t over the genes every panel has, each
 // contrast's log2 fold change with its interval; the genes by p, a volcano, and a gene's values by
 // group. Spatial statistics: each sample's numbers from its spatial analyses (neighbor enrichment,
-// nearest distances, niches' shares, Moran's I) in a linear model of the design, moderated across
+// nearest distances, Moran's I) in a linear model of the design, moderated across
 // each family; each statistic's values by group.
 
 import { h, icon, downloadBlob } from './dom.js';
@@ -297,7 +297,7 @@ export function spatialTestsSection(app, { redraw }) {
   const summary = shownSummary(project);
   const card = h('div.seg-card.cohort-abundance.cohort-spatial-tests');
   const section = h('section.seg-section', h('div.section-title', 'Spatial statistics between groups'), card);
-  card.append(h('p', 'Each sample\'s numbers from its spatial analyses compared between the design\'s groups, with the replicate unit as the unit (a unit\'s value its samples\' mean): a pair of labels\' neighbor enrichment and a label\'s median distance to the nearest cell of another, as log2 ratios; a niche\'s share; a gene\'s Moran\'s I. Each statistic is a linear model of the design, with its pairing and covariates; a family\'s variances are moderated across its statistics (limma\'s empirical Bayes), and its p-values adjusted by Benjamini and Hochberg over its tests.'));
+  card.append(h('p', 'Each sample\'s numbers from its spatial analyses compared between the design\'s groups, with the replicate unit as the unit (a unit\'s value its samples\' mean): a pair of labels\' neighbor enrichment and a label\'s median distance to the nearest cell of another, as log2 ratios; a gene\'s Moran\'s I. Each statistic is a linear model of the design, with its pairing and covariates; a family\'s variances are moderated across its statistics (limma\'s empirical Bayes), and its p-values adjusted by Benjamini and Hochberg over its tests. Niches\' shares are compared with the abundances, above.'));
   if (!summary) {
     card.append(h('p.muted', 'Summarize the samples first, with a spatial question answered on every sample.'));
     return section;
@@ -314,7 +314,7 @@ export function spatialTestsSection(app, { redraw }) {
     return section;
   }
   if (!has.length) {
-    card.append(h('p.muted.seg-note', 'The summary\'s samples have no spatial statistics: in the steps on every sample, answer a spatial question (neighbor enrichment, nearest distances, Moran\'s I) or find niches, and summarize again.'));
+    card.append(h('p.muted.seg-note', 'The summary\'s samples have no spatial statistics: in the steps on every sample, answer a spatial question (neighbor enrichment, nearest distances, Moran\'s I), and summarize again.'));
   } else {
     // Every family the summary has, until some are unchosen; again for another summary.
     if (!s.families || s.familiesOf !== summary.id || [...s.families].some((f) => !has.includes(f))) {
@@ -389,9 +389,9 @@ function spatialParts(c, record, redraw) {
   }
   const groups = statisticByGroup(c, f.family, pick.key).map((g) => ({
     ...g,
-    points: g.points.map((p) => ({ ...p, title: `${p.unit} (${g.group}): ${f.log ? `${(2 ** p.value).toFixed(3)}` : f.family === 'niche' ? `${(100 * p.value).toFixed(1)}%` : p.value.toFixed(3)}` })),
+    points: g.points.map((p) => ({ ...p, title: `${p.unit} (${g.group}): ${f.log ? `${(2 ** p.value).toFixed(3)}` : p.value.toFixed(3)}` })),
   }));
-  const fmt = (v) => (f.log ? (2 ** v).toPrecision(3) : f.family === 'niche' ? `${(100 * v).toFixed(1)}%` : v.toFixed(2));
+  const fmt = (v) => (f.log ? (2 ** v).toPrecision(3) : v.toFixed(2));
   out.push(h('div.cohort-pick',
     h('h3.seg-card-title', `${pick.key}: ${pick.contrast}`),
     h('p', pick.tested ? `${f.effect[0].toUpperCase() + f.effect.slice(1)} ${spatialEffectWords(f, pick)}; moderated t ${pick.t.toFixed(2)}, p ${fmtP(pick.p)}, adjusted ${fmtP(pick.padj)}.` : `Untested: ${pick.note}.`),

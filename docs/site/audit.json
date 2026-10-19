@@ -35,6 +35,13 @@
   "overflow": 0
  },
  {
+  "page": "docs/error-rates.html",
+  "theme": "light",
+  "width": "desktop",
+  "violations": [],
+  "overflow": 0
+ },
+ {
   "page": "docs/exports.html",
   "theme": "light",
   "width": "desktop",
@@ -231,6 +238,13 @@
   "overflow": 0
  },
  {
+  "page": "docs/error-rates.html",
+  "theme": "dark",
+  "width": "desktop",
+  "violations": [],
+  "overflow": 0
+ },
+ {
   "page": "docs/exports.html",
   "theme": "dark",
   "width": "desktop",
@@ -427,6 +441,13 @@
   "overflow": 0
  },
  {
+  "page": "docs/error-rates.html",
+  "theme": "light",
+  "width": "phone",
+  "violations": [],
+  "overflow": 0
+ },
+ {
   "page": "docs/exports.html",
   "theme": "light",
   "width": "phone",
@@ -617,6 +638,13 @@
  },
  {
   "page": "docs/designs.html",
+  "theme": "dark",
+  "width": "phone",
+  "violations": [],
+  "overflow": 0
+ },
+ {
+  "page": "docs/error-rates.html",
   "theme": "dark",
   "width": "phone",
   "violations": [],

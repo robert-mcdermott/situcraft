@@ -2904,8 +2904,7 @@ its cells against the sample's, a gene's expression in a cell type by its pseudo
 voom's weights and limma's moderated statistics (Law et al. 2014; Smyth 2004), a spatial statistic
 by a linear model of its per-sample values. Pairing and covariates enter through the design; a
 batch is a covariate only when the design names it. Per-cell tests, where shown, are labeled
-exploratory. The statistics are adapted from CytoWeave's sample-level comparisons and MaveScape's
-moderated linear models, as noted in the code.
+exploratory. The statistics are implemented from their publications, each cited in the code.
 
 **Where the work runs.** As in waves 4 and 6: each sample's numbers come from jobs on its dataset
 (the same steps run on every sample in one step); the cohort's summaries and tests run in the
@@ -3205,8 +3204,8 @@ makes, which SituCraft refuses.
      artifact of kind `expression` (`expression.json`, `results.csv`); a gene's values by row
      (`GET /api/cohort/expression/values`), read from the summary's pseudobulk.
    - **Spatial statistics between groups** (`CompareSpatial`, `POST /api/cohort/spatial-tests`):
-     each sample's neighbor enrichments and nearest distances (log2), niches' shares and Moran's I,
-     a row's value its samples' mean, a statistic some row lacks untested; ordinary least squares of
+     each sample's neighbor enrichments and nearest distances (log2), niches' shares (left to the
+     abundances by slice 8) and Moran's I, a row's value its samples' mean, a statistic some row lacks untested; ordinary least squares of
      the design, each family's variances moderated across its statistics (one statistic: its own),
      Benjamini–Hochberg over each family. An artifact of kind `spatial-comparison`
      (`spatial-tests.json`, `results.csv`).
@@ -3246,14 +3245,54 @@ makes, which SituCraft refuses.
        adjusted over the ten pairs it is 0.084. Slice 8 states power at the known effects.
      - **The pseudobulk fold is below the asked one:** SIM033's 2.5-fold (1.32 log2) reads as 0.97
        in the true cells (each subject's own level folds) and 0.94 in the pseudobulk.
-8. **Error rates, pseudoreplication and scale.**
-   - **Error rates:** thousands of simulated null cohorts (weekly), each test's false-positive rate
-     within binomial error of its level, the false discovery rate controlled; power at the known
-     effects, stated; intervals covering the true effect as often as stated.
-   - **Pseudoreplication shown:** the same null cohorts tested cell by cell, their false positives
-     counted, as the documentation shows; such tests are refused across groups.
-   - **Scale:** a cohort of dozens of sections and millions of cells summarized and tested within a
-     stated budget of time and memory, one dataset held at a time.
+8. **Error rates, pseudoreplication and scale: done.**
+   - **The study** (`validation/cohort_errors_test.go`): simulated cohorts made in memory
+     (`simulate.CohortSamples`, each sample's true cells by `simulate.Cells`, their true types the
+     labels), each sample summarized as the job summarizes it (the job's assembly moved into
+     `cohort.Builder`, which keeps only what each sample leaves; its statistics by the analyses'
+     own parameters through `cohort.EnrichmentStatistics` and its siblings), niches across the
+     samples, and the abundance, expression and spatial comparisons. Weekly 2,000 null cohorts and
+     500 with the standard cohort's effects (the data workflow's job `cohort-errors`, 15 minutes
+     on ten cores); on every commit 24 and 6 (8 and 2 under the race detector).
+   - **Error rates** (2,000 null cohorts, four subjects a group): below 0.05 in shares 4.90%,
+     densities 4.98%, niches' shares 4.74%, expression 5.12%, enrichment 5.47%, nearest distances
+     5.08%, Moran's I 5.26%; below 0.01 in 0.79% to 1.23%; a family finding anything after
+     Benjamini and Hochberg in 3.9% to 6.4% of the cohorts. Held weekly within four standard errors
+     (the cohorts the clusters) and a fifth of the level, and the families' chance of finding
+     anything within 0.05 and a binomial margin.
+   - **Power and coverage** (500 cohorts with effects): SIM033's 2.5-fold found in 98.0%, its
+     estimates' mean 1.327 log2 against 1.322, its interval covering the truth in 95.0%; the
+     epithelial–immune enrichment found in 47.0%; the endothelial-like share in 16.8% (its odds
+     ratio among the labeled cells 1.50 on average, the immune-like cells' change moving the rest);
+     among the genes found, 6.25% not SIM033 on average.
+   - **Pseudoreplication shown:** the same null cohorts tested cell by cell, each cell a
+     replicate: a label's share by the two-proportion test of the groups' pooled cells, 58.2% of
+     the tests below 0.05 (a difference in 87.6% of the cohorts); a gene in a label by the Wilcoxon
+     rank-sum test of the groups' cells, 23.7% (genes found in every cohort). The guide's **Error
+     rates and scale** shows them. Refused across groups in the program as well as the page
+     (`cohort.CheckDesign`): a group of one unit, a unit in two rows of one group, regions of one
+     section given different units (a teaching example's design marks them `pseudoSamples`).
+   - **Scale** (`validation/cohort_scale_test.go`, the data workflow's scale job): 24 sections of
+     3 by 3 fields of the large preset's (2,019,439 cells; their true cells written as a
+     segmentation keeps them), summarized and compared in a process of its own one section at a
+     time, each section's graph, enrichment, nearest distances and Moran's I with the page's
+     defaults: 251 s on four cores of a 10-core laptop (Moran's I 139 s in all, nearest distances 77 s,
+     enrichment 11 s, the graphs 6 s, the niches across 2 million cells 15 s; summarized, written
+     and compared in under a second), a peak of 0.65 GB against 0.54 GB for 6 sections (516,718
+     cells): one section held at a time. Budgets 1,200 s and 1.5 GB, the peak at most 1.5 times
+     6 sections'. At 12 subjects a group, SIM033 found.
+   - Found by slice 8:
+     - **A cohort's panel is its seed's:** with each cohort a new seed, the effect gene was in
+       some cohorts barely expressed (or a marker of another type) and filtered out; the cohorts
+       with effects keep the standard cohort's panel, their sections the new seed's.
+     - **Niches' shares as moderated spatial statistics were too often significant** (6.0% at 5%,
+       6.9% of the cohorts finding something; as log odds, 6.2%): six niches' unlike variances
+       moderated toward one. They are compared only as counts, with the abundances (4.74%).
+     - **Enrichment and Moran's I are slightly liberal** (5.47% and 5.26%): rare pairs' and sparse
+       genes' variances, larger than the rest's, are moderated toward them; within the tolerance,
+       stated.
+     - **The cohort's sections may be mosaics** when their true cells alone are made: a mosaic's
+       fields share the cohort's mixes.
 9. **Examples, documentation, release 0.7.0.**
    - Worked examples on the simulated cohort (a composition shift found, a null comparison found
      null, a gene changed in one type, a paired design), and a teaching example of the development

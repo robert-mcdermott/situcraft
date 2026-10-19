@@ -11,17 +11,15 @@ import { log10 } from './dmath.js';
 export const SPATIAL_FAMILIES = [
   { id: 'enrichment', label: 'Neighbor enrichment', log: true },
   { id: 'nearest', label: 'Nearest distances', log: true },
-  { id: 'niche', label: 'Niches\' shares', log: false },
   { id: 'moran', label: 'Moran\'s I', log: false },
 ];
 
-// The families a summary's samples have numbers of (its document's samples' statistics, and their
-// niches' shares), in SPATIAL_FAMILIES' order.
+// The families a summary's samples have numbers of (its document's samples' statistics), in
+// SPATIAL_FAMILIES' order.
 export function spatialFamiliesOf(doc) {
   const has = new Set();
   for (const s of doc.samples ?? []) {
     for (const st of s.statistics ?? []) has.add(st.family);
-    if (s.nicheShares?.length) has.add('niche');
   }
   return SPATIAL_FAMILIES.filter((f) => has.has(f.id)).map((f) => f.id);
 }
@@ -143,11 +141,9 @@ export function statisticByGroup(comparison, familyId, key) {
 }
 
 // A spatial test's effect in words: "1.84× (1.21 to 2.80)" for a ratio, "+0.042 (−0.010 to
-// +0.094)" for a difference (a niche's share in points of percent).
+// +0.094)" for a difference.
 export function spatialEffectWords(family, test) {
   if (!test.tested) return test.note || 'untested';
   if (family.log) return `${test.ratio.toFixed(2)}× (${test.ratioLo.toFixed(2)} to ${test.ratioHi.toFixed(2)})`;
-  const share = family.family === 'niche';
-  const v = (x) => (share ? signed(100 * x, 1) : signed(x, 3));
-  return `${v(test.estimate)}${share ? ' points' : ''} (${v(test.lo)} to ${v(test.hi)})`;
+  return `${signed(test.estimate, 3)} (${signed(test.lo, 3)} to ${signed(test.hi, 3)})`;
 }

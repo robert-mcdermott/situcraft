@@ -39,37 +39,61 @@ func GraphStatistics(id string, s spatial.Summary) []Statistic {
 // from each label to each ("A→B"), a gene's Moran's I (by the gene's name). Other questions give
 // none. A number that is not one (no expected neighbors) is left out.
 func AnalysisStatistics(id string, a *spatial.Analysis) []Statistic {
-	var out []Statistic
-	names := a.Labels.Names
-	K := len(names)
-	add := func(family, key string, v float64) {
-		if !math.IsNaN(v) && !math.IsInf(v, 0) {
-			out = append(out, Statistic{Family: family, Key: key, Value: v, Source: id})
-		}
-	}
 	switch {
 	case a.Enrichment != nil:
-		e := a.Enrichment
-		for x := 0; x < K; x++ {
-			for y := x; y < K; y++ {
-				q := x*K + y
-				if e.Expected[q] > 0 {
-					pair := []string{names[x], names[y]}
-					sort.Strings(pair)
-					add("enrichment", pair[0]+"|"+pair[1], e.Count[q]/e.Expected[q])
-				}
-			}
-		}
+		return EnrichmentStatistics(id, a.Labels.Names, a.Enrichment.Count, a.Enrichment.Expected)
 	case a.Nearest != nil:
-		for x := 0; x < K; x++ {
-			for y := 0; y < K; y++ {
-				add("nearest", names[x]+"→"+names[y], a.Nearest.Median[x*K+y])
+		return NearestStatistics(id, a.Labels.Names, a.Nearest.Median)
+	case a.Moran != nil:
+		return MoranStatistics(id, a.Moran.Genes, a.Moran.I)
+	}
+	return nil
+}
+
+// statistic adds a number to out when it is one.
+func statistic(out []Statistic, family, key string, v float64, id string) []Statistic {
+	if math.IsNaN(v) || math.IsInf(v, 0) {
+		return out
+	}
+	return append(out, Statistic{Family: family, Key: key, Value: v, Source: id})
+}
+
+// EnrichmentStatistics are an enrichment's ratios of neighbors found over expected, by unordered
+// pair of labels (count and expected K × K, row-major), those expected at all.
+func EnrichmentStatistics(id string, names []string, count, expected []float64) []Statistic {
+	var out []Statistic
+	K := len(names)
+	for x := 0; x < K; x++ {
+		for y := x; y < K; y++ {
+			q := x*K + y
+			if expected[q] > 0 {
+				pair := []string{names[x], names[y]}
+				sort.Strings(pair)
+				out = statistic(out, "enrichment", pair[0]+"|"+pair[1], count[q]/expected[q], id)
 			}
 		}
-	case a.Moran != nil:
-		for g, gene := range a.Moran.Genes {
-			add("moran", gene, a.Moran.I[g])
+	}
+	return out
+}
+
+// NearestStatistics are the median distances from each label's cells to the nearest of each
+// label's (K × K, row-major).
+func NearestStatistics(id string, names []string, median []float64) []Statistic {
+	var out []Statistic
+	K := len(names)
+	for x := 0; x < K; x++ {
+		for y := 0; y < K; y++ {
+			out = statistic(out, "nearest", names[x]+"→"+names[y], median[x*K+y], id)
 		}
+	}
+	return out
+}
+
+// MoranStatistics are the genes' Moran's I.
+func MoranStatistics(id string, genes []string, I []float64) []Statistic {
+	var out []Statistic
+	for g, gene := range genes {
+		out = statistic(out, "moran", gene, I[g], id)
 	}
 	return out
 }

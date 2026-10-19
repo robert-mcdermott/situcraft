@@ -32,9 +32,9 @@ test('the requests: the design as the abundance request has it, the level, the f
   assert.deepEqual(spatialRequest(design, 'coh-1').families, []);
   assert.throws(() => expressionRequest({ ...design, ok: false, problems: ['treated has 1 subject.'] }, 'coh-1'), /cannot be used: treated has 1 subject/);
   assert.throws(() => spatialRequest(design, ''), /Summarize/);
-  assert.equal(SPATIAL_FAMILIES.length, 4);
+  assert.equal(SPATIAL_FAMILIES.length, 3);
   const doc = { samples: [{ statistics: [{ family: 'moran' }, { family: 'graph' }], nicheShares: [0.5, 0.5] }, { statistics: [{ family: 'enrichment' }] }] };
-  assert.deepEqual(spatialFamiliesOf(doc), ['enrichment', 'niche', 'moran']);
+  assert.deepEqual(spatialFamiliesOf(doc), ['enrichment', 'moran']);
 });
 
 // An expression comparison as expression.json has it: two labels, the second untested.
@@ -71,7 +71,6 @@ test('a statistic\'s rows by group; effects in words', () => {
   assert.deepEqual(g.map((x) => [x.group, x.points.map((p) => p.unit), x.mean]), [['control', ['P1', 'P2'], 0.2], ['treated', ['P4'], 1.1]]);
   assert.deepEqual(statisticByGroup(comparison, 'enrichment', 'B|C'), []);
   assert.equal(spatialEffectWords({ family: 'enrichment', log: true }, { tested: true, ratio: 1.8412, ratioLo: 1.2093, ratioHi: 2.8031 }), '1.84× (1.21 to 2.80)');
-  assert.equal(spatialEffectWords({ family: 'niche', log: false }, { tested: true, estimate: 0.042, lo: -0.01, hi: 0.094 }), '+4.2 points (−1.0 to +9.4)');
   assert.equal(spatialEffectWords({ family: 'moran', log: false }, { tested: true, estimate: -0.05, lo: -0.1, hi: 0 }), '−0.050 (−0.100 to 0.000)');
   assert.equal(spatialEffectWords({ family: 'moran' }, { tested: false, note: 'not in every row' }), 'not in every row');
 });

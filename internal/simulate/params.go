@@ -97,7 +97,8 @@ type Params struct {
 	// A sample of a simulated cohort (cohort.go) differs from its cohort's other sections by these;
 	// each is absent for a tissue of its own.
 	//   - PanelSeed: the panel's stream's seed, shared by the cohort's sections (the seed's own if 0).
-	//   - MixSeed: the seed of the domains' mixes' stream, shared likewise (the layout's own if 0).
+	//   - MixSeed: the seed of the domains' mixes' stream, shared likewise (the layout's own if 0);
+	//     a mosaic's fields share it too (their domains in other places, with the same mixes).
 	//   - Retries: how many other places in its domain a candidate cell refused for crowding tries
 	//     before it is dropped (0: dropped at once).
 	//   - TypeOdds: each type's weight in every domain's mix multiplied by it, then the mix
@@ -258,9 +259,6 @@ func (p *Params) Check() error {
 				need(positive(v), "level folds above 0")
 			}
 		}
-	}
-	if (p.TypeOdds != nil || len(p.DomainOdds) > 0 || p.LevelFolds != nil) && (p.TilesAcross > 1 || p.TilesDown > 1) {
-		bad = append(bad, "a cohort's sample is one field, not a mosaic")
 	}
 	if px := p.PostXenium; px != nil {
 		across, down := p.tiles()

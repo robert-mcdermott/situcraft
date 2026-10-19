@@ -166,10 +166,10 @@ project, each a sample, compared with the sample or the subject, not the cell, a
     volcano; a gene's units by group, read from the cohort table's pseudobulk. Kept as an artifact
     of kind `expression`; written as CSV.
   - **Spatial statistics between groups:** each sample's neighbor enrichments and nearest distances
-    (as log2 ratios), niches' shares and Moran's I, a unit's value its samples' mean, each in a
-    linear model of the design, their variances moderated across each family; each effect with its
-    interval and the p-values adjusted over each family's tests. Kept as an artifact of kind
-    `spatial-comparison`; written as CSV.
+    (as log2 ratios) and Moran's I, a unit's value its samples' mean, each in a linear model of the
+    design, their variances moderated across each family; each effect with its interval and the
+    p-values adjusted over each family's tests. Kept as an artifact of kind `spatial-comparison`;
+    written as CSV. (Niches' shares are compared with the abundances.)
   - **Remote control:** `compare_expression`, `show_gene`, `compare_spatial`. The project tree lists
     **Expression compared** and **Spatial statistics compared**.
   - **Validated:** against limma 3.68.5 and edgeR 4.10.5 in R on nine pseudobulk tables (the genes
@@ -180,6 +180,27 @@ project, each a sample, compared with the sample or the subject, not the cell, a
     simulated cohort's raised gene found in its cell type with its interval covering the true
     cells' fold and no other gene, the enrichment of the cell types it mixes higher in the treated
     subjects, and a null cohort finding nothing.
+- **Error rates, pseudoreplication and scale (wave 7, slice 8).** The cohort tests measured on
+  thousands of simulated cohorts whose truth is known, and a cohort of 2 million cells.
+  - **False positives at their levels:** on 2,000 null cohorts (four subjects a group), each
+    family's tests below 0.05 in 4.7% to 5.5% of them and below 0.01 in 0.8% to 1.2%; a family
+    finding anything in 3.9% to 6.4% of the cohorts.
+  - **Power and coverage:** on 500 cohorts with the known effects, a gene raised 2.5-fold found in
+    98% of them, its interval covering the truth in 95.0%; a change in arrangement found in 47%, in
+    a share in 17%.
+  - **Cells are not replicates:** the same null cohorts tested cell by cell find a share changed in
+    58% of the tests and genes changed in every cohort. Every comparison now also refuses, in the
+    program and not only in the page, a group of one unit, a unit in two rows of one group, and
+    regions of one section given different units (unless a teaching example's design marks them
+    `pseudoSamples`).
+  - **At scale:** 24 sections, 2 million cells, summarized and compared one section at a time (each
+    section's graph and spatial questions too) in 4.2 minutes and 0.65 GB of memory on four cores,
+    the peak barely above 6 sections' (0.54 GB). The summary job keeps only what each sample leaves.
+  - **Niches' shares** are compared only with the abundances: as spatial statistics (by a moderated
+    linear model) their tests were found too often (6.0% at 5%).
+  - **Validated:** weekly, the study of 2,000 null cohorts and 500 with effects and the cohort at
+    scale (`validation/cohort_errors_test.go`, `validation/cohort_scale_test.go`); on every commit,
+    a smaller study.
 - **Open by browsing.** **Open a bundle** shows this computer's folders instead of asking for a
   path.
   - **Places** to start from (the home folder, its Desktop, Documents and Downloads, SituCraft's

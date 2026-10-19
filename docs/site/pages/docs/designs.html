@@ -30,6 +30,7 @@ lede: Before any comparison of groups, the design names what replicates what: th
         <li><strong>Regions of one section as separate units</strong> (above), and a covariate with two values for one unit in one group.</li>
       </ul>
       <p>A design with few degrees of freedom left (one or two) is kept but noted: its estimates of the variation between units will be rough.</p>
+      <p>The program refuses the same designs when a comparison is asked of it directly (by remote control, say): a group of one unit, a unit in two rows of one group, and regions of one section as separate units. Each would make a test of cells rather than of replicates, and cells as replicates find differences that are not there (see <a href="error-rates.html#cells">Error rates</a>).</p>
 
       <h2 id="saved">Saved designs</h2>
       <p><strong>Save as …, version …</strong> keeps the design in the project as a version of its name, with the samples as they were (each one's unit, group and covariates) and the samples left out with their reasons. The project tree lists the designs; a saved design whose samples have changed since says so, and a new version records them as they are. Only a design that can be used is saved.</p>

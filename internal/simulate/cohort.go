@@ -175,7 +175,11 @@ func pairedCohort() Cohort {
 var groupName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9 _.-]{0,39}$`)
 
 // Check refuses a cohort that cannot be made, saying why.
-func (c *Cohort) Check() error {
+func (c *Cohort) Check() error { return c.check(false) }
+
+// check is Check, sections of several fields (a mosaic) allowed when mosaic: CohortSamples's
+// sections, whose true cells Cells makes a field at a time (RunCohort writes sections of one).
+func (c *Cohort) check(mosaic bool) error {
 	var bad []string
 	need := func(ok bool, what string) {
 		if !ok {
@@ -206,7 +210,7 @@ func (c *Cohort) Check() error {
 	if err := p.Check(); err != nil {
 		bad = append(bad, err.Error())
 	}
-	need(p.TilesAcross <= 1 && p.TilesDown <= 1 && p.PostXenium == nil, "sections of one field without post-Xenium images")
+	need((mosaic || p.TilesAcross <= 1 && p.TilesDown <= 1) && p.PostXenium == nil, "sections of one field without post-Xenium images")
 	need(p.TypeOdds == nil && len(p.DomainOdds) == 0 && p.LevelFolds == nil && p.PanelSeed == 0 && p.MixSeed == 0 && p.Retries == 0 && p.RunName == "" && p.RegionName == "" && p.SlideID == "", "the section without a sample's own settings (its odds, levels, panel seed and names: the cohort sets them)")
 	for _, e := range c.Effects {
 		what := fmt.Sprintf("the effect %s of %s in %s", e.Kind, e.Type, e.Group)
@@ -304,6 +308,21 @@ func (c *Cohort) design() []Sample {
 		}
 	}
 	return out
+}
+
+// CohortSamples are a cohort's samples and each one's parameters, as RunCohort makes them: for a
+// program that simulates many cohorts' sections without writing them (each section's true cells by
+// Cells), such as a study of the cohort tests' error rates. Its sections may be mosaics of fields.
+func CohortSamples(c Cohort) ([]Sample, []Params, error) {
+	if err := c.check(true); err != nil {
+		return nil, nil, err
+	}
+	samples := c.design()
+	params := make([]Params, len(samples))
+	for k, s := range samples {
+		params[k] = c.sampleParams(k, s)
+	}
+	return samples, params, nil
 }
 
 // The cohort's streams: a subject's draws, a sample's own, a slide's efficiency, and a sample's

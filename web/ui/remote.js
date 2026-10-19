@@ -2520,7 +2520,7 @@ export function installRemote(app) {
     async compare_spatial(args) {
       // Every family the summary has unless named (not the page's choice).
       const options = { families: [] };
-      if (args.families !== undefined) options.families = (Array.isArray(args.families) ? args.families : [args.families]).map((f) => choose(String(f), ['enrichment', 'nearest', 'niche', 'moran'], 'family'));
+      if (args.families !== undefined) options.families = (Array.isArray(args.families) ? args.families : [args.families]).map((f) => choose(String(f), ['enrichment', 'nearest', 'moran'], 'family'));
       if (args.summary !== undefined) options.summary = String(args.summary);
       if (args.level !== undefined) options.level = finite(args.level, 'level');
       if (args.design !== undefined) options.spec = savedDesign(args.design);

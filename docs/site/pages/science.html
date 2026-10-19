@@ -52,6 +52,21 @@ lede: SituCraft implements each method itself, from its publication, and checks 
       </div>
       <p>Where a question tests many pairs, labels or genes, its p-values are adjusted by Benjamini and Hochberg's procedure (1995). Under another segmentation, on the simulated tissue, the enrichment of its types and its niches hardly change between its true cells, the instrument's and the refinement's (rank correlation 1.00), while the markers' Moran's I nearly doubles under the instrument's expansion and stays within 0.03 of the truth's under the refinement. At a million generated cells, on four cores, each graph takes seconds and Moran's I with its permutations 88 s in 0.94 GB.</p>
 
+      <h2 id="cohorts">Cohorts</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Method</th><th>Source</th><th>Checked against</th><th>Agreement</th></tr></thead>
+          <tbody>
+            <tr><td>Samples far out; the pseudobulk's principal components</td><td>Iglewicz and Hoaglin 1993; Love et al. 2014</td><td>numpy 2.5.4</td><td class="agree">every score and share to 10⁻¹³</td></tr>
+            <tr><td>Differential abundance: quasi-binomial and quasi-Poisson models of the design</td><td>Wedderburn 1974; McCullagh and Nelder 1989</td><td>statsmodels 0.15.0 (and R's <code>glm</code>)</td><td class="agree">every coefficient, standard error, t, p and interval to 10⁻⁸</td></tr>
+            <tr><td>Differential expression: pseudobulk, filtering, TMM, voom and the moderated t</td><td>Crowell et al. 2020; Chen et al. 2016; Robinson and Oshlack 2010; Law et al. 2014; Smyth 2004</td><td>limma 3.68.5 and edgeR 4.10.5 (R 4.6.1)</td><td class="agree">the genes kept; every factor, weight, fold change, t and p within 10⁻⁹</td></tr>
+            <tr><td>Spatial statistics between groups</td><td>Smyth 2004</td><td>limma's <code>lmFit</code> and <code>eBayes</code>; statsmodels' OLS</td><td class="agree">within 10⁻¹³</td></tr>
+            <tr><td>The tests' error rates</td><td>Squair et al. 2021</td><td>2,000 simulated null cohorts and 500 with known effects, weekly</td><td class="agree">4.7% to 5.5% at 5%; a raised gene's interval covering it in 95.0% of cohorts</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Every comparison of a cohort is of its replicate units, never its cells. Tested cell by cell, the same null cohorts find differences everywhere; see <a href="docs/error-rates.html">Error rates and scale</a>.</p>
+
       <h2 id="cite">Cite SituCraft</h2>
       <p>If you use SituCraft in your research, please cite it (the repository's <a href="{{github}}/blob/main/CITATION.cff">CITATION.cff</a>), with its version, and the methods you used as the methods paragraph lists them:</p>
       <div class="code wrap" data-no-copy><pre><code>McDermott R. SituCraft: a local-first workbench for imaging-based spatial transcriptomics. Version {{version}}. https://github.com/robert-mcdermott/situcraft</code></pre></div>
@@ -65,7 +80,9 @@ lede: SituCraft implements each method itself, from its publication, and checks 
         <li>Benjamini Y, Hochberg Y. Controlling the false discovery rate. <em>J R Stat Soc B</em> 1995;57:289–300.</li>
         <li>Besag J. Contribution to the discussion of Dr Ripley's paper. <em>J R Stat Soc B</em> 1977;39:193–195.</li>
         <li>Bowyer A. Computing Dirichlet tessellations. <em>Comput J</em> 1981;24:162–166.</li>
+        <li>Chen Y, Lun ATL, Smyth GK. From reads to genes to pathways: differential expression analysis of RNA-Seq experiments using Rsubread and the edgeR quasi-likelihood pipeline. <em>F1000Research</em> 2016;5:1438.</li>
         <li>Cliff AD, Ord JK. <em>Spatial Processes: Models and Applications</em>. Pion, 1981.</li>
+        <li>Crowell HL, Soneson C, Germain P-L, et al. muscat detects subpopulation-specific state transitions from multi-sample multi-condition single-cell transcriptomics data. <em>Nat Commun</em> 2020;11:6077.</li>
         <li>Diggle PJ. <em>Statistical Analysis of Spatial Point Patterns</em>, 2nd ed. Arnold, 2003.</li>
         <li>Dong W, Moses C, Li K. Efficient k-nearest neighbor graph construction for generic similarity measures. <em>WWW</em> 2011:577–586.</li>
         <li>Ederer F, Mantel N. Confidence limits on the ratio of two Poisson variables. <em>Am J Epidemiol</em> 1974;100:165–167.</li>
@@ -77,23 +94,30 @@ lede: SituCraft implements each method itself, from its publication, and checks 
         <li>Hartman A, Satija R. Comparative analysis of multiplexed in situ gene expression profiling technologies. <em>bioRxiv</em> 2024. doi:10.1101/2024.01.11.575135.</li>
         <li>Hooke R, Jeeves TA. "Direct search" solution of numerical and statistical problems. <em>J ACM</em> 1961;8:212–229.</li>
         <li>Hubert L, Arabie P. Comparing partitions. <em>J Classif</em> 1985;2:193–218.</li>
+        <li>Iglewicz B, Hoaglin DC. <em>How to Detect and Handle Outliers</em>. ASQC Quality Press, 1993.</li>
         <li>Janesick A, Shelansky R, Gottscho AD, et al. High resolution mapping of the tumor microenvironment using integrated single-cell, spatial and in situ analysis. <em>Nat Commun</em> 2023;14:8353.</li>
         <li>Jones DC, Elz AE, Hadadianpour A, Ryu H, Glass DR, Newell EW. Cell simulation as cell segmentation. <em>Nat Methods</em> 2025;22:1331–1342.</li>
         <li>Koopman PAR. Confidence intervals for the ratio of two binomial proportions. <em>Biometrics</em> 1984;40:513–517.</li>
         <li>Kuglin CD, Hines DC. The phase correlation image alignment method. <em>Proc IEEE Conf Cybernetics and Society</em> 1975.</li>
+        <li>Law CW, Chen Y, Shi W, Smyth GK. voom: precision weights unlock linear model analysis tools for RNA-seq read counts. <em>Genome Biol</em> 2014;15:R29.</li>
         <li>Lee DT, Schachter BJ. Two algorithms for constructing a Delaunay triangulation. <em>Int J Comput Inf Sci</em> 1980;9:219–242.</li>
+        <li>Love MI, Huber W, Anders S. Moderated estimation of fold change and dispersion for RNA-seq data with DESeq2. <em>Genome Biol</em> 2014;15:550.</li>
         <li>Mann HB, Whitney DR. On a test of whether one of two random variables is stochastically larger than the other. <em>Ann Math Stat</em> 1947;18:50–60.</li>
+        <li>McCullagh P, Nelder JA. <em>Generalized Linear Models</em>, 2nd ed. Chapman and Hall, 1989.</li>
         <li>McInnes L, Healy J, Melville J. UMAP: uniform manifold approximation and projection for dimension reduction. arXiv:1802.03426, 2018.</li>
         <li>Moran PAP. Notes on continuous stochastic phenomena. <em>Biometrika</em> 1950;37:17–23.</li>
         <li>Palla G, Spitzer H, Klein M, et al. Squidpy: a scalable framework for spatial omics analysis. <em>Nat Methods</em> 2022;19:171–178.</li>
         <li>Reddy BS, Chatterji BN. An FFT-based technique for translation, rotation, and scale-invariant image registration. <em>IEEE Trans Image Process</em> 1996;5:1266–1271.</li>
         <li>Reichardt J, Bornholdt S. Statistical mechanics of community detection. <em>Phys Rev E</em> 2006;74:016110.</li>
         <li>Ripley BD. Modelling spatial patterns. <em>J R Stat Soc B</em> 1977;39:172–212.</li>
+        <li>Robinson MD, Oshlack A. A scaling normalization method for differential expression analysis of RNA-seq data. <em>Genome Biol</em> 2010;11:R25.</li>
         <li>Rueckert D, Sonoda LI, Hayes C, Hill DLG, Leach MO, Hawkes DJ. Nonrigid registration using free-form deformations: application to breast MR images. <em>IEEE Trans Med Imaging</em> 1999;18:712–721.</li>
         <li>Ruifrok AC, Johnston DA. Quantification of histochemical staining by color deconvolution. <em>Anal Quant Cytol Histol</em> 2001;23:291–299.</li>
         <li>Schapiro D, Jackson HW, Raghuraman S, et al. histoCAT: analysis of cell phenotypes and interactions in multiplex image cytometry data. <em>Nat Methods</em> 2017;14:873–876.</li>
         <li>Schürch CM, Bhate SS, Barlow GL, et al. Coordinated cellular neighborhoods orchestrate antitumoral immunity at the colorectal cancer invasive front. <em>Cell</em> 2020;182:1341–1359.</li>
         <li>Shewchuk JR. Adaptive precision floating-point arithmetic and fast robust geometric predicates. <em>Discrete Comput Geom</em> 1997;18:305–363.</li>
+        <li>Smyth GK. Linear models and empirical Bayes methods for assessing differential expression in microarray experiments. <em>Stat Appl Genet Mol Biol</em> 2004;3:3.</li>
+        <li>Squair JW, Gautier M, Kathe C, et al. Confronting false discoveries in single-cell differential expression. <em>Nat Commun</em> 2021;12:5692.</li>
         <li>Stone M. Cross-validatory choice and assessment of statistical predictions. <em>J R Stat Soc B</em> 1974;36:111–147.</li>
         <li>Studholme C, Hill DLG, Hawkes DJ. An overlap invariant entropy measure of 3D medical image alignment. <em>Pattern Recognit</em> 1999;32:71–86.</li>
         <li>Tirosh I, Izar B, Prakadan SM, et al. Dissecting the multicellular ecosystem of metastatic melanoma by single-cell RNA-seq. <em>Science</em> 2016;352:189–196.</li>
@@ -101,6 +125,7 @@ lede: SituCraft implements each method itself, from its publication, and checks 
         <li>Umeyama S. Least-squares estimation of transformation parameters between two point patterns. <em>IEEE TPAMI</em> 1991;13:376–380.</li>
         <li>Venna J, Kaski S. Neighborhood preservation in nonlinear projection methods: an experimental study. <em>ICANN</em> 2001:485–491.</li>
         <li>Watson DF. Computing the n-dimensional Delaunay tessellation with application to Voronoi polytopes. <em>Comput J</em> 1981;24:167–172.</li>
+        <li>Wedderburn RWM. Quasi-likelihood functions, generalized linear models, and the Gauss–Newton method. <em>Biometrika</em> 1974;61:439–447.</li>
         <li>Wilson EB. Probable inference, the law of succession, and statistical inference. <em>J Am Stat Assoc</em> 1927;22:209–212.</li>
         <li>Wolf FA, Angerer P, Theis FJ. SCANPY: large-scale single-cell gene expression data analysis. <em>Genome Biol</em> 2018;19:15.</li>
       </ul>

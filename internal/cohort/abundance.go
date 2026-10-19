@@ -68,14 +68,17 @@ type ExcludedSample struct {
 
 // ComparisonDesign is the design a comparison is of (web/lib/design.js makes it): its name and
 // version when saved, its specification, its columns, rows, contrasts and samples left out.
+// PseudoSamples marks a teaching example's design whose units are regions of one section: not
+// independent replicates, compared only so that the comparison says so.
 type ComparisonDesign struct {
-	Name      string           `json:"name,omitempty"`
-	Version   int              `json:"version,omitempty"`
-	Spec      json.RawMessage  `json:"spec,omitempty"`
-	Names     []string         `json:"names"`
-	Rows      []DesignRow      `json:"rows"`
-	Contrasts []Contrast       `json:"contrasts"`
-	Excluded  []ExcludedSample `json:"excluded,omitempty"`
+	Name          string           `json:"name,omitempty"`
+	Version       int              `json:"version,omitempty"`
+	Spec          json.RawMessage  `json:"spec,omitempty"`
+	Names         []string         `json:"names"`
+	Rows          []DesignRow      `json:"rows"`
+	Contrasts     []Contrast       `json:"contrasts"`
+	Excluded      []ExcludedSample `json:"excluded,omitempty"`
+	PseudoSamples bool             `json:"pseudoSamples,omitempty"`
 }
 
 // AbundanceTest is one label's test of one contrast: the model's estimate (on the link's scale)
@@ -136,6 +139,9 @@ type Comparison struct {
 
 // CheckDesign says what is wrong with a design for the summary's samples: rows of the columns'
 // width naming the summary's samples, each once; contrasts of that width; more rows than columns.
+// And what would make its tests of cells rather than of replicates: a group of one unit, a unit in
+// two rows of one group, and regions of one section given different units (unless the design says
+// they are pseudo-samples, for teaching).
 func CheckDesign(d *Document, design ComparisonDesign) error {
 	p := len(design.Names)
 	if p == 0 || len(design.Rows) <= p {
@@ -168,12 +174,62 @@ func CheckDesign(d *Document, design ComparisonDesign) error {
 			}
 		}
 	}
+	if err := checkReplicates(d, design); err != nil {
+		return err
+	}
 	if len(design.Contrasts) == 0 || len(design.Contrasts) > 50 {
 		return errors.New("a comparison is of 1 to 50 contrasts")
 	}
 	for _, c := range design.Contrasts {
 		if len(c.Vector) != p {
 			return fmt.Errorf("the contrast %s has %d values, not %d", c.Name, len(c.Vector), p)
+		}
+	}
+	return nil
+}
+
+// checkReplicates refuses a design whose groups are not compared by their replicate units' variation.
+func checkReplicates(d *Document, design ComparisonDesign) error {
+	units := map[string]map[string]bool{}
+	var groups []string
+	for _, r := range design.Rows {
+		if units[r.Group] == nil {
+			units[r.Group] = map[string]bool{}
+			groups = append(groups, r.Group)
+		}
+		if units[r.Group][r.Unit] {
+			return fmt.Errorf("the unit %s is in two rows of %s: a unit's samples in a group are one row (technical replicates, combined)", r.Unit, r.Group)
+		}
+		units[r.Group][r.Unit] = true
+	}
+	if len(groups) < 2 {
+		return errors.New("every row is in one group: a comparison needs two")
+	}
+	for _, g := range groups {
+		if n := len(units[g]); n < 2 {
+			return fmt.Errorf("%s has 1 replicate unit: a group needs at least two, so that the variation between units can be measured (with one, a test would be of its cells, which are not replicates)", g)
+		}
+	}
+	if design.PseudoSamples {
+		return nil
+	}
+	// Regions of one section: one dataset's samples in rows of different units.
+	at := map[string]int{}
+	for i, s := range d.Samples {
+		at[s.Sample] = i
+	}
+	type seen struct{ unit, name string }
+	byDataset := map[string]seen{}
+	for _, r := range design.Rows {
+		for _, id := range r.Samples {
+			sd := d.Samples[at[id]]
+			if sd.Dataset == "" {
+				continue
+			}
+			if o, ok := byDataset[sd.Dataset]; ok && o.unit != r.Unit {
+				return fmt.Errorf("%s and %s are regions of one section given different units (%s, %s): regions of one section of one tissue are not independent replicates. Give them one unit, or compare sections", o.name, sd.Name, o.unit, r.Unit)
+			}
+			byDataset[sd.Dataset] = seen{r.Unit, sd.Name}
 		}
 	}
 	return nil

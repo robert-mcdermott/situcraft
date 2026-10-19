@@ -2,11 +2,14 @@ package cohort
 
 // Spatial statistics compared between groups (wave 7, slice 7): each sample's numbers from its
 // spatial analyses (a pair of labels' neighbor enrichment, a label's median distance to the nearest
-// cell of another, a niche's share, a gene's Moran's I), a replicate unit's value the mean of its
-// samples', in a linear model of the design (its pairing and covariates). Ratios are compared on
-// the log2 scale. A family's statistics are fitted together, their variances moderated across the
-// family (limma.go: Smyth 2004), each contrast's estimate with its interval and moderated t;
-// p-values adjusted by Benjamini and Hochberg over the family's tests, the universe recorded.
+// cell of another, a gene's Moran's I), a replicate unit's value the mean of its samples', in a
+// linear model of the design (its pairing and covariates). Ratios are compared on the log2 scale.
+// A family's statistics are fitted together, their variances moderated across the family
+// (limma.go: Smyth 2004), each contrast's estimate with its interval and moderated t; p-values
+// adjusted by Benjamini and Hochberg over the family's tests, the universe recorded. A niche's share
+// is a count of cells, compared by abundance's quasi-binomial model (abundance.go): moderated with
+// the other niches', six unlike variances made one, its tests were too often found (slice 8's
+// study of the error rates: 6.0% at 5%).
 //
 // Files (an artifact of kind spatial-comparison; docs/FORMATS.md): spatial-tests.json
 // (SpatialComparison), results.csv (a row a test).
@@ -31,13 +34,13 @@ import (
 const (
 	FileSpatialTests          = "spatial-tests.json"
 	FileSpatialResults        = "results.csv"
-	SpatialTestsMethodVersion = "1"
+	SpatialTestsMethodVersion = "2"
 )
 
 // SpatialTestsRoles are the files' roles.
 var SpatialTestsRoles = map[string]string{FileSpatialTests: "comparison", FileSpatialResults: "results"}
 
-// The families of spatial statistics (FamilyNiche is a niche's share of the cells with a window).
+// The families of spatial statistics.
 const (
 	FamilyEnrichment = "enrichment"
 	FamilyNearest    = "nearest"
@@ -52,7 +55,6 @@ var SpatialFamilies = []struct {
 }{
 	{FamilyEnrichment, "Neighbor enrichment (found over expected)", "ratio of enrichments", true},
 	{FamilyNearest, "Median distance to the nearest cell (µm)", "ratio of distances", true},
-	{FamilyNiche, "Niches' shares of the cells with a window", "difference in share", false},
 	{FamilyMoran, "Moran's I of a gene's counts", "difference in Moran's I", false},
 }
 
@@ -115,9 +117,6 @@ func SpatialFamiliesOf(d *Document) []string {
 		for _, st := range s.Statistics {
 			has[st.Family] = true
 		}
-		if len(s.NicheShares) > 0 {
-			has[FamilyNiche] = true
-		}
 	}
 	var out []string
 	for _, f := range SpatialFamilies {
@@ -128,25 +127,28 @@ func SpatialFamiliesOf(d *Document) []string {
 	return out
 }
 
-// sampleValues are a sample's numbers of a family by key.
-func sampleValues(d *Document, s *SampleDoc, family string) map[string]float64 {
+// sampleValues are a sample's numbers of a family by key, on the scale compared: a ratio's log2
+// (a ratio of 0 is none), Moran's I as it is.
+func sampleValues(s *SampleDoc, family string, log bool) map[string]float64 {
 	out := map[string]float64{}
-	if family == FamilyNiche {
-		for v, share := range s.NicheShares {
-			out[NicheName(v)] = share
-		}
-		return out
-	}
 	for _, st := range s.Statistics {
-		if st.Family == family {
-			out[st.Key] = st.Value
+		if st.Family != family {
+			continue
 		}
+		v := st.Value
+		if log {
+			if !(v > 0) {
+				continue
+			}
+			v = log2(v)
+		}
+		out[st.Key] = v
 	}
 	return out
 }
 
 // CompareSpatial compares the summary's samples' spatial statistics by the design: the families
-// asked (enrichment, nearest, niche, moran), each statistic's test of each contrast at the level.
+// asked (enrichment, nearest, moran), each statistic's test of each contrast at the level.
 func CompareSpatial(d *Document, design ComparisonDesign, families []string, level float64) (*SpatialComparison, error) {
 	if err := CheckDesign(d, design); err != nil {
 		return nil, err
@@ -171,23 +173,17 @@ func CompareSpatial(d *Document, design ComparisonDesign, families []string, lev
 			}
 		}
 		if k < 0 {
-			return nil, fmt.Errorf("no family %q to compare: enrichment, nearest, niche or moran", fam)
+			return nil, fmt.Errorf("no family %q to compare: enrichment, nearest or moran (a niche's share is compared with the abundances)", fam)
 		}
 		def := SpatialFamilies[k]
 		f := SpatialFamily{Family: fam, Name: def.Name, Effect: def.Effect, Log: def.Log, Keys: []string{}, Values: [][]*float64{}, Tests: []SpatialTest{}}
-		// Each row's mean of its samples' values (log2 for a log family; a ratio of 0 is none).
+		// Each row's mean of its samples' values, on the scale compared.
 		rows := make([]map[string]float64, len(design.Rows))
 		seen := map[string]bool{}
 		for r, row := range design.Rows {
 			sums, ns := map[string]float64{}, map[string]int{}
 			for _, s := range row.Samples {
-				for key, v := range sampleValues(d, &d.Samples[at[s]], fam) {
-					if def.Log {
-						if !(v > 0) {
-							continue
-						}
-						v = log2(v)
-					}
+				for key, v := range sampleValues(&d.Samples[at[s]], fam, def.Log) {
 					sums[key] += v
 					ns[key]++
 					seen[key] = true
@@ -293,7 +289,7 @@ func CompareSpatial(d *Document, design ComparisonDesign, families []string, lev
 		c.Families = append(c.Families, f)
 	}
 	if len(c.Families) == 0 {
-		return nil, errors.New("no family to compare: enrichment, nearest, niche or moran")
+		return nil, errors.New("no family to compare: enrichment, nearest or moran")
 	}
 	return c, nil
 }

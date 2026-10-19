@@ -119,7 +119,11 @@ quasi-likelihood models of the design: effects with intervals, p-values adjusted
 and each result traced to its samples' cells. Each cell type's genes are compared by its
 pseudobulk (filtered by expression, normalized by TMM, weighted by voom and tested by the moderated
 t, validated against limma and edgeR), and the samples' spatial statistics (neighbor enrichment,
-nearest distances, niches' shares, Moran's I) by moderated linear models of the design.
+nearest distances, Moran's I) by moderated linear models of the design. Every week the tests'
+error rates are measured on thousands of simulated cohorts (each family's false positives at their
+levels, a known change's interval covering it 95% of the time) beside the same cohorts tested cell
+by cell, whose false positives show why cells are never tested as replicates; and a cohort of 2
+million cells is summarized and compared one section at a time within its budget.
 
 ## A look around
 

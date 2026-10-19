@@ -138,7 +138,7 @@ func (a *app) checkSpatialTests(body *spatialTestsRequest) (*cohort.Document, ar
 		body.Families = has
 	}
 	if len(body.Families) == 0 {
-		return nil, none, errors.New("the summary's samples have no spatial statistics: answer a spatial question in the steps on every sample (neighbor enrichment, nearest distances, Moran's I) or find niches")
+		return nil, none, errors.New("the summary's samples have no spatial statistics: answer a spatial question in the steps on every sample (neighbor enrichment, nearest distances, Moran's I)")
 	}
 	seen := map[string]bool{}
 	for _, f := range body.Families {
@@ -147,7 +147,7 @@ func (a *app) checkSpatialTests(body *spatialTestsRequest) (*cohort.Document, ar
 			known = known || g.ID == f
 		}
 		if !known {
-			return nil, none, fmt.Errorf("no family %q to compare: enrichment, nearest, niche or moran", f)
+			return nil, none, fmt.Errorf("no family %q to compare: enrichment, nearest or moran (a niche's share is compared with the abundances)", f)
 		}
 		if seen[f] {
 			return nil, none, fmt.Errorf("the family %s twice", f)
@@ -186,7 +186,7 @@ func (a *app) startExpression(w http.ResponseWriter, r *http.Request) {
 func (a *app) startSpatialTests(w http.ResponseWriter, r *http.Request) {
 	var body spatialTestsRequest
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<20)).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, "Send {\"summary\": id, \"design\": {names, rows, contrasts}, \"families\": [enrichment, nearest, niche, moran], \"level\"}.")
+		writeError(w, http.StatusBadRequest, "Send {\"summary\": id, \"design\": {names, rows, contrasts}, \"families\": [enrichment, nearest, moran], \"level\"}.")
 		return
 	}
 	if _, _, err := a.checkSpatialTests(&body); err != nil {

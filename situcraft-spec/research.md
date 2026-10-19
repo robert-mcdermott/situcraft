@@ -3213,14 +3213,15 @@ label. The steps are those the field's pseudobulk analyses use, each from its pu
 Each contrast's log2 fold change has its interval (the moderated t's quantile), and the p-values of
 every label, gene and contrast tested are adjusted together by Benjamini and Hochberg.
 
-**Spatial statistics between groups.** A sample's neighbor enrichments, nearest distances, niches'
-shares and Moran's I (§6.2–§6.6, §6.10) are numbers of the sample, so they are compared as the
-units' values: ratios on the log2 scale (an enrichment of found over expected, a median distance),
-shares and Moran's I as they are; a unit's value the mean of its samples'. Each statistic is an
-ordinary least squares model of the design, and a family's statistics (its pairs, distances,
-niches or genes) share a moderated variance as genes do (Smyth 2004), which steadies the many tests
-of few units; a family of one statistic is tested by its own variance alone. P-values are adjusted
-within each family.
+**Spatial statistics between groups.** A sample's neighbor enrichments, nearest distances and
+Moran's I (§6.2, §6.3, §6.6) are numbers of the sample, so they are compared as the units' values:
+ratios on the log2 scale (an enrichment of found over expected, a median distance), Moran's I as it
+is; a unit's value the mean of its samples'. Each statistic is an ordinary least squares model of
+the design, and a family's statistics (its pairs, distances or genes) share a moderated variance as
+genes do (Smyth 2004), which steadies the many tests of few units; a family of one statistic is
+tested by its own variance alone. P-values are adjusted within each family. A niche's share
+(§6.10) is a count of cells, compared with the abundances (§6.12): slice 7 also tested the niches'
+shares by a moderated linear model, which slice 8's study found too often significant (§6.14).
 
 **Checked.** Against limma 3.68.5 and edgeR 4.10.5 (R 4.6.1), run apart from SituCraft as a
 reference on nine pseudobulk tables: the genes kept the same, and the TMM factors, voom's span and
@@ -3235,6 +3236,49 @@ varying) is found at +0.94 (0.59 to 1.30), and no other gene; the enrichment of 
 and immune-like cells, which the simulator mixes in the treated subjects, is 1.35 times as high
 (1.07 to 1.70), the family's strongest change, though not below an adjusted p of 0.05 over the ten
 pairs with four subjects a group; a null cohort finds nothing.
+
+### 6.14 Error rates, pseudoreplication and scale (verified, wave 7, slice 8)
+
+**The study.** A test's error rates are measured where the truth is known: simulated cohorts whose
+sections vary from one another as real sections do (each type's share and each gene's level drawn
+for each sample, a slide's efficiency) and whose groups differ by known effects, or not at all.
+Each sample's true cells are made without writing a bundle (§6.9's simulator, its true types the
+labels), summarized as the summary job summarizes them, and compared as the page compares them. On
+null cohorts, a test at level α should reject in a share α of its tests; a family adjusted by
+Benjamini and Hochberg should find anything in at most α of the cohorts (its false discovery rate
+when nothing differs). A cohort's tests are not independent (they share its samples), so a rate's
+standard error is the cohorts': each cohort's rejections against the rate times its tests, the
+ratio estimator's.
+
+**What it found** (2,000 null cohorts of two groups of four subjects): the quasi-likelihood models
+of shares, densities and niches' shares reject 4.7% to 5.0% at 5% and 0.8% to 1.1% at 1%; voom and
+the moderated t over each label's genes 5.12% and 1.03%; the moderated spatial statistics 5.08%
+(nearest distances), 5.26% (Moran's I) and 5.47% (enrichment). The last two are slightly liberal: a
+family's variances moderated toward one common prior shrink the rare pairs' and the sparse genes'
+larger variances. A trend of the prior with the statistics' precision (limma's trend; Law et al.
+2014 compare it with voom) would answer this; it is not needed at half a percentage point. Niches'
+shares as spatial statistics were liberal enough to matter (6.0%; their log odds 6.2%), six unlike
+variances moderated toward one; they are compared only as counts. On 500 cohorts with the standard
+cohort's effects: the gene raised 2.5-fold found in 98%, its intervals covering the truth in 95.0%
+(the estimates' mean 1.327 log2 against 1.322), so the expression tests are calibrated where the
+truth is exact; the share and arrangement effects found in 17% and 47%: four subjects a group
+measure modest changes in composition and arrangement poorly, which their intervals say.
+
+**Pseudoreplication.** The same null cohorts tested with cells as replicates (the groups' pooled
+cells: a label's share by the two-proportion z-test, a gene by the Wilcoxon rank-sum test as
+single-cell tools test markers) reject 58% and 24% at 5%: the sections' own variation, which their
+cells cannot show, makes the groups differ by chance, as Squair et al. (2021) showed for
+single-cell expression. SituCraft has no test of cells across groups; the comparisons refuse a
+design that would make one (a group of one unit; a unit twice in a group; regions of one section
+as separate units, unless a teaching example says they are pseudo-samples).
+
+**Scale.** A cohort's summary holds one section at a time: each section's cells and counts are
+read, its analyses asked, its numbers kept (its document, its pseudobulk over its genes, its cells'
+centroids and labels for the niches across sections, 12 bytes a cell) and the rest let go. At 24
+sections of 84,000 cells (2 million), with each section's graph and spatial questions asked as it
+is read: 251 s on four cores and a peak of 0.65 GB, against 0.54 GB for 6 sections; most of the
+time is each section's Moran's I (its permutations) and nearest distances, and the summary and the
+three comparisons together take under a second.
 
 ## 7. Datasets
 

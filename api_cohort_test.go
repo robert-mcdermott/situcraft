@@ -240,8 +240,9 @@ func TestCohortSummary(t *testing.T) {
 }
 
 // fourRegions summarizes four region samples of the small simulated tissue (two on each side; with
-// niches when asked) and answers the summary's id and a design comparing the sides.
-func fourRegions(t *testing.T, f *refineFixture, niches string) (string, string) {
+// niches when asked, and with each region's graph and enrichment when spatial) and answers the
+// summary's id and a design comparing the sides.
+func fourRegions(t *testing.T, f *refineFixture, niches string, spatial bool) (string, string) {
 	t.Helper()
 	all, _ := f.a.artifacts.List()
 	var seg artifacts.Manifest
@@ -281,8 +282,28 @@ func fourRegions(t *testing.T, f *refineFixture, niches string) (string, string)
 		for i, c := range cells {
 			keep[i] = float64(c.X) >= p.x0 && float64(c.X) < p.x1 && float64(c.Y) >= p.y0 && float64(c.Y) < p.y1
 		}
-		samples = append(samples, fmt.Sprintf(`{"sample":%q,"name":%q,"dataset":"d-1","item":"0","segmentation":%q,"cells":%s,"labels":%s,"region":{"kind":"region","region":{"id":"r-%d","name":%q,"version":1},"geometry":%s}}`,
-			p.id, p.name, seg.ID, chosenCells(keep, ""), labelsJSON, k, p.name, rect(p.x0, p.y0, p.x1, p.y1)))
+		analyses := ""
+		if spatial {
+			// The region's cells' graph, and its labels' enrichment over it.
+			var g, e struct {
+				ID  string
+				Job *struct{ ID string }
+			}
+			json.NewDecoder(f.post("/api/local/0/graph", fmt.Sprintf(`{"segmentation":%q,"parameters":{"kind":"delaunay"},"cells":%s}`, seg.ID, chosenCells(keep, ""))).Body).Decode(&g)
+			if g.Job != nil {
+				f.wait(g.Job.ID)
+			}
+			json.NewDecoder(f.post("/api/local/0/spatial", fmt.Sprintf(`{"question":"enrichment","segmentation":%q,"graph":%q,"labels":%s,"parameters":{"permutations":100,"seed":3}}`, seg.ID, g.ID, labelsJSON)).Body).Decode(&e)
+			if e.Job != nil {
+				f.wait(e.Job.ID)
+			}
+			if g.ID == "" || e.ID == "" {
+				t.Fatalf("%s: no graph or enrichment", p.name)
+			}
+			analyses = fmt.Sprintf(`,"graph":%q,"analyses":[%q]`, g.ID, e.ID)
+		}
+		samples = append(samples, fmt.Sprintf(`{"sample":%q,"name":%q,"dataset":"d-1","item":"0","segmentation":%q,"cells":%s,"labels":%s,"region":{"kind":"region","region":{"id":"r-%d","name":%q,"version":1},"geometry":%s}%s}`,
+			p.id, p.name, seg.ID, chosenCells(keep, ""), labelsJSON, k, p.name, rect(p.x0, p.y0, p.x1, p.y1), analyses))
 	}
 	var answer struct {
 		ID  string
@@ -295,7 +316,8 @@ func fourRegions(t *testing.T, f *refineFixture, niches string) (string, string)
 	if answer.Job != nil {
 		f.wait(answer.Job.ID)
 	}
-	design := `{"names":["Intercept","side[T.right]"],"rows":[{"unit":"1","group":"left","samples":["s-1"],"x":[1,0]},{"unit":"2","group":"left","samples":["s-2"],"x":[1,0]},{"unit":"3","group":"right","samples":["s-3"],"x":[1,1]},{"unit":"4","group":"right","samples":["s-4"],"x":[1,1]}],"contrasts":[{"name":"right − left","vector":[0,1]}]}`
+	// Regions of one section as samples: pseudo-samples, as a teaching example's are.
+	design := `{"pseudoSamples":true,"names":["Intercept","side[T.right]"],"rows":[{"unit":"1","group":"left","samples":["s-1"],"x":[1,0]},{"unit":"2","group":"left","samples":["s-2"],"x":[1,0]},{"unit":"3","group":"right","samples":["s-3"],"x":[1,1]},{"unit":"4","group":"right","samples":["s-4"],"x":[1,1]}],"contrasts":[{"name":"right − left","vector":[0,1]}]}`
 	return answer.ID, design
 }
 
@@ -305,7 +327,7 @@ func fourRegions(t *testing.T, f *refineFixture, niches string) (string, string)
 // refused.
 func TestAbundanceAPI(t *testing.T) {
 	f := newRefineFixture(t, true)
-	summaryID, design := fourRegions(t, f, "")
+	summaryID, design := fourRegions(t, f, "", false)
 	answer := struct{ ID string }{summaryID}
 	body := fmt.Sprintf(`{"summary":%q,"design":%s}`, answer.ID, design)
 	var started struct {
@@ -358,11 +380,13 @@ func TestAbundanceAPI(t *testing.T) {
 		t.Error("asked again: not answered at once")
 	}
 	for want, bad := range map[string]string{
-		"no cohort summary":     strings.Replace(body, answer.ID, "coh-nothing", 1),
-		"not in the summary":    strings.Replace(body, `"s-4"`, `"s-9"`, 1),
-		"no niches to compare":  strings.Replace(body, `"design":`, `"families":["niche"],"design":`, 1),
-		"no family":             strings.Replace(body, `"design":`, `"families":["mass"],"design":`, 1),
-		"no degrees of freedom": strings.Replace(strings.Replace(body, `,{"unit":"4","group":"right","samples":["s-4"],"x":[1,1]}`, "", 1), `{"unit":"2","group":"left","samples":["s-2"],"x":[1,0]},`, "", 1),
+		"no cohort summary":          strings.Replace(body, answer.ID, "coh-nothing", 1),
+		"not in the summary":         strings.Replace(body, `"s-4"`, `"s-9"`, 1),
+		"no niches to compare":       strings.Replace(body, `"design":`, `"families":["niche"],"design":`, 1),
+		"no family":                  strings.Replace(body, `"design":`, `"families":["mass"],"design":`, 1),
+		"no degrees of freedom":      strings.Replace(strings.Replace(body, `,{"unit":"4","group":"right","samples":["s-4"],"x":[1,1]}`, "", 1), `{"unit":"2","group":"left","samples":["s-2"],"x":[1,0]},`, "", 1),
+		"regions of one section":     strings.Replace(body, `"pseudoSamples":true,`, "", 1),
+		"right has 1 replicate unit": strings.Replace(body, `,{"unit":"4","group":"right","samples":["s-4"],"x":[1,1]}`, "", 1),
 	} {
 		rec := f.post("/api/cohort/abundance", bad)
 		if rec.Code != 400 || !strings.Contains(rec.Body.String(), want) {
@@ -377,7 +401,7 @@ func TestAbundanceAPI(t *testing.T) {
 // cannot be compared refused.
 func TestExpressionAndSpatialAPI(t *testing.T) {
 	f := newRefineFixture(t, true)
-	summaryID, design := fourRegions(t, f, `"niches":{"neighbors":5,"niches":2,"starts":2,"seeds":1,"seed":4},`)
+	summaryID, design := fourRegions(t, f, `"niches":{"neighbors":5,"niches":2,"starts":2,"seeds":1,"seed":4},`, true)
 	sp, _ := f.a.artifacts.Path(summaryID, cohort.FileSummary)
 	doc, pb, err := cohort.Read(filepath.Dir(sp))
 	if err != nil {
@@ -469,7 +493,7 @@ func TestExpressionAndSpatialAPI(t *testing.T) {
 		}
 	}
 
-	// Spatial statistics: the niches' shares (the samples answered no spatial question).
+	// Spatial statistics: each region's enrichment of its labels.
 	body = fmt.Sprintf(`{"summary":%q,"design":%s}`, summaryID, design)
 	m = start("/api/cohort/spatial-tests", body, "spt-")
 	if m.Kind != "spatial-comparison" || m.Lineage.Job.Kind != "spatial-tests" {
@@ -480,18 +504,19 @@ func TestExpressionAndSpatialAPI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantSC, _ := cohort.CompareSpatial(doc, design0, []string{cohort.FamilyNiche}, 0.95)
-	if len(sc.Families) != 1 || sc.Families[0].Family != cohort.FamilyNiche || fmt.Sprint(sc.Families[0].Tests) != fmt.Sprint(wantSC.Families[0].Tests) {
+	wantSC, _ := cohort.CompareSpatial(doc, design0, []string{cohort.FamilyEnrichment}, 0.95)
+	if len(sc.Families) != 1 || sc.Families[0].Family != cohort.FamilyEnrichment || len(sc.Families[0].Keys) != 3 || fmt.Sprint(sc.Families[0].Tests) != fmt.Sprint(wantSC.Families[0].Tests) {
 		t.Errorf("the spatial comparison: %+v", sc.Families)
 	}
 	for want, bad := range map[string]string{
-		"no enrichment statistics": strings.Replace(body, `"design":`, `"families":["enrichment"],"design":`, 1),
-		"no family":                strings.Replace(body, `"design":`, `"families":["mass"],"design":`, 1),
-		"twice":                    strings.Replace(body, `"design":`, `"families":["niche","niche"],"design":`, 1),
+		"no moran statistics":          strings.Replace(body, `"design":`, `"families":["moran"],"design":`, 1),
+		"compared with the abundances": strings.Replace(body, `"design":`, `"families":["niche"],"design":`, 1),
+		"twice":                        strings.Replace(body, `"design":`, `"families":["enrichment","enrichment"],"design":`, 1),
 	} {
 		rec := f.post("/api/cohort/spatial-tests", bad)
 		if rec.Code != 400 || !strings.Contains(rec.Body.String(), want) {
 			t.Errorf("%s: %d %s", want, rec.Code, rec.Body.String())
 		}
 	}
+
 }

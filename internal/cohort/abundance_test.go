@@ -109,8 +109,33 @@ func TestAbundanceRefuses(t *testing.T) {
 	bad(func(g *ComparisonDesign) { g.Rows[0] = DesignRow{Samples: []string{"z"}, X: []float64{1, 0}} }, "not in the summary")
 	bad(func(g *ComparisonDesign) { g.Rows[1] = DesignRow{Samples: []string{"a"}, X: []float64{1, 0}} }, "in two rows")
 	bad(func(g *ComparisonDesign) { g.Contrasts = []Contrast{{Name: "x", Vector: []float64{1}}} }, "has 1 values")
+	// Tests of cells, not replicates: a group of one unit, a unit twice in a group, one group.
+	bad(func(g *ComparisonDesign) {
+		g.Rows = append(g.Rows[:3], DesignRow{Unit: "4", Group: "b", Samples: []string{"d", "e", "f"}, X: []float64{1, 1}})
+	}, "b has 1 replicate unit: a group needs at least two")
+	bad(func(g *ComparisonDesign) { g.Rows[4].Unit = "4" }, "the unit 4 is in two rows of b")
+	bad(func(g *ComparisonDesign) {
+		for k := range g.Rows {
+			g.Rows[k].Group = "a"
+		}
+	}, "every row is in one group")
 	if _, err := Abundance(d, design, []string{"mass"}, 0.95); err == nil {
 		t.Error("an unknown family accepted")
+	}
+	// Regions of one section as different units: refused, unless the design says they are
+	// pseudo-samples (a teaching example's).
+	d.Samples[0].Dataset, d.Samples[3].Dataset = "d-1", "d-1"
+	if _, err := Abundance(d, design, []string{FamilyShare}, 0.95); err == nil || !strings.Contains(err.Error(), "A and D are regions of one section given different units (1, 4)") {
+		t.Errorf("regions of one section: %v", err)
+	}
+	design.PseudoSamples = true
+	if _, err := Abundance(d, design, []string{FamilyShare}, 0.95); err != nil {
+		t.Errorf("pseudo-samples: %v", err)
+	}
+	design.PseudoSamples = false
+	d.Samples[3].Dataset = "d-2"
+	if _, err := Abundance(d, design, []string{FamilyShare}, 0.95); err != nil {
+		t.Errorf("two sections: %v", err)
 	}
 	if _, err := Abundance(d, design, []string{FamilyShare}, 1.5); err == nil {
 		t.Error("a level of 1.5 accepted")

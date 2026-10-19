@@ -186,7 +186,7 @@ func TestExpressionCalibration(t *testing.T) {
 }
 
 // spatialCohort is handCohort with each sample's statistics: two enrichment pairs (the second
-// missing from the third sample: its row has none), a distance, a gene's Moran's I; niches' shares.
+// missing from the third sample: its row has none), a distance, a gene's Moran's I.
 func spatialCohort() (*Document, ComparisonDesign) {
 	d, design := handCohort()
 	s := random.New(20261019, 17)
@@ -205,7 +205,6 @@ func spatialCohort() (*Document, ComparisonDesign) {
 			st = append(st, Statistic{"enrichment", "A|A", s.LogNormal(0, 0.2), "spa-1"})
 		}
 		d.Samples[i].Statistics = st
-		d.Samples[i].NicheShares = []float64{0.4 + 0.02*float64(i), 0.6 - 0.02*float64(i)}
 	}
 	return d, design
 }
@@ -215,10 +214,10 @@ func spatialCohort() (*Document, ComparisonDesign) {
 // files written and checked.
 func TestSpatialByHand(t *testing.T) {
 	d, design := spatialCohort()
-	if got := fmt.Sprint(SpatialFamiliesOf(d)); got != "[enrichment nearest niche moran]" {
+	if got := fmt.Sprint(SpatialFamiliesOf(d)); got != "[enrichment nearest moran]" {
 		t.Errorf("families %s", got)
 	}
-	c, err := CompareSpatial(d, design, []string{FamilyEnrichment, FamilyNiche, FamilyMoran}, 0.95)
+	c, err := CompareSpatial(d, design, []string{FamilyEnrichment, FamilyMoran}, 0.95)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -247,9 +246,12 @@ func TestSpatialByHand(t *testing.T) {
 	if *en.DFPrior != 0 || en.DFTotal != 3 {
 		t.Errorf("one statistic tested: prior df %v, total %v", *en.DFPrior, en.DFTotal)
 	}
-	ni := c.Families[1]
-	if ni.Log || fmt.Sprint(ni.Keys) != "[niche 1 niche 2]" || math.Abs(*ni.Values[0][4]-(0.48+0.50)/2) > 1e-15 || ni.Tests[0].Ratio != 0 {
-		t.Errorf("niches: %+v", ni)
+	if mo := c.Families[1]; mo.Family != FamilyMoran || mo.Log || len(mo.Tests) != 1 || !mo.Tests[0].Tested || mo.Tests[0].Ratio != 0 {
+		t.Errorf("Moran's I: %+v", mo)
+	}
+	// A niche's share is compared with the abundances, not here.
+	if _, err := CompareSpatial(d, design, []string{FamilyNiche}, 0.95); err == nil || !strings.Contains(err.Error(), "compared with the abundances") {
+		t.Errorf("niches: %v", err)
 	}
 	dir := t.TempDir()
 	if err := WriteSpatialComparison(dir, c); err != nil {
