@@ -2629,6 +2629,39 @@ export async function viewerSuite({ check, MissingData, verbose }) {
             && refSteps.ok && refSteps.data.reference?.labelColumn === 'cell_type' && refSummary.ok && refShares.length === 8 && Math.max(...refShares) < 0.08
             && nullDA.ok && nullTests.length === 14 && nullTests.every((t) => t.padj >= 0.05),
             'odds and density ratios their pooled counts\', every interval covering the truth; S05\'s endothelial cells the summary\'s; reference labels within 0.08 of the truth; the null cohort\'s 14 tests none below 0.05');
+
+          // Differential expression and spatial statistics between groups (wave 7, slice 7): the null
+          // cohort (open now) finds no gene and no niche's share below an adjusted p of 0.05. The
+          // standard cohort's subjects compared by condition: SIM033 higher in the epithelial-like
+          // cells, its log2 fold's interval covering the one the true cells show, and few other
+          // genes found; the gene's values by unit; the spatial statistics of every family, the
+          // epithelial-like and immune-like cells' neighbor enrichment higher in the treated subjects
+          // (where the simulator mixes immune-like cells into epithelial-like domains), its interval
+          // above 1.
+          const nullDE = await act('compare_expression', {});
+          const nullSpatial = await act('compare_spatial', {});
+          const nullFound = (nullDE.data?.labels ?? []).flatMap((l) => (l.contrasts ?? []).flatMap((c) => c.found));
+          const nullSpatialFound = (nullSpatial.data?.families ?? []).flatMap((f) => f.tests.filter((t) => t.padj < 0.05));
+          await act('open_project', { project: 'A simulated cohort example' });
+          const de = await act('compare_expression', { summary: sd.id });
+          const epi = (de.data?.labels ?? []).find((l) => l.label === 'epithelial-like');
+          const sim033 = epi?.contrasts?.[0]?.found.find((x) => x.gene === 'SIM033');
+          const trueLevel = (cohortTruth.effects ?? []).find((e) => e.kind === 'level' && e.gene === 'SIM033');
+          const trueLog2 = trueLevel ? trueLevel.measured_log_fold / Math.LN2 : NaN;
+          const others = (de.data?.labels ?? []).flatMap((l) => (l.contrasts ?? []).flatMap((c) => c.found.filter((x) => !(l.label === 'epithelial-like' && x.gene === 'SIM033'))));
+          const gene = await act('show_gene', { gene: 'SIM033', label: 'epithelial-like' });
+          const byGroup = (g) => (gene.data?.rows ?? []).filter((r) => r.group === g).map((r) => r.logCPM);
+          const mean = (v) => v.reduce((a, x) => a + x, 0) / Math.max(1, v.length);
+          const sp = await act('compare_spatial', { summary: sd.id });
+          const spf = Object.fromEntries((sp.data?.families ?? []).map((f) => [f.family, f]));
+          const mixed = spf.enrichment?.tests.find((t) => t.key === 'epithelial-like|immune-like');
+          check('viewer', 'differential expression and spatial statistics between groups: the null cohort finds nothing; the standard cohort finds SIM033 higher in the epithelial-like cells, its interval covering the true cells\' fold, few other genes; the gene\'s values by unit; every family of spatial statistics compared, the epithelial-like and immune-like cells\' enrichment higher where the simulator mixes them',
+            `${nullDE.message ?? nullDE.error} | ${nullSpatial.message ?? nullSpatial.error} | ${de.message ?? de.error} | true log2 fold ${trueLog2.toFixed(3)} | ${gene.message ?? gene.error} | ${sp.message ?? sp.error} | enrichment ${JSON.stringify(mixed)}`,
+            nullDE.ok && nullDE.data.labels.length === 4 && nullFound.length === 0 && nullSpatial.ok && nullSpatial.data.families.map((f) => f.family).join() === 'niche' && nullSpatialFound.length === 0
+            && de.ok && de.data.genes === 120 && de.data.labels.every((l) => l.rows?.length === 8 && l.genes > 80) && sim033?.logFC > 0 && sim033.padj < 0.05 && sim033.lo <= trueLog2 && trueLog2 <= sim033.hi && others.length <= 1
+            && gene.ok && gene.data.rows.length === 8 && mean(byGroup('treated')) > mean(byGroup('control'))
+            && sp.ok && Object.keys(spf).sort().join() === 'enrichment,moran,nearest,niche' && spf.enrichment.tests.length === 10 && spf.moran.tests.length === 120 && mixed?.ratio > 1 && mixed.ratioLo > 1,
+            'the null cohort nothing below 0.05; SIM033 found in the epithelial-like cells, its interval covering the truth, at most one other gene; treated above control; four families, the epithelial–immune enrichment above 1');
         }
       }
 

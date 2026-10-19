@@ -13,6 +13,7 @@ import { samplesOf } from '../lib/samples.js';
 import { designsOf } from '../lib/design.js';
 import { summariesOf } from '../lib/cohort.js';
 import { comparisonsOf } from '../lib/abundance.js';
+import { testsOf } from '../lib/expression.js';
 
 // The icon of an item handed to the program, by its kind (local.go, fileKind and dirKind).
 export const KIND_ICONS = {
@@ -80,7 +81,7 @@ const SECTIONS = [
     hideWhenEmpty: true,
   },
   {
-    kind: 'abundance', title: 'Comparisons', icon: 'compare',
+    kind: 'abundance', title: 'Abundance compared', icon: 'compare',
     // The cohort's comparisons of abundance (wave 7), the latest first.
     items: (project) => comparisonsOf(project),
     label: (r) => r.name.replace(/^Abundance compared: /, ''),
@@ -88,6 +89,22 @@ const SECTIONS = [
       const n = r.summaryOf?.found?.length ?? 0;
       return `${r.summaryOf?.tests ?? '?'} tests, ${n} found`;
     },
+    hideWhenEmpty: true,
+  },
+  {
+    kind: 'expression', title: 'Expression compared', icon: 'compare',
+    // The cohort's comparisons of expression (wave 7), the latest first.
+    items: (project) => testsOf(project, 'expression'),
+    label: (r) => r.name.replace(/^Expression compared: /, ''),
+    meta: (r) => `${r.summaryOf?.tests ?? '?'} tests, ${r.summaryOf?.below ?? 0} found`,
+    hideWhenEmpty: true,
+  },
+  {
+    kind: 'spatial-comparison', title: 'Spatial statistics compared', icon: 'compare',
+    // The cohort's comparisons of spatial statistics (wave 7), the latest first.
+    items: (project) => testsOf(project, 'spatial-comparison'),
+    label: (r) => r.name.replace(/^Spatial statistics compared: /, ''),
+    meta: (r) => `${r.summaryOf?.tests ?? '?'} tests, ${r.summaryOf?.found?.length ?? 0} found`,
     hideWhenEmpty: true,
   },
   {
@@ -225,7 +242,7 @@ export function mountSidebar(app) {
             if (section.kind === 'filter') app.setMode('qc');
             if (section.kind === 'clustering') app.setMode('celltypes');
             if (section.kind === 'graph' || section.kind === 'spatial') app.setMode('spatial');
-            if (['sample', 'design', 'cohort-summary', 'abundance'].includes(section.kind)) app.setMode('cohort');
+            if (['sample', 'design', 'cohort-summary', 'abundance', 'expression', 'spatial-comparison'].includes(section.kind)) app.setMode('cohort');
             // An image is shown on its dataset's tissue; one not aligned yet, in the Alignment view.
             if (section.kind === 'image') {
               if (transformInUse(app.store.project, item.id)) {

@@ -11,6 +11,7 @@ import { promotedSegmentation } from '../lib/segmentations.js';
 import { KIND_ICONS, KIND_LABELS } from './sidebar.js';
 import { askRemoveComparison } from './comparisons.js';
 import { describeLabels, markerSetFile, markerSetVersions } from '../lib/labels.js';
+import { signed } from '../lib/expression.js';
 
 export function mountInspector(app) {
   const root = document.getElementById('inspector');
@@ -277,6 +278,34 @@ export function mountInspector(app) {
       r.method?.citation ? h('p.muted', { style: { margin: '8px 0 0', fontSize: '11.5px' } }, r.method.citation) : null);
   }
 
+  // A comparison of expression or of spatial statistics: what it compared and what it found.
+  function testSection(r) {
+    const s = r.summaryOf ?? {};
+    const summary = app.store.project.artifacts.find((a) => a.kind === 'cohort-summary' && a.id === r.summary);
+    const expression = r.kind === 'expression';
+    const q = (v) => (v < 1e-4 ? v.toExponential(1) : v.toFixed(4));
+    const found = expression
+      ? (s.found ?? []).map((f) => `${f.gene} in ${f.label} ${signed(f.logFC)} log2 (adjusted p ${q(f.padj)})`)
+      : (s.found ?? []).map((f) => `${f.key} ${f.ratio ? `${f.ratio.toFixed(2)}×` : signed(f.estimate, 3)} (${f.family}, adjusted p ${q(f.padj)})`);
+    const below = expression ? s.below ?? 0 : found.length;
+    return h('section.inspector-section',
+      h('h3', icon('compare'), expression ? 'Differential expression' : 'Spatial statistics compared'),
+      h('dl.kv',
+        h('dt', 'Contrasts'), h('dd', r.name.replace(/^(Expression|Spatial statistics) compared: /, '')),
+        h('dt', 'Of'), h('dd', summary?.name ?? r.summary ?? '—'),
+        h('dt', 'Design'), h('dd', r.design ? `${r.design.name}, version ${r.design.version}` : 'the draft, unsaved'),
+        h('dt', 'Tests'), h('dd', `${s.tests ?? '?'}${expression && s.untested?.length ? `; ${s.untested.join(', ')} untested` : !expression && s.untested ? `, ${s.untested} untested` : ''}`),
+        h('dt', 'Found'), h('dd', found.length ? `${found.join('; ')}${below > found.length ? `; ${below - found.length} more` : ''}` : 'none below an adjusted p of 0.05'),
+        h('dt', 'Method'), h('dd', `${r.method?.name ?? ''} ${r.method?.version ?? ''}`.trim()),
+        h('dt', 'Artifact'), h('dd.mono', r.id)),
+      h('div.btn-row', { style: { marginTop: '8px' } },
+        h('button.btn.small', { type: 'button', onclick: () => {
+          app.focusItem({ kind: r.kind, id: r.id });
+          app.setMode('cohort');
+        } }, icon('compare'), 'In the Cohort view')),
+      r.method?.citation ? h('p.muted', { style: { margin: '8px 0 0', fontSize: '11.5px' } }, r.method.citation) : null);
+  }
+
   // A spatial analysis: its question, labels, what it is of, and what it found.
   function analysisSection(r) {
     const { project } = app.store;
@@ -436,6 +465,10 @@ export function mountInspector(app) {
     if (focus?.kind === 'abundance') {
       const r = app.store.project.artifacts.find((a) => a.kind === 'abundance' && a.id === focus.id);
       if (r) return abundanceSection(r);
+    }
+    if (focus?.kind === 'expression' || focus?.kind === 'spatial-comparison') {
+      const r = app.store.project.artifacts.find((a) => a.kind === focus.kind && a.id === focus.id);
+      if (r) return testSection(r);
     }
     if (focus?.kind === 'cohort-summary') {
       const r = app.store.project.artifacts.find((a) => a.kind === 'cohort-summary' && a.id === focus.id);

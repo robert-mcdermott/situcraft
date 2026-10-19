@@ -378,6 +378,30 @@ func (a *app) handleJobs() {
 			a.artifacts.Discard(abundanceID(p))
 		}
 	})
+	a.jobs.Handle("expression", func(spec json.RawMessage) (jobs.Func, error) {
+		var p expressionRequest
+		if err := json.Unmarshal(spec, &p); err != nil || p.Summary == "" {
+			return nil, errors.New("the comparison's specification is not readable")
+		}
+		return a.expressionJob(p, expressionID(p)), nil
+	}, func(id string, spec json.RawMessage) {
+		var p expressionRequest
+		if json.Unmarshal(spec, &p) == nil && p.Summary != "" {
+			a.artifacts.Discard(expressionID(p))
+		}
+	})
+	a.jobs.Handle("spatial-tests", func(spec json.RawMessage) (jobs.Func, error) {
+		var p spatialTestsRequest
+		if err := json.Unmarshal(spec, &p); err != nil || p.Summary == "" {
+			return nil, errors.New("the comparison's specification is not readable")
+		}
+		return a.spatialTestsJob(p, spatialTestsID(p)), nil
+	}, func(id string, spec json.RawMessage) {
+		var p spatialTestsRequest
+		if json.Unmarshal(spec, &p) == nil && p.Summary != "" {
+			a.artifacts.Discard(spatialTestsID(p))
+		}
+	})
 	a.jobs.Handle("example", func(spec json.RawMessage) (jobs.Func, error) {
 		var p struct {
 			Example string `json:"example"`

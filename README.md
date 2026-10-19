@@ -116,7 +116,10 @@ run and panel, a group confounded with a batch said, the pseudobulk's principal 
 panels compared so that only genes every sample measured are compared. Each cell type's share and
 density is then compared between groups with the replicate unit, not the cell, as the unit, by
 quasi-likelihood models of the design: effects with intervals, p-values adjusted over the tests,
-and each result traced to its samples' cells.
+and each result traced to its samples' cells. Each cell type's genes are compared by its
+pseudobulk (filtered by expression, normalized by TMM, weighted by voom and tested by the moderated
+t, validated against limma and edgeR), and the samples' spatial statistics (neighbor enrichment,
+nearest distances, niches' shares, Moran's I) by moderated linear models of the design.
 
 ## A look around
 

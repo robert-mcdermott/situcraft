@@ -542,6 +542,23 @@ var remoteActions = []remoteAction{
 		"summary":  textArg("The summary, by ID (the one shown, or the latest, if not given)."),
 		"level":    map[string]any{"type": "number", "minimum": 0.5, "maximum": 0.999, "description": "The intervals' level (0.95 if not given)."},
 	}), long: true},
+	{Name: "compare_expression", Title: "Compare the groups' expression", Description: "Compares each label's genes between the design's groups, in the Cohort view, with the replicate unit (not the cell) as the unit, as an artifact of kind expression made from the summary: each label's pseudobulk (its cells' transcripts summed over each unit's samples) over the genes every panel has, in the units with enough of its cells; genes filtered by expression (a count of 10 over the median library size in the smallest group's number of units, and 15 in all); TMM normalization; voom's precision weights; each gene's weighted model of the design (its pairing and covariates) and limma's moderated t, its variance moderated toward the genes' prior; each contrast's log2 fold change with its interval, and p-values adjusted by Benjamini and Hochberg over every label, gene and contrast tested, the universe said. A label in too few units is left untested, with the reason. The design is the Cohort view's draft unless a saved one is named. Answers each label's genes below an adjusted p of 0.05 (and the 10 lowest p's of each), its units, genes tested and prior.", InputSchema: schema(map[string]any{
+		"design":    textArg("A saved design, by name (its latest version; the Cohort view's draft if not given)."),
+		"summary":   textArg("The summary, by ID (the one shown, or the latest, if not given)."),
+		"level":     map[string]any{"type": "number", "minimum": 0.5, "maximum": 0.999, "description": "The intervals' level (0.95 if not given)."},
+		"min_cells": map[string]any{"type": "integer", "minimum": 1, "maximum": 10000, "description": "The fewest cells of a label a unit is tested with (10 if not given)."},
+	}), long: true},
+	{Name: "show_gene", Title: "Show a gene's expression by group", Description: "Shows a gene's expression in a label, by group, in the Cohort view's differential expression: each unit's log2 counts per million of the label's pseudobulk (its count and library size), with the gene's test of each contrast.", InputSchema: schema(map[string]any{
+		"gene":       textArg("The gene, by name."),
+		"label":      textArg("The label, by name."),
+		"comparison": textArg("The expression comparison, by ID (the latest if not given)."),
+	}, "gene", "label"), long: true},
+	{Name: "compare_spatial", Title: "Compare the groups' spatial statistics", Description: "Compares the samples' spatial statistics between the design's groups, in the Cohort view, with the replicate unit as the unit (its samples' mean), as an artifact of kind spatial-comparison made from the summary: a pair of labels' neighbor enrichment (found over expected) and a label's median distance to the nearest cell of another, as log2 ratios; a niche's share of the cells with a window; a gene's Moran's I. Each statistic in every unit is a linear model of the design (its pairing and covariates); each family's variances are moderated across its statistics (limma's empirical Bayes); each contrast's effect (a ratio, or a difference) with its interval and moderated t, and p-values adjusted by Benjamini and Hochberg over each family's tests, the universe said. A statistic some unit has none of is left untested. The summary's samples need a spatial question answered (summarize_samples) or niches. Answers every test.", InputSchema: schema(map[string]any{
+		"families": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "enrichment, nearest, niche, moran (all the summary has if not given)."},
+		"design":   textArg("A saved design, by name (its latest version; the Cohort view's draft if not given)."),
+		"summary":  textArg("The summary, by ID (the one shown, or the latest, if not given)."),
+		"level":    map[string]any{"type": "number", "minimum": 0.5, "maximum": 0.999, "description": "The intervals' level (0.95 if not given)."},
+	}), long: true},
 	{Name: "show_sample_cells", Title: "Show a sample's cells of a label", Description: "Shows a sample's cells of a label on its tissue, in the Viewer: of its cells chosen (its section's, or its region's; never those a review excluded), those whose label in the summary's label set is the one named. Answers the cells shown.", InputSchema: schema(map[string]any{
 		"sample":  textArg("The sample, by name or ID."),
 		"label":   textArg("The label, by name."),

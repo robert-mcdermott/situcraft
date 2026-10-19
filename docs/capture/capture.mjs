@@ -704,6 +704,37 @@ const scenes = {
     await scrollTo('.cohort-abundance');
     await clearToasts();
   },
+  // Differential expression (wave 7, slice 7): the simulated cohort's subjects compared by
+  // condition, the epithelial-like cells' genes, their volcano, and SIM033's subjects by group.
+  async expression() {
+    await act('open_example', { example: 'cohort' });
+    await act('design', { unit: 'subject', group: 'condition', reference: 'control' });
+    await act('cohort_steps', { questions: [] });
+    await act('summarize_samples', { niches: 0 });
+    await act('compare_expression', {});
+    await act('show_gene', { gene: 'SIM033', label: 'epithelial-like' });
+    await waitFor(`Boolean(document.querySelector('.cohort-expression .cohort-volcano')) && Boolean(document.querySelector('.cohort-expression .cohort-pick .cohort-dots'))`);
+    await js(`document.getElementById('app').classList.add('inspector-closed')`);
+    await sleep(600);
+    await scrollTo('.cohort-expression .cohort-results');
+    await clearToasts();
+  },
+  // Spatial statistics between groups (wave 7, slice 7): the simulated cohort's neighbor enrichment
+  // compared by condition, the epithelial-like and immune-like cells' result chosen and plotted.
+  async 'spatial-tests'() {
+    await act('open_example', { example: 'cohort' });
+    await act('design', { unit: 'subject', group: 'condition', reference: 'control' });
+    await act('cohort_steps', { questions: ['enrichment'] });
+    await act('summarize_samples', { niches: 0 });
+    await act('compare_spatial', {});
+    await waitFor(`Boolean(document.querySelector('.cohort-spatial-tests tr[data-test^="epithelial-like|immune-like"]'))`);
+    await js(`document.querySelector('.cohort-spatial-tests tr[data-test^="epithelial-like|immune-like"]').click()`);
+    await waitFor(`Boolean(document.querySelector('.cohort-spatial-tests .cohort-dots'))`);
+    await js(`document.getElementById('app').classList.add('inspector-closed')`);
+    await sleep(600);
+    await scrollTo('.cohort-spatial-tests .cohort-results');
+    await clearToasts();
+  },
   // The Jobs view after both examples were opened: each job's state and times, one's log open.
   async jobs() {
     await act('open_example', { example: 'lung' });

@@ -2676,8 +2676,9 @@ H&E placed by its automatic version, labels imported with a confidence each):
   Commun* 11:6077), motivated by the pseudoreplication problem (Squair et al. 2021, *Nat Commun*
   12:5692).
 - **Multiple testing:** Benjamini–Hochberg (1995, *J R Stat Soc B* 57:289–300).
-- **Moderated statistics:** where used, from MaveScape's `limma.js` (Smyth 2004, *Stat Appl Genet
-  Mol Biol* 3:3).
+- **Moderated statistics:** Smyth 2004 (*Stat Appl Genet Mol Biol* 3:3), with TMM normalization
+  (Robinson and Oshlack 2010, *Genome Biol* 11:R25) and voom's weights (Law et al. 2014, *Genome
+  Biol* 15:R29) for pseudobulk counts (§6.13).
 
 ### 6.1 Cell graphs (verified, wave 6, slice 1)
 
@@ -3172,6 +3173,68 @@ binomial densities (dispersion 20, areas varying threefold), the tests reject 5.
 1% at 1%: slightly liberal, as quasi-likelihood's t approximation is with few units. On the
 simulated cohort, the estimates are the pooled ratios of the labeled counts (exactly, for a design
 of the groups alone) and every interval covers the ratio the true cells show.
+
+### 6.13 Differential expression and spatial statistics (verified, wave 7, slice 7)
+
+**Pseudobulk.** A label's expression in a replicate unit is its cells' transcripts of each gene
+summed over the unit's samples (Crowell et al. 2020), compared across units as bulk RNA-seq compares
+samples; tests of cells as replicates find differences between sections that are chance (Squair et
+al. 2021). Only genes every panel has are compared (§6.11), and a unit with fewer than 10 of a
+label's cells is left out of that label's comparison, its pseudobulk too small to stand for the
+label. The steps are those the field's pseudobulk analyses use, each from its publication:
+
+- **Filtering by expression** (Chen, Lun and Smyth 2016, *F1000Research* 5:1438): a gene is kept
+  with a count per million of at least 10 over the median library size in as many units as the
+  smallest group has (for a design, 1 over its largest leverage; above 10, 10 plus 70% of the rest)
+  and a total count of 15. A gene too rare to be tested would add only noise and multiplicity.
+- **TMM** (Robinson and Oshlack 2010): each library's factor its weighted mean log-ratio against a
+  reference library (the one whose upper quartile of counts per million is nearest the mean), the
+  log-ratios trimmed 30% at each end and the mean log-expressions 5%, weighted by the inverse of
+  their binomial variances (by the delta method); genes absent in either library left out; the
+  factors scaled to multiply to 1. M is the log of the ratio of proportions as the paper defines it:
+  genes whose counts are in the same ratio then tie exactly, and the trimming's ranks see the ties
+  (a difference of logs splits some, and on a table with many small counts moves the factors by
+  0.1%).
+- **voom** (Law et al. 2014): log2((count + 0.5) / (library + 1) × 10⁶) with the library its
+  effective size (count total × factor); each gene's least squares fit of the design; a lowess
+  trend (Cleveland 1979: three robustness iterations, points within 1% of the range interpolated)
+  of the square root of its residual deviation against its mean log count, with the span 0.3 + 0.7
+  (50 / genes)^⅓ (1 for 50 genes or fewer), as limma now chooses it; each value weighted by the
+  inverse of the trend's variance at its fitted log count.
+- **The moderated t** (Smyth 2004): each gene's weighted least squares; its residual variance
+  combined with a scaled inverse χ² prior fitted to all the genes' by the moments of their logs
+  (the prior's degrees of freedom by inverting the trigamma function with Newton's method, as the
+  paper's appendix gives it; infinite, every gene the variances' mean, when the log variances vary
+  no more than chance); t on the residual and the prior's degrees of freedom together. A contrast's
+  standard error is each gene's own, from its weighted design: exact where weights differ by gene
+  (limma's `contrasts.fit` approximates it for designs that are not orthogonal, so the reference
+  compares each contrast as a coefficient of the design reparametrized).
+
+Each contrast's log2 fold change has its interval (the moderated t's quantile), and the p-values of
+every label, gene and contrast tested are adjusted together by Benjamini and Hochberg.
+
+**Spatial statistics between groups.** A sample's neighbor enrichments, nearest distances, niches'
+shares and Moran's I (§6.2–§6.6, §6.10) are numbers of the sample, so they are compared as the
+units' values: ratios on the log2 scale (an enrichment of found over expected, a median distance),
+shares and Moran's I as they are; a unit's value the mean of its samples'. Each statistic is an
+ordinary least squares model of the design, and a family's statistics (its pairs, distances,
+niches or genes) share a moderated variance as genes do (Smyth 2004), which steadies the many tests
+of few units; a family of one statistic is tested by its own variance alone. P-values are adjusted
+within each family.
+
+**Checked.** Against limma 3.68.5 and edgeR 4.10.5 (R 4.6.1), run apart from SituCraft as a
+reference on nine pseudobulk tables: the genes kept the same, and the TMM factors, voom's span and
+weights, each gene's residual deviation, the prior and every log fold change, interval, t and p
+within 10⁻⁹. On ten cases of spatial statistics, limma's `lmFit` and `eBayes` within 10⁻¹³, and
+each statistic's unmoderated fit against statsmodels 0.15.0's OLS within 10⁻¹³. Lowess on six
+curves (ties, spans from 0.1 to 1, skipping by delta, no robustness) within 10⁻¹⁰ of R's. On 40
+null tables of 200 negative binomial genes (four rows against four), the tests reject 5.1% at 5%
+and 1.2% at 1%. On the standard simulated cohort, the gene the simulator raises 2.5-fold in one
+type (SIM033 in the epithelial-like cells; 0.97 log2 in the true cells, each subject's own level
+varying) is found at +0.94 (0.59 to 1.30), and no other gene; the enrichment of the epithelial-like
+and immune-like cells, which the simulator mixes in the treated subjects, is 1.35 times as high
+(1.07 to 1.70), the family's strongest change, though not below an adjusted p of 0.05 over the ten
+pairs with four subjects a group; a null cohort finds nothing.
 
 ## 7. Datasets
 

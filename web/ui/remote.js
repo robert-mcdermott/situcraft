@@ -33,6 +33,8 @@ import { ratioText } from './spatial-results.js';
 import { showAnalysisCells } from './spatial-cells.js';
 import { addDesign, designsOf, makeDesign } from '../lib/design.js';
 import { FAMILIES, summariesOf } from '../lib/cohort.js';
+import { spatialEffectWords, testsOf } from '../lib/expression.js';
+import { expressionDocument as expressionDocumentOf } from './cohort-expression.js';
 import { BUNDLE_FIELDS, addSampleField, fieldValue, readSamplesTable, removeSampleField, renameSample, sampleFields, samplesCSV, samplesOf, setFieldKind, setRegionSamples, setSampleField } from '../lib/samples.js';
 
 export class ActionError extends Error {}
@@ -229,6 +231,13 @@ export function installRemote(app) {
   async function settleMode(mode) {
     if (store.ui.mode !== mode) await app.setMode(mode);
     await frames();
+  }
+
+  // A saved design's specification, by name (its latest version).
+  function savedDesign(name) {
+    const saved = designsOf(project()).filter((d) => d.name === String(name));
+    if (!saved.length) throw new ActionError(`No saved design ${name}; the project's are ${[...new Set(designsOf(project()).map((d) => d.name))].join(', ') || 'none'}.`);
+    return saved[0].spec;
   }
 
   // Waits for a bundle's derived data to be built (the job the page started when it was added).
@@ -2426,11 +2435,7 @@ export function installRemote(app) {
       const options = { families };
       if (args.summary !== undefined) options.summary = String(args.summary);
       if (args.level !== undefined) options.level = finite(args.level, 'level');
-      if (args.design !== undefined) {
-        const saved = designsOf(project()).filter((d) => d.name === String(args.design));
-        if (!saved.length) throw new ActionError(`No saved design ${args.design}; the project's are ${[...new Set(designsOf(project()).map((d) => d.name))].join(', ') || 'none'}.`);
-        options.spec = saved[0].spec;
-      }
+      if (args.design !== undefined) options.spec = savedDesign(args.design);
       await settleMode('cohort');
       let manifest;
       try {
@@ -2447,6 +2452,94 @@ export function installRemote(app) {
       await frames();
       return {
         message: `${manifest.name} (${manifest.id}), of ${c.summary.name}: ${fams.map((f) => `${f.name.toLowerCase()}, ${f.universe}`).join('; ')}. ${found.length ? `Below an adjusted p of 0.05: ${found.join('; ')}.` : 'None below an adjusted p of 0.05.'}`,
+        data: { id: manifest.id, summary: c.summary, level: c.level, design: { names: c.design.names, rows: c.design.rows.map((r) => ({ unit: r.unit, group: r.group, samples: r.samples })), contrasts: c.design.contrasts }, families: fams },
+      };
+    },
+
+    async compare_expression(args) {
+      const options = {};
+      if (args.summary !== undefined) options.summary = String(args.summary);
+      if (args.level !== undefined) options.level = finite(args.level, 'level');
+      if (args.min_cells !== undefined) options.minCells = Math.round(finite(args.min_cells, 'min_cells'));
+      if (args.design !== undefined) options.spec = savedDesign(args.design);
+      await settleMode('cohort');
+      let manifest;
+      try {
+        manifest = await app.cohortView.expression(options);
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      const e = await app.cohortView.expressionResult(manifest.id);
+      const q = (v) => (v < 1e-4 ? v.toExponential(1) : v.toFixed(4));
+      const labels = e.results.map((r) => {
+        if (!r.tested) return { label: r.label, untested: r.note, cells: r.cells };
+        return {
+          label: r.label, cells: r.cells, rows: r.rows, genes: r.genes.length, filtered: r.filtered, span: r.span, s2Prior: r.s2Prior, dfPrior: r.dfPrior, dfTotal: r.dfTotal,
+          contrasts: r.contrasts.map((c) => {
+            const rows = r.genes.map((g, i) => ({ gene: e.genes[g], aveLogCPM: r.aveLogCPM[i], logFC: c.logFC[i], lo: c.lo[i], hi: c.hi[i], t: c.t[i], p: c.p[i], padj: c.padj[i] })).sort((a, b) => a.p - b.p);
+            return { contrast: c.contrast, up: c.up, down: c.down, found: rows.filter((x) => x.padj < 0.05), lowest: rows.slice(0, 10) };
+          }),
+        };
+      });
+      const found = labels.flatMap((l) => (l.contrasts ?? []).flatMap((c) => c.found.map((x) => `${x.gene} in ${l.label} ${x.logFC > 0 ? '+' : '−'}${Math.abs(x.logFC).toFixed(2)} log2 (adjusted p ${q(x.padj)})`)));
+      const untested = labels.filter((l) => l.untested);
+      await frames();
+      return {
+        message: `${manifest.name} (${manifest.id}), of ${e.summary.name}: ${e.universe}. ${found.length ? `Below an adjusted p of 0.05: ${found.slice(0, 12).join('; ')}${found.length > 12 ? `; and ${found.length - 12} more` : ''}.` : 'None below an adjusted p of 0.05.'}${untested.length ? ` Untested: ${untested.map((l) => `${l.label} (${l.untested})`).join('; ')}.` : ''}`,
+        data: { id: manifest.id, summary: e.summary, level: e.level, minCells: e.minCells, genes: e.genes.length, tests: e.tests, universe: e.universe, design: { names: e.design.names, rows: e.design.rows.map((r) => ({ unit: r.unit, group: r.group, samples: r.samples })), contrasts: e.design.contrasts }, labels },
+      };
+    },
+
+    async show_gene(args) {
+      const list = testsOf(project(), 'expression');
+      if (!list.length) throw new ActionError('The project has no expression comparison yet: compare_expression makes one.');
+      const record = args.comparison === undefined ? list[0] : list.find((r) => r.id === String(args.comparison));
+      if (!record) throw new ActionError(`No expression comparison ${args.comparison}.`);
+      await settleMode('cohort');
+      const e = await expressionDocumentOf(record.id);
+      const label = choose(String(args.label ?? ''), e.results.map((r) => r.label), 'label');
+      const r = e.results.find((x) => x.label === label);
+      if (!r.tested) throw new ActionError(`${label} is untested: ${r.note}.`);
+      const gene = choose(String(args.gene ?? ''), r.genes.map((g) => e.genes[g]), 'tested gene');
+      await app.cohortView.expressionResult(record.id, { label, gene });
+      let values;
+      try {
+        values = await app.cohortView.geneValues(record.id, label, gene);
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      const i = r.genes.findIndex((g) => e.genes[g] === gene);
+      const tests = r.contrasts.map((c) => ({ contrast: c.contrast, logFC: c.logFC[i], lo: c.lo[i], hi: c.hi[i], t: c.t[i], p: c.p[i], padj: c.padj[i] }));
+      await frames();
+      return {
+        message: `${gene} in ${label}: ${tests.map((t) => `${t.contrast} ${t.logFC > 0 ? '+' : '−'}${Math.abs(t.logFC).toFixed(2)} log2 (${t.lo.toFixed(2)} to ${t.hi.toFixed(2)}), adjusted p ${t.padj < 1e-4 ? t.padj.toExponential(1) : t.padj.toFixed(4)}`).join('; ')}; ${values.rows.length} units shown by group.`,
+        data: { comparison: record.id, label, gene, aveLogCPM: r.aveLogCPM[i], tests, rows: values.rows },
+      };
+    },
+
+    async compare_spatial(args) {
+      // Every family the summary has unless named (not the page's choice).
+      const options = { families: [] };
+      if (args.families !== undefined) options.families = (Array.isArray(args.families) ? args.families : [args.families]).map((f) => choose(String(f), ['enrichment', 'nearest', 'niche', 'moran'], 'family'));
+      if (args.summary !== undefined) options.summary = String(args.summary);
+      if (args.level !== undefined) options.level = finite(args.level, 'level');
+      if (args.design !== undefined) options.spec = savedDesign(args.design);
+      await settleMode('cohort');
+      let manifest;
+      try {
+        manifest = await app.cohortView.spatial(options);
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      const c = await app.cohortView.spatialResult(manifest.id);
+      const fams = c.families.map((f) => ({
+        family: f.family, name: f.name, effect: f.effect, log: f.log, universe: f.universe, s2Prior: f.s2Prior, dfPrior: f.dfPrior, dfTotal: f.dfTotal, keys: f.keys,
+        tests: f.tests.map((t) => (t.tested ? { key: t.key, contrast: t.contrast, estimate: t.estimate, lo: t.lo, hi: t.hi, ...(f.log ? { ratio: t.ratio, ratioLo: t.ratioLo, ratioHi: t.ratioHi } : {}), t: t.t, p: t.p, padj: t.padj } : { key: t.key, contrast: t.contrast, untested: t.note })),
+      }));
+      const found = c.families.flatMap((f) => f.tests.filter((t) => t.tested && t.padj < 0.05).map((t) => `${t.key} ${spatialEffectWords(f, t)} (${f.family}, adjusted p ${t.padj < 1e-4 ? t.padj.toExponential(1) : t.padj.toFixed(4)})`));
+      await frames();
+      return {
+        message: `${manifest.name} (${manifest.id}), of ${c.summary.name}: ${fams.map((f) => `${f.name}: ${f.universe}`).join('; ')}. ${found.length ? `Below an adjusted p of 0.05: ${found.join('; ')}.` : 'None below an adjusted p of 0.05.'}`,
         data: { id: manifest.id, summary: c.summary, level: c.level, design: { names: c.design.names, rows: c.design.rows.map((r) => ({ unit: r.unit, group: r.group, samples: r.samples })), contrasts: c.design.contrasts }, families: fams },
       };
     },

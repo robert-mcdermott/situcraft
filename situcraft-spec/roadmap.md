@@ -3153,7 +3153,7 @@ makes, which SituCraft refuses.
      (`internal/stats` Student's t, against R). Effect sizes as ratios (odds, densities) with
      intervals, raw and Benjamini–Hochberg-adjusted p-values over each family's tests, the universe
      stated; what cannot be tested (no cells; a group with none) said. An artifact of kind
-     `abundance` (`abundance.json`, `results.csv`); the project tree's **Comparisons**.
+     `abundance` (`abundance.json`, `results.csv`); the project tree's **Abundance compared**.
    - **A result's units as points by group** (`ui/cohort-abundance.js`); a point opens its sample's
      cells of that label on its tissue (the summary's label set, its cells chosen).
    - **The same steps on every sample also label from a reference** (a label set's source: its
@@ -3189,16 +3189,63 @@ makes, which SituCraft refuses.
        interval says so; slice 8 states power at the known effects.
      - **A reference's labels are less exact than the starter markers here** (shares within 0.053
        against 0.015): its profiles leave out each sample's own levels.
-7. **Differential expression and spatial statistics (H3).**
-   - **Pseudobulk expression:** each label's counts by sample, filtered for expression, normalized
-     (TMM; Robinson and Oshlack 2010), voom's weights and limma's moderated t (Law et al. 2014;
-     Smyth 2004), with the design's pairing and covariates; log fold changes with intervals,
-     adjusted over the genes and labels tested; only genes on every panel.
-   - **Spatial statistics between groups:** each sample's value (an enrichment's log ratio, a
-     nearest distance, a niche's share, a gene's Moran's I) in a linear model of the design,
-     moderated across the statistics compared.
-   - Validation: against limma in R, run apart, and statsmodels' OLS; on simulated cohorts, the
-     known changes in expression and arrangement found.
+7. **Differential expression and spatial statistics (H3): done.**
+   - **Pseudobulk expression** (`internal/cohort` `CompareExpression`, `limma.go`;
+     `api_expression.go`, `POST /api/cohort/expression`): each label's counts summed over each
+     design row's samples, over the genes every panel has, in the rows with at least 10 of its cells
+     (`minCells`); genes filtered by expression (Chen, Lun and Smyth 2016: a count per million of 10
+     over the median library size in the smallest group's number of rows, 1 over the largest
+     leverage, and 15 in all); TMM factors (Robinson and Oshlack 2010); voom's log counts per million
+     and weights from a lowess trend (Cleveland 1979; R's defaults, its span chosen by the genes'
+     number) (Law et al. 2014); each gene's weighted least squares and the moderated t, the prior by
+     the moments of the log variances and the trigamma function inverted by Newton's method
+     (Smyth 2004); each contrast's log2 fold change with its interval (its own covariance under its
+     weights), Benjamini–Hochberg over every label, gene and contrast tested, the universe stated. A
+     label in too few rows, or whose rows leave the design unfittable, untested with why. An
+     artifact of kind `expression` (`expression.json`, `results.csv`); a gene's values by row
+     (`GET /api/cohort/expression/values`), read from the summary's pseudobulk.
+   - **Spatial statistics between groups** (`CompareSpatial`, `POST /api/cohort/spatial-tests`):
+     each sample's neighbor enrichments and nearest distances (log2), niches' shares and Moran's I,
+     a row's value its samples' mean, a statistic some row lacks untested; ordinary least squares of
+     the design, each family's variances moderated across its statistics (one statistic: its own),
+     Benjamini–Hochberg over each family. An artifact of kind `spatial-comparison`
+     (`spatial-tests.json`, `results.csv`).
+   - **In the page** (`ui/cohort-expression.js`): each label's genes by p or fold, found by name, a
+     volcano, a gene's rows by group; each family's statistics, a statistic's rows by group. The
+     project tree's **Expression compared** and **Spatial statistics compared**. Remote control:
+     `compare_expression`, `show_gene`, `compare_spatial`; both jobs resumed after a restart.
+   - Validation:
+     - **Against limma and edgeR in R** (`validation/reference/limma/`: `compare.sh` runs limma
+       3.68.5 and edgeR 4.10.5 apart, as a reference, on nine pseudobulk tables, the simulated
+       cohort's four labels by condition and one by condition and slide, four subjects paired, three
+       groups with a contrast between two, libraries tenfold apart with a few genes making up much
+       of some, 40 genes; each contrast compared as a coefficient of the design reparametrized; and
+       on ten cases of spatial statistics; compared on every commit): the genes kept the same; the
+       TMM factors, span, weights (stored to 10 digits), residual deviations, prior and every log
+       fold change, interval, t and p within 10⁻⁹ (5·10⁻¹⁰ found); the spatial cases within 10⁻¹³;
+       lowess on six curves within 10⁻¹⁰ of R's; digamma, trigamma and their inverse against R's.
+     - **Against statsmodels:** each spatial statistic's ordinary least squares (coefficients,
+       residual deviation, each contrast's estimate, interval, t and p) within 10⁻¹³.
+     - **Calibration** (`TestExpressionCalibration`): 40 null tables of 200 negative binomial
+       genes, four rows against four: rejections 5.1% at 5% and 1.2% at 1%.
+     - **In the page** (viewer suite): the standard cohort's SIM033 found higher in the
+       epithelial-like cells (+0.94 log2, 0.59 to 1.30, adjusted p 0.005) and no other gene; its
+       interval covering the true cells' fold (0.97 log2); the gene's rows by group; every spatial
+       family compared, the epithelial-like and immune-like enrichment 1.35 times as high in the
+       treated subjects (1.07 to 1.70); the null cohort finding no gene and no niche's share.
+   - Found by slice 7:
+     - **TMM's ranks see floating-point ties:** genes whose counts are in the same ratio tie only
+       if their log-ratios are computed as the log of the ratio of proportions, as the method
+       defines M; a difference of logs splits some ties and moves the trimmed set (factors 0.1% off
+       on the composition table).
+     - **With no variance to learn, the prior is the variances' mean:** when the genes' log
+       variances vary no more than chance, every gene takes the mean of the variances; a family of
+       one statistic has no prior (its own variance, 0 degrees of freedom).
+     - **The spatial change is real but not significant with four subjects a group:** the
+       epithelial–immune enrichment is the family's strongest change, its interval above 1, but
+       adjusted over the ten pairs it is 0.084. Slice 8 states power at the known effects.
+     - **The pseudobulk fold is below the asked one:** SIM033's 2.5-fold (1.32 log2) reads as 0.97
+       in the true cells (each subject's own level folds) and 0.94 in the pseudobulk.
 8. **Error rates, pseudoreplication and scale.**
    - **Error rates:** thousands of simulated null cohorts (weekly), each test's false-positive rate
      within binomial error of its level, the false discovery rate controlled; power at the known

@@ -146,13 +146,40 @@ project, each a sample, compared with the sample or the subject, not the cell, a
     reference as well as from a marker set. `situcraft simulate --cohort … --reference N` writes a
     reference of a cohort's types over its panel, and the start page's simulated cohort has one.
   - **Remote control:** `compare_abundance`, `show_sample_cells`; `cohort_steps` and
-    `summarize_samples` take a `reference`. The project tree lists **Comparisons**.
+    `summarize_samples` take a `reference`. The project tree lists **Abundance compared**.
   - **Validated:** 19 models against statsmodels 0.15.0's (and R's), every coefficient, standard
     error, dispersion, t, p and interval to 10⁻⁸ (`validation/reference/abundance/`); on 4,000
     overdispersed null tables, rejections at their levels (5.6% at 5%, 1.1% at 1%); in the page, the
     simulated cohort's effects the pooled ratios of its counts with every interval covering the true
     cells' ratio, a sample's cells of a label shown as the summary counts them, and a null cohort
     labeled from its own reference (shares within 0.08 of its true types') finding nothing.
+- **Differential expression and spatial statistics (wave 7, slice 7).** Each cell type's genes,
+  and the samples' spatial statistics, compared between groups of samples with the replicate unit
+  (not the cell) as the unit, in the Cohort view.
+  - **Pseudobulk expression:** each label's cells' transcripts summed in each unit, over the genes
+    every panel has, in the units with at least 10 of its cells (the number can be changed); genes
+    filtered by expression, libraries normalized by TMM, voom's precision weights, and each gene's
+    model of the design (its pairing and covariates) tested by limma's moderated t. Each log2 fold
+    change has its interval; p-values are adjusted by Benjamini and Hochberg over every label, gene
+    and contrast tested, the universe stated. A label in too few units is untested, with why.
+  - **The results:** each label's genes by p-value or by the size of their change, found by name; a
+    volcano; a gene's units by group, read from the cohort table's pseudobulk. Kept as an artifact
+    of kind `expression`; written as CSV.
+  - **Spatial statistics between groups:** each sample's neighbor enrichments and nearest distances
+    (as log2 ratios), niches' shares and Moran's I, a unit's value its samples' mean, each in a
+    linear model of the design, their variances moderated across each family; each effect with its
+    interval and the p-values adjusted over each family's tests. Kept as an artifact of kind
+    `spatial-comparison`; written as CSV.
+  - **Remote control:** `compare_expression`, `show_gene`, `compare_spatial`. The project tree lists
+    **Expression compared** and **Spatial statistics compared**.
+  - **Validated:** against limma 3.68.5 and edgeR 4.10.5 in R on nine pseudobulk tables (the genes
+    kept, the TMM factors, voom's weights, the prior, and every log fold change, interval, t and p
+    within 10⁻⁹) and on ten cases of spatial statistics (within 10⁻¹³), and each statistic's fit
+    against statsmodels 0.15.0's OLS (`validation/reference/limma/`); lowess against R's within
+    10⁻¹⁰; on null tables, rejections at their levels (5.1% at 5%, 1.2% at 1%); in the page, the
+    simulated cohort's raised gene found in its cell type with its interval covering the true
+    cells' fold and no other gene, the enrichment of the cell types it mixes higher in the treated
+    subjects, and a null cohort finding nothing.
 - **Open by browsing.** **Open a bundle** shows this computer's folders instead of asking for a
   path.
   - **Places** to start from (the home folder, its Desktop, Documents and Downloads, SituCraft's

@@ -14,22 +14,25 @@ export const ABUNDANCE_FAMILIES = [
 // leaves out with their reasons; the families and the intervals' level. A design that cannot be
 // used is refused, saying why.
 export function abundanceRequest(design, summaryId, { families = ['share', 'density'], level = 0.95, name = '', version = 0 } = {}) {
-  if (!design.ok) throw new Error(`The design cannot be used: ${design.problems.join(' ')}`);
+  const d = requestDesign(design, { name, version });
   if (!summaryId) throw new Error('Summarize the samples first.');
+  return { summary: summaryId, design: d, families, level };
+}
+
+// A design as a comparison's request has it (internal/cohort ComparisonDesign): its name and
+// version when saved, its columns, rows, contrasts and the samples it leaves out. A design that
+// cannot be used is refused, saying why.
+export function requestDesign(design, { name = '', version = 0 } = {}) {
+  if (!design.ok) throw new Error(`The design cannot be used: ${design.problems.join(' ')}`);
   const rows = design.rows.map((r, k) => ({ unit: String(r.unit), group: String(r.group), samples: [...r.samples], x: design.matrix[k] }));
   return {
-    summary: summaryId,
-    design: {
-      ...(name ? { name } : {}),
-      ...(version ? { version } : {}),
-      spec: design.spec,
-      names: design.names,
-      rows,
-      contrasts: design.contrasts.map((c) => ({ name: c.name, vector: c.vector })),
-      ...(design.excluded?.length ? { excluded: design.excluded.map((e) => ({ sample: e.id, name: e.name, reason: e.reason })) } : {}),
-    },
-    families,
-    level,
+    ...(name ? { name } : {}),
+    ...(version ? { version } : {}),
+    spec: design.spec,
+    names: design.names,
+    rows,
+    contrasts: design.contrasts.map((c) => ({ name: c.name, vector: c.vector })),
+    ...(design.excluded?.length ? { excluded: design.excluded.map((e) => ({ sample: e.id, name: e.name, reason: e.reason })) } : {}),
   };
 }
 

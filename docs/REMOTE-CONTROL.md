@@ -245,6 +245,17 @@ Each label's cells compared between the design's groups, with the replicate unit
 | `compare_abundance` | `families` (`share`, `density`, `niche`; `share` and `density` if not given), `design` (a saved design by name; the Cohort view's draft if not given), `summary` (an ID; the one shown or the latest if not given), `level` (0.95 if not given) | Compares the summary's samples as an artifact of kind `abundance`: each label's share of the labeled cells by a quasi-binomial model of the design, its density per mm² by a quasi-Poisson model with the tissue's area as offset, the niches' shares as shares; each contrast's effect (odds or density ratio) with its interval, t test, dispersion and Benjamini–Hochberg-adjusted p over each family's tests. Answers every test, and those untested with why |
 | `show_sample_cells` | `sample` (name or ID), `label`, `summary` (the latest if not given) | Shows a sample's cells of a label on its tissue in the Viewer: of its cells chosen, those the summary's label set gives the label. Answers the cells shown |
 
+### Differential expression and spatial statistics
+
+Each label's genes, and the samples' spatial statistics, compared between the design's groups, with
+the replicate unit as the unit.
+
+| Action | Arguments | What it does |
+| --- | --- | --- |
+| `compare_expression` | `design` (a saved design by name; the Cohort view's draft if not given), `summary` (an ID; the one shown or the latest if not given), `level` (0.95 if not given), `min_cells` (the fewest cells of a label a unit is tested with; 10 if not given) | Compares each label's pseudobulk (its cells' transcripts summed over each unit's samples, over the genes every panel has) as an artifact of kind `expression`: genes filtered by expression, TMM normalization, voom's weights, each gene's weighted model of the design and limma's moderated t; each contrast's log2 fold change with its interval, and p-values adjusted by Benjamini and Hochberg over every label, gene and contrast tested. Answers each label's units, genes tested and prior, the genes below an adjusted p of 0.05 and the 10 lowest p-values of each, and the labels untested with why |
+| `show_gene` | `gene`, `label` (by name), `comparison` (an expression comparison's ID; the latest if not given) | Shows a gene's values in a label by group in the Cohort view: each unit's log2 counts per million of the label's pseudobulk, its count and library size, with the gene's test of each contrast |
+| `compare_spatial` | `families` (`enrichment`, `nearest`, `niche`, `moran`; every family the summary has if not given), `design`, `summary`, `level` (as `compare_expression`'s) | Compares the samples' spatial statistics as an artifact of kind `spatial-comparison`: neighbor enrichments and nearest distances as log2 ratios, niches' shares, Moran's I; each statistic a linear model of the design, each family's variances moderated across its statistics; each contrast's effect (a ratio, or a difference) with its interval and moderated t, and p-values adjusted over each family's tests. Answers every test, and those untested with why |
+
 ### Quality control
 
 | Action | Arguments | What it does |

@@ -500,6 +500,26 @@
   "violations": []
  },
  {
+  "scene": "expression",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "expression",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "spatial-tests",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "spatial-tests",
+  "theme": "light",
+  "violations": []
+ },
+ {
   "scene": "jobs",
   "theme": "dark",
   "violations": []

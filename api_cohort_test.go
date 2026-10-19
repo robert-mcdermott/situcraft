@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -237,12 +239,10 @@ func TestCohortSummary(t *testing.T) {
 	}
 }
 
-// A comparison of four region samples of the small simulated tissue (two on each side): the job
-// records an artifact of kind abundance made from the summary, its tests those internal/cohort
-// makes of the summary's own numbers; asked again, answered at once; what cannot be compared
-// refused.
-func TestAbundanceAPI(t *testing.T) {
-	f := newRefineFixture(t, true)
+// fourRegions summarizes four region samples of the small simulated tissue (two on each side; with
+// niches when asked) and answers the summary's id and a design comparing the sides.
+func fourRegions(t *testing.T, f *refineFixture, niches string) (string, string) {
+	t.Helper()
 	all, _ := f.a.artifacts.List()
 	var seg artifacts.Manifest
 	for _, m := range all {
@@ -288,7 +288,7 @@ func TestAbundanceAPI(t *testing.T) {
 		ID  string
 		Job *struct{ ID string }
 	}
-	rec := f.post("/api/cohort/summary", fmt.Sprintf(`{"labels":{"name":"By turns","level":0,"names":["A","B"]},"samples":[%s]}`, strings.Join(samples, ",")))
+	rec := f.post("/api/cohort/summary", fmt.Sprintf(`{"labels":{"name":"By turns","level":0,"names":["A","B"]},%s"samples":[%s]}`, niches, strings.Join(samples, ",")))
 	if err := json.Unmarshal(rec.Body.Bytes(), &answer); err != nil || answer.ID == "" {
 		t.Fatalf("the summary: %d %s", rec.Code, rec.Body.String())
 	}
@@ -296,13 +296,24 @@ func TestAbundanceAPI(t *testing.T) {
 		f.wait(answer.Job.ID)
 	}
 	design := `{"names":["Intercept","side[T.right]"],"rows":[{"unit":"1","group":"left","samples":["s-1"],"x":[1,0]},{"unit":"2","group":"left","samples":["s-2"],"x":[1,0]},{"unit":"3","group":"right","samples":["s-3"],"x":[1,1]},{"unit":"4","group":"right","samples":["s-4"],"x":[1,1]}],"contrasts":[{"name":"right − left","vector":[0,1]}]}`
+	return answer.ID, design
+}
+
+// A comparison of four region samples of the small simulated tissue (two on each side): the job
+// records an artifact of kind abundance made from the summary, its tests those internal/cohort
+// makes of the summary's own numbers; asked again, answered at once; what cannot be compared
+// refused.
+func TestAbundanceAPI(t *testing.T) {
+	f := newRefineFixture(t, true)
+	summaryID, design := fourRegions(t, f, "")
+	answer := struct{ ID string }{summaryID}
 	body := fmt.Sprintf(`{"summary":%q,"design":%s}`, answer.ID, design)
 	var started struct {
 		ID       string
 		Artifact *artifacts.Manifest
 		Job      *struct{ ID string }
 	}
-	rec = f.post("/api/cohort/abundance", body)
+	rec := f.post("/api/cohort/abundance", body)
 	if err := json.Unmarshal(rec.Body.Bytes(), &started); err != nil || started.Job == nil || !strings.HasPrefix(started.ID, "abu-") {
 		t.Fatalf("the comparison: %d %s", rec.Code, rec.Body.String())
 	}
@@ -354,6 +365,131 @@ func TestAbundanceAPI(t *testing.T) {
 		"no degrees of freedom": strings.Replace(strings.Replace(body, `,{"unit":"4","group":"right","samples":["s-4"],"x":[1,1]}`, "", 1), `{"unit":"2","group":"left","samples":["s-2"],"x":[1,0]},`, "", 1),
 	} {
 		rec := f.post("/api/cohort/abundance", bad)
+		if rec.Code != 400 || !strings.Contains(rec.Body.String(), want) {
+			t.Errorf("%s: %d %s", want, rec.Code, rec.Body.String())
+		}
+	}
+}
+
+// The expression and spatial comparisons of four region samples (with niches): each job records an
+// artifact made from the summary, its tests those internal/cohort makes of the summary's own
+// pseudobulk and numbers; a gene's values by row answered; asked again, answered at once; what
+// cannot be compared refused.
+func TestExpressionAndSpatialAPI(t *testing.T) {
+	f := newRefineFixture(t, true)
+	summaryID, design := fourRegions(t, f, `"niches":{"neighbors":5,"niches":2,"starts":2,"seeds":1,"seed":4},`)
+	sp, _ := f.a.artifacts.Path(summaryID, cohort.FileSummary)
+	doc, pb, err := cohort.Read(filepath.Dir(sp))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var design0 cohort.ComparisonDesign
+	json.Unmarshal([]byte(design), &design0)
+	type started struct {
+		ID       string
+		Artifact *artifacts.Manifest
+		Job      *struct{ ID string }
+	}
+	start := func(path, body, prefix string) artifacts.Manifest {
+		t.Helper()
+		var s started
+		rec := f.post(path, body)
+		if err := json.Unmarshal(rec.Body.Bytes(), &s); err != nil || s.Job == nil || !strings.HasPrefix(s.ID, prefix) {
+			t.Fatalf("%s: %d %s", path, rec.Code, rec.Body.String())
+		}
+		f.wait(s.Job.ID)
+		m, err := f.a.artifacts.Get(s.ID)
+		if err != nil || m.State != artifacts.Complete || len(m.Lineage.Parents) != 1 || m.Lineage.Parents[0].ID != summaryID {
+			t.Fatalf("%s's artifact: %v %+v", path, err, m)
+		}
+		var again started
+		json.Unmarshal(f.post(path, body).Body.Bytes(), &again)
+		if again.ID != s.ID || again.Artifact == nil {
+			t.Errorf("%s asked again: not answered at once", path)
+		}
+		return m
+	}
+
+	// Expression, with rows of a single cell of a label tested (the tissue is small).
+	body := fmt.Sprintf(`{"summary":%q,"design":%s,"minCells":1}`, summaryID, design)
+	m := start("/api/cohort/expression", body, "exp-")
+	if m.Kind != "expression" || m.Lineage.Job.Kind != "expression" {
+		t.Errorf("the expression artifact: %+v", m)
+	}
+	p, _ := f.a.artifacts.Path(m.ID, cohort.FileExpression)
+	got, err := cohort.ReadExpression(filepath.Dir(p))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := cohort.CompareExpression(doc, pb, design0, 0.95, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Summary.ID != summaryID || got.Tests != want.Tests || got.Tests == 0 || len(got.Genes) != len(cohort.SharedGenes(doc, pb)) || len(got.Genes) < 100 {
+		t.Fatalf("the comparison: %d tests, want %d; %d genes", got.Tests, want.Tests, len(got.Genes))
+	}
+	var label, gene string
+	for k, r := range want.Results {
+		if r.Tested != got.Results[k].Tested {
+			t.Fatalf("%s tested %v, want %v", r.Label, got.Results[k].Tested, r.Tested)
+		}
+		if r.Tested {
+			label, gene = r.Label, want.Genes[r.Genes[0]]
+			for c := range r.Contrasts {
+				if fmt.Sprint(r.Contrasts[c].P) != fmt.Sprint(got.Results[k].Contrasts[c].P) || fmt.Sprint(r.Contrasts[c].PAdj) != fmt.Sprint(got.Results[k].Contrasts[c].PAdj) {
+					t.Errorf("%s: its tests differ", r.Label)
+				}
+			}
+		}
+	}
+	rec := request(t, f.handler, http.MethodGet, "/api/cohort/expression/values?id="+m.ID+"&label="+url.QueryEscape(label)+"&gene="+url.QueryEscape(gene), nil, nil)
+	var values struct {
+		Gene string
+		Rows []struct {
+			Unit, Group string
+			Count       float64
+			LogCPM      float64
+		}
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &values); err != nil || values.Gene != gene || len(values.Rows) == 0 || values.Rows[0].Unit != "1" || values.Rows[0].Group != "left" {
+		t.Errorf("a gene's values: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := request(t, f.handler, http.MethodGet, "/api/cohort/expression/values?id="+m.ID+"&label=Nothing&gene="+url.QueryEscape(gene), nil, nil); rec.Code != 400 {
+		t.Errorf("an unknown label's values: %d", rec.Code)
+	}
+	for want, bad := range map[string]string{
+		"no cohort summary":     strings.Replace(body, summaryID, "coh-nothing", 1),
+		"not in the summary":    strings.Replace(body, `"s-4"`, `"s-9"`, 1),
+		"1 to 10,000":           strings.Replace(body, `"minCells":1`, `"minCells":-2`, 1),
+		"above 0.5 and below 1": strings.Replace(body, `"minCells":1`, `"level":2`, 1),
+	} {
+		rec := f.post("/api/cohort/expression", bad)
+		if rec.Code != 400 || !strings.Contains(rec.Body.String(), want) {
+			t.Errorf("%s: %d %s", want, rec.Code, rec.Body.String())
+		}
+	}
+
+	// Spatial statistics: the niches' shares (the samples answered no spatial question).
+	body = fmt.Sprintf(`{"summary":%q,"design":%s}`, summaryID, design)
+	m = start("/api/cohort/spatial-tests", body, "spt-")
+	if m.Kind != "spatial-comparison" || m.Lineage.Job.Kind != "spatial-tests" {
+		t.Errorf("the spatial artifact: %+v", m)
+	}
+	p, _ = f.a.artifacts.Path(m.ID, cohort.FileSpatialTests)
+	sc, err := cohort.ReadSpatialComparison(filepath.Dir(p))
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantSC, _ := cohort.CompareSpatial(doc, design0, []string{cohort.FamilyNiche}, 0.95)
+	if len(sc.Families) != 1 || sc.Families[0].Family != cohort.FamilyNiche || fmt.Sprint(sc.Families[0].Tests) != fmt.Sprint(wantSC.Families[0].Tests) {
+		t.Errorf("the spatial comparison: %+v", sc.Families)
+	}
+	for want, bad := range map[string]string{
+		"no enrichment statistics": strings.Replace(body, `"design":`, `"families":["enrichment"],"design":`, 1),
+		"no family":                strings.Replace(body, `"design":`, `"families":["mass"],"design":`, 1),
+		"twice":                    strings.Replace(body, `"design":`, `"families":["niche","niche"],"design":`, 1),
+	} {
+		rec := f.post("/api/cohort/spatial-tests", bad)
 		if rec.Code != 400 || !strings.Contains(rec.Body.String(), want) {
 			t.Errorf("%s: %d %s", want, rec.Code, rec.Body.String())
 		}

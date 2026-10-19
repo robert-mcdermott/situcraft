@@ -63,6 +63,9 @@ func (a *app) registerCohort(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/cohort/summary", a.startCohortSummary)
 	mux.HandleFunc("POST /api/cohort/panels", a.comparePanels)
 	mux.HandleFunc("POST /api/cohort/abundance", a.startAbundance)
+	mux.HandleFunc("POST /api/cohort/expression", a.startExpression)
+	mux.HandleFunc("GET /api/cohort/expression/values", a.expressionValues)
+	mux.HandleFunc("POST /api/cohort/spatial-tests", a.startSpatialTests)
 }
 
 // startCohortSummary starts the job summarizing a cohort's samples, answering {id, artifact, job}:

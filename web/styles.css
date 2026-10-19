@@ -1378,3 +1378,14 @@ table.data.cohort-balance { width: auto; min-width: 360px; margin-bottom: 8px; }
 .cohort-dots circle[role="button"] { cursor: pointer; }
 .cohort-dots circle[role="button"]:focus-visible { outline: none; stroke: var(--accent); stroke-width: 3; }
 .cohort-mean { stroke: var(--text-2); stroke-width: 2; }
+
+/* Differential expression and spatial statistics between groups (ui/cohort-expression.js). */
+.cohort-expression .btn-row > input.input.small.cohort-min-cells { width: 80px; flex: none; }
+.cohort-expression .btn-row > input.input.small.cohort-gene-find { width: 180px; flex: none; }
+.cohort-expression .btn-row > label.muted, .cohort-expression .btn-row > span.muted { font-size: 12.5px; }
+.cohort-plots { display: flex; flex-wrap: wrap; gap: 4px 20px; align-items: flex-start; }
+.cohort-plots > div { flex: 1 1 400px; max-width: 480px; }
+.cohort-plots > .cohort-pick { margin-top: 0; padding-top: 0; border-top: 0; }
+.cohort-volcano-point { fill: var(--text-3); fill-opacity: 0.45; cursor: pointer; }
+.cohort-volcano-point.found { fill: var(--accent); fill-opacity: 0.85; }
+.cohort-volcano-point.chosen { fill-opacity: 1; stroke: var(--text); stroke-width: 1.5; }

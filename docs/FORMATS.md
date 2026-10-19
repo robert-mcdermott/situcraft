@@ -508,6 +508,49 @@ each comparison (kind `abundance`: `{id, name, summary, design, state, created, 
 parameters, summaryOf}`, `summaryOf` the manifest's summary: the tests, those untested, and those
 `found`, each `family`, `label`, `contrast`, `ratio` and `padj`, below an adjusted p of 0.05).
 
+### Comparisons of expression
+
+A comparison of expression (from 0.7.0) is an artifact of kind `expression`, made from a cohort
+summary: each label's pseudobulk compared between a design's groups, the replicate unit the unit.
+
+| File | Holds |
+| --- | --- |
+| `expression.json` | `format` (`"situcraft-expression"`), `version`, `method`, `methodVersion`; the `summary` (`id`, `name`); the summary's `labels`; the `design` (as `abundance.json` has it); the intervals' `level`; `minCells`, the fewest cells of a label a row is tested with; the `genes` compared (those every panel has); the `results`, one per label; the `tests` and their `universe` in words. A label's result: `label`; `tested`, or a `note` saying why not; each design row's `cells` of the label and the `rows` used (those with `minCells` or more); then, tested, the used rows' `library` sizes (the tested genes' transcripts) and TMM `factors`; the `genes` tested (indices into `genes`), each one's `aveLogCPM` (mean log2 count per million), the genes `filtered` as too little expressed; voom's lowess `span`; the variances' prior (`s2Prior`, and `dfPrior`, null when infinite: the variances agree beyond chance), the tests' degrees of freedom `dfTotal`; and its `contrasts`, each `contrast` (its name) with arrays one per tested gene: `logFC`, its interval `lo` and `hi`, the moderated `t`, two-sided `p` and Benjamini–Hochberg `padj` over every label, gene and contrast tested; and the genes `up` and `down` below an adjusted p of 0.05 |
+| `results.csv` | A row each test: `label`, `contrast`, `gene`, `tested`, `aveLogCPM`, `logFC`, `lo`, `hi`, `t`, `df`, `p`, `padj`, `note`; and a row each label untested, with its note |
+
+A label's pseudobulk in a row is its cells' transcripts of each gene summed over the row's samples.
+Genes are kept with a count per million of at least 10 over the median library size in as many
+rows as the smallest group has (1 over the design's largest leverage) and a total count of 15;
+library sizes are normalized by TMM (log-ratios trimmed 30% at each end and mean log-expressions 5%,
+weighted by their binomial variances, against the row whose upper quartile is nearest the rows');
+voom's values are log2((count + 0.5) / (library × factor + 1) × 10⁶), its weights the inverse of a
+lowess trend of the genes' square-root residual deviations (its span 0.3 + 0.7 (50 / genes)^⅓, or 1
+for 50 genes or fewer) at each value's fitted log count, raised to the fourth power; each gene's
+model is weighted least squares, and its variance is moderated by the prior fitted to the genes'
+log variances by their moments. A comparison is named by its summary, design, level, `minCells` and
+method version, so comparing again answers it. The project records each comparison (kind
+`expression`: `{id, name, summary, design, state, created, method, parameters, summaryOf}`,
+`summaryOf` the manifest's summary: the `tests`, the labels `untested`, the tests `below` an
+adjusted p of 0.05, and the 10 lowest `found`, each `label`, `gene`, `contrast`, `logFC` and
+`padj`).
+
+### Comparisons of spatial statistics
+
+A comparison of spatial statistics (from 0.7.0) is an artifact of kind `spatial-comparison`, made
+from a cohort summary: each sample's spatial statistics compared between a design's groups.
+
+| File | Holds |
+| --- | --- |
+| `spatial-tests.json` | `format` (`"situcraft-spatial-tests"`), `version`, `method`, `methodVersion`; the `summary`; the summary's `labels`; the `design` (as `abundance.json` has it); the intervals' `level`; and the `families` compared (`enrichment`, `nearest`, `niche`, `moran`), each its `name`, `effect`, whether it is compared as log2 ratios (`log`), its statistics' `keys` (a pair `A\|B`, a distance `A→B`, a niche `niche 1`, a gene), each row's `values` of each (keys × rows; log2 for a log family; null where none of the row's samples has it), the variances' prior (`s2Prior`; `dfPrior`, null when infinite and 0 for a family of one statistic) and `dfTotal`, its `tests`, their `universe` in words, and the tests `untested`. A test is a statistic's of a contrast: `key`, `contrast`, `tested` or a `note` saying why not (a row has none of it; no variation left to test); the `estimate` (a log2 ratio or a difference) with its interval (`lo`, `hi`), the moderated `t`, two-sided `p`, the Benjamini–Hochberg `padj` over the family's tests; for a log family, the effect as a `ratio` with its interval (`ratioLo`, `ratioHi`) |
+| `results.csv` | A row each test: `family`, `key`, `contrast`, `tested`, `estimate`, `lo`, `hi`, `t`, `df`, `p`, `padj`, `ratio`, `ratio_lo`, `ratio_hi`, `note` |
+
+A row's value is the mean of its samples' (a ratio of 0 counted as none). Each statistic's model is
+ordinary least squares, and each family's variances are moderated by the prior fitted to their log
+variances by their moments. A comparison is named by its summary, design, families, level and
+method version. The project records each comparison (kind `spatial-comparison`, as an expression
+comparison is recorded; `summaryOf` the `tests`, those `untested`, and those `found` below an
+adjusted p of 0.05, each `family`, `key`, `contrast`, `estimate`, `ratio` and `padj`).
+
 ### Post-Xenium images
 
 A post-Xenium image (from 0.5.0) is an artifact of one file in its folder, `image.json`, and one in

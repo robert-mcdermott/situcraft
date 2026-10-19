@@ -3,8 +3,8 @@
 // with the user's fields and those read from each bundle, written and read as CSV (lib/samples.js).
 // Slice 3: the design (ui/cohort-design.js). Slice 4: the same steps on every sample and the cohort
 // table (ui/cohort-summary.js). Slice 5: cohort QC, batches and panels (ui/cohort-qc.js). Slice 6:
-// differential abundance (ui/cohort-abundance.js). The comparisons of expression and spatial
-// statistics come in the slices after (situcraft-spec/roadmap.md, wave 7).
+// differential abundance (ui/cohort-abundance.js). Slice 7: differential expression and spatial
+// statistics between groups (ui/cohort-expression.js).
 
 import { h, icon, clear, downloadBlob, formatCount } from './dom.js';
 import { confirmDialog, toast } from './overlays.js';
@@ -18,6 +18,7 @@ import { batchStatements, itemIndex } from '../lib/cohort.js';
 import { cohortSession, runSteps, stepsSection, summarize, summaryDocument, summarySection, summaryTable, updateSummaryProgress } from './cohort-summary.js';
 import { qcSection } from './cohort-qc.js';
 import { abundanceSection, abundanceSession, compareAbundance, comparisonDocument, showSampleCells } from './cohort-abundance.js';
+import { compareExpression, compareSpatial, expressionDocument, expressionSection, expressionSession, geneValues, spatialDocument, spatialSession, spatialTestsSection } from './cohort-expression.js';
 import { BUNDLE_FIELDS, FIELD_KINDS, addSampleField, fieldValue, readSamplesTable, removeSampleField, renameSample, renameSampleField, sampleFields, samplesCSV, samplesOf, setFieldKind, setRegionSamples, setSampleField } from '../lib/samples.js';
 
 const exact = (v) => (Number.isFinite(v) ? v.toLocaleString('en-US') : '—');
@@ -278,7 +279,8 @@ export function mountCohort(app, container) {
     const regions = regionsSection(project, samples);
     if (regions) body.append(regions);
     body.append(designSection(app, { commit, redraw: () => schedule() }));
-    body.append(stepsSection(app, { cellsOf, redraw: () => schedule() }), summarySection(app, { cellsOf, redraw: () => schedule() }), qcSection(app, { redraw: () => schedule() }), abundanceSection(app, { cellsOf, redraw: () => schedule() }));
+    body.append(stepsSection(app, { cellsOf, redraw: () => schedule() }), summarySection(app, { cellsOf, redraw: () => schedule() }), qcSection(app, { redraw: () => schedule() }), abundanceSection(app, { cellsOf, redraw: () => schedule() }),
+      expressionSection(app, { redraw: () => schedule() }), spatialTestsSection(app, { redraw: () => schedule() }));
     const focus = app.store.ui.focus?.kind === 'sample' ? app.store.ui.focus.id : null;
     if (focus) body.querySelector(`tr[data-sample="${CSS.escape(focus)}"]`)?.scrollIntoView({ block: 'nearest' });
   }
@@ -363,6 +365,35 @@ export function mountCohort(app, container) {
       schedule();
       return comparisonDocument(id);
     },
+    // Compares the labels' expression (cohort-expression.js compareExpression): { level, minCells,
+    // summary, spec }; answers the comparison's manifest, shown in the view.
+    expression: (options = {}) => compareExpression(app, options, () => schedule()),
+    // An expression comparison's document, shown in the view (a label, contrast and gene chosen
+    // when given).
+    expressionResult: async (id, { label = null, contrast = null, gene = null } = {}) => {
+      expressionSession.shown = id;
+      if (label) expressionSession.label = label;
+      if (contrast) expressionSession.contrast = contrast;
+      if (gene) {
+        expressionSession.gene = gene;
+        expressionSession.filter = '';
+      }
+      schedule();
+      return expressionDocument(id);
+    },
+    // One gene's values in a label's rows (api_expression.go expressionValues).
+    geneValues: (id, label, gene) => geneValues(id, label, gene),
+    // Compares the samples' spatial statistics (cohort-expression.js compareSpatial): { families,
+    // level, summary, spec }; answers the comparison's manifest, shown in the view.
+    spatial: (options = {}) => compareSpatial(app, options, () => schedule()),
+    // A spatial comparison's document, shown in the view (a family and a test chosen when given).
+    spatialResult: async (id, { family = null, pick = null } = {}) => {
+      spatialSession.shown = id;
+      if (family) spatialSession.family = family;
+      if (pick) spatialSession.pick = pick;
+      schedule();
+      return spatialDocument(id);
+    },
     // A sample's cells of a label shown on its tissue (cohort-abundance.js showSampleCells).
     sampleCells: (summaryId, sampleId, label) => showSampleCells(app, cellsOf, summaryId, sampleId, label),
     // The samples' panels compared now, before any summary (api_cohort.go comparePanels).
@@ -396,6 +427,8 @@ export function mountCohort(app, container) {
       const focus = app.store.ui.focus;
       if (topics.has('focus') && focus?.kind === 'cohort-summary') cohortSession.shown = focus.id;
       if (topics.has('focus') && focus?.kind === 'abundance') abundanceSession.shown = focus.id;
+      if (topics.has('focus') && focus?.kind === 'expression') expressionSession.shown = focus.id;
+      if (topics.has('focus') && focus?.kind === 'spatial-comparison') spatialSession.shown = focus.id;
       if (topics.has('focus') && focus?.kind === 'design' && focus.id !== shownDesign) {
         const d = app.store.project.artifacts.find((a) => a.kind === 'design' && a.id === focus.id);
         if (d) setDraft(app.store.project, d.spec, d.name);

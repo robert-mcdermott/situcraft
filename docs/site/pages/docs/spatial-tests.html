@@ -1,0 +1,32 @@
+---
+title: Spatial statistics between groups
+description: SituCraft compares each sample's spatial statistics between groups, with the sample or subject as the unit: neighbor enrichments and nearest distances as log ratios, niches' shares and Moran's I, each in a linear model of the design, their variances moderated across each family, with intervals and adjusted p-values.
+lede: Are two cell types more often neighbors in one group than another? SituCraft answers with each sample's own number as one observation, by a model of the design, and gives the effect with its interval.
+---
+      <h2 id="numbers">Each sample's numbers</h2>
+      <p>The same steps on every sample answer the same spatial questions of each (see <a href="summaries.html#steps">Sample summaries</a>), and the cohort table holds each sample's numbers. <strong>Spatial statistics between groups</strong> in the Cohort view compares four families of them:</p>
+      <ul>
+        <li><strong>Neighbor enrichment:</strong> each pair of labels' neighbors found over those expected (see <a href="spatial.html">Spatial analysis</a>). It is compared as a log2 ratio, and the effect is a ratio of enrichments.</li>
+        <li><strong>Nearest distances:</strong> each label's median distance to the nearest cell of another, also compared as a log2 ratio, the effect a ratio of distances.</li>
+        <li><strong>Niches' shares:</strong> each niche's share of the cells with a window. The niches are found across the samples together, so a niche is the same kind of place in every sample (see <a href="summaries.html#niches">Niches across the samples</a>). The effect is a difference in points of percent.</li>
+        <li><strong>Moran's I</strong> of each gene's counts, the effect a difference.</li>
+      </ul>
+      <p>A design row's value is the mean of its samples' (on the log2 scale for a ratio). A statistic that some row has none of, such as a pair's enrichment where a sample has none of one label, is left untested, and the reason is said.</p>
+
+      <h2 id="model">The model</h2>
+      <p>Each statistic is a linear model of the design, with its pairing and covariates, fitted by least squares. A family's statistics are fitted together: each one's variance is moderated toward the family's common one, by as much as their variances agree, and each contrast is tested by the moderated t (Smyth 2004), as limma tests genes. A family of one statistic is tested by its own variance alone. P-values are adjusted by Benjamini and Hochberg over each family's tests, and the universe is stated with them.</p>
+
+      <h2 id="results">Reading the results</h2>
+      <p>Choose a family: the table lists its statistics by p-value, each effect with its interval (95% by default), its p-value and adjusted p. Choosing a row plots each row's value by group, with each group's mean. <strong>The results (CSV)</strong> writes every test.</p>
+      <shot name="spatial-tests" alt="The Cohort view's comparison of the simulated cohort's neighbor enrichment between conditions: the ten pairs of labels with their ratios, the epithelial-like and immune-like pair chosen first, and its subjects' enrichments by condition, higher in the treated">The simulated cohort's subjects compared by condition: the epithelial-like and immune-like cells are neighbors 1.35 times as much in the treated subjects (1.07 to 1.70), where the simulator mixes immune-like cells into epithelial-like domains.</shot>
+      <p>With four subjects a group, that change is the family's strongest, and its interval is above 1. Adjusted over the ten pairs, it is not below 0.05 (0.084): a larger cohort, or pairing, would say more.</p>
+
+      <h2 id="remote">By remote control</h2>
+      <p><code>compare_spatial</code> compares the samples' spatial statistics (every family the summary has, or those named; by the design draft or a saved design) and answers every test. See <a href="remote-control.html">Remote control</a>.</p>
+
+      <h2 id="checked">How it is checked</h2>
+      <ul>
+        <li><strong>Against limma:</strong> on ten cases (the simulated cohort's four families by condition, and by condition and slide; three statistics in three groups, each against the first and the third against the second; one statistic alone), every estimate, interval, moderated t and p, and the prior, equal limma 3.68.5's (<code>lmFit</code> and <code>eBayes</code>) within 10⁻¹³ (<code>validation/reference/limma/</code>).</li>
+        <li><strong>Against statsmodels:</strong> each statistic's fit before moderation (its coefficients, residual deviation, and each contrast's estimate, interval, t and p on the residual degrees of freedom) equals statsmodels 0.15.0's OLS within 10⁻¹³.</li>
+        <li><strong>In the page:</strong> on the simulated cohort, every family is compared and the epithelial-like and immune-like enrichment is higher in the treated subjects, its interval above 1. A null cohort's niches find nothing.</li>
+      </ul>
