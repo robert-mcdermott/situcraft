@@ -275,6 +275,14 @@ Cell attributes: `transcripts`, `genes`, `total`, `controls`, `area`, `nucleusAr
 | `methods` | `dataset`, `filters` (names), `show` | The methods paragraph and its references; `show` shows it in the window |
 | `export` | `what` (`project`, `archive`, `methods`, `alignment`, `regions`, `reviews`, `samples`, `cohort-table`, `pseudobulk`), `path` (absolute), `overwrite`, `dataset`; for an alignment `image`, `transform` (the one in use if not given), `format` (`matrix`, `keypoints`); for regions `coordinates`, `regions` (names or IDs; all if not given); for reviews `format` (`csv`, `json`); for a cohort table or pseudobulk `summary` (the latest if not given) | Writes the project document (JSON), a project archive (`.scz`), the methods (Markdown), an image's alignment as Xenium Explorer reads it (CSV), a dataset's regions as QuPath imports annotations (GeoJSON), a dataset's reviews (CSV, a row a cell, cluster or region reviewed; JSON, the record), the project's samples (CSV, a row a sample), or a cohort summary's table (CSV, a row each number of each sample with the artifact it came from) or pseudobulk (CSV, a row each sample's label, a column each gene). Needs the token |
 
+### Figures
+
+| Action | Arguments | What it does |
+| --- | --- | --- |
+| `figure` | `name` (by name or ID), `views` (saved views of the tissue, by name or ID, each a panel side by side), `size` (`single`, `onehalf`, `double`, `slide`), `height_mm`, `text` (pt), `width_um` (each tissue panel's width of tissue), `center` (`[x, y]` µm), `scale_bar` (µm), `point_size` (pt), `remove` | Makes or changes a figure in the Reports view: with `views`, a new figure (or the named one made again) of those views side by side, the page as tall as its panels; without, the named figure's size, text and panels changed. Answers what it shows, each panel's letter, place on the page (pt), region (µm), µm a point, scale bar, the cells and transcripts drawn, and notes |
+| `write_figure` | `name` (the only one if not given), `path` (absolute), `format` (`svg`, `pdf`, `png`, `json`; from the path's extension if not given), `dpi` (300 if not given), `time` (ISO 8601: the same time, the same bytes), `overwrite` | Writes the figure with its manifest inside (an SVG's metadata, a PDF's attached file, a PNG's text chunk), or the manifest alone as JSON; answers its fingerprint, the digest of each panel's drawing, its inputs and facts. Needs the token |
+| `read_figure` | `path` | Reads a figure SituCraft wrote and compares it with the project: whether its manifest is as written, what changed since in each panel's view, dataset and artifacts, and whether each panel draws the same now. Needs the token |
+
 ## The documentation's screenshots
 
 `node docs/capture/capture.mjs` captures every picture in `docs/images` through remote control,

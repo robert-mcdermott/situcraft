@@ -578,6 +578,29 @@ var remoteActions = []remoteAction{
 		"coordinates": textArg("For regions: um (the default), xenium (the Xenium image's pixels) or a post-Xenium image by name or artifact ID (its pixels, as QuPath opens it)."),
 		"regions":     map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "For regions: which, by name or ID (all if not given)."},
 	}, "what", "path"), long: true, output: true},
+	{Name: "figure", Title: "Make or change a figure", Description: "Makes or changes a figure of the project, in the Reports view: a page of panels (a journal's column, 85, 114 or 174 mm wide, or a 16:9 slide), each a saved view of the tissue at the figure's size (its stains composited from their samples, its cells' outlines and fill and its genes' transcripts, in µm, with a scale bar and a legend), lettered A, B, C in reading order. With views, the figure's panels are those views side by side (a new figure when none has its name). Answers what it shows, each panel's letter, region in µm, µm a point, scale bar and the cells and transcripts it draws, and notes (a fill not drawn, too many transcripts). remove: true removes it.", InputSchema: schema(map[string]any{
+		"name":       textArg("The figure, by name or ID (a new one with views)."),
+		"views":      map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Saved views of the tissue, by name or ID, each a panel, side by side."},
+		"size":       textArg("single (85 mm), onehalf (114 mm), double (174 mm, the default) or slide."),
+		"height_mm":  numberArg("The page's height in mm (the size's if not given)."),
+		"text":       numberArg("The text's size in pt (6 to 36; 7 if not given, 14 on a slide)."),
+		"width_um":   numberArg("Each tissue panel's width of tissue in µm (what the view shows in a Viewer 1,000 CSS pixels wide if not given)."),
+		"center":     map[string]any{"type": "array", "items": map[string]any{"type": "number"}, "minItems": 2, "maxItems": 2, "description": "Each tissue panel's center, [x, y] in µm (its view's if not given)."},
+		"scale_bar":  numberArg("The scale bar's length in µm (a round length about a fifth of the width if not given)."),
+		"point_size": numberArg("The transcripts' points, in pt across (1.2 if not given)."),
+		"remove":     flagArg("Remove the figure."),
+	}), long: true},
+	{Name: "write_figure", Title: "Write a figure", Description: "Writes a figure as SVG, PDF (vector, its text in Helvetica) or PNG (300 dpi by default), or its manifest as JSON, with its manifest inside: the figure, what each panel shows and was drawn from (the dataset by its bundle's run and fingerprint, the saved view, the artifacts drawn), a digest of each panel's drawing, SituCraft's version and commit, and a fingerprint. Answers the manifest's fingerprint and digests and each panel's facts. The same figure written at the same time is the same bytes in SVG and PDF.", InputSchema: schema(map[string]any{
+		"name":      textArg("The figure, by name or ID (the only one if not given)."),
+		"path":      textArg("The absolute path of the file to write."),
+		"format":    textArg("svg, pdf, png or json (from the path's extension if not given)."),
+		"dpi":       numberArg("A PNG's resolution, and the stains' in every format (300 if not given)."),
+		"time":      textArg("The time written, ISO 8601 (now if not given): the same time, the same bytes."),
+		"overwrite": flagArg("Replace the file if it exists."),
+	}, "path"), long: true, output: true},
+	{Name: "read_figure", Title: "Read a figure back", Description: "Reads a figure SituCraft wrote (SVG, PDF, PNG or JSON) and compares it with the project: whether its manifest is as written, what changed since in each panel's view, dataset and artifacts, and whether each panel draws the same now.", InputSchema: schema(map[string]any{
+		"path": textArg("The figure file on this computer."),
+	}, "path"), long: true, readsAt: true},
 }
 
 func findAction(name string) (remoteAction, bool) {

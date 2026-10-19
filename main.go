@@ -565,6 +565,7 @@ func (a *app) registerAPI(mux *http.ServeMux) {
 	a.registerSegView(mux)
 	a.registerPlant(mux)
 	a.registerExports(mux)
+	a.registerFigures(mux)
 	if a.control != nil {
 		a.control.register(mux)
 	}

@@ -128,6 +128,14 @@ find a gene changed in one cell type, find nothing in a null cohort, find a comp
 subjects sampled before and after, show what pairing gains, and, for teaching only, compare regions
 of one Breast section as pseudo-samples, every result saying that they are not subjects.
 
+In development for 0.8.0: figures and a provable record. The Reports view draws figures from the
+project: saved views of the tissue at a journal's column width, their stains composited from their
+samples as the Viewer composites them, the cells' outlines and fills and the genes' transcripts
+placed in µm, with a scale bar and a legend, lettered as panels of a page. Each is written as SVG,
+PDF or PNG carrying what it was drawn from (the dataset's bundle, the saved view, the label set) and
+a digest of its drawing, so that SituCraft can read it back and say whether the project still draws
+it the same.
+
 ## A look around
 
 <picture>

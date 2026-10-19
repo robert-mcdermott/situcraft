@@ -8,7 +8,6 @@ import { createLibrary, detectBackend, openPaths, prefs } from './ui/storage.js'
 import { mountSidebar } from './ui/sidebar.js';
 import { mountInspector } from './ui/inspector.js';
 import { mountDrawer } from './ui/drawer.js';
-import { plannedMode } from './ui/mode-planned.js';
 import { openPalette } from './ui/palette.js';
 import { WorkerClient } from './ui/workers.js';
 import { createBundles } from './ui/bundles.js';
@@ -23,9 +22,8 @@ const VERSION = '0.7.0';
 
 const toOpen = { label: 'Open a bundle', icon: 'bundle', run: (app) => app.openPathDialog() };
 
-// The views, in the order of the work: data in, see it, check it, segment, then biology. Each
-// loads its module when first shown; views still to be built say what they are for
-// (mode-planned.js) until the slice that builds them (situcraft-spec/roadmap.md).
+// The views, in the order of the work: data in, see it, check it, segment, then biology, then
+// the record. Each loads its module when first shown.
 const MODES = [
   { id: 'welcome', label: 'Start', icon: 'grid', hidden: true, load: () => import('./ui/mode-welcome.js').then((m) => m.mountWelcome) },
   { id: 'data', label: 'Data', icon: 'database', load: () => import('./ui/mode-data.js').then((m) => m.mountData) },
@@ -38,14 +36,7 @@ const MODES = [
   { id: 'celltypes', label: 'Cell types', icon: 'tag', load: () => import('./ui/mode-celltypes.js').then((m) => m.mountCellTypes) },
   { id: 'spatial', label: 'Spatial', icon: 'graph', load: () => import('./ui/mode-spatial.js').then((m) => m.mountSpatial) },
   { id: 'cohort', label: 'Cohort', icon: 'samples', load: () => import('./ui/mode-cohort.js').then((m) => m.mountCohort) },
-  {
-    id: 'reports', label: 'Reports', icon: 'report',
-    load: async () => plannedMode({
-      title: 'Reports', icon: 'report',
-      purpose: 'Results others can check: figures with scale bars and legends, methods written from what was actually done, citations of every method used, and exports in open formats (SpatialData Zarr, AnnData Zarr, Parquet, GeoJSON) that carry their provenance.',
-      steps: ['Analyze.', 'Choose the views, figures and results to report.', 'Export.'],
-    }),
-  },
+  { id: 'reports', label: 'Reports', icon: 'report', load: () => import('./ui/mode-reports.js').then((m) => m.mountReports) },
   { id: 'jobs', label: 'Jobs', icon: 'jobs', load: () => import('./ui/mode-jobs.js').then((m) => m.mountJobs) },
 ];
 

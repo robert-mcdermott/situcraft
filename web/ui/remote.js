@@ -35,6 +35,9 @@ import { addDesign, designsOf, makeDesign } from '../lib/design.js';
 import { FAMILIES, summariesOf } from '../lib/cohort.js';
 import { spatialEffectWords, testsOf } from '../lib/expression.js';
 import { expressionDocument as expressionDocumentOf } from './cohort-expression.js';
+import { FIGURE_SIZES, addPanel, checkFigure, createFigure, figuresOf, mm, panelLetters, panelSummary, removeFigure, saveFigure, toMM } from '../lib/figures.js';
+import { drawFigure, readBackFigure, writeFigure } from './figures.js';
+import { tissueViews, viewRegion } from './mode-reports.js';
 import { BUNDLE_FIELDS, addSampleField, fieldValue, readSamplesTable, removeSampleField, renameSample, sampleFields, samplesCSV, samplesOf, setFieldKind, setRegionSamples, setSampleField } from '../lib/samples.js';
 
 export class ActionError extends Error {}
@@ -2582,6 +2585,121 @@ export function installRemote(app) {
           ? `${plural(d.panels.length, 'panel')} (${d.panels.map((p) => `${p.design || p.name} ${p.version}, ${plural(p.genes, 'gene')}, ${plural(p.samples.length, 'sample')}`).join('; ')}): ${plural(d.shared.length, 'gene')} in every panel, compared across samples; ${plural(d.partial.length, 'gene')} in some only, not compared${d.codewords.length ? `; ${plural(d.codewords.length, 'shared gene')} read by other codewords` : ''}${d.ids.length ? `; ${plural(d.ids.length, 'gene')} named or identified differently` : ''}.`
           : `One panel (${d.panels[0]?.design || d.panels[0]?.name} ${d.panels[0]?.version ?? ''}): all ${plural(d.shared.length, 'gene')} compared across the samples.`,
         data: { panels: d.panels, shared: d.shared, partial: d.partial.map((g) => ({ gene: g.gene, id: g.id, panels: g.panels.map(nameOf) })), codewords: d.codewords, ids: d.ids },
+      };
+    },
+
+    // --- Figures (wave 8) ------------------------------------------------------------------------
+
+    async figure(args) {
+      const figs = figuresOf(project());
+      const ref = args.name === undefined ? null : String(args.name).trim();
+      let fig = ref ? figs.find((f) => f.id === ref) ?? figs.find((f) => f.name === ref) ?? null : figs.length === 1 ? figs[0] : null;
+      if (args.remove) {
+        if (!fig) throw new ActionError(ref ? `No figure ${ref}.` : 'Name the figure to remove.');
+        store.commit(removeFigure(project(), fig.id), `Remove figure ${fig.name}`);
+        return { message: `Removed the figure ${fig.name}.` };
+      }
+      const size = args.size === undefined ? null : choose(String(args.size), FIGURE_SIZES.map((x) => x.id), 'size');
+      const region = (view) => {
+        const r = viewRegion(view);
+        if (args.width_um !== undefined) r.width = finite(args.width_um, 'width_um');
+        if (args.center !== undefined) {
+          if (!Array.isArray(args.center) || args.center.length !== 2) throw new ActionError('center is [x, y] in µm.');
+          [r.cx, r.cy] = [finite(args.center[0], 'center'), finite(args.center[1], 'center')];
+        }
+        if (!(r.width > 0)) throw new ActionError('width_um is above 0.');
+        return r;
+      };
+      const extras = {
+        ...(args.scale_bar !== undefined ? { scaleBar: finite(args.scale_bar, 'scale_bar') } : {}),
+        ...(args.point_size !== undefined ? { pointSize: finite(args.point_size, 'point_size') } : {}),
+      };
+      if (args.views !== undefined) {
+        if (!Array.isArray(args.views) || !args.views.length) throw new ActionError('views is a list of saved views, by name or ID.');
+        const list = tissueViews(project());
+        if (!list.length) throw new ActionError('The project has no saved view of the tissue: save_view saves the Viewer\'s.');
+        const views = args.views.map((v) => list.find((x) => x.id === String(v)) ?? list.find((x) => x.name === choose(String(v), list.map((y) => y.name), 'saved view')));
+        let next = createFigure(ref ?? `Figure ${figs.length + 1}`, size ?? fig?.size ?? 'double', { ...(fig ? { id: fig.id, now: fig.created } : {}), ...(args.text !== undefined ? { text: finite(args.text, 'text') } : {}) });
+        const columns = Math.min(3, views.length);
+        for (const v of views) next = addPanel(next, { kind: 'tissue', view: v.id, region: region(v), ...extras }, { columns }).figure;
+        // The page as tall as its panels, unless a height is given.
+        const bottom = next.panels.reduce((y, p) => Math.max(y, p.y + p.h), 0);
+        next.height = args.height_mm !== undefined ? Math.round(mm(finite(args.height_mm, 'height_mm')) * 100) / 100 : Math.round((bottom + 8) * 100) / 100;
+        fig = next;
+      } else {
+        if (!fig) throw new ActionError(ref ? `No figure ${ref}: give views to make it.` : 'Name a figure, or give views to make one.');
+        const s = size ? FIGURE_SIZES.find((x) => x.id === size) : null;
+        const view = (p) => (project().views ?? []).find((v) => v.id === p.view);
+        fig = {
+          ...fig,
+          ...(s ? { size: s.id, width: Math.round(s.width * 100) / 100 } : {}),
+          ...(args.height_mm !== undefined ? { height: Math.round(mm(finite(args.height_mm, 'height_mm')) * 100) / 100 } : {}),
+          ...(args.text !== undefined ? { text: finite(args.text, 'text') } : {}),
+          panels: fig.panels.map((p) => (p.kind === 'tissue' ? { ...p, ...extras, ...(args.width_um !== undefined || args.center !== undefined ? { region: view(p) ? region({ ...view(p), camera: { cx: p.region.cx, cy: p.region.cy, umPerCss: p.region.width / 1000 } }) : p.region } : {}) } : p)),
+        };
+      }
+      try {
+        checkFigure(fig);
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      store.commit(saveFigure(project(), fig), `Figure ${fig.name}`);
+      await settleMode('reports');
+      app.reportsView?.select(fig.id);
+      const { drawn } = await drawFigure(app, fig, { dpi: 300 });
+      const letters = panelLetters(fig);
+      return {
+        message: `${drawn.description}${drawn.notes.length ? ` Notes: ${drawn.notes.join(' ')}` : ''}`,
+        data: {
+          id: fig.id, name: fig.name, size: fig.size, width_mm: toMM(fig.width), height_mm: toMM(fig.height), text: fig.text, description: drawn.description, notes: drawn.notes, smallest: drawn.smallest,
+          panels: fig.panels.map((p, i) => ({ id: p.id, letter: letters.get(p.id) ?? null, kind: p.kind, shows: panelSummary(p, project()), x: p.x, y: p.y, w: p.w, h: p.h, ...(p.region ? { region: p.region } : {}), ...(drawn.panels[i].facts ? { facts: drawn.panels[i].facts } : {}), notes: drawn.panels[i].notes })),
+        },
+      };
+    },
+
+    async write_figure(args) {
+      const figs = figuresOf(project());
+      const ref = args.name === undefined ? null : String(args.name).trim();
+      const fig = ref ? figs.find((f) => f.id === ref) ?? figs.find((f) => f.name === choose(ref, figs.map((x) => x.name), 'figure')) : figs.length === 1 ? figs[0] : null;
+      if (!fig) throw new ActionError(figs.length ? 'Name the figure: the project has several.' : 'The project has no figure: figure makes one.');
+      const ext = String(args.path ?? '').split('.').at(-1).toLowerCase();
+      const format = choose(String(args.format ?? ext), ['svg', 'pdf', 'png', 'json'], 'format');
+      const dpi = args.dpi === undefined ? 300 : finite(args.dpi, 'dpi');
+      if (!(dpi >= 72 && dpi <= 1200)) throw new ActionError('dpi is 72 to 1,200.');
+      let time = null;
+      if (args.time !== undefined) {
+        const t = new Date(String(args.time));
+        if (Number.isNaN(t.getTime())) throw new ActionError(`time is ISO 8601, not ${args.time}.`);
+        time = t.toISOString();
+      }
+      let out;
+      try {
+        out = await writeFigure(app, fig, format, { dpi, time });
+      } catch (error) {
+        throw new ActionError(`${fig.name} could not be written: ${error.message}`);
+      }
+      const m = out.manifest;
+      return {
+        file: out.bytes,
+        message: `${fig.name} as ${format.toUpperCase()}${format === 'png' ? ` at ${dpi} dpi` : ''}, its manifest inside (fingerprint ${m.fingerprint.slice(0, 12)}…).${out.drawn.notes.length ? ` Notes: ${out.drawn.notes.join(' ')}` : ''}`,
+        data: { name: fig.name, format, dpi, created: m.created, fingerprint: m.fingerprint, drawing: m.drawing, notes: out.drawn.notes, panels: m.panels.map((p) => ({ id: p.id, letter: p.letter, shows: p.shows, drawing: p.drawing, inputs: p.inputs, facts: p.facts ?? null })) },
+      };
+    },
+
+    async read_figure(args) {
+      const path = String(args.path ?? '');
+      const response = await fetch(`/api/read-figure?path=${encodeURIComponent(path)}`, { cache: 'no-store' });
+      if (!response.ok) throw new ActionError((await response.json().catch(() => ({}))).error ?? `HTTP ${response.status}`);
+      const read = await readBackFigure(app, new Uint8Array(await response.arrayBuffer()));
+      const name = path.split(/[\\/]/).at(-1);
+      if (!read) throw new ActionError(`${name} carries no SituCraft figure manifest.`);
+      const { manifest: m, comparison: c, redrawn } = read;
+      const same = redrawn.filter((r) => r.same).length;
+      return {
+        message: c.intact
+          ? `${name}: ${m.figure.name}, written by SituCraft ${m.software.version} on ${m.created}${c.sameProject ? ' from this project' : ` from the project ${m.project.name}`}. ${c.panels.map((p) => `${p.letter ?? p.id} ${p.status}${p.changes.length ? ` (${p.changes.join('; ')})` : ''}`).join('; ')}. Drawn again, ${same} of ${redrawn.length} panel${redrawn.length === 1 ? '' : 's'} the same.`
+          : `${name}: its manifest is not as written. ${c.problem}`,
+        data: { name: m.figure.name, intact: c.intact, problem: c.problem, sameProject: c.sameProject, created: m.created, software: m.software, fingerprint: m.fingerprint, panels: c.panels.map((p) => ({ ...p, same: redrawn.find((r) => r.id === p.id)?.same ?? null })) },
       };
     },
 

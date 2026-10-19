@@ -750,6 +750,21 @@ const scenes = {
     await scrollTo('.cohort-abundance');
     await clearToasts();
   },
+  // The Reports view (wave 8, slice 1): a figure of a saved view of the Lung (its DAPI stain, three
+  // genes, the cells filled by lineage), its preview as it will print.
+  async figures() {
+    await act('open_example', { example: 'lung' });
+    await act('cluster_cells', {});
+    await act('label_cells', { markers: 'lung' });
+    await act('show_tissue', { center: [750, 300], um_per_pixel: 0.4, genes: ['EPCAM', 'PLVAP', 'CD68'], fill: 'labels:lineage', opacity: 0.5 });
+    await act('save_view', { name: 'Lung lineages' });
+    await act('figure', { name: 'Figure 1', views: ['Lung lineages'], size: 'single', width_um: 300 });
+    await waitFor(`Number(window.situcraft.reportsView?.drawn?.() ?? 0) > 0`);
+    await js(`document.getElementById('app').classList.add('inspector-closed')`);
+    await sleep(400);
+    await scrollTo('.reports-figure');
+    await clearToasts();
+  },
   // The Jobs view after both examples were opened: each job's state and times, one's log open.
   async jobs() {
     await act('open_example', { example: 'lung' });

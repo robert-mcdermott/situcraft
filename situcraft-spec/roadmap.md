@@ -3361,11 +3361,142 @@ makes, which SituCraft refuses.
 
 ## 0.8.0: figures and a provable record (wave 8)
 
-Outline.
-- Figures (SVG, PDF, PNG) with scale bars, legends and provenance (E6), adapted from MaveScape.
-- The full methods text and citation helper (E4, E9).
-- A certificate and `situcraft verify` (E7).
-- The redacted static result package (E8); the report.
+What others can check. A result leaves SituCraft as a figure with a scale bar and a legend, a
+methods text of everything that was done, the software and publications behind it, a certificate
+that another computer checks by making the result again, and a package that opens anywhere.
+
+**One drawing, three outputs.** A figure is drawn once, as a list of marks, and written as SVG, as
+PDF (its text as text, in Helvetica, which every reader has) or as PNG (300 dpi by default), and
+painted in the page for its preview: the same marks in each (after MaveScape 0.8.0's
+`web/lib/draw.js`, `pdf.js` and `png.js`, the same author's). A tissue panel is a saved view drawn
+at the figure's size: the stains composited from their samples as the Viewer's shader composites
+them, at the output's resolution; the cells' outlines and fills as paths and the transcripts as
+points, placed in µm; a scale bar of a round length; and a legend of what is drawn. A panel says
+what it shows; it never holds a number it does not draw.
+
+**Provenance in every file.** A figure carries its manifest: the figure, each panel's dataset (its
+bundle's run and fingerprint), its view and the artifacts it draws by id and checksum, SituCraft's
+version and commit, and a digest of each panel's drawing; in an SVG's metadata, a PNG's text chunk
+and a PDF's attached file. SituCraft reads it back from any of them and says whether the project
+still draws the figure the same.
+
+**The record of a result.** Every artifact already records its lineage (its parents with their
+checksums, its job and every effective parameter, its method with its version and citation, the
+software), and the page records what it decides itself (filters, designs, curated label sets,
+reviews, decisions). The software and publications behind a result (E9) and the methods text (E4)
+are written from them: each step from the bundle to the result, in the order done, its method,
+version, parameters, seed and reference; only what was done; the same text for the same project.
+
+**A certificate, checked by making the result again.** A result's certificate lists what it rests
+on: the bundles' files read, by SHA-256; each step's job and parameters, and its files by SHA-256;
+the page's own records by digest; the figures' drawings; and the numbers it reports.
+`situcraft verify` makes each step again from the bundles, in a store of its own, and compares
+every file bit for bit, without tolerance (SituCraft gives the same bits on every processor; wave
+6, slice 10): verified, differs (what, and where it first differs) or not checkable (what is
+missing). The Go jobs are run again in the program; the page's own records are recomputed in a
+headless page, as MaveScape's `verify` does.
+
+**A package that opens anywhere.** A result package is a folder (or a zip) of static files: the
+report (the methods, the figures, the tables, each number traced to the certificate), the views it
+shows with their tiles made in advance and a reader of its own, and the certificate. It is
+redacted of what the computer says of itself (paths, the user's name, notes kept private) and, when
+asked, of the samples' and subjects' names.
+
+**Validation.** Independent readers of SVG and PDF, written for the suite, compared mark by mark;
+SVG and PDF the same bytes when written again; a tissue panel's pixels the suite's own composite of
+the tiles' samples, and the Viewer's within one level of 255; each scale bar's length in µm; no text
+below 6 pt; manifests read back from every format and edits found; methods texts whose every step
+and reference is the project's; certificates verified on the other processor in CI and tampered
+ones found; the package opened in headless Chrome with no request leaving it and nothing redacted
+left in it.
+
+### Wave 8
+
+1. **Figures of the tissue (E6): done.**
+   - **One drawing, three outputs** (`web/lib/draw.js`, `pdf.js`, `png.js`, adapted from MaveScape
+     0.8.0 with their tests): marks (rectangles, lines, paths, circles, text, images, clipped
+     groups) in points, written as SVG and PDF and painted on a canvas; PDF 1.4 with Helvetica's
+     metrics for layout, its text as text; PNG encoded where no canvas is.
+   - **The figure** (`web/lib/figures.js`; `project.figures`): its size (85, 114 or 174 mm wide,
+     or a 16:9 slide), text (6 to 36 pt), panels in points, lettered in reading order, checked
+     before it is drawn; a text panel; the figure in words.
+   - **A tissue panel** (`web/lib/figure-tissue.js`, pure; its data gathered by
+     `web/ui/figure-data.js` from the saved view as the Viewer reads it, without the Viewer
+     open): the region a center and width in µm, its height the panel's shape less its legend;
+     the stains composited on the processor as the shader composites them (each 16-bit sample
+     windowed, raised to its gamma, colored, the channels added and clamped), from the level whose
+     samples are no larger than the output's pixels at 300 dpi; the cells' level-0 outlines, a
+     path of each fill color and alpha and one of every outline (the nuclei's under the cells'),
+     the fill from the functions the Viewer colors by (a label set, clusters, niches, a number on
+     viridis, the segmentation method); the genes' transcripts of quality 20 or more as points (no
+     more than 250,000); a scale bar of 1, 2 or 5 × 10ⁿ µm near a fifth of the width; a legend
+     of the stains, genes and the fill's labels among the cells drawn (settled with the region it
+     leaves) or its scale and range. What it does not draw yet (certainties, limitations, review
+     status, all transcripts) it says in a note.
+   - **The manifest** (`web/lib/figure-manifest.js`): the figure, each panel's inputs (the dataset
+     by its run and fingerprint's digest, the saved view's digest, the artifacts drawn), facts and
+     drawing's digest (its marks as SVG, each image stood in for by the SHA-256 of its pixels, so
+     that it does not depend on a PNG's compression), SituCraft's version and commit, the time,
+     and a fingerprint over all of it as canonical JSON; embedded in SVG metadata, a PDF
+     attachment and a PNG iTXt chunk (with pHYs for its resolution) and read back from each;
+     compared with the project panel by panel, and each panel drawn again.
+   - **The Reports view** (`web/ui/mode-reports.js`): the figures, a new one of a saved view, its
+     size, height, text and panels (view, region, scale bar, points, place), a preview, the files
+     written; a figure read back. The project tree lists **Figures**. Remote control: `figure`,
+     `write_figure` (a fixed `time` for the same bytes), `read_figure` (`GET /api/read-figure`,
+     this computer only).
+   - Validation:
+     - **In Node** (`web/lib/figures.test.mjs`, `draw.test.mjs`, `pdf.test.mjs`, `png.test.mjs`):
+       scale bar lengths; channel tables; compositing against hand-computed pixels (two channels
+       clamped, finer than the samples, beyond the grid); layout and the legend's rows; a tissue
+       panel's cells, fills, points, scale bar and words; letters; SVG and PDF the same twice; the
+       manifest in SVG, PNG and PDF, edits and changes found; a drawing's digest the same whatever
+       compressed its image, and another for another pixel.
+     - **In the page** (viewer suite): a figure of a saved view of the Lung (DAPI, EPCAM, PLVAP,
+       CD68, the cells filled by lineage) written in every format and read by the suite's own
+       readers: SVG and PDF the same bytes again; one manifest in all four files, its fingerprint
+       the suite's; the PNG at 300 dpi; the stains' pixels in the SVG the suite's own composite of
+       the tiles' samples, every pixel; the Viewer's pixels that composite within one level; the
+       scale bar its length; the cells the suite's own count of outlines meeting the region, each
+       group of fills the Viewer's colors; the points the suite's count; text 6 pt or more, the
+       PDF's strings the SVG's; read back unchanged and drawn the same.
+   - Found by slice 1:
+     - **A drawing's digest followed its PNG's compression:** the stains' PNG is deflated by the
+       browser, whose bytes another engine's deflate need not give; the digest now reads an image
+       by its pixels.
+     - **The Viewer's fill colors belong to the Viewer:** a figure draws without it, so the fill's
+       dispatch (labels, clusters, attributes) is gathered again from the same coloring
+       functions, and the suite compares the two cell by cell.
+2. **Figures of results (E6).** Panels of the analyses' plots: QC distributions and maps, the
+   cells' map (UMAP), markers, a spatial answer (enrichment's heat map, distances, Moran's I), a
+   cohort's comparison (abundance, a volcano, a gene by group); several panels laid out on a page,
+   the panels of a row sharing their images' height; post-Xenium images, regions and the fills
+   not drawn yet (certainties, limitations, review status) on a tissue panel.
+3. **What made a result (E9).** A result's record: each step from the bundles to it, its method,
+   version, parameters, seed, software and reference, in the Reports view and the inspector; the
+   references kept in one place, each publication's DOI checked against a recorded copy of its
+   Crossref record; written as Markdown, JSON and BibTeX; remote control `record`.
+4. **The methods text (E4).** Every kind of step described, from the record: the segmentation
+   (expanded, refined, imported, decided), filters, clusters and maps, labels (markers, a
+   reference, imported, curated, consensus, reviews), images and their alignment, regions,
+   spatial analyses, and a cohort's samples, design, summary and comparisons; for the project or
+   a chosen result; its references numbered as first cited.
+5. **Certificates (E7).** A result's certificate: what it rests on and what it reports, its
+   fingerprint, written beside the project as a zip with a README saying what it proves and how
+   to check it; in the Reports view and by remote control.
+6. **`situcraft verify` (E7).** The certificate's steps made again from the bundles (found by
+   their fingerprints in the folders given), in a store of its own; the page's records
+   recomputed in a headless page; verified, differs or not checkable, with exit codes; a
+   certificate written on one processor verified on the other in CI.
+7. **The report.** One self-contained HTML file of chosen results: the methods, the figures, the
+   tables, each number traced to its place in the certificate, which it carries and checks.
+8. **The result package (E8).** The report, its views as static tiles with a reader of their
+   own, and the certificate, in a folder or zip that opens in any browser without SituCraft;
+   redacted as above; nothing in it that it was asked to leave out, checked.
+9. **Examples, documentation, release 0.8.0.** Worked examples making a figure, a methods text,
+   a certificate verified and a package; the project fixture
+   `validation/projects/0.8.0-*.situcraft.json`; the guide's pages; CHANGELOG; release, and the
+   product site published for it.
 
 ## 0.9.0: agents and scripts (wave 9)
 

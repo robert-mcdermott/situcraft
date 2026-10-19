@@ -632,6 +632,241 @@ export async function viewerSuite({ check, MissingData, verbose }) {
           return { wrong, size, kind: st.color.kind, legend: document.querySelectorAll('.cm-legend-item').length };
         })()`);
         check('viewer', 'remote control: label_cells labels the Lung cells from the panel\'s starter set; the tissue shows each cell in its label\'s color, and a cluster selected on the labels\' colors is its cells', labeled.ok && shownLabels.ok && byLabels.ok ? `${labeled.message} ${JSON.stringify(labelFill)} ${JSON.stringify(stillClusters)}` : labeled.message ?? shownLabels.message ?? byLabels.message, labeled.ok && labeled.data.cells.analyzed === 11820 && labelFill?.segCells === 11898 && labelFill.wrong === 0 && labelFill.clear === 78 && labelFill.grey > 0 && labelFill.legend > 2 && stillClusters.kind === 'labels' && stillClusters.wrong === 0 && stillClusters.size > 0 && stillClusters.legend > 2, 'every cell in its label\'s color, the unlabeled gray, the 78 not analyzed clear; the cluster\'s cells exactly');
+        // Figures (wave 8, slice 1): a saved view of the Lung (the DAPI stain, three genes, the cells
+        // outlined and filled by their lineage) made a figure's panel, written as SVG, PDF, PNG and
+        // its manifest. Read by the suite's own readers: the same bytes when written again at the
+        // same time; the manifest the same in every file, its fingerprint the suite's own; the
+        // stains' pixels in the SVG the suite's own composite of the tiles' samples (each pixel the
+        // sample under its center, windowed, colored), and the Viewer's pixels the same composite
+        // within one level; the scale bar's length in µm; the cells drawn those whose outlines meet
+        // the region, each filled as the Viewer fills it; the transcripts those of the genes in the
+        // region; no text below 6 pt, the PDF's text the SVG's.
+        {
+          await act('show_tissue', { center: [750, 300], um_per_pixel: 0.4, genes: ['EPCAM', 'PLVAP', 'CD68'], fill: 'labels:lineage', opacity: 0.5, outlines: true, nuclei: false, transcripts: true });
+          await act('save_view', { name: 'A figure of the Lung' });
+          const made = await act('figure', { name: 'Figure 1', views: ['A figure of the Lung'], size: 'single', width_um: 300 });
+          const time = '2026-10-19T12:00:00Z';
+          const out = (name) => join(work, name);
+          const wrote = {};
+          for (const [name, format] of [['figure.svg', 'svg'], ['figure-again.svg', 'svg'], ['figure.pdf', 'pdf'], ['figure-again.pdf', 'pdf'], ['figure.png', 'png'], ['figure.json', 'json']]) wrote[name] = await act('write_figure', { name: 'Figure 1', path: out(name), format, time, overwrite: true });
+          const bytes = (name) => (existsSync(out(name)) ? readFileSync(out(name)) : Buffer.alloc(0));
+          const svg = bytes('figure.svg').toString('utf8');
+          const pdf = bytes('figure.pdf');
+          const png = bytes('figure.png');
+          const manifest = JSON.parse(bytes('figure.json').toString('utf8') || 'null');
+          // The suite's own readers of the manifest in each file.
+          const canonical = (v) => (Array.isArray(v) ? `[${v.map((x) => canonical(x === undefined ? null : x)).join(',')}]` : v && typeof v === 'object' ? `{${Object.keys(v).filter((k) => v[k] !== undefined).sort().map((k) => `${JSON.stringify(k)}:${canonical(v[k])}`).join(',')}}` : JSON.stringify(v ?? null));
+          const fromSVG = (() => { const m = /<metadata id="situcraft-figure"><!\[CDATA\[([\s\S]*?)\]\]><\/metadata>/.exec(svg); return m ? JSON.parse(m[1]) : null; })();
+          const fromPDF = (() => {
+            const text = pdf.toString('latin1');
+            const m = /\/Type \/EmbeddedFile[^>]*\/Length (\d+)[^]*?stream\n/.exec(text);
+            return m ? JSON.parse(pdf.subarray(m.index + m[0].length, m.index + m[0].length + Number(m[1])).toString('utf8')) : null;
+          })();
+          const pngChunks = (b) => {
+            const out2 = [];
+            for (let at = 8; at + 8 <= b.length;) {
+              const n = b.readUInt32BE(at);
+              out2.push({ type: b.toString('latin1', at + 4, at + 8), data: b.subarray(at + 8, at + 8 + n) });
+              at += 12 + n;
+            }
+            return out2;
+          };
+          const fromPNG = (() => {
+            const c = pngChunks(png).find((x) => x.type === 'iTXt' && x.data.toString('latin1', 0, 16) === 'situcraft-figure');
+            if (!c) return null;
+            let p = c.data.indexOf(0) + 3;
+            p = c.data.indexOf(0, p) + 1;
+            p = c.data.indexOf(0, p) + 1;
+            return JSON.parse(c.data.subarray(p).toString('utf8'));
+          })();
+          const phys = pngChunks(png).find((x) => x.type === 'pHYs');
+          const dpiOfPng = phys ? Math.round(phys.data.readUInt32BE(0) * 0.0254) : null;
+          const { fingerprint, ...rest } = manifest ?? {};
+          const fingerprintOwn = createHash('sha256').update(canonical(rest)).digest('hex');
+          const panel = manifest?.panels?.[0];
+          const facts = panel?.facts;
+          // The stains' raster in the SVG, decoded by the suite (8-bit RGBA, rows unfiltered, as
+          // SituCraft writes them).
+          const raster = (() => {
+            const m = /<image x="[^"]*" y="[^"]*" width="[^"]*" height="[^"]*" preserveAspectRatio="none" image-rendering="pixelated" href="data:image\/png;base64,([^"]+)"/.exec(svg);
+            if (!m) return null;
+            const b = Buffer.from(m[1], 'base64');
+            const chunks = pngChunks(b);
+            const head = chunks.find((x) => x.type === 'IHDR').data;
+            const width = head.readUInt32BE(0);
+            const height = head.readUInt32BE(4);
+            const raw = inflateSync(Buffer.concat(chunks.filter((x) => x.type === 'IDAT').map((x) => x.data)));
+            const rgba = new Uint8Array(width * height * 4);
+            for (let y = 0; y < height; y += 1) {
+              if (raw[y * (width * 4 + 1)] !== 0) return { width, height, filtered: true };
+              rgba.set(raw.subarray(y * (width * 4 + 1) + 1, (y + 1) * (width * 4 + 1)), y * width * 4);
+            }
+            return { width, height, rgba };
+          })();
+          // The suite's own composite: the view's DAPI, from the tiles' samples at the level drawn.
+          await act('open_view', { view: 'A figure of the Lung' });
+          const viewNow = await chrome.eval(`(() => { const p = window.situcraft.store.project; const v = p.views.find((x) => x.name === 'A figure of the Lung'); const desc = window.situcraftViewer.desc; return { view: v, grid: desc.grid, image: desc.entries.image, channels: desc.channels.map((c) => c.name) }; })()`);
+          const dapi = viewNow.view.channels.find((c) => c.name === 'DAPI');
+          const sampleAt = async (level) => {
+            const g = viewNow.grid;
+            const um = g.pixelSize * 2 ** level;
+            const side = g.tile * um;
+            const tiles = new Map();
+            return async (x, y) => {
+              const tx = Math.floor(x / side);
+              const ty = Math.floor(y / side);
+              const key = `${tx},${ty}`;
+              if (!tiles.has(key)) {
+                const r = await fetch(`${url}/api/cache/${viewNow.image}/image/${viewNow.channels.indexOf('DAPI')}/${level}/${tx}/${ty}`);
+                tiles.set(key, r.ok ? { w: Number(r.headers.get('X-Tile-Width')), h: Number(r.headers.get('X-Tile-Height')), b: new Uint8Array(await r.arrayBuffer()) } : null);
+              }
+              const t = tiles.get(key);
+              const sx = Math.floor(x / um) - tx * g.tile;
+              const sy = Math.floor(y / um) - ty * g.tile;
+              if (!t || sx < 0 || sy < 0 || sx >= t.w || sy >= t.h) return 0;
+              return t.b[sy * t.w + sx] + 256 * t.b[t.w * t.h + sy * t.w + sx];
+            };
+          };
+          const shade = (v) => {
+            const n = Math.min(1, Math.max(0, (v - dapi.window[0]) / Math.max(dapi.window[1] - dapi.window[0], 1)));
+            const c = [1, 3, 5].map((i) => Number.parseInt(dapi.color.slice(i, i + 2), 16) / 255);
+            return c.map((k) => Math.round(Math.min(1, k * n) * 255));
+          };
+          let pixelsOff = -1;
+          if (raster?.rgba && facts?.raster && dapi.gamma === 1) {
+            const at = await sampleAt(facts.raster.level);
+            const r = facts.region;
+            pixelsOff = 0;
+            for (let py = 0; py < raster.height; py += 1) {
+              for (let px = 0; px < raster.width; px += 1) {
+                const want = shade(await at(r.x0 + (px + 0.5) * ((r.x1 - r.x0) / raster.width), r.y0 + (py + 0.5) * ((r.y1 - r.y0) / raster.height)));
+                const i = 4 * (py * raster.width + px);
+                if (raster.rgba[i] !== want[0] || raster.rgba[i + 1] !== want[1] || raster.rgba[i + 2] !== want[2]) pixelsOff += 1;
+              }
+            }
+          }
+          // The Viewer's own pixels, the stain alone, against the same composite at its level.
+          await act('show_tissue', { center: [750, 300], um_per_pixel: 0.3, transcripts: false, outlines: false, fill: 'none' });
+          const probes = await chrome.eval(`(async () => {
+            const v = window.situcraftViewer;
+            await v.settled();
+            const r = v.renderer;
+            const [w, h] = r.size();
+            const { screenToWorld } = await import('/lib/viewport.js');
+            const level = v.plan().level;
+            // The stain alone: a cell selected earlier, or cells chosen, are not drawn over it.
+            const kept = [r.selected, r.highlight];
+            r.selected = null;
+            r.highlight = null;
+            const out = [];
+            for (const [fx, fy] of [[0.2, 0.2], [0.35, 0.6], [0.5, 0.5], [0.62, 0.31], [0.71, 0.77], [0.8, 0.45], [0.27, 0.83], [0.9, 0.15], [0.45, 0.9]]) {
+              const sx = Math.floor(w * fx), sy = Math.floor(h * fy);
+              const [x, y] = screenToWorld(r.camera, w, h, sx + 0.5, sy + 0.5);
+              out.push({ x, y, color: r.readColor(sx, sy).slice(0, 3) });
+            }
+            [r.selected, r.highlight] = kept;
+            return { level, out };
+          })()`);
+          const atViewer = await sampleAt(probes.level);
+          let viewerOff = 0;
+          for (const p of probes.out) {
+            const want = shade(await atViewer(p.x, p.y));
+            if (want.some((c, k) => Math.abs(c - p.color[k]) > 1)) viewerOff += 1;
+          }
+          await act('open_view', { view: 'A figure of the Lung' });
+          // The drawing in the SVG: the scale bar, the outlines, the fills, the points, the text.
+          // The tissue's group (its clip, no group inside it), not the legend after it.
+          const groupSvg = (() => { const from = svg.slice(svg.indexOf('aria-label="The tissue of')); return from.slice(0, from.indexOf('</g>')); })();
+          const bar = /<rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="1.5" fill="#ffffff"\/>\s*<text[^>]*>([^<]+)<\/text>/.exec(groupSvg);
+          const barUm = bar ? Number(bar[3]) * facts.umPerPt : null;
+          const outline = /<path d="([^"]+)" fill="none" stroke="#e8e8e8"/.exec(groupSvg);
+          const subpaths = (d) => (d.match(/M/g) ?? []).length;
+          const fills = [...groupSvg.matchAll(/<path d="([^"]+)" fill="(#[0-9a-f]{6})"(?: opacity="([\d.]+)")?\/>/g)].map((m) => ({ color: m[2], opacity: Number(m[3] ?? 1), count: subpaths(m[1]) }));
+          const circles = (groupSvg.match(/<circle /g) ?? []).length;
+          const sizes = [...svg.matchAll(/font-size="([\d.]+)"/g)].map((m) => Number(m[1]));
+          const svgTexts = [...svg.matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map((m) => m[1].replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"'));
+          // The PDF's text, from its content stream (the suite inflates it).
+          const pdfText = pdf.toString('latin1');
+          const streamAt = pdfText.indexOf('<< /Filter /FlateDecode /Length');
+          const ops = (() => {
+            const m = /\/Length (\d+) >>\nstream\n/.exec(pdfText.slice(streamAt));
+            if (!m) return '';
+            const start = streamAt + m.index + m[0].length;
+            return inflateSync(pdf.subarray(start, start + Number(m[1]))).toString('latin1');
+          })();
+          const pdfSizes = [...ops.matchAll(/\/F[12] ([\d.]+) Tf/g)].map((m) => Number(m[1]));
+          const pdfStrings = [...ops.matchAll(/\(((?:[^()\\]|\\.)*)\) Tj/g)].map((m) => m[1].replace(/\\(\d{3})/g, (_, o) => String.fromCharCode(Number.parseInt(o, 8))).replace(/\\(.)/g, '$1'));
+          // The cells the region shows, from the outlines' tiles (each polygon once), and the
+          // Viewer's fill of each.
+          const cellsShown = await chrome.eval(`(async () => {
+            const v = window.situcraftViewer;
+            const desc = v.desc;
+            const r = ${JSON.stringify(facts?.region ?? null)};
+            const { readPolygonTile } = await import('/lib/polygons.js');
+            const g = desc.grid;
+            const side = g.tile * g.pixelSize;
+            const info = desc.geometry.find((s) => s.name === 'cells');
+            const reach = info.maxExtent;
+            const base = desc.polygonsBase ?? '/api/cache/' + desc.entries.geometry + '/polygons';
+            const seen = new Set();
+            const across = Math.ceil(g.width / g.tile), down = Math.ceil(g.height / g.tile);
+            for (let ty = Math.max(0, Math.floor((r.y0 - reach) / side)); ty <= Math.min(down - 1, Math.floor((r.y1 + reach) / side)); ty += 1) {
+              for (let tx = Math.max(0, Math.floor((r.x0 - reach) / side)); tx <= Math.min(across - 1, Math.floor((r.x1 + reach) / side)); tx += 1) {
+                const res = await fetch(base + '/cells/0/' + tx + '/' + ty);
+                const t = readPolygonTile(await res.arrayBuffer(), Number(res.headers.get('X-Polygons')), Number(res.headers.get('X-Vertices')));
+                for (let p = 0; p < t.cells.length; p += 1) {
+                  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+                  for (let i = t.starts[p]; i < t.starts[p + 1]; i += 1) { x0 = Math.min(x0, t.xy[2 * i]); x1 = Math.max(x1, t.xy[2 * i]); y0 = Math.min(y0, t.xy[2 * i + 1]); y1 = Math.max(y1, t.xy[2 * i + 1]); }
+                  if (x1 >= r.x0 && x0 <= r.x1 && y1 >= r.y0 && y0 <= r.y1) seen.add(t.cells[p]);
+                }
+              }
+            }
+            for (let k = 0; k < 300 && !v.clusterFill()?.labels; k += 1) await new Promise((res) => setTimeout(res, 100));
+            const rgba = v.fillColors();
+            const groups = {};
+            for (const c of seen) {
+              if (c === 0xffffffff || !rgba || rgba[4 * c + 3] === 0) continue;
+              const key = '#' + [0, 1, 2].map((j) => rgba[4 * c + j].toString(16).padStart(2, '0')).join('') + '|' + Math.round(0.5 * (rgba[4 * c + 3] / 255) * 100) / 100;
+              groups[key] = (groups[key] ?? 0) + 1;
+            }
+            return { cells: seen.size, groups };
+          })()`);
+          const fillGroups = Object.fromEntries(fills.map((f) => [`${f.color}|${f.opacity}`, f.count]));
+          // The genes' transcripts in the region, of quality 20 or more, from the points' tiles.
+          const pointsShown = await chrome.eval(`(async () => {
+            const desc = window.situcraftViewer.desc;
+            const { readPoints } = await import('/lib/viewer-data.js');
+            const r = ${JSON.stringify(facts?.region ?? null)};
+            const genes = ['EPCAM', 'PLVAP', 'CD68'].map((n) => desc.transcripts.genes.findIndex((g) => g.name === n));
+            const g = desc.grid;
+            const side = g.tile * g.pixelSize;
+            let n = 0;
+            for (let ty = Math.floor(r.y0 / side); ty <= Math.floor(r.y1 / side); ty += 1) {
+              for (let tx = Math.floor(r.x0 / side); tx <= Math.floor(r.x1 / side); tx += 1) {
+                const p = readPoints(await fetch('/api/cache/' + desc.entries.transcripts + '/points/' + tx + '/' + ty + '?genes=' + genes.join(',') + '&minq=20').then((res) => res.arrayBuffer()));
+                for (let k = 0; k < p.genes.length; k += 1) {
+                  if (!genes.includes(p.genes[k])) continue;
+                  for (let i = p.starts[k]; i < p.starts[k + 1]; i += 1) if (p.x[i] >= r.x0 && p.x[i] <= r.x1 && p.y[i] >= r.y0 && p.y[i] <= r.y1) n += 1;
+                }
+              }
+            }
+            return n;
+          })()`);
+          const readBack = await act('read_figure', { path: out('figure.pdf') });
+          const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+          check('viewer', 'a figure of a saved view: written as SVG, PDF and PNG, the same bytes again; its manifest the same in each, its fingerprint the suite\'s own; read back unchanged and drawn the same', `${made.ok ? made.message : made.message}; ${Object.entries(wrote).map(([k, w]) => `${k} ${w.ok ? 'written' : w.message}`).join(', ')}; manifests ${[fromSVG, fromPDF, fromPNG].map((m) => (same(m, manifest) ? 'the same' : 'other')).join(', ')}; fingerprint ${fingerprintOwn === fingerprint ? 'the suite\'s' : 'other'}; PNG ${dpiOfPng} dpi; ${readBack.message ?? readBack.error}`,
+            made.ok && Object.values(wrote).every((w) => w.ok) && bytes('figure.svg').equals(bytes('figure-again.svg')) && bytes('figure.pdf').equals(bytes('figure-again.pdf')) && manifest?.format === 'situcraft-figure-manifest'
+            && same(fromSVG, manifest) && same(fromPDF, manifest) && same(fromPNG, manifest) && fingerprintOwn === fingerprint && dpiOfPng === 300 && readBack.ok && readBack.data.intact && readBack.data.panels.every((p) => p.status === 'unchanged' && p.same === true),
+            'the same bytes; one manifest, the suite\'s fingerprint; 300 dpi; unchanged, drawn the same');
+          check('viewer', 'a figure\'s tissue: its stains the suite\'s own composite of the samples, pixel for pixel, and the Viewer\'s within one level; a scale bar its length in µm; the cells whose outlines meet the region, filled as the Viewer fills them; the genes\' transcripts in the region; no text below 6 pt, the PDF\'s text the SVG\'s', `raster ${raster ? `${raster.width} × ${raster.height}${raster.filtered ? ' (filtered)' : ''}` : 'not found'} at level ${facts?.raster?.level}, ${pixelsOff} pixels off; the Viewer at level ${probes.level}, ${viewerOff} of ${probes.out.length} probes off; scale bar "${bar?.[4]}" ${barUm?.toFixed(3)} µm; cells ${facts?.cells} drawn, ${outline ? subpaths(outline[1]) : 0} outlined, ${cellsShown.cells} the suite's; fills ${JSON.stringify(fillGroups)} against ${JSON.stringify(cellsShown.groups)}; ${circles} points, ${pointsShown} the suite's; text ${Math.min(...sizes)} to ${Math.max(...sizes)} pt (PDF ${Math.min(...pdfSizes)}); PDF strings ${same([...pdfStrings].sort(), [...svgTexts].sort()) ? 'the SVG\'s' : JSON.stringify(pdfStrings.slice(0, 6))}`,
+            raster?.rgba && raster.width === facts.raster.width && raster.height === facts.raster.height && pixelsOff === 0 && viewerOff === 0
+            && bar && bar[4] === `${facts.scaleBar.um} µm` && Math.abs(barUm - facts.scaleBar.um) < 0.01 * facts.umPerPt
+            && outline && subpaths(outline[1]) === facts.cells && facts.cells === cellsShown.cells && same(Object.keys(fillGroups).sort(), Object.keys(cellsShown.groups).sort()) && Object.keys(fillGroups).every((k) => fillGroups[k] === cellsShown.groups[k])
+            && circles === facts.transcripts && circles === pointsShown && circles > 100
+            && Math.min(...sizes) >= 6 && Math.min(...pdfSizes) >= 6 && same([...pdfStrings].sort(), [...svgTexts].sort()),
+            'every pixel the suite\'s; every probe within one level; the bar its length; the cells, fills and transcripts the suite\'s; text 6 pt or more, the same in the PDF');
+        }
+
         // Imported labels (wave 4, slice 4): a table of three of the Lung cells' labels (their ids
         // as select_cell answers them), each cell taking its row's label and the others none; a
         // table naming a cell the segmentation does not have refused, with how many; the

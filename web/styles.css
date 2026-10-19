@@ -1389,3 +1389,18 @@ table.data.cohort-balance { width: auto; min-width: 360px; margin-bottom: 8px; }
 .cohort-volcano-point { fill: var(--text-3); fill-opacity: 0.45; cursor: pointer; }
 .cohort-volcano-point.found { fill: var(--accent); fill-opacity: 0.85; }
 .cohort-volcano-point.chosen { fill-opacity: 1; stroke: var(--text); stroke-width: 1.5; }
+
+/* --- Reports (wave 8): figures ------------------------------------------------------------------ */
+.reports-body { max-width: 1100px; margin: 0 auto; display: flex; flex-direction: column; gap: 10px; }
+.reports-intro { margin: 0; font-size: 12.5px; line-height: 1.5; }
+.reports-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.reports-list .card.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.reports-editor { display: flex; flex-direction: column; gap: 10px; }
+.reports-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0 10px; }
+.reports-preview-wrap { background: var(--panel-2, var(--panel)); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; overflow: auto; }
+.reports-preview { display: block; margin: 0 auto; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18); background: #ffffff; }
+.reports-description { margin: 0; font-size: 12px; line-height: 1.45; }
+.reports-notes { margin: 0; padding-left: 18px; font-size: 12px; color: var(--warn, var(--text-2)); }
+.reports-notes:empty { display: none; }
+.reports-panel .seg-card-title { display: flex; align-items: center; gap: 4px; }
+.reports .spacer { flex: 1; }

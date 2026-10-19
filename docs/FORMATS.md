@@ -197,6 +197,7 @@ A project is one JSON document, saved automatically in the library (`<data dir>/
 | `regions` | The regions drawn on its datasets, each with its versions (from 0.5.0; absent until the first; below) |
 | `reviews` | The reviews of its cells and regions, appended and never changed (from 0.5.0; absent until the first; below) |
 | `samples`, `sampleFields` | What is known of its samples, and the fields that say it (from 0.7.0; absent until the first; below) |
+| `figures` | Its figures (from 0.8.0; absent until the first; below) |
 | `history` | Every change, with its time |
 
 A filter's checksum is the SHA-256 of the cell count (32-bit unsigned, little-endian) followed by
@@ -299,6 +300,42 @@ Relabeling a region appends a version of it with the new class. Curated edits ma
 default), `keep-segmentation` (kept for exploration) or `reject-segmentation`, and `comparison`
 the comparison it rests on, when there is one. A segmentation's status is its latest decision; the
 default is the segmentation of the latest promotion not rejected since.
+
+`figures` lists the project's figures (from 0.8.0), each `{id, name, size, width, height, text,
+letters, panels, created}`: `size` one of `single`, `onehalf`, `double` or `slide`; `width` and
+`height` the page in points (1/72 inch); `text` its text size in points (6 to 36); `letters` whether
+its panels are lettered. Each panel is `{id, kind, x, y, w, h}`, its place on the page in points,
+and what it shows: a `tissue` panel's `view` (a saved view's id), `region` (`{cx, cy, width}`, its
+center and width in µm), and optionally `scaleBar` (µm) and `pointSize` (pt); a `text` panel's
+`text`, `size`, `bold` and `align`. A panel with `letter: false` is not lettered. A figure holds no
+data: it is drawn from the project whenever it is shown or written.
+
+### Figures
+
+A figure is written as SVG, PDF (1.4; its text in Helvetica, the stains one image) or PNG (8-bit
+RGBA, its resolution in a `pHYs` chunk, 300 dpi by default), each carrying the figure's manifest,
+or as the manifest alone (JSON):
+
+- in an SVG, the element `<metadata id="situcraft-figure">`, the JSON in CDATA, first in the
+  document;
+- in a PDF, an attached file `situcraft-figure.json` (`application/json`, stored uncompressed);
+- in a PNG, an `iTXt` chunk, keyword `situcraft-figure`, uncompressed UTF-8, before `IEND`.
+
+| Manifest field | Holds |
+| --- | --- |
+| `format`, `version` | `"situcraft-figure-manifest"`, `1` |
+| `created` | When it was written (ISO 8601) |
+| `software` | `{name, version, commit}`: the SituCraft that wrote it |
+| `project` | `{id, name}` |
+| `figure` | The figure as the project holds it (above) |
+| `description` | The figure in words, panel by panel |
+| `panels` | Each `{id, letter, kind, shows, drawing, inputs, facts}`: `shows` in a few words; `drawing` the SHA-256 of the panel's marks written as SVG, each image in it stood in for by its size and the SHA-256 of its RGBA pixels (so that it does not depend on how a PNG is compressed); `inputs` what it was drawn from (a tissue panel's `dataset`: `{id, name, run, experimentUuid, fingerprint}`, the fingerprint the SHA-256 of the dataset's file fingerprint as canonical JSON; `view`: `{id, name, made}`, `made` the SHA-256 of the saved view as canonical JSON; `region`; `artifacts`: the segmentation, label set or clustering drawn, `{id, kind, name, files?}`); `facts` what a tissue panel drew (`region` `{x0, y0, x1, y1}` in µm, `umPerPt`, `scaleBar` `{um, pt}`, `cells` and `transcripts` drawn, `raster` `{width, height, level}` of its stains or null) |
+| `drawing` | The SHA-256 of the panels' drawings' list as canonical JSON |
+| `fingerprint` | The SHA-256 of everything else as canonical JSON (every object's keys sorted): a manifest edited after it was written does not match it |
+
+Canonical JSON is JSON with every object's keys sorted and nothing undefined; the SHA-256 is of its
+UTF-8 bytes. The same figure written at the same time (`write_figure`'s `time`) is the same bytes in
+SVG and PDF.
 
 ### Artifacts
 

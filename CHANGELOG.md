@@ -1,5 +1,41 @@
 # Changelog
 
+## Unreleased (0.8.0)
+
+Wave 8 of the [roadmap](situcraft-spec/roadmap.md): figures and a provable record. What others can
+check: figures with scale bars and legends, the methods text, the software and publications behind
+a result, a certificate checked by making the result again, and a package that opens anywhere.
+
+### Added
+
+- **Figures of the tissue (wave 8, slice 1).** The **Reports** view, until now a placeholder, keeps
+  the project's figures.
+  - **A figure** is a page of panels at a journal's column width (85, 114 or 174 mm) or a 16:9
+    slide, its text 7 pt by default and never below 6 pt, its panels lettered A, B, C in reading
+    order; previewed as it will print; listed in the project tree.
+  - **A tissue panel** is a saved view drawn at the panel's size, its region a center and a width
+    in µm: the stains composited from their samples as the Viewer composites them, at 300 dpi; the
+    cells' full-resolution outlines and their fill (a label set, clusters, niches, or a number
+    such as the cell's area); the view's genes' transcripts as points; a scale bar of a round
+    length; and a legend of the stains, the genes and the labels drawn. Each panel says what it
+    shows in words.
+  - **Written** as SVG or PDF (vector, the PDF's text in Helvetica) or PNG (300 dpi), each with the
+    figure's manifest inside: what each panel shows and was drawn from (the dataset by its
+    bundle's run and fingerprint, the saved view, the label set or clustering), what it drew, a
+    digest of its drawing, SituCraft's version and commit, and a fingerprint. The same figure
+    written at the same time is the same bytes in SVG and PDF.
+  - **Read back:** a figure SituCraft wrote is compared with the project: whether its manifest is
+    as written, what changed since in each panel's view, dataset and artifacts, and whether each
+    panel draws the same now.
+  - **Remote control:** `figure`, `write_figure` and `read_figure`.
+  - **Validated:** in Node, the drawing in SVG and PDF, the compositing of stains against hand
+    computed pixels, the scale bar's lengths, the layout and letters, and the manifest in every
+    format, its edits found; in the page, a figure of a saved view of the Lung written in every
+    format and read with the suite's own readers: the same bytes again, one manifest, the stains'
+    pixels the suite's own composite of the tiles' samples and the Viewer's within one level, the
+    scale bar its length, the cells and their fills and the transcripts the suite's own, no text
+    below 6 pt, the PDF's text the SVG's.
+
 ## 0.7.0 (2026-10-19)
 
 Wave 7 of the [roadmap](situcraft-spec/roadmap.md): samples and cohorts. A study's sections in one
