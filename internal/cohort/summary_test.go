@@ -36,9 +36,18 @@ func TestSummarizeByHand(t *testing.T) {
 	q := s.QC
 	// Transcripts 10, 4, 0, 6: median 5; genes 3, 2, 0, 2: median 2; areas 100, 80, 60, 120:
 	// median 90; nuclei 30, 20, 40: median 30, in 3 of 4 cells; 20 transcripts over 360 µm².
-	want := QC{Cells: 4, CellsPerMm2: 2, MedianTranscripts: 5, MedianGenes: 2, MedianArea: 90, MedianNucleusArea: 30, NucleusShare: 0.75, TranscriptsPer100: 20.0 / 360 * 100, Transcripts: 20, NoTranscriptShare: 0.25}
-	if q != want {
+	want := QC{Cells: 4, CellsPerMm2: 2, MedianTranscripts: 5, MedianGenes: 2, MedianArea: 90, MedianNucleusArea: ptr(30), NucleusShare: ptr(0.75), TranscriptsPer100: 20.0 / 360 * 100, Transcripts: 20, NoTranscriptShare: 0.25}
+	if !reflect.DeepEqual(q, want) {
 		t.Errorf("QC %+v,\nwant %+v", q, want)
+	}
+	// A segmentation that records no nucleus: its nuclei's numbers absent, not zero.
+	bare := append([]segment.Cell(nil), cells...)
+	for i := range bare {
+		bare[i].Nucleus, bare[i].NucleusArea = "", 0
+	}
+	in.Cells = bare
+	if s2, err := Summarize(in, 2); err != nil || s2.QC.NucleusShare != nil || s2.QC.MedianNucleusArea != nil || s2.QC.MedianTranscripts != 5 {
+		t.Errorf("no nuclei recorded: %+v %v", s2.QC, err)
 	}
 	// The pseudobulk's total is the labeled cells' transcripts.
 	var total uint64
@@ -51,6 +60,8 @@ func TestSummarizeByHand(t *testing.T) {
 		t.Errorf("the pseudobulk holds %d transcripts", total)
 	}
 }
+
+func ptr(v float64) *float64 { return &v }
 
 func TestSummarizeRefuses(t *testing.T) {
 	cells := []segment.Cell{{ID: "a", Area: 1}}

@@ -71,7 +71,7 @@ Status: **planned (wave N)** until built. Then **done**, **partial** (the gap no
 | Q2 | Spatial QC maps: transcripts per cell, negative-control density, unassigned fraction, cell and nuclear area, segmentation method, Q-score | done (wave 1, slice 6) |
 | Q3 | Distributions (histograms, box plots, scatter plots) with brushing linked to the tissue | done (wave 1, slice 6) |
 | Q4 | Non-destructive cell filters saved as named versions; their effects compared | done (wave 1, slice 6) |
-| Q5 | Metrics compared across samples, outliers flagged, no opaque pass/fail thresholds | planned (wave 7) |
+| Q5 | Metrics compared across samples, outliers flagged, no opaque pass/fail thresholds | done (wave 7, slice 5: eight quality numbers by sample and by batch; a sample far out flagged by a robust z-score and a difference that matters, with the reason, never passed or failed; left out only with a reason the design keeps) |
 
 ## Segmentation
 
@@ -149,8 +149,8 @@ Status: **planned (wave N)** until built. Then **done**, **partial** (the gap no
 | H1 | An experimental design (biological and technical replicates, pairing, covariates, contrasts) before any group inference | done (wave 7, slice 3: the replicate unit, the groups and their reference, contrasts, covariates and samples left out; technical replicates combined, pairing by units in more than one group; the matrix in treatment coding, patsy's for the same formula; refused, saying why, when it cannot be estimated or a batch could explain the groups; saved as versions) |
 | H2 | Sample summaries: composition, niches, QC, graph metrics, marker expression | done (wave 7, slice 4: the same steps on every sample, labels from one marker set; each sample's cells by label, niches found across the samples together, QC, graph and spatial statistics and pseudobulk by label and gene, each number traced to its artifact; written as CSV) |
 | H3 | Sample- or patient-level inference by default; effect sizes and intervals; raw and adjusted p-values; the correction and universe of tests recorded | planned (wave 7) |
-| H4 | Batch and panel differences shown; no silent correction | planned (wave 7) |
-| H5 | Panel compatibility checked before cross-sample gene comparisons | planned (wave 7) |
+| H4 | Batch and panel differences shown; no silent correction | done (wave 7, slice 5: the numbers by slide, run and panel; each batch's samples by group, a confounded group stated; the pseudobulk's principal components colored by batch or group; nothing corrected unless the design adjusts for a batch) |
+| H5 | Panel compatibility checked before cross-sample gene comparisons | done (wave 7, slice 5: every sample's panel compared, genes, codewords, IDs and versions; only the genes every panel has compared across samples, the others listed) |
 
 ## Output, provenance and reporting
 

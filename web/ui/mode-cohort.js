@@ -2,8 +2,8 @@
 // dataset a sample or its regions instead (a tissue microarray's cores, sections on one slide),
 // with the user's fields and those read from each bundle, written and read as CSV (lib/samples.js).
 // Slice 3: the design (ui/cohort-design.js). Slice 4: the same steps on every sample and the cohort
-// table (ui/cohort-summary.js). The comparisons come in the slices after (situcraft-spec/roadmap.md,
-// wave 7).
+// table (ui/cohort-summary.js). Slice 5: cohort QC, batches and panels (ui/cohort-qc.js). The
+// comparisons come in the slices after (situcraft-spec/roadmap.md, wave 7).
 
 import { h, icon, clear, downloadBlob, formatCount } from './dom.js';
 import { confirmDialog, toast } from './overlays.js';
@@ -11,8 +11,11 @@ import { promotedSegmentation } from '../lib/segmentations.js';
 import { area, cellsIn, regionsOf } from '../lib/regions.js';
 import { readCells } from '../lib/viewer-data.js';
 import { readSegCells } from '../lib/segview.js';
-import { designSection, setDraft } from './cohort-design.js';
-import { cohortSession, runSteps, stepsSection, summarize, summarySection, summaryTable, updateSummaryProgress } from './cohort-summary.js';
+import { designSection, draftOf, setDraft } from './cohort-design.js';
+import { makeDesign } from '../lib/design.js';
+import { batchStatements, itemIndex } from '../lib/cohort.js';
+import { cohortSession, runSteps, stepsSection, summarize, summaryDocument, summarySection, summaryTable, updateSummaryProgress } from './cohort-summary.js';
+import { qcSection } from './cohort-qc.js';
 import { BUNDLE_FIELDS, FIELD_KINDS, addSampleField, fieldValue, readSamplesTable, removeSampleField, renameSample, renameSampleField, sampleFields, samplesCSV, samplesOf, setFieldKind, setRegionSamples, setSampleField } from '../lib/samples.js';
 
 const exact = (v) => (Number.isFinite(v) ? v.toLocaleString('en-US') : '—');
@@ -273,7 +276,7 @@ export function mountCohort(app, container) {
     const regions = regionsSection(project, samples);
     if (regions) body.append(regions);
     body.append(designSection(app, { commit, redraw: () => schedule() }));
-    body.append(stepsSection(app, { cellsOf, redraw: () => schedule() }), summarySection(app, { cellsOf, redraw: () => schedule() }));
+    body.append(stepsSection(app, { cellsOf, redraw: () => schedule() }), summarySection(app, { cellsOf, redraw: () => schedule() }), qcSection(app, { redraw: () => schedule() }));
     const focus = app.store.ui.focus?.kind === 'sample' ? app.store.ui.focus.id : null;
     if (focus) body.querySelector(`tr[data-sample="${CSS.escape(focus)}"]`)?.scrollIntoView({ block: 'nearest' });
   }
@@ -338,6 +341,28 @@ export function mountCohort(app, container) {
       if (family) cohortSession.family = family;
       schedule();
       return summaryTable(id);
+    },
+    // A summary's cohort QC: its document, and the design draft's sentences about batches.
+    qc: async (id) => {
+      cohortSession.shown = id;
+      schedule();
+      const doc = await summaryDocument(id);
+      const design = makeDesign(app.store.project, draftOf(app.store.project).spec);
+      return { doc, design: { group: design.spec.group, levels: design.levels, balance: design.balance, statements: batchStatements(design) } };
+    },
+    // The samples' panels compared now, before any summary (api_cohort.go comparePanels).
+    panels: async () => {
+      const samples = samplesOf(app.store.project).filter((s) => !s.removed);
+      const body = { samples: [] };
+      for (const s of samples) {
+        const item = app.bundles.link(s.dataset.id)?.item ?? app.bundles.itemByPath(s.dataset.path);
+        if (!item) throw new Error(`${s.name}: its bundle is not open on this computer`);
+        body.samples.push({ sample: s.id, name: s.name, item: itemIndex(item) });
+      }
+      const response = await fetch('/api/cohort/panels', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const answer = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(answer.error ?? `HTTP ${response.status}`);
+      return answer;
     },
     // Each sample's cells as the table shows them, counted where they need counting.
     async cells() {

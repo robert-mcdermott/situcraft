@@ -93,7 +93,7 @@ func TestSimulateWritesACohort(t *testing.T) {
 		t.Errorf("--post-xenium: exit %d, %s", code, errs.String())
 	}
 	errs.Reset()
-	if code := runSimulate([]string{"--cohort", "huge", filepath.Join(dir, "y")}, &out, &errs); code != 2 || !strings.Contains(errs.String(), "null, paired, standard") {
+	if code := runSimulate([]string{"--cohort", "huge", filepath.Join(dir, "y")}, &out, &errs); code != 2 || !strings.Contains(errs.String(), "null, outlier, paired, standard") {
 		t.Errorf("an unknown cohort: exit %d, %s", code, errs.String())
 	}
 }

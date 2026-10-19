@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"encoding/csv"
 	"fmt"
+	"math"
 	"strconv"
 )
 
@@ -19,8 +20,9 @@ const (
 )
 
 // Row is one number of the table: a sample's (its id and name), its family (cells, share,
-// density, niche, qc, graph, enrichment, nearest, moran), what it is of, its value, and the
-// artifact it came from (empty for a niche's share: the niches are this summary's own).
+// density, niche, qc, graph, enrichment, nearest, moran, pca), what it is of, its value, and the
+// artifact it came from (empty for a niche's share and a principal component's score: the
+// summary's own).
 type Row struct {
 	Sample, Name, Family, Key string
 	Value                     float64
@@ -30,14 +32,22 @@ type Row struct {
 // QCKeys name a sample's quality numbers in the table, in order.
 var QCKeys = []string{"cells", "cells per mm²", "tissue area µm²", "median transcripts", "median genes", "median area µm²", "median nucleus area µm²", "nucleus share", "transcripts per 100 µm²", "transcripts", "no-transcript share"}
 
+// qcValues are a sample's quality numbers in QCKeys's order, NaN for one its segmentation does not
+// record (left out of the table).
 func qcValues(sd *SampleDoc) []float64 {
 	q := sd.QC
-	return []float64{float64(q.Cells), q.CellsPerMm2, sd.Tissue, q.MedianTranscripts, q.MedianGenes, q.MedianArea, q.MedianNucleusArea, q.NucleusShare, q.TranscriptsPer100, float64(q.Transcripts), q.NoTranscriptShare}
+	or := func(p *float64) float64 {
+		if p == nil {
+			return math.NaN()
+		}
+		return *p
+	}
+	return []float64{float64(q.Cells), q.CellsPerMm2, sd.Tissue, q.MedianTranscripts, q.MedianGenes, q.MedianArea, or(q.MedianNucleusArea), or(q.NucleusShare), q.TranscriptsPer100, float64(q.Transcripts), q.NoTranscriptShare}
 }
 
 // Table is the document's numbers, sample by sample: its cells by label, their shares and
-// densities (from its labels), its niches' shares, its quality (from its segmentation), and its
-// graph's and analyses' numbers.
+// densities (from its labels), its niches' shares, its quality (from its segmentation), its
+// graph's and analyses' numbers, and its scores on the pseudobulk's principal components.
 func Table(d *Document) []Row {
 	var out []Row
 	for i := range d.Samples {
@@ -58,10 +68,17 @@ func Table(d *Document) []Row {
 			add("niche", NicheName(v), share, "")
 		}
 		for k, v := range qcValues(sd) {
-			add("qc", QCKeys[k], v, sd.Segmentation.ID)
+			if !math.IsNaN(v) {
+				add("qc", QCKeys[k], v, sd.Segmentation.ID)
+			}
 		}
 		for _, st := range sd.Statistics {
 			add(st.Family, st.Key, st.Value, st.Source)
+		}
+		if d.PCA != nil && i < len(d.PCA.Scores) {
+			for k, v := range d.PCA.Scores[i] {
+				add("pca", fmt.Sprintf("PC%d", k+1), v, "")
+			}
 		}
 	}
 	return out

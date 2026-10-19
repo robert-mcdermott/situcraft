@@ -106,6 +106,30 @@ project, each a sample, compared with the sample or the subject, not the cell, a
     true types', its tissue within 2% of the section, the pseudobulk's raised gene within 0.15 (log)
     of the truth's, the niches found together near each sample's own (and for one sample alone,
     exactly its own), every domain's leading type defining a niche.
+- **Cohort QC, batches and panels (wave 7, slice 5).** Before any comparison, the samples side by
+  side, in the Cohort view.
+  - **Quality by sample:** cells per mm², median transcripts and genes, transcripts per 100 µm²,
+    median cell and nucleus areas, the shares of cells with a nucleus and without a transcript,
+    beside each sample's slide, run and panel. A sample far out on one (a robust z-score of 3.5
+    from the median absolute deviation, as Iglewicz and Hoaglin's, and a difference that matters:
+    20% for a quantity, 5 points for a share) is flagged with the reason in words, never passed
+    or failed; leaving it out of the design asks for a reason the design keeps.
+  - **Batches:** the numbers' medians by slide, run and panel; each batch's samples by the design's
+    groups, a group confounded with a batch said. Nothing is corrected unless the design adjusts
+    for the batch.
+  - **The pseudobulk's principal components** over the genes every panel has (log2 counts per
+    million, the 500 most variable), plotted on any two components and colored by any field; the
+    scores in the cohort table.
+  - **Panels compared** (genes, codewords, Ensembl IDs, versions): only the genes every panel has
+    are compared across samples; the others listed.
+  - **A planted outlier:** `situcraft simulate --cohort outlier` (and the cohort's `outliers`)
+    makes a sample detect less, as a failed run would.
+  - **Remote control:** `cohort_qc`, `compare_panels`.
+  - **Validated:** the rule by hand; the principal components against numpy 2.5.4's on three
+    cases (`validation/reference/pca/`), within 10⁻¹³; panels by hand; in the page, the simulated
+    cohort with none far out and both groups on each slide, its groups made to follow the slides
+    said to be confounded, a planted sample alone found far out on its transcripts and genes, and
+    the Lung and Breast panels' 67 shared genes, 435 in one, and codewords as their files say.
 - **Open by browsing.** **Open a bundle** shows this computer's folders instead of asking for a
   path.
   - **Places** to start from (the home folder, its Desktop, Documents and Downloads, SituCraft's
@@ -124,6 +148,13 @@ project, each a sample, compared with the sample or the subject, not the cell, a
     hidden files, each as SituCraft reads it, a file's path, the home folder, and refusals; in the
     page, the dialog walked to the development bundles, each marked as its manifest says, a file's
     path typed, and a bundle double-clicked opened.
+
+### Fixed
+
+- **Sample summaries' nuclei (slice 4):** the instrument's segmentation records its nuclei in the
+  bundle's cells table, not its own, so its samples' median nucleus area and share of cells with a
+  nucleus were 0; they are now read from the table, and a segmentation that records no nucleus
+  leaves them out instead of giving 0.
 
 ## 0.6.0 (2026-10-18)
 

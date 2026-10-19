@@ -2374,6 +2374,59 @@ export function installRemote(app) {
       };
     },
 
+    async cohort_qc(args) {
+      const list = summariesOf(project());
+      if (!list.length) throw new ActionError('The project has no summary yet: summarize_samples makes one.');
+      const record = args.summary === undefined ? list[0] : list.find((r) => r.id === String(args.summary));
+      if (!record) throw new ActionError(`No summary ${args.summary}; the project's are ${list.map((r) => r.id).join(', ')}.`);
+      await settleMode('cohort');
+      let qc;
+      try {
+        qc = await app.cohortView.qc(record.id);
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      const { doc, design } = qc;
+      const metrics = doc.qcMetrics ?? [];
+      const samples = doc.samples.map((s) => ({
+        sample: s.sample, name: s.name, bundle: s.bundle,
+        qc: Object.fromEntries(metrics.map((m) => [m.key, s.qc?.[m.key] ?? null])),
+        far: (doc.outliers ?? []).filter((o) => o.sample === s.sample).map((o) => ({ metric: o.metric, z: o.z, reason: o.reason })),
+        pca: doc.pca?.scores?.[doc.samples.indexOf(s)] ?? null,
+      }));
+      const panels = doc.panels ? { panels: doc.panels.panels.map((p) => ({ name: p.name, design: p.design, version: p.version, genes: p.genes, samples: p.samples })), shared: doc.panels.shared.length, partial: doc.panels.partial.map((g) => g.gene), codewords: doc.panels.codewords.map((g) => g.gene), ids: doc.panels.ids.length } : null;
+      const far = doc.outliers ?? [];
+      const batchWords = design.statements.length ? design.statements.map((st) => st.text).join(' ') : design.group ? `No slide, run or panel separates the ${design.group}s.` : 'The design names no groups yet.';
+      await frames();
+      return {
+        message: `${record.name} (${record.id}): ${far.length ? `${plural(new Set(far.map((o) => o.sample)).size, 'sample')} far out: ${far.slice(0, 4).map((o) => `${o.name}, ${o.reason}`).join('; ')}${far.length > 4 ? '; …' : ''}` : 'no sample far out'}. ${batchWords} ${doc.panels ? (doc.panels.panels.length > 1 ? `${doc.panels.panels.length} panels, ${doc.panels.shared.length} genes in every one.` : 'One panel.') : ''}${doc.pca?.variance?.length ? ` PC1 ${(100 * doc.pca.variance[0]).toFixed(1)}% of the variance.` : ''}`,
+        data: {
+          id: record.id, metrics, rule: doc.outlierRule, samples, outliers: far, batches: doc.batches,
+          design: { group: design.group, levels: design.levels, statements: design.statements, balance: design.balance.map((b) => ({ field: b.field, table: b.table })) },
+          pca: doc.pca ? { genes: doc.pca.genes.length, top: doc.pca.top, variance: doc.pca.variance, normalization: doc.pca.normalization } : null,
+          panels,
+        },
+      };
+    },
+
+    async compare_panels() {
+      if (!project().datasets.length) throw new ActionError('The project has no sample yet: add its datasets first.');
+      await settleMode('cohort');
+      let d;
+      try {
+        d = await app.cohortView.panels();
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      const nameOf = (k) => d.panels[k]?.design || d.panels[k]?.name || `panel ${k + 1}`;
+      return {
+        message: d.panels.length > 1
+          ? `${plural(d.panels.length, 'panel')} (${d.panels.map((p) => `${p.design || p.name} ${p.version}, ${plural(p.genes, 'gene')}, ${plural(p.samples.length, 'sample')}`).join('; ')}): ${plural(d.shared.length, 'gene')} in every panel, compared across samples; ${plural(d.partial.length, 'gene')} in some only, not compared${d.codewords.length ? `; ${plural(d.codewords.length, 'shared gene')} read by other codewords` : ''}${d.ids.length ? `; ${plural(d.ids.length, 'gene')} named or identified differently` : ''}.`
+          : `One panel (${d.panels[0]?.design || d.panels[0]?.name} ${d.panels[0]?.version ?? ''}): all ${plural(d.shared.length, 'gene')} compared across the samples.`,
+        data: { panels: d.panels, shared: d.shared, partial: d.partial.map((g) => ({ gene: g.gene, id: g.id, panels: g.panels.map(nameOf) })), codewords: d.codewords, ids: d.ids },
+      };
+    },
+
     async export(args) {
       const what = choose(args.what, ['project', 'archive', 'methods', 'alignment', 'regions', 'reviews', 'samples', 'cohort-table', 'pseudobulk'], 'kind of file');
       if (what === 'cohort-table' || what === 'pseudobulk') {

@@ -3098,6 +3098,49 @@ simulated cohort, 1,280 numbers, all equal. Against the truth: shares from marke
 lower (log) than the true cells', the transcripts of that type that segmentation assigns to a
 neighbor's cell.
 
+### 6.11 Cohort QC, batches and panels (verified, wave 7, slice 5)
+
+**Far-out samples.** A cohort's samples are few (often under twenty), so a mean and standard
+deviation are pulled by the very sample one hopes to find. The median and the median absolute
+deviation are not: a sample's robust z-score, its distance from the median over 1.4826 times the
+median absolute deviation (the factor that makes it a standard deviation for normal data), is
+Iglewicz and Hoaglin's modified z-score (*How to Detect and Handle Outliers*, ASQC 1993), and their
+threshold of 3.5 is kept. Quantities (cells per mm², median transcripts and genes, transcripts per
+area, areas) vary by factors, so they are compared as log(1 + value); shares as they are. Two
+cautions found on the simulated cohort: where the samples agree closely a small difference gets a
+large z (sections' tissue areas within 0.1% of each other), so a difference must also matter (20% of
+the median, or 5 points of a share); and where half the samples agree exactly the median absolute
+deviation is 0, so the mean absolute deviation (times 1.2533, its factor for normal data) is the
+spread. A section's size is not its quality: its cells, transcripts and tissue in all are not
+compared. A planted sample detecting 40% of its transcripts is found on its median transcripts
+(robust z −9.5), its median genes (−13.8) and its transcripts per area (−11.6), and no other sample is
+flagged. Flags are reasons to look, never verdicts; a sample leaves a comparison only with a reason,
+which the design keeps.
+
+**Batches.** A batch (slide, run, panel) that holds only one group makes the groups' difference the
+batch's; the design refuses it unless it adjusts for that batch (§6.9), and the QC states it
+beforehand with each batch's samples by group. Nothing is corrected silently: no batch correction
+(ComBat-style or otherwise) is applied to the numbers or the pseudobulk; a batch enters only as a
+covariate of the design.
+
+**The pseudobulk's principal components.** Each sample's labeled cells' transcripts, summed over its
+labels, of the genes every panel has, as log2(1 + counts per million): the 500 most variable genes,
+as DESeq2's `plotPCA` keeps its `ntop` (Love, Huber and Anders 2014, *Genome Biol* 15:550), centered
+and decomposed. With few samples and many genes the decomposition is of the samples' Gram matrix
+(S × S), by Jacobi's cyclic rotations (Golub and Van Loan, *Matrix Computations*, §8.5),
+deterministic, its products rounded so that every processor gives the same scores; a component's
+sign makes the sample farthest along it positive (as scikit-learn's `svd_flip`). Against numpy's SVD
+on the simulated cohort's pseudobulk, twelve drawn samples of 800 genes in two batches, and three of
+five genes: the same genes kept and every score within 10⁻¹³.
+
+**Panels.** Xenium panels are designed per tissue, and a custom panel adds genes: the Lung and Breast
+development panels share 67 of 289 and 280 genes. Transcripts carry a gene's name, so panels are
+matched by name, with their Ensembl IDs compared (a gene renamed between panel versions keeps its
+ID); only genes every panel has are compared across samples, and a gene one panel lacks is missing
+for its samples, never zero. Codewords are each panel's own assignment of barcodes to probes, so every
+gene the two development panels share is read by other codewords: a difference says the probes may
+differ, and with them the detection, not that the gene is another.
+
 ## 7. Datasets
 
 | Dataset | Source | Size | License | Use |

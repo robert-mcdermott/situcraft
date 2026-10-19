@@ -110,7 +110,10 @@ the covariates before any comparison, as a model matrix in treatment coding, and
 cannot estimate or what a batch could explain. Every sample is then measured the same way (the
 same labels, graph and questions) and summarized in the cohort table: its cells by label, niches
 found across the samples together, its quality, its spatial statistics and its pseudobulk, each
-number traced to the artifact it came from.
+number traced to the artifact it came from. Before any comparison, cohort QC lays the samples side
+by side: samples far out flagged with the reason (never passed or failed), the numbers by slide,
+run and panel, a group confounded with a batch said, the pseudobulk's principal components, and the
+panels compared so that only genes every sample measured are compared.
 
 ## A look around
 

@@ -27,18 +27,19 @@ type Input struct {
 	Tissue float64
 }
 
-// QC is a sample's quality, over its cells chosen.
+// QC is a sample's quality, over its cells chosen. The nuclei's numbers are absent (nil) when
+// its segmentation records no nucleus.
 type QC struct {
-	Cells             int     `json:"cells"`
-	CellsPerMm2       float64 `json:"cellsPerMm2"`
-	MedianTranscripts float64 `json:"medianTranscripts"`
-	MedianGenes       float64 `json:"medianGenes"`
-	MedianArea        float64 `json:"medianAreaUm2"`
-	MedianNucleusArea float64 `json:"medianNucleusAreaUm2"`
-	NucleusShare      float64 `json:"nucleusShare"`
-	TranscriptsPer100 float64 `json:"transcriptsPer100um2"`
-	Transcripts       int64   `json:"transcripts"`
-	NoTranscriptShare float64 `json:"noTranscriptShare"`
+	Cells             int      `json:"cells"`
+	CellsPerMm2       float64  `json:"cellsPerMm2"`
+	MedianTranscripts float64  `json:"medianTranscripts"`
+	MedianGenes       float64  `json:"medianGenes"`
+	MedianArea        float64  `json:"medianAreaUm2"`
+	MedianNucleusArea *float64 `json:"medianNucleusAreaUm2"`
+	NucleusShare      *float64 `json:"nucleusShare"`
+	TranscriptsPer100 float64  `json:"transcriptsPer100um2"`
+	Transcripts       int64    `json:"transcripts"`
+	NoTranscriptShare float64  `json:"noTranscriptShare"`
 }
 
 // Summary is a sample's numbers: its cells chosen and labeled, its tissue's area, each label's
@@ -76,6 +77,14 @@ func Summarize(in Input, K int) (*Summary, error) {
 	var sumT int64
 	var sumA float64
 	nucleated, empty := 0, 0
+	// Whether the segmentation records nuclei at all (any of its cells, chosen or not).
+	recorded := false
+	for _, c := range in.Cells {
+		if c.NucleusArea > 0 {
+			recorded = true
+			break
+		}
+	}
 	for i, c := range in.Cells {
 		if !in.Keep[i] {
 			continue
@@ -93,7 +102,7 @@ func Summarize(in Input, K int) (*Summary, error) {
 		if c.Transcripts == 0 {
 			empty++
 		}
-		if c.Nucleus != "" && c.NucleusArea > 0 {
+		if c.NucleusArea > 0 {
 			nucleated++
 			nuclei = append(nuclei, float64(c.NucleusArea))
 		}
@@ -117,10 +126,17 @@ func Summarize(in Input, K int) (*Summary, error) {
 	q := &s.QC
 	q.Cells = s.Cells
 	q.CellsPerMm2 = float64(s.Cells) / mm2
-	q.MedianTranscripts, q.MedianGenes, q.MedianArea, q.MedianNucleusArea = median(transcripts), median(genes), median(areas), median(nuclei)
+	q.MedianTranscripts, q.MedianGenes, q.MedianArea = median(transcripts), median(genes), median(areas)
 	q.Transcripts = sumT
+	if recorded {
+		m := median(nuclei)
+		q.MedianNucleusArea = &m
+	}
 	if s.Cells > 0 {
-		q.NucleusShare = float64(nucleated) / float64(s.Cells)
+		if recorded {
+			share := float64(nucleated) / float64(s.Cells)
+			q.NucleusShare = &share
+		}
 		q.NoTranscriptShare = float64(empty) / float64(s.Cells)
 	}
 	if sumA > 0 {

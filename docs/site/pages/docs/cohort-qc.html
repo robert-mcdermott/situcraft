@@ -1,0 +1,55 @@
+---
+title: Cohort QC, batches and panels
+description: Before comparing groups of samples, SituCraft compares the samples themselves: each quality number side by side with the samples far out flagged and why, the numbers by slide, run and panel, a group confounded with a batch, the pseudobulk's principal components, and the samples' gene panels.
+lede: A difference between groups is only as good as the samples behind it. Before any comparison, SituCraft lays the samples side by side, flags those far from the others with the reason, shows how the batches fall across the groups, and compares the panels, so that only genes every sample measured are compared.
+---
+      <h2 id="quality">Quality by sample</h2>
+      <p>The Cohort view's <strong>Cohort QC, batches and panels</strong> reads the cohort table's summary (see <a href="summaries.html">Sample summaries</a>). It lists each sample's quality numbers beside its bundle's slide, run and panel:</p>
+      <ul>
+        <li>cells per mm²</li>
+        <li>median transcripts and median genes per cell</li>
+        <li>transcripts per 100 µm²</li>
+        <li>median cell and nucleus areas</li>
+        <li>the shares of cells with a nucleus and without a transcript</li>
+      </ul>
+      <p>These follow a sample's quality, not its size: the cells and transcripts in all, and the tissue's area, are left out. A segmentation that records no nucleus shows its nuclei's numbers as missing, never zero. The instrument's segmentation takes its nuclei from the bundle's cells table.</p>
+      <p>A sample is <strong>far out</strong> on a number when it meets both of these conditions:</p>
+      <ul>
+        <li>Its robust z-score is at least 3.5. The score is its distance from the samples' median over 1.4826 times their median absolute deviation, as Iglewicz and Hoaglin's modified z-score is.</li>
+        <li>It differs by enough to matter: 20% of the median for a quantity, compared on a log scale, or 5 points for a share.</li>
+      </ul>
+      <p>Where half the samples agree exactly, the mean absolute deviation (times 1.2533) is the spread instead. Fewer than five samples are too few to call one far out.</p>
+      <p>A sample far out is highlighted, and listed with the reason in words, such as <em>median transcripts 43.0, 0.386 times the samples' median of 112 (robust z −9.5)</em>. Nothing is passed or failed. <strong>Leave it out of the design…</strong> asks why, and the design keeps the reason with the sample (see <a href="designs.html#refused">The design</a>). A sample is left out of a comparison only that way.</p>
+      <shot name="cohort-qc" alt="The Cohort view's QC of a simulated cohort with a planted outlier: each sample's quality numbers beside its slide, run and panel, the sixth sample's median transcripts, median genes and transcripts per 100 µm² highlighted, and its reasons listed">A simulated cohort whose sixth sample detects 40% of its transcripts: found far out on its transcripts and genes, with the reasons.</shot>
+
+      <h2 id="batches">Batches</h2>
+      <p><strong>By batch</strong> gives the samples' median of each number by slide, by run and by panel. A batch whose samples differ from the others' is worth knowing before any comparison.</p>
+      <p><strong>Batches and groups</strong> counts each slide's, run's and panel's samples in each of the design's groups. A batch that holds only one group <strong>confounds</strong> the groups with it: a difference between them could be the batch's. SituCraft says so here, and the design refuses to compare them unless it adjusts for that batch. Batches that hold the groups unevenly are noted. SituCraft corrects for no batch unless the design names it as a covariate.</p>
+
+      <h2 id="pca">The pseudobulk's principal components</h2>
+      <p>Each sample's pseudobulk (its labeled cells' transcripts, summed) over the genes every panel has becomes log2(1 + counts per million). The 500 most variable genes are kept, as DESeq2's plot of principal components keeps its top genes. They are centered and decomposed into principal components, with nothing corrected.</p>
+      <p>The plot shows the samples on any two components, colored by any field: the groups, the subject, the slide, the run or the panel. Samples that gather by a batch rather than by group show a batch effect to account for, and a sample apart from all is one to look at. Each sample's scores are also in the cohort table (its family <em>The pseudobulk's principal components</em>), and SituCraft's components are checked against numpy's on every change.</p>
+
+      <h2 id="panels">Panels</h2>
+      <p>Samples read with different gene panels can be compared only on the genes every panel has. SituCraft compares each sample's panel from its bundle, matching genes by name as transcripts carry them, and lists:</p>
+      <ul>
+        <li>the panels, with their designs, versions, genes and samples;</li>
+        <li>the genes every panel has: the only ones compared across samples, such as by the principal components above and the comparisons to come;</li>
+        <li>the genes in some panels only, which are not compared;</li>
+        <li>shared genes read by other codewords: each panel designs its own probes, so a gene may be detected a little differently in each;</li>
+        <li>genes named alike with other Ensembl IDs, or one ID under other names.</li>
+      </ul>
+      <p>The Lung and Breast development bundles, for example, share 67 of their 289 and 280 genes.</p>
+
+      <h2 id="remote">By remote control</h2>
+      <p><code>cohort_qc</code> reads a summary's QC: each sample's numbers and batches, the samples far out with their reasons, the numbers by batch, the design's batches by group with what it says of confounding, the principal components and the panels. <code>compare_panels</code> compares the samples' panels before any summary. See <a href="remote-control.html">Remote control</a>.</p>
+
+      <h2 id="checked">How it is checked</h2>
+      <p>The validation suite checks:</p>
+      <ul>
+        <li>The simulated cohort's eight samples: none is far out, each slide and run holds both groups, and there are principal components over its one panel.</li>
+        <li>With the groups made to follow the slides, the QC says they are confounded with them.</li>
+        <li>A cohort whose sixth sample was planted to detect 40% of its transcripts (<code>situcraft simulate --cohort outlier</code>): that sample alone is found far out, below the others on its transcripts and genes.</li>
+        <li>The Lung and Breast panels' genes in both, in one, and read by other codewords, each equal to the suite's own count from the panels' files.</li>
+      </ul>
+      <p>The principal components equal numpy's to 10⁻¹³ on three cases, and the rule for flagging a sample is checked by hand.</p>

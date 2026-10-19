@@ -39,7 +39,7 @@ const (
 )
 
 // MethodVersion names how summaries are made; a change makes them again.
-const MethodVersion = "1"
+const MethodVersion = "2"
 
 // Missing marks a gene a sample's panel has not, in the pseudobulk.
 const Missing = math.MaxUint32
@@ -83,6 +83,7 @@ type SampleDoc struct {
 	Choice       spatial.Choice     `json:"choice"`
 	Window       *spatial.WindowRef `json:"window"`
 	PanelGenes   int                `json:"panelGenes"`
+	Bundle       BundleFacts        `json:"bundle"`
 	Summary
 	Niches      []int       `json:"niches,omitempty"`
 	NicheShares []float64   `json:"nicheShares,omitempty"`
@@ -115,6 +116,15 @@ type Document struct {
 	Genes         []string    `json:"genes"`
 	Samples       []SampleDoc `json:"samples"`
 	Niches        *NichesDoc  `json:"niches,omitempty"`
+	// The samples' quality compared: the numbers, the rule, the samples far out, the batches.
+	QCMetrics   []QCMetric  `json:"qcMetrics"`
+	OutlierRule OutlierRule `json:"outlierRule"`
+	Outliers    []Outlier   `json:"outliers"`
+	Batches     []Batch     `json:"batches"`
+	// The samples' panels compared, and their pseudobulk's principal components over the genes
+	// every panel has.
+	Panels *PanelsDoc `json:"panels"`
+	PCA    *PCA       `json:"pca,omitempty"`
 }
 
 // Write writes a summary's files into dir: the document, the pseudobulk (by sample, the label by

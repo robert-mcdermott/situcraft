@@ -186,6 +186,32 @@ func TestCohortSummary(t *testing.T) {
 	if err != nil || len(nrows) != whole.Cells+part.Cells || len(nniches) != len(nrows) {
 		t.Errorf("niches.bin holds %d cells: %v", len(nrows), err)
 	}
+	// Each sample's bundle (its run and panel), the instrument's nuclei from the bundle's cells
+	// table, the panels compared (one), the batches (one slide), no sample far out among two, and
+	// the pseudobulk's one principal component over the panel's genes.
+	for _, sd := range d.Samples {
+		if sd.Bundle.Panel.Genes < len(counts.Genes) || sd.Bundle.Run == "" || sd.QC.NucleusShare == nil || *sd.QC.NucleusShare <= 0 || sd.QC.MedianNucleusArea == nil || *sd.QC.MedianNucleusArea <= 0 {
+			t.Errorf("%s: bundle %+v, nuclei %+v", sd.Name, sd.Bundle, sd.QC)
+		}
+	}
+	if d.Panels == nil || len(d.Panels.Panels) != 1 || len(d.Panels.Shared) != d.Samples[0].Bundle.Panel.Genes || len(d.Panels.Panels[0].Samples) != 2 {
+		t.Errorf("panels: %+v", d.Panels)
+	}
+	if len(d.Outliers) != 0 || d.OutlierRule.Z != 3.5 || len(d.Batches) != 3 || len(d.Batches[0].Samples) != 2 {
+		t.Errorf("quality: %+v %+v", d.Outliers, d.Batches)
+	}
+	if d.PCA == nil || len(d.PCA.Variance) != 1 || math.Abs(d.PCA.Variance[0]-1) > 1e-12 || len(d.PCA.Scores) != 2 || math.Abs(d.PCA.Scores[0][0]+d.PCA.Scores[1][0]) > 1e-9 {
+		t.Errorf("principal components: %+v", d.PCA)
+	}
+	// The panels compared before any summary.
+	prec := f.post("/api/cohort/panels", `{"samples":[{"sample":"s-1","name":"Whole","item":"0"},{"sample":"s-2","name":"Again","item":"0"}]}`)
+	var pd cohort.PanelsDoc
+	if err := json.Unmarshal(prec.Body.Bytes(), &pd); err != nil || prec.Code != 200 || len(pd.Panels) != 1 || len(pd.Shared) != d.Samples[0].Bundle.Panel.Genes {
+		t.Errorf("the panels compared: %d %s", prec.Code, prec.Body.String())
+	}
+	if prec := f.post("/api/cohort/panels", `{"samples":[{"sample":"s-1","name":"Whole","item":"9"}]}`); prec.Code != 400 || !strings.Contains(prec.Body.String(), "not open") {
+		t.Errorf("a bundle not open: %d %s", prec.Code, prec.Body.String())
+	}
 	// Asked again: answered at once.
 	var again struct {
 		ID       string

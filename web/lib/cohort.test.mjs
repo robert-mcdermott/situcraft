@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createProject, parseProject, serializeProject } from './project.js';
-import { FAMILIES, addSummary, familyCSV, graphAnalysesOf, graphOfSample, itemIndex, latestByQuestion, readCohortTable, summariesOf, summaryRecord, usedNames, vocabularyOf } from './cohort.js';
+import { FAMILIES, addSummary, batchStatements, familyCSV, graphAnalysesOf, graphOfSample, itemIndex, latestByQuestion, linearScale, qcRows, readCohortTable, summariesOf, summaryRecord, usedNames, vocabularyOf } from './cohort.js';
 
 const NOW = '2026-10-19T12:00:00.000Z';
 
@@ -95,4 +95,32 @@ test('the cohort table read into families, and a family as a wide CSV', () => {
   assert.equal(familyCSV(t, 'graph'), '');
   assert.throws(() => readCohortTable('a,b\n1,2\n'), /not a cohort table/);
   assert.throws(() => readCohortTable('sample,name,family,key,value,source\ns,n,cells,A,1\n'), /5 fields/);
+});
+
+test('cohort QC: each sample\'s numbers, batch and flags; the design\'s sentences about batches; a scale', () => {
+  const doc = {
+    qcMetrics: [{ key: 'medianTranscripts', name: 'median transcripts' }, { key: 'nucleusShare', name: 'share of cells with a nucleus', share: true }],
+    samples: [
+      { sample: 's-1', name: 'S1', bundle: { slide: 'slide 1', run: 'run 1', panel: { design: 'hLung_v1.1', version: '1.1.0' } }, qc: { medianTranscripts: 100, nucleusShare: null } },
+      { sample: 's-2', name: 'S2', bundle: { slide: '', run: 'run 2', panel: { name: 'Custom', version: '' } }, qc: { medianTranscripts: 30 } },
+    ],
+    outliers: [{ sample: 's-2', metric: 'medianTranscripts', z: -6, reason: 'median transcripts 30.0, far below' }],
+  };
+  const rows = qcRows(doc);
+  assert.deepEqual(rows.map((r) => [r.name, r.slide, r.run, r.panel]), [['S1', 'slide 1', 'run 1', 'hLung_v1.1 1.1.0'], ['S2', 'not recorded', 'run 2', 'Custom']]);
+  assert.deepEqual(rows[0].values, { medianTranscripts: 100, nucleusShare: null });
+  assert.equal(rows[1].values.nucleusShare, null);
+  assert.deepEqual(Object.keys(rows[0].flags), []);
+  assert.equal(rows[1].flags.medianTranscripts.z, -6);
+  const statements = batchStatements({
+    problems: ['condition is confounded with the slide: slide 1 holds only control; slide 2 holds only treated.', 'treated has 1 subject.'],
+    notes: ['Not every run holds every condition: run 1: 2 control, 0 treated.', 'Only 2 degrees of freedom are left.'],
+  });
+  assert.deepEqual(statements.map((x) => x.kind), ['confounded', 'uneven']);
+  assert.equal(batchStatements({}).length, 0);
+  const sc = linearScale(0, 10, 100, 200, 0);
+  assert.equal(sc(0), 100);
+  assert.equal(sc(5), 150);
+  assert.equal(linearScale(3, 3, 0, 10)(3), 5);
+  assert.equal(FAMILIES.at(-1).id, 'pca');
 });

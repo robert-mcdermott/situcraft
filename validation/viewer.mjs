@@ -2259,6 +2259,21 @@ export async function viewerSuite({ check, MissingData, verbose }) {
           const ls = listed.data?.samples ?? [];
           check('viewer', 'remote control: bundles opened together are added as a project\'s samples, each a sample of its own with its bundle\'s run, slide and panel', `${opened.message ?? opened.error}; ${listed.message ?? listed.error}`,
             opened.ok && listed.ok && ls.length === 2 && ls.every((s) => s.region === null && s.bundle.run && s.bundle.slide) && ls.map((s) => s.bundle.panel).join() === 'hLung_v1.1,hBreast_v1' && ls[0].cells === 11898 && ls[1].cells === 7275, 'two samples, 11,898 and 7,275 cells; panels hLung_v1.1 and hBreast_v1');
+          // Their panels compared (wave 7, slice 5) against the suite's own reading of each bundle's
+          // gene_panel.json: the genes both have, in the Lung panel's order; those one has; the shared
+          // genes read by other codewords; those with other Ensembl IDs.
+          const panelsCompared = await act('compare_panels');
+          const panelGenes = (name) => Object.fromEntries(JSON.parse(readFileSync(join(dataRoot, name, 'gene_panel.json'), 'utf8')).payload.targets.filter((tg) => tg.type.descriptor === 'gene').map((tg) => [tg.type.data.name, { id: tg.type.data.id, codewords: [...tg.codewords].sort((x, y) => x - y).join() }]));
+          const lungGenes = panelGenes('xenium-lung-2fov');
+          const breastGenes = panelGenes('xenium-breast-2fov');
+          const bothGenes = Object.keys(lungGenes).filter((g) => breastGenes[g]);
+          const oneGene = Object.keys(lungGenes).length + Object.keys(breastGenes).length - 2 * bothGenes.length;
+          const pc = panelsCompared.data ?? {};
+          check('viewer', 'the samples\' panels compared before any gene is: the genes in both the Lung and the Breast panel, those in one only, and the shared genes read by other codewords, each the suite\'s own count from the panels\' files',
+            `${panelsCompared.message ?? panelsCompared.error}; the suite: ${bothGenes.length} in both, ${oneGene} in one`,
+            panelsCompared.ok && pc.panels?.length === 2 && JSON.stringify(pc.shared) === JSON.stringify(bothGenes) && pc.partial?.length === oneGene
+            && pc.codewords?.length === bothGenes.filter((g) => lungGenes[g].codewords !== breastGenes[g].codewords).length && pc.ids?.length === bothGenes.filter((g) => lungGenes[g].id !== breastGenes[g].id).length,
+            `${bothGenes.length} genes in both panels (in order), ${oneGene} in one; codewords and IDs as the files say`);
           const set = await act('set_samples', { fields: [{ name: 'age', kind: 'number' }, { name: 'notes', kind: 'text' }], values: { 'xenium-lung-2fov': { subject: 'P1', condition: 'tumor', age: 0.1 + 0.2, notes: 'said "fine",\nthen left' }, 'xenium-breast-2fov': { subject: 'P2', condition: 'normal', age: 0 } } });
           const csvPath = join(work, 'samples.csv');
           const written = await act('export', { what: 'samples', path: csvPath, overwrite: true });
@@ -2511,6 +2526,39 @@ export async function viewerSuite({ check, MissingData, verbose }) {
             && aris.length === 8 && aris.every((x) => x > 0.45) && alone.ok && aloneN === sd.samples[0].cells && aloneSame === aloneN
             && [...leaders].every((l) => defining.has(l)),
             'every number its source\'s; shares within 0.03 of the truth\'s, tissue within 2%, SIM033 within 0.15 (log); ARI above 0.45 each; one sample alone exactly its own; every leader defines a niche');
+
+          // Cohort QC (wave 7, slice 5): the standard cohort's quality side by side, no sample far out,
+          // its batches (two slides and runs, one panel) holding both groups, its pseudobulk's
+          // principal components; the groups made to follow the slides, said to be confounded with
+          // them; and a cohort with a sample planted to detect 40% of its transcripts, that sample
+          // alone found far out, on its transcripts and genes.
+          const qcStandard = await act('cohort_qc', { summary: sd.id });
+          const qs = qcStandard.data ?? {};
+          const slideOf = Object.fromEntries((qs.samples ?? []).map((x) => [x.name, x.bundle?.slide]));
+          await act('set_samples', { values: Object.fromEntries(cs.map((x) => [x.sample, { condition: slideOf[x.sample] === 'simulated slide 1' ? 'control' : 'treated' }])) });
+          const qcConfounded = await act('cohort_qc', { summary: sd.id });
+          await act('set_samples', { values: Object.fromEntries(cs.map((x, k) => [x.sample, { condition: k < 4 ? 'control' : 'treated' }])) });
+          const plantedDir = join(work, 'planted-cohort');
+          rmSync(plantedDir, { recursive: true, force: true });
+          execFileSync(bin, ['simulate', '--cohort', 'outlier', '--quiet', plantedDir]);
+          const plantedTruth = JSON.parse(readFileSync(join(plantedDir, 'truth', 'cohort.json'), 'utf8'));
+          await act('new_project', { name: 'A planted outlier' });
+          const plantedOpened = await act('open_paths', { paths: [plantedDir], add: true });
+          await act('cohort_steps', { questions: [] });
+          const plantedSummary = await act('summarize_samples', { niches: 0 });
+          const qcPlanted = await act('cohort_qc', {});
+          const far = qcPlanted.data?.outliers ?? [];
+          const planted = plantedTruth.samples.filter((x) => x.planted).map((x) => x.name);
+          const variance = qs.pca?.variance ?? [];
+          check('viewer', 'cohort QC: the simulated cohort\'s quality by sample, no sample far out, its slides and runs each holding both groups, its pseudobulk\'s principal components over its one panel; the groups made to follow the slides said to be confounded with them; a planted sample alone found far out, on its transcripts and genes, each with its reason',
+            `${qcStandard.message ?? qcStandard.error} | ${qcConfounded.message ?? qcConfounded.error} | ${plantedOpened.message ?? plantedOpened.error} ${plantedSummary.message ?? plantedSummary.error} | ${qcPlanted.message ?? qcPlanted.error}`,
+            qcStandard.ok && qs.samples?.length === 8 && qs.outliers?.length === 0 && qs.metrics?.length === 8 && (qs.batches ?? []).filter((x) => x.kind === 'slide').length === 2 && (qs.batches ?? []).filter((x) => x.kind === 'panel').length === 1
+            && qs.design?.statements?.length === 0 && qs.panels?.panels?.length === 1 && qs.panels.shared === 120 && variance.length === 7 && variance.every((v, k) => v > 0 && (k === 0 || v <= variance[k - 1])) && variance.reduce((x, v) => x + v, 0) <= 1 + 1e-9
+            && qs.samples.every((x) => x.qc.nucleusShare > 0 && x.qc.medianNucleusAreaUm2 > 0 && x.pca?.length === 7)
+            && qcConfounded.ok && (qcConfounded.data?.design?.statements ?? []).some((st) => st.kind === 'confounded' && /condition is confounded with the slide/.test(st.text))
+            && plantedOpened.ok && plantedSummary.ok && planted.join() === 'S06' && far.length >= 2 && far.every((o) => o.name === 'S06' && o.z < 0)
+            && ['medianTranscripts', 'transcriptsPer100um2'].every((m) => far.some((o) => o.metric === m && /times the samples' median/.test(o.reason))),
+            'none far out; 2 slides, 1 panel of 120 genes; 7 components; confounded when the groups follow the slides; S06 alone far out, below, on its median transcripts and transcripts per 100 µm²');
         }
       }
 

@@ -68,6 +68,9 @@ type Cohort struct {
 	// have in common.
 	SubjectShare float64  `json:"subject_share"`
 	Effects      []Effect `json:"effects"`
+	// Outliers are samples made far out on purpose: each one's detection multiplied, as a failed
+	// run's would be (for checking that cohort QC finds them).
+	Outliers []Outlier `json:"outliers,omitempty"`
 	// Section is every sample's parameters but those its sample sets (its seed, odds, levels,
 	// names and densities).
 	Section Params `json:"section"`
@@ -83,6 +86,13 @@ type Effect struct {
 	Fold   float64 `json:"fold"`
 }
 
+// Outlier is a sample (S01 is 1) whose detection efficiency is multiplied: its cells' expression
+// and the ambient background, as the slide's efficiency multiplies them.
+type Outlier struct {
+	Sample    int     `json:"sample"`
+	Detection float64 `json:"detection"`
+}
+
 // Effect kinds.
 const (
 	EffectShare = "share"
@@ -90,8 +100,9 @@ const (
 )
 
 // CohortPresets are named cohorts: standard (two groups of four subjects, with effects), null (the
-// same without them) and paired (four subjects before and after, with the effects after).
-var CohortPresets = map[string]Cohort{"standard": standardCohort(), "null": nullCohort(), "paired": pairedCohort()}
+// same without them), paired (four subjects before and after, with the effects after) and outlier
+// (the standard cohort with its sixth sample detecting 40% of the transcripts it would).
+var CohortPresets = map[string]Cohort{"standard": standardCohort(), "null": nullCohort(), "paired": pairedCohort(), "outlier": outlierCohort()}
 
 // cohortSection is a cohort's section: the standard tissue on 250 µm a side, twelve domains (three
 // led by each type), without post-Xenium images.
@@ -120,6 +131,12 @@ func standardCohort() Cohort {
 		},
 		Section: cohortSection(),
 	}
+}
+
+func outlierCohort() Cohort {
+	c := standardCohort()
+	c.Outliers = []Outlier{{Sample: 6, Detection: 0.4}}
+	return c
 }
 
 func nullCohort() Cohort {
@@ -158,6 +175,12 @@ func (c *Cohort) Check() error {
 	need(c.Slides >= 0 && c.Slides <= 100, "0 to 100 slides")
 	need(c.SlideSD >= 0 && c.SlideSD <= 3 && c.ShareSD >= 0 && c.ShareSD <= 3 && c.LevelSD >= 0 && c.LevelSD <= 3, "spreads of 0 to 3")
 	need(c.SubjectShare >= 0 && c.SubjectShare <= 1, "a subject share of 0 to 1")
+	planted := map[int]bool{}
+	for _, o := range c.Outliers {
+		need(o.Sample >= 1 && o.Sample <= c.samples() && !planted[o.Sample], fmt.Sprintf("an outlier of one of the samples, once (sample %d)", o.Sample))
+		need(o.Detection > 0 && o.Detection <= 10, fmt.Sprintf("an outlier's detection above 0, at most 10 (%g)", o.Detection))
+		planted[o.Sample] = true
+	}
 	if n := c.samples(); n > 500 {
 		bad = append(bad, fmt.Sprintf("at most 500 samples (%d asked)", n))
 	}
@@ -349,8 +372,9 @@ func (c *Cohort) sampleParams(k int, s Sample) Params {
 			p.LevelFolds[t][g] = mul(p.LevelFolds[t][g], e.Fold)
 		}
 	}
-	// The slide's efficiency multiplies its cells' densities and the ambient background.
-	if eff := c.slideEfficiency(s.Slide); eff != 1 {
+	// The slide's efficiency (and a planted outlier's) multiplies its cells' densities and the
+	// ambient background.
+	if eff := mul(c.slideEfficiency(s.Slide), c.planted(k)); eff != 1 {
 		p.Types = append([]CellType(nil), p.Types...)
 		for t := range p.Types {
 			p.Types[t].Density = mul(p.Types[t].Density, eff)
@@ -372,6 +396,16 @@ func drawOf(v []float64, k int) float64 {
 		return 0
 	}
 	return v[k]
+}
+
+// planted is the kth sample's planted detection (1 when it is not an outlier).
+func (c *Cohort) planted(k int) float64 {
+	for _, o := range c.Outliers {
+		if o.Sample == k+1 {
+			return o.Detection
+		}
+	}
+	return 1
 }
 
 // slideEfficiency is a slide's detection efficiency: 1 without slides.
@@ -417,11 +451,13 @@ type CohortDesign struct {
 // cells and their transcripts are.
 type TrueSample struct {
 	Sample
-	Seed      uint64             `json:"seed"`
-	Detection float64            `json:"detection"`
-	TypeOdds  map[string]float64 `json:"type_odds"`
-	Cells     int                `json:"cells"`
-	ByType    map[string]int     `json:"cells_by_type"`
+	Seed      uint64  `json:"seed"`
+	Detection float64 `json:"detection"`
+	// Planted: a planted outlier's detection, within Detection (absent for the others).
+	Planted  float64            `json:"planted,omitempty"`
+	TypeOdds map[string]float64 `json:"type_odds"`
+	Cells    int                `json:"cells"`
+	ByType   map[string]int     `json:"cells_by_type"`
 	// Domains: each domain's leading type and its cells by type (the domains in the same order in
 	// every sample, each with the same mix).
 	Domains []TrueDomain `json:"domains"`
@@ -609,7 +645,10 @@ func (c *Cohort) truth(samples []Sample, params []Params, sums []*Summary) Cohor
 	}
 	for k, s := range samples {
 		sum, sp := sums[k], params[k]
-		ts := TrueSample{Sample: s, Seed: sp.Seed, Detection: c.slideEfficiency(s.Slide), TypeOdds: map[string]float64{}, Cells: sum.Cells, ByType: map[string]int{}}
+		ts := TrueSample{Sample: s, Seed: sp.Seed, Detection: mul(c.slideEfficiency(s.Slide), c.planted(k)), TypeOdds: map[string]float64{}, Cells: sum.Cells, ByType: map[string]int{}}
+		if f := c.planted(k); f != 1 {
+			ts.Planted = f
+		}
 		for i, ty := range p.Types {
 			ts.TypeOdds[ty.Name] = sp.TypeOdds[i]
 			ts.ByType[ty.Name] = sum.CellsByType[ty.Name]

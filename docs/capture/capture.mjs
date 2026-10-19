@@ -669,6 +669,25 @@ const scenes = {
     await scrollTo('.cohort-summary');
     await clearToasts();
   },
+  // Cohort QC (wave 7, slice 5): a simulated cohort with a planted outlier, its samples' conditions
+  // read from its table, the same steps and the summary; the sixth sample found far out.
+  async 'cohort-qc'() {
+    const dir = join(temp, 'planted-cohort');
+    if (!existsSync(dir)) {
+      await new Promise((done, fail) => spawn(binary, ['simulate', '--quiet', '--cohort', 'outlier', dir], { cwd: temp, stdio: 'ignore' }).on('exit', (code) => (code ? fail(new Error('situcraft simulate --cohort outlier failed')) : done())));
+    }
+    await act('new_project', { name: 'A planted outlier' });
+    await act('open_paths', { paths: [dir], add: true });
+    await act('set_samples', { table: readFileSync(join(dir, 'samples.csv'), 'utf8') });
+    await act('design', { unit: 'subject', group: 'condition', reference: 'control' });
+    await act('cohort_steps', { questions: [] });
+    await act('summarize_samples', { niches: 0 });
+    await act('cohort_qc', {});
+    await js(`document.getElementById('app').classList.add('inspector-closed')`);
+    await sleep(800);
+    await scrollTo('.cohort-qc');
+    await clearToasts();
+  },
   // The Jobs view after both examples were opened: each job's state and times, one's log open.
   async jobs() {
     await act('open_example', { example: 'lung' });

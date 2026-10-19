@@ -480,6 +480,16 @@
   "violations": []
  },
  {
+  "scene": "cohort-qc",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "cohort-qc",
+  "theme": "light",
+  "violations": []
+ },
+ {
   "scene": "jobs",
   "theme": "dark",
   "violations": []

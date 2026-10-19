@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"net/http"
 	"runtime"
@@ -60,6 +61,7 @@ type cohortSummarySpec struct {
 
 func (a *app) registerCohort(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/cohort/summary", a.startCohortSummary)
+	mux.HandleFunc("POST /api/cohort/panels", a.comparePanels)
 }
 
 // startCohortSummary starts the job summarizing a cohort's samples, answering {id, artifact, job}:
@@ -231,6 +233,7 @@ func (a *app) cohortSummaryJob(spec cohortSummarySpec, id string) jobs.Func {
 		var genesOf [][]string
 		var nicheCells []spatial.NicheCells
 		var nicheRows [][]uint32
+		var panels []cohort.Panel
 		parents := []artifacts.Parent{}
 		S := len(spec.Samples)
 		for s, sr := range spec.Samples {
@@ -250,6 +253,7 @@ func (a *app) cohortSummaryJob(spec cohortSummarySpec, id string) jobs.Func {
 			}
 			bySample, genesOf = append(bySample, pb), append(genesOf, genes)
 			doc.Samples = append(doc.Samples, *sd)
+			panels = append(panels, cells.panel)
 			parents = append(parents, artifacts.Parent{Kind: "segmentation", ID: sd.Segmentation.ID, Name: sd.Segmentation.Name})
 			if spec.Niches != nil {
 				nicheCells = append(nicheCells, cells.niche)
@@ -321,6 +325,27 @@ func (a *app) cohortSummaryJob(spec cohortSummarySpec, id string) jobs.Func {
 			}
 			niches = nc.Assign
 		}
+		// The samples' panels compared; their quality side by side; their pseudobulk's principal
+		// components over the genes every panel has.
+		ids := make([]string, S)
+		for k := range doc.Samples {
+			ids[k] = doc.Samples[k].Sample
+		}
+		doc.Panels = cohort.ComparePanels(ids, panels)
+		r.Log("info", "The samples' panels: %s.", doc.Panels.PanelWords())
+		doc.QCMetrics, doc.OutlierRule = cohort.QCMetrics, cohort.DefaultOutlierRule
+		doc.Outliers, doc.Batches = cohort.Outliers(doc.Samples, doc.OutlierRule), cohort.Batches(doc.Samples)
+		for _, o := range doc.Outliers {
+			r.Log("info", "%s is far out: %s.", o.Name, o.Reason)
+		}
+		if S >= 2 {
+			pca, err := cohort.PseudobulkPCA(cohort.SharedCounts(doc, pseudobulk, doc.Panels.Shared), doc.Panels.Shared, cohort.PCATop, cohort.PCAComponents)
+			if err != nil {
+				r.Log("warn", "No principal components: %v.", err)
+			} else {
+				doc.PCA = pca
+			}
+		}
 		stage, err := a.artifacts.Stage(id)
 		if err != nil {
 			return err
@@ -374,10 +399,12 @@ func (a *app) cohortSummaryJob(spec cohortSummarySpec, id string) jobs.Func {
 	}
 }
 
-// sampleCells are a sample's chosen cells for the niches: their rows and their centroids and labels.
+// sampleCells are a sample's chosen cells for the niches (their rows and their centroids and
+// labels), and its bundle's panel.
 type sampleCells struct {
 	rows  []uint32
 	niche spatial.NicheCells
+	panel cohort.Panel
 }
 
 // summarizeSample summarizes one sample: its segmentation's cells and counts, its cells chosen
@@ -405,6 +432,12 @@ func (a *app) summarizeSample(ctx context.Context, bundle string, sr cohortSampl
 	counts, err := segment.ReadCounts(dir)
 	if err != nil {
 		return nil, nil, nil, none, err
+	}
+	// The instrument's segmentation records its nuclei in the bundle's cells table, not its own.
+	if known := a.knownSegmentation(b); known != nil && known.ID == sm.ID {
+		if err := instrumentNuclei(b, cells); err != nil {
+			r.Log("warn", "%s: the nuclei of the bundle's cells could not be read (%v): its nuclei's numbers are left out.", sr.Name, err)
+		}
 	}
 	local, err := sr.Labels.decode(len(cells))
 	if err != nil {
@@ -451,6 +484,15 @@ func (a *app) summarizeSample(ctx context.Context, bundle string, sr cohortSampl
 	sd := &cohort.SampleDoc{Sample: sr.Sample, Name: sr.Name, Dataset: sr.Dataset, Segmentation: spatial.Side{ID: sm.ID, Name: sm.Name},
 		Labels: cohort.SampleLabels{ID: sr.Labels.ID, Kind: sr.Labels.Kind, Name: sr.Labels.Name, Level: sr.Labels.Level, Checksum: sr.Labels.Checksum},
 		Choice: sr.Cells.choice(), Window: ref, PanelGenes: len(counts.Genes), Summary: *sum, Statistics: []cohort.Statistic{}}
+	sd.Bundle = cohort.BundleFacts{Run: b.Experiment.RunName, Slide: b.Experiment.SlideID, Region: b.Experiment.RegionName, Software: b.Experiment.AnalysisSoftware}
+	var panel cohort.Panel
+	if p := b.Panel; p != nil {
+		panel = cohort.Panel{Name: p.Name, Design: p.DesignID, Version: p.Version}
+		for _, g := range p.Genes() {
+			panel.Genes = append(panel.Genes, cohort.PanelGene{Name: g.Name, ID: g.ID, Codewords: g.Codewords})
+		}
+		sd.Bundle.Panel = cohort.PanelRef{Name: p.Name, Design: p.DesignID, Version: p.Version, Genes: len(panel.Genes)}
+	}
 	if sr.Region != nil {
 		reg := *sr.Region.Region
 		sd.Region = &reg
@@ -475,7 +517,7 @@ func (a *app) summarizeSample(ctx context.Context, bundle string, sr cohortSampl
 		}
 		sd.Statistics = append(sd.Statistics, cohort.AnalysisStatistics(id, an)...)
 	}
-	var sc sampleCells
+	sc := sampleCells{panel: panel}
 	for i, cl := range cells {
 		if keep[i] {
 			sc.rows = append(sc.rows, uint32(i))
@@ -496,4 +538,68 @@ func formatArea(v float64) string {
 		out = append(out, s[i])
 	}
 	return string(out)
+}
+
+// instrumentNuclei gives the instrument's segmentation's cells their nuclei's areas from the
+// bundle's cells table (by cell id), where the segmentation records none.
+func instrumentNuclei(b *xenium.Bundle, cells []segment.Cell) error {
+	for _, c := range cells {
+		if c.NucleusArea > 0 {
+			return nil
+		}
+	}
+	table, err := b.ReadCells()
+	if err != nil {
+		return err
+	}
+	if table.NucleusArea == nil {
+		return errors.New("cells.parquet has no nucleus_area column")
+	}
+	for i := range cells {
+		if k, ok := table.Index[cells[i].ID]; ok && int(k) < len(table.NucleusArea) {
+			if v := table.NucleusArea[k]; v > 0 && !math.IsNaN(v) {
+				cells[i].NucleusArea = float32(v)
+			}
+		}
+	}
+	return nil
+}
+
+// comparePanels answers the panels of samples' bundles compared (POST /api/cohort/panels):
+// {samples: [{sample, name, item}]}, before any summary.
+func (a *app) comparePanels(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Samples []struct {
+			Sample string `json:"sample"`
+			Name   string `json:"name"`
+			Item   string `json:"item"`
+		} `json:"samples"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&body); err != nil || len(body.Samples) == 0 || len(body.Samples) > 500 {
+		writeError(w, http.StatusBadRequest, "Send {\"samples\": [{sample, name, item}]}, 1 to 500 samples.")
+		return
+	}
+	ids := make([]string, len(body.Samples))
+	panels := make([]cohort.Panel, len(body.Samples))
+	for k, s := range body.Samples {
+		file, ok := a.files.get(s.Item)
+		if !ok || (file.Kind != "bundle" && file.Kind != "archive") {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("%s: its bundle is not open on this computer", s.Name))
+			return
+		}
+		b, err := xenium.Open(file.path, xenium.Options{CacheDir: a.cacheDir})
+		if err != nil {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("%s: %v", s.Name, err))
+			return
+		}
+		ids[k] = s.Sample
+		if p := b.Panel; p != nil {
+			panels[k] = cohort.Panel{Name: p.Name, Design: p.DesignID, Version: p.Version}
+			for _, g := range p.Genes() {
+				panels[k].Genes = append(panels[k].Genes, cohort.PanelGene{Name: g.Name, ID: g.ID, Codewords: g.Codewords})
+			}
+		}
+		b.Close()
+	}
+	writeJSON(w, cohort.ComparePanels(ids, panels))
 }

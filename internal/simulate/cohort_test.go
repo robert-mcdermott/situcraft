@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"math"
 	"os"
 	"path/filepath"
@@ -296,6 +297,8 @@ func TestCohortIsChecked(t *testing.T) {
 		"of kind share or level":    func(c *Cohort) { c.Effects[0].Kind = "spread" },
 		"a sample's own settings":   func(c *Cohort) { c.Section.SlideID = "x" },
 		"without post-Xenium":       func(c *Cohort) { c.Section.PostXenium = DefaultPostXenium() },
+		"an outlier of one of":      func(c *Cohort) { c.Outliers = []Outlier{{Sample: 9, Detection: 0.5}} },
+		"an outlier's detection":    func(c *Cohort) { c.Outliers = []Outlier{{Sample: 2, Detection: 0}} },
 	}
 	for want, change := range cases {
 		c := standardCohort()
@@ -312,5 +315,50 @@ func TestCohortIsChecked(t *testing.T) {
 	}
 	if _, err := RunCohort(context.Background(), standardCohort(), t.TempDir(), "test", nil); err == nil || !strings.Contains(err.Error(), "already exists") {
 		t.Errorf("an existing folder: %v", err)
+	}
+}
+
+// A planted outlier: the tiny cohort with its second sample detecting 30% of what it would. Its
+// cells and their types are the same; its transcripts about 30% of the cohort's without it (the
+// ambient background too); the other sample byte for byte the same; the truth says so.
+func TestCohortOutlier(t *testing.T) {
+	plain, planted := filepath.Join(t.TempDir(), "plain"), filepath.Join(t.TempDir(), "planted")
+	c := tinyCohort()
+	a, err := RunCohort(context.Background(), c, plain, "test", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.Outliers = []Outlier{{Sample: 2, Detection: 0.3}}
+	b, err := RunCohort(context.Background(), c, planted, "test", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	transcripts := func(dir, name string) float64 {
+		var sim struct {
+			Made struct {
+				Transcripts int `json:"transcripts"`
+			} `json:"made"`
+		}
+		raw, err := os.ReadFile(filepath.Join(dir, name, "situcraft-simulation.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		json.Unmarshal(raw, &sim)
+		return float64(sim.Made.Transcripts)
+	}
+	ta, tb := a.Truth.Samples[1], b.Truth.Samples[1]
+	ratio := transcripts(planted, "S02") / transcripts(plain, "S02")
+	if ratio < 0.25 || ratio > 0.35 || tb.Cells != ta.Cells || fmt.Sprint(tb.ByType) != fmt.Sprint(ta.ByType) {
+		t.Errorf("the outlier: transcripts %.3f of the plain cohort's, cells %d and %d", ratio, tb.Cells, ta.Cells)
+	}
+	if tb.Planted != 0.3 || math.Abs(tb.Detection-0.3*ta.Detection) > 1e-12 || ta.Planted != 0 || b.Truth.Samples[0].Planted != 0 {
+		t.Errorf("the truth: planted %g, detection %g (plain %g)", tb.Planted, tb.Detection, ta.Detection)
+	}
+	for _, f := range []string{"transcripts.parquet", "cells.parquet"} {
+		x, _ := os.ReadFile(filepath.Join(plain, "S01", f))
+		y, _ := os.ReadFile(filepath.Join(planted, "S01", f))
+		if len(x) == 0 || !bytes.Equal(x, y) {
+			t.Errorf("S01's %s differs with S02 planted", f)
+		}
 	}
 }

@@ -16,7 +16,7 @@ func TestTable(t *testing.T) {
 	tenth, fifth := 0.1, 0.2 // a sum whose shortest text is long
 	d := &Document{Labels: LabelSet{Name: "Types", Names: []string{"T cell", "B, plasma"}}, Genes: []string{"CD3E", "MS4A1"}}
 	one := SampleDoc{Sample: "s-1", Name: "First", Segmentation: spatial.Side{ID: "seg-1"}, Labels: SampleLabels{ID: "lab-1"},
-		Summary:     Summary{Cells: 3, Labeled: 3, Tissue: 3e5, Counts: []int{2, 1}, Shares: []float64{2.0 / 3, 1.0 / 3}, Density: []float64{2 / 0.3, 1 / 0.3}, QC: QC{Cells: 3, Transcripts: 30, NucleusShare: 1}},
+		Summary:     Summary{Cells: 3, Labeled: 3, Tissue: 3e5, Counts: []int{2, 1}, Shares: []float64{2.0 / 3, 1.0 / 3}, Density: []float64{2 / 0.3, 1 / 0.3}, QC: QC{Cells: 3, Transcripts: 30, NucleusShare: ptr(1), MedianNucleusArea: ptr(20)}},
 		NicheShares: []float64{0.25, 0.75}, Statistics: []Statistic{{"enrichment", "B, plasma|T cell", 1.5, "spa-1"}, {"moran", "CD3E", tenth + fifth, "spa-2"}}}
 	two := SampleDoc{Sample: "s-2", Name: "Second \"core\"", Segmentation: spatial.Side{ID: "seg-2"}, Labels: SampleLabels{ID: "lab-2"},
 		Summary:     Summary{Cells: 1, Labeled: 1, Tissue: 1e5, Counts: []int{0, 1}, Shares: []float64{0, 1}, Density: []float64{0, 10}},
@@ -30,9 +30,10 @@ func TestTable(t *testing.T) {
 		t.Fatalf("header %v", rows[0])
 	}
 	want := Table(d)
+	// The second sample's segmentation records no nucleus: its two nuclei's numbers left out.
 	per := 3*2 + 2 + len(QCKeys)
-	if len(rows)-1 != len(want) || len(want) != 2*per+2 {
-		t.Fatalf("%d rows, %d numbers; want %d", len(rows)-1, len(want), 2*per+2)
+	if len(rows)-1 != len(want) || len(want) != 2*per+2-2 {
+		t.Fatalf("%d rows, %d numbers; want %d", len(rows)-1, len(want), 2*per)
 	}
 	for i, r := range want {
 		got := rows[i+1]
@@ -48,6 +49,9 @@ func TestTable(t *testing.T) {
 			}
 		}
 		return nil
+	}
+	if r := find("s-2", "qc", "nucleus share"); r != nil {
+		t.Errorf("a nucleus share not recorded, written: %v", r)
 	}
 	if r := find("s-1", "cells", "B, plasma"); r == nil || r[4] != "1" || r[5] != "lab-1" {
 		t.Errorf("First's B cells: %v", r)

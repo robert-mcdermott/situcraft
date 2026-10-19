@@ -3099,17 +3099,49 @@ makes, which SituCraft refuses.
      - **The pseudobulk is of the cells' assigned transcripts:** a few of a type's transcripts land
        in a neighbor's cell, so a gene raised in one type reads a little lower in its cells'
        pseudobulk than in the true cells (0.04 to 0.065 on the log scale here).
-5. **Cohort QC, batches and panels (Q5, H4, H5).**
-   - Each QC metric by sample, side by side and by batch; outlying samples flagged by robust
-     z-scores (the median and the median absolute deviation) with the reason, no pass or fail; a
-     sample left out of inference only with a reason, recorded.
-   - **Batches shown:** summaries by slide and run, the pseudobulk's principal components colored
-     by batch and group; a group confounded with a batch stated before any test; no correction
-     unless the design names the batch as a covariate.
-   - **Panels:** before any gene is compared across samples, every sample's panel compared (genes,
-     codewords, the panel's version): only genes in every panel are compared, the others listed.
-   - Validation: outliers planted in a simulated cohort found; a confounded design detected; the
-     Lung and Breast panels' shared genes (two runs and panels) by hand.
+5. **Cohort QC, batches and panels (Q5, H4, H5): done.**
+   - **Each QC metric by sample** (`internal/cohort` `Outliers`, `ui/cohort-qc.js`), side by side
+     with its slide, run and panel and by batch (`Batches`): eight numbers of a sample's quality,
+     not its size; a sample far out flagged by its robust z-score (the median absolute deviation's,
+     as Iglewicz and Hoaglin's modified z-score, 3.5) and a difference that matters (20% for a
+     quantity on a log scale, 5 points for a share), the reason in words, no pass or fail; five
+     samples at least. Left out of the design only with a reason, which the design keeps.
+   - **Batches shown:** the numbers' medians by slide, run and panel; each batch's samples by the
+     design's groups, a group confounded with a batch stated (the design's own check); the
+     pseudobulk's principal components (`PseudobulkPCA`: log2 counts per million over the genes
+     every panel has, the 500 most variable, Jacobi's rotations), plotted colored by any field and
+     in the cohort table; no correction unless the design names the batch.
+   - **Panels** (`ComparePanels`, `POST /api/cohort/panels`, and in every summary): genes matched by
+     name; those in every panel, the only ones compared across samples; the others listed, with
+     shared genes read by other codewords and genes with other Ensembl IDs or names.
+   - **A planted outlier** in simulated cohorts (`outliers`, the `outlier` preset). Remote control:
+     `cohort_qc`, `compare_panels`.
+   - Validation:
+     - **By hand** (`internal/cohort`): the rule's robust z-scores, the mean absolute deviation where
+       half agree, a difference too small to matter, too few samples; batches; two panels' shared,
+       partial, codeword and ID differences.
+     - **Against numpy** (`validation/reference/pca/`: `compare.sh` runs numpy 2.5.4 on the
+       simulated cohort's pseudobulk, twelve drawn samples of 800 genes in two batches and three of
+       five; compared on every commit): the same genes kept, every score and share within 10⁻¹³.
+     - **In the simulator:** a planted outlier detects its factor of the transcripts, its cells and
+       the other samples unchanged.
+     - **In the page** (viewer suite): the simulated cohort with no sample far out, each slide and
+       run holding both groups, seven principal components over its one panel; its groups made to
+       follow the slides said to be confounded; the planted outlier cohort's sixth sample alone
+       found far out (median transcripts 0.39 times the others', robust z −9.5; its median genes and
+       transcripts per 100 µm² too); the Lung and Breast panels' 67 shared genes, 435 in one panel
+       only and 67 read by other codewords, as the suite counts them from the panels' files.
+   - Found by slice 5:
+     - **The instrument's segmentation records no nuclei of its own:** slice 4's summaries gave its
+       samples a nucleus share and area of 0. They are read from the bundle's cells table now, and a
+       segmentation without nuclei leaves them out.
+     - **A robust z-score alone flags differences too small to matter** where the samples agree
+       closely (simulated sections' tissue areas within 0.1% of each other), hence the second
+       condition; and a section's size is not its quality (cells, transcripts and tissue in all are
+       not compared).
+     - **Every gene the Lung and Breast panels share is read by other codewords:** codewords are
+       each panel's own assignment, so a difference says the probes may differ, not that the gene
+       is another.
 6. **Differential abundance (H3).**
    - Each label's share between groups: its cells against the sample's labeled cells, by a
      quasi-binomial generalized linear model with the design's pairing and covariates; densities by

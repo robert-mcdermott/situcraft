@@ -15,6 +15,7 @@ export const FAMILIES = [
   { id: 'enrichment', label: 'Neighborhood enrichment (neighbors found ÷ expected)', unit: 'ratio', digits: 3 },
   { id: 'nearest', label: 'Nearest distances (median µm, from → to)', unit: 'µm', digits: 1 },
   { id: 'moran', label: 'Moran\'s I by gene', unit: 'I', digits: 4 },
+  { id: 'pca', label: 'The pseudobulk\'s principal components (scores)', unit: 'score', digits: 3 },
 ];
 
 // The questions whose numbers a summary reads (internal/cohort AnalysisStatistics).
@@ -156,4 +157,45 @@ export function familyCSV(table, familyId) {
     lines.push([s.sample, s.name, ...f.keys.map((k) => (v?.has(k) ? String(v.get(k).value) : ''))].map(quote).join(','));
   }
   return `${lines.join('\n')}\n`;
+}
+
+// --- Cohort QC (wave 7, slice 5) ---------------------------------------------------------------
+
+// A summary's quality by sample: each sample's batch (its bundle's slide, run and panel), its value
+// of each quality number the summary compared (null where its segmentation records none), and the
+// numbers it is far out on (the summary's outliers, by metric).
+export function qcRows(doc) {
+  const flags = new Map();
+  for (const o of doc.outliers ?? []) {
+    if (!flags.has(o.sample)) flags.set(o.sample, {});
+    flags.get(o.sample)[o.metric] = o;
+  }
+  const panelName = (p) => `${p?.design || p?.name || 'not recorded'}${p?.version ? ` ${p.version}` : ''}`;
+  return doc.samples.map((s) => ({
+    sample: s.sample,
+    name: s.name,
+    slide: s.bundle?.slide || 'not recorded',
+    run: s.bundle?.run || 'not recorded',
+    panel: panelName(s.bundle?.panel),
+    values: Object.fromEntries((doc.qcMetrics ?? []).map((m) => [m.key, s.qc?.[m.key] ?? null])),
+    flags: flags.get(s.sample) ?? {},
+  }));
+}
+
+// The design's sentences about batches: the groups confounded with a slide, run or panel (it cannot
+// be used), or batches that do not hold every group (it can, adjusted for the batch).
+export function batchStatements(design) {
+  return [
+    ...(design.problems ?? []).filter((p) => /is confounded with the (slide|run|panel)\b/.test(p)).map((text) => ({ kind: 'confounded', text })),
+    ...(design.notes ?? []).filter((n) => /^Not every (slide|run|panel)\b/.test(n)).map((text) => ({ kind: 'uneven', text })),
+  ];
+}
+
+// A linear map of [lo, hi] onto [from, to], a little margin kept; a flat range onto the middle.
+export function linearScale(lo, hi, from, to, margin = 0.08) {
+  if (!(hi > lo)) return () => (from + to) / 2;
+  const pad = (hi - lo) * margin;
+  const a = lo - pad;
+  const b = hi + pad;
+  return (v) => from + ((v - a) / (b - a)) * (to - from);
 }
