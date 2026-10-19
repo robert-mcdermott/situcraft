@@ -144,7 +144,7 @@ const scenes = {
   // The start page: the examples to download or make, what to bring.
   async start() {
     await act('set_mode', { mode: 'start' });
-    await waitFor(`document.querySelectorAll('.card.example').length === 3`);
+    await waitFor(`document.querySelectorAll('.card.example').length === 4`);
   },
   // The Lung example checked: what the run was, its findings, its derived data.
   async data() {

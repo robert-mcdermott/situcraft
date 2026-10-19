@@ -2976,17 +2976,52 @@ makes, which SituCraft refuses.
        (and its panel's design) from now on. A dataset added by an earlier release shows them as
        not recorded until it is added again; slice 5, which compares batches and panels, reads them
        from the bundle.
-2. **Simulated cohorts (data plan).**
-   - `situcraft simulate --cohort`: subjects in groups (or paired: each subject before and after),
-     each sample a section of its own layout, its types' shares and genes' levels varying from
-     sample to sample by a stated amount, and between groups by known effects: a type's share, a
-     gene's level in a type, how much one type mixes into another's domains. Slides as batches,
-     optionally. Small sections, so that a cohort of a dozen samples takes little disk.
-   - `truth/cohort.json`: the design, each effect, and each sample's true values; the start page's
-     example **A simulated cohort**, made in seconds.
-   - Validation: the effects measured from the true cells against those asked, within sampling
-     error; the sample-to-sample variation as asked; the same cohort from the same seed, byte for
-     byte.
+2. **Simulated cohorts (data plan): done.**
+   - **`situcraft simulate --cohort`** (`internal/simulate/cohort.go`; research.md §3.4b;
+     `docs/FORMATS.md`): groups, the first the reference; subjects in each, or paired subjects in
+     every group; slides as batches, an unpaired group's sections dealt to them in turn and a paired
+     subject's together, each slide's detection efficiency log-normal. Each section a simulated
+     bundle of its own layout, cells and molecules, sharing the panel and the domains' mixes
+     (`panel_seed`, `mix_seed`), its candidate cells refused for crowding trying other places in
+     their domain (`placement_retries`) so that the types placed are the types drawn.
+   - **Effects and variation** on the model's knobs (`type_odds`, `domain_odds`, `level_folds`):
+     a type's weight in every domain's mix or in another type's domains (its odds against each other
+     type), and a gene's expected count in a type; from section to section, log-normal (share_sd,
+     level_sd), a paired subject's sections sharing a part (subject_share).
+   - **The truth:** `truth/cohort.json` (the design, each effect with what the true cells show of
+     it, each section's true cells by domain and type and its transcripts), `samples.csv` and
+     `situcraft-cohort.json`. Presets `standard`, `null` and `paired`.
+   - **The start page's A simulated cohort** (`api_examples.go`: a generated example made by
+     `RunCohort`, ready once `situcraft-cohort.json` is there): opened, each sample's bundle added
+     with its subject and condition (`ui/examples.js`). Remote control: `open_example` with `cohort`.
+   - Validation:
+     - **By hand and by chance** (`internal/simulate/cohort_test.go`): the tiny cohort pinned by
+       digest (the same on arm64 and amd64, on one worker or many); the design's names, groups and
+       slides; the folder (each section's region, run and slide, one panel, the truth's cells each
+       bundle's own, the parameters read back); over 24 sections each effect within three standard
+       errors of the fold asked, and the null cohort's groups alike; a gene's fold exact in each
+       section (spread below 0.1); over 100 sections the variation's spread within 15% and 2% of
+       share_sd and level_sd, a paired subject's sections correlating by the subject share within
+       0.03; refusals.
+     - **In the page** (viewer suite): the cohort made and opened by remote control, each sample with
+       its subject, condition, slide and run; from its files, one panel, the truth's cells each
+       bundle's own, `samples.csv` the samples' fields, and every effect the suite's own from the
+       truth's counts.
+   - Found by slice 2:
+     - **A section's own domain mixes made a variation nobody asked for:** a minor type's weight in
+       a domain is a gamma draw, so a type's share of a kind of place differed several-fold from
+       section to section, and an effect within a kind of domain could not be told from it (a
+       standard error of 0.6 on the log scale). The cohort's sections share the mixes, each with its
+       own domains' places.
+     - **An effect on one type changes the others' odds against the rest:** a fold multiplies a
+       type's odds against each other type; where another type's weight changes too, its odds
+       against all the others change by less (0.19 and 0.24 below the log folds over 20 cohorts).
+       The truth measures each effect against the types no effect changes, domain by domain; over
+       20 cohorts 0.06 below the log folds remain (small domains' counts, and crowding).
+     - **A type's share of all the cells is not the effect:** odds are not collapsible, and the
+       types change places; the standard cohort's endothelial-like ×2 makes it 1.5 times as common
+       in all, and the immune-like type less common, though ×4 in the epithelial-like domains. The
+       example says what is doubled: a cell's odds of being of the type.
 3. **The design (H1).**
    - In the Cohort view: the replicate unit (a field, such as subject), the groups (a field and its
      levels), the contrasts, pairing, covariates, and technical replicates (several samples of one

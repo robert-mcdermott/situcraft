@@ -31,6 +31,11 @@ type Summary struct {
 	ImageHeight       int            `json:"image_height_px"`
 	// PostXeniumImages are the post-Xenium images made, within the bundle.
 	PostXeniumImages []string `json:"post_xenium_images,omitempty"`
+	// A single field's true cells by the domain that chose their type and by type (domains ×
+	// types), and the gene transcripts observed from each type's cells (types × genes): a
+	// cohort's sample's true values (not for a mosaic).
+	CellsByDomainType [][]int   `json:"cells_by_domain_type,omitempty"`
+	GeneCountsByType  [][]int64 `json:"gene_counts_by_type,omitempty"`
 }
 
 // Run makes the tissue p describes and writes it, as a simulated Xenium-shaped bundle with its
@@ -201,17 +206,35 @@ func (t *tissue) molecules(pn *panel, stop func() bool) ([]molecule, error) {
 	return out, nil
 }
 
-// count records what the molecules are, for the summary.
+// count records what the molecules are, for the summary, and the true values a cohort's sample
+// reports: its cells by domain and type, and its types' gene transcripts.
 func (wr *writer) count() {
 	wr.w.moleculesByOrigin = map[string]int{}
 	wr.w.trueCells = len(wr.t.cells)
+	p := wr.t.p
+	byDomain := make([][]int, len(wr.t.domains))
+	for d := range byDomain {
+		byDomain[d] = make([]int, len(p.Types))
+	}
+	for k := range wr.t.cells {
+		c := &wr.t.cells[k]
+		byDomain[c.domain][c.typ]++
+	}
+	genes := make([][]int64, len(p.Types))
+	for k := range genes {
+		genes[k] = make([]int64, p.Genes)
+	}
 	names := []string{"cell", "background", "control probe", "control codeword"}
 	for _, m := range wr.mols {
 		wr.w.moleculesByOrigin[names[m.origin]]++
 		if m.wide {
 			wr.w.wide++
 		}
+		if m.origin == FromCell && int(m.feature) < p.Genes {
+			genes[wr.t.cells[m.cell-1].typ][m.feature]++
+		}
 	}
+	wr.w.cellsByDomainType, wr.w.geneCountsByType = byDomain, genes
 }
 
 func (wr *writer) summary(folder string) *Summary {
@@ -219,6 +242,7 @@ func (wr *writer) summary(folder string) *Summary {
 		Folder: folder, Cells: wr.w.trueCells, CellsByType: wr.w.trueCellsByType, VisibleNuclei: wr.w.visibleNuclei,
 		InstrumentCells: wr.w.instrumentCells, Transcripts: wr.w.transcripts, MoleculesByOrigin: wr.w.moleculesByOrigin,
 		WideDisplacements: wr.w.wide, ImageWidth: wr.t.w, ImageHeight: wr.t.h, PostXeniumImages: wr.postXeniumImages(),
+		CellsByDomainType: wr.w.cellsByDomainType, GeneCountsByType: wr.w.geneCountsByType,
 	}
 }
 

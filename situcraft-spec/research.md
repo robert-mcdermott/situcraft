@@ -1743,6 +1743,85 @@ A half-pixel error in the truth's convention would put the nuclei 0.26 µm (H&E)
 On the standard preset the images are 1,675 × 1,672 (6.4 MB) and 913 × 914 (2.8 MB), and the
 simulation takes 4.5 s with them.
 
+### 3.4b Simulated cohorts (verified, wave 7, slice 2)
+
+A test that compares groups of samples is checked only on samples whose differences are known:
+how often it finds a difference that is not there, how often one that is, and whether its
+intervals cover the truth as often as they say. `situcraft simulate --cohort` makes cohorts of
+simulated sections for that (`internal/simulate/cohort.go`; FORMATS.md), each section a tissue of
+§3.4 with its own layout, cells and molecules.
+
+**The design.** Groups, the first the reference; subjects in each, one section a subject, or,
+paired, each subject a section in every group. Slides as batches: an unpaired group's sections
+dealt to the slides in turn (every slide holds every group, so a slide is never confounded with a
+group), a paired subject's sections on one slide. A slide's detection efficiency is log-normal and
+multiplies its cells' densities and the ambient background.
+
+**What the sections share.** The panel (its stream's seed is the cohort's) and the domains' mixes
+(likewise): the domain numbered d is the same kind of place in every section, in another place and
+of another size. A section's own domain mixes, drawn from its layout's stream as a tissue of its
+own draws them, would add a variation nobody asked for, and a large one: a minor type's weight in a
+domain is a gamma draw, so a type's share of a kind of place would differ several-fold from section
+to section. Twelve domains (each type leading three) on 250 µm average the domains' sizes out.
+
+**Variation and effects** are multiplicative, on the knobs of §3.4's model:
+- **A type's weight in the domains' mixes.** Multiplying one type's weight by r, then normalizing,
+  multiplies its odds against each other type by r in that domain, whatever the others' weights;
+  its odds against all the other types together change by less where another type's weight changes
+  too. A section's variation multiplies each type's weight by exp(σ_share Z) in every domain; a share
+  effect by its fold in every domain, or, with *within*, in the domains another type leads (how much
+  it mixes into them).
+- **A gene's expected count in a type's cells.** The type's profile (its genes' shares, summing to
+  one) is multiplied gene by gene, without normalizing again, so a fold on one gene multiplies its
+  expected count, and its odds among the type's transcripts, exactly. A section's variation
+  multiplies each gene in each type by exp(σ_level Z); a level effect by its fold.
+- **Pairing.** A paired subject's sections share part of each draw: √ρ times the subject's plus
+  √(1 − ρ) times the section's own, ρ the subject share, so that their draws correlate by ρ.
+- **Placement.** A section's candidate cell refused for crowding tries up to 200 other places in its
+  domain, keeping its type and size, before it is dropped (a tissue of its own drops it at once), so
+  that the types placed are nearly the types drawn whatever their sizes.
+
+Each draw comes from a stream of the cohort's seed (a subject's, a section's, a slide's), and each
+section's seed from another: the same cohort on any computer, byte for byte (pinned in the tests,
+on arm64 and amd64), whatever the number of workers making its sections.
+
+**What is true.** The folds are on the model's knobs, and the truth measures each effect where its
+fold acts: a type's log odds against the cells of the types no share effect changes, in each domain
+the effect holds in, averaged over those domains; and a gene's log odds among its type's
+transcripts. Two other measures were tried and set aside. A type's odds against all the other types
+are lowered wherever another effect raises another type (in the standard cohort, the immune-like
+type's ×4 in the epithelial-like type's domains lowers the endothelial-like type's odds against the
+rest there): over 20 cohorts of 12 subjects a group, the endothelial-like ×2 measured 0.19 below its
+log fold that way, and the immune-like ×4 0.24 below. Pooling a kind of domain's cells before taking
+the odds mixes domains of different base shares, and odds are not collapsible: 0.23 below. Each
+section's value, the groups' means, their difference and its standard error (from the sections'
+spread; paired, from the subjects' differences) are in `truth/cohort.json`, beside the fold asked: a
+cohort's own difference, which its sections' variation and its counts move away from the fold by
+chance, is what a perfect analysis of its true cells would find.
+
+**What remains.** Over 20 cohorts of 12 subjects a group (250 µm sections), the share effects
+measure 0.06 below their log folds on average (the endothelial-like ×2's 0.693, the immune-like
+×4's 1.386; about half a standard error of one cohort): a small domain's few cells of a minor type,
+whose +½ in the log odds pulls the difference toward zero, and crowding, which the retries reduce
+but do not end. The level effect measures 0.035 below its 0.916, within chance. A type's share of
+all the cells is another quantity again: the standard cohort's endothelial-like cells are 1.5 times
+as common in its treated sections as in its controls, not 2, and its immune-like cells less common
+(0.85 times), the endothelial-like cells taking their place outside the epithelial-like domains.
+
+**Validated** (`internal/simulate/cohort_test.go`):
+- **Effects as asked:** over a cohort of 12 subjects a group (200 µm sections), each effect as the
+  true cells show it is within three standard errors of the fold asked; the null cohort's groups
+  differ in no type's odds beyond three standard errors.
+- **A gene's fold exact:** in each section, the gene's log odds among its type's transcripts less
+  the log of the fold asked of that section are the same in every section but for counting (spread
+  below 0.1, with over 300 transcripts of it a section).
+- **The variation as asked:** over 100 sections, each type's log weight spreads by share_sd (within
+  15%) and each gene's log level by level_sd (within 2%), centered on zero; a paired subject's
+  sections correlate by the subject share (within 0.03), unpaired sections not at all.
+- **The folder:** each section a bundle naming its region, run and slide; one panel, byte for byte,
+  in every section; the truth's cells each bundle's own; the parameters read back as given; and
+  what a cohort cannot be refused, saying why.
+
 ## 4. Comparing segmentations (verified, wave 2, slice 5)
 
 Every segmentation is compared as SituCraft's own files (§3.1, §3.3): the instrument's is written

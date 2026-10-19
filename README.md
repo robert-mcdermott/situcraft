@@ -103,7 +103,9 @@ genes in a pattern, and make an answer again under another segmentation.
 In development for 0.7.0: samples and cohorts. A study's sections in one project, each a sample (or
 its regions, such as a tissue microarray's cores), described by the subject it came from, its
 condition and any field added, beside its run, slide and panel read from its bundle, and written
-and read as CSV.
+and read as CSV. Simulated cohorts (`situcraft simulate --cohort`, and the start page's **A
+simulated cohort**) are sections of subjects in groups whose differences are known, with their
+truth, for checking comparisons of groups.
 
 ## A look around
 

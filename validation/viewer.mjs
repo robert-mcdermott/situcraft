@@ -385,8 +385,8 @@ export async function viewerSuite({ check, MissingData, verbose }) {
     const downloads = examples.examples.filter((e) => !e.generated);
     const generated = examples.examples.filter((e) => e.generated);
     check('viewer', 'the example datasets are listed, and none is downloaded or made unasked', examples.examples.map((e) => `${e.name}: ${e.state}`).join(', '),
-      downloads.length === 2 && downloads.every((e) => e.state === 'absent' && e.download > 0 && e.license) && generated.length === 1 && generated[0].name === 'simulated-standard' && generated[0].state === 'absent' && !generated[0].download,
-      'two to download and one to make, all absent');
+      downloads.length === 2 && downloads.every((e) => e.state === 'absent' && e.download > 0 && e.license) && generated.map((e) => `${e.name}:${e.kind ?? ''}`).join() === 'simulated-standard:,simulated-cohort:cohort' && generated.every((e) => e.state === 'absent' && !e.download),
+      'two to download and two to make (a tissue and a cohort), all absent');
     for (const name of info.files.map((f) => f.name)) {
       const toured = await chrome.eval(`(async () => {
         const app = window.situcraft;
@@ -2268,6 +2268,56 @@ export async function viewerSuite({ check, MissingData, verbose }) {
           check('viewer', 'samples and their fields are kept with the project; a section made one sample again has its fields back', `${reopened.message ?? reopened.error}; ${whole.message ?? whole.error}`,
             reopened.ok && JSON.stringify(reopened.data.samples.map((s) => [s.sample, s.cells, s.fields])) === JSON.stringify(rs.map((s) => [s.sample, s.cells, s.fields])) && whole.ok && ws.length === 2 && ws[0].sample === 'xenium-lung-2fov' && ws[0].fields.age === 0.30000000000000004 && ws[0].fields.subject === 'P1',
             'the same samples, cells and fields; the Lung one sample with its own');
+        }
+
+        // A simulated cohort (wave 7, slice 2): made here and opened, each sample's bundle added
+        // with its subject and condition, and its slide and run read from it; from its files, the
+        // panel the same in every sample, the truth's cells each bundle's own, the table the
+        // samples', and every effect as the truth measures it the suite's own from its counts.
+        {
+          const made = await act('open_example', { example: 'cohort' });
+          const listed = await act('samples');
+          const cs = listed.data?.samples ?? [];
+          const examplesNow = await json(`${url}/api/examples`);
+          const cohortDir = examplesNow.examples.find((e) => e.name === 'simulated-cohort')?.path;
+          const own = cohortDir ? (() => {
+            const read = (p) => JSON.parse(readFileSync(join(cohortDir, p), 'utf8'));
+            const truth = read('truth/cohort.json');
+            const desc = read('situcraft-cohort.json');
+            const panels = new Set(desc.samples.map((s) => readFileSync(join(cohortDir, s.name, 'gene_panel.json'), 'utf8')));
+            const countsMatch = truth.samples.every((s) => {
+              const m = read(`${s.name}/situcraft-simulation.json`).made;
+              return m.cells === s.cells && JSON.stringify(Object.entries(m.cells_by_type).sort()) === JSON.stringify(Object.entries(s.cells_by_type).sort());
+            });
+            const table = readFileSync(join(cohortDir, 'samples.csv'), 'utf8').trim().split('\n').slice(1).map((l) => l.split(','));
+            // Each effect from the truth's counts: the type's log odds against the cells of the
+            // types no share effect changes, in each domain the effect holds in, averaged; or the
+            // gene's log odds among its type's transcripts; the groups' means' difference.
+            const changed = (type, leader) => truth.effects.some((x) => x.kind === 'share' && x.type === type && (!x.within || x.within === leader));
+            const value = (e, s) => {
+              if (e.kind === 'level') {
+                const l = s.levels.find((x) => x.type === e.type && x.gene === e.gene);
+                return Math.log((l.transcripts + 0.5) / (l.type_transcripts - l.transcripts + 0.5));
+              }
+              const vs = s.domains.filter((d) => !e.within || d.leader === e.within).map((d) => {
+                const rest = Object.entries(d.cells_by_type).filter(([type]) => type !== e.type && !changed(type, d.leader)).reduce((a, [, v]) => a + v, 0);
+                return Math.log(((d.cells_by_type[e.type] ?? 0) + 0.5) / (rest + 0.5));
+              });
+              return vs.reduce((a, v) => a + v, 0) / vs.length;
+            };
+            const mean = (v) => v.reduce((a, x) => a + x, 0) / v.length;
+            const effects = truth.effects.map((e) => {
+              const of = (g) => truth.samples.filter((s) => s.group === g).map((s) => value(e, s));
+              const measured = mean(of(e.group)) - mean(of(truth.design.groups[0]));
+              return { of: `${e.kind} ${e.type}${e.within ? ` in ${e.within}` : ''}${e.gene ? ` ${e.gene}` : ''} ×${e.fold}`, measured: Math.exp(measured), off: Math.abs(measured - e.measured_log_fold), z: (e.measured_log_fold - e.log_fold) / e.std_error };
+            });
+            return { panels: panels.size, countsMatch, table, effects, samples: truth.samples.length, slides: truth.design.slides };
+          })() : null;
+          check('viewer', 'a simulated cohort made here and opened: each sample added with its subject, condition, slide and run; its panel the same in every sample, the truth\'s cells each bundle\'s own, and each effect the truth measures the suite\'s own from its counts', `${made.message ?? made.error}; ${JSON.stringify(cs.map((s) => [s.sample, s.fields.subject, s.fields.condition, s.bundle.slide]))}; ${JSON.stringify(own && { ...own, table: own.table.length })}`,
+            made.ok && cs.length === 8 && cs.map((s) => s.sample).join() === 'S01,S02,S03,S04,S05,S06,S07,S08' && cs.every((s, k) => s.fields.subject === s.sample && s.fields.condition === (k < 4 ? 'control' : 'treated') && s.bundle.slide === `simulated slide ${(k % 2) + 1}` && s.bundle.run === `simulated run ${(k % 2) + 1}` && s.cells > 500)
+            && own && own.panels === 1 && own.countsMatch && own.samples === 8 && own.table.every(([name, subject, condition], k) => name === cs[k].sample && subject === cs[k].fields.subject && condition === cs[k].fields.condition)
+            && own.effects.length === 3 && own.effects.every((e) => e.off < 1e-9 && Math.abs(e.z) < 3),
+            'eight samples, four of each group, on two slides; one panel; the counts and every effect as recorded');
         }
       }
 

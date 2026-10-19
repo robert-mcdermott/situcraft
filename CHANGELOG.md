@@ -29,6 +29,32 @@ project, each a sample, compared with the sample or the subject, not the cell, a
     added together, fields written and read back, refusals changing nothing, two regions of the
     Lung as samples, their cells the suite's own count by centroid, all kept with the project; every
     earlier release's project opening with each dataset a sample.
+- **Simulated cohorts (wave 7, slice 2).** `situcraft simulate --cohort` makes sections of subjects
+  in groups, each a simulated bundle, whose differences are known: for checking the comparisons of
+  groups to come.
+  - **The design:** groups (the first the reference), subjects in each or paired subjects in every
+    group, and slides as batches (each holding every group), each slide detecting transcripts a
+    little more or less well.
+  - **Known effects** in a group: a cell type's odds against each other type, in every domain or in
+    the domains another type leads (how much it mixes into them), and a gene's level in a type.
+  - **Variation as asked,** from section to section: each type's weight and each gene's level in
+    each type, log-normally; a paired subject's sections sharing a part of it. The sections share
+    the panel and the domains' mixes, each with its own layout, cells and molecules.
+  - **The truth** (`truth/cohort.json`): the design, each effect with what the true cells show of
+    it (each section's value, the groups' difference and its standard error), and each section's
+    true cells by domain and type and transcripts; `samples.csv`, each sample's subject and
+    condition; `situcraft-cohort.json`, its parameters.
+  - **Presets:** `standard` (four subjects in each of two groups, on two slides, with three effects;
+    about 3 s and 64 MB), `null` (no effect) and `paired` (four subjects before and after).
+  - **The start page's A simulated cohort,** made in seconds and opened as a project of its eight
+    samples, each with its subject and condition and its slide and run read from its bundle.
+  - **Remote control:** `open_example` with `cohort`.
+  - **Validated:** the same cohort from the same seed, byte for byte on arm64 and amd64; each
+    effect as the true cells show it within three standard errors of the fold asked over 24
+    sections, the null cohort's groups alike; a gene's fold exact in each section; the variation's
+    spread and a paired subject's correlation as asked; in the page, the cohort made and opened,
+    each sample with its subject, condition, slide and run, one panel in every section, the truth's
+    cells each bundle's own and every effect the suite's own from the truth's counts.
 
 ## 0.6.0 (2026-10-18)
 

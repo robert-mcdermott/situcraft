@@ -6,7 +6,7 @@ package simulate
 // named as Xenium names them (NegControlProbe_…, NegControlCodeword_…), so readers classify them.
 // Each gene has a base level (gamma, shape 0.6); a type's profile is the base levels with its
 // markers multiplied by its fold and the other types' markers damped to a fifth, normalized to
-// sum to one.
+// sum to one (a cohort's sample then multiplies some genes' levels, without normalizing again).
 //
 // A cell's gene transcripts: its type's density times its area (per 100 µm²) times a size factor
 // (log-normal, σ 0.25) is its expected total; each gene's count is negative binomial with that
@@ -67,6 +67,7 @@ const (
 	streamCells  = 1 << 32
 	streamTiles  = 1 << 33
 	streamImage  = 1 << 34
+	streamMixes  = 1 << 35
 )
 
 func makePanel(p Params, s *random.Stream, typeShare []float64) *panel {
@@ -106,6 +107,10 @@ func makePanel(p Params, s *random.Stream, typeShare []float64) *panel {
 		}
 		for g := range prof {
 			prof[g] /= sum
+			// A cohort's sample's levels: its expected counts multiplied, the others' unchanged.
+			if p.LevelFolds != nil {
+				prof[g] = mul(prof[g], p.LevelFolds[k][g])
+			}
 			pn.tissueMean[g] += mul(typeShare[k], prof[g])
 		}
 		pn.profiles = append(pn.profiles, prof)

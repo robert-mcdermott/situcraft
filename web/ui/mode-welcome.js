@@ -82,7 +82,7 @@ export function mountWelcome(app, container) {
       const job = app.examples.job(example.name);
       const actions = h('div.btn-row');
       const card = h('div.card.example', { 'data-example': example.name },
-        h('h4', icon('bundle'), example.title.replace(/\s*\(.*\)$/, '')),
+        h('h4', icon(example.kind === 'cohort' ? 'samples' : 'bundle'), example.title.replace(/\s*\(.*\)$/, '')),
         h('p', example.summary),
         example.generated
           ? h('p.muted.example-source', `Data: simulated by SituCraft on this computer, nothing downloaded · about ${formatBytes(example.size)} on disk`)

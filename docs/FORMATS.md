@@ -721,6 +721,7 @@ are in [research.md](../situcraft-spec/research.md) §3.4.
 | `--quiet` | | Print only the summary |
 | `--reference` | 0 | Also write a single-cell reference of the tissue's types, this many cells of each, as `<folder>-reference.zarr` (below) |
 | `--post-xenium` | | Also make post-Xenium images of the section, an H&E and an immunofluorescence image, each placed by a known transform and deformation (below); not for a mosaic |
+| `--cohort` | | A simulated cohort instead of one tissue: `standard`, `null` or `paired` (below); `--params` then reads the cohort's parameters, `--seed` its seed and `--width`, `--height` its sections' size |
 
 The folder must not exist: it is written under a temporary name beside it and renamed into place
 when complete, so an interrupted run (Ctrl+C) leaves nothing behind.
@@ -761,3 +762,38 @@ Other tools read a simulated bundle as they read Xenium's: spatialdata-io's Xeni
 its table, transcripts, labels, boundaries and image with no warning, and tifffile and pyarrow
 its image and tables (`validation/reference/read_simulation.py` checks each against what the
 simulation made).
+
+### Simulated cohorts (`situcraft simulate --cohort`)
+
+`situcraft simulate --cohort <name> <new folder>` writes a simulated cohort: sections of subjects
+in groups, each a simulated bundle of its own layout, cells and molecules, with one panel; the
+sections differ from one another by stated amounts and between groups by known effects. The model
+and its validation are in [research.md](../situcraft-spec/research.md) §3.4b.
+
+| Cohort | Holds |
+| --- | --- |
+| `standard` | Four subjects in each of two groups, `control` and `treated`, on two slides; sections of 250 × 250 µm with twelve domains (about 750 cells each), with effects in the treated group: the endothelial-like type's odds against each other type ×2 in every domain, the immune-like type's ×4 in the domains the epithelial-like type leads, and `SIM033` ×2.5 in epithelial-like cells. About 3 s and 64 MB |
+| `null` | The same design without effects: the groups differ only by chance |
+| `paired` | Four subjects, each a section `before` and `after`, the effects after; a subject's sections share 60% of their variation, and lie on one slide |
+
+Its parameters (`--print-params` prints them; `--params` reads them back):
+
+| Parameter | Sets |
+| --- | --- |
+| `seed` | The cohort's seed: each sample's seed and draws come from it, and the panel's stream is it |
+| `groups`, `subjects`, `paired` | The groups (2 to 10; the first the reference) and the subjects in each, or, paired, the subjects each sampled in every group |
+| `slides`, `slide_sd` | Slides as batches (0 for none): an unpaired group's samples dealt to them in turn, a paired subject's together; each slide's detection efficiency log-normal with this σ, multiplying its cells' densities and the ambient background |
+| `share_sd`, `level_sd`, `subject_share` | Sample-to-sample variation on the log scale: of each type's weight in the domains' mixes, and of each gene's expected count in each type; in a paired design, the share of each draw's variance a subject's samples have in common |
+| `effects` | Each `{kind, group, type, within, gene, fold}`: `share` multiplies a type's weight in every domain's mix (its odds against each other type, in every domain), or with `within` in the domains another type leads; `level` multiplies a gene's expected count in a type's cells; in `group`, against the first group |
+| `section` | Every section's parameters, as `--print-params` lists a tissue's (but its seed, odds, levels, names and densities, which each sample sets). Each section has its own domains' places and its own cells, and the same domains' mixes as the others (the domain numbered *d* is the same kind of place in every section) |
+
+| File | Holds |
+| --- | --- |
+| `situcraft-cohort.json` | `format` (`"situcraft-cohort"`), `version` (1), `simulated`, `software`, `about`, `truth`, `samples` (each one's `name`, `subject`, `group` and `slide`) and `parameters` |
+| `samples.csv` | Each sample's `sample`, `subject` and `condition` (its group), as SituCraft reads a table of samples |
+| `truth/cohort.json` | `design` (the groups, subjects, pairing, slides and variation); `effects`, each as asked with what the true cells show of it (each group's mean of its samples' values, their difference `measured_log_fold` against `log_fold`, and its `std_error` from the samples' spread; paired: of the subjects' differences), the value being a type's log odds against the cells of the types no share effect changes, in each domain the effect holds in (averaged over them), or a gene's log odds among its type's transcripts, both of which the fold multiplies; and `samples`, each one's seed, slide `detection`, `type_odds`, true `cells`, `cells_by_type`, `domains` (each domain's `leader`, the type that leads it, and its `cells_by_type`) and, for each level effect, its `fold` and its type's `cells`, `transcripts` of the gene and `type_transcripts` |
+| `<sample>/` | A simulated bundle (above): its `experiment.xenium` names the sample's region, its run (`simulated run 1` for `simulated slide 1`) and its `slide_id`; its `situcraft-simulation.json` records its parameters, among them the cohort's `panel_seed` and `mix_seed`, its `placement_retries`, `type_odds`, `domain_odds` and `level_folds` |
+
+Opened in SituCraft (the start page's **A simulated cohort**, or the folder's bundles added
+together and `samples.csv` read in the Cohort view), each section is a sample with its subject,
+condition and slide.

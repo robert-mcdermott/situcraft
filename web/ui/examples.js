@@ -6,6 +6,7 @@ import { confirmDialog, toast } from './overlays.js';
 import { exampleFor } from '../lib/examples.js';
 import { guideFor, tourFor } from '../lib/tours.js';
 import { startTour } from './tour.js';
+import { samplesOf, setSampleField } from '../lib/samples.js';
 
 export function exampleJobKey(name) {
   return `example\u0000${name}`;
@@ -78,6 +79,11 @@ export function createExamples(app) {
 
   async function open(name) {
     try {
+      if (byName(name)?.kind === 'cohort') {
+        await inProject(name);
+        app.setMode('cohort');
+        return;
+      }
       const it = await item(name);
       app.focusItem({ kind: 'local', id: it.url });
       app.setMode('data');
@@ -86,11 +92,60 @@ export function createExamples(app) {
     }
   }
 
+  // A simulated cohort's samples (situcraft-cohort.json) and their bundles as local items, in the
+  // cohort's order: [{ sample, item }].
+  async function cohortItems(example) {
+    const sep = example.path.includes('\\') && !example.path.includes('/') ? '\\' : '/';
+    const doc = await getJSON(`/api/read-json?path=${encodeURIComponent(`${example.path}${sep}situcraft-cohort.json`)}`);
+    const paths = doc.samples.map((s) => `${example.path}${sep}${s.name}`);
+    // The samples' folders, not the cohort's (which would list its table too).
+    if (!paths.every((p) => app.localItems.some((i) => i.path === p))) {
+      const answer = await openPaths(paths);
+      app.setLocalItems(answer.files);
+    }
+    return doc.samples.map((sample, k) => {
+      const found = app.localItems.find((i) => i.path === paths[k]);
+      if (!found) throw new Error(`${sample.name}'s bundle is not in ${example.path}.`);
+      return { sample, item: found };
+    });
+  }
+
+  // A simulated cohort in this project if it has its samples (or is empty), else in a new project
+  // named after it: each sample's bundle added, and its subject and condition (its group) set.
+  async function cohortInProject(example) {
+    const entries = await cohortItems(example);
+    const missing = entries.filter((e) => !app.bundles.datasetFor(e.item));
+    if (missing.length && app.store.project.datasets.length && missing.length === entries.length) await app.newProject();
+    // Named after the cohort, not its first sample.
+    if (!app.store.project.datasets.length && app.store.project.name === 'Untitled project') app.store.commit({ ...app.store.project, name: `${example.title} example` }, 'Name project');
+    const datasets = [];
+    for (const e of entries) datasets.push(app.bundles.datasetFor(e.item) ?? (await app.bundles.add(e.item)));
+    // Each sample's subject and condition, unless already said.
+    let project = app.store.project;
+    let changed = false;
+    for (const [k, e] of entries.entries()) {
+      const sample = samplesOf(project).find((s) => s.dataset.id === datasets[k].id && !s.region);
+      if (!sample) continue;
+      for (const [field, value] of [['subject', e.sample.subject], ['condition', e.sample.group]]) {
+        if (sample.fields[field] === undefined && value) {
+          project = setSampleField(project, sample.id, field, value);
+          changed = true;
+        }
+      }
+    }
+    if (changed) app.store.commit(project, `Read ${example.title}'s subjects and conditions`);
+    return { example, items: entries.map((e) => e.item), datasets, item: entries[0].item, dataset: datasets[0] };
+  }
+
   // The example's dataset in this project if it has it (or is empty), else in a new project named
-  // after it: { example, item, dataset }.
+  // after it: { example, item, dataset } (a cohort's: its items and datasets too).
   async function inProject(name) {
     const example = byName(name);
     if (!example) throw new Error(`No example "${name}".`);
+    if (example.kind === 'cohort') {
+      if (example.state !== 'ready') throw new Error('It is not made yet.');
+      return cohortInProject(example);
+    }
     const it = await item(name);
     let dataset = app.bundles.datasetFor(it);
     if (!dataset) {

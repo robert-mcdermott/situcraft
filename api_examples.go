@@ -45,11 +45,25 @@ func newExamples(dir string) *examples.Library {
 				return err == nil
 			},
 			Outdated: "Made by an earlier SituCraft, without the H&E and immunofluorescence image of the section: make it again to add them (its run, cells and transcripts stay the same).",
+		}, {
+			Name:    cohortExample,
+			Title:   "A simulated cohort",
+			Summary: "SituCraft's standard simulated cohort: eight sections of 250 × 250 µm, four subjects in each of two groups (control and treated) on two slides, about 6,000 cells in all. In the treated sections a cell is twice as likely to be endothelial-like (its odds against each other type, in every part of the tissue), four times as likely to be immune-like where epithelial-like cells lead, and epithelial-like cells hold 2.5 times the SIM033; every section also differs from the others by chance. Made on this computer in seconds; each sample's subject and condition are read in with it, and the truth of every effect and sample is beside it.",
+			Size:    64 << 20,
+			Make: func(ctx context.Context, dir string, progress examples.Progress) error {
+				_, err := simulate.RunCohort(ctx, simulate.CohortPresets["standard"], dir, version, func(f float64, message string) { progress(f, message) })
+				return err
+			},
+			Marker: simulate.CohortFile,
+			Kind:   "cohort",
 		}}}
 }
 
-// simulatedExample is the generated example's name.
-const simulatedExample = "simulated-standard"
+// simulatedExample and cohortExample are the generated examples' names.
+const (
+	simulatedExample = "simulated-standard"
+	cohortExample    = "simulated-cohort"
+)
 
 func (a *app) registerExamples(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/examples", func(w http.ResponseWriter, r *http.Request) {

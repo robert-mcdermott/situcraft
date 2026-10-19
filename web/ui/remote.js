@@ -179,7 +179,7 @@ export function installRemote(app) {
     const list = app.examples.list() ?? [];
     const names = list.map((e) => e.name);
     const text = String(ref ?? '').trim().toLowerCase();
-    const short = { lung: 'xenium-lung-2fov', breast: 'xenium-breast-2fov', simulated: 'simulated-standard' }[text];
+    const short = { lung: 'xenium-lung-2fov', breast: 'xenium-breast-2fov', simulated: 'simulated-standard', cohort: 'simulated-cohort' }[text];
     return list.find((e) => e.name === choose(short ?? ref, names, 'example'));
   }
 
@@ -409,6 +409,16 @@ export function installRemote(app) {
           throw error;
         });
         example = resolveExample(example.name);
+      }
+      // A simulated cohort: each sample's bundle added, with its subject and condition.
+      if (example.kind === 'cohort') {
+        const { items, datasets } = await app.examples.inProject(example.name);
+        for (const [k, item] of items.entries()) {
+          await derivedData(item);
+          await app.bundles.registerSegmentation(item, datasets[k].id);
+        }
+        await settleMode('cohort');
+        return { message: `Opened ${example.title} in ${project().name}: ${plural(datasets.length, 'sample')}, each with its subject and condition.`, data: { project: project().name, datasets: datasets.map(datasetData) } };
       }
       const { dataset, item } = await app.examples.inProject(example.name);
       await derivedData(item);
