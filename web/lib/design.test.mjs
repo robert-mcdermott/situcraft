@@ -3,7 +3,7 @@ import test from 'node:test';
 import { createProject } from './project.js';
 import { addRegion, rectangle } from './regions.js';
 import { addSampleField, setRegionSamples, setSampleField } from './samples.js';
-import { addDesign, columnRank, designChanges, designFields, designMatrix, designVersions, designsOf, makeDesign } from './design.js';
+import { addDesign, columnRank, designChanges, designFields, designMatrix, designVersions, designsOf, makeDesign, normalizeSpec } from './design.js';
 
 const NOW = '2026-10-19T12:00:00.000Z';
 
@@ -136,6 +136,13 @@ test('refused: regions of one section as separate units; with one unit, its samp
   p = setSampleField(p, 's-r-2', 'condition', 'treated', NOW);
   const d = makeDesign(p, { unit: 'subject', group: 'condition' });
   assert.match(d.problems.join(' '), /Core 1 and Core 2 are regions of one section \(S04\) given different subjects/);
+  // A teaching example's pseudo-samples: kept, said first, and in the design's words.
+  const t = makeDesign(p, { unit: 'subject', group: 'condition', pseudoSamples: true });
+  assert.equal(t.ok, true, t.problems.join(' '));
+  assert.equal(t.pseudoSamples, true);
+  assert.match(t.notes[0], /^Pseudo-samples, for teaching: Core 1 and Core 2 are regions of one section \(S04\) given different subjects/);
+  assert.match(t.words.join(' '), /Its subjects are pseudo-samples: regions of one section, compared for teaching/);
+  assert.deepEqual(normalizeSpec({ unit: 'subject' }).pseudoSamples, undefined);
   p = setSampleField(p, 's-r-2', 'subject', 'P4', NOW);
   const e = makeDesign(p, { unit: 'subject', group: 'condition' });
   assert.equal(e.ok, true, e.problems.join(' '));

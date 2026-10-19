@@ -65,7 +65,7 @@ func CohortReference(c Cohort, path string, perType int) error {
 // panel's seed every sample's.
 func (c *Cohort) referenceParams() Params {
 	p := c.Section
-	p.Seed, p.PanelSeed = c.Seed, c.Seed
+	p.Seed, p.PanelSeed = c.Seed, c.panelSeed()
 	return p
 }
 
@@ -74,14 +74,17 @@ const CohortSamplesFile = "samples.csv"
 
 // Cohort is a simulated cohort's every setting, recorded in situcraft-cohort.json.
 type Cohort struct {
-	Seed     uint64   `json:"seed"`
-	Groups   []string `json:"groups"`
-	Subjects int      `json:"subjects"`
-	Paired   bool     `json:"paired"`
-	Slides   int      `json:"slides"`
-	SlideSD  float64  `json:"slide_sd"`
-	ShareSD  float64  `json:"share_sd"`
-	LevelSD  float64  `json:"level_sd"`
+	Seed uint64 `json:"seed"`
+	// PanelSeed is the seed of the panel every section shares (the seed if 0): the presets share
+	// the standard cohort's, on which its effect gene is among its type's most expressed.
+	PanelSeed uint64   `json:"panel_seed,omitempty"`
+	Groups    []string `json:"groups"`
+	Subjects  int      `json:"subjects"`
+	Paired    bool     `json:"paired"`
+	Slides    int      `json:"slides"`
+	SlideSD   float64  `json:"slide_sd"`
+	ShareSD   float64  `json:"share_sd"`
+	LevelSD   float64  `json:"level_sd"`
 	// SubjectShare is, in a paired design, the share of each draw's variance a subject's samples
 	// have in common.
 	SubjectShare float64  `json:"subject_share"`
@@ -118,7 +121,7 @@ const (
 )
 
 // CohortPresets are named cohorts: standard (two groups of four subjects, with effects), null (the
-// same without them), paired (four subjects before and after, with the effects after) and outlier
+// same without them), paired (six subjects before and after, with the effects after) and outlier
 // (the standard cohort with its sixth sample detecting 40% of the transcripts it would).
 var CohortPresets = map[string]Cohort{"standard": standardCohort(), "null": nullCohort(), "paired": pairedCohort(), "outlier": outlierCohort()}
 
@@ -159,17 +162,31 @@ func outlierCohort() Cohort {
 
 func nullCohort() Cohort {
 	c := standardCohort()
-	c.Seed, c.Effects = 20261020, []Effect{}
+	c.Seed, c.PanelSeed, c.Effects = 20261020, 20261019, []Effect{}
 	return c
 }
 
+// pairedCohort is six subjects each sampled before and after, the standard cohort's effects after
+// but the endothelial-like type's odds multiplied by 4: a shift six pairs find nearly always
+// (wave 7, slice 9's worked examples).
 func pairedCohort() Cohort {
 	c := standardCohort()
-	c.Seed, c.Paired, c.Groups = 20261021, true, []string{"before", "after"}
+	c.Seed, c.PanelSeed, c.Paired, c.Groups, c.Subjects = 20261021, 20261019, true, []string{"before", "after"}, 6
 	for k := range c.Effects {
 		c.Effects[k].Group = "after"
+		if c.Effects[k].Kind == EffectShare && c.Effects[k].Within == "" {
+			c.Effects[k].Fold = 4
+		}
 	}
 	return c
+}
+
+// panelSeed is the seed of the cohort's panel.
+func (c *Cohort) panelSeed() uint64 {
+	if c.PanelSeed != 0 {
+		return c.PanelSeed
+	}
+	return c.Seed
 }
 
 var groupName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9 _.-]{0,39}$`)
@@ -365,7 +382,7 @@ func (c *Cohort) sampleParams(k int, s Sample) Params {
 	if seed == 0 {
 		seed = sampleSeedFallback
 	}
-	p.Seed, p.PanelSeed, p.MixSeed = seed, c.Seed, c.Seed
+	p.Seed, p.PanelSeed, p.MixSeed = seed, c.panelSeed(), c.Seed
 	p.Retries = cohortRetries
 	own := drawsOf(random.New(c.Seed, streamSampleDraws+uint64(k)), types, genes)
 	var subject draws

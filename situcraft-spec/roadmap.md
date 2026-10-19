@@ -3293,12 +3293,65 @@ makes, which SituCraft refuses.
        stated.
      - **The cohort's sections may be mosaics** when their true cells alone are made: a mosaic's
        fields share the cohort's mixes.
-9. **Examples, documentation, release 0.7.0.**
-   - Worked examples on the simulated cohort (a composition shift found, a null comparison found
-     null, a gene changed in one type, a paired design), and a teaching example of the development
-     bundles' regions as pseudo-samples, labeled as such.
-   - The project fixture `validation/projects/0.7.0-*.situcraft.json`; the guide's pages for the
-     wave; CHANGELOG; release, and the product site published for it.
+9. **Examples, documentation, release 0.7.0: done.**
+   - **Two more cohorts on the start page** (`api_examples.go`): `simulated-null-cohort` (the
+     standard design without effects) and `simulated-paired-cohort` (six subjects before and
+     after, twelve sections, the endothelial-like type's odds ×4 after, the other effects the
+     standard's). Every preset shares the standard cohort's panel (`Cohort.PanelSeed`,
+     `panel_seed`), so SIM033 is an epithelial-like gene in each.
+   - **Worked examples of cohorts** (`web/lib/tours.js`; the steps' jobs in `web/ui/tour.js`): a
+     step sets the samples' fields or makes a section's regions its samples, describes and saves a
+     design (or shows one refused), runs the same steps on every sample, summarizes them, and makes
+     a comparison of the saved design; a display step shows the Cohort view's samples, design,
+     summary, QC or a comparison with its family, label or gene. A design step is done only when
+     the view's draft is that design, of which comparisons are made.
+     - *A gene changed in one cell type* (`cohort-gene`, the standard cohort): SIM033 in the
+       epithelial-like cells +0.94 log2 (0.59 to 1.30, adjusted p 0.005), the only one of 424
+       tests found; the true cells 0.97.
+     - *A comparison where nothing differs* (`cohort-null`): 14 abundance tests, none below a raw p
+       of 0.05 (the lowest 0.31); 423 expression tests, 11 below 0.05 and 1 below 0.01 (SIM015,
+       p 0.0006, adjusted 0.25); 10 enrichment tests, the lowest adjusted 0.36.
+     - *A composition shift found* (`cohort-shift`, paired): the endothelial-like share's odds ratio
+       2.19 (1.54 to 3.12, adjusted 0.009), density 1.80 (1.39 to 2.33); the epithelial-like 0.48
+       (0.27 to 0.84); the true cells' pooled odds ratios 2.26 and 0.47.
+     - *Each subject compared with itself* (`cohort-paired`): SIM033 1.08 log2 either way, 0.75 to
+       1.41 with the twelve sections as units (one gene of 427 tests found) and 0.84 to 1.31 paired
+       (22 of 442; the true cells 1.24).
+     - *Places in one section are not subjects* (`pseudo-samples`, the Breast data, for teaching):
+       three regions of stroma and three of tumor, each a subject, refused; marked pseudo-samples
+       (`design.pseudoSamples`, honored by `cohort.CheckDesign`), compared: the immune cells' odds
+       8.37 times in the stroma (1.58 to 44.5), the epithelial 0.04; the adipocytes untested. Every
+       comparison of such a design shows a banner, and its design's words and notes say so.
+   - **Documentation:** the guide's examples and worked examples; pseudo-samples on the design's
+     and samples' pages; pairing and neighbors' transcripts on the expression page; the worked
+     examples' findings on the abundance, expression and spatial tests' pages; FORMATS (the
+     presets, `panel_seed`), remote control (`open_example`'s cohorts, `design`'s
+     `pseudo_samples`, `tour`'s cohort steps), the README, the CHANGELOG; the home page's
+     release line, a cohorts feature, the validation table's cohort rows and the releases.
+   - **Release 0.7.0:** a cohort project as 0.7.0 saves it (the standard cohort's samples, the
+     design *By condition*, the steps with all three spatial questions, the summary and the three
+     comparisons) kept as `validation/projects/0.7.0-cohort.situcraft.json` and reopened by every
+     later release: its eight bundles found, its samples and design as saved, the steps, summary
+     and comparisons made again with the same ids, and the 52 artifacts it records the same by
+     their summaries. The product site built for it.
+   - **Validated** in the viewer suite: each worked example walked to its end and each number its
+     cards state checked against the comparisons' files and the cohorts' truth; the 0.2.0 to 0.6.0
+     Lung projects and the 0.7.0 cohort reopened, their artifacts made again.
+   - Found by slice 9:
+     - **The presets' panels were their seeds':** the null and paired cohorts, each with a seed of
+       its own, had other panels, in which SIM033 was not an epithelial-like gene; the panel's seed
+       is now a parameter of its own, the standard cohort's in every preset.
+     - **Four subjects paired were too few for a composition shift:** at the standard cohort's
+       effects the paired cohort's endothelial-like share was not found; six subjects and its odds
+       ×4 find it, and still show what pairing gains.
+     - **An absent label's estimate is infinite:** a label with no cells in one group (the Breast
+       regions' adipocytes in the tumor) gave an infinite ratio, which JSON cannot hold, and the
+       comparison failed; such a test is untested, with why, in every family.
+     - **Neighbors' transcripts in a label's pseudobulk:** with more endothelial-like cells after,
+       their markers (SIM025 to SIM030) are found higher in the epithelial-like and immune-like
+       cells, whose true expression did not change: transcripts read into their outlines. Found
+       paired, not with the sections as units; stated in the worked example and on the expression
+       page.
 
 ## 0.8.0: figures and a provable record (wave 8)
 

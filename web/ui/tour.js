@@ -6,7 +6,9 @@
 // button runs it as a job and goes on when it is done), show a comparison in the Compare view (its
 // labels read through it in the Labels tab), show a clustering in the Cell types view, show an
 // answer in the Spatial view or its cells on the tissue, or reveal a planted segmentation's answer
-// key. One tour at a time.
+// key. A cohort's worked example's steps (wave 7) set the samples' fields, make regions samples,
+// describe the design, run the same steps on every sample, summarize them and compare the groups,
+// and show a design, summary or comparison in the Cohort view. One tour at a time.
 
 import { h, icon } from './dom.js';
 import { segmentationByRole, stepView } from '../lib/tours.js';
@@ -23,8 +25,14 @@ import { landmarksFromTruth } from '../lib/simulated-truth.js';
 import { reviewCells, reviewRegion, segmentationFor } from './reviewing.js';
 import { labelSource, refOf } from './label-sources.js';
 import { graphsOf } from '../lib/graphs.js';
-import { analysesOf, zoneBands } from '../lib/spatial.js';
+import { NICHES_DEFAULTS, analysesOf, zoneBands } from '../lib/spatial.js';
 import { showAnalysisCells } from './spatial-cells.js';
+import { addDesign, designsOf, makeDesign } from '../lib/design.js';
+import { draftOf } from './cohort-design.js';
+import { addSampleField, sampleFields, samplesOf, setRegionSamples, setSampleField } from '../lib/samples.js';
+import { summariesOf } from '../lib/cohort.js';
+import { comparisonsOf as abundanceComparisons } from '../lib/abundance.js';
+import { testsOf } from '../lib/expression.js';
 
 let active = null;
 
@@ -35,6 +43,12 @@ const POST_XENIUM_ACTIONS = new Set(['add-image', 'landmarks', 'register', 'chec
 
 // The spatial worked examples' actions (runSpatial).
 const SPATIAL_ACTIONS = new Set(['graph', 'ask', 'remake-analysis', 'import-truth-domains']);
+
+// The cohorts' worked examples' actions (runCohort).
+const COHORT_ACTIONS = new Set(['sample-fields', 'region-samples', 'cohort-design', 'cohort-steps', 'summarize', 'compare-abundance', 'compare-expression', 'compare-spatial']);
+
+// The Cohort view's sections a cohort step may show.
+const COHORT_SECTIONS = { samples: '.cohort-table', design: '.cohort-design', steps: '.cohort-steps', summary: '.cohort-summary', qc: '.cohort-qc', abundance: '.cohort-abundance:not(.cohort-expression):not(.cohort-spatial-tests) .cohort-results', expression: '.cohort-expression .cohort-results', spatial: '.cohort-spatial-tests .cohort-results' };
 
 // The Cell types view's sections a step may bring into view.
 const SECTIONS = { map: '.ct-map-host', selection: '.ct-selection', clusters: '.ct-detail', review: '.rv-section' };
@@ -50,7 +64,7 @@ export function startTour(app, { tour, dataset }) {
   const back = h('button.btn.small', { type: 'button', onclick: () => go(index - 1) }, 'Back');
   const next = h('button.btn.small.primary', { type: 'button', onclick: () => advance() });
   const intro = tour.question
-    ? h('div.tour-intro', h('p', h('b', 'The question: '), tour.question), h('p.muted', h('b', 'What to expect: '), tour.expect), tour.simulated ? h('p.muted', 'Its errors are simulated.') : null)
+    ? h('div.tour-intro', h('p', h('b', 'The question: '), tour.question), h('p.muted', h('b', 'What to expect: '), tour.expect), tour.note || tour.simulated ? h('p.muted', tour.note ?? 'Its errors are simulated.') : null)
     : null;
   const card = h('section.tour-card', { role: 'dialog', 'aria-label': tour.title, 'aria-live': 'polite' },
     h('div.tour-head', icon(tour.question ? 'flask' : 'info'), h('b', tour.title), count, h('button.icon-button.small', { type: 'button', title: 'End the tour', 'aria-label': 'End the tour', onclick: () => close() }, icon('close'))),
@@ -166,6 +180,11 @@ export function startTour(app, { tour, dataset }) {
     if (d.action === 'ask') return Boolean(analysisOf(d));
     if (d.action === 'remake-analysis') return Boolean(remadeOf(d));
     if (d.action === 'import-truth-domains') return Boolean(trueDomains());
+    if (d.action === 'sample-fields') return fieldsSet(d);
+    if (d.action === 'region-samples') return regionSamplesMade(d);
+    if (d.action === 'cohort-design') return Boolean(!d.refused && d.save && savedDesign(d) && drafted(d));
+    // The steps, the summary and the comparisons are answered at once when made already.
+    if (COHORT_ACTIONS.has(d.action)) return false;
     return true;
   }
 
@@ -176,6 +195,7 @@ export function startTour(app, { tour, dataset }) {
     const ds = datasetRecord();
     if (POST_XENIUM_ACTIONS.has(d.action)) return runPostXenium(d, ds);
     if (SPATIAL_ACTIONS.has(d.action)) return runSpatial(d, ds);
+    if (COHORT_ACTIONS.has(d.action)) return runCohort(d, ds);
     if (step.mode === 'celltypes') {
       for (let k = 0; k < 200 && !app.cellTypesView; k += 1) await sleep(25);
       if (!app.cellTypesView) throw new Error('the Cell types view did not open');
@@ -361,6 +381,114 @@ export function startTour(app, { tour, dataset }) {
 
   // Shows a step's answer in the Spatial view, with what in it the step chooses; or, made again on
   // another segmentation, the first read with it.
+  // The cohorts' worked examples: the samples' fields (each sample's name as a field, or values by
+  // sample name), regions made samples, the design (saved under a name, so that its comparisons
+  // are found by it), and the Cohort view's steps, summary and comparisons.
+  const fieldValues = (d) => {
+    const samples = samplesOf(app.store.project);
+    if (d.name) return samples.filter((x) => !x.removed).map((x) => ({ sample: x, field: d.name, value: x.name }));
+    return Object.entries(d.values ?? {}).flatMap(([name, fields]) => {
+      const x = samples.find((y) => y.name === name);
+      return x ? Object.entries(fields).map(([field, value]) => ({ sample: x, field, value: String(value) })) : [];
+    });
+  };
+  const fieldsSet = (d) => {
+    const want = fieldValues(d);
+    return want.length > 0 && want.every((w) => String(w.sample.fields[w.field] ?? '') === w.value);
+  };
+  const regionSamplesMade = (d) => d.regions.every((name) => samplesOf(app.store.project).some((x) => x.region?.name === name && !x.removed));
+  const specOf = (d) => ({ unit: d.unit, group: d.group, reference: d.reference ?? '', contrasts: [], covariates: d.covariates ?? [], exclude: {}, ...(d.pseudoSamples ? { pseudoSamples: true } : {}) });
+  // Whether the Cohort view's draft is the step's design (the comparisons are made of the draft).
+  const drafted = (d) => {
+    const draft = draftOf(app.store.project);
+    return draft.name === d.save && JSON.stringify(makeDesign(app.store.project, draft.spec).spec) === JSON.stringify(makeDesign(app.store.project, specOf(d)).spec);
+  };
+  const savedDesign = (d) => {
+    const spec = makeDesign(app.store.project, specOf(d)).spec;
+    return designsOf(app.store.project).find((x) => x.name === d.save && JSON.stringify(x.spec) === JSON.stringify(spec)) ?? null;
+  };
+  // A cohort's comparison of a kind (abundance, expression, spatial), the latest, of the design so
+  // named when one is.
+  const cohortComparison = (kind, design) => {
+    const p = app.store.project;
+    const list = kind === 'abundance' ? abundanceComparisons(p) : testsOf(p, kind === 'expression' ? 'expression' : 'spatial-comparison');
+    return list.find((r) => r.state === 'complete' && (!design || r.design?.name === design)) ?? null;
+  };
+
+  async function runCohort(d, ds) {
+    const project = app.store.project;
+    if (d.action === 'sample-fields') {
+      const want = fieldValues(d);
+      if (!want.length) throw new Error('do the steps before this one first: the samples are not there yet');
+      let next = project;
+      for (const field of new Set(want.map((w) => w.field))) {
+        if (!sampleFields(next).some((f) => f.name === field)) next = addSampleField(next, field, 'text');
+      }
+      for (const w of want) next = setSampleField(next, w.sample.id, w.field, w.value);
+      app.store.commit(next, 'Set the worked example\'s fields');
+      return null;
+    }
+    if (d.action === 'region-samples') {
+      const regions = d.regions.map((name) => regionsOf(project, ds.id).find((r) => r.name === name));
+      if (regions.some((r) => !r)) throw new Error('do the steps before this one first: the regions are not drawn yet');
+      app.store.commit(setRegionSamples(project, ds.id, regions.map((r) => r.id)), 'Make the regions samples');
+      return null;
+    }
+    app.setMode('cohort');
+    for (let k = 0; k < 200 && !app.cohortView; k += 1) await sleep(25);
+    const view = app.cohortView;
+    if (!view) throw new Error('the Cohort view did not open');
+    if (d.action === 'cohort-design') {
+      const design = makeDesign(app.store.project, specOf(d));
+      // A design the example shows refused: drafted and shown, not saved.
+      if (d.refused) {
+        view.showDesign(design.spec, 'Refused');
+        return design;
+      }
+      if (!design.ok) throw new Error(`the design cannot be used: ${design.problems.join(' ')}`);
+      if (d.save && !savedDesign(d)) app.store.commit(addDesign(app.store.project, design, { name: d.save }).project, `Save design ${d.save}`);
+      view.showDesign(design.spec, d.save ?? 'Design');
+      return design;
+    }
+    if (d.action === 'cohort-steps') return view.steps({ ...(d.questions ? { questions: d.questions } : {}), ...(d.markers ? { markers: d.markers } : {}) });
+    if (d.action === 'summarize') return view.summarize({ niches: d.niches === 0 ? null : { ...NICHES_DEFAULTS, niches: d.niches ?? NICHES_DEFAULTS.niches } });
+    if (d.action === 'compare-abundance') return view.abundance(d.families ? { families: d.families } : {});
+    if (d.action === 'compare-expression') return view.expression({});
+    if (d.action === 'compare-spatial') return view.spatial(d.families ? { families: d.families } : {});
+    return null;
+  }
+
+  // Shows the Cohort view's section a step names: the samples, the design, the steps, the
+  // summary's table (a family of it) or its QC, or a comparison (of the design named), a family
+  // and a result chosen, a label and gene.
+  async function showCohort(step) {
+    const c = step.cohort ?? {};
+    app.setMode('cohort');
+    for (let k = 0; k < 200 && !app.cohortView; k += 1) await sleep(25);
+    const view = app.cohortView;
+    if (!view) return null;
+    let shown = null;
+    if (['abundance', 'expression', 'spatial'].includes(c.show)) {
+      const r = cohortComparison(c.show, c.design);
+      if (!r) {
+        note.hidden = false;
+        note.textContent = 'The comparison is not made yet: go back to the steps that make it.';
+        return null;
+      }
+      if (c.show === 'abundance') shown = await view.comparison(r.id, { family: c.family ?? null, pick: c.pick ?? null });
+      if (c.show === 'expression') shown = await view.expressionResult(r.id, { label: c.label ?? null, gene: c.gene ?? null });
+      if (c.show === 'spatial') shown = await view.spatialResult(r.id, { family: c.family ?? null, pick: c.pick ?? null });
+    } else if (c.show === 'summary' || c.show === 'qc') {
+      const r = summariesOf(app.store.project)[0];
+      if (r) shown = c.show === 'qc' ? await view.qc(r.id) : await view.table(r.id, c.family ?? null);
+    }
+    if (active !== controller || tour.steps[index] !== step) return shown;
+    const selector = COHORT_SECTIONS[c.show ?? 'samples'];
+    for (let k = 0; k < 200 && !document.querySelector(selector); k += 1) await sleep(25);
+    document.querySelector(selector)?.scrollIntoView({ block: 'start' });
+    return shown;
+  }
+
   async function showSpatial(step) {
     const q = step.spatial;
     const analysis = analysisOf(q);
@@ -530,8 +658,13 @@ export function startTour(app, { tour, dataset }) {
       close();
       return;
     }
-    card.classList.toggle('aside', Boolean(step.compare || step.mode === 'celltypes' || step.mode === 'alignment' || step.spatial));
-    if (step.spatial) {
+    card.classList.toggle('aside', Boolean(step.compare || step.mode === 'celltypes' || step.mode === 'alignment' || step.spatial || step.mode === 'cohort'));
+    if (step.mode === 'cohort') {
+      controller.shown = showCohort(step).catch((error) => {
+        note.hidden = false;
+        note.textContent = `The cohort could not be shown: ${error.message}`;
+      });
+    } else if (step.spatial) {
       controller.shown = showSpatial(step).catch((error) => {
         note.hidden = false;
         note.textContent = `The answer could not be shown: ${error.message}`;
@@ -605,7 +738,13 @@ export function startTour(app, { tour, dataset }) {
     const q = step.spatial ?? step.cells_of;
     return q ? { analysis: analysisOf(q)?.id ?? null, again: q.to ? remadeOf(q)?.id ?? null : null } : null;
   };
-  const controller = { close, go, advance, step: () => index, card, tour, dataset, open: () => card.isConnected, done: () => done(tour.steps[index]), answers: () => answers(tour.steps[index]), shown: Promise.resolve() };
+  // A cohort step's summary and comparison: for remote control.
+  const cohortAnswers = (step) => {
+    const c = step.cohort;
+    if (!c) return null;
+    return { summary: summariesOf(app.store.project)[0]?.id ?? null, comparison: ['abundance', 'expression', 'spatial'].includes(c.show) ? cohortComparison(c.show, c.design)?.id ?? null : null };
+  };
+  const controller = { close, go, advance, step: () => index, card, tour, dataset, open: () => card.isConnected, done: () => done(tour.steps[index]), answers: () => answers(tour.steps[index]), cohort: () => cohortAnswers(tour.steps[index]), shown: Promise.resolve() };
   active = controller;
   app.tour = controller;
   go(0);

@@ -291,10 +291,16 @@ func (e *Expression) fitLabel(res *ExpressionLabel, counts [][]float64) string {
 	for _, ct := range design.Contrasts {
 		c := ExpressionContrast{Contrast: ct.Name}
 		for _, t := range TestContrast(fit.Fit, m, ct.Vector, e.Level) {
+			if !finite(t.Estimate, t.Lo, t.Hi, t.T, t.P) {
+				return "not estimable: a gene's fit is beyond numbers (its rows' counts too few or too alike)"
+			}
 			c.LogFC, c.Lo, c.Hi = append(c.LogFC, t.Estimate), append(c.Lo, t.Lo), append(c.Hi, t.Hi)
 			c.T, c.P = append(c.T, t.T), append(c.P, t.P)
 		}
 		res.Contrasts = append(res.Contrasts, c)
+	}
+	if !finite(append(append([]float64{res.Span, res.S2Prior, res.DFTotal}, res.AveLogCPM...), res.Factors...)...) {
+		return "not estimable: its rows' counts are too few or too alike to fit"
 	}
 	return ""
 }

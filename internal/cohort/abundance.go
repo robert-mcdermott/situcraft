@@ -365,9 +365,17 @@ func Abundance(d *Document, design ComparisonDesign, families []string, level fl
 					f.Untested++
 					continue
 				}
+				ratio, lo, hi := dmath.Exp(t.Estimate), dmath.Exp(t.Lo), dmath.Exp(t.Hi)
+				if !finite(ratio, lo, hi, t.SE, fit.Dispersion) || !(lo > 0) {
+					// A group with almost none of it: the effect, or its interval, beyond numbers.
+					test.Note = "not estimable: a group has almost none of it, so its effect's interval reaches beyond any ratio"
+					f.Tests = append(f.Tests, test)
+					f.Untested++
+					continue
+				}
 				test.Tested = true
 				test.Estimate, test.SE, test.T, test.P = t.Estimate, t.SE, t.T, t.P
-				test.Ratio, test.Lo, test.Hi = dmath.Exp(t.Estimate), dmath.Exp(t.Lo), dmath.Exp(t.Hi)
+				test.Ratio, test.Lo, test.Hi = ratio, lo, hi
 				f.Tests = append(f.Tests, test)
 			}
 		}
@@ -389,13 +397,23 @@ func Abundance(d *Document, design ComparisonDesign, families []string, level fl
 		if f.Untested > 0 {
 			left = fmt.Sprintf(", %d untested", f.Untested)
 		}
-		f.Universe = fmt.Sprintf("%d tests (%d labels × %d contrasts%s), adjusted together by Benjamini and Hochberg", len(ps), len(labels), len(design.Contrasts), left)
+		f.Universe = fmt.Sprintf("%s (%s × %s%s), adjusted together by Benjamini and Hochberg", plural(len(ps), "test"), plural(len(labels), "label"), plural(len(design.Contrasts), "contrast"), left)
 		c.Families = append(c.Families, f)
 	}
 	if len(c.Families) == 0 {
 		return nil, errors.New("no family to compare: share, density or niche")
 	}
 	return c, nil
+}
+
+// finite says whether every value is a number, not infinite.
+func finite(v ...float64) bool {
+	for _, x := range v {
+		if math.IsNaN(x) || math.IsInf(x, 0) {
+			return false
+		}
+	}
+	return true
 }
 
 // ResultsCSV is results.csv: a row each test.

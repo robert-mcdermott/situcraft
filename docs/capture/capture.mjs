@@ -160,7 +160,7 @@ const scenes = {
   // The start page: the examples to download or make, what to bring.
   async start() {
     await act('set_mode', { mode: 'start' });
-    await waitFor(`document.querySelectorAll('.card.example').length === 4`);
+    await waitFor(`document.querySelectorAll('.card.example').length === 6`);
   },
   // Open a bundle: a home folder's data folder, its bundles marked with their runs, regions and
   // cells, the Lung bundle chosen; the places but the computer's own disks.
@@ -733,6 +733,21 @@ const scenes = {
     await js(`document.getElementById('app').classList.add('inspector-closed')`);
     await sleep(600);
     await scrollTo('.cohort-spatial-tests .cohort-results');
+    await clearToasts();
+  },
+  // A cohort's worked example (wave 7, slice 9): the cohort before and after compared by a paired
+  // design, the endothelial-like cells' share chosen and its subjects plotted, the example's card
+  // at the foot of the window.
+  async 'worked-cohort'() {
+    await act('open_example', { example: 'paired-cohort' });
+    await act('tour', { example: 'paired-cohort', name: 'cohort-shift' });
+    let step = null;
+    for (let k = 0; k < 5; k += 1) step = await act('tour', { run: true });
+    if (step?.data?.step !== 6) throw new Error(`the worked example stopped at step ${step?.data?.step}: ${step?.message}`);
+    await waitFor(`Boolean(document.querySelector('.cohort-abundance .cohort-dots'))`);
+    await js(`document.getElementById('app').classList.add('inspector-closed')`);
+    await sleep(600);
+    await scrollTo('.cohort-abundance');
     await clearToasts();
   },
   // The Jobs view after both examples were opened: each job's state and times, one's log open.

@@ -33,6 +33,7 @@ export function requestDesign(design, { name = '', version = 0 } = {}) {
     rows,
     contrasts: design.contrasts.map((c) => ({ name: c.name, vector: c.vector })),
     ...(design.excluded?.length ? { excluded: design.excluded.map((e) => ({ sample: e.id, name: e.name, reason: e.reason })) } : {}),
+    ...(design.pseudoSamples ? { pseudoSamples: true } : {}),
   };
 }
 

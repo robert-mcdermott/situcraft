@@ -520,6 +520,16 @@
   "violations": []
  },
  {
+  "scene": "worked-cohort",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "worked-cohort",
+  "theme": "light",
+  "violations": []
+ },
+ {
   "scene": "jobs",
   "theme": "dark",
   "violations": []

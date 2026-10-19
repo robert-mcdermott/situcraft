@@ -80,6 +80,7 @@ func TestCohortDesign(t *testing.T) {
 	want = []string{
 		"S01-before S01 before simulated slide 1", "S01-after S01 after simulated slide 1", "S02-before S02 before simulated slide 2", "S02-after S02 after simulated slide 2",
 		"S03-before S03 before simulated slide 1", "S03-after S03 after simulated slide 1", "S04-before S04 before simulated slide 2", "S04-after S04 after simulated slide 2",
+		"S05-before S05 before simulated slide 1", "S05-after S05 after simulated slide 1", "S06-before S06 before simulated slide 2", "S06-after S06 after simulated slide 2",
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("paired:\n%s", strings.Join(got, "\n"))

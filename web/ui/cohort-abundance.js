@@ -151,7 +151,7 @@ export function abundanceSection(app, { cellsOf, redraw }) {
 function resultParts(app, cellsOf, c, record, redraw) {
   const s = abundanceSession;
   if (!c.families.some((f) => f.family === s.family)) s.family = c.families[0]?.family ?? 'share';
-  const out = [h('p', h('b', record.name), h('span.muted', ` · artifact `), h('span.mono', record.id))];
+  const out = [h('p', h('b', record.name), h('span.muted', ` · artifact `), h('span.mono', record.id)), c.design.pseudoSamples ? h('p.callout.warn.cohort-pseudo-note', h('span', h('b', 'Pseudo-samples, for teaching. '), 'Its units are regions of one section, not independent replicates: these tests describe this section\'s regions, and their p-values are not evidence about subjects.')) : null];
   out.push(h('div.btn-row',
     h('span.muted', 'Show'),
     h('select.input.small.cohort-family', { 'aria-label': 'The family of tests shown', onchange: (e) => { s.family = e.target.value; s.pick = null; redraw(); } },

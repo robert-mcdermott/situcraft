@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (0.7.0)
+## 0.7.0 (2026-10-19)
 
 Wave 7 of the [roadmap](situcraft-spec/roadmap.md): samples and cohorts. A study's sections in one
 project, each a sample, compared with the sample or the subject, not the cell, as the unit.
@@ -201,6 +201,38 @@ project, each a sample, compared with the sample or the subject, not the cell, a
   - **Validated:** weekly, the study of 2,000 null cohorts and 500 with effects and the cohort at
     scale (`validation/cohort_errors_test.go`, `validation/cohort_scale_test.go`); on every commit,
     a smaller study.
+- **Worked examples of cohorts (wave 7, slice 9).** Two more simulated cohorts on the start page,
+  and five worked examples that compare groups step by step: the samples set, the design described,
+  the same steps on every sample, the summary, and the comparison read.
+  - **A simulated null cohort:** the standard cohort's design with no difference between its groups.
+    **A simulated cohort, before and after:** six subjects each sampled before and after, a
+    subject's two sections sharing part of their variation, a cell four times as likely to be
+    endothelial-like after. Every cohort shares the standard cohort's panel (`panel_seed`).
+  - **A gene changed in one cell type** (the simulated cohort): SIM033 higher in the treated
+    subjects' epithelial-like cells, +0.94 log2 (0.59 to 1.30), the only one of 424 tests found;
+    the true cells show +0.97.
+  - **A comparison where nothing differs** (the null cohort): none of 14 tests of abundance, 423 of
+    expression and 10 of neighbor enrichment below an adjusted p of 0.05; the 11 genes below a raw
+    p of 0.05 fewer than chance gives.
+  - **A composition shift found** (before and after, paired): the endothelial-like cells' odds 2.19
+    times as high after (1.54 to 3.12) and the epithelial-like cells' 0.48 times (0.27 to 0.84),
+    near the true cells' 2.26 and 0.47.
+  - **Each subject compared with itself** (before and after): SIM033's interval 0.84 to 1.31 log2
+    paired against 0.75 to 1.41 with the sections as units. Paired, the endothelial-like cells'
+    markers are also found in their neighbors' pseudobulk: transcripts of more numerous neighbors
+    read into the cells' outlines, which the guide's **Differential expression** now explains.
+  - **Places in one section are not subjects** (the Breast data, for teaching): six regions, three
+    of stroma and three of tumor, each given a subject, refused; marked **pseudo-samples**, they
+    are compared, and every result says that its tests describe the section's places, not
+    subjects. A design keeps regions of one section as separate units only when so marked.
+  - **Remote control:** `open_example` takes `null-cohort` and `paired-cohort`; `design` takes
+    `pseudo_samples`; `tour` runs the cohort worked examples and answers the summary and
+    comparison a step shows.
+  - **Validated:** in the page, each worked example walked to its end and every number its cards
+    state checked against the comparisons' files and the cohorts' truth; the project saved by
+    0.7.0 (`validation/projects/0.7.0-cohort.situcraft.json`, a cohort with its design, steps,
+    summary and comparisons) opens, finds its moved bundles, and its summary and comparisons are
+    made again with the same ids and summaries.
 - **Open by browsing.** **Open a bundle** shows this computer's folders instead of asking for a
   path.
   - **Places** to start from (the home folder, its Desktop, Documents and Downloads, SituCraft's
@@ -222,6 +254,10 @@ project, each a sample, compared with the sample or the subject, not the cell, a
 
 ### Fixed
 
+- **A comparison with a label absent from a group** (the Breast regions' adipocytes, say) failed
+  writing its results, its estimate infinite; such a test is now untested, with why, in the
+  abundance, expression and spatial comparisons alike.
+- **"1 contrasts":** an abundance family's tests are counted in the singular when there is one.
 - **Sample summaries' nuclei (slice 4):** the instrument's segmentation records its nuclei in the
   bundle's cells table, not its own, so its samples' median nucleus area and share of cells with a
   nucleus were 0; they are now read from the table, and a segmentation that records no nucleus

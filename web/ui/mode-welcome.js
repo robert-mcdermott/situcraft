@@ -94,7 +94,7 @@ export function mountWelcome(app, container) {
       const worked = workedExamples(example.name);
       if (worked.length) {
         card.insertBefore(h('div.example-worked', h('div.example-worked-title', 'Worked example'), ...worked.map((w) => h('div.example-worked-item',
-          h('div', h('b', w.title), w.simulated ? h('span.badge.warn', { style: { marginLeft: '6px' } }, example.generated ? 'simulated tissue' : 'simulated errors') : null),
+          h('div', h('b', w.title), w.simulated ? h('span.badge.warn', { style: { marginLeft: '6px' } }, example.kind === 'cohort' ? 'simulated cohort' : example.generated ? 'simulated tissue' : 'simulated errors') : null, w.teaching ? h('span.badge.warn', { style: { marginLeft: '6px' } }, 'teaching: pseudo-samples') : null),
           h('p.muted', w.question),
           example.state === 'ready' && !job ? h('button.btn.small', { type: 'button', 'data-worked': w.id, disabled: Boolean(w.images && example.outdated), title: w.images && example.outdated ? 'It needs the H&E: make the example again first' : '', onclick: () => app.examples.tour(example.name, w.id) }, icon('flask'), 'Start') : null))), actions);
       }

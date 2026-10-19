@@ -386,8 +386,8 @@ export async function viewerSuite({ check, MissingData, verbose }) {
     const downloads = examples.examples.filter((e) => !e.generated);
     const generated = examples.examples.filter((e) => e.generated);
     check('viewer', 'the example datasets are listed, and none is downloaded or made unasked', examples.examples.map((e) => `${e.name}: ${e.state}`).join(', '),
-      downloads.length === 2 && downloads.every((e) => e.state === 'absent' && e.download > 0 && e.license) && generated.map((e) => `${e.name}:${e.kind ?? ''}`).join() === 'simulated-standard:,simulated-cohort:cohort' && generated.every((e) => e.state === 'absent' && !e.download),
-      'two to download and two to make (a tissue and a cohort), all absent');
+      downloads.length === 2 && downloads.every((e) => e.state === 'absent' && e.download > 0 && e.license) && generated.map((e) => `${e.name}:${e.kind ?? ''}`).join() === 'simulated-standard:,simulated-cohort:cohort,simulated-null-cohort:cohort,simulated-paired-cohort:cohort' && generated.every((e) => e.state === 'absent' && !e.download),
+      'two to download and four to make (a tissue and three cohorts), all absent');
     for (const name of info.files.map((f) => f.name)) {
       const toured = await chrome.eval(`(async () => {
         const app = window.situcraft;
@@ -1663,26 +1663,14 @@ export async function viewerSuite({ check, MissingData, verbose }) {
             `${behindOwn?.counts?.join(' and ')} cells`);
         }
 
-        // The projects as 0.2.0 to 0.5.0 saved them
-        // (validation/projects/<version>-lung.situcraft.json): this release's written when asked
-        // (SITUCRAFT_WRITE_FIXTURE=1), the places of this run's folders made neutral and given its
-        // own id; then each reopened, and every artifact SituCraft made that it records made again by
-        // this build with the same files' checksums (a comparison by its differences: its
-        // comparison.json records the jobs' times; a clustering, a map, a label set from markers, a
-        // graph and a spatial analysis, whose records keep no checksums, by their summaries, which
-        // hold their numbers exactly; those of a drawn region left out).
+        // The Lung project as 0.2.0 to 0.6.0 saved it (validation/projects/<version>-lung.situcraft.json;
+        // from 0.7.0 a release's fixture is a cohort's, below), each reopened, and every artifact
+        // SituCraft made that it records made again by this build with the same files' checksums (a
+        // comparison by its differences: its comparison.json records the jobs' times; a clustering,
+        // a map, a label set from markers, a graph and a spatial analysis, whose records keep no
+        // checksums, by their summaries, which hold their numbers exactly; those of a drawn region
+        // left out).
         const fixtureOf = (v) => join(root, 'validation', 'projects', `${v}-lung.situcraft.json`);
-        if (process.env.SITUCRAFT_WRITE_FIXTURE) {
-          const doc = await chrome.eval(`(async () => {
-            const app = window.situcraft;
-            const { rename, serializeProject } = await import('/lib/project.js');
-            app.store.commit(rename(app.store.project, 'Lung example, as SituCraft 0.6.0 saved it'), 'Rename');
-            return serializeProject(app.store.project);
-          })()`);
-          // Its own id: it grew from the 0.1.0 project in this run.
-          const neutral = JSON.parse(doc.split(join(dataRoot, 'xenium-lung-2fov')).join('/data/examples/xenium-lung-2fov').split(work).join('/data/work'));
-          writeFileSync(fixtureOf('0.6.0'), `${JSON.stringify({ ...neutral, id: 'p-situcraft-0-6-0-lung' }, null, 1)}\n`);
-        }
         for (const v of ['0.2.0', '0.3.0', '0.4.0', '0.5.0', '0.6.0']) {
           if (!existsSync(fixtureOf(v))) continue;
           const text = readFileSync(fixtureOf(v), 'utf8');
@@ -2662,6 +2650,174 @@ export async function viewerSuite({ check, MissingData, verbose }) {
             && gene.ok && gene.data.rows.length === 8 && mean(byGroup('treated')) > mean(byGroup('control'))
             && sp.ok && Object.keys(spf).sort().join() === 'enrichment,moran,nearest' && spf.enrichment.tests.length === 10 && spf.moran.tests.length === 120 && mixed?.ratio > 1 && mixed.ratioLo > 1,
             'the null cohort nothing below 0.05, its spatial statistics refused; SIM033 found in the epithelial-like cells, its interval covering the truth, at most one other gene; treated above control; three families, the epithelial–immune enrichment above 1');
+
+          // Worked examples on the simulated cohorts (wave 7, slice 9), each run step by step and
+          // every number its cards state checked against the comparison's own document: a gene
+          // changed in one cell type (the standard cohort, open now), a comparison where nothing
+          // differs (the null cohort), and a composition shift found and each subject compared with
+          // itself (the cohort before and after, its true cells' odds the suite's own from its truth).
+          const walkCohort = async (example, name) => {
+            const steps = [await act('tour', { example, name })];
+            for (let k = 0; k < 20 && steps.at(-1).ok && !steps.at(-1).data?.finished; k += 1) steps.push(await act('tour', { run: true }));
+            await act('tour', { end: true });
+            return steps;
+          };
+          const walked = (steps) => steps.every((x) => x.ok) && steps.at(-1)?.data?.finished === true;
+          const shownAt = (steps, n) => steps.find((x) => x.ok && x.data?.step === n)?.data?.cohort?.comparison ?? null;
+          const artifactDoc = async (id, file) => (id ? json(`${url}/api/artifacts/${encodeURIComponent(id)}/files/${file}`) : null);
+          const geneOf = (e, label, gene) => {
+            const r = e?.results.find((x) => x.label === label);
+            const i = r?.genes?.findIndex((g) => e.genes[g] === gene) ?? -1;
+            return i >= 0 ? { logFC: r.contrasts[0].logFC[i], lo: r.contrasts[0].lo[i], hi: r.contrasts[0].hi[i], padj: r.contrasts[0].padj[i] } : null;
+          };
+          const foundOf = (e) => (e?.results ?? []).flatMap((r) => (r.contrasts ?? []).flatMap((c) => c.padj.map((q, i) => [q, `${r.label} ${e.genes[r.genes[i]]}`]).filter(([q]) => q < 0.05).map(([, k]) => k)));
+          const r2 = (v) => Math.round(100 * v) / 100;
+          const geneSteps = await walkCohort('simulated-cohort', 'cohort-gene');
+          const geneDoc = await artifactDoc(shownAt(geneSteps, 6), 'expression.json');
+          const sim = geneOf(geneDoc, 'epithelial-like', 'SIM033');
+          check('viewer', 'the worked example A gene changed in one cell type: the standard cohort\'s subjects compared by condition, SIM033 the only gene found, in the epithelial-like cells, as its card states', `${geneSteps.map((x) => (x.ok ? `step ${x.data?.step ?? 'finished'}` : x.message)).join('; ')}; ${JSON.stringify({ tests: geneDoc?.tests, found: foundOf(geneDoc), sim })}`,
+            walked(geneSteps) && geneDoc?.tests === 424 && foundOf(geneDoc).join() === 'epithelial-like SIM033' && r2(sim.logFC) === 0.94 && r2(sim.lo) === 0.59 && r2(sim.hi) === 1.3 && sim.padj < 0.005,
+            '424 tests; SIM033 +0.94 log2 (0.59 to 1.30), adjusted p 0.005, alone');
+          await act('open_example', { example: 'simulated-null-cohort' });
+          const nullWalk = await walkCohort('simulated-null-cohort', 'cohort-null');
+          const nullAbu = await artifactDoc(shownAt(nullWalk, 6), 'abundance.json');
+          const nullExp = await artifactDoc(shownAt(nullWalk, 8), 'expression.json');
+          const nullSpt = await artifactDoc(shownAt(nullWalk, 10), 'spatial-tests.json');
+          const abuTests = (nullAbu?.families ?? []).flatMap((f) => f.tests.filter((t) => t.tested));
+          const expP = (nullExp?.results ?? []).flatMap((r) => (r.contrasts ?? []).flatMap((c) => c.p.map((p, i) => ({ p, padj: c.padj[i], key: `${r.label} ${nullExp.genes[r.genes[i]]}` }))));
+          const lowest = [...expP].sort((a, b) => a.p - b.p)[0];
+          const sptTests = (nullSpt?.families ?? []).flatMap((f) => f.tests.filter((t) => t.tested));
+          check('viewer', 'the worked example A comparison where nothing differs: the null cohort\'s abundance, expression and arrangement, nothing found, as its cards state', `${nullWalk.map((x) => (x.ok ? `step ${x.data?.step ?? 'finished'}` : x.message)).join('; ')}; abundance ${abuTests.length} tests, lowest p ${Math.min(...abuTests.map((t) => t.p))}; expression ${expP.length} tests, ${expP.filter((x) => x.p < 0.05).length} below 0.05, lowest ${JSON.stringify(lowest)}; enrichment ${sptTests.length}, lowest adjusted ${Math.min(...sptTests.map((t) => t.padj))}`,
+            walked(nullWalk) && abuTests.length === 14 && abuTests.every((t) => t.p >= 0.05) && expP.length === 423 && expP.filter((x) => x.p < 0.05).length === 11 && expP.every((x) => x.padj >= 0.05) && lowest?.key === 'epithelial-like SIM015' && r2(lowest.padj) === 0.25
+            && sptTests.length === 10 && sptTests.every((t) => t.padj >= 0.05) && r2(Math.min(...sptTests.map((t) => t.padj))) === 0.36,
+            '14 abundance tests, none below 0.05; 423 of expression, 11 raw below 0.05, SIM015 the lowest, adjusted 0.25; 10 of enrichment, the lowest adjusted 0.36');
+          await act('open_example', { example: 'simulated-paired-cohort' });
+          const pairedDir = (await json(`${url}/api/examples`)).examples.find((e) => e.name === 'simulated-paired-cohort')?.path;
+          const pairedTruth = pairedDir ? JSON.parse(readFileSync(join(pairedDir, 'truth', 'cohort.json'), 'utf8')) : null;
+          const trueOdds = (type) => {
+            const by = { before: [0, 0], after: [0, 0] };
+            for (const t of pairedTruth?.samples ?? []) {
+              by[t.group][0] += t.cells_by_type[type] ?? 0;
+              by[t.group][1] += Object.values(t.cells_by_type).reduce((n, v) => n + v, 0);
+            }
+            const odds = (g) => g[0] / (g[1] - g[0]);
+            return odds(by.after) / odds(by.before);
+          };
+          const shiftWalk = await walkCohort('simulated-paired-cohort', 'cohort-shift');
+          const shiftAbu = await artifactDoc(shownAt(shiftWalk, 6), 'abundance.json');
+          const testOf = (doc, family, label) => doc?.families.find((f) => f.family === family)?.tests.find((t) => t.label === label);
+          const endoShare = testOf(shiftAbu, 'share', 'endothelial-like'), epiShare = testOf(shiftAbu, 'share', 'epithelial-like'), endoD = testOf(shiftAbu, 'density', 'endothelial-like');
+          check('viewer', 'the worked example A composition shift found: the cohort before and after compared by a paired design, more endothelial-like cells and fewer epithelial-like ones, near the true cells\' odds, as its cards state', `${shiftWalk.map((x) => (x.ok ? `step ${x.data?.step ?? 'finished'}` : x.message)).join('; ')}; ${JSON.stringify({ endoShare, epiShare, endoD })}; true ${r2(trueOdds('endothelial-like'))} and ${r2(trueOdds('epithelial-like'))}`,
+            walked(shiftWalk) && r2(endoShare?.ratio) === 2.19 && r2(endoShare.lo) === 1.54 && r2(endoShare.hi) === 3.12 && endoShare.padj < 0.01 && r2(epiShare?.ratio) === 0.48 && r2(epiShare.lo) === 0.27 && r2(epiShare.hi) === 0.84 && epiShare.padj < 0.05
+            && r2(endoD?.ratio) === 1.8 && r2(endoD.lo) === 1.39 && r2(endoD.hi) === 2.33 && r2(trueOdds('endothelial-like')) === 2.26 && r2(trueOdds('epithelial-like')) === 0.47,
+            'endothelial-like 2.19× (1.54 to 3.12), density 1.80× (1.39 to 2.33); epithelial-like 0.48× (0.27 to 0.84); the true cells 2.26 and 0.47');
+          const pairWalk = await walkCohort('simulated-paired-cohort', 'cohort-paired');
+          const sectionsExp = await artifactDoc(shownAt(pairWalk, 7), 'expression.json');
+          const pairedExp = await artifactDoc(shownAt(pairWalk, 10), 'expression.json');
+          const s1 = geneOf(sectionsExp, 'epithelial-like', 'SIM033'), s2 = geneOf(pairedExp, 'epithelial-like', 'SIM033');
+          const pairedFound = foundOf(pairedExp);
+          check('viewer', 'the worked example Each subject compared with itself: SIM033 with the sections as units and paired, its interval narrower paired, and the endothelial-like markers in their neighbors found, as its cards state', `${pairWalk.map((x) => (x.ok ? `step ${x.data?.step ?? 'finished'}` : x.message)).join('; ')}; sections ${JSON.stringify(s1)} (${foundOf(sectionsExp).length} found); paired ${JSON.stringify(s2)} (${pairedFound.length} found: ${pairedFound.filter((k) => k.startsWith('epithelial-like')).join(', ')})`,
+            walked(pairWalk) && r2(s1?.logFC) === 1.08 && r2(s1.lo) === 0.75 && r2(s1.hi) === 1.41 && foundOf(sectionsExp).join() === 'epithelial-like SIM033'
+            && r2(s2?.logFC) === 1.08 && r2(s2.lo) === 0.84 && r2(s2.hi) === 1.31 && pairedFound.length === 22 && ['SIM025', 'SIM026', 'SIM027', 'SIM028', 'SIM029', 'SIM030'].every((g) => pairedFound.includes(`epithelial-like ${g}`)) && pairedExp.design.names.length === 7,
+            'sections: +1.08 log2 (0.75 to 1.41), only SIM033; paired: (0.84 to 1.31), 22 genes, the endothelial-like markers SIM025 to SIM030 among them');
+
+          // The project as 0.7.0 saves a cohort (validation/projects/0.7.0-cohort.situcraft.json):
+          // the simulated cohort's samples with their subjects and conditions, a saved design, the
+          // same steps on every sample, its summary and its comparisons of abundance, expression and
+          // arrangement. Written when asked (SITUCRAFT_WRITE_FIXTURE=1), its folders' places made
+          // neutral and given its own id. Then reopened: each sample's bundle found again where this
+          // run made it, its samples, fields and design as saved; and the steps, summary and
+          // comparisons made again by this build with the same ids, each artifact the project
+          // records the same by its summary (a cohort's records keep no checksums; their summaries
+          // hold the samples' counts and the comparisons' tests and genes found).
+          const cohortFixture = join(root, 'validation', 'projects', '0.7.0-cohort.situcraft.json');
+          const cohortHome = (await json(`${url}/api/examples`)).examples.find((e) => e.name === 'simulated-cohort')?.path;
+          const cohortFlow = async () => [
+            await act('cohort_steps', { questions: ['enrichment', 'distances', 'moran'] }),
+            await act('summarize_samples', {}),
+            await act('compare_abundance', { families: ['share', 'density', 'niche'], design: 'By condition' }),
+            await act('compare_expression', { design: 'By condition' }),
+            await act('compare_spatial', { design: 'By condition' }),
+          ];
+          if (process.env.SITUCRAFT_WRITE_FIXTURE && cohortHome) {
+            await act('new_project', { name: 'Simulated cohort, as SituCraft 0.7.0 saved it' });
+            await act('open_example', { example: 'cohort' });
+            await act('design', { unit: 'subject', group: 'condition', reference: 'control', save: 'By condition' });
+            await cohortFlow();
+            const doc = await chrome.eval(`(async () => (await import('/lib/project.js')).serializeProject(window.situcraft.store.project))()`);
+            const neutral = JSON.parse(doc.split(cohortHome).join('/data/examples/simulated-cohort').split(work).join('/data/work'));
+            writeFileSync(cohortFixture, `${JSON.stringify({ ...neutral, id: 'p-situcraft-0-7-0-cohort' }, null, 1)}\n`);
+          }
+          if (existsSync(cohortFixture) && cohortHome) {
+            const text = readFileSync(cohortFixture, 'utf8');
+            const fixture = JSON.parse(text);
+            const reopened = await chrome.eval(`(async () => {
+              const app = window.situcraft;
+              const { samplesOf } = await import('/lib/samples.js');
+              const { designsOf } = await import('/lib/design.js');
+              const doc = ${JSON.stringify(text)};
+              const saved = JSON.parse(doc);
+              await app.library.saveProject(saved.id, doc);
+              await app.openProject(saved.id);
+              const states = [];
+              for (const d of app.store.project.datasets) states.push((await app.bundles.locate(d.id, ${JSON.stringify(cohortHome)} + '/' + d.path.split('/').pop()))?.state);
+              const p = app.store.project;
+              return { states, samples: samplesOf(p).map((x) => [x.name, x.fields.subject, x.fields.condition].join(' ')).join(', '), designs: designsOf(p).map((d) => d.name + ' v' + d.version).join() };
+            })()`);
+            const flow = await cohortFlow();
+            // A comparison's record keeps its summary's id as summary and the manifest's as summaryOf.
+            const kinds = new Set(['cohort-summary', 'abundance', 'expression', 'spatial-comparison']);
+            const perSample = (a) => ['clustering', 'labels', 'graph', 'spatial'].includes(a.kind) && a.state === 'complete' && !a.source && !a.reference;
+            const made = fixture.artifacts.filter((a) => kinds.has(a.kind) || perSample(a));
+            const differing = [];
+            for (const a of made) {
+              const m = await fetch(`${url}/api/artifacts/${encodeURIComponent(a.id)}`).then((r) => (r.ok ? r.json() : null));
+              if (!m) differing.push(`${a.name}: not made again`);
+              else if (JSON.stringify(m.summary) !== JSON.stringify(a.summaryOf ?? a.summary)) differing.push(`${a.name}: another summary`);
+            }
+            // The summary and comparisons made now are the fixture's, by their ids.
+            const ids = flow.slice(1).map((x) => x.data?.id);
+            check('viewer', '0.7.0 cohort project: it opens and finds its moved bundles, its samples and design as saved; its steps, summary and comparisons made again the same', `${JSON.stringify(reopened)}; ${flow.map((x) => (x.ok ? x.data?.id ?? 'ok' : x.message)).join('; ')}; ${made.length} artifacts${differing.length ? `; ${differing.slice(0, 4).join('; ')}` : ', all the same'}`,
+              reopened.states.length === 8 && reopened.states.every((st) => st === 'ok') && /S01 S01 control/.test(reopened.samples) && reopened.designs === 'By condition v1'
+              && flow.every((x) => x.ok) && ids.length === 4 && ids.every((id) => fixture.artifacts.some((a) => a.id === id && kinds.has(a.kind))) && made.filter((a) => kinds.has(a.kind)).length === 4 && made.length === 52 && differing.length === 0,
+              '8 bundles found; S01 a control subject; By condition v1; the summary and three comparisons, and the samples\' 48 clusterings, label sets, graphs and analyses, the same');
+          }
+
+          // The teaching example on the Breast section (wave 7, slice 9), in a project of its own:
+          // six regions as samples, each its own subject, refused; marked pseudo-samples, compared,
+          // every result saying so; the places' differences as its cards state.
+          if (existsSync(join(dataRoot, 'xenium-breast-2fov', 'experiment.xenium'))) {
+            await act('new_project', { name: 'Places in one section' });
+            await act('open_paths', { paths: [join(dataRoot, 'xenium-breast-2fov')], add: true });
+            await chrome.eval(`(async () => {
+              const app = window.situcraft;
+              const { guideFor } = await import('/lib/tours.js');
+              const { startTour } = await import('/ui/tour.js');
+              const dataset = app.store.project.datasets.find((d) => d.name === 'xenium-breast-2fov');
+              for (let k = 0; k < 600 && !app.store.project.artifacts.some((a) => a.kind === 'segmentation' && a.dataset === dataset.id); k += 1) await new Promise((r) => setTimeout(r, 100));
+              startTour(app, { tour: guideFor('xenium-breast-2fov', 'pseudo-samples'), dataset: dataset.id });
+              return true;
+            })()`);
+            const teach = [];
+            for (let k = 0; k < 20; k += 1) {
+              const x = await act('tour', { run: true });
+              teach.push(x);
+              if (!x.ok || x.data?.finished) break;
+            }
+            const placesAbu = await artifactDoc(teach.find((x) => x.ok && x.data?.step === 10)?.data?.cohort?.comparison, 'abundance.json');
+            const refused = await chrome.eval(`(async () => {
+              const { makeDesign } = await import('/lib/design.js');
+              const d = makeDesign(window.situcraft.store.project, { unit: 'subject', group: 'place', reference: 'tumor' });
+              return d.problems.join(' ');
+            })()`);
+            // The comparison the last step shows, its warning on the page.
+            const banner = await chrome.eval(`document.querySelector('.cohort-pseudo-note')?.textContent ?? ''`);
+            const immune = testOf(placesAbu, 'share', 'Immune'), epithelial = testOf(placesAbu, 'share', 'Epithelial'), adipocyte = testOf(placesAbu, 'share', 'Adipocyte');
+            check('viewer', 'the teaching example Places in one section are not subjects: six Breast regions as samples refused, then marked pseudo-samples and compared, every result saying so, the places\' differences as its cards state', `${teach.map((x) => (x.ok ? `step ${x.data?.step ?? 'finished'}` : x.message)).join('; ')}; refused: ${refused.slice(0, 120)}; ${JSON.stringify({ pseudo: placesAbu?.design?.pseudoSamples, banner: banner.slice(0, 60), immune, epithelial, adipocyte: adipocyte?.note })}`,
+              teach.every((x) => x.ok) && teach.at(-1)?.data?.finished === true && /are regions of one section \(xenium-breast-2fov\) given different subjects/.test(refused) && placesAbu?.design?.pseudoSamples === true && placesAbu.design.rows.length === 6 && /^Pseudo-samples, for teaching\. .*not independent replicates/.test(banner)
+              && r2(immune?.ratio) === 8.37 && r2(immune.lo) === 1.58 && r2(immune.hi) === 44.49 && r2(immune.padj) === 0.03 && r2(epithelial?.ratio) === 0.04 && adipocyte && !adipocyte.tested && /not estimable/.test(adipocyte.note),
+              'refused as subjects; pseudo-samples, 6 rows, the warning shown; immune 8.37× (1.58 to 44.49), adjusted p 0.03; epithelial 0.04×; adipocytes not estimable');
+          }
         }
       }
 

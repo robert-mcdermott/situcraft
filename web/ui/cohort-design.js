@@ -121,6 +121,11 @@ export function designSection(app, { commit, redraw }) {
       h('div.field', h('span', 'Adjust for'), covariates),
       h('div.field', h('span', 'Contrasts'), h('ul.cohort-list', ...contrastRows), levels.length > 2 ? h('div.btn-row', a, b, addContrast) : null),
       h('div.field', h('span', 'Samples left out'), outList.length ? h('ul.cohort-list', ...outList) : h('p.muted.seg-note', 'None.'), h('div.btn-row', leaveOut)),
+      // Regions of one section as separate units: refused, unless a teaching example says so.
+      samplesOf(project).some((s) => s.region) || spec.pseudoSamples ? h('label.check.cohort-pseudo', h('input', {
+        type: 'checkbox', checked: Boolean(spec.pseudoSamples),
+        onchange: (e) => change({ pseudoSamples: e.target.checked }),
+      }), 'Regions of one section as pseudo-samples, for teaching only: they are not independent replicates') : null,
       ...result,
       h('div.btn-row', nameInput, save)),
     saved.length ? h('div.seg-card', { style: { marginTop: '10px' } },

@@ -25,6 +25,9 @@ export function designFields(project) {
 // The batch fields checked for confounding whether or not the design uses them.
 const BATCH_FIELDS = ['slide', 'run', 'panel'];
 
+// Names in words: "a", "a and b", "a, b and c".
+const listed = (names) => (names.length < 3 ? names.join(' and ') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`);
+
 // The levels of a field's values in code-point order.
 const levelsOf = (values) => [...new Set(values)].sort(byCode);
 
@@ -106,7 +109,7 @@ export function makeDesign(project, spec = {}) {
   const problems = [];
   const notes = [];
   const words = [];
-  const out = { ok: false, spec: normalizeSpec(spec), problems, notes, words, samples: [], excluded: [], rows: [], names: [], matrix: [], terms: [], levels: [], reference: null, contrasts: [], paired: false, rank: 0, df: 0, balance: [] };
+  const out = { ok: false, spec: normalizeSpec(spec), problems, notes, words, samples: [], excluded: [], rows: [], names: [], matrix: [], terms: [], levels: [], reference: null, contrasts: [], paired: false, pseudoSamples: false, rank: 0, df: 0, balance: [] };
   const { unit, group, covariates, exclude } = out.spec;
   if (!unit || !fieldNamed(unit)) problems.push(unit ? `There is no field ${unit} to be the replicate unit.` : 'Choose the replicate unit: the field that names each biological replicate (the subject, patient or animal).');
   if (!group || !fieldNamed(group)) problems.push(group ? `There is no field ${group} to compare.` : 'Choose the field whose groups are compared (the condition).');
@@ -165,7 +168,13 @@ export function makeDesign(project, spec = {}) {
   for (const [, m] of unitsOfDataset) {
     if (m.size > 1) {
       const ds = out.samples.find((s) => m.has(s.unit)).datasetName;
-      problems.push(`${[...m.values()].join(' and ')} are regions of one section (${ds}) given different ${unit}s: regions of one section of one tissue are not independent replicates. Give them one ${unit} (their samples are then combined), or compare sections.`);
+      if (out.spec.pseudoSamples) {
+        // For teaching only: kept, and said at the top of every comparison made of it.
+        out.pseudoSamples = true;
+        notes.unshift(`Pseudo-samples, for teaching: ${listed([...m.values()])} are regions of one section (${ds}) given different ${unit}s. They are not independent replicates: a comparison of them describes this section's regions, not tissue of different ${unit}s, and its p-values are not evidence about ${unit}s.`);
+      } else {
+        problems.push(`${listed([...m.values()])} are regions of one section (${ds}) given different ${unit}s: regions of one section of one tissue are not independent replicates. Give them one ${unit} (their samples are then combined), or compare sections.`);
+      }
     }
   }
 
@@ -265,6 +274,7 @@ export function makeDesign(project, spec = {}) {
     words.push(`The replicate unit is the ${unit}: ${out.levels.map((l) => `${plural(unitsIn(l).size, unit)} in ${l}`).join(', ')}.`);
   }
   if (covariates.length) words.push(`Adjusted for ${covariates.map((c) => (fieldNamed(c).kind === 'number' ? `${c} (a number)` : `${c} (${plural(levelsOf(out.rows.map((r) => String(r.values[c]))).length, 'level')})`)).join(' and ')}.`);
+  if (out.pseudoSamples) words.push(`Its ${unit}s are pseudo-samples: regions of one section, compared for teaching, not as replicates.`);
   words.push(`The model: ${dm.names.join(' + ')}; ${plural(dm.names.length, 'coefficient')} over ${plural(out.rows.length, 'row')} (${unit}s in ${group}s), ${plural(Math.max(0, out.df), 'degree')} of freedom left for the variation between ${unit}s.`);
   for (const c of out.contrasts) words.push(`${c.name}: from ${plural(unitsIn(c.a).size, unit)} in ${c.a} and ${plural(unitsIn(c.b).size, unit)} in ${c.b}${out.paired ? `, ${plural([...unitsIn(c.a)].filter((u) => unitsIn(c.b).has(u)).length, unit)} in both` : ''}.`);
   return out;
@@ -280,6 +290,8 @@ export function normalizeSpec(spec = {}) {
     contrasts: (spec.contrasts ?? []).map(([a, b]) => [String(a), String(b)]),
     covariates: [...(spec.covariates ?? [])],
     exclude: { ...(spec.exclude ?? {}) },
+    // A teaching example's regions of one section as separate units (pseudo-samples): only when set.
+    ...(spec.pseudoSamples ? { pseudoSamples: true } : {}),
   };
 }
 

@@ -66,13 +66,37 @@ func newExamples(dir string) *examples.Library {
 			Outdated: "Made by an earlier SituCraft, without the cohort's single-cell reference: make it again to add it (its sections stay the same).",
 			Marker:   simulate.CohortFile,
 			Kind:     "cohort",
+		}, {
+			Name:    nullCohortExample,
+			Title:   "A simulated null cohort",
+			Summary: "SituCraft's null simulated cohort: eight sections of 250 × 250 µm, four subjects in each of two groups (control and treated) on two slides, about 5,800 cells, with no difference between the groups: every section differs from the others only by chance, as the standard cohort's do. For seeing what a comparison finds when there is nothing to find. Made on this computer in seconds; each sample's subject and condition are read in with it, and its truth is beside it.",
+			Size:    68 << 20,
+			Make: func(ctx context.Context, dir string, progress examples.Progress) error {
+				_, err := simulate.RunCohort(ctx, simulate.CohortPresets["null"], dir, version, func(f float64, message string) { progress(f, message) })
+				return err
+			},
+			Marker: simulate.CohortFile,
+			Kind:   "cohort",
+		}, {
+			Name:    pairedCohortExample,
+			Title:   "A simulated cohort, before and after",
+			Summary: "SituCraft's paired simulated cohort: six subjects, each sampled before and after (twelve sections of 250 × 250 µm on two slides, about 8,800 cells). After, a cell is four times as likely to be endothelial-like, four times as likely to be immune-like where epithelial-like cells lead, and epithelial-like cells hold 2.5 times the SIM033; a subject's two sections share part of their variation, as one person's tissue does. Made on this computer in seconds; each sample's subject and condition are read in with it, and the truth of every effect and sample is beside it.",
+			Size:    95 << 20,
+			Make: func(ctx context.Context, dir string, progress examples.Progress) error {
+				_, err := simulate.RunCohort(ctx, simulate.CohortPresets["paired"], dir, version, func(f float64, message string) { progress(f, message) })
+				return err
+			},
+			Marker: simulate.CohortFile,
+			Kind:   "cohort",
 		}}}
 }
 
-// simulatedExample and cohortExample are the generated examples' names.
+// The generated examples' names.
 const (
-	simulatedExample = "simulated-standard"
-	cohortExample    = "simulated-cohort"
+	simulatedExample    = "simulated-standard"
+	cohortExample       = "simulated-cohort"
+	nullCohortExample   = "simulated-null-cohort"
+	pairedCohortExample = "simulated-paired-cohort"
 )
 
 func (a *app) registerExamples(mux *http.ServeMux) {

@@ -140,7 +140,7 @@ func (a *app) abundanceJob(body abundanceRequest, id string) jobs.Func {
 			names = append(names, ct.Name)
 		}
 		jobSpec, _ := json.Marshal(body)
-		params, _ := json.Marshal(map[string]any{"families": body.Families, "level": body.Level, "design": map[string]any{"name": body.Design.Name, "version": body.Design.Version, "names": body.Design.Names, "contrasts": body.Design.Contrasts}})
+		params, _ := json.Marshal(map[string]any{"families": body.Families, "level": body.Level, "design": designParams(body.Design)})
 		var files []artifacts.File
 		for _, f := range []string{cohort.FileAbundance, cohort.FileAbundanceResults} {
 			files = append(files, artifacts.File{Path: f, Role: cohort.AbundanceRoles[f]})

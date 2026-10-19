@@ -254,6 +254,8 @@ func CompareSpatial(d *Document, design ComparisonDesign, families []string, lev
 					t.Note = "not in every row: a row's samples have none of it"
 				case !(m.S2Post[j] > 0) || math.IsNaN(results[ci][j].T):
 					t.Note = "no variation left to test"
+				case !finite(results[ci][j].Estimate, results[ci][j].Lo, results[ci][j].Hi) || def.Log && !finite(exp2(results[ci][j].Lo), exp2(results[ci][j].Hi)):
+					t.Note = "not estimable: its interval reaches beyond any number"
 				default:
 					r := results[ci][j]
 					t.Tested = true

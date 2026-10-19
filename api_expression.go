@@ -272,7 +272,11 @@ func contrastNames(d cohort.ComparisonDesign) string {
 }
 
 func designParams(d cohort.ComparisonDesign) map[string]any {
-	return map[string]any{"name": d.Name, "version": d.Version, "names": d.Names, "contrasts": d.Contrasts}
+	p := map[string]any{"name": d.Name, "version": d.Version, "names": d.Names, "contrasts": d.Contrasts}
+	if d.PseudoSamples {
+		p["pseudoSamples"] = true
+	}
+	return p
 }
 
 // expressionJob compares the summary's labels' pseudobulk and records the comparison.

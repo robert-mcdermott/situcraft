@@ -19,7 +19,13 @@ The guide is on SituCraft's website, a page a subject:
 - **Spatial:** [spatial analysis](https://robert-mcdermott.github.io/situcraft/docs/spatial.html);
   [niches and genes](https://robert-mcdermott.github.io/situcraft/docs/niches.html).
 - **Cohorts:** [samples](https://robert-mcdermott.github.io/situcraft/docs/samples.html);
-  [the design](https://robert-mcdermott.github.io/situcraft/docs/designs.html).
+  [the design](https://robert-mcdermott.github.io/situcraft/docs/designs.html);
+  [sample summaries](https://robert-mcdermott.github.io/situcraft/docs/summaries.html);
+  [cohort QC](https://robert-mcdermott.github.io/situcraft/docs/cohort-qc.html);
+  [differential abundance](https://robert-mcdermott.github.io/situcraft/docs/abundance.html);
+  [differential expression](https://robert-mcdermott.github.io/situcraft/docs/expression.html);
+  [spatial statistics between groups](https://robert-mcdermott.github.io/situcraft/docs/spatial-tests.html);
+  [error rates and scale](https://robert-mcdermott.github.io/situcraft/docs/error-rates.html).
 - **Reference:** [remote control](https://robert-mcdermott.github.io/situcraft/docs/remote-control.html);
   [the record](https://robert-mcdermott.github.io/situcraft/docs/record.html);
   [troubleshooting](https://robert-mcdermott.github.io/situcraft/docs/troubleshooting.html).

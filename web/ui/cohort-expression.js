@@ -168,7 +168,7 @@ function expressionParts(e, record, redraw) {
   const contrasts = e.design.contrasts.map((c) => c.name);
   if (!contrasts.includes(s.contrast)) s.contrast = contrasts[0];
   const found = (r) => (r.contrasts ?? []).reduce((a, c) => a + c.up + c.down, 0);
-  const out = [h('p', h('b', record.name), h('span.muted', ' · artifact '), h('span.mono', record.id))];
+  const out = [h('p', h('b', record.name), h('span.muted', ' · artifact '), h('span.mono', record.id)), e.design.pseudoSamples ? h('p.callout.warn.cohort-pseudo-note', h('span', h('b', 'Pseudo-samples, for teaching. '), 'Its units are regions of one section, not independent replicates: these tests describe this section\'s regions, and their p-values are not evidence about subjects.')) : null];
   out.push(h('div.btn-row',
     h('span.muted', 'Label'),
     h('select.input.small.cohort-family', { 'aria-label': 'The label shown', onchange: (ev) => { s.label = ev.target.value; s.gene = null; redraw(); } },
@@ -353,7 +353,7 @@ export function spatialTestsSection(app, { redraw }) {
 function spatialParts(c, record, redraw) {
   const s = spatialSession;
   if (!c.families.some((f) => f.family === s.family)) s.family = c.families[0]?.family ?? null;
-  const out = [h('p', h('b', record.name), h('span.muted', ' · artifact '), h('span.mono', record.id))];
+  const out = [h('p', h('b', record.name), h('span.muted', ' · artifact '), h('span.mono', record.id)), c.design.pseudoSamples ? h('p.callout.warn.cohort-pseudo-note', h('span', h('b', 'Pseudo-samples, for teaching. '), 'Its units are regions of one section, not independent replicates: these tests describe this section\'s regions, and their p-values are not evidence about subjects.')) : null];
   out.push(h('div.btn-row',
     h('span.muted', 'Show'),
     h('select.input.small.cohort-family', { 'aria-label': 'The family of statistics shown', onchange: (ev) => { s.family = ev.target.value; s.pick = null; redraw(); } },

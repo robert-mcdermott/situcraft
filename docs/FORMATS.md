@@ -888,15 +888,15 @@ and its validation are in [research.md](../situcraft-spec/research.md) §3.4b.
 | Cohort | Holds |
 | --- | --- |
 | `standard` | Four subjects in each of two groups, `control` and `treated`, on two slides; sections of 250 × 250 µm with twelve domains (about 750 cells each), with effects in the treated group: the endothelial-like type's odds against each other type ×2 in every domain, the immune-like type's ×4 in the domains the epithelial-like type leads, and `SIM033` ×2.5 in epithelial-like cells. About 3 s and 64 MB |
-| `null` | The same design without effects: the groups differ only by chance |
-| `paired` | Four subjects, each a section `before` and `after`, the effects after; a subject's sections share 60% of their variation, and lie on one slide |
+| `null` | The same design and panel, its own seed, without effects: the groups differ only by chance (the start page's **A simulated null cohort**). About 3 s and 68 MB |
+| `paired` | Six subjects, each a section `before` and `after` (twelve sections), the same panel, the effects after, the endothelial-like type's odds ×4; a subject's sections share 60% of their variation, and lie on one slide (the start page's **A simulated cohort, before and after**). About 4 s and 95 MB |
 | `outlier` | The standard cohort with its sixth sample (`S06`) planted to detect 40% of the transcripts it would, as a failed run would: for checking that cohort QC finds it |
 
 Its parameters (`--print-params` prints them; `--params` reads them back):
 
 | Parameter | Sets |
 | --- | --- |
-| `seed` | The cohort's seed: each sample's seed and draws come from it, and the panel's stream is it |
+| `seed`, `panel_seed` | The cohort's seed: each sample's seed and draws come from it; and the panel's stream (the seed if not given). The presets share the standard cohort's panel |
 | `groups`, `subjects`, `paired` | The groups (2 to 10; the first the reference) and the subjects in each, or, paired, the subjects each sampled in every group |
 | `slides`, `slide_sd` | Slides as batches (0 for none): an unpaired group's samples dealt to them in turn, a paired subject's together; each slide's detection efficiency log-normal with this σ, multiplying its cells' densities and the ambient background |
 | `share_sd`, `level_sd`, `subject_share` | Sample-to-sample variation on the log scale: of each type's weight in the domains' mixes, and of each gene's expected count in each type; in a paired design, the share of each draw's variance a subject's samples have in common |

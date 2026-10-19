@@ -183,7 +183,7 @@ export function installRemote(app) {
     const list = app.examples.list() ?? [];
     const names = list.map((e) => e.name);
     const text = String(ref ?? '').trim().toLowerCase();
-    const short = { lung: 'xenium-lung-2fov', breast: 'xenium-breast-2fov', simulated: 'simulated-standard', cohort: 'simulated-cohort' }[text];
+    const short = { lung: 'xenium-lung-2fov', breast: 'xenium-breast-2fov', simulated: 'simulated-standard', cohort: 'simulated-cohort', 'null-cohort': 'simulated-null-cohort', 'paired-cohort': 'simulated-paired-cohort' }[text];
     return list.find((e) => e.name === choose(short ?? ref, names, 'example'));
   }
 
@@ -447,7 +447,7 @@ export function installRemote(app) {
       if (!app.examples.list()) await app.examples.refresh();
       let card = app.tour?.open?.() ? app.tour : null;
       if (args.example !== undefined || !card) {
-        if (args.example === undefined) throw new ActionError('Name the example whose tour to take (xenium-lung-2fov, xenium-breast-2fov or simulated-standard).');
+        if (args.example === undefined) throw new ActionError('Name the example whose tour or worked example to take (xenium-lung-2fov, xenium-breast-2fov, simulated-standard, simulated-cohort, simulated-null-cohort or simulated-paired-cohort).');
         const example = resolveExample(args.example);
         if (example.state !== 'ready') throw new ActionError(`${example.title} is not on this computer: ${example.generated ? 'open_example makes it' : 'open_example with download: true downloads it'}.`);
         const names = ['tour', ...workedExamples(example.name).map((w) => w.id)];
@@ -455,10 +455,12 @@ export function installRemote(app) {
         if (example.outdated && workedExamples(example.name).find((w) => w.id === name)?.images) throw new ActionError(`${example.outdated} open_example with remake: true makes it again.`);
         card = await app.examples.tour(example.name, name);
         if (!card) throw new ActionError(`${example.title}'s ${name === 'tour' ? 'tour' : `worked example ${name}`} could not start.`);
-        const { item, dataset } = await app.examples.inProject(example.name);
-        await derivedData(item);
-        // A worked example's steps start from the dataset's segmentation.
-        await app.bundles.registerSegmentation(item, dataset.id);
+        // A worked example's steps start from each dataset's segmentation (a cohort's every sample's).
+        const { item, dataset, items, datasets } = await app.examples.inProject(example.name);
+        for (const [k, it] of (items ?? [item]).entries()) {
+          await derivedData(it);
+          await app.bundles.registerSegmentation(it, (datasets ?? [dataset])[k].id);
+        }
       }
       const steps = card.tour.steps;
       if (args.step !== undefined) {
@@ -498,6 +500,8 @@ export function installRemote(app) {
       }
       // A spatial step: its answer (and that answer made again), and the cells it shows on the tissue.
       if (step.spatial || step.cells_of) data.spatial = card.answers();
+      // A cohort step: the summary, and the comparison it shows.
+      if (step.mode === 'cohort') data.cohort = card.cohort?.() ?? null;
       if (step.cells_of) {
         for (let k = 0; k < 200 && !window.situcraftViewer?.focus?.(); k += 1) await sleep(25);
         data.focus = window.situcraftViewer?.focus?.() ?? null;
@@ -2256,7 +2260,7 @@ export function installRemote(app) {
     },
 
     async design(args) {
-      const asked = ['unit', 'group', 'reference', 'contrasts', 'covariates', 'exclude'].some((k) => args[k] !== undefined);
+      const asked = ['unit', 'group', 'reference', 'contrasts', 'covariates', 'exclude', 'pseudo_samples'].some((k) => args[k] !== undefined);
       const latest = designsOf(project())[0];
       if (!asked && !latest) throw new ActionError('The project has no design yet: name its unit and group (design with unit and group).');
       // Samples left out, by name or ID.
@@ -2267,7 +2271,7 @@ export function installRemote(app) {
         if (!String(reason ?? '').trim()) throw new ActionError(`Say why ${s.name} is left out.`);
         exclude[s.id] = String(reason).trim();
       }
-      const spec = asked ? { unit: args.unit ?? latest?.spec.unit, group: args.group ?? latest?.spec.group, reference: args.reference ?? '', contrasts: args.contrasts ?? [], covariates: args.covariates ?? [], exclude } : latest.spec;
+      const spec = asked ? { unit: args.unit ?? latest?.spec.unit, group: args.group ?? latest?.spec.group, reference: args.reference ?? '', contrasts: args.contrasts ?? [], covariates: args.covariates ?? [], exclude, ...(args.pseudo_samples ? { pseudoSamples: true } : {}) } : latest.spec;
       const d = makeDesign(project(), spec);
       let saved = null;
       if (args.save !== undefined) {
@@ -2282,7 +2286,7 @@ export function installRemote(app) {
       return {
         message: `${d.ok ? d.words.join(' ') : `This design cannot be used: ${d.problems.join(' ')}`}${d.notes.length ? ` Notes: ${d.notes.join(' ')}` : ''}${saved ? ` Saved as ${saved.name}, version ${saved.version}.` : ''}`,
         data: {
-          ok: d.ok, problems: d.problems, notes: d.notes, words: d.words, levels: d.levels, reference: d.reference, paired: d.paired,
+          ok: d.ok, problems: d.problems, notes: d.notes, words: d.words, levels: d.levels, reference: d.reference, paired: d.paired, pseudoSamples: d.pseudoSamples,
           names: d.names, rows: d.rows.map((r) => ({ unit: r.unit, group: r.group, samples: r.samples.map((id) => nameOf.get(id)) })), matrix: d.matrix, rank: d.rank, df: d.df,
           contrasts: d.contrasts, excluded: d.excluded.map((e) => ({ sample: e.name, reason: e.reason })), saved,
         },

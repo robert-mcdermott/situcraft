@@ -58,7 +58,7 @@ func TestAbundanceByHand(t *testing.T) {
 		t.Errorf("the share's test %+v, the model's %+v", got, want)
 	}
 	// The second label: no cells anywhere, untested, outside the adjustment.
-	if share.Tests[1].Tested || !strings.Contains(share.Tests[1].Note, "no sample") || share.Untested != 1 || !strings.Contains(share.Universe, "1 tests (2 labels × 1 contrasts, 1 untested)") {
+	if share.Tests[1].Tested || !strings.Contains(share.Tests[1].Note, "no sample") || share.Untested != 1 || !strings.Contains(share.Universe, "1 test (2 labels × 1 contrast, 1 untested)") {
 		t.Errorf("untested: %+v; %s", share.Tests[1], share.Universe)
 	}
 	// Densities: per mm², the tissue summed in the subject's row.

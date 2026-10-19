@@ -69,18 +69,11 @@ var studyFamilies = []string{"share", "density", "niche share", "expression", "e
 // The cell-by-cell tests.
 var cellFamilies = []string{"share, cells as replicates", "expression, cells as replicates"}
 
-// studyCohort simulates a cohort's sections, summarizes them and compares them by condition. A
-// panel seed (not 0) keeps the cohort's panel that seed's: the standard cohort's, whose effect gene
-// is among its type's most expressed, while its sections and their variation are the seed's.
-func studyCohort(ctx context.Context, c simulate.Cohort, panelSeed uint64, cellTests bool) (*cohortStudy, error) {
+// studyCohort simulates a cohort's sections, summarizes them and compares them by condition.
+func studyCohort(ctx context.Context, c simulate.Cohort, cellTests bool) (*cohortStudy, error) {
 	samples, params, err := simulate.CohortSamples(c)
 	if err != nil {
 		return nil, err
-	}
-	if panelSeed != 0 {
-		for k := range params {
-			params[k].PanelSeed = panelSeed
-		}
 	}
 	types := make([]string, len(c.Section.Types))
 	for k, t := range c.Section.Types {
@@ -475,17 +468,18 @@ func runStudy(t *testing.T, n, m int) studyReport {
 		go func() {
 			defer wg.Done()
 			for j := range jobs {
+				// A null cohort's panel its seed's (the study's panels as varied as its sections);
+				// a cohort with effects keeps the standard cohort's panel, whose effect gene is
+				// among its type's most expressed, its sections and their variation the seed's.
 				var c simulate.Cohort
-				var panel uint64
 				if j.null {
 					c = simulate.CohortPresets["null"]
-					c.Seed = 20261100 + uint64(j.k)
+					c.Seed, c.PanelSeed = 20261100+uint64(j.k), 0
 				} else {
 					c = simulate.CohortPresets["standard"]
-					panel = c.Seed
-					c.Seed = 20262100 + uint64(j.k)
+					c.Seed, c.PanelSeed = 20262100+uint64(j.k), c.Seed
 				}
-				r, err := studyCohort(ctx, c, panel, j.null)
+				r, err := studyCohort(ctx, c, j.null)
 				if err != nil {
 					errs <- fmt.Errorf("cohort seed %d: %w", c.Seed, err)
 					continue

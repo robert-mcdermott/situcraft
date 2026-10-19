@@ -21,7 +21,7 @@ SituCraft runs as one self-contained program on macOS, Linux and Windows. It ope
 window, needs no other software, and keeps your data on your computer. 16 GB of memory is
 recommended for whole sections; 8 GB is enough for the examples ([what it needs](docs/INSTALLING.md#what-it-needs)).
 
-**Status:** 0.6.0. SituCraft opens a Xenium output bundle (folder or zip), reads every byte of it
+**Status:** 0.7.0. SituCraft opens a Xenium output bundle (folder or zip), reads every byte of it
 with its own readers, validates it (fatal problems, warnings and notes, and 22 of the run's
 recorded values recomputed from its data) and records it in a project. Its tissue viewer shows the
 morphology stains, the transcripts of chosen genes and the cells at any zoom, every image sample
@@ -100,12 +100,12 @@ graphs, enrichment and niches take seconds on four cores, and their Moran's I un
 immune cells enter its tumor, read the simulated tissue's niches against its domains, find the Lung
 genes in a pattern, and make an answer again under another segmentation.
 
-In development for 0.7.0: samples and cohorts. A study's sections in one project, each a sample (or
+Since 0.7.0, SituCraft compares samples and cohorts, in the Cohort view. A study's sections in one project, each a sample (or
 its regions, such as a tissue microarray's cores), described by the subject it came from, its
 condition and any field added, beside its run, slide and panel read from its bundle, and written
-and read as CSV. Simulated cohorts (`situcraft simulate --cohort`, and the start page's **A
-simulated cohort**) are sections of subjects in groups whose differences are known, with their
-truth, for checking comparisons of groups. The design names the replicate unit, the groups and
+and read as CSV. Simulated cohorts (`situcraft simulate --cohort`, and the start page's three: a cohort with known
+effects, a null cohort and a cohort before and after) are sections of subjects in groups whose
+differences are known, with their truth, for checking comparisons of groups. The design names the replicate unit, the groups and
 the covariates before any comparison, as a model matrix in treatment coding, and refuses what it
 cannot estimate or what a batch could explain. Every sample is then measured the same way (the
 same labels, graph and questions) and summarized in the cohort table: its cells by label, niches
@@ -123,7 +123,10 @@ nearest distances, Moran's I) by moderated linear models of the design. Every we
 error rates are measured on thousands of simulated cohorts (each family's false positives at their
 levels, a known change's interval covering it 95% of the time) beside the same cohorts tested cell
 by cell, whose false positives show why cells are never tested as replicates; and a cohort of 2
-million cells is summarized and compared one section at a time within its budget.
+million cells is summarized and compared one section at a time within its budget. Worked examples
+find a gene changed in one cell type, find nothing in a null cohort, find a composition shift in
+subjects sampled before and after, show what pairing gains, and, for teaching only, compare regions
+of one Breast section as pseudo-samples, every result saying that they are not subjects.
 
 ## A look around
 
@@ -157,6 +160,14 @@ ranked for review, and the decision recorded with its reason.
 
 The Cell types view: the cells' map beside the tissue, linked, colored by cluster, gene or label.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/expression-dark.webp">
+  <img alt="The Cohort view's differential expression of the simulated cohort's epithelial-like cells: the volcano with SIM033 far above the rest, SIM033's subjects by condition, and the genes ranked by p-value with SIM033 first and marked higher" src="docs/images/expression-light.webp">
+</picture>
+
+The Cohort view: a simulated cohort's subjects compared by condition, each subject one observation;
+SIM033, raised in the treated subjects' epithelial-like cells, the only gene found.
+
 More: [checking a bundle](docs/images/data-light.webp), [the tissue's stains](docs/images/viewer-light.webp),
 [transcripts outside cells](docs/images/qc-outside-light.webp), [filters as versions](docs/images/qc-filter-light.webp),
 [saved views](docs/images/saved-views-light.webp), [the methods paragraph](docs/images/methods-light.webp),
@@ -177,6 +188,11 @@ More: [checking a bundle](docs/images/data-light.webp), [the tissue's stains](do
 [the instrument's clusters imported as labels](docs/images/imported-light.webp),
 [the review queue and a cell's evidence](docs/images/review-light.webp),
 [a worked example reading labels against the simulated truth](docs/images/worked-labels-light.webp),
+[a cohort's samples](docs/images/samples-light.webp), [the design](docs/images/design-light.webp),
+[sample summaries](docs/images/summary-light.webp), [cohort QC](docs/images/cohort-qc-light.webp),
+[differential abundance](docs/images/abundance-light.webp),
+[spatial statistics between groups](docs/images/spatial-tests-light.webp),
+[a worked example finding a composition shift](docs/images/worked-cohort-light.webp),
 [the Jobs view](docs/images/jobs-light.webp).
 
 ## Install
@@ -236,7 +252,9 @@ known. It writes the tissue as a Xenium output bundle labeled simulated, with th
 `truth/` folder, so that any segmentation can be scored against it. SituCraft and other tools
 (spatialdata-io among them) read the bundle as they read Xenium's. The same seed gives the same
 bundle on any computer. `--preset large` makes a tissue of 6 × 5 mm and 55 million transcripts,
-a field at a time, for measuring at scale. `--reference N` also writes a single-cell reference of
+a field at a time, for measuring at scale. `--cohort standard`, `null` or `paired` makes a cohort
+of such sections, subjects in groups with known effects (or none), with each sample's subject and
+condition and the truth of every effect. `--reference N` also writes a single-cell reference of
 the tissue's types (N cells of each, as AnnData Zarr) to label its cells from. `situcraft simulate
 -h` lists the settings, and
 [Formats](docs/FORMATS.md#simulated-tissues-situcraft-simulate) describes the files.
@@ -286,8 +304,8 @@ The example datasets are 10x Genomics' Xenium human Lung and Breast 2-FOV output
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) from
 [10x Genomics' example data](https://www.10xgenomics.com/support/software/xenium-onboard-analysis/latest/resources/xenium-example-data).
 SituCraft downloads them from 10x Genomics only when asked; they are not part of SituCraft or this
-repository. The screenshots in this documentation show these data. The third example, a simulated
-tissue, is made by SituCraft on your computer when asked.
+repository. The screenshots in this documentation show these data. The other examples, a simulated
+tissue and three simulated cohorts, are made by SituCraft on your computer when asked.
 
 ## Research use
 
