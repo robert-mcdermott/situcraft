@@ -1,0 +1,48 @@
+---
+title: AI agents
+description: Let an AI agent such as Claude Code look at your SituCraft projects and results through the Model Context Protocol, read-only unless you give it more, in a window you watch.
+lede: An AI agent such as Claude Code can ask SituCraft about your projects, datasets and results, and show you the tissue, through situcraft mcp, a Model Context Protocol server. It works in a SituCraft window you see, may only read until you give it more, and every change it makes carries its name and can be undone.
+---
+      <h2 id="setup">Setting it up</h2>
+      <p>Give your agent's client the full path to SituCraft and the argument <code>mcp</code>. For Claude Code, for all your projects:</p>
+      <div class="code"><pre><code><span class="prompt">$ </span>claude mcp add situcraft --scope user -- ~/.local/bin/situcraft mcp</code></pre></div>
+      <p>For Claude Desktop, under <code>mcpServers</code> in <code>claude_desktop_config.json</code> (Settings, Developer, Edit Config):</p>
+      <div class="code"><pre><code>{
+  "mcpServers": {
+    "situcraft": { "command": "/Users/you/.local/bin/situcraft", "args": ["mcp"] }
+  }
+}</code></pre></div>
+      <p>Cursor, Gemini CLI, VS Code and Codex take the same command and arguments; the <a href="{{github}}/blob/main/docs/MCP.md">MCP reference</a> shows each one's file, and how to check the connection without a client.</p>
+
+      <h2 id="leave">What an agent may do</h2>
+      <p>By default an agent may only read and show: describe the project, list what was made, read results and their records, write the methods, and show things in the window. You give it more when you start the server:</p>
+      <table>
+        <thead><tr><th>Leave</th><th>What it adds</th></tr></thead>
+        <tbody>
+          <tr><td><code>--allow edits</code></td><td>Changing the project: regions, saved views and filters, cluster names, curated labels and reviews, decisions, samples and designs, figures</td></tr>
+          <tr><td><code>--allow compute</code></td><td>Running jobs: segmentations, clusterings, labels, graphs, spatial analyses, cohort summaries and comparisons, opening examples; stopping or resuming jobs</td></tr>
+          <tr><td><code>--allow files</code></td><td>This computer's files by path: opening bundles, reading tables, references and images, writing exports; downloading an example</td></tr>
+        </tbody>
+      </table>
+      <p>Give several at once, <code>--allow edits,compute</code>, or <code>--allow all</code>. In Claude Code, the flags go after <code>mcp</code>: <code>claude mcp add situcraft --scope user -- ~/.local/bin/situcraft mcp --allow edits,compute</code>. The agent's client offers only the tools it may use, and SituCraft refuses a call that needs more leave than you gave, saying which.</p>
+
+      <h2 id="window">Your window, or one of its own</h2>
+      <p>When SituCraft is already running with your library and <a href="remote-control.html">remote control</a> on, the agent works in its window, where you are working. Otherwise <code>situcraft mcp</code> starts a SituCraft of its own with your library, opens its window when a tool first needs it, and stops it when the agent's session ends; jobs it did not finish can be resumed in the Jobs view.</p>
+      <p>The History drawer (<kbd>⌘J</kbd>) names the agent with each change it made, and Undo takes any of them back.</p>
+
+      <h2 id="ask">What to ask</h2>
+      <ul>
+        <li>"What is open in SituCraft, and is each bundle healthy?"</li>
+        <li>"List the Lung dataset's segmentations and say how each was made."</li>
+        <li>"Show the tissue around the tumor nest region with CD3E and EPCAM."</li>
+        <li>"Which labels are enriched near each other, and is the answer the same on the refined segmentation?" (with <code>--allow compute</code>)</li>
+        <li>"Write the methods for the whole project, with their references."</li>
+      </ul>
+      <p>The tools are SituCraft's remote-control actions, under the same names; the <a href="{{github}}/blob/main/docs/MCP.md#tools">MCP reference</a> lists them by the leave each needs. SituCraft's results are research findings about a tissue, never a diagnosis, and its instructions to the agent say so.</p>
+
+      <h2 id="security">Privacy and security</h2>
+      <ul>
+        <li>Everything runs on this computer, and your data never leave it; the only outbound requests are example downloads, which need <code>--allow files</code>.</li>
+        <li>The leave is checked by SituCraft, not left to the agent.</li>
+        <li>While an agent drives a SituCraft that <code>situcraft mcp</code> started, that SituCraft takes no actions from scripts.</li>
+      </ul>

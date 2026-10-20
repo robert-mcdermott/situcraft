@@ -3330,7 +3330,13 @@ export function installRemote(app) {
         document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
         await frames();
       }
-      const result = await handler(args, event);
+      app.store.setActor?.(author);
+      let result;
+      try {
+        result = await handler(args, event);
+      } finally {
+        app.store.setActor?.(null);
+      }
       let message = result.message ?? 'Done.';
       // A file: the program writes it where the caller asked.
       if (result.file !== undefined) {

@@ -1,9 +1,13 @@
 package main
 
+import "strings"
+
 // The remote-control actions (remote.go): what a program on this computer can ask the open
 // SituCraft page to do. The page performs them (web/ui/remote.js, whose action table must name
 // exactly these; TestEveryActionHasAPageHandler checks it). GET /api/remote/tools lists them with
-// their arguments' JSON schemas; the MCP server (wave 9) will offer the same list to agents.
+// their arguments' JSON schemas, and the MCP server (mcp.go) offers the same list to agents as its
+// tools: each with the leave it needs beyond reading (actionHints), so that an agent is offered only
+// the tools it was allowed.
 
 // apiVersion is the version of what these actions are: their names, their arguments and what their
 // results hold (GET /api/info and /api/remote/tools give it). It changes when an action is removed
@@ -16,6 +20,9 @@ type remoteAction struct {
 	Title       string         `json:"title"`
 	Description string         `json:"description"`
 	InputSchema map[string]any `json:"inputSchema"`
+	// Annotations are MCP's hints of what the tool does (from actionHints).
+	Annotations map[string]any `json:"annotations,omitempty"`
+	hint        actionHint
 	// long: may run for minutes (checking a bundle, building its derived data, a download).
 	long bool
 	// output: writes a file at args.path (output.go), so it needs the token.
@@ -661,4 +668,183 @@ func refineArgs() map[string]any {
 		"seed_check": flagArg("Run again with the next seed and report how many transcripts both runs put in the same cell."),
 		"threads":    map[string]any{"type": "integer", "minimum": 1, "description": "Threads to run on (every core if not given); the result does not depend on them."},
 	}
+}
+
+// Leaves: what an agent must be allowed (situcraft mcp --allow) to use an action beyond reading.
+// Reading includes showing things in the window (a view, a cell, a map already made): nothing in
+// the project changes and nothing is computed that is kept.
+const (
+	leaveEdits   uint8 = 1 << iota // it changes the project: a region, a view, a filter, names, a decision, a figure
+	leaveCompute                   // it starts jobs that make artifacts (and adds them to the project)
+	leaveFiles                     // it reads or writes this computer's files by path, or downloads an example
+)
+
+// leaveNames, in the order --allow lists them.
+var leaveNames = []struct {
+	bit  uint8
+	name string
+}{{leaveEdits, "edits"}, {leaveCompute, "compute"}, {leaveFiles, "files"}}
+
+// leaveText names a leave's parts: "compute and files".
+func leaveText(leave uint8) string {
+	var names []string
+	for _, l := range leaveNames {
+		if leave&l.bit != 0 {
+			names = append(names, l.name)
+		}
+	}
+	switch len(names) {
+	case 0:
+		return "none"
+	case 1:
+		return names[0]
+	}
+	return strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1]
+}
+
+// actionHint is an action's leave and MCP's hints. files are the arguments naming a file on this
+// computer that it reads where it lies (it needs the token, and an agent the files leave, when one
+// is given); flags are arguments that ask for more leave when given (true, or a text).
+type actionHint struct {
+	leave       uint8
+	files       []string
+	flags       map[string]uint8
+	destructive bool
+	openWorld   bool
+}
+
+var actionHints = map[string]actionHint{
+	// Reading, and showing in the window.
+	"get_state":            {},
+	"open_project":         {},
+	"set_mode":             {},
+	"focus":                {},
+	"show_tissue":          {},
+	"show_alignment":       {},
+	"regions":              {},
+	"select_cell":          {},
+	"open_view":            {},
+	"qc_metrics":           {},
+	"set_qc_map":           {},
+	"select_cells":         {},
+	"segmentations":        {},
+	"refinement_preflight": {},
+	"review_labels":        {},
+	"label_impact":         {},
+	"label_evidence":       {},
+	"reviews":              {},
+	"show_comparison":      {},
+	"jobs":                 {flags: map[string]uint8{"do": leaveCompute}},
+	"methods":              {},
+	"samples":              {},
+	"cohort_table":         {},
+	"cohort_qc":            {},
+	"show_gene":            {},
+	"show_sample_cells":    {},
+	"compare_panels":       {},
+	"record":               {},
+	"verify_records":       {},
+	// Changing the project.
+	"new_project":         {leave: leaveEdits},
+	"use_transform":       {leave: leaveEdits},
+	"draw_region":         {leave: leaveEdits},
+	"edit_region":         {leave: leaveEdits, destructive: true},
+	"save_view":           {leave: leaveEdits},
+	"remove_view":         {leave: leaveEdits, destructive: true},
+	"save_filter":         {leave: leaveEdits},
+	"name_clusters":       {leave: leaveEdits},
+	"curate_labels":       {leave: leaveEdits},
+	"review":              {leave: leaveEdits},
+	"decide_segmentation": {leave: leaveEdits},
+	"set_samples":         {leave: leaveEdits},
+	"design":              {leave: leaveEdits},
+	"figure":              {leave: leaveEdits},
+	// Jobs.
+	"add_dataset":            {leave: leaveCompute},
+	"open_example":           {leave: leaveCompute, flags: map[string]uint8{"download": leaveFiles, "remake": leaveFiles}, openWorld: true},
+	"tour":                   {leave: leaveCompute},
+	"align_image":            {leave: leaveCompute},
+	"register_image":         {leave: leaveCompute},
+	"check_alignment":        {leave: leaveCompute},
+	"expand_nuclei":          {leave: leaveCompute},
+	"refine_segmentation":    {leave: leaveCompute},
+	"compare_segmentations":  {leave: leaveCompute},
+	"cluster_cells":          {leave: leaveCompute},
+	"build_graph":            {leave: leaveCompute},
+	"spatial_analysis":       {leave: leaveCompute},
+	"remake_analysis":        {leave: leaveCompute},
+	"show_map":               {leave: leaveCompute},
+	"instrument_clusters":    {leave: leaveCompute},
+	"label_cells":            {leave: leaveCompute},
+	"reference_labels":       {leave: leaveCompute | leaveFiles, files: []string{"path"}},
+	"import_labels":          {leave: leaveCompute, files: []string{"path"}},
+	"repeat_on_segmentation": {leave: leaveCompute},
+	"consensus_labels":       {leave: leaveCompute},
+	"plant_errors":           {leave: leaveCompute},
+	"cohort_steps":           {leave: leaveCompute, files: []string{"reference"}},
+	"summarize_samples":      {leave: leaveCompute, files: []string{"reference"}},
+	"compare_abundance":      {leave: leaveCompute},
+	"compare_expression":     {leave: leaveCompute},
+	"compare_spatial":        {leave: leaveCompute},
+	// This computer's files.
+	"open_paths":          {leave: leaveFiles, flags: map[string]uint8{"add": leaveCompute}},
+	"add_image":           {leave: leaveFiles | leaveCompute},
+	"import_regions":      {leave: leaveFiles | leaveEdits},
+	"import_segmentation": {leave: leaveFiles | leaveCompute},
+	"export_segmentation": {leave: leaveFiles},
+	"export":              {leave: leaveFiles, destructive: true},
+	"write_figure":        {leave: leaveFiles, destructive: true},
+	"verify_certificate":  {leave: leaveFiles | leaveCompute},
+	"read_figure":         {leave: leaveFiles},
+}
+
+func init() {
+	for i := range remoteActions {
+		a := &remoteActions[i]
+		a.hint = actionHints[a.Name]
+		// A tool some of whose arguments ask for more leave (jobs' do) is not read-only to a client.
+		read := a.hint.leave == 0 && len(a.hint.flags) == 0
+		a.Annotations = map[string]any{"title": a.Title, "readOnlyHint": read, "openWorldHint": a.hint.openWorld}
+		if !read {
+			a.Annotations["destructiveHint"] = a.hint.destructive
+		}
+	}
+}
+
+// namesFile says whether the arguments name a file on this computer that the action reads where it
+// lies: one of its file arguments given (a SHA-256 names a file the library already keeps, not a
+// path).
+func (a remoteAction) namesFile(args map[string]any) bool {
+	for _, name := range a.hint.files {
+		if text, ok := args[name].(string); ok && strings.TrimSpace(text) != "" && !sha256Pattern.MatchString(strings.TrimSpace(text)) {
+			return true
+		}
+	}
+	return false
+}
+
+// touchesFiles: the action reads or writes this computer's files (a script needs the token).
+func (a remoteAction) touchesFiles(args map[string]any) bool {
+	return a.output || a.reads || a.readsAt || a.writes || a.namesFile(args)
+}
+
+// leave is the leave an agent needs for the action with these arguments.
+func (a remoteAction) leave(args map[string]any) uint8 {
+	leave := a.hint.leave
+	if a.namesFile(args) {
+		leave |= leaveFiles
+	}
+	for name, more := range a.hint.flags {
+		switch value := args[name].(type) {
+		case bool:
+			if value {
+				leave |= more
+			}
+		case string:
+			if strings.TrimSpace(value) != "" {
+				leave |= more
+			}
+		}
+	}
+	return leave
 }

@@ -1,0 +1,299 @@
+# Using SituCraft with AI agents (MCP)
+
+`situcraft mcp` is a [Model Context Protocol](https://modelcontextprotocol.io) server. An AI agent
+such as Claude Code can use it to look at your projects and datasets, show the tissue, read a run's
+quality control, segmentations, clusters, labels, spatial analyses and cohort comparisons, and say
+what made each result. Given leave, it can also change the project, run SituCraft's jobs and read
+or write files.
+
+The agent works in a SituCraft window you see. You watch what it does, every change it makes is in
+the project's history with its name, and you can undo it or take over at any time.
+
+- [Requirements](#requirements)
+- [What an agent may do](#what-an-agent-may-do)
+- [Claude Code](#claude-code)
+- [Claude Desktop](#claude-desktop)
+- [Other clients](#other-clients)
+- [Checking the connection](#checking-the-connection)
+- [Your window, or one of its own](#your-window-or-one-of-its-own)
+- [What to ask](#what-to-ask)
+- [Tools](#tools)
+- [Files](#files)
+- [Privacy and security](#privacy-and-security)
+- [Troubleshooting](#troubleshooting)
+- [How it works](#how-it-works)
+
+## Requirements
+
+- **SituCraft 0.9.0 or later.** `situcraft --version` prints yours. To upgrade, install the latest
+  release ([Installing SituCraft](INSTALLING.md)).
+- **A browser.** SituCraft opens its window in Chrome, Edge or Brave as an app window, or in your
+  default browser.
+- **The full path to the program.** Agents start SituCraft themselves, often without your shell's
+  `PATH`, so give them the full path. The installers put it here:
+
+  | System | Path |
+  | --- | --- |
+  | macOS and Linux | `~/.local/bin/situcraft`, for example `/Users/you/.local/bin/situcraft` |
+  | Windows | `%LOCALAPPDATA%\Programs\SituCraft\situcraft.exe` |
+
+  Print it with `command -v situcraft` (macOS and Linux) or `(Get-Command situcraft).Source`
+  (PowerShell).
+
+The examples below use `/Users/you/.local/bin/situcraft`; use your own path.
+
+## What an agent may do
+
+By default an agent may only read and show: describe the project, list what was made, read
+results and their records, write the methods, and show things in the window. Nothing it does then
+changes your project or starts a job. You give it more when you start the server, with `--allow`:
+
+| Leave | What it adds |
+| --- | --- |
+| (none) | Reading and showing: the project, datasets, segmentations, labels, analyses, comparisons, records and methods; views, cells and maps already made |
+| `--allow edits` | Changing the project: regions, saved views and filters, names of clusters, curated labels and reviews, decisions, samples and designs, figures |
+| `--allow compute` | Running jobs, which make artifacts and add them to the project: segmentations, clusterings, labels, graphs, spatial analyses, cohort summaries and comparisons, opening examples; and stopping, resuming or forgetting jobs |
+| `--allow files` | This computer's files by path: opening bundles, reading tables, references, images and figures, writing exports; downloading an example |
+
+Give several at once (`--allow edits,compute`) or all (`--allow all`). The agent's client lists
+only the tools it may use, and a call that needs more leave than you gave is refused with the
+leave it needs: "cluster_cells needs leave to use compute, which this server was not given: the
+user starts situcraft mcp with --allow compute to give it." Some arguments ask for more leave than
+their tool: `open_example` with `download`, `open_paths` with `add`, `import_labels` with a `path`,
+and `jobs` with `do`.
+
+## Claude Code
+
+Add the server for all your projects, read-only:
+
+```sh
+claude mcp add situcraft --scope user -- /Users/you/.local/bin/situcraft mcp
+```
+
+Everything after `--` is the command Claude Code runs, so SituCraft's flags go there too:
+
+```sh
+claude mcp add situcraft --scope user -- /Users/you/.local/bin/situcraft mcp --allow edits,compute
+```
+
+Claude Code has three scopes:
+
+| Scope | Where it applies |
+| --- | --- |
+| `local` (the default) | You, in the current project only |
+| `user` | You, in every project |
+| `project` | Everyone working in the repository, through a `.mcp.json` file you commit; Claude Code asks each person to approve it |
+
+For the project scope, `.mcp.json` looks like this:
+
+```json
+{
+  "mcpServers": {
+    "situcraft": {
+      "command": "/Users/you/.local/bin/situcraft",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+A committed file holds one path for everyone. It works only when everyone has SituCraft at that
+path or on their `PATH`, in which case the command can be just `situcraft`.
+
+`claude mcp list` in a terminal shows whether the server connects; inside a session, `/mcp` shows
+its status and tools. To remove it:
+
+```sh
+claude mcp remove situcraft --scope user
+```
+
+A job such as a refinement or a cohort's steps can take several minutes. If a call times out,
+start Claude Code with a longer tool timeout, in milliseconds:
+
+```sh
+MCP_TOOL_TIMEOUT=900000 claude
+```
+
+## Claude Desktop
+
+Open **Settings → Developer → Edit Config**. That opens `claude_desktop_config.json`, which is in
+`~/Library/Application Support/Claude/` on macOS and in `%APPDATA%\Claude\` on Windows. Add
+SituCraft under `mcpServers`:
+
+```json
+{
+  "mcpServers": {
+    "situcraft": {
+      "command": "/Users/you/.local/bin/situcraft",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+Add the leave you give to `args`, for example `["mcp", "--allow", "edits,compute"]`. On Windows,
+double the backslashes in the path:
+`"C:\\Users\\you\\AppData\\Local\\Programs\\SituCraft\\situcraft.exe"`. Quit and reopen Claude
+Desktop; SituCraft's tools then appear in the chat's tools menu.
+
+## Other clients
+
+Most clients take the same two things: the command (the full path to SituCraft) and its arguments
+(`["mcp"]`, and any `--allow`). Where the configuration lives depends on the client, so see its
+documentation.
+
+Clients that use an `mcpServers` object, such as Cursor (`~/.cursor/mcp.json`) and Gemini CLI
+(`~/.gemini/settings.json`), take the same entry as Claude Desktop above.
+
+VS Code (`.vscode/mcp.json` in a workspace) uses `servers`:
+
+```json
+{
+  "servers": {
+    "situcraft": {
+      "type": "stdio",
+      "command": "/Users/you/.local/bin/situcraft",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+OpenAI Codex CLI (`~/.codex/config.toml`) uses TOML:
+
+```toml
+[mcp_servers.situcraft]
+command = "/Users/you/.local/bin/situcraft"
+args = ["mcp"]
+```
+
+## Checking the connection
+
+Without any client, send the server one message and read its answer:
+
+```sh
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}' | /Users/you/.local/bin/situcraft mcp --window none
+```
+
+The answer is one line of JSON naming the server (`"name":"situcraft"`) and its version; SituCraft's
+banner goes to stderr. No window opens, since no tool was called.
+
+## Your window, or one of its own
+
+When SituCraft is already running with your library and remote control on (`situcraft
+--remote-control`), the agent works in its window: you see each step where you are working. When
+it is not, `situcraft mcp` starts a SituCraft of its own, with your library, and opens its window
+when a tool first needs it; that SituCraft stops when the agent's session ends. Jobs it started and
+did not finish are kept, and can be resumed in the Jobs view.
+
+When SituCraft is running with your library without remote control, the agent's SituCraft is a
+second program on the same library, and says so on stderr. Start yours with `--remote-control` to
+have the agent work in it.
+
+`--window app` (the default) opens an app window from Chrome, Edge or Brave, `--window browser` a
+tab of your default browser, and `--window none` nothing: then open the address in SituCraft's
+banner (in the client's logs) yourself.
+
+## What to ask
+
+Start with what is open, and say what you want to know:
+
+- "What is in SituCraft now? Which datasets, and is each bundle healthy?" (`get_state`,
+  `qc_metrics`)
+- "List the Lung dataset's segmentations and say how each was made." (`segmentations`, `record`)
+- "Show the tissue around the tumor nest region with CD3E and EPCAM." (`regions`, `show_tissue`)
+- "Which labels are enriched near each other in the Lung, and is the answer the same on the
+  refined segmentation?" (needs `--allow compute`: `spatial_analysis`, `remake_analysis`)
+- "Write the methods for the whole project, with their references." (`methods`)
+
+SituCraft's results are research findings about a tissue, never a diagnosis, and its instructions
+to the agent say so.
+
+## Tools
+
+The tools are SituCraft's remote-control actions, under the same names and with the same arguments
+(`GET /api/remote/tools` lists them, and the agent's client shows each one's description). Each
+carries MCP's hints: whether it only reads (it may still show something in the window), whether it
+may replace or remove something, and whether it may reach the network (downloading an example).
+
+**Reading and showing**, always offered:
+
+| Area | Tools |
+| --- | --- |
+| The project | `get_state` (start here), `open_project`, `set_mode`, `focus`, `jobs` (with `do`, needs compute) |
+| The tissue | `show_tissue`, `select_cell`, `open_view`, `regions`, `show_alignment` |
+| Quality control | `qc_metrics`, `set_qc_map`, `select_cells` |
+| Segmentations | `segmentations`, `refinement_preflight`, `show_comparison`, `label_impact` |
+| Labels and reviews | `label_evidence`, `review_labels`, `reviews` |
+| Cohorts | `samples`, `compare_panels`, `cohort_table`, `cohort_qc`, `show_gene`, `show_sample_cells` |
+| The record | `record`, `methods`, `verify_records` |
+
+**Changing the project**, with `--allow edits`: `new_project`, `draw_region`, `edit_region`,
+`save_view`, `remove_view`, `save_filter`, `name_clusters`, `curate_labels`, `review`,
+`decide_segmentation`, `use_transform`, `set_samples`, `design`, `figure`.
+
+**Running jobs**, with `--allow compute`:
+
+| Area | Tools |
+| --- | --- |
+| Data | `add_dataset`, `open_example`, `tour` |
+| Images | `align_image`, `register_image`, `check_alignment` |
+| Segmentations | `expand_nuclei`, `refine_segmentation`, `compare_segmentations`, `plant_errors` |
+| Cell types | `cluster_cells`, `show_map`, `instrument_clusters`, `label_cells`, `import_labels` (an instrument's clusters; a table needs files), `repeat_on_segmentation`, `consensus_labels` |
+| Spatial | `build_graph`, `spatial_analysis`, `remake_analysis` |
+| Cohorts | `cohort_steps`, `summarize_samples`, `compare_abundance`, `compare_expression`, `compare_spatial` |
+
+**This computer's files**, with `--allow files` (and compute where the tool runs a job):
+`open_paths`, `add_image`, `import_regions` (and edits), `import_segmentation`,
+`reference_labels`, `export_segmentation`, `export`, `write_figure`, `read_figure`,
+`verify_certificate`.
+
+A result is the action's sentence and its data: as text (the data's JSON after the sentence) and
+as structured content. An action SituCraft refuses is a tool error carrying its reason (`No
+dataset "liver" in the project.`), which the agent can act on.
+
+## Files
+
+With `--allow files`, the agent opens and reads files where they lie and writes files at absolute
+paths in folders that exist, never over an existing file unless `overwrite` is given, as a script
+with remote control's token does ([Remote control](REMOTE-CONTROL.md)).
+
+## Privacy and security
+
+- Everything runs on this computer: SituCraft answers only requests from this computer, and your
+  data never leave it. The only outbound requests are example downloads, which need
+  `--allow files`.
+- The agent acts in a window you can see, under its name; nothing happens out of sight, and every
+  change to the project can be undone.
+- An agent may only read until you give it more leave, and its client offers it only the tools it
+  may use. The leave is checked by SituCraft, not left to the agent.
+- While an agent drives a SituCraft that `situcraft mcp` started, that SituCraft takes no actions
+  from scripts, and writes no `remote.json`.
+
+## Troubleshooting
+
+- **The client shows no SituCraft tools**: it could not start the program. Give the full path (the
+  client may not use your shell's `PATH`), check that `situcraft --version` says 0.9.0 or later,
+  and try the [check above](#checking-the-connection). Claude Code's `claude mcp list` and Claude
+  Desktop's logs say why a server did not start.
+- **A tool is missing**: it needs leave you did not give; see
+  [What an agent may do](#what-an-agent-may-do).
+- **No window opens**: SituCraft opens one when a tool first needs it. With `--window browser` it
+  opens in your default browser; with `--window none`, open the address on SituCraft's stderr (in
+  the client's logs). A window you close is opened again by the next tool that needs one.
+- **A call times out**: a job can take minutes; give your client a longer tool timeout (Claude
+  Code: `MCP_TOOL_TIMEOUT`).
+- **A file was not written**: give an absolute path in a folder that exists; an existing file is
+  replaced only with `overwrite: true`.
+
+## How it works
+
+`situcraft mcp` speaks JSON-RPC on its stdin and stdout, one message per line (protocol versions
+2024-11-05 to 2025-11-25); its banner and logs go to stderr. A tool call becomes a remote-control
+action: SituCraft forwards it to the open window over Server-Sent Events, the window performs it
+with the same code as its own controls, and posts the result back. Actions reach the window one at
+a time; a long call reports progress while it runs, and the agent may cancel it. When the agent
+closes stdin, a SituCraft that `situcraft mcp` started stops.
+
+The tools, their arguments and their leave are `actions.go`'s, the same list scripts use; a test
+keeps this page naming every one.

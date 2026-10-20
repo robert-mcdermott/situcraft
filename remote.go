@@ -52,6 +52,9 @@ type remoteHub struct {
 	// that a tab left open while SituCraft was started again (another version, another library) is
 	// refused when it reconnects. Empty: any page (the tests' hubs).
 	session string
+	// scripts: programs may send actions (POST /api/remote/action). Off while an agent drives the
+	// window (situcraft mcp), whose actions come only from its stdin (after CytoWeave 0.8.0).
+	scripts bool
 }
 
 type remoteClient struct {
@@ -91,6 +94,7 @@ func newRemoteHub() *remoteHub {
 		turn:      make(chan struct{}, 1),
 		connected: make(chan struct{}),
 		token:     randomToken(),
+		scripts:   true,
 	}
 }
 
@@ -106,7 +110,9 @@ func (h *remoteHub) register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/remote/events", localOnly(h.serveEvents))
 	mux.HandleFunc("POST /api/remote/result/{id}", localOnly(h.serveResult))
 	mux.HandleFunc("POST /api/remote/output/{token}", localOnly(h.serveOutput))
-	mux.HandleFunc("POST /api/remote/action", localOnly(h.serveAction))
+	if h.scripts {
+		mux.HandleFunc("POST /api/remote/action", localOnly(h.serveAction))
+	}
 	mux.HandleFunc("GET /api/remote/tools", localOnly(h.serveTools))
 }
 
@@ -257,9 +263,11 @@ func (h *remoteHub) serveAction(w http.ResponseWriter, r *http.Request) {
 		h.respond(w, r, event)
 		return
 	}
-	if (action.output || action.reads || action.readsAt || action.writes) && !h.hasToken(r) {
+	var args map[string]any
+	json.Unmarshal(request.Args, &args)
+	if action.touchesFiles(args) && !h.hasToken(r) {
 		what := "Writing files"
-		if action.reads || action.readsAt {
+		if action.reads || action.readsAt || action.namesFile(args) {
 			what = "Reading files"
 		}
 		writeError(w, http.StatusUnauthorized, what+" needs the "+remoteTokenHeader+" header with the token SituCraft printed when it started (also in remote.json).")

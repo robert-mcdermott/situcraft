@@ -80,9 +80,11 @@ an optional argument or a field does not change it.
 - SituCraft listens on this computer only, and refuses requests that do not name it (DNS
   rebinding) and web pages of other sites.
 - Opening paths (`open_paths`), reading files (`import_segmentation`, `add_image`,
-  `import_regions`) and writing
-  them (`export`, `export_segmentation`) also need the header `X-SituCraft-Token` with the token
-  from `remote.json`: another user of a shared computer can reach the port, but not your files.
+  `import_regions`, `verify_certificate`, `read_figure`; `import_labels` and `reference_labels`
+  given a `path`, and `cohort_steps` and `summarize_samples` given a `reference` by its path) and
+  writing them (`export`, `write_figure`, `export_segmentation`) also need the header
+  `X-SituCraft-Token` with the token from `remote.json`: another user of a shared computer can
+  reach the port, but not your files.
 - A file is written only at an absolute path in a folder that exists, never over an existing file
   unless `overwrite` is true, and through a temporary file renamed into place. An export's folder
   is written under a temporary name beside it and renamed into place; an existing folder is

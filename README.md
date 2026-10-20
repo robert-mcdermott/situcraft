@@ -42,6 +42,9 @@ no Python, R or account, and keeps your data on your computer.
 - **Reproducible and open.** Every result is an artifact with its lineage, the same bits on every
   computer; exports to SpatialData, AnnData, Parquet, CSV and GeoJSON; scripts drive the window by
   remote control.
+- **Work with AI agents.** An agent such as Claude Code asks SituCraft about your projects and
+  results through `situcraft mcp`, a Model Context Protocol server, in a window you watch:
+  read-only unless you allow it to change the project, run jobs or touch files.
 
 Every method is checked against an independent implementation or a known truth (scanpy, Squidpy,
 SingleR, limma, edgeR, QuPath and simulated tissues among them): see
@@ -157,6 +160,8 @@ walks through the examples and every view.
 
 ## Command-line tools
 
+- `situcraft mcp` is a Model Context Protocol server for AI agents: read-only tools by default,
+  `--allow edits,compute,files` for more ([AI agents](docs/MCP.md)).
 - `situcraft verify --data <folder of bundles> <certificate, report or package>` makes a
   certificate's results again from the bundles and compares every file bit for bit
   ([the record](https://robert-mcdermott.github.io/situcraft/docs/record.html#verify)).
@@ -174,6 +179,8 @@ Each takes `-h` for its settings.
 - [The website](https://robert-mcdermott.github.io/situcraft/): the user guide, installing, and
   the methods with their validation ([docs/site/](docs/site/README.md) builds it).
 - [Formats](docs/FORMATS.md): what SituCraft reads and writes.
+- [AI agents (MCP)](docs/MCP.md): setting up Claude Code, Claude Desktop and other clients, and what
+  an agent may do.
 - [Remote control](docs/REMOTE-CONTROL.md): driving the window from scripts and notebooks.
 - [Installing](docs/INSTALLING.md): release files, installers, upgrading, uninstalling.
 - [Requirements](situcraft-spec/requirements.md): what SituCraft must do.

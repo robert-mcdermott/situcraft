@@ -1,5 +1,45 @@
 # Changelog
 
+## Unreleased (0.9.0)
+
+Wave 9 of the [roadmap](situcraft-spec/roadmap.md): agents and scripts. What a program can do with
+SituCraft, and what it may not: an agent asks through typed tools and gets answers that name their
+sources, a script runs the same steps from Python or R, and a recipe makes a result again without
+a window.
+
+### Added
+
+- **The MCP server (wave 9, slice 1).** `situcraft mcp` is a Model Context Protocol server for AI
+  agents such as Claude Code: JSON-RPC on stdin and stdout, MCP 2024-11-05 to 2025-11-25.
+  - **Its tools are the remote-control actions,** under the same names and arguments, with MCP's
+    hints (read-only, destructive, reaching the network).
+  - **Read-only unless allowed.** By default the agent is offered the tools that read and show.
+    `--allow edits` adds those that change the project, `--allow compute` those that run jobs,
+    `--allow files` those that read or write this computer's files by path or download an
+    example (`--allow all` for every one). A call needing more leave than was given is refused
+    with the leave it needs, and some arguments ask for more (`jobs` with `do`, `open_paths`
+    with `add`, `import_labels` with a `path`).
+  - **In your window, or one of its own.** With SituCraft already running on the library with
+    remote control, the agent works in its window. Otherwise `situcraft mcp` starts SituCraft,
+    opens its window when a tool needs it, takes no script's actions meanwhile, and stops when
+    the agent's session ends.
+  - **Named in the history.** Every change an agent or a script makes is labeled with its name in
+    the History drawer, and undoes as any other.
+  - **Long calls** report progress and can be cancelled.
+  - **Documented:** [docs/MCP.md](docs/MCP.md) (Claude Code, Claude Desktop, Cursor, Gemini CLI,
+    VS Code and Codex; what an agent may do; every tool by the leave it needs) and the guide's
+    *AI agents* page.
+  - **Validated:** the protocol's edges, the leave of every tool and every refusal, the agent's
+    name reaching the window, files by path, cancellation and progress (never after the reply),
+    the real command's stdout carrying only the protocol, and attaching to a running SituCraft; in
+    the browser, an agent's changes named in the History drawer.
+
+### Changed
+
+- **Files named by an argument need the token.** A script that has `import_labels` or
+  `reference_labels` read a table by its `path`, or `cohort_steps` or `summarize_samples` read a
+  reference by its path, now needs remote control's token, as opening and writing files did.
+
 ## 0.8.0 (2026-10-19)
 
 Wave 8 of the [roadmap](situcraft-spec/roadmap.md): figures and a provable record. What others can
