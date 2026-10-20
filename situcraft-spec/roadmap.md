@@ -3847,6 +3847,10 @@ left in it.
        processor; every agreement with SciPy, Squidpy, Shapely, astropy, scikit-learn and Proseg
        held. They are made again (the Python packages from uv's cache, offline; Proseg's
        segmentations as before), their numbers the same but in their last digits.
+     - **The scale test on the weekly runner:** its 2 cores and 7.8 GB are less than the test was
+       written for (4 cores, 16 GB), and the refinement's preflight rightly refused the Balanced
+       preset (6.6 GB needed). When the preflight says the memory is too little, the test refines
+       with the Low memory preset, as the preflight advises, against the same budgets.
 
 ## 0.9.0: agents and scripts (wave 9)
 
