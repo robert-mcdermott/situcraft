@@ -61,9 +61,9 @@
 // (ui/mode-viewer.js) and window.situcraftAlignment (ui/mode-alignment.js). Run by
 // validation/run.mjs's "viewer" suite.
 
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -162,6 +162,40 @@ function unzipOwn(buf) {
     at += 46 + nameLength + buf.readUInt16LE(at + 30) + buf.readUInt16LE(at + 32);
   }
   return out;
+}
+
+// A zip written by the suite's own writer (wave 8, slice 6): each entry stored, with its CRC-32.
+const CRC = Array.from({ length: 256 }, (_, n) => {
+  let c = n;
+  for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+  return c >>> 0;
+});
+const crcOf = (buf) => {
+  let c = 0xffffffff;
+  for (const b of buf) c = CRC[(c ^ b) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+};
+function zipOwn(entries) {
+  const locals = [];
+  const centrals = [];
+  let offset = 0;
+  for (const [name, data] of entries) {
+    const body = Buffer.isBuffer(data) ? data : Buffer.from(data);
+    const nameBuf = Buffer.from(name);
+    const head = Buffer.alloc(30);
+    head.writeUInt32LE(0x04034b50, 0); head.writeUInt16LE(20, 4); head.writeUInt16LE(0x0800, 6);
+    head.writeUInt32LE(crcOf(body), 14); head.writeUInt32LE(body.length, 18); head.writeUInt32LE(body.length, 22); head.writeUInt16LE(nameBuf.length, 26);
+    const central = Buffer.alloc(46);
+    central.writeUInt32LE(0x02014b50, 0); central.writeUInt16LE(20, 4); central.writeUInt16LE(20, 6); central.writeUInt16LE(0x0800, 8);
+    central.writeUInt32LE(crcOf(body), 16); central.writeUInt32LE(body.length, 20); central.writeUInt32LE(body.length, 24); central.writeUInt16LE(nameBuf.length, 28); central.writeUInt32LE(offset, 42);
+    locals.push(head, nameBuf, body);
+    centrals.push(central, nameBuf);
+    offset += 30 + nameBuf.length + body.length;
+  }
+  const size = centrals.reduce((n, b) => n + b.length, 0);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(entries.length, 8); end.writeUInt16LE(entries.length, 10); end.writeUInt32LE(size, 12); end.writeUInt32LE(offset, 16);
+  return Buffer.concat([...locals, ...centrals, end]);
 }
 
 const BUNDLES = ['xenium-lung-2fov', 'xenium-breast-2fov'];
@@ -2487,6 +2521,66 @@ export async function viewerSuite({ check, MissingData, verbose }) {
               wrote.every((w) => w.ok) && cert?.format === 'situcraft-certificate' && own === fingerprint && JSON.stringify(cert.steps.map((x) => x.id)) === JSON.stringify(recordSteps) && made >= 5 && madeOff.length === 0
               && bundleFiles.length >= 5 && bundleOff.length === 0 && listed.length === entries.size - 1 && listOff.length === 0 && leaks.length === 0 && again && /^SituCraft certificate\n/.test(text('README.txt')) && text('README.txt').includes(fingerprint),
               'the suite\'s fingerprint; the record\'s steps; every SHA-256 the files\'; no path; the same bytes');
+          }
+
+          // situcraft verify (wave 8, slice 6): the Lung enrichment's certificate made again from its
+          // bundle (found in the data folder by its files' SHA-256) in a SituCraft of its own:
+          // verified (exit 0), every step made again; tampered with by the suite's own zip writer (the
+          // graph's longest edge changed and everything made consistent again: its manifest, its
+          // SHA-256, the fingerprint), found to differ first at the graph (exit 1); without its
+          // bundle, not checkable (exit 2). And the Lung's results figure certified and verified: its
+          // drawing drawn again in a headless page, the same.
+          {
+            const sha = (bytes) => createHash('sha256').update(bytes).digest('hex');
+            const chromePath = findChrome();
+            const reportOf = (path) => (existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : null);
+            const verifyRun = (zip, data, name) => {
+              const report = join(work, `${name}.json`);
+              const r = spawnSync(bin, ['verify', '--data', data, '--report', report, '--overwrite', ...(chromePath ? ['--chrome', chromePath] : []), zip], { encoding: 'utf8', timeout: 30 * 60e3 });
+              return { status: r.status, out: `${r.stdout ?? ''}${r.stderr ?? ''}`, report: reportOf(report) };
+            };
+            const certPath = join(work, 'certificate.zip');
+            const verified = verifyRun(certPath, dataRoot, 'verified');
+            // Tampered with, consistently.
+            const entries = unzipOwn(readFileSync(certPath));
+            const cert = JSON.parse(entries.get('certificate.json').toString('utf8'));
+            const graph = cert.steps.find((x) => x.kind === 'graph');
+            const manifest = JSON.parse(entries.get(graph.manifest.path).toString('utf8'));
+            manifest.lineage.job.spec.parameters.longest = 40;
+            const manifestText = `${JSON.stringify(manifest, null, 1)}\n`;
+            graph.manifest.sha256 = sha(manifestText);
+            graph.job.spec = sha(canonicalOf(manifest.lineage.job.spec));
+            delete cert.fingerprint;
+            cert.fingerprint = sha(canonicalOf(cert));
+            entries.set(graph.manifest.path, Buffer.from(manifestText));
+            entries.set('certificate.json', Buffer.from(JSON.stringify(cert)));
+            const tamperedPath = join(work, 'certificate-tampered.zip');
+            writeFileSync(tamperedPath, zipOwn([...entries]));
+            const tampered = verifyRun(tamperedPath, dataRoot, 'tampered');
+            const empty = join(work, 'no-bundles');
+            mkdirSync(empty, { recursive: true });
+            const missing = verifyRun(certPath, empty, 'missing');
+            // The results figure, drawn again in a headless page.
+            const figureId = await chrome.eval(`window.situcraft.store.project.figures.find((f) => f.name === 'Results of the Lung')?.id ?? null`);
+            const figurePath = join(work, 'certificate-figure.zip');
+            const figureMade = await act('export', { what: 'certificate', result: figureId, path: figurePath, overwrite: true });
+            const figure = verifyRun(figurePath, dataRoot, 'figure');
+            const figureStep = figure.report?.steps?.find((x) => x.kind === 'figure');
+            const steps = verified.report?.steps ?? [];
+            const madeAgain = steps.filter((x) => x.by === 'program' && x.verdict === 'verified').length;
+            check('viewer', 'situcraft verify: the Lung enrichment made again from its bundle, found by its files\' SHA-256, in a SituCraft of its own: verified (exit 0); tampered with, consistently, found to differ first at the graph (exit 1); without its bundle, not checkable (exit 2); the results figure drawn again in a headless page, the same', `verified: exit ${verified.status}, ${verified.report?.verdict}, ${madeAgain} steps made again of ${steps.filter((x) => x.by === 'program').length}; tampered: exit ${tampered.status}, ${tampered.report?.verdict}, first at ${tampered.report?.firstDiffers?.kind} (${tampered.report?.firstDiffers?.detail}); missing: exit ${missing.status}, ${missing.report?.verdict}; figure: ${figureMade.ok ? 'certified' : figureMade.message}, exit ${figure.status}, ${figure.report?.verdict}, ${figureStep?.verdict} (${figureStep?.detail})${verified.status !== 0 ? `; ${verified.out.slice(-600)}` : ''}`,
+              verified.status === 0 && verified.report?.verdict === 'verified' && madeAgain >= 5 && steps.every((x) => ['verified', 'as certified'].includes(x.verdict))
+              && tampered.status === 1 && tampered.report?.verdict === 'differs' && tampered.report?.firstDiffers?.kind === 'graph'
+              && missing.status === 2 && missing.report?.verdict === 'not checkable' && missing.report?.bundles?.[0]?.status === 'missing'
+              && figureMade.ok && figure.status === 0 && figureStep?.verdict === 'verified',
+              'verified, 0; differs at the graph, 1; not checkable, 2; the figure drawn again the same');
+            // Kept for CI to verify on the other processor (SITUCRAFT_CERTIFICATES: a folder).
+            const keep = process.env.SITUCRAFT_CERTIFICATES;
+            if (keep) {
+              mkdirSync(keep, { recursive: true });
+              copyFileSync(certPath, join(keep, 'lung-enrichment.zip'));
+              if (existsSync(figurePath)) copyFileSync(figurePath, join(keep, 'lung-figure.zip'));
+            }
           }
         }
 

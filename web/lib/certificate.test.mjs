@@ -5,6 +5,7 @@ import { resultRecord, scopeRoots } from './record.js';
 import { methodsText } from './methods-text.js';
 import { sha256 } from './sha256.js';
 import { readZip } from './zip.js';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { CERTIFICATE_NAME, FILES_NAME, README_NAME, buildCertificate, certificateFingerprint, readCertificate, redactPaths, shortFingerprint, writeCertificate } from './certificate.js';
 
 const decode = (bytes) => new TextDecoder().decode(bytes);
@@ -59,8 +60,8 @@ test('a certificate names the bundles by their files\' SHA-256 and each step by 
   for (const [name, bytes] of files) assert.doesNotMatch(decode(bytes), /\/Users\/someone/, name);
   assert.match(decode(files.get('artifacts/clu-1/manifest.json')), /"bundle": "situcraft:bundle\/d-1"/);
   assert.match(decode(files.get('project.json')), /"path": "situcraft:bundle\/d-1"/);
-  assert.deepEqual(redactPaths({ a: '/Users/someone/data/S01/outs/x.tif', b: 'C:\\images\\he.tif', c: 'relative/name.csv', d: 'Added S01 (/Users/someone/data/S01), then /home/someone/he.tif', e: 'segments 3/4' }, { datasets: [{ id: 'd-1', path: '/Users/someone/data/S01' }] }),
-    { a: 'situcraft:bundle/d-1/outs/x.tif', b: 'situcraft:file/he.tif', c: 'relative/name.csv', d: 'Added S01 (situcraft:bundle/d-1), then situcraft:file/he.tif', e: 'segments 3/4' });
+  assert.deepEqual(redactPaths({ a: '/Users/someone/data/S01/outs/x.tif', b: 'C:\\images\\he.tif', c: 'relative/name.csv', d: 'Added S01 (/Users/someone/data/S01), then /home/someone/he.tif', e: 'segments 3/4', keep: '/////w==', codes: 'AAAA/Users/AAAA+/w==' }, { datasets: [{ id: 'd-1', path: '/Users/someone/data/S01' }] }),
+    { a: 'situcraft:bundle/d-1/outs/x.tif', b: 'situcraft:file/he.tif', c: 'relative/name.csv', d: 'Added S01 (situcraft:bundle/d-1), then situcraft:file/he.tif', e: 'segments 3/4', keep: '/////w==', codes: 'AAAA/Users/AAAA+/w==' }, 'base64 text is not a path, even starting with a slash');
 });
 
 test('the zip: its README, the certificate and every file it names, the same bytes again; read back, an edit found', async () => {
@@ -110,4 +111,17 @@ test('a different result, step or SituCraft, a different fingerprint; one not co
   assert.deepEqual(c.subject, { id: p.id, kind: 'project', name: 'Record' });
   assert.ok(c.steps.some((s) => s.id === 'spa-1') && c.steps.some((s) => s.id === 'exp-1'));
   assert.ok(at(0));
+});
+
+// The certificate the program's verify reads in its own tests (testdata/certificate.zip, verify_test.go):
+// what this page writes for the fixture, entry by entry (deflate's bytes are the platform's). Run
+// with SITUCRAFT_WRITE_FIXTURES=1 to write it again.
+test('the certificate the program reads in its tests is the one this page writes', async () => {
+  const zip = await writeCertificate(certified().built);
+  const path = new URL('../../testdata/certificate.zip', import.meta.url);
+  if (process.env.SITUCRAFT_WRITE_FIXTURES) writeFileSync(path, zip);
+  const fixture = await readZip(new Uint8Array(readFileSync(path)));
+  const made = await readZip(zip);
+  assert.deepEqual([...fixture.keys()], [...made.keys()]);
+  for (const [name, bytes] of made) assert.deepEqual(fixture.get(name), bytes, name);
 });

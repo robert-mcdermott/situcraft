@@ -611,6 +611,9 @@ var remoteActions = []remoteAction{
 		"format":  textArg("json (the default), markdown or bibtex."),
 		"time":    textArg("The time recorded, ISO 8601 (now if not given)."),
 	}), long: true},
+	{Name: "verify_records", Title: "Compute the page's records again", Description: "Used by situcraft verify: the page's own records named (a design, a filter, a figure, by ID) computed again in the project open, a design from its samples, a filter's cells from their attributes, a figure's drawing; answers each one's id, whether it was computed (checked), whether it is the same (same), how (detail) and what differs (differ).", InputSchema: schema(map[string]any{
+		"steps": map[string]any{"type": "array", "items": map[string]any{"type": "object"}, "description": "Each {id, kind (design, filter or figure), drawing (a figure's drawing as its certificate records it: {drawing, panels: [{id, letter, drawing}]})}."},
+	}, "steps"), long: true},
 	{Name: "read_figure", Title: "Read a figure back", Description: "Reads a figure SituCraft wrote (SVG, PDF, PNG or JSON) and compares it with the project: whether its manifest is as written, what changed since in each panel's view, dataset and artifacts, and whether each panel draws the same now.", InputSchema: schema(map[string]any{
 		"path": textArg("The figure file on this computer."),
 	}, "path"), long: true, readsAt: true},

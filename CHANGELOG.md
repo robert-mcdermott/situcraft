@@ -129,6 +129,26 @@ a result, a certificate checked by making the result again, and a package that o
     in the page, the Lung enrichment's certificate read by the suite's own zip reader, its
     fingerprint the suite's own, every file's SHA-256 the program's store's and the bundle's.
 
+- **`situcraft verify` (wave 8, slice 6).** Checks a certificate by making its result again.
+  - **The certificate as certified:** its fingerprint and every file it holds.
+  - **Its bundles found** in the folders given (`--data`) by their files' SHA-256, whatever their
+    folders are named, every file it names checked.
+  - **Each step made again** in a SituCraft of its own (a temporary library, store and derived
+    data, never yours), from the spec it recorded, and every file compared bit for bit; a
+    clustering's, a map's or labels' content without how long its run took.
+  - **The page's records:** each checked by its digest; a design, a filter and a figure computed
+    again in a headless Chrome, Edge, Brave or Chromium.
+  - **Verified, differs or not checkable**, step by step, with exit codes 0, 1 and 2; where it
+    first differs, and which version of SituCraft made a step that differs; `--report` writes it
+    all as JSON.
+  - **Certificates** now record a clustering's, a map's and labels' content digest, list
+    alignments as not made again, and no longer take base64 text beginning with a slash for a
+    path.
+  - **Validated:** in Go, the certificate the page writes read as intact and edits found; in the
+    page, the Lung enrichment verified, tampered with and found to differ at the graph, and not
+    checkable without its bundle, and the results figure drawn again the same; in CI,
+    certificates written on x86-64 verified on arm64.
+
 ## 0.7.0 (2026-10-19)
 
 Wave 7 of the [roadmap](situcraft-spec/roadmap.md): samples and cohorts. A study's sections in one

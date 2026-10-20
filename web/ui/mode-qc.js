@@ -581,6 +581,11 @@ export function mountQC(app, container) {
         return app.selection.count;
       },
       chosen: () => (app.selection?.dataset === t.dataset.id ? Array.from(app.selection.mask) : null),
+      // A filter applied again to the cells (situcraft verify): { same, kept, sha256 }.
+      verifyFilter: (filter) => {
+        const { same, kept, sha256 } = verifyFilter(filter, cells);
+        return { same, kept, sha256 };
+      },
       saveFilter: (name, conditions) => {
         session.name = name;
         session.draft = conditions;

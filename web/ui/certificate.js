@@ -25,6 +25,13 @@ export async function certify(app, scope) {
     const out = await writeFigure(app, fig, 'json', { dpi: 300, time: DRAWN_AT });
     figures.set(fig.id, { drawing: out.manifest.drawing, panels: out.manifest.panels.map((p) => ({ id: p.id, letter: p.letter, drawing: p.drawing })) });
   }
-  const built = buildCertificate(project, record, methods, { manifests, figures, software: { version: app.version ?? null, commit: app.commit ?? null } });
+  // The content of each step whose files also record how long its run took.
+  const contents = new Map();
+  for (const s of record.steps.filter((x) => ['clustering', 'embedding', 'labels'].includes(x.kind) && manifests.get(x.id))) {
+    const response = await fetch(`/api/artifacts/${encodeURIComponent(s.id)}/digest`);
+    const content = response.ok ? (await response.json()).content : null;
+    if (content) contents.set(s.id, content);
+  }
+  const built = buildCertificate(project, record, methods, { manifests, contents, figures, software: { version: app.version ?? null, commit: app.commit ?? null } });
   return { bytes: await writeCertificate(built), certificate: built.certificate, name: certificateFileName(built.certificate) };
 }

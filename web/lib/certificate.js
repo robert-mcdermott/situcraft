@@ -44,9 +44,13 @@ export const shortFingerprint = (fingerprint) => (fingerprint ? fingerprint.slic
 
 // --- Paths --------------------------------------------------------------------------------------
 
-const isAbsolute = (s) => s.length > 1 && /^(\/|[A-Za-z]:[\\/]|\\\\)/.test(s);
-// An absolute path within a sentence (a project's history says where a bundle was opened from).
-const WITHIN = /(?:\/(?:Users|home|private|tmp|var|Volumes|mnt|media|opt|srv|data|root)\/|[A-Za-z]:\\)[^\s)"'`,;]*/g;
+// Where a computer keeps its files: a path under one of these, or a bundle's folder, is stood in
+// for. Not any text starting with a slash: a cell selection's base64 may.
+const ROOTS = '(?:\\/(?:Users|home|private|tmp|var|Volumes|mnt|media|opt|srv|data|root|Applications)\\/|[A-Za-z]:\\\\|\\\\\\\\)';
+const ROOTED = new RegExp(`^${ROOTS}`);
+// Such a path within a sentence (a project's history says where a bundle was opened from), not
+// within base64 text.
+const WITHIN = new RegExp(`(?<![A-Za-z0-9+/])${ROOTS}[^\\s)"'\`,;]*`, 'g');
 const escape = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 // A value with this computer's paths stood in for: a bundle's folder (or a file in it) by
@@ -60,8 +64,9 @@ export function redactPaths(value, project) {
     }
     return `situcraft:file/${text.split(/[\\/]/).filter(Boolean).pop() ?? ''}`;
   };
+  const inBundle = (text) => bundles.some(([root]) => text === root || text.startsWith(`${root}/`) || text.startsWith(`${root}\\`));
   const one = (text) => {
-    if (isAbsolute(text)) return path(text);
+    if (inBundle(text) || ROOTED.test(text)) return path(text);
     let out = text;
     for (const [root, id] of bundles) out = out.replace(new RegExp(`${escape(root)}(?=[\\/\\s)"'\`,;]|$)((?:[\\/][^\\s)"'\`,;]*)?)`, 'g'), (m, rest) => `situcraft:bundle/${id}${rest.replace(/\\/g, '/')}`);
     return out.replace(WITHIN, (m) => path(m));
@@ -107,7 +112,9 @@ function notMadeAgain(project, steps) {
     else if (s.kind === 'segmentation' && r.source === 'instrument') say('the instrument\'s segmentation, read from its bundle: its files are checked by their SHA-256');
     else if (s.kind === 'segmentation' && r.source === 'imported') say(`made by ${r.method?.name ?? 'another tool'} outside SituCraft: the files read are checked by their SHA-256`);
     else if (s.kind === 'labels' && r.source) say(`labels read from ${r.source.format === 'instrument' ? 'the instrument\'s clusters' : r.source.file ?? 'a file'}: checked by the SHA-256 of what was read`);
-    else if (s.kind === 'image') say('an image read where it lies: checked by its SHA-256');
+    else if (s.kind === 'image') say('an image read where it lies (its own file records where): the image is checked by its SHA-256');
+    else if (s.kind === 'transform') say('an alignment, by landmarks, a matrix supplied or found automatically: recorded as made, its file by SHA-256');
+    else if (s.kind === 'alignment-check') say('an alignment\'s check: recorded as made, its files by SHA-256');
     else if (['region', 'curated-labels', 'cluster-names', 'marker-set', 'design', 'consensus-labels', 'view'].includes(s.kind)) say('a person\'s work, recorded as made (its digest); what follows from it is made again');
   }
   return out;
@@ -115,11 +122,13 @@ function notMadeAgain(project, steps) {
 
 // The certificate of a record (lib/record.js; made without a time) and its methods
 // (lib/methods-text.js). options: { manifests (artifact ID → its manifest, every program step's),
-// figures (figure ID → { drawing, panels: [{ id, letter, drawing }] }, as its manifest has them),
-// software: { version, commit } }. Throws when a step SituCraft made is not complete, or its
+// contents (artifact ID → its content's digest, where its files also record how long its run took:
+// a clustering's, a map's, labels'; GET /api/artifacts/<ID>/digest), figures (figure ID → {
+// drawing, panels: [{ id, letter, drawing }] }, as its manifest has them), software: { version,
+// commit } }. Throws when a step SituCraft made is not complete, or its
 // manifest is missing. Answers { certificate, files: [{ name, data }] } without the README and
 // the files' list (writeCertificate adds them).
-export function buildCertificate(project, record, methods, { manifests = new Map(), figures = new Map(), software = {} } = {}) {
+export function buildCertificate(project, record, methods, { manifests = new Map(), contents = new Map(), figures = new Map(), software = {} } = {}) {
   const red = (v) => redactPaths(v, project);
   const files = [];
   const add = (name, text) => {
@@ -149,6 +158,7 @@ export function buildCertificate(project, record, methods, { manifests = new Map
         job: manifest.lineage?.job ? { kind: manifest.lineage.job.kind ?? null, spec: digestOf(manifest.lineage.job.spec ?? null) } : null,
         manifest: add(`artifacts/${s.id}/manifest.json`, text),
         files: (manifest.files ?? []).map(({ path, role, size, sha256: sum, location }) => ({ path, role: role ?? '', size: size ?? null, sha256: sum, location: location ?? '' })),
+        ...(contents.get(s.id) ? { content: contents.get(s.id) } : {}),
         summary: m.summary ?? null,
       });
       continue;

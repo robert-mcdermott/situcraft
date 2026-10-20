@@ -3635,10 +3635,54 @@ left in it.
    - Found by slice 5:
      - **A path within a sentence:** the project's history says where a bundle was opened from;
        paths are now stood in for within text as well as whole values.
-6. **`situcraft verify` (E7).** The certificate's steps made again from the bundles (found by
-   their fingerprints in the folders given), in a store of its own; the page's records
-   recomputed in a headless page; verified, differs or not checkable, with exit codes; a
-   certificate written on one processor verified on the other in CI.
+6. **`situcraft verify` (E7): done.**
+   - **The command** (`verify.go`, after MaveScape 0.8.0's, the same author's): the certificate
+     read and checked (its fingerprint over canonical JSON written as the page writes it,
+     JSON.stringify's escapes and numbers; every file it names and lists by SHA-256); its bundles
+     found in the folders given (`--data`, repeated) by their `experiment.xenium`'s SHA-256, every
+     file the certificate names checked; the files its steps read (a table, a reference) found by
+     name.
+   - **Each of SituCraft's steps made again** in a SituCraft of its own (its library, store and
+     derived data in a temporary folder; `--keep` keeps it): each bundle's derived data built,
+     then each job run from the spec its manifest recorded, this computer's paths put back in the
+     spec's text (nothing else of it changes, byte for byte), by the function the API submits
+     (`rerun`: segmentations of the instrument, expansions, refinements, imports, planted errors,
+     comparisons, clusterings, maps, the instrument's analysis, labels from markers, a reference
+     or a table, graphs, spatial analyses, summaries, abundance, expression and spatial
+     statistics compared). Every file compared bit for bit; a clustering's, a map's or labels'
+     content by its package's digest without the run's timings, which the certificate now
+     records (`GET /api/artifacts/<ID>/digest`). An image, an alignment and its check are not
+     made again (the image's own file records where it lay).
+   - **The page's records:** each checked by its digest over the project certified; a design, a
+     filter and a figure computed again in a headless page (`verifypage.go`: Chrome, Edge, Brave
+     or Chromium with a profile of its own, opened on that SituCraft with the project placed in its
+     library; remote control's `verify_records`): the design made again from its samples, the
+     filter applied again to the cells (the QC view's `verifyFilter`), the figure drawn again and
+     its drawing's digests compared. `--no-page` checks their digests only (not checkable).
+   - **The verdict**, printed step by step and written by `--report`: verified (exit 0), differs
+     (exit 1: what, and the first step that differs; a step made by another version of SituCraft
+     says which) or not checkable (exit 2: a bundle or file not found, no browser).
+   - **CI:** the certificates the viewer suite writes on x86-64 (the data job) verified on arm64
+     (job verify-arm, macOS on Apple silicon).
+   - Validation:
+     - **In Go** (`verify_test.go`): the certificate the page writes for its fixture
+       (`testdata/certificate.zip`, kept the page's own by `certificate.test.mjs`) read as intact,
+       its fingerprint the page's; a parameter or a manifest edited, found; canonical JSON as
+       JSON.stringify writes it; paths put back with the rest of a spec as recorded; the verdict.
+     - **In the page** (viewer suite): the Lung enrichment's certificate verified by the program
+       (exit 0, every step made again); tampered with by the suite's own zip writer (the graph's
+       longest edge changed, its manifest, SHA-256 and the fingerprint made consistent again),
+       found to differ first at the graph (exit 1); without its bundle, not checkable (exit 2);
+       the Lung's results figure drawn again in the headless page, the same.
+   - Found by slice 6:
+     - **Base64 taken for a path:** a graph's cells, base64 beginning with a slash, were stood in
+       for as a file by the certificate (slice 5); only paths under a computer's usual roots, or a
+       bundle's folder, are now.
+     - **Run timings in a result's description:** a clustering's, a map's and labels' record how
+       long each stage took, so their files never repeat; their content is compared without them.
+     - **A graph made by 0.5.0:** its last quantile's last digit differs from today's (made the
+       same on every processor in wave 7, its method's version kept); verify says which version
+       made a step that differs.
 7. **The report.** One self-contained HTML file of chosen results: the methods, the figures, the
    tables, each number traced to its place in the certificate, which it carries and checks.
 8. **The result package (E8).** The report, its views as static tiles with a reader of their

@@ -32,7 +32,8 @@ import { KINDS as GRAPH_KINDS, describeGraph, graphsOf } from '../lib/graphs.js'
 import { NICHES_DEFAULTS, analysesOf, analysisNumbers, bandsOf, compareNumbers, nicheNames, rankCorrelation, rankPairs, rowNames, zoneBands } from '../lib/spatial.js';
 import { ratioText } from './spatial-results.js';
 import { showAnalysisCells } from './spatial-cells.js';
-import { addDesign, designsOf, makeDesign } from '../lib/design.js';
+import { addDesign, designRecord, designsOf, makeDesign } from '../lib/design.js';
+import { canonicalJSON } from '../lib/figure-manifest.js';
 import { FAMILIES, summariesOf } from '../lib/cohort.js';
 import { spatialEffectWords, testsOf } from '../lib/expression.js';
 import { expressionDocument as expressionDocumentOf } from './cohort-expression.js';
@@ -2792,6 +2793,23 @@ export function installRemote(app) {
       };
     },
 
+    // situcraft verify (wave 8, slice 6): the page's records it computes, computed again in the
+    // project opened: a design from its samples, a filter's cells from their attributes, a figure's
+    // drawing (its digests). Each answers { id, checked, same, detail, differ }.
+    async verify_records(args) {
+      const steps = Array.isArray(args.steps) ? args.steps : [];
+      const out = [];
+      for (const s of steps) {
+        try {
+          out.push({ id: s.id, ...(await verifyRecord(s)) });
+        } catch (error) {
+          out.push({ id: s.id, checked: false, same: null, detail: `it could not be computed again: ${error.message}` });
+        }
+      }
+      const same = out.filter((x) => x.checked && x.same).length;
+      return { message: `${same} of ${plural(out.length, 'record')} computed again as recorded.`, data: { steps: out } };
+    },
+
     async read_figure(args) {
       const path = String(args.path ?? '');
       const response = await fetch(`/api/read-figure?path=${encodeURIComponent(path)}`, { cache: 'no-store' });
@@ -2897,6 +2915,42 @@ export function installRemote(app) {
     if (args.project) return { kind: 'project' };
     if (args.dataset !== undefined || dataset) return { kind: 'dataset', id: resolveDataset(args.dataset).id };
     throw new ActionError('Name the result (result), or ask for the project\'s (project: true) or a dataset\'s (dataset).');
+  }
+
+  // One of the page's records computed again (verify_records).
+  async function verifyRecord(s) {
+    const p = project();
+    if (s.kind === 'design') {
+      const record = p.artifacts.find((a) => a.kind === 'design' && a.id === s.id);
+      if (!record) return { checked: false, same: null, detail: 'the project has no such design' };
+      const design = makeDesign(p, record.spec);
+      if (!design.ok) return { checked: true, same: false, detail: `the samples no longer give the design: ${design.problems[0]}`, differ: ['the design'] };
+      const again = designRecord(design, { name: record.name, now: record.created, id: record.id });
+      const differ = ['samples', 'excluded', ...Object.keys(again.result).map((k) => `result.${k}`)].filter((k) => {
+        const [a, b] = k.startsWith('result.') ? [again.result[k.slice(7)], record.result?.[k.slice(7)]] : [again[k], record[k]];
+        return canonicalJSON(a) !== canonicalJSON(b);
+      });
+      return { checked: true, same: differ.length === 0, detail: differ.length ? 'made again from the samples, it differs' : 'made again from the samples, the same', differ };
+    }
+    if (s.kind === 'filter') {
+      const record = p.artifacts.find((a) => a.kind === 'filter' && a.id === s.id);
+      if (!record) return { checked: false, same: null, detail: 'the project has no such filter' };
+      const dataset = p.datasets.find((d) => d.id === record.dataset);
+      const q = await openIn('qc', dataset);
+      const again = q.verifyFilter(record);
+      return { checked: true, same: again.same, detail: again.same ? `applied again to the cells, it keeps the same ${again.kept.toLocaleString('en-US')} cells` : `applied again, it keeps ${again.kept.toLocaleString('en-US')} cells (recorded ${record.result.kept.toLocaleString('en-US')}), SHA-256 ${again.sha256 === record.result.sha256 ? 'the same' : 'another'}`, differ: again.same ? [] : ['its cells'] };
+    }
+    if (s.kind === 'figure') {
+      const fig = figuresOf(p).find((f) => f.id === s.id);
+      if (!fig) return { checked: false, same: null, detail: 'the project has no such figure' };
+      if (!s.drawing) return { checked: false, same: null, detail: 'the certificate holds no drawing of it' };
+      const written = await writeFigure(app, fig, 'json', { dpi: 300, time: '2026-01-01T00:00:00.000Z' });
+      const m = written.manifest;
+      const differ = (s.drawing.panels ?? []).filter((x) => m.panels.find((y) => y.id === x.id)?.drawing !== x.drawing).map((x) => `panel ${x.letter ?? x.id}`);
+      const same = m.drawing === s.drawing.drawing && differ.length === 0;
+      return { checked: true, same, detail: same ? 'drawn again, every panel the same' : 'drawn again, it differs', differ: same ? [] : (differ.length ? differ : ['the drawing']) };
+    }
+    return { checked: false, same: null, detail: `a ${s.kind} is not computed again` };
   }
 
   // A result a record can be made of, by its ID or its name (a name several share needs the ID).
