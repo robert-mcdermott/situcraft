@@ -3683,8 +3683,48 @@ left in it.
      - **A graph made by 0.5.0:** its last quantile's last digit differs from today's (made the
        same on every processor in wave 7, its method's version kept); verify says which version
        made a step that differs.
-7. **The report.** One self-contained HTML file of chosen results: the methods, the figures, the
-   tables, each number traced to its place in the certificate, which it carries and checks.
+7. **The report: done.** One self-contained HTML file of chosen results: the methods, the
+   figures, the tables, each number traced to its place in the certificate, which it carries and
+   checks.
+   - **The file** (`web/lib/report.js`): the figures chosen, each its SVG as written (its manifest
+     inside); a table of each other result's numbers from its step's summary in the certificate,
+     each number's cell carrying its JSON pointer into `certificate.json` and its value; the
+     methods by topic and their references; the certificate of the results (a scope of results
+     chosen, its subject a report), base64 in the file, which it offers to save. Its
+     Content-Security-Policy is `default-src 'none'`: nothing outside the file is loaded. The
+     same project and choice give the same bytes (each figure drawn at the certificate's time).
+   - **Its check** (`web/lib/report-check.js`, written into the report as it is, with its own
+     SHA-256, canonical JSON and zip reader): the fingerprint and the files it names; each number
+     the value at its place and its text that value as the report writes it; each figure's SVG
+     the one whose SHA-256 the certificate's figure step records (`drawing.svg`); the methods'
+     paragraphs those of `methods.md`. It says what it found at the top, marks a number that
+     differs, and sets `data-checked` on the page (`intact`, `differs`, `error`).
+   - **The page:** the Reports view's report section (a title, the results by kind, the file
+     written); remote control's `export` with `what: report`.
+   - **`situcraft verify`** reads a report as a certificate (`verifyreport.go`): the certificate it
+     carries verified, and the report checked against it as it checks itself, numbers written as
+     JavaScript writes them (to 4 significant digits from the number's exact value, a tie away
+     from zero).
+   - Validation:
+     - **In Node** (`report.test.mjs`): a report of the fixture's figure, enrichment and expression
+       comparison; nothing in it fetched; every number traced and checked by the check as the
+       report holds it; a number's value or its text, the figure's SVG and a paragraph edited, each
+       found; the certificate edited, its fingerprint found not to match; the same bytes again.
+     - **In Go** (`verify_test.go`): the report the page writes (`testdata/report.html`) read as
+       intact, each edit found; numbers written as the page writes them, ties and carries among
+       them.
+     - **In the page** (viewer suite): a report of the Lung's results figure and enrichment opened
+       from the disk in a browser of its own, intact, nothing asked of the network, every number
+       the certificate's as the suite reads it, the figure's SVG the one certified; a number's text
+       edited, found and marked; verified from its bundle by `situcraft verify`. CI verifies it on
+       arm64 too.
+   - Found by slice 7:
+     - **A comparison's numbers in the fixture:** the certificate's fixture took a comparison's
+       summary (the cohort summary's ID) for its numbers; it now takes them as the program's
+       manifest has them.
+     - **A number's text and its value:** checking the value a cell carries would miss its text
+       edited; the text shown is checked too, and a figure by its SVG's bytes, not only the
+       manifest inside.
 8. **The result package (E8).** The report, its views as static tiles with a reader of their
    own, and the certificate, in a folder or zip that opens in any browser without SituCraft;
    redacted as above; nothing in it that it was asked to leave out, checked.

@@ -124,7 +124,8 @@ function notMadeAgain(project, steps) {
 // (lib/methods-text.js). options: { manifests (artifact ID → its manifest, every program step's),
 // contents (artifact ID → its content's digest, where its files also record how long its run took:
 // a clustering's, a map's, labels'; GET /api/artifacts/<ID>/digest), figures (figure ID → {
-// drawing, panels: [{ id, letter, drawing }] }, as its manifest has them), software: { version,
+// drawing, panels: [{ id, letter, drawing }] }, as its manifest has them, and svg: the SHA-256 of
+// the SVG a report shows, written at the certificate's time), software: { version,
 // commit } }. Throws when a step SituCraft made is not complete, or its
 // manifest is missing. Answers { certificate, files: [{ name, data }] } without the README and
 // the files' list (writeCertificate adds them).
@@ -165,7 +166,7 @@ export function buildCertificate(project, record, methods, { manifests = new Map
     }
     const step = { ...base, by: 'page', record: digestOf(red(r)), summary: r.summary ?? r.summaryOf ?? r.result ?? null };
     const drawn = figures.get(s.id);
-    if (drawn) step.drawing = { drawing: drawn.drawing, panels: drawn.panels };
+    if (drawn) step.drawing = { drawing: drawn.drawing, panels: drawn.panels, ...(drawn.svg ? { svg: drawn.svg } : {}) };
     steps.push(step);
   }
   const projectText = `${JSON.stringify(red(project), null, 1)}\n`;
@@ -205,7 +206,7 @@ export function certificateText(value) {
   return `${write(value, '')}\n`;
 }
 
-const SUBJECTS = { project: 'the project', dataset: 'the dataset' };
+const SUBJECTS = { project: 'the project', dataset: 'the dataset', report: 'the report' };
 
 // The README: what the certificate is of, what it proves, how to check it, what it holds.
 export function readme(certificate) {

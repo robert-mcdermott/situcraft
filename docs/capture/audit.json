@@ -570,6 +570,26 @@
   "violations": []
  },
  {
+  "scene": "report-section",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "report-section",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "report",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "report",
+  "theme": "light",
+  "violations": []
+ },
+ {
   "scene": "jobs",
   "theme": "dark",
   "violations": []

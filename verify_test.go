@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -155,4 +156,94 @@ func stepByID(c *certificate, id string) *certStep {
 		}
 	}
 	return nil
+}
+
+// The report the page writes for its fixture (web/lib/report.test.mjs keeps testdata/report.html
+// its own): the certificate it carries read as intact, its numbers, figure and methods the
+// certificate's; each edited, found.
+func TestReportReadAsThePageWroteIt(t *testing.T) {
+	path := filepath.Join("testdata", "report.html")
+	page, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, files, problems, err := readCertificateZip(path)
+	if err != nil || len(problems) > 0 {
+		t.Fatalf("the report's certificate: %v %v", problems, err)
+	}
+	if c.Subject.Kind != "report" || c.Subject.Name != "Results of the fixture" {
+		t.Fatalf("its subject: %+v", c.Subject)
+	}
+	checked, problems := checkReport(page, c, files)
+	if len(problems) > 0 || !strings.Contains(checked, "1 figure and its methods") || strings.HasPrefix(checked, "0 ") {
+		t.Fatalf("the report checked: %q %v", checked, problems)
+	}
+	// The first match of re replaced.
+	edit := func(re, with string) []string {
+		pattern := regexp.MustCompile(re)
+		at := pattern.FindSubmatchIndex(page)
+		if at == nil {
+			t.Fatalf("%s: nothing edited", re)
+		}
+		edited := append(append(append([]byte{}, page[:at[0]]...), pattern.Expand(nil, []byte(with), page, at)...), page[at[1]:]...)
+		_, problems := checkReport(edited, c, files)
+		return problems
+	}
+	if p := edit(`data-value="2"`, `data-value="3"`); len(p) != 1 || !strings.Contains(p[0], "numbers is not the certificate's") {
+		t.Fatalf("a number edited: %v", p)
+	}
+	if p := edit(`(data-value="2"[^>]*>)2<`, `${1}3<`); len(p) != 1 || !strings.Contains(p[0], "numbers is not the certificate's") {
+		t.Fatalf("a number's text edited: %v", p)
+	}
+	if p := edit(`(<p class="methods-paragraph">)`, `${1}Also, `); len(p) != 1 || !strings.Contains(p[0], "methods") {
+		t.Fatalf("the methods edited: %v", p)
+	}
+	if p := edit(`(<img data-figure="fig-1"[^>]*base64,)[A-Za-z0-9]`, `${1}A`); len(p) != 1 || !strings.Contains(p[0], "figures") {
+		t.Fatalf("a figure edited: %v", p)
+	}
+}
+
+// A number written as the report writes it, in JavaScript (web/lib/report-check.js's numberText;
+// these its own answers): its digits rounded from its exact value, a tie away from zero.
+func TestNumberTextAsThePageWritesIt(t *testing.T) {
+	for _, c := range []struct{ number, text string }{
+		{"0", "0"},
+		{"7", "7"},
+		{"-12", "-12"},
+		{"1234567", "1,234,567"},
+		{"123456789012", "123,456,789,012"},
+		{"1.0625", "1.063"},
+		{"2.5625", "2.563"},
+		{"-1.0625", "-1.063"},
+		{"0.15625", "0.1563"},
+		{"999.95", "1000"},
+		{"999.94999", "999.9"},
+		{"999999.7", "1000000"},
+		{"12345.6", "12350"},
+		{"1234.5", "1235"},
+		{"0.0016650016650016", "0.001665"},
+		{"0.001", "0.001"},
+		{"0.00099995", "1.00e-3"},
+		{"0.0009999", "1.00e-3"},
+		{"0.00012345", "1.23e-4"},
+		{"2.5e-7", "2.50e-7"},
+		{"0.00001125", "1.13e-5"},
+		{"3500000", "3,500,000"},
+		{"0.30000000000000004", "0.3"},
+		{"0.3333333333333333", "0.3333"},
+		{"-7.592", "-7.592"},
+		{"2.0660598", "2.066"},
+		{"0.4362947245656103", "0.4363"},
+		{"5e-324", "4.94e-324"},
+		{"100.5", "100.5"},
+		{"4.0005", "4"},
+		{"1152921504606847000", "1,152,921,504,606,847,000"},
+		{"9007199254740994", "9,007,199,254,740,994"},
+		{"1e+21", "1,000,000,000,000,000,000,000"},
+		{"-1.1805916207174113e+21", "-1,180,591,620,717,411,300,000"},
+	} {
+		if got := numberText(json.Number(c.number)); got != c.text {
+			t.Errorf("%s: %q, the page writes %q", c.number, got, c.text)
+		}
+	}
 }

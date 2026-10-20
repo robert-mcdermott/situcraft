@@ -7,7 +7,7 @@ import { recordAndMethods } from './methods.js';
 import { writeFigure } from './figures.js';
 
 // A figure's manifest has a time; its drawing's digests do not. Drawn for a certificate at this one.
-const DRAWN_AT = '2026-01-01T00:00:00.000Z';
+export const DRAWN_AT = '2026-01-01T00:00:00.000Z';
 
 // The certificate's file name: "certificate-<subject>-<short fingerprint>.zip".
 export function certificateFileName(certificate) {
@@ -15,15 +15,17 @@ export function certificateFileName(certificate) {
   return `certificate-${base}-${certificate.fingerprint.slice(0, 8)}.zip`;
 }
 
-// The certificate of a scope ({ kind: 'project' }, { kind: 'dataset', id } or { kind: 'result',
-// id }): { bytes (the zip), certificate, name }.
-export async function certify(app, scope) {
+// The certificate of a scope ({ kind: 'project' }, { kind: 'dataset', id }, { kind: 'result', id }
+// or { kind: 'results', ids, name }). options: { drawn (figure ID → { manifest, svg (the SHA-256 of
+// the SVG a report shows) }, a figure already drawn at DRAWN_AT) }. Answers { bytes (the zip),
+// certificate, methods, name }.
+export async function certify(app, scope, { drawn = new Map() } = {}) {
   const { project, manifests, record, methods } = await recordAndMethods(app, scope);
   const figures = new Map();
   for (const s of record.steps.filter((x) => x.kind === 'figure')) {
     const fig = (project.figures ?? []).find((f) => f.id === s.id);
-    const out = await writeFigure(app, fig, 'json', { dpi: 300, time: DRAWN_AT });
-    figures.set(fig.id, { drawing: out.manifest.drawing, panels: out.manifest.panels.map((p) => ({ id: p.id, letter: p.letter, drawing: p.drawing })) });
+    const { manifest, svg } = drawn.get(fig.id) ?? { manifest: (await writeFigure(app, fig, 'json', { dpi: 300, time: DRAWN_AT })).manifest };
+    figures.set(fig.id, { drawing: manifest.drawing, panels: manifest.panels.map((p) => ({ id: p.id, letter: p.letter, drawing: p.drawing })), ...(svg ? { svg } : {}) });
   }
   // The content of each step whose files also record how long its run took.
   const contents = new Map();
@@ -33,5 +35,5 @@ export async function certify(app, scope) {
     if (content) contents.set(s.id, content);
   }
   const built = buildCertificate(project, record, methods, { manifests, contents, figures, software: { version: app.version ?? null, commit: app.commit ?? null } });
-  return { bytes: await writeCertificate(built), certificate: built.certificate, name: certificateFileName(built.certificate) };
+  return { bytes: await writeCertificate(built), certificate: built.certificate, methods, name: certificateFileName(built.certificate) };
 }

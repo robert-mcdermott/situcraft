@@ -43,7 +43,7 @@ export const STEP_KINDS = {
 const RANK = Object.fromEntries(Object.keys(STEP_KINDS).map((k, i) => [k, i]));
 
 // What a record of several results is of.
-const SUBJECTS = { project: 'Project', dataset: 'Dataset' };
+const SUBJECTS = { project: 'Project', dataset: 'Dataset', report: 'Report' };
 
 // The kinds a record can be asked of, as the Reports view lists them.
 export const RESULT_KINDS = ['figure', 'abundance', 'expression', 'spatial-comparison', 'cohort-summary', 'spatial', 'graph', 'embedding', 'labels', 'curated-labels', 'consensus-labels', 'clustering', 'comparison', 'segmentation', 'alignment-check', 'transform', 'filter'];
@@ -87,9 +87,11 @@ export function scopeResults(project, datasetId = null) {
 }
 
 // What a record (its methods, its certificate) is of: { kind: 'project' }, { kind: 'dataset', id,
-// filters (ids: the filters described; the latest version of each if not given) } or { kind:
-// 'result', id }. Answers { roots (the results it starts from), subject (null for one result) }.
+// filters (ids: the filters described; the latest version of each if not given) }, { kind:
+// 'result', id } or { kind: 'results', ids, name } (a report's). Answers { roots (the results it
+// starts from), subject (null for one result) }.
 export function scopeRoots(project, scope) {
+  if (scope.kind === 'results') return { roots: [...scope.ids], subject: { id: project.id, kind: 'report', name: scope.name ?? `Results of ${project.name}` } };
   if (scope.kind === 'project') return { roots: scopeResults(project), subject: { id: project.id, kind: 'project', name: project.name } };
   if (scope.kind === 'dataset') {
     const dataset = project.datasets.find((d) => d.id === scope.id);

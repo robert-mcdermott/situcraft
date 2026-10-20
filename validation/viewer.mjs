@@ -66,7 +66,7 @@ import { createHash } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { findChrome, launch, sleep } from './cdp.mjs';
 import { inflateRawSync, inflateSync } from 'node:zlib';
 import { attributeRange, readCells } from '../web/lib/viewer-data.js';
@@ -2581,6 +2581,76 @@ export async function viewerSuite({ check, MissingData, verbose }) {
               copyFileSync(certPath, join(keep, 'lung-enrichment.zip'));
               if (existsSync(figurePath)) copyFileSync(figurePath, join(keep, 'lung-figure.zip'));
             }
+          }
+
+          // The report (wave 8, slice 7): the Lung's results figure and its enrichment in one HTML
+          // file, opened from the disk in a browser of its own, as a reader opens it: it asks the
+          // network for nothing, checks the certificate it carries and finds every number, the figure
+          // and the methods the certificate's; every number it shows is, as the suite reads it, the
+          // value at its place in certificate.json, written as the report writes it, and the
+          // certificate's fingerprint the suite's own. A number's text edited, it says so and marks
+          // it. And situcraft verify, given the report, makes its results again and checks it.
+          {
+            const ids = await chrome.eval(`(() => { const p = window.situcraft.store.project; const ds = p.datasets.find((x) => x.name === 'xenium-lung-2fov'); return { enrichment: p.artifacts.filter((a) => a.kind === 'spatial' && a.dataset === ds.id && a.state === 'complete' && a.question === 'enrichment').at(-1)?.id ?? null, figure: p.figures.find((f) => f.name === 'Results of the Lung')?.id ?? null }; })()`);
+            const reportPath = join(work, 'report.html');
+            const wrote = await act('export', { what: 'report', results: [ids.figure, ids.enrichment], title: 'The Lung\'s results', path: reportPath, overwrite: true });
+            const html = existsSync(reportPath) ? readFileSync(reportPath, 'utf8') : '';
+            // The suite's own reading of it.
+            const carried = /<script type="application\/zip" id="situcraft-certificate">([^<]*)<\/script>/.exec(html);
+            let entries = new Map();
+            try {
+              entries = carried ? unzipOwn(Buffer.from(carried[1], 'base64')) : new Map();
+            } catch {
+              entries = new Map();
+            }
+            const cert = JSON.parse(entries.get('certificate.json')?.toString('utf8') ?? 'null');
+            const { fingerprint, ...rest } = cert ?? {};
+            const own = createHash('sha256').update(canonicalOf(rest)).digest('hex');
+            const unescape = (t) => t.replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+            const at = (doc, pointer) => pointer.split('/').slice(1).map((x) => x.replace(/~1/g, '/').replace(/~0/g, '~')).reduce((v, k) => (v === undefined || v === null ? undefined : v[k]), doc);
+            // As the report writes a number: whole numbers with commas, others to 4 significant digits.
+            const written = (v) => (Number.isInteger(v) ? v.toLocaleString('en-US') : Math.abs(v) < 1e-3 || Math.abs(v) >= 1e6 ? v.toExponential(2) : String(Number(v.toPrecision(4))));
+            const shown = [...html.matchAll(/data-pointer="([^"]*)" data-value="([^"]*)"[^>]*>([^<]*)</g)].map((m) => ({ pointer: unescape(m[1]), value: JSON.parse(unescape(m[2])), text: unescape(m[3]) }));
+            const shownOff = shown.filter((n) => typeof at(cert, n.pointer) !== 'number' || at(cert, n.pointer) !== n.value || written(at(cert, n.pointer)) !== n.text).map((n) => n.pointer);
+            const figureStep = cert?.steps?.find((x) => x.id === ids.figure);
+            const svg = /<img data-figure="[^"]*"[^>]*? src="data:image\/svg\+xml;base64,([^"]*)"/.exec(html);
+            const svgSame = Boolean(svg && figureStep?.drawing?.svg === createHash('sha256').update(Buffer.from(svg[1], 'base64')).digest('hex'));
+            // Opened from the disk, in a browser of its own.
+            const opened = async (path) => {
+              const browser = await launch({ width: 1100, height: 900, args: (process.env.SITUCRAFT_CHROME_ARGS ?? '').split(' ').filter(Boolean) });
+              const asked = [];
+              try {
+                await browser.send('Network.enable');
+                browser.on('Network.requestWillBeSent', (e) => {
+                  if (!/^(data|blob|file):/.test(e.request.url)) asked.push(e.request.url);
+                });
+                await browser.goto(pathToFileURL(path).href, 300);
+                let state = null;
+                for (let k = 0; k < 80 && !state; k += 1) {
+                  state = await browser.eval('document.documentElement.dataset.checked ?? null');
+                  if (!state) await sleep(250);
+                }
+                const seen = await browser.eval(`({ box: document.getElementById('report-check')?.textContent ?? '', numbers: document.querySelectorAll('[data-pointer]').length, differs: document.querySelectorAll('td.differs').length, figures: document.querySelectorAll('img[data-figure]').length, drawn: [...document.querySelectorAll('img[data-figure]')].every((img) => img.complete && img.naturalWidth > 0), paragraphs: document.querySelectorAll('#methods .methods-paragraph').length, link: (document.getElementById('certificate-link')?.href ?? '').startsWith('blob:') })`);
+                return { state, asked, ...seen };
+              } finally {
+                await browser.close();
+              }
+            };
+            const seen = await opened(reportPath);
+            // The first number's text edited, its value left as it was.
+            const first = /(data-value="[^"]*"[^>]*>)([^<]*)</.exec(html);
+            const editedPath = join(work, 'report-edited.html');
+            if (first) writeFileSync(editedPath, `${html.slice(0, first.index)}${first[1]}9${first[2]}<${html.slice(first.index + first[0].length)}`);
+            const edited = first ? await opened(editedPath) : null;
+            const verified = spawnSync(bin, ['verify', '--data', dataRoot, ...(findChrome() ? ['--chrome', findChrome()] : []), reportPath], { encoding: 'utf8', timeout: 30 * 60e3 });
+            const verifyOut = `${verified.stdout ?? ''}${verified.stderr ?? ''}`;
+            const carriedSaid = /The report carries it: its (\d+) numbers, 1 figure and its methods are the certificate's\./.exec(verifyOut);
+            check('viewer', 'a report of the Lung\'s results figure and enrichment: one HTML file, opened from the disk, asking the network for nothing; it finds its certificate intact and every number, the figure and the methods the certificate\'s, each number as the suite reads it at its place in the certificate, the fingerprint the suite\'s own; a number\'s text edited, it says so; situcraft verify, given the report, makes its results again and checks it', `${wrote.ok ? `${wrote.data.numbers} numbers, ${wrote.data.figures} figure, ${Math.round(wrote.data.bytes / 1024)} KB` : wrote.message}; opened: ${seen.state} (${seen.box.slice(0, 120)}); ${seen.asked.length ? `asked ${seen.asked.slice(0, 2).join(', ')}` : 'nothing asked of the network'}; figure ${seen.drawn ? 'drawn' : 'not drawn'}, its SVG ${svgSame ? 'the certified one' : 'other'}; ${shown.length} numbers shown, ${shownOff.length} not the certificate's as the suite reads it; fingerprint ${own === fingerprint ? 'the suite\'s' : 'other'}; edited: ${edited?.state} (${edited?.differs} marked); verify: exit ${verified.status}${carriedSaid ? `, ${carriedSaid[1]} numbers checked` : `; ${verifyOut.slice(-400)}`}`,
+              wrote.ok && seen.state === 'intact' && seen.asked.length === 0 && seen.numbers === shown.length && shown.length >= 10 && shownOff.length === 0 && seen.figures === 1 && seen.drawn && svgSame && seen.paragraphs >= 4 && seen.link && own === fingerprint
+              && edited?.state === 'differs' && edited?.differs === 1 && verified.status === 0 && Number(carriedSaid?.[1]) === shown.length,
+              'intact, offline; every number the certificate\'s; an edit found; verified');
+            const keep = process.env.SITUCRAFT_CERTIFICATES;
+            if (keep && existsSync(reportPath)) copyFileSync(reportPath, join(keep, 'lung-report.html'));
           }
         }
 

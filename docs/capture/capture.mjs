@@ -18,7 +18,7 @@ import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { launch, sleep } from '../../validation/cdp.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -103,6 +103,22 @@ async function act(action, actionArgs = {}) {
 }
 
 // --- Page helpers ---------------------------------------------------------------------------------
+
+// The Lung example clustered, labeled, mapped, its graph built, its classes' enrichment and its
+// genes' Moran's I answered, and a figure of them (the report scenes'). Answers { figure,
+// enrichment }.
+async function reportResults() {
+  await act('open_example', { example: 'lung' });
+  await act('cluster_cells', {});
+  await act('label_cells', { markers: 'lung' });
+  await act('show_map', { dataset: 'xenium-lung-2fov' });
+  await act('build_graph', { dataset: 'xenium-lung-2fov' });
+  const ids = await js(`(() => { const p = window.situcraft.store.project; return { labels: p.artifacts.find((a) => a.kind === 'labels')?.id, map: p.artifacts.filter((a) => a.kind === 'embedding').at(-1)?.id }; })()`);
+  const enrichment = await act('spatial_analysis', { question: 'enrichment', dataset: 'xenium-lung-2fov', labels: ids.labels, level: 1 });
+  const moran = await act('spatial_analysis', { question: 'moran', dataset: 'xenium-lung-2fov' });
+  const figure = await act('figure', { name: 'Results', size: 'double', columns: 2, height_mm: 150, panels: [{ kind: 'qc', metric: 'transcripts', log: true }, { kind: 'map', map: ids.map, color: 'clusters' }, { kind: 'spatial', analysis: enrichment.data?.id }, { kind: 'spatial', analysis: moran.data?.id }] });
+  return { figure: figure.data?.id, enrichment: enrichment.data?.id };
+}
 
 let b;
 const js = (expression) => b.eval(expression);
@@ -814,6 +830,26 @@ const scenes = {
     await sleep(400);
     await scrollTo('.methods-section');
     await clearToasts();
+  },
+  // A report (wave 8, slice 7): the Lung's results figure and its classes' enrichment chosen in the
+  // Reports view, its title given.
+  async 'report-section'() {
+    const ids = await reportResults();
+    await act('set_mode', { mode: 'reports' });
+    await waitFor(`Boolean(document.querySelector('.report-section input[value="${ids.figure}"]'))`);
+    await js(`(() => { const section = document.querySelector('.report-section'); for (const id of ${JSON.stringify([ids.figure, ids.enrichment])}) section.querySelector(\`input[value="\${id}"]\`).click(); const title = section.querySelector('input[type="text"]'); title.value = 'The Lung\\'s cell types and their neighbors'; return true; })()`);
+    await js(`document.getElementById('app').classList.add('inspector-closed')`);
+    await sleep(400);
+    await scrollTo('.report-section');
+    await clearToasts();
+  },
+  // The report written of them, opened from the disk as its reader opens it: checked, offline.
+  async report() {
+    const ids = await reportResults();
+    const path = join(places.exports, 'report.html');
+    await act('export', { what: 'report', results: [ids.figure, ids.enrichment], title: 'The Lung\'s cell types and their neighbors', path, overwrite: true });
+    await b.goto(pathToFileURL(path).href, 800);
+    await waitFor(`document.documentElement.dataset.checked === 'intact'`);
   },
   // The Jobs view after both examples were opened: each job's state and times, one's log open.
   async jobs() {

@@ -149,6 +149,28 @@ a result, a certificate checked by making the result again, and a package that o
     checkable without its bundle, and the results figure drawn again the same; in CI,
     certificates written on x86-64 verified on arm64.
 
+- **The report (wave 8, slice 7).** Results you choose in one HTML file that opens in any browser,
+  offline, with nothing to install and nothing asked of the network (Reports, **A report**).
+  - **What it holds:** each figure chosen, as an SVG carrying its manifest; a table of each other
+    result's numbers, every number read from the certificate and traced to its place in
+    `certificate.json`; the methods and their references; and the certificate of them all,
+    carried in the file and saved from it.
+  - **It checks itself as it opens:** the certificate it carries (its fingerprint and every file
+    in it), each number shown (the value at its place, written as the report writes it), each
+    figure (the SVG whose SHA-256 the certificate holds) and the methods. It says what it found at
+    the top and marks a number that differs.
+  - **`situcraft verify`** takes a report as it takes a certificate: it makes the results again
+    from the bundles and checks the report against its certificate.
+  - **The same project and choice give the same bytes.**
+  - **Remote control:** `export` with `what: report`, `results` and `title`.
+  - **Validated:** in Node, a report of the fixture with every number traced, its own check run as
+    the report holds it, and a number's value or text, a figure and a paragraph edited, each
+    found; in Go, the report the page writes read as intact, each edit found, and numbers written
+    as JavaScript writes them; in the page, a report of the Lung's results figure and enrichment
+    opened from the disk in a browser of its own, intact, asking nothing of the network, every
+    number the certificate's as the suite reads it, a number's text edited and found, and verified
+    from its bundle; in CI, verified on arm64.
+
 ## 0.7.0 (2026-10-19)
 
 Wave 7 of the [roadmap](situcraft-spec/roadmap.md): samples and cohorts. A study's sections in one

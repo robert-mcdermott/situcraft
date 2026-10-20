@@ -395,16 +395,38 @@ with its path in the bundle after it), any other absolute path `situcraft:file/<
 | --- | --- |
 | `format`, `version` | `"situcraft-certificate"`, `1` |
 | `software` | `{name, version, commit}`: the SituCraft that certified it |
-| `subject` | What it is of: `{id, kind, name}` (a result's kind, or `project`, `dataset`) |
+| `subject` | What it is of: `{id, kind, name}` (a result's kind, or `project`, `dataset`, `report`: the results a report shows) |
 | `project` | `{id, name, modified, path, sha256}`: the project as it was, `project.json` |
 | `record`, `methods` | `{path, sha256}` of `record.json` and `methods.md` |
 | `bundles` | Each `{dataset, name, run, region, analysisUuid, experimentUuid, software, panel, cells, transcripts, files}`: `files` each `{path, size, sha256}`, those the dataset's fingerprint records and those the instrument's segmentation read |
-| `steps` | Each step of the record, in its order: `{n, id, kind, name, inputs, method, parameters, seeds, software, references, decisions, by}`; `by` is `instrument` (a bundle, with `bundle`, its dataset), `program` (with `job`: `{kind, spec}`, the spec's digest; `manifest`: `{path, sha256}`; `files`: each `{path, role, size, sha256, location}`; `content`, for a clustering, a map or labels, the SHA-256 of its content without how long its run took, which its description also records; `summary`: the numbers it reports) or `page` (with `record`, its record's digest; `summary`; a figure's `drawing`: `{drawing, panels: [{id, letter, drawing}]}`, its manifest's digests) |
+| `steps` | Each step of the record, in its order: `{n, id, kind, name, inputs, method, parameters, seeds, software, references, decisions, by}`; `by` is `instrument` (a bundle, with `bundle`, its dataset), `program` (with `job`: `{kind, spec}`, the spec's digest; `manifest`: `{path, sha256}`; `files`: each `{path, role, size, sha256, location}`; `content`, for a clustering, a map or labels, the SHA-256 of its content without how long its run took, which its description also records; `summary`: the numbers it reports) or `page` (with `record`, its record's digest; `summary`; a figure's `drawing`: `{drawing, panels: [{id, letter, drawing}]}`, its manifest's digests, and in a report's, `svg`: the SHA-256 of the SVG the report shows) |
 | `notMadeAgain` | Each step not made again in checking it, and why: `{step, what, why}` (the bundles and the instrument's segmentation, checked by their files' SHA-256; an import, by the files read; a person's work, by its digest) |
 | `fingerprint` | The SHA-256 of everything else as canonical JSON: cite it with the result |
 
 A digest is the SHA-256 of a value's canonical JSON (every object's keys sorted), with this
 computer's paths stood in for as above.
+
+### Reports
+
+A report (Reports, **A report**; remote control's `export` with `what: report`) is one HTML file of
+results chosen, read in any browser, offline: it loads nothing from the network (its
+Content-Security-Policy is `default-src 'none'`), and the same project and choice give the same
+bytes.
+
+| Part | Holds |
+| --- | --- |
+| Figures | Each figure chosen, as an SVG with its manifest inside ([Figures](#figures)), in an `<img data-figure="<ID>">` |
+| Results | Each other result's numbers, from its step's `summary` in the certificate: each in a `<td data-pointer data-value>`, `data-pointer` its place in `certificate.json` (a JSON pointer, RFC 6901) and `data-value` its value as JSON |
+| Methods, References | The methods, written from the record, each paragraph a `<p class="methods-paragraph">`, and their references |
+| The certificate | The certificate of the results ([Certificates](#certificates); its subject's kind `report`), base64 in `<script type="application/zip" id="situcraft-certificate">` |
+
+As it opens, the report checks itself: the certificate's fingerprint and the SHA-256 of each file
+it names; each number, the value at its place in `certificate.json`, its text that value as the
+report writes it (whole numbers with commas; others to 4 significant digits, below 0.001 and from
+a million up to 3 and a power of ten); each figure's SVG, the SHA-256 its step's `drawing.svg`
+records; the methods' paragraphs, those of `methods.md`. It says what it found at the top, marks a
+number that differs, and sets `data-checked` on `<html>` to `intact`, `differs` or `error`.
+`situcraft verify` takes a report as it takes a certificate, and checks it the same way.
 
 ### Artifacts
 

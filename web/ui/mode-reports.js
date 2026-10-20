@@ -3,8 +3,9 @@
 // made from a saved view (a tissue panel: the view's place and look at the figure's size, a scale
 // bar and a legend), laid out and lettered, previewed as it will print, and written as SVG, PDF or
 // PNG with its manifest inside (ui/figures.js). A figure written earlier is read back and compared
-// with the project: what changed since, and whether each panel draws the same now. Below them,
-// the methods (slice 4, ui/methods.js) and what made a result (slice 3, ui/record-view.js).
+// with the project: what changed since, and whether each panel draws the same now. Below them, a
+// report of results chosen (slice 7, ui/report.js), the methods (slice 4, ui/methods.js) and what
+// made a result (slice 3, ui/record-view.js).
 
 import { h, icon, clear, downloadBlob, debounce } from './dom.js';
 import { confirmDialog, promptDialog, showDialog, showMenu, toast } from './overlays.js';
@@ -13,6 +14,7 @@ import { QC_METRICS } from './figure-results.js';
 import { drawFigure, paintFigure, readBackFigure, writeFigure } from './figures.js';
 import { mountRecord } from './record-view.js';
 import { mountMethods } from './methods.js';
+import { mountReport } from './report.js';
 
 // A tissue panel's region from a saved view: its center, and the width a Viewer a thousand CSS
 // pixels wide shows at its zoom.
@@ -58,6 +60,7 @@ export function mountReports(app, container) {
   const editor = h('div.reports-editor');
   const record = mountRecord(app);
   const methods = mountMethods(app);
+  const report = mountReport(app);
   const root = h('div.view.reports',
     h('div.workbench-head', h('h1', icon('report'), 'Reports')),
     h('div.workbench-scroll', h('div.reports-body',
@@ -68,6 +71,7 @@ export function mountReports(app, container) {
         h('button.btn', { type: 'button', onclick: () => readBack() }, icon('upload'), 'Read a figure back…')),
       list,
       editor,
+      report.element,
       methods.element,
       record.element)));
   container.append(root);
@@ -324,6 +328,7 @@ export function mountReports(app, container) {
 
   const later = debounce(() => {
     render();
+    report.update();
     methods.update();
     record.update();
   }, 50);

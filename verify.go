@@ -92,9 +92,10 @@ func parseVerifyArgs(args []string, stderr io.Writer) (verifyOptions, error) {
 	flags.DurationVar(&opts.timeout, "timeout", 6*time.Hour, "stop a verification that takes longer")
 	flags.Usage = func() {
 		out := flags.Output()
-		fmt.Fprintln(out, "Usage: situcraft verify [--data DIR]... [--report verification.json] certificate.zip")
+		fmt.Fprintln(out, "Usage: situcraft verify [--data DIR]... [--report verification.json] certificate.zip|report.html")
 		fmt.Fprintln(out, "Makes a SituCraft certificate's result again from its bundles, found in the folders")
-		fmt.Fprintln(out, "given by their files' SHA-256, and compares every file bit for bit.")
+		fmt.Fprintln(out, "given by their files' SHA-256, and compares every file bit for bit. A report is checked")
+		fmt.Fprintln(out, "by the certificate it carries, and its numbers, figures and methods against it.")
 		fmt.Fprintln(out, "Exit status: 0 verified, 1 something differs (listed), 2 it could not be checked (a bundle")
 		fmt.Fprintln(out, "or file missing: give its folder with --data; no browser; a wrong command line).")
 		flags.PrintDefaults()
@@ -104,7 +105,7 @@ func parseVerifyArgs(args []string, stderr io.Writer) (verifyOptions, error) {
 		return opts, err
 	}
 	if len(positional) != 1 {
-		return opts, errors.New("name one certificate (.zip) to verify")
+		return opts, errors.New("name one certificate (.zip) or report (.html) to verify")
 	}
 	if opts.certificate, err = filepath.Abs(positional[0]); err != nil {
 		return opts, err
@@ -214,14 +215,23 @@ type certificate struct {
 const certificateFormat = "situcraft-certificate"
 const certificateVersion = 1
 
-// readCertificateZip reads a certificate's zip: the certificate, its entries (name → bytes), and
-// what is not as certified (its fingerprint, a file it names, an entry its list names).
+// readCertificateZip reads a certificate's zip (or the one a report carries): the certificate, its
+// entries (name → bytes), and what is not as certified (its fingerprint, a file it names, an entry
+// its list names).
 func readCertificateZip(path string) (*certificate, map[string][]byte, []string, error) {
-	z, err := zip.OpenReader(path)
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if isReport(raw) {
+		if raw, err = carriedCertificate(raw); err != nil {
+			return nil, nil, nil, fmt.Errorf("%s is not a SituCraft report: %v", filepath.Base(path), err)
+		}
+	}
+	z, err := zip.NewReader(bytes.NewReader(raw), int64(len(raw)))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("%s is not a SituCraft certificate: %v", filepath.Base(path), err)
 	}
-	defer z.Close()
 	files := map[string][]byte{}
 	for _, f := range z.File {
 		if f.FileInfo().IsDir() {
@@ -647,6 +657,16 @@ func verifyCertificate(ctx context.Context, opts verifyOptions, out io.Writer) (
 	}
 	for _, p := range problems {
 		fmt.Fprintln(out, "  The archive:", p)
+	}
+	// A report: its numbers, figures and methods, the certificate's.
+	if page, err := os.ReadFile(opts.certificate); err == nil && isReport(page) {
+		checked, more := checkReport(page, c, files)
+		if len(more) == 0 {
+			fmt.Fprintf(out, "The report carries it: its %s are the certificate's.\n", checked)
+		} else {
+			fmt.Fprintf(out, "The report carries it, but %s.\n", strings.Join(more, "; "))
+		}
+		report.Problems = append(report.Problems, more...)
 	}
 
 	// The bundles, by their files' SHA-256.

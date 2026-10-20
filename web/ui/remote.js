@@ -42,6 +42,7 @@ import { drawFigure, readBackFigure, writeFigure } from './figures.js';
 import { tissueViews, viewRegion } from './mode-reports.js';
 import { RECORD_FORMATS, recordOf } from './record-view.js';
 import { certify } from './certificate.js';
+import { writeReport } from './report.js';
 import { certificateSummary, shortFingerprint } from '../lib/certificate.js';
 import { recordableResults } from '../lib/record.js';
 import { BUNDLE_FIELDS, addSampleField, fieldValue, readSamplesTable, removeSampleField, renameSample, sampleFields, samplesCSV, samplesOf, setFieldKind, setRegionSamples, setSampleField } from '../lib/samples.js';
@@ -2828,7 +2829,23 @@ export function installRemote(app) {
     },
 
     async export(args) {
-      const what = choose(args.what, ['project', 'archive', 'methods', 'alignment', 'regions', 'reviews', 'samples', 'cohort-table', 'pseudobulk', 'record', 'certificate'], 'kind of file');
+      const what = choose(args.what, ['project', 'archive', 'methods', 'alignment', 'regions', 'reviews', 'samples', 'cohort-table', 'pseudobulk', 'record', 'certificate', 'report'], 'kind of file');
+      if (what === 'report') {
+        if (!Array.isArray(args.results) || !args.results.length) throw new ActionError('Name the results it reports (results: their IDs or names; a figure is one).');
+        const ids = args.results.map((x) => resultRef(x).id);
+        let out;
+        try {
+          out = await writeReport(app, { title: args.title, results: ids });
+        } catch (error) {
+          throw new ActionError(`The report could not be written: ${error.message}`);
+        }
+        const c = out.certificate;
+        return {
+          file: out.html,
+          message: `The report ${c.subject.name}: ${plural(out.figures, 'figure')}, the numbers of ${plural(ids.length - out.figures, 'result')} (${plural(out.numbers, 'number')}, each traced to its place in the certificate), its methods and the certificate it carries (${plural(c.steps.length, 'step')} from ${plural(c.bundles.length, 'bundle')}, fingerprint ${shortFingerprint(c.fingerprint)}), which it checks as it opens.`,
+          data: { title: c.subject.name, fingerprint: c.fingerprint, short: shortFingerprint(c.fingerprint), figures: out.figures, results: ids, numbers: out.numbers, steps: c.steps.length, bundles: c.bundles.length, bytes: new TextEncoder().encode(out.html).length },
+        };
+      }
       if (what === 'certificate') {
         const scope = scopeArg(args);
         let out;

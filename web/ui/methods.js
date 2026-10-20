@@ -22,7 +22,8 @@ export function datasetFilters(project, dataset) {
 
 // The record of a scope and its methods: { project, manifests, record (without a time), methods }.
 // scope: { kind: 'project' }, { kind: 'dataset', id, filters (ids: those described; the latest
-// version of each if not given) } or { kind: 'result', id }.
+// version of each if not given) }, { kind: 'result', id } or { kind: 'results', ids, name } (a
+// report's, its methods as a result's).
 export async function recordAndMethods(app, scope) {
   const project = app.store.project;
   const { roots, subject } = scopeRoots(project, scope);
@@ -39,7 +40,7 @@ export async function recordAndMethods(app, scope) {
     reports[dataset.id] = item ? await app.bundles.validate(item).catch(() => null) : null;
     sources[dataset.id] = exampleSource(app.examples.forDataset(dataset));
   }
-  return { project, manifests, record, methods: methodsText(project, record, { reports, sources, scope: scope.kind }) };
+  return { project, manifests, record, methods: methodsText(project, record, { reports, sources, scope: scope.kind === 'results' ? 'result' : scope.kind }) };
 }
 
 // The methods text of a scope (as recordAndMethods).
