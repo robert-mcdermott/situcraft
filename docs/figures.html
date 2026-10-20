@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Figures · SituCraft</title>
+  <meta name="description" content="SituCraft's figures: saved views of the tissue and plots of results (QC, the cells' map, spatial answers, a cohort's comparisons) drawn at a journal's column width, laid out as lettered panels, and written as SVG, PDF or PNG, each carrying what it was drawn from so that SituCraft can read it back and say whether the project still draws it the same." />
+  <link rel="canonical" href="https://robert-mcdermott.github.io/situcraft/docs/figures.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Figures" />
+  <meta property="og:description" content="SituCraft's figures: saved views of the tissue and plots of results (QC, the cells' map, spatial answers, a cohort's comparisons) drawn at a journal's column width, laid out as lettered panels, and written as SVG, PDF or PNG, each carrying what it was drawn from so that SituCraft can read it back and say whether the project still draws it the same." />
+  <meta property="og:url" content="https://robert-mcdermott.github.io/situcraft/docs/figures.html" />
+  <meta property="og:image" content="https://robert-mcdermott.github.io/situcraft/assets/img/og-image.jpg" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="theme-color" content="#07090e" />
+  <link rel="icon" href="../assets/img/logo.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="../assets/css/site.css" />
+  <script>try { const t = localStorage.getItem('situcraft-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+  <script src="../assets/js/site.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="container">
+      <a class="brand" href="../"><img src="../assets/img/logo.svg" alt="" width="30" height="30" /><span>Situ<b>Craft</b></span></a>
+      <nav class="site-nav" id="site-nav" aria-label="Main">
+        <a href="../#features">Features</a>
+        <a href="../docs/" aria-current="page">Documentation</a>
+        <a href="../install.html">Install</a>
+        <a href="../science.html">Science</a>
+      </nav>
+      <div class="header-actions">
+        <a class="icon-button" href="https://github.com/robert-mcdermott/situcraft" aria-label="SituCraft on GitHub">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.71 1.26 3.37.96.1-.75.4-1.26.73-1.55-2.56-.29-5.25-1.28-5.25-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.7 5.4-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"/></svg>
+        </a>
+        <button class="icon-button theme-toggle" type="button" aria-label="Switch between light and dark">
+          <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        </button>
+        <button class="icon-button nav-toggle" type="button" aria-label="Menu" aria-controls="site-nav" aria-expanded="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <div class="docs-layout">
+    <aside class="docs-sidebar" aria-label="Documentation">
+      <button class="btn docs-menu-toggle" type="button" aria-expanded="false">Documentation menu <span aria-hidden="true">▾</span></button>
+      <nav>
+        <h4>Start</h4>
+        <ul>
+          <li><a href="./">Overview</a></li>
+          <li><a href="getting-started.html">Getting started</a></li>
+          <li><a href="opening-data.html">Opening a bundle</a></li>
+        </ul>
+        <h4>The tissue</h4>
+        <ul>
+          <li><a href="viewer.html">The Viewer</a></li>
+          <li><a href="qc.html">Quality control</a></li>
+        </ul>
+        <h4>Segmentations</h4>
+        <ul>
+          <li><a href="segmentations.html">Segmentations</a></li>
+          <li><a href="refinement.html">Refinement</a></li>
+          <li><a href="comparing.html">Comparing and deciding</a></li>
+          <li><a href="exports.html">Exports</a></li>
+        </ul>
+        <h4>Cell types</h4>
+        <ul>
+          <li><a href="clusters.html">Clusters and the map</a></li>
+          <li><a href="labels.html">Labels</a></li>
+        </ul>
+        <h4>Pathology</h4>
+        <ul>
+          <li><a href="images.html">Images and alignment</a></li>
+          <li><a href="regions.html">Regions and reviews</a></li>
+        </ul>
+        <h4>Spatial</h4>
+        <ul>
+          <li><a href="spatial.html">Spatial analysis</a></li>
+          <li><a href="niches.html">Niches and genes</a></li>
+        </ul>
+        <h4>Cohorts</h4>
+        <ul>
+          <li><a href="samples.html">Samples</a></li>
+          <li><a href="designs.html">The design</a></li>
+          <li><a href="summaries.html">Sample summaries</a></li>
+          <li><a href="cohort-qc.html">Cohort QC</a></li>
+          <li><a href="abundance.html">Differential abundance</a></li>
+          <li><a href="expression.html">Differential expression</a></li>
+          <li><a href="spatial-tests.html">Spatial statistics between groups</a></li>
+          <li><a href="error-rates.html">Error rates and scale</a></li>
+        </ul>
+        <h4>Reports</h4>
+        <ul>
+          <li><a href="figures.html" aria-current="page">Figures</a></li>
+        </ul>
+        <h4>Reference</h4>
+        <ul>
+          <li><a href="remote-control.html">Remote control</a></li>
+          <li><a href="record.html">The record</a></li>
+          <li><a href="troubleshooting.html">Troubleshooting</a></li>
+        </ul>
+      </nav>
+    </aside>
+
+    <main id="main" class="doc">
+      <h1>Figures</h1>
+      <p class="doc-lede">A figure is drawn from the project, not copied from the screen: saved views of the tissue at the figure's size, placed in µm with a scale bar and a legend, beside plots of the results they led to. Every file written carries what it was drawn from.</p>
+
+      <h2 id="figure">A figure</h2>
+      <p>The <strong>Reports</strong> view keeps the project's figures. A figure is a page of panels, at a journal's column width (one column, 85 mm; one and a half, 114 mm; two, 174 mm) or a 16:9 slide, its text 7 pt by default and never below 6 pt. Its panels are lettered A, B, C in reading order. <strong>New figure</strong> makes one of the first saved view; <strong>Add a panel</strong> adds a panel of the tissue, of a result (below) or of text beside the last one, and each panel's place and size on the page (in points, 1/72 inch) can be set. The tissue panels of a row keep their images as tall as each other, whatever their legends hold. The preview draws the figure as it will print. The project tree lists the figures, and a figure opens the Reports view at it.</p>
+      <figure>
+        <div class="shot"><img class="shot-dark" src="../assets/img/figures-dark.webp" width="2000" height="1250" loading="lazy" alt="The Reports view: a figure of the Lung example selected, its size, text and panels, and its preview: the Lung section's DAPI stain with the cells outlined and filled by lineage and three genes' transcripts, a scale bar of 50 µm and a legend of the stains, the transcripts and the lineages" /><img class="shot-light" src="../assets/img/figures-light.webp" width="2000" height="1250" loading="lazy" alt="The Reports view: a figure of the Lung example selected, its size, text and panels, and its preview: the Lung section's DAPI stain with the cells outlined and filled by lineage and three genes' transcripts, a scale bar of 50 µm and a legend of the stains, the transcripts and the lineages" /></div>
+        <figcaption>A figure of the Lung section: one tissue panel, its preview as it will print, and the buttons that write it.</figcaption>
+      </figure>
+
+      <h2 id="tissue">A tissue panel</h2>
+      <p>A tissue panel is a saved view of the Viewer (see <a href="viewer.html#saved-views">Saved views</a>) drawn at the panel's size. Its <strong>region</strong> is a center and a width in µm, at first the view's center and the width a Viewer a thousand pixels wide shows at its zoom; its height follows the panel's shape. The panel draws what the view shows:</p>
+      <ul>
+        <li><strong>The stains,</strong> each visible channel's sample under each pixel windowed, raised to its gamma and given its color, the channels added, as the Viewer's shader composites them, at 300 dots an inch (the pyramid level whose samples are no larger than the output's pixels). They are one image, as the stains are measured.</li>
+        <li><strong>Post-Xenium images</strong> the view shows (an H&amp;E or an immunofluorescence image), each placed by the alignment in use, through its deformation if it has one, as the Viewer places it: an H&amp;E laid over at its opacity, an immunofluorescence image's channels added in their colors.</li>
+        <li><strong>The cells,</strong> from their full-resolution outlines: outlined, and filled as the view fills them (by a label set, clusters or niches, a number such as the cell's area on viridis over its 1st to 99th percentile, a refinement's certainties or limitations, or each cell's review), as paths placed in µm; the nuclei outlined when the view shows them.</li>
+        <li><strong>The regions</strong> of the dataset, when asked (<strong>Draw the dataset's regions</strong>): each outlined in its class's color, faintly filled, and named.</li>
+        <li><strong>The transcripts</strong> of the view's genes, of quality 20 or more, each a point in its gene's color. A region holding more than 250,000 of them is not drawn: show a smaller one, or fewer genes.</li>
+        <li><strong>A scale bar</strong> of a round length (1, 2 or 5 times a power of ten µm, about a fifth of the width), bottom right, white over the tissue; its length can be set.</li>
+        <li><strong>A legend</strong> below: the stains, the genes, and the fill's labels among the cells drawn, or its scale with its range.</li>
+      </ul>
+      <p>Each panel is described in words (the dataset, the view, the width shown, the stains, how many cells and transcripts it draws, the scale bar), and the description is written with the figure.</p>
+
+      <h2 id="results">Results</h2>
+      <p>A result panel draws a plot of what the project holds, at the figure's text size and never below 6 pt, from the same numbers its view shows:</p>
+      <ul>
+        <li><strong>A QC distribution:</strong> a dataset's cells' transcripts, all transcripts, area or nucleus area, in the QC view's 40 bins from the least to the 99.5th percentile (on a log scale if asked), with a filter's thresholds.</li>
+        <li><strong>The cells' map:</strong> a clustering's map (UMAP), each cell a point colored by its cluster or a label set's labels; many clusters are named on the map, at their cells' middle, rather than in a legend.</li>
+        <li><strong>A spatial answer:</strong> an enrichment's or nearest distances' heat map (each pair's ratio against chance, red more and blue fewer, a dot where the adjusted p is below 0.05), or Moran's I's genes in a pattern, strongest first.</li>
+        <li><strong>A cohort's comparison:</strong> its effects with their intervals (each label's odds or density ratio on a log scale, or each spatial statistic's), a label's or statistic's units by group, a label's volcano with the strongest genes named, or a gene by group. Those found (an adjusted p below 0.05) are red.</li>
+      </ul>
+      <p>A plot that has more rows than its panel holds at 6 pt draws those that fit and says how many it left out.</p>
+      <figure>
+        <div class="shot"><img class="shot-dark" src="../assets/img/figure-results-dark.webp" width="2000" height="1250" loading="lazy" alt="The Reports view: a figure of the Lung example's results, four panels: the distribution of transcripts per cell, the cells' map colored by cluster with the clusters numbered on it, the classes' neighbor enrichment as a heat map with dots where a pair differs from chance, and the genes in a pattern by Moran's I as bars" /><img class="shot-light" src="../assets/img/figure-results-light.webp" width="2000" height="1250" loading="lazy" alt="The Reports view: a figure of the Lung example's results, four panels: the distribution of transcripts per cell, the cells' map colored by cluster with the clusters numbered on it, the classes' neighbor enrichment as a heat map with dots where a pair differs from chance, and the genes in a pattern by Moran's I as bars" /></div>
+        <figcaption>A figure of results: the transcripts per cell, the cells' map, the classes' enrichment and the genes in a pattern.</figcaption>
+      </figure>
+
+      <h2 id="writing">Writing it</h2>
+      <p><strong>SVG</strong> and <strong>PDF</strong> are vector: the cells, points, legend and text are drawn as shapes and text (the PDF's text in Helvetica, which every reader has), and the stains as one image of 300 dots an inch. <strong>PNG</strong> is 300 dots an inch, its print size recorded in it. The same figure written at the same time is the same bytes in SVG and PDF.</p>
+      <p>Every file carries the figure's <strong>manifest</strong>: the figure, and for each panel what it shows, what it was drawn from (the dataset by its bundle's run and fingerprint, the saved view as it was, the label set, clustering, image and alignment drawn; a result's analysis, map or comparison), what it drew (a tissue panel's region in µm, µm a point, the scale bar, the cells, transcripts and regions, the stains' pixels and level and each image's; a plot's counts) and a digest of its drawing; SituCraft's version and commit; when it was written; and a fingerprint of all of it. It is in an SVG's metadata, a PDF's attached file and a PNG's text chunk, and <strong>Its manifest</strong> writes it alone as JSON.</p>
+
+      <h2 id="read-back">Reading a figure back</h2>
+      <p><strong>Read a figure back…</strong> opens a figure SituCraft wrote and compares it with the project: whether its manifest is as it was written (its fingerprint), whether each panel's saved view, dataset and artifacts are still those it was drawn from, and whether each panel, drawn again now, is drawn the same.</p>
+
+      <h2 id="what-made">What made a result</h2>
+      <p>Below the figures, the Reports view shows what made any result (a figure among them): each step from the bundles to it, with its method, parameters, seed, software and references, written as Markdown, JSON or BibTeX. See <a href="record.html#what-made">The record</a>.</p>
+
+      <h2 id="remote">By remote control</h2>
+      <p><code>figure</code> makes a figure of saved views side by side, or of any panels (the tissue, a QC distribution, the cells' map, a spatial answer, a cohort's comparison, text) laid out in rows, or changes one, and answers what each panel draws; <code>write_figure</code> writes it as SVG, PDF, PNG or its manifest, with a fixed time when asked; <code>read_figure</code> reads one back. See <a href="remote-control.html">Remote control</a>.</p>
+
+      <h2 id="checked">How it is checked</h2>
+      <p>The validation suite makes a figure of a saved view of the Lung example (its DAPI stain, three genes, the cells filled by their lineage), writes it in every format, and reads each with its own readers:</p>
+      <ul>
+        <li>The SVG and PDF are the same bytes when written again; the manifest is the same in every file, and its fingerprint is the suite's own.</li>
+        <li>The stains' pixels in the SVG are the suite's own composite of the tiles' samples, pixel for pixel, and the Viewer's own pixels are that composite within one level of 255.</li>
+        <li>The scale bar is its length in µm; the cells drawn are those whose outlines meet the region, each filled as the Viewer fills it; the points are the genes' transcripts in the region.</li>
+        <li>No text is below 6 pt, and the PDF's text is the SVG's.</li>
+        <li>Read back, the figure is unchanged and draws the same.</li>
+      </ul>
+      <p>For results, it draws the Lung's transcripts per cell, its cells' map, its classes' enrichment and its genes in a pattern, and the simulated cohort's shares, volcano, SIM033 by group and enrichments by condition:</p>
+      <ul>
+        <li>The histogram's counts are the suite's own binning of the cells, bar by bar.</li>
+        <li>The map has a point for each cell mapped, and its clusters are named.</li>
+        <li>The heat map has a square for each pair in its ratio's color, and a dot for each pair found.</li>
+        <li>The bars name the genes in a pattern, strongest first.</li>
+        <li>The forest puts each label's estimate where its ratio falls on the log axis, and those found are red.</li>
+        <li>The volcano has a point for each gene tested, those found red and SIM033 named, and the gene by group has a dot for each unit.</li>
+      </ul>
+      <p>With the simulated tissue's H&amp;E, each of 60 pixels of the figure matches the suite's own placing of the image (through the alignment's deformation and transform, the image's pixels interpolated from its tiles). The Viewer's own pixels match the same placing within four levels of 255.</p>
+
+      <nav class="doc-pager" aria-label="Pages">
+        <a class="prev" href="error-rates.html"><span>Previous</span>Error rates and scale</a>
+        <a class="next" href="remote-control.html"><span>Next</span>Remote control</a>
+      </nav>
+    </main>
+
+    <aside class="toc" aria-label="On this page">
+      <h4>On this page</h4>
+      <ul></ul>
+    </aside>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-about">
+          <a class="brand" href="../"><img src="../assets/img/logo.svg" alt="" width="30" height="30" /><span>Situ<b>Craft</b></span></a>
+          <p>A local-first workbench for imaging-based spatial transcriptomics: Xenium bundles checked, segmented, typed, reviewed and analyzed on your own computer, every decision on record. Free and open source under the Apache License 2.0.</p>
+        </div>
+        <div>
+          <h4>Product</h4>
+          <ul>
+            <li><a href="../#features">Features</a></li>
+            <li><a href="../install.html">Install</a></li>
+            <li><a href="../science.html">Science</a></li>
+            <li><a href="https://github.com/robert-mcdermott/situcraft/blob/main/CHANGELOG.md">Changelog</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Documentation</h4>
+          <ul>
+            <li><a href="../docs/getting-started.html">Getting started</a></li>
+            <li><a href="../docs/segmentations.html">Segmentations</a></li>
+            <li><a href="../docs/clusters.html">Cell types</a></li>
+            <li><a href="../docs/spatial.html">Spatial analysis</a></li>
+            <li><a href="../docs/troubleshooting.html">Troubleshooting</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Project</h4>
+          <ul>
+            <li><a href="https://github.com/robert-mcdermott/situcraft">GitHub</a></li>
+            <li><a href="https://github.com/robert-mcdermott/situcraft/releases">Releases</a></li>
+            <li><a href="https://github.com/robert-mcdermott/situcraft/issues">Issues</a></li>
+            <li><a href="../science.html#cite">Cite SituCraft</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">SituCraft is licensed under the Apache License 2.0. It is for research use only: it is not a medical device and makes no diagnostic claims. See <a href="../science.html#credits">credits</a>.</div>
+    </div>
+  </footer>
+</body>
+</html>

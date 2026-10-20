@@ -93,6 +93,10 @@
           <li><a href="spatial-tests.html">Spatial statistics between groups</a></li>
           <li><a href="error-rates.html">Error rates and scale</a></li>
         </ul>
+        <h4>Reports</h4>
+        <ul>
+          <li><a href="figures.html">Figures</a></li>
+        </ul>
         <h4>Reference</h4>
         <ul>
           <li><a href="remote-control.html">Remote control</a></li>
@@ -132,7 +136,7 @@
         </table>
       </div>
       <p><strong>Download</strong> fetches one from 10x Genomics, checks the archive and every file against recorded checksums, keeps only the bundle and deletes the archive. Nothing is downloaded until you ask. <strong>Make it</strong> simulates the tissue or cohort with SituCraft's settings (<code>situcraft simulate --post-xenium</code> makes the same tissue, byte for byte, and <code>situcraft simulate --cohort standard</code>, <code>null</code> or <code>paired</code> the same cohort); each is labeled simulated wherever it is shown. A cohort's samples are added to a project together, each with its subject and condition. One made by an earlier SituCraft, without the H&amp;E, offers <strong>Make it again</strong>: the same run, cells and transcripts, with the images.</p>
-      <p>Each example is used under its license; its source and license are linked on its card, and the <a href="record.html#methods">methods paragraph</a> cites it.</p>
+      <p>Each example is used under its license; its source and license are linked on its card, and the <a href="record.html#methods">methods</a> cite it.</p>
 
       <h2 id="tour">The tour</h2>
       <p>When a 10x Genomics example is ready, <strong>Take the tour</strong>: seven steps through the Data view, the Viewer and QC. Use <strong>Next</strong> and <strong>Back</strong> on the card at the foot of the window; you can explore at any step, and the tour continues from there.</p>
@@ -142,7 +146,7 @@
       </figure>
 
       <h2 id="worked-examples">Worked examples</h2>
-      <p>Each example also has <strong>worked examples</strong>: a question answered step by step, saying first what to expect. Some steps run a job before going on (the card's button says what it does: expand the nuclei, plant errors, refine, import the truth, compare, cluster, label, make the labels again on another segmentation, add the H&amp;E, place landmarks, align it automatically, check its alignments, draw regions and write them for QuPath, decide the review queue's first cells, exclude a fold, import the truth's domains, build a graph of which cells are neighbors, ask a spatial question, make an answer again on another segmentation, set the samples, describe the design, run the same steps on every sample, summarize them, compare the groups), and others open the comparison in the Compare workspace, the clustering in the Cell types view, the Alignment view, an answer in the Spatial view, a comparison of the groups in the Cohort view, or the Viewer, with the view, the ranking, the colors, the difference and the cells the step talks about.</p>
+      <p>Each example also has <strong>worked examples</strong>: a question answered step by step, saying first what to expect. Some steps run a job before going on (the card's button says what it does: expand the nuclei, plant errors, refine, import the truth, compare, cluster, label, make the labels again on another segmentation, add the H&amp;E, place landmarks, align it automatically, check its alignments, draw regions and write them for QuPath, decide the review queue's first cells, exclude a fold, import the truth's domains, build a graph of which cells are neighbors, ask a spatial question, make an answer again on another segmentation, set the samples, describe the design, run the same steps on every sample, summarize them, compare the groups, make a figure, certify and verify it, write the report or the package), and others open the comparison in the Compare workspace, the clustering in the Cell types view, the Alignment view, an answer in the Spatial view, a comparison of the groups in the Cohort view, a figure, its methods or what made it in the Reports view, or the Viewer, with the view, the ranking, the colors, the difference and the cells the step talks about.</p>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Example</th><th>Worked example</th><th>The question</th></tr></thead>
@@ -157,6 +161,8 @@
             <tr><td>Lung</td><td>Cluster and label the Lung cells</td><td>Which cells are in this section, as their expression groups them and as known markers name them, and how far can each label be trusted?</td></tr>
             <tr><td>Lung</td><td>Genes in a pattern</td><td>Which genes are expressed in a pattern across the Lung section, and where?</td></tr>
             <tr><td>Lung</td><td>An answer under another segmentation</td><td>How much does which cell types are neighbors in the Lung section depend on how its cells were drawn?</td></tr>
+            <tr><td>Lung</td><td>A figure of results, and its methods</td><td>How does a result become a figure for a paper, with a methods section written from what was done?</td></tr>
+            <tr><td>Lung</td><td>Results others can check</td><td>How can a reader check the figure's results, with SituCraft or without it?</td></tr>
             <tr><td>Simulated</td><td>Score segmentations against the truth</td><td>When every cell is known, how close do the instrument's nucleus expansion and SituCraft's transcript-informed segmentation come to the true cells?</td></tr>
             <tr><td>Simulated</td><td>Labels against the truth</td><td>When every cell's type is known, how many cells do markers label correctly, and how much of the error is the segmentation's?</td></tr>
             <tr><td>Simulated</td><td>Align an H&amp;E three ways</td><td>The section was stained with H&amp;E and scanned after the run: placed by Xenium Explorer's matrix, by six landmarks, or automatically by the nuclei, which places it best, and how do you tell without a truth?</td></tr>
