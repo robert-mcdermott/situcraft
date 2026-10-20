@@ -3805,6 +3805,13 @@ left in it.
        genes in a pattern one bar short at 6 pt; its panels are nine tenths as tall as wide.
      - **The cohort fixture written again:** any value of `SITUCRAFT_WRITE_FIXTURE` rewrote 0.7.0's
        cohort fixture with the version running; each release's is now written only for its own.
+     - **Moran's I differed between processors:** CI's certificates (written on amd64) failed to
+       verify on arm64 at Moran's I from slice 6 on, and the 0.8.0 fixture (written on arm64) failed
+       on amd64: its analytical p-values (Go's `math.Erfc`), its variance under randomization and its
+       permutations' spread were fused into multiply-adds on arm64. `stats.NormalCDF` now uses
+       `dmath.Erfc`, and each of those products is rounded on its own; a test pins Moran's I's
+       numbers on a tissue where the two processors differed before (the same digest on both, checked
+       with an amd64 build under Rosetta), and the 0.8.0 fixture is written again.
      - **0.7.0's cohort, another run:** a simulated bundle records the version that wrote it, so the
        cohort 0.8.0 makes is not the one 0.7.0's fixture recorded, and its bundles were refused; the
        suite makes the cohort as 0.7.0 made it (`SITUCRAFT_SIMULATE_AS`, the simulator unchanged).

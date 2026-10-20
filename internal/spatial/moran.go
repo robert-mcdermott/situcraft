@@ -271,7 +271,10 @@ func MoransI(ctx context.Context, g *Graph, e *Expression, p MoranParams, worker
 	m.Expected = -1 / (nf - 1)
 	E2 := mul(m.Expected, m.Expected)
 	S02 := mul(m.S0, m.S0)
-	varNorm := (mul(mul(nf, nf), m.S1)-mul(nf, m.S2)+3*S02)/(mul(S02, mul(nf, nf)-1)) - E2
+	// Each product rounded on its own (mul), so that every processor gives the same bits: fused with
+	// the additions about it, a product rounds once instead of twice on some (arm64).
+	n2, nS2 := mul(nf, nf), mul(nf, m.S2)
+	varNorm := (mul(n2, m.S1)-nS2+mul(3, S02))/mul(S02, n2-1) - E2
 	// lag answers Σⱼ wᵢⱼ zⱼ for each cell, into out.
 	lag := func(z, out []float64) {
 		for i := 0; i < n; i++ {
@@ -327,7 +330,7 @@ func MoransI(ctx context.Context, g *Graph, e *Expression, p MoranParams, worker
 			}
 			m.I[gene] = nf / m.S0 * cross / s2
 			b2 := nf * s4 / mul(s2, s2)
-			num := nf*((mul(nf, nf)-3*nf+3)*m.S1-mul(nf, m.S2)+3*S02) - b2*((mul(nf, nf)-nf)*m.S1-2*mul(nf, m.S2)+6*S02)
+			num := mul(nf, mul(n2-mul(3, nf)+3, m.S1)-nS2+mul(3, S02)) - mul(b2, mul(n2-nf, m.S1)-mul(2, nS2)+mul(6, S02))
 			m.VarNorm[gene] = varNorm
 			m.VarRand[gene] = num/((nf-1)*(nf-2)*(nf-3)*S02) - E2
 			if m.VarRand[gene] > 0 {
@@ -394,7 +397,7 @@ func MoransI(ctx context.Context, g *Graph, e *Expression, p MoranParams, worker
 						s[gene] += I
 						q[gene] += mul(I, I)
 						dev := math.Abs(m.I[gene] - m.Expected)
-						if math.Abs(I-m.Expected) >= dev-1e-12*math.Max(1, dev) {
+						if math.Abs(I-m.Expected) >= dev-mul(1e-12, math.Max(1, dev)) {
 							f[gene]++
 						}
 					}
@@ -410,7 +413,7 @@ func MoransI(ctx context.Context, g *Graph, e *Expression, p MoranParams, worker
 			}
 			mean := s[gene] / float64(P)
 			m.PermMean[gene] = mean
-			m.PermSD[gene] = math.Sqrt(math.Max(0, (q[gene]-float64(P)*mul(mean, mean))/float64(P-1)))
+			m.PermSD[gene] = math.Sqrt(math.Max(0, (q[gene]-mul(float64(P), mul(mean, mean)))/float64(P-1)))
 			m.Perm[gene] = float64(1+f[gene]) / float64(1+P)
 		}
 	} else {

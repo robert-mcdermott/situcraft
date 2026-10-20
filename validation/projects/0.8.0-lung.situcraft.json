@@ -3,11 +3,11 @@
  "version": 1,
  "id": "p-situcraft-0-8-0-lung",
  "name": "The Lung, as SituCraft 0.8.0 saved it",
- "created": "2026-10-20T06:04:30.066Z",
- "modified": "2026-10-20T06:04:30.517Z",
+ "created": "2026-10-20T07:16:02.707Z",
+ "modified": "2026-10-20T07:16:03.111Z",
  "datasets": [
   {
-   "id": "d-a8ff45bb5b7b4174",
+   "id": "d-7c9a5b4068f345b6",
    "name": "xenium-lung-2fov",
    "platform": "Xenium",
    "path": "/data/xenium-lung-2fov",
@@ -129,7 +129,7 @@
     }
    ],
    "validation": {
-    "checked": "2026-10-20T05:58:28Z",
+    "checked": "2026-10-20T07:05:31Z",
     "support": "supported",
     "fatal": 0,
     "warnings": 0,
@@ -157,7 +157,7 @@
      }
     ]
    },
-   "added": "2026-10-20T06:04:30.077Z"
+   "added": "2026-10-20T07:16:02.715Z"
   }
  ],
  "artifacts": [
@@ -165,11 +165,11 @@
    "kind": "segmentation",
    "id": "seg-2fec30e8d6bb2310839d",
    "name": "Instrument segmentation",
-   "dataset": "d-a8ff45bb5b7b4174",
+   "dataset": "d-7c9a5b4068f345b6",
    "source": "instrument",
    "state": "complete",
-   "created": "2026-10-20T05:58:31.307718Z",
-   "registered": "2026-10-20T06:04:30.078Z",
+   "created": "2026-10-20T07:05:33.980137Z",
+   "registered": "2026-10-20T07:16:02.718Z",
    "method": {
     "name": "Xenium cell segmentation (Xenium Onboard Analysis)",
     "version": "xenium-2.0.0.10",
@@ -190,11 +190,11 @@
     {
      "name": "situcraft",
      "version": "0.8.0",
-     "commit": "c4ff94293da0bc600a3c5b568c320448145b2395-dirty"
+     "commit": "2ca32c6c31209a1f647c149355c7e7c5103259b7-dirty"
     }
    ],
    "job": {
-    "id": "jmvg9vkn2-3",
+    "id": "jmvgc9rwf-3",
     "kind": "segmentation"
    },
    "parents": [
@@ -282,11 +282,11 @@
    "kind": "clustering",
    "id": "clu-8b3e720f09c5d17b9e7b",
    "name": "Clusters of Instrument segmentation, resolution 1",
-   "dataset": "d-a8ff45bb5b7b4174",
+   "dataset": "d-7c9a5b4068f345b6",
    "segmentation": "seg-2fec30e8d6bb2310839d",
    "state": "complete",
-   "created": "2026-10-20T05:59:00.350924Z",
-   "registered": "2026-10-20T06:04:30.269Z",
+   "created": "2026-10-20T07:06:11.13496Z",
+   "registered": "2026-10-20T07:16:02.892Z",
    "method": {
     "name": "SituCraft clustering",
     "version": "1",
@@ -303,11 +303,11 @@
     {
      "name": "situcraft",
      "version": "0.8.0",
-     "commit": "c4ff94293da0bc600a3c5b568c320448145b2395-dirty"
+     "commit": "2ca32c6c31209a1f647c149355c7e7c5103259b7-dirty"
     }
    ],
    "job": {
-    "id": "jmvg9w63j-5",
+    "id": "jmvgcai09-5",
     "kind": "clustering"
    },
    "summary": {
@@ -359,12 +359,12 @@
    "kind": "embedding",
    "id": "emb-09f3e4a29309055ae73a",
    "name": "Map of Clusters of Instrument segmentation, resolution 1",
-   "dataset": "d-a8ff45bb5b7b4174",
+   "dataset": "d-7c9a5b4068f345b6",
    "segmentation": "seg-2fec30e8d6bb2310839d",
    "clustering": "clu-8b3e720f09c5d17b9e7b",
    "state": "complete",
-   "created": "2026-10-20T05:59:07.627284Z",
-   "registered": "2026-10-20T06:04:30.296Z",
+   "created": "2026-10-20T07:06:31.814858Z",
+   "registered": "2026-10-20T07:16:02.917Z",
    "method": {
     "name": "SituCraft UMAP",
     "version": "1",
@@ -826,13 +826,13 @@
     "starter": "lung"
    },
    "by": "the user",
-   "created": "2026-10-20T06:04:30.318Z"
+   "created": "2026-10-20T07:16:02.935Z"
   },
   {
    "kind": "labels",
    "id": "lab-c25f4eaba2e9de96a2fe",
    "name": "Labels of Clusters of Instrument segmentation, resolution 1 by Human lung (Xenium Human Lung panel)",
-   "dataset": "d-a8ff45bb5b7b4174",
+   "dataset": "d-7c9a5b4068f345b6",
    "segmentation": "seg-2fec30e8d6bb2310839d",
    "clustering": "clu-8b3e720f09c5d17b9e7b",
    "markerSet": "ms-d96c65a024d9-1",
@@ -843,8 +843,8 @@
    "source": null,
    "reference": null,
    "state": "complete",
-   "created": "2026-10-20T05:59:08.100357Z",
-   "registered": "2026-10-20T06:04:30.358Z",
+   "created": "2026-10-20T07:06:32.864594Z",
+   "registered": "2026-10-20T07:16:02.975Z",
    "method": {
     "name": "SituCraft labels from markers",
     "version": "1",
@@ -867,11 +867,11 @@
     {
      "name": "situcraft",
      "version": "0.8.0",
-     "commit": "c4ff94293da0bc600a3c5b568c320448145b2395-dirty"
+     "commit": "2ca32c6c31209a1f647c149355c7e7c5103259b7-dirty"
     }
    ],
    "job": {
-    "id": "jmvg9wd8x-7",
+    "id": "jmvgcb25c-7",
     "kind": "labels"
    },
    "summary": {
@@ -907,11 +907,11 @@
    "kind": "graph",
    "id": "gra-0a5299a64a7cf1b80bf7",
    "name": "Delaunay graph of Instrument segmentation, edges to 50 µm",
-   "dataset": "d-a8ff45bb5b7b4174",
+   "dataset": "d-7c9a5b4068f345b6",
    "segmentation": "seg-2fec30e8d6bb2310839d",
    "state": "complete",
-   "created": "2026-10-20T06:02:47.986685Z",
-   "registered": "2026-10-20T06:04:30.397Z",
+   "created": "2026-10-20T07:13:37.005796Z",
+   "registered": "2026-10-20T07:16:03.013Z",
    "method": {
     "name": "SituCraft cell graph",
     "version": "1",
@@ -925,11 +925,11 @@
     {
      "name": "situcraft",
      "version": "0.8.0",
-     "commit": "c4ff94293da0bc600a3c5b568c320448145b2395-dirty"
+     "commit": "2ca32c6c31209a1f647c149355c7e7c5103259b7-dirty"
     }
    ],
    "job": {
-    "id": "jmvga12x2-57",
+    "id": "jmvgck5h8-57",
     "kind": "graph"
    },
    "summary": {
@@ -958,13 +958,13 @@
    "kind": "spatial",
    "id": "spa-57930e2da45e95e3094f",
    "name": "Neighborhood enrichment of Labels by Human lung (Xenium Human Lung panel): class, Delaunay graph of Instrument segmentation, edges to 50 µm",
-   "dataset": "d-a8ff45bb5b7b4174",
+   "dataset": "d-7c9a5b4068f345b6",
    "segmentation": "seg-2fec30e8d6bb2310839d",
    "graph": "gra-0a5299a64a7cf1b80bf7",
    "question": "enrichment",
    "state": "complete",
-   "created": "2026-10-20T06:02:49.244055Z",
-   "registered": "2026-10-20T06:04:30.417Z",
+   "created": "2026-10-20T07:13:38.521158Z",
+   "registered": "2026-10-20T07:16:03.025Z",
    "method": {
     "name": "SituCraft spatial analysis",
     "version": "1",
@@ -979,11 +979,11 @@
     {
      "name": "situcraft",
      "version": "0.8.0",
-     "commit": "c4ff94293da0bc600a3c5b568c320448145b2395-dirty"
+     "commit": "2ca32c6c31209a1f647c149355c7e7c5103259b7-dirty"
     }
    ],
    "job": {
-    "id": "jmvga13wa-59",
+    "id": "jmvgck6ng-59",
     "kind": "spatial"
    },
    "summary": {
@@ -1062,13 +1062,13 @@
    "kind": "spatial",
    "id": "spa-300a3e216e6519ac93b4",
    "name": "Moran's I of Instrument segmentation's genes, Delaunay graph of Instrument segmentation, edges to 50 µm",
-   "dataset": "d-a8ff45bb5b7b4174",
+   "dataset": "d-7c9a5b4068f345b6",
    "segmentation": "seg-2fec30e8d6bb2310839d",
    "graph": "gra-0a5299a64a7cf1b80bf7",
    "question": "moran",
    "state": "complete",
-   "created": "2026-10-20T06:02:48.581848Z",
-   "registered": "2026-10-20T06:04:30.433Z",
+   "created": "2026-10-20T07:13:37.665572Z",
+   "registered": "2026-10-20T07:16:03.040Z",
    "method": {
     "name": "SituCraft spatial analysis",
     "version": "1",
@@ -1085,11 +1085,11 @@
     {
      "name": "situcraft",
      "version": "0.8.0",
-     "commit": "c4ff94293da0bc600a3c5b568c320448145b2395-dirty"
+     "commit": "2ca32c6c31209a1f647c149355c7e7c5103259b7-dirty"
     }
    ],
    "job": {
-    "id": "jmvga134y-58",
+    "id": "jmvgck5on-58",
     "kind": "spatial"
    },
    "summary": {
@@ -1150,20 +1150,20 @@
  "decisions": [
   {
    "kind": "promote-segmentation",
-   "dataset": "d-a8ff45bb5b7b4174",
+   "dataset": "d-7c9a5b4068f345b6",
    "artifact": "seg-2fec30e8d6bb2310839d",
    "rationale": "The instrument's segmentation: the dataset's only segmentation when it was added.",
    "by": "SituCraft",
-   "time": "2026-10-20T06:04:30.078Z"
+   "time": "2026-10-20T07:16:02.718Z"
   }
  ],
  "views": [
   {
-   "id": "v-4c135a224d3a409c",
+   "id": "v-dfbe75e4466442e7",
    "name": "Lung classes",
-   "dataset": "d-a8ff45bb5b7b4174",
+   "dataset": "d-7c9a5b4068f345b6",
    "mode": "viewer",
-   "created": "2026-10-20T06:04:30.517Z",
+   "created": "2026-10-20T07:16:03.111Z",
    "segmentation": "instrument",
    "camera": {
     "cx": 750,
@@ -1201,64 +1201,64 @@
  ],
  "history": [
   {
-   "time": "2026-10-20T06:04:30.077Z",
+   "time": "2026-10-20T07:16:02.715Z",
    "action": "add-dataset",
    "detail": "xenium-lung-2fov (/data/xenium-lung-2fov)"
   },
   {
-   "time": "2026-10-20T06:04:30.078Z",
+   "time": "2026-10-20T07:16:02.718Z",
    "action": "segmentation",
    "detail": "Registered instrument segmentation of xenium-lung-2fov (artifact seg-2fec30e8d6bb2310839d, 6 files by SHA-256)"
   },
   {
-   "time": "2026-10-20T06:04:30.078Z",
+   "time": "2026-10-20T07:16:02.718Z",
    "action": "decision",
    "detail": "Promoted instrument segmentation as xenium-lung-2fov's segmentation: The instrument's segmentation: the dataset's only segmentation when it was added."
   },
   {
-   "time": "2026-10-20T06:04:30.269Z",
+   "time": "2026-10-20T07:16:02.892Z",
    "action": "clustering",
    "detail": "Clustered the cells of instrument segmentation of xenium-lung-2fov: 29 clusters of 11820 cells at resolution 1 (artifact clu-8b3e720f09c5d17b9e7b)"
   },
   {
-   "time": "2026-10-20T06:04:30.296Z",
+   "time": "2026-10-20T07:16:02.917Z",
    "action": "embedding",
    "detail": "Made map of Clusters of Instrument segmentation, resolution 1 of xenium-lung-2fov: trustworthiness 0.737 (artifact emb-09f3e4a29309055ae73a)"
   },
   {
-   "time": "2026-10-20T06:04:30.318Z",
+   "time": "2026-10-20T07:16:02.935Z",
    "action": "marker-set",
    "detail": "Added the marker set \"Human lung (Xenium Human Lung panel)\" from SituCraft's starter set \"lung\" (version 1: 26 labels, 1 state; checksum d96c65a024d9)"
   },
   {
-   "time": "2026-10-20T06:04:30.358Z",
+   "time": "2026-10-20T07:16:02.975Z",
    "action": "labels",
    "detail": "Labeled the cells of clusters of instrument segmentation, resolution 1 by the marker set \"Human lung (Xenium Human Lung panel)\" (version 1): 5555 of 11820 cells at the class level, margin 0.1 (artifact lab-c25f4eaba2e9de96a2fe)"
   },
   {
-   "time": "2026-10-20T06:04:30.397Z",
+   "time": "2026-10-20T07:16:03.013Z",
    "action": "graph",
    "detail": "Built a graph of the cells of xenium-lung-2fov: Delaunay graph of Instrument segmentation, edges to 50 µm; 11898 cells, 35472 edges (artifact gra-0a5299a64a7cf1b80bf7)"
   },
   {
-   "time": "2026-10-20T06:04:30.417Z",
+   "time": "2026-10-20T07:16:03.025Z",
    "action": "spatial",
    "detail": "Neighborhood enrichment of Labels by Human lung (Xenium Human Lung panel): class, Delaunay graph of Instrument segmentation, edges to 50 µm of xenium-lung-2fov (artifact spa-57930e2da45e95e3094f)"
   },
   {
-   "time": "2026-10-20T06:04:30.433Z",
+   "time": "2026-10-20T07:16:03.040Z",
    "action": "spatial",
    "detail": "Moran's I of Instrument segmentation's genes, Delaunay graph of Instrument segmentation, edges to 50 µm of xenium-lung-2fov (artifact spa-300a3e216e6519ac93b4)"
   },
   {
-   "time": "2026-10-20T06:04:30.517Z",
+   "time": "2026-10-20T07:16:03.111Z",
    "action": "view",
    "detail": "Saved view Lung classes"
   }
  ],
  "figures": [
   {
-   "id": "fig-c57156fd8ed54d80",
+   "id": "fig-6819d73cc6474c91",
    "name": "The Lung's results",
    "size": "double",
    "width": 493.23,
@@ -1269,7 +1269,7 @@
     {
      "id": "panel-1",
      "kind": "tissue",
-     "view": "v-4c135a224d3a409c",
+     "view": "v-dfbe75e4466442e7",
      "region": {
       "cx": 750,
       "cy": 300,
@@ -1309,7 +1309,7 @@
      "w": 234.62
     }
    ],
-   "created": "2026-10-20T06:04:30.517Z"
+   "created": "2026-10-20T07:16:03.111Z"
   }
  ]
 }

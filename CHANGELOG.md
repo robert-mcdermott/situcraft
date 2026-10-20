@@ -223,6 +223,16 @@ a result, a certificate checked by making the result again, and a package that o
     its figure's certificate (`0.8.0-lung.certificate.zip`): the certificate verified from the
     bundle, every step made again, and the project reopened, its figure drawn the same as certified.
 
+### Fixed
+
+- **Moran's I the same on every processor.** Its analytical p-values, its variance under
+  randomization and its permutations' spread differed in their last digit between Apple silicon
+  (arm64) and Intel and AMD processors (amd64): the compiler may fuse a product with the addition
+  after it on one and not the other, and the normal distribution's tails came from Go's own
+  `math.Erfc`, fused the same way. Each product is now rounded on its own, and the tails come from
+  SituCraft's own `Erfc`, the same everywhere. Certificates of a Moran's I made on one processor
+  now verify on the other; a test pins its every number on both.
+
 ### Changed
 
 - **The README** says what SituCraft is and does, shows it, and says how to install and start it,

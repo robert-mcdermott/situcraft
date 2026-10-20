@@ -20,6 +20,8 @@ package stats
 import (
 	"math"
 	"sort"
+
+	"situcraft/internal/dmath"
 )
 
 // GammaP is the regularized lower incomplete gamma function P(a, x).
@@ -105,8 +107,11 @@ func ChiSquareP(stat float64, df int) float64 {
 	return GammaQ(float64(df)/2, stat/2)
 }
 
-// NormalCDF is the standard normal distribution function.
-func NormalCDF(z float64) float64 { return 0.5 * math.Erfc(-z/math.Sqrt2) }
+// NormalCDF is the standard normal distribution function, the same bits on every processor:
+// math.Erfc's polynomials may be fused into multiply-adds on some (arm64) and not others (amd64),
+// so a Moran's I's p-value differed in its last digit between them; dmath.Erfc rounds each
+// product on its own.
+func NormalCDF(z float64) float64 { return 0.5 * dmath.Erfc(-z/math.Sqrt2) }
 
 // PoissonPMF is P(N = k) for a Poisson mean m.
 func PoissonPMF(k int, m float64) float64 {

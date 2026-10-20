@@ -2,6 +2,9 @@ package spatial
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
+	"encoding/hex"
 	"math"
 	"sort"
 	"testing"
@@ -304,3 +307,41 @@ func TestKth(t *testing.T) {
 		}
 	}
 }
+
+// Moran's I gives the same bits on every processor: each product is rounded on its own, never fused
+// with an addition (as arm64's compiler may and amd64's does not), and its p-values' normal
+// distribution is dmath's. The digest pinned is of every number of a random tissue's 80 genes over
+// 12,000 cells, the same on both (CI's is amd64); before, the two differed on this tissue.
+func TestMoranTheSameOnEveryProcessor(t *testing.T) {
+	g, _ := randomCase(t, 12000, 4, 7)
+	n := len(g.Rows)
+	genes := 80
+	s := random.New(11, 3)
+	values := make([]float32, genes*n)
+	for k := range values {
+		if s.Float64() < 0.4 {
+			values[k] = float32(dmath.Log(float64(2 + s.IntN(9))))
+		}
+	}
+	m := moran(t, g, values, genes, MoranParams{Weights: "row", Permutations: 99, Seed: 5, Local: 3, LocalPermutations: 49}, 4)
+	h := sha256.New()
+	put := func(v ...float64) {
+		for _, x := range v {
+			binary.Write(h, binary.LittleEndian, math.Float64bits(x))
+		}
+	}
+	put(m.S0, m.S1, m.S2, m.Expected)
+	for _, list := range [][]float64{m.I, m.VarNorm, m.VarRand, m.Z, m.P, m.PermMean, m.PermSD, m.Perm, m.PAdj} {
+		put(list...)
+	}
+	for _, l := range m.Local {
+		for i := range l.I {
+			put(float64(l.I[i]), float64(l.P[i]), float64(l.Class[i]))
+		}
+	}
+	if got := hex.EncodeToString(h.Sum(nil))[:16]; got != pinnedMoran {
+		t.Fatalf("Moran's I's numbers have digest %s, pinned %s", got, pinnedMoran)
+	}
+}
+
+const pinnedMoran = "7a03a10d3441abbe"
