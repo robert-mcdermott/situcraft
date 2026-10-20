@@ -1,5 +1,271 @@
 # Changelog
 
+## 0.8.0 (2026-10-19)
+
+Wave 8 of the [roadmap](situcraft-spec/roadmap.md): figures and a provable record. What others can
+check: figures with scale bars and legends, the methods text, the software and publications behind
+a result, a certificate checked by making the result again, and a package that opens anywhere.
+
+### Added
+
+- **Figures of the tissue (wave 8, slice 1).** The **Reports** view, until now a placeholder, keeps
+  the project's figures.
+  - **A figure** is a page of panels at a journal's column width (85, 114 or 174 mm) or a 16:9
+    slide, its text 7 pt by default and never below 6 pt, its panels lettered A, B, C in reading
+    order; previewed as it will print; listed in the project tree.
+  - **A tissue panel** is a saved view drawn at the panel's size, its region a center and a width
+    in µm: the stains composited from their samples as the Viewer composites them, at 300 dpi; the
+    cells' full-resolution outlines and their fill (a label set, clusters, niches, or a number
+    such as the cell's area); the view's genes' transcripts as points; a scale bar of a round
+    length; and a legend of the stains, the genes and the labels drawn. Each panel says what it
+    shows in words.
+  - **Written** as SVG or PDF (vector, the PDF's text in Helvetica) or PNG (300 dpi), each with the
+    figure's manifest inside: what each panel shows and was drawn from (the dataset by its
+    bundle's run and fingerprint, the saved view, the label set or clustering), what it drew, a
+    digest of its drawing, SituCraft's version and commit, and a fingerprint. The same figure
+    written at the same time is the same bytes in SVG and PDF.
+  - **Read back:** a figure SituCraft wrote is compared with the project: whether its manifest is
+    as written, what changed since in each panel's view, dataset and artifacts, and whether each
+    panel draws the same now.
+  - **Remote control:** `figure`, `write_figure` and `read_figure`.
+  - **Validated:** in Node, the drawing in SVG and PDF, the compositing of stains against hand
+    computed pixels, the scale bar's lengths, the layout and letters, and the manifest in every
+    format, its edits found; in the page, a figure of a saved view of the Lung written in every
+    format and read with the suite's own readers: the same bytes again, one manifest, the stains'
+    pixels the suite's own composite of the tiles' samples and the Viewer's within one level, the
+    scale bar its length, the cells and their fills and the transcripts the suite's own, no text
+    below 6 pt, the PDF's text the SVG's.
+
+- **Figures of results (wave 8, slice 2).** A figure's panels can be plots of results beside the
+  tissue, drawn from the same numbers their views show, at the figure's text size and never below
+  6 pt.
+  - **A QC distribution** of a dataset's cells (transcripts, all transcripts, area, nucleus area),
+    in the QC view's 40 bins, on a log scale if asked, with a filter's thresholds.
+  - **The cells' map** (UMAP), colored by clusters or a label set; many clusters named on the map.
+  - **A spatial answer:** an enrichment's or nearest distances' heat map, a dot where a pair differs
+    from chance, or Moran's I's genes in a pattern as bars.
+  - **A cohort's comparison:** its effects with their intervals (on a log scale for ratios), a
+    label's or statistic's units by group, a volcano with the strongest genes named, or a gene by
+    group; those found red.
+  - **More on the tissue:** post-Xenium images placed by their alignment (through its deformation),
+    an H&E laid over at its opacity and immunofluorescence channels added; the dataset's regions
+    outlined and named; every fill the Viewer draws, certainties, limitations and the review
+    status among them; the scale bar dark over a light H&E.
+  - **Laid out in rows:** the tissue panels of a row keep their images as tall as each other; a
+    plot with more rows than its panel holds at 6 pt says how many it left out.
+  - **The Reports view** adds a panel of any kind and chooses what it draws; remote control's
+    `figure` takes `panels` and `columns`.
+  - **Validated:** in Node, the charts' ticks, bars, forests on log axes, heat maps, volcanoes,
+    dots and maps, and an image composited (at its opacity, between its pixels, a channel added, a
+    deformation followed); in the page, a figure of the Lung's results (every histogram bar the
+    suite's own binning, every map point and cluster, every heat map square's color and dot, the
+    genes in a pattern in order), of the simulated cohort's comparisons (each estimate on the log
+    scale, the found red, a volcano point each gene, a dot each unit), and of the simulated tissue's
+    H&E (60 pixels the suite's own placing of the image through its deformation and transform, and
+    the Viewer's within four levels).
+
+- **What made a result (wave 8, slice 3).** The record of any result: an analysis, a comparison, a
+  summary, a label set, a clustering, a map, a graph, a segmentation, an alignment, a filter or a
+  figure.
+  - **Each step** from the bundles to the result, in an order where each comes after the steps it
+    was made from: its method and version, its parameters and seeds, the software that ran it, the
+    decisions about it (a segmentation promoted, an alignment chosen) and the publications it
+    follows. A cohort's result reaches back through each sample's segmentation, clustering, labels,
+    graph and analyses, as the summary's job recorded them, and through the design.
+  - **The references in one place:** every publication SituCraft cites (the methods' papers, the
+    starter marker sets' atlases, the science page's list), numbered as first cited, each with its
+    DOI; a marker set's or an import's own citation kept as written.
+  - **Shown** in the Reports view, below the figures (choose a result, or **What made it** in the
+    inspector), and **written** as Markdown (the samples' same steps written once), JSON
+    (`situcraft-record`) or BibTeX.
+  - **Remote control:** `record`, and `export` with `what: record`.
+  - The cohort summary's citation names the published muscat paper (Crowell et al. 2020) by its
+    title.
+  - **Validated:** each DOI against a recorded copy of Crossref's record of it (its title,
+    journal, year, volume, first page and first author); every citation the program records, the
+    starter sets' atlases and the science page's references found in the list; in Node, the
+    steps' order, inputs, seeds and references of a sample's and a cohort's results; in the page,
+    the Lung enrichment's record (from the bundle through its segmentation, clustering, marker set,
+    labels and graph, the clustering's seed its parameters', the methods' and atlas's papers cited,
+    the same record in every format) and the simulated cohort's expression comparison's (eight of
+    each sample's steps, the design, the summary, every method's paper).
+
+- **The methods text (wave 8, slice 4).** A methods section written from the record of the whole
+  project, a dataset (and everything made of it) or a result.
+  - **Every kind of step said as what was done**, in paragraphs by topic: the data and its check;
+    images and their alignments (and why one was chosen) and checks; regions; segmentations
+    (expanded, refined, imported, chosen after a comparison, with why) and comparisons; filters
+    and reviews; clusters, maps, marker sets and labels (from markers, a reference, imported,
+    curated, consensus); graphs and every spatial question; a cohort's design, summary and
+    comparisons, with what they found; figures; the software and its versions.
+  - **Each step's parameters and seed** are said, and what it found; a step made the same way for
+    several sections, segmentations or regions is said once, naming each.
+  - **References numbered as first cited**, each with its DOI.
+  - **Shown** in the Reports view (copied, or written as Markdown or BibTeX), in the Data view's
+    Methods (a dataset's) and by **Its methods** in the inspector. Remote control: `methods` takes
+    `result` or `project`, and `export` writes any of them.
+  - **Each method's own citations:** each spatial question now records its own papers, a graph
+    those of its kind, the clusters Reichardt and Bornholdt's resolution, automatic registration
+    Hooke and Jeeves's search, and niches across samples Goltsev's and k-means++'s.
+  - **Validated:** in Node, a result's, a project's and a dataset's methods, each number their
+    records', numbered as first cited; in the page, the Lung enrichment's methods against its
+    records and written as Markdown, and the simulated cohort's expression comparison's and
+    project's.
+
+- **Certificates (wave 8, slice 5).** A certificate of a result, a dataset's results or the whole
+  project: a zip of what it rests on and what it reports.
+  - **What it holds:** the bundles by their files' SHA-256; each step from them to the result, the
+    program's by its job, parameters and the SHA-256 of every file it wrote, the page's own by its
+    record's digest, a figure by its drawing's digests, each with the numbers it reports; the
+    project, the record and the methods.
+  - **Its fingerprint**, the SHA-256 of what it certifies, names it; a README says what it proves,
+    how `situcraft verify` checks it, and what is not made again.
+  - **The same bytes for the same project:** no time of its own, and no path of your computer
+    (a bundle's folder stood in for by its dataset, any other path by its file's name).
+  - **In the Reports view**, **What made a result** is of a result, a dataset or the project, and
+    writes its **Certificate**; remote control: `export` with `what: certificate`, and `record`
+    of a dataset or the project.
+  - **Validated:** in Node, each step's files or digest, no path, the same bytes, edits found;
+    in the page, the Lung enrichment's certificate read by the suite's own zip reader, its
+    fingerprint the suite's own, every file's SHA-256 the program's store's and the bundle's.
+
+- **`situcraft verify` (wave 8, slice 6).** Checks a certificate by making its result again.
+  - **The certificate as certified:** its fingerprint and every file it holds.
+  - **Its bundles found** in the folders given (`--data`) by their files' SHA-256, whatever their
+    folders are named, every file it names checked.
+  - **Each step made again** in a SituCraft of its own (a temporary library, store and derived
+    data, never yours), from the spec it recorded, and every file compared bit for bit; a
+    clustering's, a map's or labels' content without how long its run took.
+  - **The page's records:** each checked by its digest; a design, a filter and a figure computed
+    again in a headless Chrome, Edge, Brave or Chromium.
+  - **Verified, differs or not checkable**, step by step, with exit codes 0, 1 and 2; where it
+    first differs, and which version of SituCraft made a step that differs; `--report` writes it
+    all as JSON.
+  - **Certificates** now record a clustering's, a map's and labels' content digest, list
+    alignments as not made again, and no longer take base64 text beginning with a slash for a
+    path.
+  - **Validated:** in Go, the certificate the page writes read as intact and edits found; in the
+    page, the Lung enrichment verified, tampered with and found to differ at the graph, and not
+    checkable without its bundle, and the results figure drawn again the same; in CI,
+    certificates written on x86-64 verified on arm64.
+
+- **The report (wave 8, slice 7).** Results you choose in one HTML file that opens in any browser,
+  offline, with nothing to install and nothing asked of the network (Reports, **A report**).
+  - **What it holds:** each figure chosen, as an SVG carrying its manifest; a table of each other
+    result's numbers, every number read from the certificate and traced to its place in
+    `certificate.json`; the methods and their references; and the certificate of them all,
+    carried in the file and saved from it.
+  - **It checks itself as it opens:** the certificate it carries (its fingerprint and every file
+    in it), each number shown (the value at its place, written as the report writes it), each
+    figure (the SVG whose SHA-256 the certificate holds) and the methods. It says what it found at
+    the top and marks a number that differs.
+  - **`situcraft verify`** takes a report as it takes a certificate: it makes the results again
+    from the bundles and checks the report against its certificate.
+  - **The same project and choice give the same bytes.**
+  - **Remote control:** `export` with `what: report`, `results` and `title`.
+  - **Validated:** in Node, a report of the fixture with every number traced, its own check run as
+    the report holds it, and a number's value or text, a figure and a paragraph edited, each
+    found; in Go, the report the page writes read as intact, each edit found, and numbers written
+    as JavaScript writes them; in the page, a report of the Lung's results figure and enrichment
+    opened from the disk in a browser of its own, intact, asking nothing of the network, every
+    number the certificate's as the suite reads it, a number's text edited and found, and verified
+    from its bundle; in CI, verified on arm64.
+
+- **Result packages (wave 8, slice 8).** The report and the saved views its figures show, in a
+  folder that opens in any browser without SituCraft (Reports, **Write a package**).
+  - **Its views** each open in a page of their own: the tissue drawn in advance as tiles, from the
+    view's own scale to the image's full resolution, as a figure's tissue panel draws it (the
+    stains, post-Xenium images, cells, fills, transcripts and regions); drag to move, scroll to
+    zoom, with a scale bar and the view's legend.
+  - **Beside them:** the certificate, a README, and every file listed with its SHA-256. Nothing in
+    it asks the network for anything.
+  - **What it leaves out, and the report too:** where files lay on this computer, people's names
+    (each written "Person 1", …) and the notes they wrote on reviews and regions; and, when asked,
+    the samples', subjects' and sections' names ("Sample 1", …). Done to the project before
+    anything is drawn or certified, so everything in it says the same; then every text it holds,
+    the figures and certificate inside the report among them, is searched for each, and it is not
+    written if one is found.
+  - **`situcraft verify`** takes a package's folder or zip. A step whose job was given the names
+    left out is not made again from it, and says so.
+  - **Remote control:** `export` with `what: package` writes a folder, or a zip when the path ends
+    in `.zip`; `names` leaves the names out of a report or a package.
+  - **Validated:** in Node, the redaction (people, notes, names as words, paths first, base64 left
+    alone) and the search for what was left out, the tiles' pyramid and its reader, the package's
+    README and list of files; in Go, a package read by verify as a folder and as a zip, a step made
+    with names left out not made again, a package written as a folder and replaced only when it is
+    one; in the page, a package of the Lung's figures and enrichment with a person's review and
+    note planted and the names left out, written as a folder and a zip (the same files), every
+    file read by the suite and none holding a path, the user, the person, a note or the dataset's
+    name, opened from the disk asking the network for nothing (the report intact, each view drawn
+    and zoomed to its finest tiles), and verified from its bundle; in CI, verified on arm64.
+
+- **Worked examples of the record, and verifying in SituCraft (wave 8, slice 9).**
+  - **Verify a certificate…** in the Reports view (and **Verify** beside a record's Certificate,
+    which certifies it first) makes a certificate's, report's or package's results again in
+    SituCraft itself, as `situcraft verify` does, as a job: the bundles looked for among those this
+    library knows (each project's datasets and the examples), each step made again and every file
+    compared, the page's records computed again in a headless browser, what it found shown step by
+    step.
+  - **A figure of results, and its methods** (the Lung): its cells clustered and labeled, a graph,
+    the classes' enrichment and the genes in a pattern; a view of the tissue made a figure of four
+    panels two columns wide (174 × 157 mm: the view, its 2,298 cells filled by class; the map of
+    11,820 cells; the 7 pairs found; the 15 leading genes of the 162 in a pattern); its methods (23
+    references) and what made it (11 steps from the bundle).
+  - **Results others can check** (the Lung): the figure certified and verified in SituCraft (its 7
+    steps SituCraft made made again from the bundle, every file the same; the figure drawn again
+    the same), its report (23 numbers traced to the certificate) and a package with the dataset's
+    name left out (25 files, the view in 20 tiles, 35 texts searched).
+  - **Remote control:** `verify_certificate` verifies a file, or what made a result; `tour` runs the
+    new worked examples.
+  - **Validated:** in Go, a file that is no certificate refused at once and the bundles looked
+    among; in the page, each worked example walked to its end and every number its cards state
+    checked; the Lung project saved by 0.8.0 (`validation/projects/0.8.0-lung.situcraft.json`) and
+    its figure's certificate (`0.8.0-lung.certificate.zip`): the certificate verified from the
+    bundle, every step made again, and the project reopened, its figure drawn the same as certified.
+
+### Fixed
+
+- **Moran's I the same on every processor.** Its analytical p-values, its variance under
+  randomization and its permutations' spread differed in their last digit between Apple silicon
+  (arm64) and Intel and AMD processors (amd64): the compiler may fuse a product with the addition
+  after it on one and not the other, and the normal distribution's tails came from Go's own
+  `math.Erfc`, fused the same way. Each product is now rounded on its own, and the tails come from
+  SituCraft's own `Erfc`, the same everywhere. Certificates of a Moran's I made on one processor
+  now verify on the other; a test pins its every number on both.
+- **Every certified result the same on every processor.** Certificates made on Apple silicon (arm64)
+  were verified with an x86-64 (amd64) build, for a cohort (70 steps: per-sample graphs and
+  answers, the summary, and the abundance, expression and spatial comparisons) and the Lung's
+  spatial analyses (all six questions, regions compared and a profile across a region's edge).
+  - **What differed:** the cohort comparisons' p-values and intervals (Student's t, the beta,
+    gamma and Poisson distributions) and the band areas across a region's edge, in their last
+    digits.
+  - **What changed:**
+    - each product added to something is rounded on its own wherever results are made: the
+      distributions; the areas of regions and bands; a window's edges, which Ripley's K corrects
+      by; the permutation tests' ties; the refinement's diagnostics; an import's checks; the
+      simulator's centroids;
+    - log-gamma, `log1p`, the inverse error function and the arctangent are SituCraft's own (from
+      fdlibm, and AS 241 for the inverse error function), like the logarithm and exponential
+      before them;
+    - the powers of ten that round a histogram's step and the cohort QC's numbers are settled
+      exactly.
+  - **Tested:** the compiler's arm64 output was searched for every fused multiply-add, each one
+    rounded on its own or found exact (a product by a power of two); tests pin the new functions'
+    digests, and the areas', on both processors.
+- **A cache entry emptied from outside SituCraft** (its files deleted by a cleaner of old temporary
+  files, its folder left) was built again on every request and set aside each time, as if another
+  program had built it first; the Viewer asked again every two seconds. Such an entry is now
+  replaced. A build that leaves its data missing ends as failed and says why, and the Viewer and the
+  QC view say so instead of starting another.
+- **Interrupted graphs, spatial analyses, images, registrations and alignment checks** can be resumed
+  after SituCraft restarts, as other jobs could; a verification can only be discarded (what it was
+  sent is not kept).
+
+### Changed
+
+- **The README** says what SituCraft is and does, shows it, and says how to install and start it,
+  pointing to the guide; what each release added is in this changelog and the roadmap.
+
 ## 0.7.0 (2026-10-19)
 
 Wave 7 of the [roadmap](situcraft-spec/roadmap.md): samples and cohorts. A study's sections in one

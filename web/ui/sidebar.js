@@ -212,6 +212,13 @@ const SECTIONS = [
     meta: (v) => (v.mode === 'qc' ? 'QC' : 'Viewer'),
     empty: 'A place in the tissue with its layers, genes and colors, reopened exactly.',
   },
+  {
+    kind: 'figure', title: 'Figures', icon: 'report',
+    items: (project) => project.figures ?? [],
+    label: (f) => f.name,
+    meta: (f) => `${f.panels.length} panel${f.panels.length === 1 ? '' : 's'}`,
+    empty: 'Saved views drawn at a journal\'s column width, with scale bars and legends, written as SVG, PDF or PNG (the Reports view).',
+  },
 ];
 
 export function mountSidebar(app) {
@@ -251,6 +258,11 @@ export function mountSidebar(app) {
               } else app.showAlignment(item.dataset, item.id);
             }
             if (section.kind === 'view') app.applyView(item);
+            if (section.kind === 'figure') {
+              app.reportsFocus = item.id;
+              app.setMode('reports');
+              app.reportsView?.select(item.id);
+            }
           },
         }, icon(section.itemIcon?.(item) ?? section.icon), h('span.label', section.label(item, app)), h('span.meta', section.meta(item, app)))));
       }

@@ -1,7 +1,7 @@
 {
  "dataSet": "xenium-breast-2fov",
  "situcraft": {
-  "version": "0.2.0",
+  "version": "0.8.0",
   "command": "situcraft refine --seed <seed> <bundle> <folder> (Balanced)",
   "cores": 10
  },
@@ -79,9 +79,9 @@
    "medianAreaUm2": 89.770622,
    "spuriousCoexpression": 1.831728,
    "mecr": 0.049992,
-   "seconds": 82.8,
-   "peakResidentBytes": 293322752,
-   "digest": "1f38b28d557d7c7cff0dad067a8ccd86da1e205c0faae3d8a688ac77622e82ac"
+   "seconds": 112.6,
+   "peakResidentBytes": 296484864,
+   "digest": "cd39807b0f5287457099e54fd96d0bbbfb071d26d1d0d380c79036740fd31da1"
   },
   "situcraft-2": {
    "cells": 7275,
@@ -91,8 +91,8 @@
    "medianAreaUm2": 89.996407,
    "spuriousCoexpression": 1.838433,
    "mecr": 0.05054,
-   "seconds": 86.4,
-   "peakResidentBytes": 297074688,
+   "seconds": 113.1,
+   "peakResidentBytes": 295632896,
    "digest": "d1083763c3e6692328a5c753b53c7a6153365e93fabcc4223ff97eed177e233e"
   }
  },
@@ -514,14 +514,14 @@
   {
    "name": "time (Breast)",
    "tolerance": "under 2 minutes on a laptop",
-   "value": 82.8,
+   "value": 112.6,
    "limit": 120,
    "pass": true
   },
   {
    "name": "memory (Breast)",
    "tolerance": "under 4 GB on a laptop",
-   "value": 293322752,
+   "value": 296484864,
    "limit": 4294967296,
    "pass": true
   }

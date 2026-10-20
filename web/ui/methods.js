@@ -1,13 +1,18 @@
-// The methods paragraph of a dataset (lib/methods.js) as the window shows it, and as remote control
-// asks for it: the filters described are chosen (by default the latest version of each), the data's
-// source cited for an example.
+// The methods text (lib/methods-text.js) as the window shows it and remote control asks for it: of
+// the project, of a dataset (its filters chosen, by default the latest version of each) or of a
+// result, written from its record (the artifacts' manifests read from the program), each dataset's
+// validation report and an example's source. Shown in the Data view (a dataset's) and in the
+// Reports view (any).
 
-import { h, clear, formatCount } from './dom.js';
+import { h, icon, clear, formatCount, downloadBlob } from './dom.js';
 import { showDialog, toast } from './overlays.js';
-import { methodsParagraph } from '../lib/methods.js';
-import { describeCondition } from '../lib/filters.js';
 import { exampleSource } from '../lib/examples.js';
-import { promotedSegmentation } from '../lib/segmentations.js';
+import { gatherManifests, itemOf, recordableResults, resultRecord, scopeRoots } from '../lib/record.js';
+import { scopeOfValue, scopeOptions, scopeValue } from './scopes.js';
+import { methodsBibTeX, methodsMarkdown, methodsPlain, methodsText } from '../lib/methods-text.js';
+import { manifestOf } from './manifests.js';
+import { redact } from '../lib/redact.js';
+import { digestOf } from '../lib/certificate.js';
 
 // The dataset's filters, and the latest version of each.
 export function datasetFilters(project, dataset) {
@@ -17,40 +22,96 @@ export function datasetFilters(project, dataset) {
   return { filters, latest: [...latest.values()] };
 }
 
-// The paragraph and its references, describing the filters given (artifacts).
-export async function writeMethods(app, dataset, report, filters) {
-  if (!app.examples.list()) await app.examples.refresh();
-  const source = exampleSource(app.examples.forDataset(dataset));
-  const methods = report?.summary?.segmentationMethods ?? [];
-  const described = filters.map((f) => ({ ...f, conditions: f.conditions.map((c) => ({ ...c, text: describeCondition(c, methods) })) }));
-  // The dataset's default segmentation, when another than the instrument's was chosen.
-  let segmentation = null;
-  const promoted = promotedSegmentation(app.store.project, dataset.id);
-  if (promoted && promoted.record.source !== 'instrument') {
-    const d = promoted.decision;
-    const cmp = d.comparison ? app.store.project.artifacts.find((a) => a.kind === 'comparison' && a.id === d.comparison) : null;
-    const otherId = cmp ? (cmp.a === promoted.record.id ? cmp.b : cmp.a) : null;
-    const other = otherId ? app.store.project.artifacts.find((a) => a.kind === 'segmentation' && a.id === otherId) : null;
-    segmentation = { record: promoted.record, decision: d, comparison: cmp ? { other: other ? other.name.toLowerCase().replace(/^instrument segmentation$/, 'the instrument\'s segmentation') : 'another segmentation', citation: cmp.method?.citation ?? '' } : null };
+// The record of a scope and its methods: { project, manifests, record (without a time), methods }.
+// scope: { kind: 'project' }, { kind: 'dataset', id, filters (ids: those described; the latest
+// version of each if not given) }, { kind: 'result', id } or { kind: 'results', ids, name } (a
+// report's, its methods as a result's). options: { redaction (lib/redact.js: what a report or a
+// package leaves out of the manifests and validation reports read; the project given is redacted
+// already) }; then answers also redactedSpecs, the IDs of the steps whose job's spec it changed.
+export async function recordAndMethods(app, scope, { redaction = null } = {}) {
+  const project = app.store.project;
+  const { roots, subject } = scopeRoots(project, scope);
+  let manifests = await gatherManifests(project, roots, manifestOf);
+  const redactedSpecs = new Set();
+  if (redaction) {
+    const left = new Map();
+    for (const [id, m] of manifests) {
+      const r = m ? redact(m, redaction) : m;
+      if (m && digestOf(redaction.paths(m.lineage?.job?.spec ?? null)) !== digestOf(r.lineage?.job?.spec ?? null)) redactedSpecs.add(id);
+      left.set(id, r);
+    }
+    manifests = left;
   }
-  return methodsParagraph({ dataset, report, filters: described, program: { version: app.version, commit: app.commit }, source, segmentation });
+  const record = resultRecord(project, roots, { manifests, program: { version: app.version ?? '', commit: app.commit ?? '' }, subject });
+  // Each dataset's validation report (its panel's genes, the transcripts counted, the instrument's
+  // segmentation methods) and, for an example, its source.
+  if (!app.examples.list()) await app.examples.refresh().catch(() => null);
+  const reports = {};
+  const sources = {};
+  for (const s of record.steps.filter((x) => x.kind === 'dataset')) {
+    const dataset = itemOf(project, s.id).record;
+    const item = app.bundles.link(dataset.id)?.item ?? app.bundles.itemByPath(dataset.path);
+    reports[dataset.id] = item ? await app.bundles.validate(item).catch(() => null) : null;
+    sources[dataset.id] = exampleSource(app.examples.forDataset(dataset));
+    if (redaction) [reports[dataset.id], sources[dataset.id]] = [redact(reports[dataset.id], redaction), redact(sources[dataset.id], redaction)];
+  }
+  return { project, manifests, record, methods: methodsText(project, record, { reports, sources, scope: scope.kind === 'results' ? 'result' : scope.kind }), redactedSpecs };
 }
 
-// The paragraph as Markdown, with its references.
-export function methodsMarkdown(dataset, written) {
-  return `# Methods: ${dataset.name}\n\n${written.text}\n\n## References\n\n${written.references.map((r) => `${r.replace(/^\[(\d+)\]\s*/, '$1. ')}`).join('\n')}\n`;
+// The methods text of a scope (as recordAndMethods).
+export async function writeMethods(app, scope) {
+  return (await recordAndMethods(app, scope)).methods;
 }
 
-export async function showMethods(app, dataset, report, { chosen: initial = null } = {}) {
+export const METHODS_FORMATS = {
+  markdown: { ext: 'md', mime: 'text/markdown', label: 'Markdown', write: methodsMarkdown },
+  text: { ext: 'txt', mime: 'text/plain', label: 'Text', write: methodsPlain },
+  bibtex: { ext: 'bib', mime: 'application/x-bibtex', label: 'BibTeX', write: methodsBibTeX },
+};
+
+export function methodsFileName(m, format) {
+  const base = m.subject.name.replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 80) || m.subject.id;
+  return `methods-${base}.${METHODS_FORMATS[format].ext}`;
+}
+
+// The text's paragraphs (each under its heading) and its references, as the window shows them.
+function methodsBody(m) {
+  if (!m.paragraphs.length) return [h('p.muted', 'Nothing to describe yet: add a dataset, or make a result.')];
+  return [
+    h('div.methods-text', ...m.paragraphs.map((p) => h('section.methods-paragraph', { 'data-topic': p.topic }, h('h4', p.heading), h('p', p.text)))),
+    m.references.length ? h('div.section-title', 'References') : null,
+    m.references.length ? h('ol.methods-refs', ...m.references.map((r) => h('li', { value: r.n }, r.text, r.doi && !r.text.includes(r.doi) ? ` doi:${r.doi}` : ''))) : null,
+  ];
+}
+
+async function copyMethods(m) {
+  try {
+    await navigator.clipboard.writeText(methodsPlain(m));
+    toast('Copied the methods and their references.', { kind: 'ok' });
+    return true;
+  } catch {
+    toast('The clipboard is not available: select the text and copy it.', { kind: 'error' });
+    return false;
+  }
+}
+
+function writeButtons(get) {
+  return Object.entries(METHODS_FORMATS).filter(([id]) => id !== 'text').map(([id, f]) => h('button.btn.small', { type: 'button', onclick: () => {
+    const m = get();
+    if (!m) return;
+    downloadBlob(new Blob([f.write(m)], { type: f.mime }), methodsFileName(m, id));
+  } }, icon('download'), f.label));
+}
+
+// A dataset's methods in a dialog (the Data view's Methods), its filters to describe chosen.
+export async function showMethods(app, dataset, { chosen: initial = null } = {}) {
   const { filters, latest } = datasetFilters(app.store.project, dataset);
   const chosen = new Set((initial ?? latest).map((f) => f.id));
-  const text = h('p.methods-text');
-  const refs = h('ol.methods-refs');
+  const body = h('div.methods-body', h('p.muted', 'Writing…'));
   let current = null;
   async function write() {
-    current = await writeMethods(app, dataset, report, filters.filter((f) => chosen.has(f.id)));
-    text.textContent = current.text;
-    clear(refs).append(...current.references.map((r) => h('li', r.replace(/^\[\d+\]\s*/, ''))));
+    current = await writeMethods(app, { kind: 'dataset', id: dataset.id, filters: filters.filter((f) => chosen.has(f.id)).map((f) => f.id) });
+    clear(body).append(...methodsBody(current));
   }
   await write();
   const choices = filters.length ? h('div.methods-filters', h('b', 'Filters to describe'),
@@ -60,24 +121,74 @@ export async function showMethods(app, dataset, report, { chosen: initial = null
     title: `Methods: ${dataset.name}`,
     width: 'wide',
     content: [
-      h('p.muted', 'Written from what the project records of this dataset and SituCraft\'s version. Check it against what you did, and add what was done elsewhere.'),
-      text,
-      h('div.section-title', 'References'),
-      refs,
+      h('p.muted', 'Written from what the project records of this dataset and everything made of it, step by step, with SituCraft\'s version. Check it against what you did, and add what was done elsewhere.'),
+      body,
       choices,
+      h('div.btn-row', h('span.field-label', 'Write it as'), ...writeButtons(() => current)),
     ],
     buttons: [
       { label: 'Close', ghost: true },
-      { label: 'Copy', primary: true, onClick: async () => {
-        try {
-          await navigator.clipboard.writeText(`${current.text}\n\n${current.references.join('\n')}\n`);
-          toast('Copied the paragraph and its references.', { kind: 'ok' });
-        } catch {
-          toast('The clipboard is not available: select the text and copy it.', { kind: 'error' });
-          return false;
-        }
-        return undefined;
-      } },
+      { label: 'Copy', primary: true, onClick: async () => ((await copyMethods(current)) ? undefined : false) },
     ],
   });
+}
+
+// The Reports view's section: the methods of the project, a dataset or a result, chosen. Answers {
+// element, update(), show(scope) }.
+export function mountMethods(app) {
+  const picker = h('select.input.small', { 'aria-label': 'What the methods describe', onchange: (e) => show(scopeOfValue(e.target.value)) });
+  const body = h('div.record-body');
+  const element = h('div.methods-section',
+    h('div.section-title', 'Methods'),
+    h('p.muted.reports-intro', 'A methods section written from the record: every step from the bundles, said as what was done, with its parameters, seeds and software, in paragraphs by topic, its references numbered as first cited. Of the whole project, a dataset (and everything made of it) or a result. Check it against what you did, and add what was done elsewhere.'),
+    h('label.field.record-picker', h('span', 'Of'), picker),
+    body);
+  let current = 'project';
+  let written = null;
+  let shape = '';
+  let generation = 0;
+  function fillPicker() {
+    const p = app.store.project;
+    const next = JSON.stringify([p.name, p.datasets.map((d) => [d.id, d.name]), recordableResults(p)]);
+    if (next === shape) return false;
+    shape = next;
+    clear(picker).append(...scopeOptions(p, current));
+    return true;
+  }
+
+  async function show(scope, { scroll = false } = {}) {
+    current = scopeValue(scope);
+    picker.value = current;
+    const mine = (generation += 1);
+    clear(body).append(h('p.muted', 'Writing…'));
+    try {
+      const m = await writeMethods(app, scope);
+      if (mine !== generation) return null;
+      written = m;
+      clear(body).append(
+        h('div.btn-row', h('button.btn.small.primary', { type: 'button', onclick: () => copyMethods(m) }, icon('copy'), 'Copy'), h('span.field-label', 'Write it as'), ...writeButtons(() => written)),
+        ...methodsBody(m));
+      element.dataset.methods = current;
+      if (scroll) element.scrollIntoView?.({ block: 'start' });
+      return m;
+    } catch (error) {
+      if (mine === generation) clear(body).append(h('p.muted', `The methods could not be written: ${error.message}`));
+      return null;
+    }
+  }
+
+  fillPicker();
+  show(scopeOfValue(current));
+  return {
+    element,
+    // Written again when the project's results change.
+    update() {
+      if (fillPicker()) {
+        if (current !== 'project' && ![...picker.options].some((o) => o.value === current)) current = 'project';
+        show(scopeOfValue(current));
+      }
+    },
+    show,
+    shown: () => current,
+  };
 }

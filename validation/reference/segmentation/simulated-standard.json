@@ -1,7 +1,7 @@
 {
  "dataSet": "simulated-standard",
  "situcraft": {
-  "version": "0.2.0",
+  "version": "0.8.0",
   "command": "situcraft refine --seed <seed> <bundle> <folder> (Balanced)",
   "cores": 10
  },
@@ -79,8 +79,8 @@
    "medianAreaUm2": 53.465,
    "spuriousCoexpression": 2.015307,
    "mecr": null,
-   "seconds": 22.7,
-   "peakResidentBytes": 111443968,
+   "seconds": 37.1,
+   "peakResidentBytes": 113311744,
    "digest": "99699a65212503b9881a4a490b8ad45383fdf0cd76658b26e9043973eed5a9d2"
   },
   "situcraft-2": {
@@ -91,8 +91,8 @@
    "medianAreaUm2": 53.735939,
    "spuriousCoexpression": 2.018018,
    "mecr": null,
-   "seconds": 23.7,
-   "peakResidentBytes": 111591424,
+   "seconds": 37.9,
+   "peakResidentBytes": 114982912,
    "digest": "cc4594c96b7224581950cd61fae13e454edf1115bd4c8566abc830c2b58f7a55"
   },
   "truth": {

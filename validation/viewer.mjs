@@ -61,22 +61,143 @@
 // (ui/mode-viewer.js) and window.situcraftAlignment (ui/mode-alignment.js). Run by
 // validation/run.mjs's "viewer" suite.
 
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { findChrome, launch, sleep } from './cdp.mjs';
-import { inflateSync } from 'node:zlib';
+import { inflateRawSync, inflateSync } from 'node:zlib';
 import { attributeRange, readCells } from '../web/lib/viewer-data.js';
 import { contingency } from '../web/lib/clusterings.js';
 import { certaintyColor, readSegCells } from '../web/lib/segview.js';
 import { colormapLUT, hexToRgb } from '../web/lib/colormaps.js';
 import { placePoint } from '../web/lib/transforms.js';
-import { invert } from '../web/lib/overlays.js';
+import { invert, readInverseField } from '../web/lib/overlays.js';
+import { divergingColor } from '../web/lib/spatial.js';
+import { log as dlog } from '../web/lib/dmath.js';
+
+// A figure's SVG read by the suite (wave 8): a lettered panel's part of it (from its group to the
+// next panel's), and an image embedded in a part decoded (8-bit RGBA, unfiltered rows, as
+// SituCraft writes them).
+function figurePanelSvg(svg, letter) {
+  const start = svg.indexOf(`aria-label="Panel ${letter}"`);
+  if (start < 0) return '';
+  const next = svg.indexOf('aria-label="Panel ', start + 10);
+  return svg.slice(start, next < 0 ? svg.length : next);
+}
+function embeddedImage(part) {
+  const m = /href="data:image\/png;base64,([^"]+)"/.exec(part);
+  if (!m) return null;
+  const b = Buffer.from(m[1], 'base64');
+  const chunks = [];
+  for (let at = 8; at + 8 <= b.length;) {
+    const n = b.readUInt32BE(at);
+    chunks.push({ type: b.toString('latin1', at + 4, at + 8), data: b.subarray(at + 8, at + 8 + n) });
+    at += 12 + n;
+  }
+  const head = chunks.find((x) => x.type === 'IHDR').data;
+  const width = head.readUInt32BE(0);
+  const height = head.readUInt32BE(4);
+  const raw = inflateSync(Buffer.concat(chunks.filter((x) => x.type === 'IDAT').map((x) => x.data)));
+  const rgba = new Uint8Array(width * height * 4);
+  for (let y = 0; y < height; y += 1) {
+    if (raw[y * (width * 4 + 1)] !== 0) return { width, height, filtered: true };
+    rgba.set(raw.subarray(y * (width * 4 + 1) + 1, (y + 1) * (width * 4 + 1)), y * width * 4);
+  }
+  return { width, height, rgba };
+}
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+// What made a result, as the suite reads it (wave 8, slice 3): whether each step comes after the
+// steps it was made from, the steps' kinds, the registry's keys among the references, the Markdown's
+// numbered references and the BibTeX's entries.
+function recordFacts(rec, md = '', bib = '') {
+  const steps = rec?.steps ?? [];
+  return {
+    ordered: steps.length > 0 && steps.every((s, i) => s.n === i + 1 && s.inputs.every((k) => k < s.n)),
+    kinds: steps.map((s) => s.kind),
+    keys: (rec?.references ?? []).map((r) => r.key).filter(Boolean),
+    numbered: (rec?.references ?? []).every((r, i) => r.n === i + 1) && steps.every((s) => s.references.every((n) => n >= 1 && n <= rec.references.length)),
+    mdRefs: (md.split('\n## References\n')[1] ?? '').split('\n').filter((l) => /^\d+\. /.test(l)).length,
+    bibEntries: [...bib.matchAll(/^@\w+\{([^,]+),$/gm)].map((m) => m[1]),
+  };
+}
+
+// A methods text as the suite reads it (wave 8, slice 4): its citations in the order they appear
+// ([1, 3–5] is 1, 3, 4, 5), and whether its references are numbered as first cited, every one
+// cited.
+function methodsFacts(text, references) {
+  const cited = [];
+  for (const m of String(text ?? '').matchAll(/\[([\d,–\s]+)\]/g)) {
+    for (const part of m[1].split(/,\s*/)) {
+      const [a, b] = part.split('–').map(Number);
+      for (let n = a; n <= (b ?? a); n += 1) cited.push(n);
+    }
+  }
+  const firsts = [...new Set(cited)];
+  return { numbered: firsts.length > 0 && firsts.every((n, i) => n === i + 1) && firsts.length === (references ?? []).length, cited: firsts.length };
+}
+
+// Canonical JSON as the suite writes it (every object's keys sorted, nothing undefined), and a zip
+// read by the suite's own reader (its central directory, each entry stored or deflated): name →
+// bytes (wave 8, slice 5).
+const canonicalOf = (v) => (Array.isArray(v) ? `[${v.map((x) => canonicalOf(x === undefined ? null : x)).join(',')}]` : v && typeof v === 'object' ? `{${Object.keys(v).filter((k) => v[k] !== undefined).sort().map((k) => `${JSON.stringify(k)}:${canonicalOf(v[k])}`).join(',')}}` : JSON.stringify(v ?? null));
+function unzipOwn(buf) {
+  let end = buf.length - 22;
+  while (end >= 0 && buf.readUInt32LE(end) !== 0x06054b50) end -= 1;
+  if (end < 0) throw new Error('not a zip');
+  const out = new Map();
+  let at = buf.readUInt32LE(end + 16);
+  for (let i = 0; i < buf.readUInt16LE(end + 10); i += 1) {
+    const method = buf.readUInt16LE(at + 10);
+    const packed = buf.readUInt32LE(at + 20);
+    const nameLength = buf.readUInt16LE(at + 28);
+    const local = buf.readUInt32LE(at + 42);
+    const name = buf.toString('utf8', at + 46, at + 46 + nameLength);
+    const start = local + 30 + buf.readUInt16LE(local + 26) + buf.readUInt16LE(local + 28);
+    const raw = buf.subarray(start, start + packed);
+    out.set(name, method === 8 ? inflateRawSync(raw) : Buffer.from(raw));
+    at += 46 + nameLength + buf.readUInt16LE(at + 30) + buf.readUInt16LE(at + 32);
+  }
+  return out;
+}
+
+// A zip written by the suite's own writer (wave 8, slice 6): each entry stored, with its CRC-32.
+const CRC = Array.from({ length: 256 }, (_, n) => {
+  let c = n;
+  for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+  return c >>> 0;
+});
+const crcOf = (buf) => {
+  let c = 0xffffffff;
+  for (const b of buf) c = CRC[(c ^ b) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+};
+function zipOwn(entries) {
+  const locals = [];
+  const centrals = [];
+  let offset = 0;
+  for (const [name, data] of entries) {
+    const body = Buffer.isBuffer(data) ? data : Buffer.from(data);
+    const nameBuf = Buffer.from(name);
+    const head = Buffer.alloc(30);
+    head.writeUInt32LE(0x04034b50, 0); head.writeUInt16LE(20, 4); head.writeUInt16LE(0x0800, 6);
+    head.writeUInt32LE(crcOf(body), 14); head.writeUInt32LE(body.length, 18); head.writeUInt32LE(body.length, 22); head.writeUInt16LE(nameBuf.length, 26);
+    const central = Buffer.alloc(46);
+    central.writeUInt32LE(0x02014b50, 0); central.writeUInt16LE(20, 4); central.writeUInt16LE(20, 6); central.writeUInt16LE(0x0800, 8);
+    central.writeUInt32LE(crcOf(body), 16); central.writeUInt32LE(body.length, 20); central.writeUInt32LE(body.length, 24); central.writeUInt16LE(nameBuf.length, 28); central.writeUInt32LE(offset, 42);
+    locals.push(head, nameBuf, body);
+    centrals.push(central, nameBuf);
+    offset += 30 + nameBuf.length + body.length;
+  }
+  const size = centrals.reduce((n, b) => n + b.length, 0);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(entries.length, 8); end.writeUInt16LE(entries.length, 10); end.writeUInt32LE(size, 12); end.writeUInt32LE(offset, 16);
+  return Buffer.concat([...locals, ...centrals, end]);
+}
+
 const BUNDLES = ['xenium-lung-2fov', 'xenium-breast-2fov'];
 const BUDGET = { fps: 30, revisitMs: 500, queryMs: 500 };
 
@@ -632,6 +753,241 @@ export async function viewerSuite({ check, MissingData, verbose }) {
           return { wrong, size, kind: st.color.kind, legend: document.querySelectorAll('.cm-legend-item').length };
         })()`);
         check('viewer', 'remote control: label_cells labels the Lung cells from the panel\'s starter set; the tissue shows each cell in its label\'s color, and a cluster selected on the labels\' colors is its cells', labeled.ok && shownLabels.ok && byLabels.ok ? `${labeled.message} ${JSON.stringify(labelFill)} ${JSON.stringify(stillClusters)}` : labeled.message ?? shownLabels.message ?? byLabels.message, labeled.ok && labeled.data.cells.analyzed === 11820 && labelFill?.segCells === 11898 && labelFill.wrong === 0 && labelFill.clear === 78 && labelFill.grey > 0 && labelFill.legend > 2 && stillClusters.kind === 'labels' && stillClusters.wrong === 0 && stillClusters.size > 0 && stillClusters.legend > 2, 'every cell in its label\'s color, the unlabeled gray, the 78 not analyzed clear; the cluster\'s cells exactly');
+        // Figures (wave 8, slice 1): a saved view of the Lung (the DAPI stain, three genes, the cells
+        // outlined and filled by their lineage) made a figure's panel, written as SVG, PDF, PNG and
+        // its manifest. Read by the suite's own readers: the same bytes when written again at the
+        // same time; the manifest the same in every file, its fingerprint the suite's own; the
+        // stains' pixels in the SVG the suite's own composite of the tiles' samples (each pixel the
+        // sample under its center, windowed, colored), and the Viewer's pixels the same composite
+        // within one level; the scale bar's length in µm; the cells drawn those whose outlines meet
+        // the region, each filled as the Viewer fills it; the transcripts those of the genes in the
+        // region; no text below 6 pt, the PDF's text the SVG's.
+        {
+          await act('show_tissue', { center: [750, 300], um_per_pixel: 0.4, genes: ['EPCAM', 'PLVAP', 'CD68'], fill: 'labels:lineage', opacity: 0.5, outlines: true, nuclei: false, transcripts: true });
+          await act('save_view', { name: 'A figure of the Lung' });
+          const made = await act('figure', { name: 'Figure 1', views: ['A figure of the Lung'], size: 'single', width_um: 300 });
+          const time = '2026-10-19T12:00:00Z';
+          const out = (name) => join(work, name);
+          const wrote = {};
+          for (const [name, format] of [['figure.svg', 'svg'], ['figure-again.svg', 'svg'], ['figure.pdf', 'pdf'], ['figure-again.pdf', 'pdf'], ['figure.png', 'png'], ['figure.json', 'json']]) wrote[name] = await act('write_figure', { name: 'Figure 1', path: out(name), format, time, overwrite: true });
+          const bytes = (name) => (existsSync(out(name)) ? readFileSync(out(name)) : Buffer.alloc(0));
+          const svg = bytes('figure.svg').toString('utf8');
+          const pdf = bytes('figure.pdf');
+          const png = bytes('figure.png');
+          const manifest = JSON.parse(bytes('figure.json').toString('utf8') || 'null');
+          // The suite's own readers of the manifest in each file.
+          const canonical = (v) => (Array.isArray(v) ? `[${v.map((x) => canonical(x === undefined ? null : x)).join(',')}]` : v && typeof v === 'object' ? `{${Object.keys(v).filter((k) => v[k] !== undefined).sort().map((k) => `${JSON.stringify(k)}:${canonical(v[k])}`).join(',')}}` : JSON.stringify(v ?? null));
+          const fromSVG = (() => { const m = /<metadata id="situcraft-figure"><!\[CDATA\[([\s\S]*?)\]\]><\/metadata>/.exec(svg); return m ? JSON.parse(m[1]) : null; })();
+          const fromPDF = (() => {
+            const text = pdf.toString('latin1');
+            const m = /\/Type \/EmbeddedFile[^>]*\/Length (\d+)[^]*?stream\n/.exec(text);
+            return m ? JSON.parse(pdf.subarray(m.index + m[0].length, m.index + m[0].length + Number(m[1])).toString('utf8')) : null;
+          })();
+          const pngChunks = (b) => {
+            const out2 = [];
+            for (let at = 8; at + 8 <= b.length;) {
+              const n = b.readUInt32BE(at);
+              out2.push({ type: b.toString('latin1', at + 4, at + 8), data: b.subarray(at + 8, at + 8 + n) });
+              at += 12 + n;
+            }
+            return out2;
+          };
+          const fromPNG = (() => {
+            const c = pngChunks(png).find((x) => x.type === 'iTXt' && x.data.toString('latin1', 0, 16) === 'situcraft-figure');
+            if (!c) return null;
+            let p = c.data.indexOf(0) + 3;
+            p = c.data.indexOf(0, p) + 1;
+            p = c.data.indexOf(0, p) + 1;
+            return JSON.parse(c.data.subarray(p).toString('utf8'));
+          })();
+          const phys = pngChunks(png).find((x) => x.type === 'pHYs');
+          const dpiOfPng = phys ? Math.round(phys.data.readUInt32BE(0) * 0.0254) : null;
+          const { fingerprint, ...rest } = manifest ?? {};
+          const fingerprintOwn = createHash('sha256').update(canonical(rest)).digest('hex');
+          const panel = manifest?.panels?.[0];
+          const facts = panel?.facts;
+          // The stains' raster in the SVG, decoded by the suite (8-bit RGBA, rows unfiltered, as
+          // SituCraft writes them).
+          const raster = (() => {
+            const m = /<image x="[^"]*" y="[^"]*" width="[^"]*" height="[^"]*" preserveAspectRatio="none" image-rendering="pixelated" href="data:image\/png;base64,([^"]+)"/.exec(svg);
+            if (!m) return null;
+            const b = Buffer.from(m[1], 'base64');
+            const chunks = pngChunks(b);
+            const head = chunks.find((x) => x.type === 'IHDR').data;
+            const width = head.readUInt32BE(0);
+            const height = head.readUInt32BE(4);
+            const raw = inflateSync(Buffer.concat(chunks.filter((x) => x.type === 'IDAT').map((x) => x.data)));
+            const rgba = new Uint8Array(width * height * 4);
+            for (let y = 0; y < height; y += 1) {
+              if (raw[y * (width * 4 + 1)] !== 0) return { width, height, filtered: true };
+              rgba.set(raw.subarray(y * (width * 4 + 1) + 1, (y + 1) * (width * 4 + 1)), y * width * 4);
+            }
+            return { width, height, rgba };
+          })();
+          // The suite's own composite: the view's DAPI, from the tiles' samples at the level drawn.
+          await act('open_view', { view: 'A figure of the Lung' });
+          const viewNow = await chrome.eval(`(() => { const p = window.situcraft.store.project; const v = p.views.find((x) => x.name === 'A figure of the Lung'); const desc = window.situcraftViewer.desc; return { view: v, grid: desc.grid, image: desc.entries.image, channels: desc.channels.map((c) => c.name) }; })()`);
+          const dapi = viewNow.view.channels.find((c) => c.name === 'DAPI');
+          const sampleAt = async (level) => {
+            const g = viewNow.grid;
+            const um = g.pixelSize * 2 ** level;
+            const side = g.tile * um;
+            const tiles = new Map();
+            return async (x, y) => {
+              const tx = Math.floor(x / side);
+              const ty = Math.floor(y / side);
+              const key = `${tx},${ty}`;
+              if (!tiles.has(key)) {
+                const r = await fetch(`${url}/api/cache/${viewNow.image}/image/${viewNow.channels.indexOf('DAPI')}/${level}/${tx}/${ty}`);
+                tiles.set(key, r.ok ? { w: Number(r.headers.get('X-Tile-Width')), h: Number(r.headers.get('X-Tile-Height')), b: new Uint8Array(await r.arrayBuffer()) } : null);
+              }
+              const t = tiles.get(key);
+              const sx = Math.floor(x / um) - tx * g.tile;
+              const sy = Math.floor(y / um) - ty * g.tile;
+              if (!t || sx < 0 || sy < 0 || sx >= t.w || sy >= t.h) return 0;
+              return t.b[sy * t.w + sx] + 256 * t.b[t.w * t.h + sy * t.w + sx];
+            };
+          };
+          const shade = (v) => {
+            const n = Math.min(1, Math.max(0, (v - dapi.window[0]) / Math.max(dapi.window[1] - dapi.window[0], 1)));
+            const c = [1, 3, 5].map((i) => Number.parseInt(dapi.color.slice(i, i + 2), 16) / 255);
+            return c.map((k) => Math.round(Math.min(1, k * n) * 255));
+          };
+          let pixelsOff = -1;
+          if (raster?.rgba && facts?.raster && dapi.gamma === 1) {
+            const at = await sampleAt(facts.raster.level);
+            const r = facts.region;
+            pixelsOff = 0;
+            for (let py = 0; py < raster.height; py += 1) {
+              for (let px = 0; px < raster.width; px += 1) {
+                const want = shade(await at(r.x0 + (px + 0.5) * ((r.x1 - r.x0) / raster.width), r.y0 + (py + 0.5) * ((r.y1 - r.y0) / raster.height)));
+                const i = 4 * (py * raster.width + px);
+                if (raster.rgba[i] !== want[0] || raster.rgba[i + 1] !== want[1] || raster.rgba[i + 2] !== want[2]) pixelsOff += 1;
+              }
+            }
+          }
+          // The Viewer's own pixels, the stain alone, against the same composite at its level.
+          await act('show_tissue', { center: [750, 300], um_per_pixel: 0.3, transcripts: false, outlines: false, fill: 'none' });
+          const probes = await chrome.eval(`(async () => {
+            const v = window.situcraftViewer;
+            await v.settled();
+            const r = v.renderer;
+            const [w, h] = r.size();
+            const { screenToWorld } = await import('/lib/viewport.js');
+            const level = v.plan().level;
+            // The stain alone: a cell selected earlier, or cells chosen, are not drawn over it.
+            const kept = [r.selected, r.highlight];
+            r.selected = null;
+            r.highlight = null;
+            const out = [];
+            for (const [fx, fy] of [[0.2, 0.2], [0.35, 0.6], [0.5, 0.5], [0.62, 0.31], [0.71, 0.77], [0.8, 0.45], [0.27, 0.83], [0.9, 0.15], [0.45, 0.9]]) {
+              const sx = Math.floor(w * fx), sy = Math.floor(h * fy);
+              const [x, y] = screenToWorld(r.camera, w, h, sx + 0.5, sy + 0.5);
+              out.push({ x, y, color: r.readColor(sx, sy).slice(0, 3) });
+            }
+            [r.selected, r.highlight] = kept;
+            return { level, out };
+          })()`);
+          const atViewer = await sampleAt(probes.level);
+          let viewerOff = 0;
+          for (const p of probes.out) {
+            const want = shade(await atViewer(p.x, p.y));
+            if (want.some((c, k) => Math.abs(c - p.color[k]) > 1)) viewerOff += 1;
+          }
+          await act('open_view', { view: 'A figure of the Lung' });
+          // The drawing in the SVG: the scale bar, the outlines, the fills, the points, the text.
+          // The tissue's group (its clip, no group inside it), not the legend after it.
+          const groupSvg = (() => { const from = svg.slice(svg.indexOf('aria-label="The tissue of')); return from.slice(0, from.indexOf('</g>')); })();
+          const bar = /<rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="1.5" fill="#ffffff"\/>\s*<text[^>]*>([^<]+)<\/text>/.exec(groupSvg);
+          const barUm = bar ? Number(bar[3]) * facts.umPerPt : null;
+          const outline = /<path d="([^"]+)" fill="none" stroke="#e8e8e8"/.exec(groupSvg);
+          const subpaths = (d) => (d.match(/M/g) ?? []).length;
+          const fills = [...groupSvg.matchAll(/<path d="([^"]+)" fill="(#[0-9a-f]{6})"(?: opacity="([\d.]+)")?\/>/g)].map((m) => ({ color: m[2], opacity: Number(m[3] ?? 1), count: subpaths(m[1]) }));
+          const circles = (groupSvg.match(/<circle /g) ?? []).length;
+          const sizes = [...svg.matchAll(/font-size="([\d.]+)"/g)].map((m) => Number(m[1]));
+          const svgTexts = [...svg.matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map((m) => m[1].replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"'));
+          // The PDF's text, from its content stream (the suite inflates it).
+          const pdfText = pdf.toString('latin1');
+          const streamAt = pdfText.indexOf('<< /Filter /FlateDecode /Length');
+          const ops = (() => {
+            const m = /\/Length (\d+) >>\nstream\n/.exec(pdfText.slice(streamAt));
+            if (!m) return '';
+            const start = streamAt + m.index + m[0].length;
+            return inflateSync(pdf.subarray(start, start + Number(m[1]))).toString('latin1');
+          })();
+          const pdfSizes = [...ops.matchAll(/\/F[12] ([\d.]+) Tf/g)].map((m) => Number(m[1]));
+          const pdfStrings = [...ops.matchAll(/\(((?:[^()\\]|\\.)*)\) Tj/g)].map((m) => m[1].replace(/\\(\d{3})/g, (_, o) => String.fromCharCode(Number.parseInt(o, 8))).replace(/\\(.)/g, '$1'));
+          // The cells the region shows, from the outlines' tiles (each polygon once), and the
+          // Viewer's fill of each.
+          const cellsShown = await chrome.eval(`(async () => {
+            const v = window.situcraftViewer;
+            const desc = v.desc;
+            const r = ${JSON.stringify(facts?.region ?? null)};
+            const { readPolygonTile } = await import('/lib/polygons.js');
+            const g = desc.grid;
+            const side = g.tile * g.pixelSize;
+            const info = desc.geometry.find((s) => s.name === 'cells');
+            const reach = info.maxExtent;
+            const base = desc.polygonsBase ?? '/api/cache/' + desc.entries.geometry + '/polygons';
+            const seen = new Set();
+            const across = Math.ceil(g.width / g.tile), down = Math.ceil(g.height / g.tile);
+            for (let ty = Math.max(0, Math.floor((r.y0 - reach) / side)); ty <= Math.min(down - 1, Math.floor((r.y1 + reach) / side)); ty += 1) {
+              for (let tx = Math.max(0, Math.floor((r.x0 - reach) / side)); tx <= Math.min(across - 1, Math.floor((r.x1 + reach) / side)); tx += 1) {
+                const res = await fetch(base + '/cells/0/' + tx + '/' + ty);
+                const t = readPolygonTile(await res.arrayBuffer(), Number(res.headers.get('X-Polygons')), Number(res.headers.get('X-Vertices')));
+                for (let p = 0; p < t.cells.length; p += 1) {
+                  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+                  for (let i = t.starts[p]; i < t.starts[p + 1]; i += 1) { x0 = Math.min(x0, t.xy[2 * i]); x1 = Math.max(x1, t.xy[2 * i]); y0 = Math.min(y0, t.xy[2 * i + 1]); y1 = Math.max(y1, t.xy[2 * i + 1]); }
+                  if (x1 >= r.x0 && x0 <= r.x1 && y1 >= r.y0 && y0 <= r.y1) seen.add(t.cells[p]);
+                }
+              }
+            }
+            for (let k = 0; k < 300 && !v.clusterFill()?.labels; k += 1) await new Promise((res) => setTimeout(res, 100));
+            const rgba = v.fillColors();
+            const groups = {};
+            for (const c of seen) {
+              if (c === 0xffffffff || !rgba || rgba[4 * c + 3] === 0) continue;
+              const key = '#' + [0, 1, 2].map((j) => rgba[4 * c + j].toString(16).padStart(2, '0')).join('') + '|' + Math.round(0.5 * (rgba[4 * c + 3] / 255) * 100) / 100;
+              groups[key] = (groups[key] ?? 0) + 1;
+            }
+            return { cells: seen.size, groups };
+          })()`);
+          const fillGroups = Object.fromEntries(fills.map((f) => [`${f.color}|${f.opacity}`, f.count]));
+          // The genes' transcripts in the region, of quality 20 or more, from the points' tiles.
+          const pointsShown = await chrome.eval(`(async () => {
+            const desc = window.situcraftViewer.desc;
+            const { readPoints } = await import('/lib/viewer-data.js');
+            const r = ${JSON.stringify(facts?.region ?? null)};
+            const genes = ['EPCAM', 'PLVAP', 'CD68'].map((n) => desc.transcripts.genes.findIndex((g) => g.name === n));
+            const g = desc.grid;
+            const side = g.tile * g.pixelSize;
+            let n = 0;
+            for (let ty = Math.floor(r.y0 / side); ty <= Math.floor(r.y1 / side); ty += 1) {
+              for (let tx = Math.floor(r.x0 / side); tx <= Math.floor(r.x1 / side); tx += 1) {
+                const p = readPoints(await fetch('/api/cache/' + desc.entries.transcripts + '/points/' + tx + '/' + ty + '?genes=' + genes.join(',') + '&minq=20').then((res) => res.arrayBuffer()));
+                for (let k = 0; k < p.genes.length; k += 1) {
+                  if (!genes.includes(p.genes[k])) continue;
+                  for (let i = p.starts[k]; i < p.starts[k + 1]; i += 1) if (p.x[i] >= r.x0 && p.x[i] <= r.x1 && p.y[i] >= r.y0 && p.y[i] <= r.y1) n += 1;
+                }
+              }
+            }
+            return n;
+          })()`);
+          const readBack = await act('read_figure', { path: out('figure.pdf') });
+          const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+          check('viewer', 'a figure of a saved view: written as SVG, PDF and PNG, the same bytes again; its manifest the same in each, its fingerprint the suite\'s own; read back unchanged and drawn the same', `${made.ok ? made.message : made.message}; ${Object.entries(wrote).map(([k, w]) => `${k} ${w.ok ? 'written' : w.message}`).join(', ')}; manifests ${[fromSVG, fromPDF, fromPNG].map((m) => (same(m, manifest) ? 'the same' : 'other')).join(', ')}; fingerprint ${fingerprintOwn === fingerprint ? 'the suite\'s' : 'other'}; PNG ${dpiOfPng} dpi; ${readBack.message ?? readBack.error}`,
+            made.ok && Object.values(wrote).every((w) => w.ok) && bytes('figure.svg').equals(bytes('figure-again.svg')) && bytes('figure.pdf').equals(bytes('figure-again.pdf')) && manifest?.format === 'situcraft-figure-manifest'
+            && same(fromSVG, manifest) && same(fromPDF, manifest) && same(fromPNG, manifest) && fingerprintOwn === fingerprint && dpiOfPng === 300 && readBack.ok && readBack.data.intact && readBack.data.panels.every((p) => p.status === 'unchanged' && p.same === true),
+            'the same bytes; one manifest, the suite\'s fingerprint; 300 dpi; unchanged, drawn the same');
+          check('viewer', 'a figure\'s tissue: its stains the suite\'s own composite of the samples, pixel for pixel, and the Viewer\'s within one level; a scale bar its length in µm; the cells whose outlines meet the region, filled as the Viewer fills them; the genes\' transcripts in the region; no text below 6 pt, the PDF\'s text the SVG\'s', `raster ${raster ? `${raster.width} × ${raster.height}${raster.filtered ? ' (filtered)' : ''}` : 'not found'} at level ${facts?.raster?.level}, ${pixelsOff} pixels off; the Viewer at level ${probes.level}, ${viewerOff} of ${probes.out.length} probes off; scale bar "${bar?.[4]}" ${barUm?.toFixed(3)} µm; cells ${facts?.cells} drawn, ${outline ? subpaths(outline[1]) : 0} outlined, ${cellsShown.cells} the suite's; fills ${JSON.stringify(fillGroups)} against ${JSON.stringify(cellsShown.groups)}; ${circles} points, ${pointsShown} the suite's; text ${Math.min(...sizes)} to ${Math.max(...sizes)} pt (PDF ${Math.min(...pdfSizes)}); PDF strings ${same([...pdfStrings].sort(), [...svgTexts].sort()) ? 'the SVG\'s' : JSON.stringify(pdfStrings.slice(0, 6))}`,
+            raster?.rgba && raster.width === facts.raster.width && raster.height === facts.raster.height && pixelsOff === 0 && viewerOff === 0
+            && bar && bar[4] === `${facts.scaleBar.um} µm` && Math.abs(barUm - facts.scaleBar.um) < 0.01 * facts.umPerPt
+            && outline && subpaths(outline[1]) === facts.cells && facts.cells === cellsShown.cells && same(Object.keys(fillGroups).sort(), Object.keys(cellsShown.groups).sort()) && Object.keys(fillGroups).every((k) => fillGroups[k] === cellsShown.groups[k])
+            && circles === facts.transcripts && circles === pointsShown && circles > 100
+            && Math.min(...sizes) >= 6 && Math.min(...pdfSizes) >= 6 && same([...pdfStrings].sort(), [...svgTexts].sort()),
+            'every pixel the suite\'s; every probe within one level; the bar its length; the cells, fills and transcripts the suite\'s; text 6 pt or more, the same in the PDF');
+        }
+
         // Imported labels (wave 4, slice 4): a table of three of the Lung cells' labels (their ids
         // as select_cell answers them), each cell taking its row's label and the others none; a
         // table naming a cell the segmentation does not have refused, with how many; the
@@ -1979,6 +2335,528 @@ export async function viewerSuite({ check, MissingData, verbose }) {
             && lr.pixels === 90 && lr.transcripts === 95.45 && lr.numbers === 10 && lr.rho === 0.976 && lr.top.key === 'pair:Immune|Immune' && lr.top.a === 1.44 && lr.top.b === 1.94 && JSON.stringify(lr.immune) === '[249,227]' && lr.behind === '44 22',
             '29 clusters of 11,820 cells, 47% labeled; 7 of 10 pairs, stromal 3.99 with themselves, epithelial–endothelial 0.78, –stromal 0.79; the expansion 90.00% of pixels and 95.45% of transcripts alike; rank correlation 0.976; immune–immune 1.44 to 1.94 (249 and 227 immune cells; 44 and 22 behind it)');
           await act('tour', { end: true });
+
+          // Figures of results (wave 8, slice 2): the Lung's distribution of transcripts, its
+          // cells' map, its classes' enrichment and its genes in a pattern, one figure, written as
+          // SVG and read by the suite: the histogram's counts the suite's own binning of the cells
+          // (40 bins from the least to the 99.5th percentile), each bar's height its count; the map
+          // a point a cell it maps and its clusters named; the heat map a square for each pair with
+          // its ratio's color and a dot for each pair whose adjusted p is below 0.05; the bars the
+          // genes in a pattern, strongest first; no text below 6 pt.
+          {
+            await act('show_map', { dataset: 'xenium-lung-2fov' });
+            const ids = await chrome.eval(`(() => { const p = window.situcraft.store.project; const ds = p.datasets.find((x) => x.name === 'xenium-lung-2fov'); const sp = p.artifacts.filter((a) => a.kind === 'spatial' && a.dataset === ds.id && a.state === 'complete'); return { dataset: ds.id, enrichment: sp.find((a) => a.question === 'enrichment')?.id, moran: sp.find((a) => a.question === 'moran')?.id, map: p.artifacts.filter((a) => a.kind === 'embedding' && a.dataset === ds.id).at(-1)?.id }; })()`);
+            const made = await act('figure', { name: 'Results of the Lung', size: 'double', columns: 2, height_mm: 160, panels: [{ kind: 'qc', dataset: ids.dataset, metric: 'transcripts' }, { kind: 'map', map: ids.map, color: 'clusters' }, { kind: 'spatial', analysis: ids.enrichment }, { kind: 'spatial', analysis: ids.moran }] });
+            const svgPath = join(work, 'results.svg');
+            const jsonPath = join(work, 'results.json');
+            const w1 = await act('write_figure', { name: 'Results of the Lung', path: svgPath, format: 'svg', time: '2026-10-19T12:00:00Z', overwrite: true });
+            const w2 = await act('write_figure', { name: 'Results of the Lung', path: jsonPath, format: 'json', time: '2026-10-19T12:00:00Z', overwrite: true });
+            const svg = existsSync(svgPath) ? readFileSync(svgPath, 'utf8') : '';
+            const manifest = existsSync(jsonPath) ? JSON.parse(readFileSync(jsonPath, 'utf8')) : null;
+            // The suite's own histogram of the cells' transcripts.
+            const values = await chrome.eval(`(async () => {
+              const app = window.situcraft;
+              const ds = app.store.project.datasets.find((x) => x.name === 'xenium-lung-2fov');
+              const item = app.bundles.link(ds.id)?.item ?? app.bundles.itemByPath(ds.path);
+              const { readCells } = await import('/lib/viewer-data.js');
+              const cells = readCells(await fetch(item.url + '/cells').then((r) => r.arrayBuffer()));
+              return Array.from(cells.transcripts);
+            })()`);
+            const sorted = values.filter(Number.isFinite).sort((a, b) => a - b);
+            const lo = sorted[0];
+            const hi = Math.max(sorted[Math.floor(0.995 * (sorted.length - 1))], lo + 1);
+            const edges = hi - lo + 1 <= 40 ? Array.from({ length: hi - lo + 2 }, (_, k) => lo + k - 0.5) : Array.from({ length: 41 }, (_, k) => lo + ((hi - lo) * k) / 40);
+            const own = new Array(edges.length - 1).fill(0);
+            for (const v of values) {
+              if (!(v >= edges[0] && v <= edges.at(-1))) continue;
+              let k = edges.findIndex((e, i) => i < edges.length - 1 && v >= e && v < edges[i + 1]);
+              if (k < 0) k = edges.length - 2;
+              own[k] += 1;
+            }
+            const qcPart = figurePanelSvg(svg, 'A');
+            const bars = [...qcPart.matchAll(/<rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)" fill="#5b4ce6"\/>/g)].map((m) => Number(m[4]));
+            const nonzero = own.filter((c) => c > 0);
+            const top = Math.max(...own);
+            const heightsOff = bars.length === nonzero.length ? bars.filter((h, i) => Math.abs(h / Math.max(...bars) - nonzero[i] / top) > 0.01).length : -1;
+            // The map: a point each cell mapped, its clusters named.
+            const mapInfo = await chrome.eval(`(async () => { const d = await window.situcraft.bundles.mapData(${JSON.stringify(ids.map)}); const c = await window.situcraft.bundles.clusteringData(window.situcraft.store.project.artifacts.find((a) => a.id === ${JSON.stringify(ids.map)}).clustering); const present = new Set(); for (let i = 0; i < d.n; i += 1) if (c.cluster[d.cells[i]] >= 0) present.add(c.cluster[d.cells[i]]); return { n: d.n, clusters: present.size }; })()`);
+            const mapPart = figurePanelSvg(svg, 'B');
+            const mapPoints = (mapPart.match(/<rect [^>]*width="(0\.9|1\.4|0\.6)" height="(0\.9|1\.4|0\.6)"/g) ?? []).length;
+            const mapNames = [...mapPart.matchAll(/<text[^>]*text-anchor="middle"[^>]*>(\d+)<\/text>/g)].length;
+            // The heat map against the analysis's numbers.
+            const en = await (await fetch(`${url}/api/artifacts/${encodeURIComponent(ids.enrichment)}/files/analysis.json`)).json();
+            const K = en.labels.names.length;
+            const wantColors = [];
+            let wantDots = 0;
+            for (let i = 0; i < K; i += 1) {
+              for (let j = 0; j < K; j += 1) {
+                const q = i * K + j;
+                const r = en.enrichment.expected[q] > 0 ? en.enrichment.count[q] / en.enrichment.expected[q] : NaN;
+                if (Number.isNaN(r)) continue;
+                wantColors.push(divergingColor(r === 0 ? -Infinity : dlog(r) / 0.6931471805599453));
+                if ((en.enrichment.padj[q] ?? NaN) < 0.05) wantDots += 1;
+              }
+            }
+            const heatPart = figurePanelSvg(svg, 'C');
+            const squares = [...heatPart.matchAll(/<rect x="[\d.]+" y="[\d.]+" width="([\d.]+)" height="([\d.]+)" fill="(rgb\([^)]+\))"\/>/g)].filter((m) => m[1] === m[2]).map((m) => m[3]);
+            const heatDots = (heatPart.match(/<circle [^>]*fill="#171b26"/g) ?? []).length;
+            const colorsOff = squares.length === wantColors.length ? squares.filter((c, i) => c !== wantColors[i]).length : -1;
+            // The bars: the genes in a pattern, strongest first.
+            const mo = await (await fetch(`${url}/api/artifacts/${encodeURIComponent(ids.moran)}/files/analysis.json`)).json();
+            const pattern = [];
+            for (let g = 0; g < mo.moran.genes.length; g += 1) if ((mo.moran.padj[g] ?? NaN) < 0.05 && Number.isFinite(mo.moran.i[g]) && mo.moran.i[g] > mo.moran.expected) pattern.push(g);
+            pattern.sort((a, b) => mo.moran.i[b] - mo.moran.i[a]);
+            const moranPart = figurePanelSvg(svg, 'D');
+            const barNames = [...moranPart.matchAll(/<text[^>]*text-anchor="end"[^>]*>([A-Za-z0-9-]+)<\/text>/g)].map((m) => m[1]).filter((t) => !/^[\d.]+$/.test(t));
+            const sizes = [...svg.matchAll(/font-size="([\d.]+)"/g)].map((m) => Number(m[1]));
+            const facts = manifest?.panels?.map((p) => p.facts) ?? [];
+            check('viewer', 'a figure of results: the Lung\'s distribution of transcripts the suite\'s own binning, bar by bar; its map a point each cell mapped, its clusters named; its enrichment\'s heat map each pair\'s ratio in its color and a dot where it differs from chance; its genes in a pattern strongest first; no text below 6 pt', `${made.ok ? made.message.slice(0, 160) : made.message}; ${w1.ok && w2.ok ? 'written' : `${w1.message} ${w2.message}`}; QC ${bars.length} bars (${nonzero.length} the suite's), ${heightsOff} heights off, counts ${JSON.stringify(facts[0]?.counts) === JSON.stringify(own) ? 'the suite\'s' : 'other'}; map ${mapPoints} points of ${mapInfo.n}, ${mapNames} names of ${mapInfo.clusters}; heat map ${squares.length} squares of ${wantColors.length}, ${colorsOff} colors off, ${heatDots} dots of ${wantDots}; bars ${barNames.join(' ')} against ${pattern.slice(0, barNames.length).map((g) => mo.moran.genes[g]).join(' ')}; text ${Math.min(...sizes)} pt or more`,
+              made.ok && w1.ok && w2.ok && bars.length === nonzero.length && heightsOff === 0 && JSON.stringify(facts[0]?.counts) === JSON.stringify(own)
+              && mapPoints === mapInfo.n && mapNames === mapInfo.clusters && squares.length === wantColors.length && colorsOff === 0 && heatDots === wantDots
+              && barNames.length >= 5 && barNames.join() === pattern.slice(0, barNames.length).map((g) => mo.moran.genes[g]).join() && Math.min(...sizes) >= 6,
+              'every bar, point, square, dot and gene the suite\'s; 6 pt or more');
+          }
+
+          // What made a result (wave 8, slice 3): the record of the Lung classes' enrichment, each
+          // step from the bundle to it after the steps it was made from, with its method, the
+          // clustering's seed its parameters' own, and the publications each follows (the bundle
+          // Xenium's, the clustering scanpy's and Leiden's, the labels' the panel's starter atlas);
+          // written as Markdown, JSON and BibTeX by export, the same record; shown in Reports.
+          {
+            const ids = await chrome.eval(`(() => { const p = window.situcraft.store.project; const ds = p.datasets.find((x) => x.name === 'xenium-lung-2fov'); return { dataset: ds.id, enrichment: p.artifacts.filter((a) => a.kind === 'spatial' && a.dataset === ds.id && a.state === 'complete' && a.question === 'enrichment').at(-1)?.id }; })()`);
+            const time = '2026-10-19T12:00:00Z';
+            const asked = await act('record', { result: ids.enrichment, format: 'markdown', time });
+            const rec = asked.data;
+            const paths = { md: join(work, 'record.md'), json: join(work, 'record.json'), bib: join(work, 'record.bib') };
+            const wrote = {};
+            for (const [ext, path] of Object.entries(paths)) wrote[ext] = await act('export', { what: 'record', result: ids.enrichment, path, overwrite: true });
+            const read = (ext) => (existsSync(paths[ext]) ? readFileSync(paths[ext], 'utf8') : '');
+            const fromJSON = JSON.parse(read('json') || 'null');
+            const f = recordFacts(rec, read('md'), read('bib'));
+            const step = (kind) => rec?.steps.find((x) => x.kind === kind);
+            const clustering = step('clustering');
+            const shown = await chrome.eval(`(() => ({ record: document.querySelector('.record')?.dataset.record ?? null, steps: document.querySelectorAll('.record-step').length, refs: document.querySelectorAll('.record-refs li').length }))()`);
+            const undated = (text) => String(text ?? '').replace(/ on \d{4}-\d{2}-\d{2}:/, ':');
+            const sameSteps = fromJSON && JSON.stringify(fromJSON.steps) === JSON.stringify(rec?.steps) && JSON.stringify(fromJSON.references) === JSON.stringify(rec?.references);
+            const want = ['janesick2023', 'situcraft', 'wolf2018', 'traag2019', 'tirosh2016', 'travaglini2020', 'schapiro2017', 'palla2022'];
+            check('viewer', 'what made a result: the Lung enrichment\'s record, each step after what made it, from the bundle through its segmentation, clustering, marker set, labels and graph; the clustering\'s seed its parameters\'; the publications each follows, numbered; Markdown, JSON and BibTeX the same record; shown in Reports', `${asked.ok ? asked.message.slice(0, 160) : asked.message}; ${Object.entries(wrote).map(([k, w]) => `${k} ${w.ok ? 'written' : w.message}`).join(', ')}; ${f.kinds.join(' > ')}; ${f.ordered ? 'in order' : 'out of order'}; seed ${clustering?.seeds} (parameters ${clustering?.parameters?.seed}); ${rec?.references.length} references (${want.filter((k) => !f.keys.includes(k)).join(', ') || 'all expected'}), Markdown ${f.mdRefs}, BibTeX ${f.bibEntries.length}; JSON ${sameSteps ? 'the same' : 'other'}; shown ${JSON.stringify(shown)}`,
+              asked.ok && Object.values(wrote).every((w) => w.ok) && f.ordered && f.numbered && f.kinds[0] === 'dataset' && f.kinds.at(-1) === 'spatial' && ['segmentation', 'clustering', 'marker-set', 'labels', 'graph'].every((k) => f.kinds.includes(k))
+              && clustering?.seeds.length === 1 && clustering.seeds[0] === clustering.parameters.seed && want.every((k) => f.keys.includes(k)) && f.mdRefs === rec.references.length && f.bibEntries.length === rec.references.length && f.bibEntries.includes('wolf2018')
+              && undated(read('md')) === undated(asked.data.text) && sameSteps && shown.record === ids.enrichment && shown.steps > 0 && shown.refs === rec.references.length,
+              'in order, from the bundle; the seed recorded; Xenium, scanpy, Leiden, the starter atlas and the analysis cited; the same record in each format; shown');
+          }
+
+          // The methods text (wave 8, slice 4): the Lung enrichment's methods, written from its
+          // record, each number the records' own (the clusters and their cells, the share labeled
+          // at the class level, the graph's edges, the pairs found among those asked), the seed
+          // said, the references numbered as first cited; written as Markdown by export.
+          {
+            const result = (await chrome.eval(`(() => { const p = window.situcraft.store.project; const ds = p.datasets.find((x) => x.name === 'xenium-lung-2fov'); return p.artifacts.filter((a) => a.kind === 'spatial' && a.dataset === ds.id && a.state === 'complete' && a.question === 'enrichment').at(-1)?.id; })()`));
+            const rec = (await act('record', { result })).data;
+            const ofKind = (kind) => rec?.steps.find((x) => x.kind === kind)?.id ?? '';
+            const facts = await chrome.eval(`(() => { const p = window.situcraft.store.project; const a = (id) => p.artifacts.find((x) => x.id === id) ?? {}; const clu = a(${JSON.stringify(ofKind('clustering'))}); const lab = a(${JSON.stringify(ofKind('labels'))}); const g = a(${JSON.stringify(ofKind('graph'))}); const e = a(${JSON.stringify(result)}); return { clusters: clu.summary?.clusters, cells: clu.summary?.cells, seed: clu.parameters?.seed, labeled: lab.summary?.labeled?.[0], labCells: lab.summary?.cells, level: lab.summary?.levels?.[0], edges: g.summary?.edges, significant: e.summary?.significant, count: e.summary?.labels?.count }; })()`);
+            const asked = await act('methods', { result });
+            const text = asked.data?.text ?? '';
+            const fmt = (n) => Number(n).toLocaleString('en-US');
+            const want = [
+              `This gave ${fmt(facts.clusters)} clusters of ${fmt(facts.cells)} cells.`,
+              `${((100 * facts.labeled) / facts.labCells).toFixed(1)}% at the ${String(facts.level).toLowerCase()} level`,
+              `${fmt(facts.edges)} edges`,
+              `${fmt(facts.significant)} of ${fmt((facts.count * (facts.count + 1)) / 2)} pairs differed from chance`,
+              `seed ${facts.seed}`,
+            ];
+            const missing = want.filter((w) => !text.includes(w));
+            const mf = methodsFacts(text, asked.data?.references);
+            const mdPath = join(work, 'methods.md');
+            const wrote = await act('export', { what: 'methods', result, path: mdPath, overwrite: true });
+            const md = existsSync(mdPath) ? readFileSync(mdPath, 'utf8') : '';
+            const inMd = (asked.data?.paragraphs ?? []).every((x) => md.includes(`## ${x.heading}\n\n${x.text}\n`));
+            check('viewer', 'the methods of the Lung enrichment: written from its record by topic, each number the records\' own (clusters and cells, the share labeled, the graph\'s edges, the pairs found), the seed said, the references numbered as first cited; written as Markdown', `${asked.ok ? `${(asked.data.paragraphs ?? []).map((x) => x.topic).join(', ')}; ${asked.data.references.length} references` : asked.message}; ${missing.length ? `missing: ${missing.join(' | ')}` : 'every number the records\''}; ${mf.numbered ? 'numbered as cited' : 'not numbered as cited'}; Markdown ${wrote.ok ? (inMd && md.startsWith(`# ${asked.data.title}`) ? 'the same text' : 'other') : wrote.message}`,
+              asked.ok && ['data', 'cells', 'spatial', 'software'].every((t) => asked.data.paragraphs.some((x) => x.topic === t)) && missing.length === 0 && mf.numbered && asked.data.references.some((r) => r.includes('10.1038/s41467-023-43458-x')) && asked.data.references.some((r) => r.includes('Travaglini')) && wrote.ok && inMd && md.startsWith(`# ${asked.data.title}`),
+              'by topic; every number the records\'; numbered as cited; the Markdown the same text');
+          }
+
+          // Certificates (wave 8, slice 5): the Lung enrichment certified, read by the suite's own
+          // zip reader: its fingerprint the suite's own over its canonical JSON; each step the
+          // record's; every file a step of SituCraft's wrote the SHA-256 of that file in the
+          // program's store, every bundle file the SHA-256 of the file in the bundle; every entry
+          // as the archive's list says; no path of this computer anywhere; the same bytes again.
+          {
+            const result = (await chrome.eval(`(() => { const p = window.situcraft.store.project; const ds = p.datasets.find((x) => x.name === 'xenium-lung-2fov'); return p.artifacts.filter((a) => a.kind === 'spatial' && a.dataset === ds.id && a.state === 'complete' && a.question === 'enrichment').at(-1)?.id; })()`));
+            const paths = [join(work, 'certificate.zip'), join(work, 'certificate-again.zip')];
+            const wrote = [];
+            for (const path of paths) wrote.push(await act('export', { what: 'certificate', result, path, overwrite: true }));
+            const zip = existsSync(paths[0]) ? readFileSync(paths[0]) : Buffer.alloc(0);
+            let entries = new Map();
+            try {
+              entries = unzipOwn(zip);
+            } catch {
+              entries = new Map();
+            }
+            const text = (name) => entries.get(name)?.toString('utf8') ?? '';
+            const cert = JSON.parse(text('certificate.json') || 'null');
+            const { fingerprint, ...rest } = cert ?? {};
+            const own = createHash('sha256').update(canonicalOf(rest)).digest('hex');
+            const recordSteps = ((await act('record', { result })).data?.steps ?? []).map((x) => x.id);
+            // Every file SituCraft's steps wrote, against its store; every bundle file, against the bundle.
+            const sha = (bytes) => createHash('sha256').update(bytes).digest('hex');
+            let made = 0;
+            const madeOff = [];
+            for (const st of (cert?.steps ?? []).filter((x) => x.by === 'program')) {
+              for (const f of st.files.filter((x) => x.location !== 'bundle' && x.location !== 'place')) {
+                const response = await fetch(`${url}/api/artifacts/${encodeURIComponent(st.id)}/files/${f.path}`);
+                const got = response.ok ? sha(Buffer.from(await response.arrayBuffer())) : `HTTP ${response.status}`;
+                made += 1;
+                if (got !== f.sha256) madeOff.push(`${st.id}/${f.path}`);
+              }
+            }
+            const bundleDir = join(dataRoot, 'xenium-lung-2fov');
+            const bundleFiles = (cert?.bundles?.[0]?.files ?? []).filter((f) => f.sha256);
+            const bundleOff = bundleFiles.filter((f) => !existsSync(join(bundleDir, f.path)) || sha(readFileSync(join(bundleDir, f.path))) !== f.sha256).map((f) => f.path);
+            const listed = JSON.parse(text('manifest.json') || '{"files":[]}').files;
+            const listOff = listed.filter((f) => !entries.has(f.path) || sha(entries.get(f.path)) !== f.sha256).map((f) => f.path);
+            const leaks = [...entries].filter(([, bytes]) => [dataRoot, work, homedir()].some((p) => bytes.includes(p))).map(([name]) => name);
+            const again = existsSync(paths[1]) && zip.equals(readFileSync(paths[1]));
+            check('viewer', 'a certificate of the Lung enrichment: its fingerprint the suite\'s own; each step the record\'s; every file a step wrote the SHA-256 of the program\'s, every bundle file the bundle\'s; every entry as listed; no path of this computer; the same bytes again', `${wrote.map((w) => (w.ok ? 'written' : w.message)).join(', ')}; ${entries.size} entries; fingerprint ${own === fingerprint ? 'the suite\'s' : 'other'} (${String(fingerprint).slice(0, 16)}); steps ${JSON.stringify((cert?.steps ?? []).map((x) => x.id)) === JSON.stringify(recordSteps) ? 'the record\'s' : 'other'}; ${made} files made, ${madeOff.length} off${madeOff.length ? ` (${madeOff.slice(0, 3).join(', ')})` : ''}; ${bundleFiles.length} bundle files, ${bundleOff.length} off; ${listed.length} listed, ${listOff.length} off; ${leaks.length ? `paths in ${leaks.join(', ')}` : 'no path'}; ${again ? 'the same bytes again' : 'other bytes again'}`,
+              wrote.every((w) => w.ok) && cert?.format === 'situcraft-certificate' && own === fingerprint && JSON.stringify(cert.steps.map((x) => x.id)) === JSON.stringify(recordSteps) && made >= 5 && madeOff.length === 0
+              && bundleFiles.length >= 5 && bundleOff.length === 0 && listed.length === entries.size - 1 && listOff.length === 0 && leaks.length === 0 && again && /^SituCraft certificate\n/.test(text('README.txt')) && text('README.txt').includes(fingerprint),
+              'the suite\'s fingerprint; the record\'s steps; every SHA-256 the files\'; no path; the same bytes');
+          }
+
+          // situcraft verify (wave 8, slice 6): the Lung enrichment's certificate made again from its
+          // bundle (found in the data folder by its files' SHA-256) in a SituCraft of its own:
+          // verified (exit 0), every step made again; tampered with by the suite's own zip writer (the
+          // graph's longest edge changed and everything made consistent again: its manifest, its
+          // SHA-256, the fingerprint), found to differ first at the graph (exit 1); without its
+          // bundle, not checkable (exit 2). And the Lung's results figure certified and verified: its
+          // drawing drawn again in a headless page, the same.
+          {
+            const sha = (bytes) => createHash('sha256').update(bytes).digest('hex');
+            const chromePath = findChrome();
+            const reportOf = (path) => (existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : null);
+            const verifyRun = (zip, data, name) => {
+              const report = join(work, `${name}.json`);
+              const r = spawnSync(bin, ['verify', '--data', data, '--report', report, '--overwrite', ...(chromePath ? ['--chrome', chromePath] : []), zip], { encoding: 'utf8', timeout: 30 * 60e3 });
+              return { status: r.status, out: `${r.stdout ?? ''}${r.stderr ?? ''}`, report: reportOf(report) };
+            };
+            const certPath = join(work, 'certificate.zip');
+            const verified = verifyRun(certPath, dataRoot, 'verified');
+            // Tampered with, consistently.
+            const entries = unzipOwn(readFileSync(certPath));
+            const cert = JSON.parse(entries.get('certificate.json').toString('utf8'));
+            const graph = cert.steps.find((x) => x.kind === 'graph');
+            const manifest = JSON.parse(entries.get(graph.manifest.path).toString('utf8'));
+            manifest.lineage.job.spec.parameters.longest = 40;
+            const manifestText = `${JSON.stringify(manifest, null, 1)}\n`;
+            graph.manifest.sha256 = sha(manifestText);
+            graph.job.spec = sha(canonicalOf(manifest.lineage.job.spec));
+            delete cert.fingerprint;
+            cert.fingerprint = sha(canonicalOf(cert));
+            entries.set(graph.manifest.path, Buffer.from(manifestText));
+            entries.set('certificate.json', Buffer.from(JSON.stringify(cert)));
+            const tamperedPath = join(work, 'certificate-tampered.zip');
+            writeFileSync(tamperedPath, zipOwn([...entries]));
+            const tampered = verifyRun(tamperedPath, dataRoot, 'tampered');
+            const empty = join(work, 'no-bundles');
+            mkdirSync(empty, { recursive: true });
+            const missing = verifyRun(certPath, empty, 'missing');
+            // The results figure, drawn again in a headless page.
+            const figureId = await chrome.eval(`window.situcraft.store.project.figures.find((f) => f.name === 'Results of the Lung')?.id ?? null`);
+            const figurePath = join(work, 'certificate-figure.zip');
+            const figureMade = await act('export', { what: 'certificate', result: figureId, path: figurePath, overwrite: true });
+            const figure = verifyRun(figurePath, dataRoot, 'figure');
+            const figureStep = figure.report?.steps?.find((x) => x.kind === 'figure');
+            const steps = verified.report?.steps ?? [];
+            const madeAgain = steps.filter((x) => x.by === 'program' && x.verdict === 'verified').length;
+            check('viewer', 'situcraft verify: the Lung enrichment made again from its bundle, found by its files\' SHA-256, in a SituCraft of its own: verified (exit 0); tampered with, consistently, found to differ first at the graph (exit 1); without its bundle, not checkable (exit 2); the results figure drawn again in a headless page, the same', `verified: exit ${verified.status}, ${verified.report?.verdict}, ${madeAgain} steps made again of ${steps.filter((x) => x.by === 'program').length}; tampered: exit ${tampered.status}, ${tampered.report?.verdict}, first at ${tampered.report?.firstDiffers?.kind} (${tampered.report?.firstDiffers?.detail}); missing: exit ${missing.status}, ${missing.report?.verdict}; figure: ${figureMade.ok ? 'certified' : figureMade.message}, exit ${figure.status}, ${figure.report?.verdict}, ${figureStep?.verdict} (${figureStep?.detail})${verified.status !== 0 ? `; ${verified.out.slice(-600)}` : ''}`,
+              verified.status === 0 && verified.report?.verdict === 'verified' && madeAgain >= 5 && steps.every((x) => ['verified', 'as certified'].includes(x.verdict))
+              && tampered.status === 1 && tampered.report?.verdict === 'differs' && tampered.report?.firstDiffers?.kind === 'graph'
+              && missing.status === 2 && missing.report?.verdict === 'not checkable' && missing.report?.bundles?.[0]?.status === 'missing'
+              && figureMade.ok && figure.status === 0 && figureStep?.verdict === 'verified',
+              'verified, 0; differs at the graph, 1; not checkable, 2; the figure drawn again the same');
+            // Kept for CI to verify on the other processor (SITUCRAFT_CERTIFICATES: a folder).
+            const keep = process.env.SITUCRAFT_CERTIFICATES;
+            if (keep) {
+              mkdirSync(keep, { recursive: true });
+              copyFileSync(certPath, join(keep, 'lung-enrichment.zip'));
+              if (existsSync(figurePath)) copyFileSync(figurePath, join(keep, 'lung-figure.zip'));
+            }
+          }
+
+          // The report (wave 8, slice 7): the Lung's results figure and its enrichment in one HTML
+          // file, opened from the disk in a browser of its own, as a reader opens it: it asks the
+          // network for nothing, checks the certificate it carries and finds every number, the figure
+          // and the methods the certificate's; every number it shows is, as the suite reads it, the
+          // value at its place in certificate.json, written as the report writes it, and the
+          // certificate's fingerprint the suite's own. A number's text edited, it says so and marks
+          // it. And situcraft verify, given the report, makes its results again and checks it.
+          {
+            const ids = await chrome.eval(`(() => { const p = window.situcraft.store.project; const ds = p.datasets.find((x) => x.name === 'xenium-lung-2fov'); return { enrichment: p.artifacts.filter((a) => a.kind === 'spatial' && a.dataset === ds.id && a.state === 'complete' && a.question === 'enrichment').at(-1)?.id ?? null, figure: p.figures.find((f) => f.name === 'Results of the Lung')?.id ?? null }; })()`);
+            const reportPath = join(work, 'report.html');
+            const wrote = await act('export', { what: 'report', results: [ids.figure, ids.enrichment], title: 'The Lung\'s results', path: reportPath, overwrite: true });
+            const html = existsSync(reportPath) ? readFileSync(reportPath, 'utf8') : '';
+            // The suite's own reading of it.
+            const carried = /<script type="application\/zip" id="situcraft-certificate">([^<]*)<\/script>/.exec(html);
+            let entries = new Map();
+            try {
+              entries = carried ? unzipOwn(Buffer.from(carried[1], 'base64')) : new Map();
+            } catch {
+              entries = new Map();
+            }
+            const cert = JSON.parse(entries.get('certificate.json')?.toString('utf8') ?? 'null');
+            const { fingerprint, ...rest } = cert ?? {};
+            const own = createHash('sha256').update(canonicalOf(rest)).digest('hex');
+            const unescape = (t) => t.replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+            const at = (doc, pointer) => pointer.split('/').slice(1).map((x) => x.replace(/~1/g, '/').replace(/~0/g, '~')).reduce((v, k) => (v === undefined || v === null ? undefined : v[k]), doc);
+            // As the report writes a number: whole numbers with commas, others to 4 significant digits.
+            const written = (v) => (Number.isInteger(v) ? v.toLocaleString('en-US') : Math.abs(v) < 1e-3 || Math.abs(v) >= 1e6 ? v.toExponential(2) : String(Number(v.toPrecision(4))));
+            const shown = [...html.matchAll(/data-pointer="([^"]*)" data-value="([^"]*)"[^>]*>([^<]*)</g)].map((m) => ({ pointer: unescape(m[1]), value: JSON.parse(unescape(m[2])), text: unescape(m[3]) }));
+            const shownOff = shown.filter((n) => typeof at(cert, n.pointer) !== 'number' || at(cert, n.pointer) !== n.value || written(at(cert, n.pointer)) !== n.text).map((n) => n.pointer);
+            const figureStep = cert?.steps?.find((x) => x.id === ids.figure);
+            const svg = /<img data-figure="[^"]*"[^>]*? src="data:image\/svg\+xml;base64,([^"]*)"/.exec(html);
+            const svgSame = Boolean(svg && figureStep?.drawing?.svg === createHash('sha256').update(Buffer.from(svg[1], 'base64')).digest('hex'));
+            // Opened from the disk, in a browser of its own.
+            const opened = async (path) => {
+              const browser = await launch({ width: 1100, height: 900, args: (process.env.SITUCRAFT_CHROME_ARGS ?? '').split(' ').filter(Boolean) });
+              const asked = [];
+              try {
+                await browser.send('Network.enable');
+                browser.on('Network.requestWillBeSent', (e) => {
+                  if (!/^(data|blob|file):/.test(e.request.url)) asked.push(e.request.url);
+                });
+                await browser.goto(pathToFileURL(path).href, 300);
+                let state = null;
+                for (let k = 0; k < 80 && !state; k += 1) {
+                  state = await browser.eval('document.documentElement.dataset.checked ?? null');
+                  if (!state) await sleep(250);
+                }
+                const seen = await browser.eval(`({ box: document.getElementById('report-check')?.textContent ?? '', numbers: document.querySelectorAll('[data-pointer]').length, differs: document.querySelectorAll('td.differs').length, figures: document.querySelectorAll('img[data-figure]').length, drawn: [...document.querySelectorAll('img[data-figure]')].every((img) => img.complete && img.naturalWidth > 0), paragraphs: document.querySelectorAll('#methods .methods-paragraph').length, link: (document.getElementById('certificate-link')?.href ?? '').startsWith('blob:') })`);
+                return { state, asked, ...seen };
+              } finally {
+                await browser.close();
+              }
+            };
+            const seen = await opened(reportPath);
+            // The first number's text edited, its value left as it was.
+            const first = /(data-value="[^"]*"[^>]*>)([^<]*)</.exec(html);
+            const editedPath = join(work, 'report-edited.html');
+            if (first) writeFileSync(editedPath, `${html.slice(0, first.index)}${first[1]}9${first[2]}<${html.slice(first.index + first[0].length)}`);
+            const edited = first ? await opened(editedPath) : null;
+            const verified = spawnSync(bin, ['verify', '--data', dataRoot, ...(findChrome() ? ['--chrome', findChrome()] : []), reportPath], { encoding: 'utf8', timeout: 30 * 60e3 });
+            const verifyOut = `${verified.stdout ?? ''}${verified.stderr ?? ''}`;
+            const carriedSaid = /The report carries it: its (\d+) numbers, 1 figure and its methods are the certificate's\./.exec(verifyOut);
+            check('viewer', 'a report of the Lung\'s results figure and enrichment: one HTML file, opened from the disk, asking the network for nothing; it finds its certificate intact and every number, the figure and the methods the certificate\'s, each number as the suite reads it at its place in the certificate, the fingerprint the suite\'s own; a number\'s text edited, it says so; situcraft verify, given the report, makes its results again and checks it', `${wrote.ok ? `${wrote.data.numbers} numbers, ${wrote.data.figures} figure, ${Math.round(wrote.data.bytes / 1024)} KB` : wrote.message}; opened: ${seen.state} (${seen.box.slice(0, 120)}); ${seen.asked.length ? `asked ${seen.asked.slice(0, 2).join(', ')}` : 'nothing asked of the network'}; figure ${seen.drawn ? 'drawn' : 'not drawn'}, its SVG ${svgSame ? 'the certified one' : 'other'}; ${shown.length} numbers shown, ${shownOff.length} not the certificate's as the suite reads it; fingerprint ${own === fingerprint ? 'the suite\'s' : 'other'}; edited: ${edited?.state} (${edited?.differs} marked); verify: exit ${verified.status}${carriedSaid ? `, ${carriedSaid[1]} numbers checked` : `; ${verifyOut.slice(-400)}`}`,
+              wrote.ok && seen.state === 'intact' && seen.asked.length === 0 && seen.numbers === shown.length && shown.length >= 10 && shownOff.length === 0 && seen.figures === 1 && seen.drawn && svgSame && seen.paragraphs >= 4 && seen.link && own === fingerprint
+              && edited?.state === 'differs' && edited?.differs === 1 && verified.status === 0 && Number(carriedSaid?.[1]) === shown.length,
+              'intact, offline; every number the certificate\'s; an edit found; verified');
+            const keep = process.env.SITUCRAFT_CERTIFICATES;
+            if (keep && existsSync(reportPath)) copyFileSync(reportPath, join(keep, 'lung-report.html'));
+          }
+
+          // The result package (wave 8, slice 8): the Lung's figure of a saved view, its results
+          // figure and its enrichment, the samples' names left out, written as a folder and as a
+          // zip (the same files). A review by a person with a note of their own is planted first.
+          // The suite reads every file itself: the list's SHA-256 each file's; no path of this
+          // computer, its user's name, the person, a note or the dataset's name in any text it holds
+          // (its HTML, the SVG figures and the certificate inside it, the certificate's entries).
+          // Opened from the disk in a browser of its own, asking the network for nothing: the
+          // report intact, its views' thumbnails drawn; each view's reader its tiles, zoomed into
+          // its finest level. situcraft verify, given the folder, makes its results again.
+          {
+            const note = 'Kept to myself: the coverslip cracked near the second FOV';
+            await act('review', { dataset: 'xenium-lung-2fov', action: 'comment', cells: ['#7'], note, by: 'Ada Lovelace' });
+            // A figure of a saved view of the tissue, whose view the package draws as tiles.
+            await act('show_tissue', { dataset: 'xenium-lung-2fov', center: [750, 300], um_per_pixel: 0.4, genes: ['EPCAM', 'PLVAP', 'CD68'], fill: 'labels:lineage', opacity: 0.5, outlines: true, nuclei: false, transcripts: true });
+            await act('save_view', { name: 'The Lung, packaged' });
+            await act('figure', { name: 'The Lung\'s tissue', views: ['The Lung, packaged'], size: 'single', width_um: 300 });
+            const ids = await chrome.eval(`(() => { const p = window.situcraft.store.project; const ds = p.datasets.find((x) => x.name === 'xenium-lung-2fov'); return { figure1: p.figures.find((f) => f.name === 'The Lung\\'s tissue')?.id ?? null, results: p.figures.find((f) => f.name === 'Results of the Lung')?.id ?? null, enrichment: p.artifacts.filter((a) => a.kind === 'spatial' && a.dataset === ds.id && a.state === 'complete' && a.question === 'enrichment').at(-1)?.id ?? null }; })()`);
+            const folder = join(work, 'package');
+            const zipPath = join(work, 'package.zip');
+            const args = { what: 'package', results: [ids.figure1, ids.results, ids.enrichment], title: 'The Lung\'s results', names: true, overwrite: true };
+            const wrote = await act('export', { ...args, path: folder });
+            const zipped = await act('export', { ...args, path: zipPath });
+            // Every file, read by the suite.
+            const walk = (dir, base = '') => readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(join(dir, e.name), `${base}${e.name}/`) : [`${base}${e.name}`]));
+            const files = existsSync(folder) ? walk(folder).sort() : [];
+            const bytes = new Map(files.map((f) => [f, readFileSync(join(folder, f))]));
+            const sha = (b) => createHash('sha256').update(b).digest('hex');
+            const listed = JSON.parse(bytes.get('manifest.json')?.toString('utf8') ?? '{"files":[]}');
+            const listOff = listed.files.filter((f) => !bytes.has(f.path) || sha(bytes.get(f.path)) !== f.sha256).map((f) => f.path);
+            const unlisted = files.filter((f) => f !== 'manifest.json' && !listed.files.some((x) => x.path === f));
+            // The zip: the same files under its folder.
+            let zipSame = false;
+            try {
+              const entries = unzipOwn(readFileSync(zipPath));
+              zipSame = entries.size === files.length && files.every((f) => entries.get(`${zipped.data?.folder}/${f}`)?.equals(bytes.get(f)));
+            } catch {
+              zipSame = false;
+            }
+            // Every text it holds, and what it must not hold.
+            const texts = [];
+            const fromZip = (name, data) => {
+              for (const [entry, b] of unzipOwn(data)) if (!/\.(jpg|png)$/.test(entry)) texts.push([`${name}: ${entry}`, b.toString('utf8')]);
+            };
+            for (const [f, b] of bytes) {
+              if (f.endsWith('.zip')) fromZip(f, b);
+              else if (!f.endsWith('.jpg')) {
+                const text = b.toString('utf8');
+                texts.push([f, text]);
+                for (const m of text.matchAll(/data:image\/svg\+xml;base64,([A-Za-z0-9+/=]+)/g)) texts.push([`${f}: a figure`, Buffer.from(m[1], 'base64').toString('utf8')]);
+                for (const m of text.matchAll(/id="situcraft-certificate">([^<]*)</g)) fromZip(`${f}: its certificate`, Buffer.from(m[1], 'base64'));
+              }
+            }
+            const user = basename(homedir());
+            const word = (w) => new RegExp(`(?<![A-Za-z0-9.-])${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![A-Za-z0-9-]|\\.[A-Za-z0-9])`);
+            const forbidden = [['a path', (t) => t.includes(dataRoot) || t.includes(work) || t.includes(homedir())], ['the user', (t) => new RegExp(`[\\/]${user}[\\/]`).test(t)], ['a person', (t) => t.includes('Ada Lovelace')], ['a note', (t) => t.includes(note) || t.includes('Folded tissue at the edge')], ['the dataset\'s name', (t) => word('xenium-lung-2fov').test(t.replace(/[A-Za-z0-9+/=]{40,}/g, ' '))]];
+            const leaks = texts.flatMap(([name, text]) => forbidden.filter(([, test]) => test(text)).map(([what]) => `${what} in ${name}`));
+            const tiles = files.filter((f) => f.endsWith('.jpg'));
+            const jpeg = tiles.every((f) => bytes.get(f)[0] === 0xff && bytes.get(f)[1] === 0xd8);
+            // Opened from the disk, as its reader opens it.
+            const opened = async (path, script) => {
+              const browser = await launch({ width: 1200, height: 850, args: (process.env.SITUCRAFT_CHROME_ARGS ?? '').split(' ').filter(Boolean) });
+              const asked = [];
+              try {
+                await browser.send('Network.enable');
+                browser.on('Network.requestWillBeSent', (e) => {
+                  if (!/^(data|blob|file):/.test(e.request.url)) asked.push(e.request.url);
+                });
+                await browser.goto(pathToFileURL(path).href, 300);
+                return { asked, ...(await browser.eval(script)) };
+              } finally {
+                await browser.close();
+              }
+            };
+            const report = existsSync(join(folder, 'index.html')) ? await opened(join(folder, 'index.html'), `(async () => {
+              for (let k = 0; k < 80 && !document.documentElement.dataset.checked; k += 1) await new Promise((r) => setTimeout(r, 250));
+              const thumbs = [...document.querySelectorAll('#views img')];
+              for (let k = 0; k < 40 && !thumbs.every((i) => i.complete); k += 1) await new Promise((r) => setTimeout(r, 250));
+              return { state: document.documentElement.dataset.checked, thumbs: thumbs.length, drawn: thumbs.filter((i) => i.naturalWidth === 512).length, links: [...document.querySelectorAll('#views a')].map((a) => a.getAttribute('href')) };
+            })()`) : { asked: [], links: [] };
+            const readers = [];
+            for (const link of report.links ?? []) {
+              readers.push(await opened(join(folder, link), `(async () => {
+                const ready = async () => { for (let k = 0; k < 80 && document.documentElement.dataset.ready !== 'true'; k += 1) await new Promise((r) => setTimeout(r, 250)); };
+                await ready();
+                const first = { level: document.documentElement.dataset.level, shown: [...document.querySelectorAll('#tiles img')].filter((i) => i.style.display !== 'none' && i.naturalWidth === 512).length };
+                const stage = document.getElementById('stage');
+                stage.focus();
+                for (let k = 0; k < 6; k += 1) stage.dispatchEvent(new KeyboardEvent('keydown', { key: '+', bubbles: true }));
+                const shown = () => [...document.querySelectorAll('#tiles img')].filter((i) => i.style.display !== 'none');
+                for (let k = 0; k < 40 && !shown().every((i) => i.complete); k += 1) await new Promise((r) => setTimeout(r, 250));
+                return { first, level: document.documentElement.dataset.level, deepShown: shown().filter((i) => i.naturalWidth === 512).length, missing: Number(document.documentElement.dataset.missing ?? 0), legend: document.querySelectorAll('aside li').length };
+              })()`));
+            }
+            const finestOf = (link) => {
+              const view = listed.views?.find((v) => v.file === link);
+              return view ? String(view.levels - 1) : null;
+            };
+            const verified = spawnSync(bin, ['verify', '--data', dataRoot, ...(findChrome() ? ['--chrome', findChrome()] : []), folder], { encoding: 'utf8', timeout: 30 * 60e3 });
+            const verifyOut = `${verified.stdout ?? ''}${verified.stderr ?? ''}`;
+            const asked = [...report.asked, ...readers.flatMap((r) => r.asked)];
+            check('viewer', 'a result package of the Lung\'s figures and enrichment, the samples\' names left out, as a folder and a zip (the same files): its list each file\'s SHA-256; no path of this computer, its user, the person who reviewed, their notes or the dataset\'s name in any text it holds; opened from the disk asking the network for nothing, its report intact and its views drawn, each zoomed to its finest tiles; verified from its bundle', `${wrote.ok ? `${wrote.data.files} files, ${wrote.data.views} view${wrote.data.views === 1 ? '' : 's'} in ${wrote.data.tiles} tiles, ${wrote.data.leftOut.people} person, ${wrote.data.leftOut.notes} note and ${wrote.data.leftOut.names} name left out, ${wrote.data.checked.texts} texts searched by SituCraft` : wrote.message}; zip ${zipped.ok ? (zipSame ? 'the same files' : 'other files') : zipped.message}; ${files.length} files read, ${listOff.length} off the list${unlisted.length ? `, ${unlisted.length} not listed` : ''}; ${texts.length} texts read by the suite, ${leaks.length ? `found ${leaks.slice(0, 3).join(', ')}` : 'nothing left out found'}; ${tiles.length} tiles, ${jpeg ? 'JPEG' : 'not all JPEG'}; report ${report.state}, ${report.drawn}/${report.thumbs} thumbnails; readers ${readers.map((r, k) => `${r.first?.shown} tiles at level ${r.first?.level}, zoomed to level ${r.level} of ${finestOf(report.links[k])} (${r.deepShown} tiles, ${r.missing} missing, ${r.legend} legend items)`).join('; ')}; ${asked.length ? `asked ${asked.slice(0, 2).join(', ')}` : 'nothing asked of the network'}; verify: exit ${verified.status}${verified.status !== 0 ? ` ${verifyOut.slice(-400)}` : ''}`,
+              wrote.ok && zipped.ok && zipSame && files.length === wrote.data.files && listOff.length === 0 && unlisted.length === 0 && texts.length >= 20 && leaks.length === 0 && tiles.length >= 4 && jpeg && wrote.data.leftOut.people >= 1 && wrote.data.leftOut.notes >= 1 && wrote.data.leftOut.names >= 1
+              && report.state === 'intact' && report.thumbs >= 1 && report.drawn === report.thumbs && readers.length === report.thumbs && readers.every((r, k) => r.first?.shown >= 1 && r.level === finestOf(report.links[k]) && r.deepShown >= 1 && r.missing === 0 && r.legend >= 1) && asked.length === 0
+              && verified.status === 0 && /The report carries it: its \d+ numbers, 2 figures and its methods are the certificate's\./.test(verifyOut),
+              'the same files; nothing left out found; offline, intact, drawn; verified');
+            const keep = process.env.SITUCRAFT_CERTIFICATES;
+            if (keep && existsSync(zipPath)) copyFileSync(zipPath, join(keep, 'lung-package.zip'));
+          }
+
+          // The worked examples of wave 8 (slice 9), walked step by step in this project, each number
+          // their cards state checked: A figure of results, and its methods (the figure's size, its
+          // panels and what each shows, its methods' references, its record's steps), and Results
+          // others can check (the figure certified and verified in SituCraft itself, its steps made
+          // again; the report's numbers; the package's files, view, tiles, what it left out and the
+          // texts searched).
+          // A Lung worked example started in the page (the bundle is this run's, not a downloaded
+          // example), then walked step by step; with steps, only its first ones.
+          const walkLung = async (name, steps = 16) => {
+            await chrome.eval(`(async () => {
+              const app = window.situcraft;
+              const { guideFor } = await import('/lib/tours.js');
+              const { startTour } = await import('/ui/tour.js');
+              const dataset = app.store.project.datasets.find((d) => d.name === 'xenium-lung-2fov');
+              for (let k = 0; k < 600 && !app.store.project.artifacts.some((a) => a.kind === 'segmentation' && a.dataset === dataset.id); k += 1) await new Promise((r) => setTimeout(r, 100));
+              startTour(app, { tour: guideFor('xenium-lung-2fov', ${JSON.stringify(name)}), dataset: dataset.id });
+              return true;
+            })()`);
+            const out = [];
+            for (let k = 0; k < steps; k += 1) {
+              const x = await act('tour', { run: true });
+              out.push(x);
+              if (!x.ok || x.data?.finished) break;
+            }
+            return out;
+          };
+          {
+            // In a project of the Lung alone, as a reader starts them.
+            await act('new_project', { name: 'Lung worked examples of wave 8' });
+            await act('open_paths', { paths: [join(dataRoot, 'xenium-lung-2fov')], add: true });
+            const walk = (name) => walkLung(name);
+            const walked = (steps) => steps.every((x) => x.ok) && steps.at(-1)?.data?.finished;
+            const first = await walk('figure-and-methods');
+            const fig = await act('figure', { name: 'The Lung\'s results' });
+            const methods = await act('methods', { result: 'The Lung\'s results' });
+            const record = await act('record', { result: 'The Lung\'s results' });
+            check('viewer', 'the worked example A figure of results, and its methods: the figure two columns wide of the view of the tissue, the cells\' map, the classes\' enrichment and the genes in a pattern, each as its cards state; its methods\' references and its record\'s steps', `${first.map((x) => (x.ok ? `step ${x.data?.step ?? 'finished'}` : x.message)).join('; ')}; ${fig.ok ? `${fig.data.width_mm} × ${fig.data.height_mm} mm, ${fig.data.panels.map((p) => p.kind).join(', ')}${fig.data.notes.length ? `, notes: ${fig.data.notes.join(' ')}` : ''}` : fig.message}; methods ${methods.ok ? `${methods.data.references.length} references, ${methods.data.paragraphs.map((x) => x.topic).join(', ')}` : methods.message}; record ${record.ok ? `${record.data.steps.length} steps, ${record.data.references.length} references` : record.message}`,
+              walked(first) && fig.ok && fig.data.width_mm === 174 && fig.data.height_mm === 157.3 && fig.data.panels.map((p) => p.kind).join() === 'tissue,map,spatial,spatial' && fig.data.notes.length === 0
+              && /400 µm across: the DAPI stain; 2,298 cells outlined and filled by the label set/.test(fig.data.description) && /11,820 cells, colored by their clusters/.test(fig.data.description) && /\(7 pairs\)/.test(fig.data.description) && /The 15 genes of 289 whose Moran's I is highest among the 162 in a pattern/.test(fig.data.description)
+              && methods.ok && methods.data.references.length === 23 && methods.data.paragraphs.some((x) => x.topic === 'figures') && record.ok && record.data.steps.length === 11 && record.data.references.length === 22,
+              '174 × 157.3 mm; 2,298 cells, 11,820 mapped, 7 pairs, 15 of 162 genes; 23 references; 11 steps and 22 references');
+            const second = await walk('results-checked');
+            const made = await chrome.eval('window.situcraft.tour?.reports?.() ?? null');
+            const v = made?.verification;
+            check('viewer', 'the worked example Results others can check: the figure certified and verified in SituCraft itself (its steps made again from the bundle, the figure drawn again), its report\'s numbers and its package\'s files, view and tiles, the dataset\'s name left out, each as its cards state', `${second.map((x) => (x.ok ? `step ${x.data?.step ?? 'finished'}` : x.message)).join('; ')}; verification ${v ? `${v.verdict}, ${v.steps} steps from ${v.bundles} bundle, ${v.madeAgain} made again; ${v.stepVerdicts.map((x) => `${x.n} ${x.verdict}`).join(', ')}` : 'none'}; report ${made?.report ? `${made.report.numbers} numbers` : 'none'}; package ${made?.package ? `${made.package.files} files, ${made.package.views} view in ${made.package.tiles} tiles, ${made.package.leftOut.names} name left out, ${made.package.checked.texts} texts searched` : 'none'}`,
+              walked(second) && v?.verdict === 'verified' && v.steps === 11 && v.bundles === 1 && v.madeAgain === 7 && v.stepVerdicts.every((x) => ['verified', 'as certified'].includes(x.verdict))
+              && made.report?.numbers === 23 && made.report.figures === 1 && made.package?.files === 25 && made.package.views === 1 && made.package.tiles === 20 && made.package.leftOut.names === 1 && made.package.checked.texts === 35,
+              'verified: 11 steps, 7 made again; 23 numbers; 25 files, 1 view in 20 tiles, 1 name left out, 35 texts');
+          }
+
+          // The Lung as 0.8.0 saves a figure of its results, and the figure's certificate
+          // (validation/projects/0.8.0-lung.situcraft.json and 0.8.0-lung.certificate.zip): written
+          // when asked (SITUCRAFT_WRITE_FIXTURE=0.8.0), a project of its own made by the worked
+          // example Results others can check, its bundle's place made neutral. Then, as every later
+          // version must: the certificate verified from the bundle by situcraft verify (every step
+          // made again, the figure drawn again); the project reopened, its bundle found where this
+          // run keeps it, and its figure drawn the same as the certificate records.
+          {
+            const projectFixture = join(root, 'validation', 'projects', '0.8.0-lung.situcraft.json');
+            const certificateFixture = join(root, 'validation', 'projects', '0.8.0-lung.certificate.zip');
+            const lungDir = join(dataRoot, 'xenium-lung-2fov');
+            if (process.env.SITUCRAFT_WRITE_FIXTURE === '0.8.0') {
+              await act('new_project', { name: 'The Lung, as SituCraft 0.8.0 saved it' });
+              await act('open_paths', { paths: [lungDir], add: true });
+              // Its first two steps: the question, and the figure made with all it rests on.
+              await walkLung('results-checked', 2);
+              await act('tour', { end: true });
+              const doc = await chrome.eval(`(async () => (await import('/lib/project.js')).serializeProject(window.situcraft.store.project))()`);
+              const neutral = JSON.parse(doc.split(lungDir).join('/data/xenium-lung-2fov').split(dataRoot).join('/data').split(work).join('/data/work'));
+              writeFileSync(projectFixture, `${JSON.stringify({ ...neutral, id: 'p-situcraft-0-8-0-lung' }, null, 1)}\n`);
+              await act('export', { what: 'certificate', result: 'The Lung\'s results', path: certificateFixture, overwrite: true });
+            }
+            if (existsSync(projectFixture) && existsSync(certificateFixture)) {
+              const fixtureReport = join(work, 'fixture-0.8.0.json');
+              const verified = spawnSync(bin, ['verify', '--data', dataRoot, '--report', fixtureReport, '--overwrite', ...(findChrome() ? ['--chrome', findChrome()] : []), certificateFixture], { encoding: 'utf8', timeout: 30 * 60e3 });
+              const report = existsSync(fixtureReport) ? JSON.parse(readFileSync(fixtureReport, 'utf8')) : null;
+              const certified = JSON.parse(unzipOwn(readFileSync(certificateFixture)).get('certificate.json').toString('utf8'));
+              const figureStep = certified.steps.find((x) => x.kind === 'figure');
+              const text = readFileSync(projectFixture, 'utf8');
+              const reopened = await chrome.eval(`(async () => {
+                const app = window.situcraft;
+                const doc = ${JSON.stringify(text)};
+                const saved = JSON.parse(doc);
+                await app.library.saveProject(saved.id, doc);
+                await app.openProject(saved.id);
+                const d = app.store.project.datasets[0];
+                const link = await app.bundles.locate(d.id, ${JSON.stringify(lungDir)});
+                return { state: link?.state ?? null, figures: app.store.project.figures.map((f) => f.name), software: saved.software ?? null };
+              })()`);
+              const drawn = await act('write_figure', { name: 'The Lung\'s results', path: join(work, 'fixture-0.8.0-figure.json'), format: 'json', overwrite: true });
+              check('viewer', '0.8.0 Lung project and its figure\'s certificate: the certificate verified from the bundle (its steps made again, the figure drawn again); the project reopened, its bundle found, its figure drawn the same as the certificate records', `verify: exit ${verified.status}, ${report?.verdict}, ${report?.steps?.length} steps (${(report?.steps ?? []).filter((x) => x.verdict === 'verified').length} verified)${verified.status !== 0 ? ` ${`${verified.stdout ?? ''}${verified.stderr ?? ''}`.slice(-400)}` : ''}; certified by ${certified.software.version}; reopened ${JSON.stringify(reopened)}; drawn ${drawn.ok ? (drawn.data.drawing === figureStep?.drawing?.drawing ? 'the same' : 'otherwise') : drawn.message}`,
+                verified.status === 0 && report?.verdict === 'verified' && certified.software.version === '0.8.0' && reopened.state === 'ok' && reopened.figures.includes('The Lung\'s results') && drawn.ok && drawn.data.drawing === figureStep?.drawing?.drawing,
+                'verified; reopened; the figure drawn the same');
+            }
+          }
         }
 
         // The simulated example, made on this computer, and its worked example scoring the
@@ -2070,6 +2948,121 @@ export async function viewerSuite({ check, MissingData, verbose }) {
             && close2(av.automatic?.median, 0.41) && close2(av.automatic?.p90, 0.62) && close2(av.automatic?.trueMedian, 0.47) && close2(av.automatic?.trueP90, 0.75),
             'matrix 0.63/1.09 checked, 0.69/1.12 truly; landmarks 0.58/1.19, 0.72/1.22 (fit 0.57, left out 1.00); automatic 0.41/0.62, 0.47/0.75; the automatic version in use');
           await act('tour', { end: true });
+
+          // The H&E in a figure (wave 8, slice 2): a saved view of the simulated tissue showing its
+          // H&E by the alignment in use (the automatic one), drawn in a figure; each pixel of the
+          // stains' raster checked against the suite's own placing (the deformation's field
+          // interpolated by the suite, the transform inverted, the image's pixels interpolated from
+          // its tiles), and the Viewer's own pixels against the same placing within a few levels.
+          {
+            const he = await chrome.eval(`(async () => { const p = window.situcraft.store.project; const ds = p.datasets.find((x) => x.name === 'simulated-standard'); const im = p.artifacts.find((a) => a.kind === 'image' && a.dataset === ds.id && /H&E/.test(a.name)); const d = im ? await window.situcraft.bundles.imageDescription(im.id) : null; return im ? { id: im.id, name: im.name, levels: d.image.levels } : null; })()`);
+            await act('show_tissue', { dataset: 'simulated-standard', center: [250, 250], um_per_pixel: 0.25, genes: [], transcripts: false, outlines: false, nuclei: false, fill: 'none', images: { [he?.name]: { visible: true, opacity: 1 } } });
+            await act('save_view', { name: 'The H&E' });
+            const made = await act('figure', { name: 'The H&E', size: 'single', panels: [{ kind: 'tissue', view: 'The H&E', width_um: 160 }] });
+            const svgPath = join(work, 'he.svg');
+            const jsonPath = join(work, 'he.json');
+            const w1 = await act('write_figure', { name: 'The H&E', path: svgPath, format: 'svg', overwrite: true });
+            const w2 = await act('write_figure', { name: 'The H&E', path: jsonPath, format: 'json', overwrite: true });
+            const svg = existsSync(svgPath) ? readFileSync(svgPath, 'utf8') : '';
+            const manifest = existsSync(jsonPath) ? JSON.parse(readFileSync(jsonPath, 'utf8')) : null;
+            const facts = manifest?.panels?.[0]?.facts;
+            const placed = facts?.raster?.images?.[0];
+            const raster = embeddedImage(figurePanelSvg(svg, 'A'));
+            // The suite's own placing of the image: the transform in use, its deformation's field.
+            const tf = placed ? await (await fetch(`${url}/api/transforms/${encodeURIComponent(placed.transform)}`)).json() : null;
+            const field = tf?.deformation ? readInverseField(await (await fetch(`${url}/api/transforms/${encodeURIComponent(placed.transform)}/inverse`)).arrayBuffer()) : null;
+            const inv = tf ? invert(tf.transform) : null;
+            const tiles = new Map();
+            const pixelOf = async (level, x, y) => {
+              const lv = he.levels[level];
+              const tx = Math.floor(x / lv.tileWidth);
+              const ty = Math.floor(y / lv.tileHeight);
+              const key = `${level}/${tx}/${ty}`;
+              if (!tiles.has(key)) {
+                const r = await fetch(`${url}/api/images/${encodeURIComponent(he.id)}/tiles/${level}/0/${tx}/${ty}`);
+                tiles.set(key, r.ok ? { w: Number(r.headers.get('X-Tile-Width')), b: new Uint8Array(await r.arrayBuffer()) } : null);
+              }
+              const t = tiles.get(key);
+              const at = 3 * ((y - ty * lv.tileHeight) * t.w + (x - tx * lv.tileWidth));
+              return [t.b[at], t.b[at + 1], t.b[at + 2]];
+            };
+            const placeColor = async (level, x, y) => {
+              let px = x;
+              let py = y;
+              if (field) {
+                const gx = Math.min(field.nx - 1, Math.max(0, (x - field.x0) / field.step));
+                const gy = Math.min(field.ny - 1, Math.max(0, (y - field.y0) / field.step));
+                const i0 = Math.min(field.nx - 2, Math.floor(gx));
+                const j0 = Math.min(field.ny - 2, Math.floor(gy));
+                const v = (i, j, k) => field.field[2 * (j * field.nx + i) + k];
+                const fx = gx - i0;
+                const fy = gy - j0;
+                for (const k of [0, 1]) {
+                  const d = (v(i0, j0, k) * (1 - fx) + v(i0 + 1, j0, k) * fx) * (1 - fy) + (v(i0, j0 + 1, k) * (1 - fx) + v(i0 + 1, j0 + 1, k) * fx) * fy;
+                  if (k === 0) px += d;
+                  else py += d;
+                }
+              }
+              const lv = he.levels[level];
+              const sx = he.levels[0].width / lv.width;
+              const sy = he.levels[0].height / lv.height;
+              const lx = (inv[0][0] * px + inv[0][1] * py + inv[0][2]) / sx - 0.5;
+              const ly = (inv[1][0] * px + inv[1][1] * py + inv[1][2]) / sy - 0.5;
+              const x0 = Math.max(0, Math.min(lv.width - 1, Math.floor(lx)));
+              const y0 = Math.max(0, Math.min(lv.height - 1, Math.floor(ly)));
+              const x1 = Math.min(lv.width - 1, x0 + 1);
+              const y1 = Math.min(lv.height - 1, y0 + 1);
+              const ax = Math.min(1, Math.max(0, lx - x0));
+              const ay = Math.min(1, Math.max(0, ly - y0));
+              const [p00, p10, p01, p11] = await Promise.all([pixelOf(level, x0, y0), pixelOf(level, x1, y0), pixelOf(level, x0, y1), pixelOf(level, x1, y1)]);
+              return [0, 1, 2].map((k) => (p00[k] * (1 - ax) + p10[k] * ax) * (1 - ay) + (p01[k] * (1 - ax) + p11[k] * ax) * ay);
+            };
+            let rasterOff = -1;
+            let probed = 0;
+            if (raster?.rgba && placed && inv) {
+              rasterOff = 0;
+              const r = facts.region;
+              for (let k = 0; k < 60; k += 1) {
+                const px = Math.floor(((k * 37) % 97) / 97 * (raster.width - 20)) + 10;
+                const py = Math.floor(((k * 53) % 89) / 89 * (raster.height - 20)) + 10;
+                const want = await placeColor(placed.level, r.x0 + (px + 0.5) * ((r.x1 - r.x0) / raster.width), r.y0 + (py + 0.5) * ((r.y1 - r.y0) / raster.height));
+                const i = 4 * (py * raster.width + px);
+                if (want.some((c, j) => Math.abs(Math.round(c) - raster.rgba[i + j]) > 1)) rasterOff += 1;
+                probed += 1;
+              }
+            }
+            // The Viewer's own pixels of the same view, at its level.
+            await act('open_view', { view: 'The H&E' });
+            const probes = await chrome.eval(`(async () => {
+              const v = window.situcraftViewer;
+              await v.settled();
+              const r = v.renderer;
+              const [w, h] = r.size();
+              const { screenToWorld } = await import('/lib/viewport.js');
+              const { overlayLevel } = await import('/lib/overlays.js');
+              const o = r.overlays[0];
+              const level = overlayLevel(o.desc.image.levels, o.desc.transform, r.camera.scale);
+              const kept = [r.selected, r.highlight];
+              r.selected = null;
+              r.highlight = null;
+              const out = [];
+              for (const [fx, fy] of [[0.2, 0.2], [0.35, 0.6], [0.5, 0.5], [0.62, 0.31], [0.71, 0.77], [0.8, 0.45], [0.27, 0.83], [0.9, 0.15], [0.45, 0.9]]) {
+                const sx = Math.floor(w * fx), sy = Math.floor(h * fy);
+                const [x, y] = screenToWorld(r.camera, w, h, sx + 0.5, sy + 0.5);
+                out.push({ x, y, color: r.readColor(sx, sy).slice(0, 3) });
+              }
+              [r.selected, r.highlight] = kept;
+              return { level, out };
+            })()`);
+            let viewerOff = 0;
+            for (const p of probes.out) {
+              const want = await placeColor(probes.level, p.x, p.y);
+              if (want.some((c, j) => Math.abs(c - p.color[j]) > 4)) viewerOff += 1;
+            }
+            check('viewer', 'a figure of the H&E: placed by the alignment in use, its pixels the suite\'s own placing of the image through the deformation and the transform, and the Viewer\'s within a few levels', `${made.ok ? made.message.slice(0, 220) : made.message}; ${w1.ok && w2.ok ? 'written' : `${w1.message} ${w2.message}`}; ${placed ? `image at level ${placed.level}, ${placed.covered} pixels covered, by ${placed.transform}${field ? ' (deformed)' : ''}` : 'no image'}; ${rasterOff} of ${probed} raster pixels off; the Viewer at level ${probes.level}, ${viewerOff} of ${probes.out.length} probes off`,
+              made.ok && w1.ok && w2.ok && placed && placed.covered === raster?.width * raster?.height && rasterOff === 0 && probed === 60 && viewerOff === 0 && /H&E/.test(made.message ?? ''),
+              'the image over every pixel; every probe the suite\'s placing; the Viewer within 4 levels');
+          }
 
           const regionSteps = await card('regions-qupath');
           const drawn = await chrome.eval(`(async () => {
@@ -2656,6 +3649,82 @@ export async function viewerSuite({ check, MissingData, verbose }) {
             && sp.ok && Object.keys(spf).sort().join() === 'enrichment,moran,nearest' && spf.enrichment.tests.length === 10 && spf.moran.tests.length === 120 && mixed?.ratio > 1 && mixed.ratioLo > 1,
             'the null cohort nothing below 0.05, its spatial statistics refused; SIM033 found in the epithelial-like cells, its interval covering the truth, at most one other gene; treated above control; three families, the epithelial–immune enrichment above 1');
 
+          // A figure of the cohort's comparisons (wave 8, slice 2): the labels' shares by condition
+          // (each estimate with its interval on a log axis), the epithelial-like cells' volcano,
+          // SIM033 by group and the neighbor enrichments by condition, written as SVG and read by
+          // the suite: a row each label, its estimate where its ratio is on the axis's log scale,
+          // those found red; a point each gene tested, those found red and SIM033 named; a dot each
+          // unit; no text below 6 pt.
+          {
+            const made = await act('figure', { name: 'The cohort compared', size: 'double', columns: 2, height_mm: 160, panels: [{ kind: 'cohort', comparison: da.data?.id, plot: 'forest', family: 'share' }, { kind: 'cohort', comparison: de.data?.id, plot: 'volcano', label: 'epithelial-like' }, { kind: 'cohort', comparison: de.data?.id, plot: 'gene', label: 'epithelial-like', gene: 'SIM033' }, { kind: 'cohort', comparison: sp.data?.id, plot: 'forest', family: 'enrichment' }] });
+            const svgPath = join(work, 'cohort.svg');
+            const wrote = await act('write_figure', { name: 'The cohort compared', path: svgPath, format: 'svg', overwrite: true });
+            const svg = existsSync(svgPath) ? readFileSync(svgPath, 'utf8') : '';
+            const abu = await (await fetch(`${url}/api/artifacts/${encodeURIComponent(da.data?.id)}/files/abundance.json`)).json();
+            const share = abu.families.find((f) => f.family === 'share');
+            const contrast = abu.design.contrasts[0].name;
+            const tests = share.tests.filter((t) => t.contrast === contrast);
+            const forest = [...figurePanelSvg(svg, 'A').matchAll(/<rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)" fill="(#171b26|#d63b4a)"\/>/g)].filter((m) => m[3] === m[4]).map((m) => ({ x: Number(m[1]) + Number(m[3]) / 2, red: m[5] === '#d63b4a' }));
+            // On a log axis, the estimates' places differ as their logs do.
+            const tested = tests.filter((t) => t.tested);
+            const slope = forest.length >= 2 ? (forest[1].x - forest[0].x) / (Math.log(tested[1].ratio) - Math.log(tested[0].ratio)) : NaN;
+            const placesOff = forest.filter((f, i) => Math.abs(f.x - forest[0].x - slope * (Math.log(tested[i].ratio) - Math.log(tested[0].ratio))) > 0.05).length;
+            const ex = await (await fetch(`${url}/api/artifacts/${encodeURIComponent(de.data?.id)}/files/expression.json`)).json();
+            const epiResult = ex.results.find((r) => r.label === 'epithelial-like');
+            const epiContrast = epiResult.contrasts.find((c) => c.contrast === contrast) ?? epiResult.contrasts[0];
+            const genesFound = epiContrast.padj.filter((p) => p < 0.05).length;
+            const volcano = figurePanelSvg(svg, 'B');
+            const vPoints = (volcano.match(/<circle /g) ?? []).length;
+            const vRed = (volcano.match(/<circle [^>]*fill="#d63b4a"/g) ?? []).length;
+            const dots = (figurePanelSvg(svg, 'C').match(/<circle /g) ?? []).length;
+            const spDoc = await (await fetch(`${url}/api/artifacts/${encodeURIComponent(sp.data?.id)}/files/spatial-tests.json`)).json();
+            const enr = spDoc.families.find((f) => f.family === 'enrichment').tests.filter((t) => t.contrast === contrast);
+            const spRows = [...figurePanelSvg(svg, 'D').matchAll(/<rect x="[\d.]+" y="[\d.]+" width="([\d.]+)" height="([\d.]+)" fill="(#171b26|#d63b4a)"\/>/g)].filter((m) => m[1] === m[2]);
+            const sizes = [...svg.matchAll(/font-size="([\d.]+)"/g)].map((m) => Number(m[1]));
+            check('viewer', 'a figure of a cohort\'s comparisons: each label\'s share by condition on a log axis, those found red; the epithelial-like cells\' volcano a point each gene tested, those found red and SIM033 named; SIM033 a dot each unit; the enrichments by condition; no text below 6 pt', `${made.ok ? made.message.slice(0, 200) : made.message}; ${wrote.ok ? 'written' : wrote.message}; forest ${forest.length} of ${tests.length} labels, ${placesOff} places off the log scale, ${forest.filter((f) => f.red).length} red of ${tests.filter((t) => t.padj < 0.05).length} found; volcano ${vPoints} points of ${epiResult.genes.length}, ${vRed} red of ${genesFound}; ${dots} units; enrichment ${spRows.length} rows of ${enr.length}, ${spRows.filter((m) => m[3] === '#d63b4a').length} red of ${enr.filter((t) => t.padj < 0.05).length}; text ${Math.min(...sizes)} pt or more`,
+              made.ok && wrote.ok && forest.length === tested.length && tested.length === 4 && placesOff === 0 && forest.filter((f) => f.red).length === tests.filter((t) => t.padj < 0.05).length
+              && vPoints === epiResult.genes.length && vRed === genesFound && /<text[^>]*>SIM033<\/text>/.test(volcano) && dots === 8
+              && spRows.length >= 5 && spRows.length <= enr.length && spRows.filter((m) => m[3] === '#d63b4a').length === enr.slice(0, spRows.length).filter((t) => t.padj < 0.05).length && Math.min(...sizes) >= 6,
+              'four labels on the log scale, the found red; a point each gene, the found red, SIM033 named; 8 units; the enrichments; 6 pt or more');
+          }
+
+          // What made a cohort's result (wave 8, slice 3): the record of the expression comparison,
+          // from the eight bundles through each sample's segmentation, clustering, labels and graph
+          // (found in the summary's job, as the program kept it), the design and the summary, to the
+          // comparison; the eight samples' steps written once in the Markdown; the methods' papers
+          // (muscat, edgeR's quasi-likelihood, TMM, voom, limma, Benjamini–Hochberg) cited.
+          {
+            const asked = await act('record', { result: de.data?.id, format: 'markdown' });
+            const rec = asked.data;
+            const f = recordFacts(rec, asked.data?.text ?? '');
+            const count = (kind) => f.kinds.filter((k) => k === kind).length;
+            const summary = rec?.steps.find((x) => x.kind === 'cohort-summary');
+            const fromSummary = new Set((summary?.inputs ?? []).map((n) => rec.steps[n - 1].kind));
+            const want = ['crowell2020', 'chen2016', 'robinson2010', 'law2014', 'smyth2004', 'benjamini1995'];
+            check('viewer', 'what made a cohort\'s result: the expression comparison\'s record, from the eight bundles through each sample\'s segmentation, clustering, labels and graph, the design and the summary; the samples\' steps written once; the methods\' papers cited', `${asked.ok ? asked.message.slice(0, 160) : asked.message}; ${['dataset', 'segmentation', 'clustering', 'labels', 'graph', 'design', 'cohort-summary', 'expression'].map((k) => `${k} ${count(k)}`).join(', ')}; the summary from ${[...fromSummary].join(', ')}; ${f.ordered ? 'in order' : 'out of order'}; ${want.filter((k) => !f.keys.includes(k)).join(', ') || 'every method\'s paper'} ${want.some((k) => !f.keys.includes(k)) ? 'missing' : 'cited'}`,
+              asked.ok && f.ordered && f.numbered && count('dataset') === 8 && count('segmentation') === 8 && count('labels') === 8 && count('graph') >= 8 && count('design') === 1 && count('cohort-summary') === 1 && f.kinds.at(-1) === 'expression'
+              && ['dataset', 'segmentation', 'labels', 'graph'].every((k) => fromSummary.has(k)) && /\*\*Xenium output bundles, one for each of 8:\*\*/.test(asked.data.text) && want.every((k) => f.keys.includes(k)) && f.mdRefs === rec.references.length,
+              'eight of each, then the design, the summary and the comparison, in order; the bundles written once; every method\'s paper');
+          }
+
+          // The methods text of a cohort's result (wave 8, slice 4): the expression comparison's
+          // methods say the eight simulated sections once, each sample's same steps once, the design
+          // in its words, the summary, the comparison's steps and the genes it found, with their
+          // log2 fold changes the comparison's own; and the whole project's methods by topic.
+          {
+            const asked = await act('methods', { result: de.data?.id });
+            const text = asked.data?.text ?? '';
+            const exp = await chrome.eval(`(() => window.situcraft.store.project.artifacts.find((a) => a.id === ${JSON.stringify(de.data?.id)})?.summaryOf ?? null)()`);
+            const found = (exp?.found ?? []).slice(0, 3).map((f) => `${f.gene} (${f.label}; ${f.contrast}; log2 fold change ${f.logFC >= 0 ? '+' : ''}${f.logFC.toFixed(2)}`);
+            const mf = methodsFacts(text, asked.data?.references);
+            const whole = await act('methods', { project: true });
+            const topics = (whole.data?.paragraphs ?? []).map((x) => x.topic);
+            check('viewer', 'the methods of a cohort\'s result: the eight sections said once, each sample\'s same steps once, the design in its words, the summary and the comparison, the genes found with the comparison\'s fold changes; numbered as first cited; the project\'s methods by topic', `${asked.ok ? `${(asked.data.paragraphs ?? []).map((x) => x.topic).join(', ')}; ${asked.data.references.length} references` : asked.message}; found ${found.filter((f) => text.includes(f)).length} of ${found.length} as the comparison has them; ${mf.numbered ? 'numbered as cited' : 'not numbered as cited'}; the project: ${whole.ok ? topics.join(', ') : whole.message}`,
+              asked.ok && /The 8 sections \(S01, .* and S08\) were simulated by SituCraft/.test(text) && /The cells of each section were clustered/.test(text) && /were compared by the design "/.test(text) && /Each sample was summarized/.test(text) && /Each label's pseudobulk was compared between the groups/.test(text)
+              && found.length > 0 && found.every((f) => text.includes(f)) && mf.numbered && whole.ok && ['data', 'cells', 'spatial', 'cohort', 'figures', 'software'].every((t) => topics.includes(t)) && methodsFacts(whole.data.text, whole.data.references).numbered,
+              'the sections once, each step once; the genes found as the comparison has them; numbered as cited; the project by topic');
+          }
+
           // Worked examples on the simulated cohorts (wave 7, slice 9), each run step by step and
           // every number its cards state checked against the comparison's own document: a gene
           // changed in one cell type (the standard cohort, open now), a comparison where nothing
@@ -2729,7 +3798,7 @@ export async function viewerSuite({ check, MissingData, verbose }) {
           // The project as 0.7.0 saves a cohort (validation/projects/0.7.0-cohort.situcraft.json):
           // the simulated cohort's samples with their subjects and conditions, a saved design, the
           // same steps on every sample, its summary and its comparisons of abundance, expression and
-          // arrangement. Written when asked (SITUCRAFT_WRITE_FIXTURE=1), its folders' places made
+          // arrangement. Written when asked (SITUCRAFT_WRITE_FIXTURE=0.7.0), its folders' places made
           // neutral and given its own id. Then reopened: each sample's bundle found again where this
           // run made it, its samples, fields and design as saved; and the steps, summary and
           // comparisons made again by this build with the same ids, each artifact the project
@@ -2744,7 +3813,7 @@ export async function viewerSuite({ check, MissingData, verbose }) {
             await act('compare_expression', { design: 'By condition' }),
             await act('compare_spatial', { design: 'By condition' }),
           ];
-          if (process.env.SITUCRAFT_WRITE_FIXTURE && cohortHome) {
+          if (process.env.SITUCRAFT_WRITE_FIXTURE === '0.7.0' && cohortHome) {
             await act('new_project', { name: 'Simulated cohort, as SituCraft 0.7.0 saved it' });
             await act('open_example', { example: 'cohort' });
             await act('design', { unit: 'subject', group: 'condition', reference: 'control', save: 'By condition' });
@@ -2753,7 +3822,12 @@ export async function viewerSuite({ check, MissingData, verbose }) {
             const neutral = JSON.parse(doc.split(cohortHome).join('/data/examples/simulated-cohort').split(work).join('/data/work'));
             writeFileSync(cohortFixture, `${JSON.stringify({ ...neutral, id: 'p-situcraft-0-7-0-cohort' }, null, 1)}\n`);
           }
-          if (existsSync(cohortFixture) && cohortHome) {
+          // Reopened against the cohort as 0.7.0 made it: a simulated bundle records the version that
+          // wrote it, so the cohort this version makes is another run; the same simulator, told to
+          // record 0.7.0 (SITUCRAFT_SIMULATE_AS), makes 0.7.0's bundles again exactly.
+          const cohort070 = join(work, 'cohort-0.7.0');
+          if (existsSync(cohortFixture) && !existsSync(cohort070)) spawnSync(bin, ['simulate', '--cohort', 'standard', '--quiet', cohort070], { encoding: 'utf8', timeout: 30 * 60e3, env: { ...process.env, SITUCRAFT_SIMULATE_AS: '0.7.0' } });
+          if (existsSync(cohortFixture) && existsSync(cohort070)) {
             const text = readFileSync(cohortFixture, 'utf8');
             const fixture = JSON.parse(text);
             const reopened = await chrome.eval(`(async () => {
@@ -2765,7 +3839,12 @@ export async function viewerSuite({ check, MissingData, verbose }) {
               await app.library.saveProject(saved.id, doc);
               await app.openProject(saved.id);
               const states = [];
-              for (const d of app.store.project.datasets) states.push((await app.bundles.locate(d.id, ${JSON.stringify(cohortHome)} + '/' + d.path.split('/').pop()))?.state);
+              for (const d of app.store.project.datasets) {
+                const link = await app.bundles.locate(d.id, ${JSON.stringify(cohort070)} + '/' + d.path.split('/').pop());
+                states.push(link?.state);
+                // Its instrument's segmentation registered, as opening it registers it.
+                if (link?.item) await app.bundles.registerSegmentation(link.item, d.id);
+              }
               const p = app.store.project;
               return { states, samples: samplesOf(p).map((x) => [x.name, x.fields.subject, x.fields.condition].join(' ')).join(', '), designs: designsOf(p).map((d) => d.name + ' v' + d.version).join() };
             })()`);

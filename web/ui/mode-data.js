@@ -156,7 +156,7 @@ export function mountData(app, container) {
     if (dataset && (!link || link.state === 'missing' || link.state === 'different-run' || link.state === 'changed')) {
       actions.push(h('button.btn', { type: 'button', onclick: () => locate(dataset) }, icon('folder'), 'Locate…'));
     }
-    if (dataset) actions.push(h('button.btn', { type: 'button', title: 'A methods paragraph for this dataset, from what the project records', onclick: () => showMethods(app, dataset, report) }, icon('report'), 'Methods'));
+    if (dataset) actions.push(h('button.btn', { type: 'button', title: 'A methods section for this dataset and everything made of it, from what the project records', onclick: () => showMethods(app, dataset) }, icon('report'), 'Methods'));
     if (dataset) {
       actions.push(h('button.btn.ghost.danger', {
         type: 'button',

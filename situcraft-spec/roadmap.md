@@ -3361,11 +3361,496 @@ makes, which SituCraft refuses.
 
 ## 0.8.0: figures and a provable record (wave 8)
 
-Outline.
-- Figures (SVG, PDF, PNG) with scale bars, legends and provenance (E6), adapted from MaveScape.
-- The full methods text and citation helper (E4, E9).
-- A certificate and `situcraft verify` (E7).
-- The redacted static result package (E8); the report.
+What others can check. A result leaves SituCraft as a figure with a scale bar and a legend, a
+methods text of everything that was done, the software and publications behind it, a certificate
+that another computer checks by making the result again, and a package that opens anywhere.
+
+**One drawing, three outputs.** A figure is drawn once, as a list of marks, and written as SVG, as
+PDF (its text as text, in Helvetica, which every reader has) or as PNG (300 dpi by default), and
+painted in the page for its preview: the same marks in each (after MaveScape 0.8.0's
+`web/lib/draw.js`, `pdf.js` and `png.js`, the same author's). A tissue panel is a saved view drawn
+at the figure's size: the stains composited from their samples as the Viewer's shader composites
+them, at the output's resolution; the cells' outlines and fills as paths and the transcripts as
+points, placed in µm; a scale bar of a round length; and a legend of what is drawn. A panel says
+what it shows; it never holds a number it does not draw.
+
+**Provenance in every file.** A figure carries its manifest: the figure, each panel's dataset (its
+bundle's run and fingerprint), its view and the artifacts it draws by id and checksum, SituCraft's
+version and commit, and a digest of each panel's drawing; in an SVG's metadata, a PNG's text chunk
+and a PDF's attached file. SituCraft reads it back from any of them and says whether the project
+still draws the figure the same.
+
+**The record of a result.** Every artifact already records its lineage (its parents with their
+checksums, its job and every effective parameter, its method with its version and citation, the
+software), and the page records what it decides itself (filters, designs, curated label sets,
+reviews, decisions). The software and publications behind a result (E9) and the methods text (E4)
+are written from them: each step from the bundle to the result, in the order done, its method,
+version, parameters, seed and reference; only what was done; the same text for the same project.
+
+**A certificate, checked by making the result again.** A result's certificate lists what it rests
+on: the bundles' files read, by SHA-256; each step's job and parameters, and its files by SHA-256;
+the page's own records by digest; the figures' drawings; and the numbers it reports.
+`situcraft verify` makes each step again from the bundles, in a store of its own, and compares
+every file bit for bit, without tolerance (SituCraft gives the same bits on every processor; wave
+6, slice 10): verified, differs (what, and where it first differs) or not checkable (what is
+missing). The Go jobs are run again in the program; the page's own records are recomputed in a
+headless page, as MaveScape's `verify` does.
+
+**A package that opens anywhere.** A result package is a folder (or a zip) of static files: the
+report (the methods, the figures, the tables, each number traced to the certificate), the views it
+shows with their tiles made in advance and a reader of its own, and the certificate. It is
+redacted of what the computer says of itself (paths, the user's name, notes kept private) and, when
+asked, of the samples' and subjects' names.
+
+**Validation.** Independent readers of SVG and PDF, written for the suite, compared mark by mark;
+SVG and PDF the same bytes when written again; a tissue panel's pixels the suite's own composite of
+the tiles' samples, and the Viewer's within one level of 255; each scale bar's length in µm; no text
+below 6 pt; manifests read back from every format and edits found; methods texts whose every step
+and reference is the project's; certificates verified on the other processor in CI and tampered
+ones found; the package opened in headless Chrome with no request leaving it and nothing redacted
+left in it.
+
+### Wave 8
+
+1. **Figures of the tissue (E6): done.**
+   - **One drawing, three outputs** (`web/lib/draw.js`, `pdf.js`, `png.js`, adapted from MaveScape
+     0.8.0 with their tests): marks (rectangles, lines, paths, circles, text, images, clipped
+     groups) in points, written as SVG and PDF and painted on a canvas; PDF 1.4 with Helvetica's
+     metrics for layout, its text as text; PNG encoded where no canvas is.
+   - **The figure** (`web/lib/figures.js`; `project.figures`): its size (85, 114 or 174 mm wide,
+     or a 16:9 slide), text (6 to 36 pt), panels in points, lettered in reading order, checked
+     before it is drawn; a text panel; the figure in words.
+   - **A tissue panel** (`web/lib/figure-tissue.js`, pure; its data gathered by
+     `web/ui/figure-data.js` from the saved view as the Viewer reads it, without the Viewer
+     open): the region a center and width in µm, its height the panel's shape less its legend;
+     the stains composited on the processor as the shader composites them (each 16-bit sample
+     windowed, raised to its gamma, colored, the channels added and clamped), from the level whose
+     samples are no larger than the output's pixels at 300 dpi; the cells' level-0 outlines, a
+     path of each fill color and alpha and one of every outline (the nuclei's under the cells'),
+     the fill from the functions the Viewer colors by (a label set, clusters, niches, a number on
+     viridis, the segmentation method); the genes' transcripts of quality 20 or more as points (no
+     more than 250,000); a scale bar of 1, 2 or 5 × 10ⁿ µm near a fifth of the width; a legend
+     of the stains, genes and the fill's labels among the cells drawn (settled with the region it
+     leaves) or its scale and range. What it does not draw yet (certainties, limitations, review
+     status, all transcripts) it says in a note.
+   - **The manifest** (`web/lib/figure-manifest.js`): the figure, each panel's inputs (the dataset
+     by its run and fingerprint's digest, the saved view's digest, the artifacts drawn), facts and
+     drawing's digest (its marks as SVG, each image stood in for by the SHA-256 of its pixels, so
+     that it does not depend on a PNG's compression), SituCraft's version and commit, the time,
+     and a fingerprint over all of it as canonical JSON; embedded in SVG metadata, a PDF
+     attachment and a PNG iTXt chunk (with pHYs for its resolution) and read back from each;
+     compared with the project panel by panel, and each panel drawn again.
+   - **The Reports view** (`web/ui/mode-reports.js`): the figures, a new one of a saved view, its
+     size, height, text and panels (view, region, scale bar, points, place), a preview, the files
+     written; a figure read back. The project tree lists **Figures**. Remote control: `figure`,
+     `write_figure` (a fixed `time` for the same bytes), `read_figure` (`GET /api/read-figure`,
+     this computer only).
+   - Validation:
+     - **In Node** (`web/lib/figures.test.mjs`, `draw.test.mjs`, `pdf.test.mjs`, `png.test.mjs`):
+       scale bar lengths; channel tables; compositing against hand-computed pixels (two channels
+       clamped, finer than the samples, beyond the grid); layout and the legend's rows; a tissue
+       panel's cells, fills, points, scale bar and words; letters; SVG and PDF the same twice; the
+       manifest in SVG, PNG and PDF, edits and changes found; a drawing's digest the same whatever
+       compressed its image, and another for another pixel.
+     - **In the page** (viewer suite): a figure of a saved view of the Lung (DAPI, EPCAM, PLVAP,
+       CD68, the cells filled by lineage) written in every format and read by the suite's own
+       readers: SVG and PDF the same bytes again; one manifest in all four files, its fingerprint
+       the suite's; the PNG at 300 dpi; the stains' pixels in the SVG the suite's own composite of
+       the tiles' samples, every pixel; the Viewer's pixels that composite within one level; the
+       scale bar its length; the cells the suite's own count of outlines meeting the region, each
+       group of fills the Viewer's colors; the points the suite's count; text 6 pt or more, the
+       PDF's strings the SVG's; read back unchanged and drawn the same.
+   - Found by slice 1:
+     - **A drawing's digest followed its PNG's compression:** the stains' PNG is deflated by the
+       browser, whose bytes another engine's deflate need not give; the digest now reads an image
+       by its pixels.
+     - **The Viewer's fill colors belong to the Viewer:** a figure draws without it, so the fill's
+       dispatch (labels, clusters, attributes) is gathered again from the same coloring
+       functions, and the suite compares the two cell by cell.
+2. **Figures of results (E6): done.**
+   - **Charts as marks** (`web/lib/charts.js`; its axes, ticks, bars and legend after MaveScape
+     0.8.0's `plots.js`): a histogram, horizontal bars, a scatter (a map's: one unit the same both
+     ways, its groups named at their points' median), a heat map with names on two sides and a
+     color bar, a forest of estimates with their intervals on a log or linear axis, a volcano,
+     dots by group with their means; a chart panel with its title and a legend of at most a third
+     of it. No text below 6 pt: bars and forests draw the rows that fit and say how many more.
+   - **Result panels** (`web/ui/figure-results.js`; `figures.js`' kinds `qc`, `map`, `spatial`,
+     `cohort`), from what the views read: a dataset's cells' metric in the QC view's 40 bins
+     (from the least to the 99.5th percentile, on a log scale if asked) with a filter's
+     thresholds; a map's points colored by its clustering or a label set; an enrichment's or
+     nearest distances' heat map (`divergingColor`, a dot where the adjusted p is below 0.05) or
+     Moran's I's genes in a pattern; a comparison's effects (abundance's odds or density ratios,
+     spatial statistics' ratios or differences), its units by group (`rowsByGroup`,
+     `statisticByGroup`), a volcano (`volcanoPoints`) or a gene by group. The manifest records
+     each panel's analysis, map or comparison and what colors it.
+   - **Rows:** the tissue panels of a row (the same top and height) reserve their tallest
+     legend's height, so that their images are as tall; each panel's legend gathered first, then
+     its stains and points.
+   - **More on the tissue:** post-Xenium images the view shows (`compositeImage`): each pixel's
+     center moved back by the deformation's inverse field (interpolated, as the shader's linear
+     texture), to the image's pixels by the transform's inverse, an H&E sampled between its
+     pixels and laid over at its opacity, an immunofluorescence channel's nearest sample windowed
+     and added, at the level whose pixels are no larger than the output's; the dataset's regions
+     (a casing, a faint fill by the even-odd rule, the outline and the name, as the Viewer draws
+     them); every fill (certainty scales, limitations, review status); the scale bar dark over a
+     light H&E. The drawing core fills paths by the even-odd rule when asked (SVG, canvas, PDF).
+   - **The Reports view** adds a panel of any kind the project has and chooses what it draws;
+     remote control's `figure` takes `panels` (each naming what it draws) and `columns`.
+   - Validation:
+     - **In Node** (`charts.test.mjs`, `figures.test.mjs`, `draw.test.mjs`): ticks; a
+       histogram's heights; a forest's places on a log axis; a heat map's squares and dots; a
+       volcano's order and names; dots and their means; a map's aspect; a figure of result
+       panels; an image at full and half opacity, between its pixels, a channel added, a
+       deformation followed, the field interpolated and clamped; the even-odd rule in SVG and PDF.
+     - **In the page** (viewer suite): the Lung's results (every histogram bar the suite's own
+       binning of the cells, every map point and cluster named, every heat map square's color
+       and dot, the genes in a pattern in order); the simulated cohort's comparisons (each label's
+       estimate on the log scale, the found red, a volcano point each gene and SIM033 named, a dot
+       each unit, the enrichments); the simulated tissue's H&E by its automatic alignment (60
+       pixels the suite's own placing through the deformation and transform, and the Viewer's
+       within four levels); no text below 6 pt in any.
+   - Found by slice 2:
+     - **Rounding at a label's width:** a label given exactly its width was cut to nothing, and
+       ticks of a step of 0.5 became 1, both by floating-point rounding; widths and steps are
+       compared with a little slack.
+     - **A map's legend of 29 clusters took the panel:** clusters past twelve are named on the
+       map instead, and a legend never takes more than a third of its panel.
+3. **What made a result (E9): done.**
+   - **The references in one place** (`web/lib/references.js`): every publication SituCraft cites
+     (the methods' citations the program records, the starter marker sets' atlases, the science
+     page's list), each with its authors, title, journal, year, volume, pages and DOI, written in
+     Vancouver style and as BibTeX; a citation as the program records it is read into the list's
+     references by each one's first author and year, what the list does not hold kept as written.
+   - **The record** (`web/lib/record.js`): from the result back to the bundles, each item's inputs
+     from its project record (a label set's clustering and marker set, an analysis's graph and
+     labels, a comparison's summary and design, a figure's panels…) and from its artifact's
+     manifest (its parents, and its job's inputs: a cohort summary's samples' segmentations,
+     labels, graphs and analyses); the steps ordered so that each comes after its inputs (kinds in
+     a fixed order where either may come first, then the oldest first), each with its method and
+     version, parameters, seeds, software, decisions and references, numbered as first cited
+     (SituCraft itself with the first step it ran). Written as Markdown (consecutive steps the
+     same but for their items written once), JSON (`situcraft-record` 1) and BibTeX.
+   - **Shown** in the Reports view below the figures (`web/ui/record-view.js`: a result chosen
+     among the project's, its steps and references, the files written); **What made it** in the
+     inspector for any result. Remote control: `record` (the record, and its Markdown or BibTeX),
+     `export` with `what: record`.
+   - Validation:
+     - **Crossref** (`validation/reference/crossref/`): `make-crossref.mjs` records Crossref's
+       record of each DOI (metadata CC0); `references.test.mjs` checks each reference against it
+       (title, or its part before a subtitle; the journal, its NLM abbreviation word by word;
+       year; volume; first page; first author), with four exceptions saying why.
+     - **In Node** (`references.test.mjs`, `record.test.mjs`): every citation the Go code records
+       found in the list, nothing left over; the science page's 55 and the starter sets' atlases
+       found; the steps, inputs, seeds and numbering of a sample's enrichment and of a cohort's
+       expression comparison, without and with the manifests; the Markdown's groups and the
+       BibTeX's entries.
+     - **In the page** (viewer suite): the Lung enrichment's record (in order from the bundle
+       through its segmentation, clustering, marker set, labels and graph; the clustering's seed
+       its parameters'; Xenium's, scanpy's, Leiden's, the atlas's and the analysis's papers cited;
+       the same record in Markdown, JSON and BibTeX; shown in Reports); the simulated cohort's
+       expression comparison's (eight of each sample's steps, the design and the summary, the
+       bundles written once, every method's paper).
+   - Found by slice 3:
+     - **A DOI of another paper:** Ederer and Mantel's 1974 note was cited by the DOI of the
+       article before it in the journal; Crossref's record named a measles paper.
+     - **A preprint's title for a paper:** the cohort summary cited muscat (Nat Commun 2020) by
+       its preprint's title; it now cites it as the expression comparison does.
+     - **A cohort's analyses were never read:** a dangling `else` in reading a job's inputs left
+       a summary's analyses out of its record; the cohort test found it.
+4. **The methods text (E4): done.**
+   - **Written from the record** (`web/lib/methods-text.js`): the record of a result, of a dataset
+     and everything made of it, or of the whole project (`record.js` now takes several results,
+     `scopeResults`: a project's datasets and complete results but a filter's older versions and
+     planted segmentations). Each kind of step said as what was done, in paragraphs by topic: the
+     data (a dataset's paragraph as before, `methods.js`; sections made alike said once, with
+     their check); images (read where they lie), alignments (Xenium Explorer's matrix or
+     keypoints, landmarks, automatic, each with its fit, and why one was chosen) and their checks;
+     regions; segmentations (expanded, refined, imported, planted for practice, chosen after a
+     comparison, with why) and comparisons; filters and reviews (a dataset's or the project's);
+     clusters, cluster names, maps, marker sets, labels (from markers, a reference, imported),
+     curated and consensus sets; graphs and every spatial question; a cohort's design (in its
+     words), summary, abundance, expression and spatial statistics compared, with what they
+     found; figures; the software and its versions. Each step's parameters and seed are said; a
+     step made the same way for several sections, segmentations or regions is said once, each
+     named or their results as a range. References numbered as first cited, each with its DOI.
+   - **Shown** in the Reports view (the project, a dataset or a result chosen; copied, or written
+     as Markdown or BibTeX), in the Data view's Methods (a dataset's, its filters chosen), and by
+     **Its methods** in the inspector. Remote control: `methods` takes `result` or `project` as
+     well as `dataset`; `export` writes any of them.
+   - **The program records each method's own citations:** each spatial question's (the enrichment
+     its, Ripley's K Ripley's and Besag's, the niches Goltsev's, Schürch's and k-means++'s…), a
+     graph's by its kind (Delaunay's for a Delaunay graph, none for the others), Reichardt and
+     Bornholdt's resolution with the clusters, Hooke and Jeeves's search with automatic
+     registration, and the niches across samples Goltsev's and k-means++'s.
+   - Validation:
+     - **In Node** (`methods-text.test.mjs`, with the record's fixture, `record.fixture.mjs`): a
+       result's methods by topic, each sentence's numbers its records', the references numbered
+       as first cited (every citation's first appearance the next number); a project's, the two
+       sections' same steps said once, the design, the summary and the comparison with the gene
+       it found; a segmentation a person chose said with why and SituCraft's own choice not; a
+       dataset's reviews; Markdown, plain text and BibTeX.
+     - **In the page** (viewer suite): the Lung enrichment's methods, each number the records'
+       own (clusters and cells, the share labeled, the graph's edges, the pairs found), the seed
+       said, numbered as first cited, and written as Markdown the same text; the simulated
+       cohort's expression comparison's (the eight sections once, each sample's steps once, the
+       design, the summary, the genes found with the comparison's fold changes) and the whole
+       project's by topic.
+   - Found by slice 4:
+     - **One citation for every spatial question:** each analysis recorded the papers of all of
+       them (Moran's for an enrichment, the enrichment's for the niches); each question now
+       records its own, and a nearest-neighbor graph no longer cites Delaunay's.
+5. **Certificates (E7): done.**
+   - **The certificate** (`web/lib/certificate.js`, after MaveScape 0.8.0's, the same author's;
+     `web/lib/zip.js` adapted from MaveScape 0.8.0 with its test): of a result, a dataset's
+     results or the whole project (`record.js`'s `scopeRoots`), built from its record: the bundles
+     by their runs and files' SHA-256 (the dataset's fingerprint's and those the instrument's
+     segmentation read); each step in the record's order, the program's by its job's kind, its
+     spec's digest and every file it wrote by SHA-256, the page's own by its record's digest, a
+     figure by its drawing's digests (drawn again at 300 dpi), each with the numbers it reports;
+     the project, the record and the methods by SHA-256; what is not made again in checking it,
+     and why. Its fingerprint is the SHA-256 of its canonical JSON.
+   - **Written as a zip** with a README (what it is of, its fingerprint, what it proves, how
+     `situcraft verify` checks it and its exit codes, what it holds, what is not made again),
+     the project, the record, the methods and their references, each artifact's manifest, and a
+     list of every entry by SHA-256. No time of its own (each entry dated 2026-01-01) and no path
+     of the computer that made it: a bundle's folder is `situcraft:bundle/<dataset ID>`, any other
+     path `situcraft:file/<its name>`, wherever it appears (a whole value or within a sentence).
+     The same project gives the same bytes.
+   - **Read back** (`readCertificate`): its fingerprint, each file it names and the list's SHA-256
+     checked; an edit found.
+   - **In the Reports view**, **What made a result** is of a result, a dataset or the project, and
+     writes its **Certificate**; remote control: `export` with `what: certificate`, and `record`
+     of a dataset or the project.
+   - Validation:
+     - **In Node** (`certificate.test.mjs`, `zip.test.mjs`): the bundles' files and each step's
+       job, files or digest; no path of this computer in any entry, within sentences too; the
+       same bytes again; the README; every entry as listed; an edit to a number found; another
+       result, step or SituCraft another fingerprint; a result not complete, or not in the store,
+       refused; the project's certificate.
+     - **In the page** (viewer suite): the Lung enrichment certified twice and read by the suite's
+       own zip reader: the same bytes; its fingerprint the suite's own over its canonical JSON;
+       its steps the record's; every file a step wrote the SHA-256 of the file in the program's
+       store, every bundle file the SHA-256 of the file in the bundle; every entry as listed; no
+       path of this computer.
+   - Found by slice 5:
+     - **A path within a sentence:** the project's history says where a bundle was opened from;
+       paths are now stood in for within text as well as whole values.
+6. **`situcraft verify` (E7): done.**
+   - **The command** (`verify.go`, after MaveScape 0.8.0's, the same author's): the certificate
+     read and checked (its fingerprint over canonical JSON written as the page writes it,
+     JSON.stringify's escapes and numbers; every file it names and lists by SHA-256); its bundles
+     found in the folders given (`--data`, repeated) by their `experiment.xenium`'s SHA-256, every
+     file the certificate names checked; the files its steps read (a table, a reference) found by
+     name.
+   - **Each of SituCraft's steps made again** in a SituCraft of its own (its library, store and
+     derived data in a temporary folder; `--keep` keeps it): each bundle's derived data built,
+     then each job run from the spec its manifest recorded, this computer's paths put back in the
+     spec's text (nothing else of it changes, byte for byte), by the function the API submits
+     (`rerun`: segmentations of the instrument, expansions, refinements, imports, planted errors,
+     comparisons, clusterings, maps, the instrument's analysis, labels from markers, a reference
+     or a table, graphs, spatial analyses, summaries, abundance, expression and spatial
+     statistics compared). Every file compared bit for bit; a clustering's, a map's or labels'
+     content by its package's digest without the run's timings, which the certificate now
+     records (`GET /api/artifacts/<ID>/digest`). An image, an alignment and its check are not
+     made again (the image's own file records where it lay).
+   - **The page's records:** each checked by its digest over the project certified; a design, a
+     filter and a figure computed again in a headless page (`verifypage.go`: Chrome, Edge, Brave
+     or Chromium with a profile of its own, opened on that SituCraft with the project placed in its
+     library; remote control's `verify_records`): the design made again from its samples, the
+     filter applied again to the cells (the QC view's `verifyFilter`), the figure drawn again and
+     its drawing's digests compared. `--no-page` checks their digests only (not checkable).
+   - **The verdict**, printed step by step and written by `--report`: verified (exit 0), differs
+     (exit 1: what, and the first step that differs; a step made by another version of SituCraft
+     says which) or not checkable (exit 2: a bundle or file not found, no browser).
+   - **CI:** the certificates the viewer suite writes on x86-64 (the data job) verified on arm64
+     (job verify-arm, macOS on Apple silicon).
+   - Validation:
+     - **In Go** (`verify_test.go`): the certificate the page writes for its fixture
+       (`testdata/certificate.zip`, kept the page's own by `certificate.test.mjs`) read as intact,
+       its fingerprint the page's; a parameter or a manifest edited, found; canonical JSON as
+       JSON.stringify writes it; paths put back with the rest of a spec as recorded; the verdict.
+     - **In the page** (viewer suite): the Lung enrichment's certificate verified by the program
+       (exit 0, every step made again); tampered with by the suite's own zip writer (the graph's
+       longest edge changed, its manifest, SHA-256 and the fingerprint made consistent again),
+       found to differ first at the graph (exit 1); without its bundle, not checkable (exit 2);
+       the Lung's results figure drawn again in the headless page, the same.
+   - Found by slice 6:
+     - **Base64 taken for a path:** a graph's cells, base64 beginning with a slash, were stood in
+       for as a file by the certificate (slice 5); only paths under a computer's usual roots, or a
+       bundle's folder, are now.
+     - **Run timings in a result's description:** a clustering's, a map's and labels' record how
+       long each stage took, so their files never repeat; their content is compared without them.
+     - **A graph made by 0.5.0:** its last quantile's last digit differs from today's (made the
+       same on every processor in wave 7, its method's version kept); verify says which version
+       made a step that differs.
+7. **The report: done.** One self-contained HTML file of chosen results: the methods, the
+   figures, the tables, each number traced to its place in the certificate, which it carries and
+   checks.
+   - **The file** (`web/lib/report.js`): the figures chosen, each its SVG as written (its manifest
+     inside); a table of each other result's numbers from its step's summary in the certificate,
+     each number's cell carrying its JSON pointer into `certificate.json` and its value; the
+     methods by topic and their references; the certificate of the results (a scope of results
+     chosen, its subject a report), base64 in the file, which it offers to save. Its
+     Content-Security-Policy is `default-src 'none'`: nothing outside the file is loaded. The
+     same project and choice give the same bytes (each figure drawn at the certificate's time).
+   - **Its check** (`web/lib/report-check.js`, written into the report as it is, with its own
+     SHA-256, canonical JSON and zip reader): the fingerprint and the files it names; each number
+     the value at its place and its text that value as the report writes it; each figure's SVG
+     the one whose SHA-256 the certificate's figure step records (`drawing.svg`); the methods'
+     paragraphs those of `methods.md`. It says what it found at the top, marks a number that
+     differs, and sets `data-checked` on the page (`intact`, `differs`, `error`).
+   - **The page:** the Reports view's report section (a title, the results by kind, the file
+     written); remote control's `export` with `what: report`.
+   - **`situcraft verify`** reads a report as a certificate (`verifyreport.go`): the certificate it
+     carries verified, and the report checked against it as it checks itself, numbers written as
+     JavaScript writes them (to 4 significant digits from the number's exact value, a tie away
+     from zero).
+   - Validation:
+     - **In Node** (`report.test.mjs`): a report of the fixture's figure, enrichment and expression
+       comparison; nothing in it fetched; every number traced and checked by the check as the
+       report holds it; a number's value or its text, the figure's SVG and a paragraph edited, each
+       found; the certificate edited, its fingerprint found not to match; the same bytes again.
+     - **In Go** (`verify_test.go`): the report the page writes (`testdata/report.html`) read as
+       intact, each edit found; numbers written as the page writes them, ties and carries among
+       them.
+     - **In the page** (viewer suite): a report of the Lung's results figure and enrichment opened
+       from the disk in a browser of its own, intact, nothing asked of the network, every number
+       the certificate's as the suite reads it, the figure's SVG the one certified; a number's text
+       edited, found and marked; verified from its bundle by `situcraft verify`. CI verifies it on
+       arm64 too.
+   - Found by slice 7:
+     - **A comparison's numbers in the fixture:** the certificate's fixture took a comparison's
+       summary (the cohort summary's ID) for its numbers; it now takes them as the program's
+       manifest has them.
+     - **A number's text and its value:** checking the value a cell carries would miss its text
+       edited; the text shown is checked too, and a figure by its SVG's bytes, not only the
+       manifest inside.
+8. **The result package (E8): done.** The report, its views as static tiles with a reader of their
+   own, and the certificate, in a folder or zip that opens in any browser without SituCraft;
+   redacted as above; nothing in it that it was asked to leave out, checked.
+   - **The redaction** (`web/lib/redact.js`), of the project and the steps' manifests before
+     anything is drawn or certified: this computer's paths stood in for first (as the
+     certificate's), then each person a record names (every `by` but SituCraft's and a program's)
+     by "Person 1", …, each note a person wrote on a review or a region left out wherever its text
+     occurs, and, when asked, each sample, subject and section by "Sample 1", "Subject 1",
+     "Section 1", … as a word (not within an identifier or a file's extension; base64 left alone).
+     A step whose job's spec it changed is marked `redacted` in the certificate, which says what
+     it left out (`leftOut`).
+   - **The search** (`findLeftOut`, `packageTexts`): every text a report or a package holds (its
+     files, a zip's entries, the SVG figures and the certificate inside its HTML) searched for each
+     path of this computer the project and manifests hold, its home folder, each person, note and
+     name; nothing is written if one is found. The report (slice 7) is redacted and searched too.
+   - **The views** (`web/lib/view-reader.js`; `viewTilesSource`, `viewTileMarks` in
+     `web/ui/figure-data.js`): each saved view a figure's tissue panel shows, over its own region
+     and the panels', drawn tile by tile as the tissue panel draws it (bare: no scale bar, legend
+     or region names), JPEG 512 pixels a side, level 0 at the view's own scale and each next at
+     half its µm a pixel, to the image's full resolution or two levels finer, 64 tiles at most; a
+     reader of its own (its script written into the page as it is): the coarsest level always and
+     the finest needed over it, of the part shown; drag, wheel, keys and buttons; scale bar and
+     legend.
+   - **The package** (`web/lib/package.js`, `writePackage` in `web/ui/report.js`): `index.html`
+     (the report, a Views section linking each reader), `views/`, the certificate, `README.txt` and
+     `manifest.json` (format `situcraft-package`: every other file by SHA-256, what was left out and
+     searched); zipped under its folder, dated as a certificate is. Remote control's `export` with
+     `what: package` writes the folder (`output.go`: unpacked beside it, renamed into place; a
+     folder replaced only when told and only when it holds a package) or the zip.
+   - **`situcraft verify`** reads a package's folder or zip by its report (`submitted`); a
+     `redacted` step is not checkable, before anything is made again.
+   - Validation:
+     - **In Node** (`redact.test.mjs`, `view-reader.test.mjs`, `package.test.mjs`): people, notes and
+       names left out wherever they occur, a bundle's folder named as its dataset stood in for
+       rather than renamed, base64 untouched; the search finding each kind as written in HTML and
+       JSON, and nothing in what was redacted; the pyramid's levels and tiles; the reader's page;
+       a certificate's `leftOut` and `redacted` steps; the package's texts, README and list.
+     - **In Go**: a package read as a folder and as a zip; a `redacted` step not made again; a
+       package written as a folder, replaced only when it is one, an entry outside its folder
+       refused.
+     - **In the page** (viewer suite): a package of the Lung's figure of a saved view, its results
+       figure and its enrichment, a person's review and note planted and the names left out,
+       written as a folder and a zip (the same files): its list each file's SHA-256; the suite's own
+       reading of every text finding no path, user, person, note or dataset name; opened from the
+       disk in a browser of its own asking the network for nothing, the report intact, its
+       thumbnails drawn, each view's reader its tiles, zoomed into its finest level; verified from
+       its bundle. CI verifies the package on arm64 too.
+   - Found by slice 8:
+     - **A dataset named as its folder:** the dataset's name, left out, was replaced within its
+       bundle's path in every job's spec; paths are now stood in for first, so a spec changes only
+       where it names a sample.
+     - **Tiles of the stains:** the tissue's own texture leaves lossless tiles large whatever the
+       filter; a view's tiles are JPEG (the figures, in SVG, are the record).
+9. **Examples, documentation, release 0.8.0: done.** Worked examples making a figure, a methods
+   text, a certificate verified and a package; the project fixture
+   `validation/projects/0.8.0-*.situcraft.json`; the guide's pages; CHANGELOG; release, and the
+   product site published for it.
+   - **Verifying in SituCraft** (`api_verify.go`, `web/ui/verify.js`): a certificate, report or
+     package sent to the program (or named by its path) is verified as `situcraft verify` verifies
+     it, as a job (`verifyCertificate`, its printing the job's log): the bundles looked for among
+     each project's datasets' folders and the examples'; what it found kept beside the file and
+     answered (`GET /api/verify/{job}`). The Reports view's **Verify a certificate…**, a record's
+     **Verify** (certified first), remote control's `verify_certificate`.
+   - **Worked examples** (`web/lib/tours.js`; the Reports view's actions in `web/ui/tour.js`:
+     `figure`, a view saved and a figure of it and the results asked before, with what it rests on
+     made first when asked; `verify`; `report`; `package`; and steps showing a figure, its methods
+     or what made it): **A figure of results, and its methods** and **Results others can check**,
+     on the Lung.
+   - **The release fixture** (`validation/projects/0.8.0-lung.situcraft.json` and
+     `0.8.0-lung.certificate.zip`): a project made by the worked example Results others can check
+     and its figure's certificate, written by the viewer suite with `SITUCRAFT_WRITE_FIXTURE=0.8.0`
+     (each release's fixture now written only when its own version is asked for). Every later
+     version verifies the certificate from the bundle and draws the figure the same.
+   - **Release:** version 0.8.0; the guide (getting started, the record, the worked examples), the
+     science page's figures and record, the README, the site's front page, CITATION.cff.
+   - Found by slice 9:
+     - **A figure's last bar:** the worked example's figure at a panel's default height left the
+       genes in a pattern one bar short at 6 pt; its panels are nine tenths as tall as wide.
+     - **The cohort fixture written again:** any value of `SITUCRAFT_WRITE_FIXTURE` rewrote 0.7.0's
+       cohort fixture with the version running; each release's is now written only for its own.
+     - **Moran's I differed between processors:** CI's certificates (written on amd64) failed to
+       verify on arm64 at Moran's I from slice 6 on, and the 0.8.0 fixture (written on arm64) failed
+       on amd64: its analytical p-values (Go's `math.Erfc`), its variance under randomization and its
+       permutations' spread were fused into multiply-adds on arm64. `stats.NormalCDF` now uses
+       `dmath.Erfc`, and each of those products is rounded on its own; a test pins Moran's I's
+       numbers on a tissue where the two processors differed before (the same digest on both, checked
+       with an amd64 build under Rosetta), and the 0.8.0 fixture is written again.
+     - **0.7.0's cohort, another run:** a simulated bundle records the version that wrote it, so the
+       cohort 0.8.0 makes is not the one 0.7.0's fixture recorded, and its bundles were refused; the
+       suite makes the cohort as 0.7.0 made it (`SITUCRAFT_SIMULATE_AS`, the simulator unchanged).
+     - **An audit of every processor:** certificates made on arm64 verified with an amd64 build
+       (under Rosetta), a cohort's 70 steps and the Lung's spatial analyses. The cohort's comparisons
+       differed in their p-values and intervals (Student's t by the beta function, `math.Lgamma`,
+       `math.Log1p`, fused products) and a profile across a region's edge in its band areas. The
+       compiler's arm64 output was searched for every fused multiply-add (`go build
+       -gcflags=-S`): each in a result is now rounded on its own, the rest exact (a product by a
+       power of two) or a progress bar's. `dmath` gains `Lgamma`, `Log1p`, `Erfinv` and `Atan2`;
+       Ripley's circles take `dmath.SinCos`; powers of ten are settled exactly. Tests pin their
+       digests and the areas' on both; both certificates verify.
+     - **A cache entry emptied from outside** (a cleaner of old temporary files deleted its files,
+       leaving its folder) was taken for another program's copy at every build, and the Viewer
+       asked for builds every two seconds: such an entry is replaced; a build leaving its data
+       missing fails, and the Viewer and QC view say so rather than build again.
+     - **Jobs that could not be resumed:** graphs, spatial analyses, images, registrations and
+       alignment checks interrupted by a restart are resumed like the others (a test interrupts a
+       graph and an analysis); a verification is discarded, what it was sent not kept.
+     - **The cache's build budget under the race detector:** two minutes is a claim of the
+       program's speed, not the race detector's (about 130 s for the Breast bundle with every
+       package's tests beside it); its time is only logged under `-race`.
+     - **The refinement's memory estimates, measured unsteadily:** reading a mask decodes each chunk
+       into a buffer that is garbage once copied (one chunk the whole mask on the test's tissues),
+       so the reading's peak holds none, one or two of them as the collector keeps up: the same
+       block peaked at 54 to 109 MB with the other packages' tests beside it, 75 alone (the weekly
+       run's 38 against 28 MB the same). A case outside 30% is measured again, up to three times.
+       Decoding into a reused buffer would steady the peak itself (a change to the zarr reader and
+       the estimate's coefficients).
+     - **The weekly real-data run's references:** the graphs', spatial analyses' and segmentation's
+       reference numbers were made from SituCraft's outputs before later changes (the Delaunay
+       graph, the spatial analyses, the refinement), so their digests no longer matched, on either
+       processor; every agreement with SciPy, Squidpy, Shapely, astropy, scikit-learn and Proseg
+       held. They are made again (the Python packages from uv's cache, offline; Proseg's
+       segmentations as before), their numbers the same but in their last digits.
+     - **The scale test on the weekly runner:** its 2 cores and 7.8 GB are less than the test was
+       written for (4 cores, 16 GB), and the refinement's preflight rightly refused the Balanced
+       preset (6.6 GB needed). When the preflight says the memory is too little, the test refines
+       with the Low memory preset, as the preflight advises, against the same budgets.
 
 ## 0.9.0: agents and scripts (wave 9)
 

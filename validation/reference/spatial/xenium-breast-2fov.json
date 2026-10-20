@@ -2,7 +2,7 @@
  "situcraft": {
   "cells": 7163,
   "labels": 15,
-  "digest": "885fa798f7e9b64489a973873f65ff1024825ec4b5e24de479aa7e9be49c7a57"
+  "digest": "db3ebecfb902117e540c62bfb4658cfe3ecc4ea3284ecb058f18d6d1f780d362"
  },
  "versions": {
   "squidpy": "1.8.3",
@@ -55,8 +55,8 @@
   "niches": 6,
   "cells": 7163,
   "inertia": 685.3624544498052,
-  "sklearnInertia": 685.333725168383,
-  "relativeInertia": 4.192013374959558e-05,
+  "sklearnInertia": 685.3337251683829,
+  "relativeInertia": 4.192013374981762e-05,
   "adjustedRand": 0.980204329102261
  },
  "moran": {
@@ -69,7 +69,7 @@
  "regions": {
   "rows": 3,
   "bands": 22,
-  "maxRelativeArea": 1.5613210901932462e-07,
+  "maxRelativeArea": 1.5613210879728e-07,
   "maxRelativeBandArea": 1.5086955577059413e-06,
   "maxBandAreaDifference": 0.006681252620182931,
   "countsDiffering": 0,

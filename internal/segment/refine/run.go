@@ -498,7 +498,7 @@ func Run(ctx context.Context, in *Inputs, region Region, opt Options, progress f
 				voxels.samples++
 				transcripts.samples++
 				half.samples++
-				res.FalseDecodes += mul(m.False, m.Region) * float64(m.Genes)
+				res.FalseDecodes += mul(mul(m.False, m.Region), float64(m.Genes))
 				for _, a := range m.Ambient {
 					res.Ambient += mul(a, m.Region)
 				}

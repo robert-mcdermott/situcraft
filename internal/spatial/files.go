@@ -223,7 +223,15 @@ func roundStep(v float64) float64 {
 	if !(v > 0) {
 		return 1
 	}
-	p := math.Pow(10, math.Floor(math.Log10(v)))
+	// The power of ten at most v, settled by exact comparisons: math.Log10 may differ in its last
+	// bit between processors, and floor differently at a power of ten.
+	k := int(math.Floor(math.Log10(v)))
+	if math.Pow10(k) > v {
+		k--
+	} else if math.Pow10(k+1) <= v {
+		k++
+	}
+	p := math.Pow10(k)
 	for _, m := range []float64{1, 2, 5, 10} {
 		if m*p >= v {
 			return m * p

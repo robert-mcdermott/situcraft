@@ -92,8 +92,8 @@ func Cells(ctx context.Context, p Params, workers int, progress func(float64)) (
 						sy += float64(int(px)/t.w) + 0.5
 					}
 					n := float64(len(cl.pixels))
-					f.x = append(f.x, float32(ox+sx/n*ps))
-					f.y = append(f.y, float32(oy+sy/n*ps))
+					f.x = append(f.x, float32(ox+mul(sx/n, ps)))
+					f.y = append(f.y, float32(oy+mul(sy/n, ps)))
 					f.typ = append(f.typ, int32(cl.typ))
 					f.domain = append(f.domain, int32(k*p.Domains+cl.domain))
 					mols = t.cellMolecules(c, pn, mols[:0])

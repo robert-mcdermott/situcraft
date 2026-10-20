@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -62,6 +63,25 @@ func (a *app) registerSegmentations(mux *http.ServeMux) {
 			return
 		}
 		writeError(w, http.StatusNotFound, "The artifact has no file "+name+" of its own.")
+	})
+	// An artifact's content digest (a clustering's, a map's, labels': its content but for how long
+	// its run took), as a certificate records it; null for the kinds compared byte for byte.
+	mux.HandleFunc("GET /api/artifacts/{id}/digest", func(w http.ResponseWriter, r *http.Request) {
+		m, err := a.artifacts.Get(r.PathValue("id"))
+		if err != nil {
+			writeError(w, http.StatusNotFound, "No such artifact.")
+			return
+		}
+		content, err := contentDigest(m.Kind, filepath.Join(a.artifacts.Dir(), m.ID))
+		if err != nil {
+			writeError(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
+		if content == "" {
+			writeJSON(w, map[string]any{"content": nil})
+			return
+		}
+		writeJSON(w, map[string]any{"content": content})
 	})
 	mux.HandleFunc("GET /api/artifacts/{id}", func(w http.ResponseWriter, r *http.Request) {
 		m, err := a.artifacts.Get(r.PathValue("id"))

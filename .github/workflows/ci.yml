@@ -148,7 +148,49 @@ jobs:
           SITUCRAFT_REQUIRE_DATA: xenium-lung-2fov
           # A runner has no GPU: Chrome's software WebGL, and no sandbox on the throwaway machine.
           SITUCRAFT_CHROME_ARGS: --use-angle=swiftshader --enable-unsafe-swiftshader --no-sandbox
+          # The certificates it writes, kept to be verified on the other processor (job verify-arm).
+          SITUCRAFT_CERTIFICATES: ${{ runner.temp }}/certificates
         run: node validation/run.mjs viewer --require-data
+      - name: Keep the certificates written on x86-64
+        uses: actions/upload-artifact@v4
+        with:
+          name: certificates
+          path: ${{ runner.temp }}/certificates
+          if-no-files-found: error
+          retention-days: 3
+
+  verify-arm:
+    name: Certificates verified on the other processor
+    needs: data
+    # Apple silicon (arm64): the certificates the data job wrote on x86-64 made again here, and
+    # every file compared bit for bit (SituCraft gives the same bits on every processor).
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Cache the Lung 2-FOV bundle (10x Genomics, CC BY 4.0)
+        uses: actions/cache@v4
+        with:
+          path: validation/cache/xenium-lung-2fov
+          key: xenium-lung-2fov-${{ hashFiles('validation/sources.json') }}
+      - name: Fetch it (checked by its MD5, then every extracted file by its SHA-256)
+        run: node validation/fetch.mjs xenium-lung-2fov
+      - uses: actions/download-artifact@v4
+        with:
+          name: certificates
+          path: certificates
+      - name: Build
+        run: go build -o situcraft .
+      - name: situcraft verify, on arm64, of each certificate, report and package written on x86-64
+        run: |
+          for certificate in certificates/*.zip certificates/*.html; do
+            ./situcraft verify --data validation/cache "$certificate"
+          done
 
   installers:
     name: Installer syntax

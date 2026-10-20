@@ -23,6 +23,17 @@ import (
 	"situcraft/internal/simulate"
 )
 
+// simulatedBy is the version a simulated bundle records as what wrote it: this one, or, for the
+// validation suite reopening an earlier release's project of simulated sections,
+// SITUCRAFT_SIMULATE_AS (the same simulator writes the same bundles, so that version's bundles
+// are made again exactly).
+func simulatedBy() string {
+	if v := os.Getenv("SITUCRAFT_SIMULATE_AS"); v != "" {
+		return v
+	}
+	return version
+}
+
 // runSimulate runs `situcraft simulate` with its arguments, answering the exit code.
 func runSimulate(args []string, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("situcraft simulate", flag.ContinueOnError)
@@ -119,7 +130,7 @@ func runSimulate(args []string, stdout, stderr io.Writer) int {
 			last = what
 		}
 	}
-	sum, err := simulate.Run(ctx, p, folders[0], version, progress)
+	sum, err := simulate.Run(ctx, p, folders[0], simulatedBy(), progress)
 	if err != nil {
 		fmt.Fprintf(stderr, "situcraft simulate: %v\n", err)
 		return 1
@@ -214,7 +225,7 @@ func runCohort(name string, names []string, paramsFile string, seed uint64, widt
 			last = what
 		}
 	}
-	sum, err := simulate.RunCohort(ctx, c, folders[0], version, progress)
+	sum, err := simulate.RunCohort(ctx, c, folders[0], simulatedBy(), progress)
 	if err != nil {
 		fmt.Fprintf(stderr, "situcraft simulate: %v\n", err)
 		return 1

@@ -1055,6 +1055,145 @@ const LUNG_MORAN = {
   ],
 };
 
+// The figure the Lung's wave-8 worked examples make, of a view of the tissue and the results asked
+// before it, and the view.
+const LUNG_FIGURE_NAME = 'The Lung\'s results';
+const LUNG_FIGURE_VIEW = {
+  mode: 'viewer',
+  camera: { cx: 750, cy: 300, umPerCss: 0.4 },
+  cells: { outlines: true, fill: 'labels:0', opacity: 0.6 },
+  transcripts: { genes: [] },
+  channels: GRAY_NUCLEI,
+};
+
+const LUNG_FIGURE = {
+  id: 'figure-and-methods',
+  title: 'A figure of results, and its methods',
+  question: 'How does a result become a figure for a paper, with a methods section written from what was done?',
+  expect: 'A figure two columns wide (174 × 157 mm) of four panels, lettered: the view of the tissue, 400 µm across, its 2,298 cells filled by class; the map of the 11,820 cells clustered; the 4 classes\' enrichment, 7 pairs found; and the 15 genes whose Moran\'s I is highest of the 162 in a pattern. Its methods, written from its record, say each step with its parameters and seed, the figure among them, citing 23 references; what made it is 11 steps from the bundle.',
+  steps: [
+    {
+      mode: 'reports',
+      title: 'The question',
+      text: 'The Reports view keeps the project\'s figures and writes their methods. A figure is drawn from the project, not pasted: each panel is a saved view of the tissue or a result, drawn at the figure\'s size, and every file written carries a manifest of what it was drawn from.',
+    },
+    {
+      mode: 'celltypes',
+      title: 'Cluster the cells',
+      text: 'The results the figure shows, made first: the cells clustered as scanpy\'s defaults do and mapped (UMAP).',
+      do: { action: 'cluster' },
+      label: 'Cluster the cells',
+    },
+    {
+      mode: 'celltypes',
+      title: 'Label them',
+      text: 'Each cell labeled from the panel\'s starter markers, its class, lineage and subtype where it leads the next label by the margin.',
+      do: { action: 'label', markers: 'lung' },
+      label: 'Label the cells',
+    },
+    {
+      mode: 'spatial',
+      title: 'Which cells are neighbors',
+      text: 'The Delaunay graph of the instrument\'s cells, edges to 50 µm.',
+      do: { action: 'graph', kind: 'delaunay' },
+      label: 'Build the graph',
+    },
+    {
+      mode: 'spatial',
+      title: 'Which classes neighbor which',
+      text: 'Neighborhood enrichment of the classes: each pair\'s edges against those of the labels dealt at random.',
+      do: { action: 'ask', question: 'enrichment', segmentation: 'instrument', level: 0 },
+      label: 'Ask',
+    },
+    {
+      mode: 'spatial',
+      title: 'Which genes are in a pattern',
+      text: 'Moran\'s I of each gene over the same graph.',
+      do: { action: 'ask', question: 'moran', segmentation: 'instrument' },
+      label: 'Ask',
+    },
+    {
+      ...LUNG_FIGURE_VIEW,
+      title: 'A view of the tissue, made a figure',
+      text: 'The cells filled by their class over the nuclear stain, 400 µm across. Make the figure: this view is saved, and a figure the width of a journal\'s two columns is laid out with four panels, lettered: the tissue as shown here, the cells\' map by cluster, the classes\' enrichment and the genes in a pattern.',
+      do: { action: 'figure', name: LUNG_FIGURE_NAME, view: 'Lung classes' },
+      label: 'Make the figure',
+    },
+    {
+      mode: 'reports',
+      title: 'The figure',
+      text: 'The figure, previewed as it will print: A, the view of the tissue (2,298 cells filled by class, a scale bar of 50 µm and a legend); B, the cells\' map by cluster; C, the classes\' enrichment, a dot on each of the 7 pairs found; D, the 15 genes with the highest Moran\'s I. Write it as SVG, PDF or PNG: each file carries its manifest, so that SituCraft can read it back and say whether the project still draws it the same.',
+      reports: { show: 'figure', figure: LUNG_FIGURE_NAME },
+    },
+    {
+      mode: 'reports',
+      title: 'Its methods',
+      text: 'Its methods, written from the record of every step from the bundle to the figure: the data and how SituCraft read it; the cells clustered, mapped and labeled; the graph and both questions; the figure; the software. Each step\'s parameters and seed are said, and its 23 references are numbered as first cited. Copy it, or write it as Markdown or BibTeX, and read it against what you did.',
+      reports: { show: 'methods', figure: LUNG_FIGURE_NAME },
+    },
+    {
+      mode: 'reports',
+      title: 'What made it',
+      text: 'What made the figure: 11 steps from the bundle, each after those it was made from (the segmentation, the clustering and its map, the marker set and the labels, the graph, both answers, the saved view, the figure), each with its method and version, parameters, seed and software, and 22 references. Certify it and verify it in Results others can check.',
+      reports: { show: 'record', figure: LUNG_FIGURE_NAME },
+    },
+  ],
+};
+
+const LUNG_CHECKED = {
+  id: 'results-checked',
+  title: 'Results others can check',
+  question: 'How can a reader check the figure\'s results, with SituCraft or without it?',
+  expect: 'The figure\'s certificate holds 11 steps from 1 bundle. Verified in SituCraft, its 7 steps SituCraft made are made again from the bundle, every file the same, and the figure is drawn again the same. The report traces 23 numbers to its certificate; the package holds 25 files, the view in 20 tiles, the dataset\'s name left out, and nothing left out was found in its 35 texts.',
+  steps: [
+    {
+      mode: 'reports',
+      title: 'The question',
+      text: 'A figure says what was found; a certificate says what it rests on, so that anyone with the same bundle can make it again and compare. This example certifies the figure of A figure of results, and its methods (made here if it is not yet), verifies it, and writes it for a reader: a report, and a package that opens without SituCraft.',
+    },
+    {
+      ...LUNG_FIGURE_VIEW,
+      title: 'The figure',
+      text: 'The figure of the Lung\'s results: its view of the tissue, the cells\' map, the classes\' enrichment and the genes in a pattern. Each step it rests on is made first if it is not yet: the clustering, the labels, the graph and both questions.',
+      do: { action: 'figure', name: LUNG_FIGURE_NAME, view: 'Lung classes', prepare: true },
+      label: 'Make the figure',
+    },
+    {
+      mode: 'reports',
+      title: 'Certify it, and verify it',
+      text: 'The figure\'s record certified (a zip of the bundle\'s files by SHA-256, each step\'s job and files, the numbers each reports, fingerprinted), then verified here as situcraft verify does: each of the 7 steps SituCraft made is made again, in a SituCraft of its own, from the bundle found by its files\' SHA-256, and every file compared bit for bit; the figure is drawn again in a headless browser and its drawing compared.',
+      do: { action: 'verify', figure: LUNG_FIGURE_NAME },
+      label: 'Certify and verify',
+    },
+    {
+      mode: 'reports',
+      title: 'What verifying found',
+      text: 'Verified: the 7 steps made again give the files certified, the figure draws the same, and what a person made (the marker set, the saved view) is as certified, by its digest. Anyone with the bundle can do the same with the certificate, in SituCraft (Verify a certificate…) or with situcraft verify on the command line, on another computer or processor.',
+      reports: { show: 'record', figure: LUNG_FIGURE_NAME },
+    },
+    {
+      mode: 'reports',
+      title: 'A report',
+      text: 'A report: one HTML file of the figure, the enrichment\'s numbers (23, each traced to its place in the certificate), the methods and their references, and the certificate itself. As it opens, in any browser and offline, it checks that the certificate is intact and that each number, figure and paragraph it shows is the certificate\'s.',
+      do: { action: 'report', figure: LUNG_FIGURE_NAME, results: ['figure', 'enrichment'], title: 'The Lung\'s cell types and their neighbors' },
+      label: 'Write the report',
+    },
+    {
+      mode: 'reports',
+      title: 'A package, the names left out',
+      text: 'A package: the report, the view the figure shows drawn in advance as 20 tiles with a reader of its own, and the certificate, 25 files that open without SituCraft. It leaves out where files lay on this computer, people\'s names and their notes, and here the dataset\'s name too (written Sample 1); its 35 texts were searched for them before it was written.',
+      do: { action: 'package', figure: LUNG_FIGURE_NAME, results: ['figure', 'enrichment'], title: 'The Lung\'s cell types and their neighbors', names: true },
+      label: 'Write the package',
+    },
+    {
+      mode: 'reports',
+      title: 'What a reader does',
+      text: 'Unzip the package and open index.html: the report checks itself, and the view opens in a page of its own, to move about and zoom into. To make the results again, a reader needs the bundle and SituCraft: Verify a certificate…, or situcraft verify --data <a folder holding the bundle> <the package>. A step whose job was given a name left out cannot be made again from a package; here none was.',
+      reports: { show: 'figure', figure: LUNG_FIGURE_NAME },
+    },
+  ],
+};
+
 const LUNG_REMAKE = {
   id: 'remake-enrichment',
   title: 'An answer under another segmentation',
@@ -1536,7 +1675,7 @@ const BREAST_PSEUDO = {
   ],
 };
 
-export const WORKED = { 'xenium-breast-2fov': [BREAST_COMPARE, BREAST_REFINE, BREAST_LABELS, BREAST_NEIGHBORS, BREAST_EDGE, BREAST_PSEUDO], 'xenium-lung-2fov': [LUNG_PLANTED, LUNG_CELL_TYPES, LUNG_MORAN, LUNG_REMAKE], 'simulated-standard': [SIMULATED_TRUTH, SIMULATED_LABELS, SIMULATED_ALIGN, SIMULATED_REGIONS, SIMULATED_REVIEW, SIMULATED_NICHES], 'simulated-cohort': [COHORT_GENE], 'simulated-null-cohort': [COHORT_NULL], 'simulated-paired-cohort': [COHORT_SHIFT, COHORT_PAIRED] };
+export const WORKED = { 'xenium-breast-2fov': [BREAST_COMPARE, BREAST_REFINE, BREAST_LABELS, BREAST_NEIGHBORS, BREAST_EDGE, BREAST_PSEUDO], 'xenium-lung-2fov': [LUNG_PLANTED, LUNG_CELL_TYPES, LUNG_MORAN, LUNG_REMAKE, LUNG_FIGURE, LUNG_CHECKED], 'simulated-standard': [SIMULATED_TRUTH, SIMULATED_LABELS, SIMULATED_ALIGN, SIMULATED_REGIONS, SIMULATED_REVIEW, SIMULATED_NICHES], 'simulated-cohort': [COHORT_GENE], 'simulated-null-cohort': [COHORT_NULL], 'simulated-paired-cohort': [COHORT_SHIFT, COHORT_PAIRED] };
 
 export function workedExamples(example) {
   return WORKED[example] ?? [];

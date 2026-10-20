@@ -327,7 +327,7 @@ func Ripleys(ctx context.Context, x, y []float32, label []int32, K int, win *Win
 		far := 0
 		for s := 0; s < P; s++ {
 			// Allowing for float32's rounding of the permutations' curves.
-			if deviation(func(r int) float64 { return float64(perm[s*K*K*R+q*R+r]) }, q) >= obs-1e-6*math.Max(1, obs) {
+			if deviation(func(r int) float64 { return float64(perm[s*K*K*R+q*R+r]) }, q) >= obs-mul(1e-6, math.Max(1, obs)) {
 				far++
 			}
 		}

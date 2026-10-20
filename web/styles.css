@@ -1389,3 +1389,49 @@ table.data.cohort-balance { width: auto; min-width: 360px; margin-bottom: 8px; }
 .cohort-volcano-point { fill: var(--text-3); fill-opacity: 0.45; cursor: pointer; }
 .cohort-volcano-point.found { fill: var(--accent); fill-opacity: 0.85; }
 .cohort-volcano-point.chosen { fill-opacity: 1; stroke: var(--text); stroke-width: 1.5; }
+
+/* --- Reports (wave 8): figures ------------------------------------------------------------------ */
+.reports-body { max-width: 1100px; margin: 0 auto; display: flex; flex-direction: column; gap: 10px; }
+.reports-intro { margin: 0; font-size: 12.5px; line-height: 1.5; }
+.reports-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.reports-list .card.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.reports-editor { display: flex; flex-direction: column; gap: 10px; }
+.reports-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0 10px; }
+.reports-preview-wrap { background: var(--panel-2, var(--panel)); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; overflow: auto; }
+.reports-preview { display: block; margin: 0 auto; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18); background: #ffffff; }
+.reports-description { margin: 0; font-size: 12px; line-height: 1.45; }
+.reports-notes { margin: 0; padding-left: 18px; font-size: 12px; color: var(--text-2); }
+.reports-notes li::marker { color: var(--warn); }
+.reports-notes:empty { display: none; }
+.reports-panel .seg-card-title { display: flex; align-items: center; gap: 4px; }
+.reports .spacer { flex: 1; }
+/* A report of results (ui/report.js). */
+.report-section { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.report-results { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 4px 16px; max-height: 280px; overflow: auto; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel-2, var(--panel)); }
+.report-group { display: flex; flex-direction: column; font-size: 12.5px; }
+.report-group > .muted { margin-top: 4px; font-size: 12px; }
+.report-group .viewer-toggle { margin: 3px 0; }
+/* A certificate verified (ui/verify.js). */
+.verification { display: flex; flex-direction: column; gap: 8px; font-size: 12.5px; }
+.verification p { margin: 0; }
+.verification-verdict { font-weight: 600; font-size: 13.5px; padding: 8px 10px; border-radius: var(--radius); border: 1px solid var(--line); }
+.verification-verdict.ok { border-color: var(--ok, #1f7a4d); }
+.verification-verdict.bad { border-color: var(--danger, #b42335); }
+.verification-verdict.warn { border-color: var(--warn); }
+.verification ul, .verification ol { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 4px; }
+.verification-steps .badge { vertical-align: 1px; }
+.verification-steps li[data-verdict="differs"] .badge { background: var(--danger, #b42335); color: #ffffff; }
+.verification-steps li[data-verdict="not checkable"] .badge { background: var(--warn); color: #000000; }
+/* What made a result (ui/record-view.js). */
+.record, .methods-section { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.record-picker select { width: min(640px, 100%); }
+.record-body { display: flex; flex-direction: column; gap: 10px; font-size: 12.5px; }
+.record-body > p { margin: 0; }
+.record-steps { margin: 0; padding-left: 24px; display: flex; flex-direction: column; gap: 10px; }
+.record-step-head { line-height: 1.5; }
+.record-step-head .badge { vertical-align: 1px; }
+.record-items { font-size: 12px; margin: 2px 0 0; }
+.record-kv { grid-template-columns: 7.5em 1fr; margin-top: 4px; }
+.record-kv dd { text-align: left; white-space: normal; overflow-wrap: anywhere; }
+.record-refs { margin: 4px 0 0; padding-left: 24px; font-size: 12px; line-height: 1.45; color: var(--text-2); }
+.record-software ul { margin-top: 4px; }

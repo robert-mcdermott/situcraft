@@ -1,0 +1,40 @@
+// Certificates (wave 8, slice 5) as the page writes them: the record of the project, a dataset or a
+// result (its artifacts' manifests read from the program), its methods, and each figure's drawing
+// (drawn again, its manifest's digests), certified by lib/certificate.js as a zip.
+
+import { buildCertificate, writeCertificate } from '../lib/certificate.js';
+import { recordAndMethods } from './methods.js';
+import { writeFigure } from './figures.js';
+
+// A figure's manifest has a time; its drawing's digests do not. Drawn for a certificate at this one.
+export const DRAWN_AT = '2026-01-01T00:00:00.000Z';
+
+// The certificate's file name: "certificate-<subject>-<short fingerprint>.zip".
+export function certificateFileName(certificate) {
+  const base = certificate.subject.name.replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60) || certificate.subject.id;
+  return `certificate-${base}-${certificate.fingerprint.slice(0, 8)}.zip`;
+}
+
+// The certificate of a scope ({ kind: 'project' }, { kind: 'dataset', id }, { kind: 'result', id }
+// or { kind: 'results', ids, name }). options: { drawn (figure ID → { manifest, svg (the SHA-256 of
+// the SVG a report shows) }, a figure already drawn at DRAWN_AT), redaction (lib/redact.js: what a
+// report or a package leaves out; app's project redacted already) }. Answers { bytes (the zip),
+// certificate, methods (as methods.md holds them), name }.
+export async function certify(app, scope, { drawn = new Map(), redaction = null } = {}) {
+  const { project, manifests, record, methods, redactedSpecs } = await recordAndMethods(app, scope, { redaction });
+  const figures = new Map();
+  for (const s of record.steps.filter((x) => x.kind === 'figure')) {
+    const fig = (project.figures ?? []).find((f) => f.id === s.id);
+    const { manifest, svg } = drawn.get(fig.id) ?? { manifest: (await writeFigure(app, fig, 'json', { dpi: 300, time: DRAWN_AT })).manifest };
+    figures.set(fig.id, { drawing: manifest.drawing, panels: manifest.panels.map((p) => ({ id: p.id, letter: p.letter, drawing: p.drawing })), ...(svg ? { svg } : {}) });
+  }
+  // The content of each step whose files also record how long its run took.
+  const contents = new Map();
+  for (const s of record.steps.filter((x) => ['clustering', 'embedding', 'labels'].includes(x.kind) && manifests.get(x.id))) {
+    const response = await fetch(`/api/artifacts/${encodeURIComponent(s.id)}/digest`);
+    const content = response.ok ? (await response.json()).content : null;
+    if (content) contents.set(s.id, content);
+  }
+  const built = buildCertificate(project, record, methods, { manifests, contents, figures, software: { version: app.version ?? null, commit: app.commit ?? null }, ...(redaction ? { leftOut: redaction.counts, redacted: redactedSpecs } : {}) });
+  return { bytes: await writeCertificate(built), certificate: built.certificate, methods: built.methods, manifests, name: certificateFileName(built.certificate) };
+}

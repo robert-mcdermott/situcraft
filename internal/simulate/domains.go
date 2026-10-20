@@ -61,7 +61,7 @@ func clipHalfPlane(poly [][2]float64, ax, ay, c float64) [][2]float64 {
 		}
 		if (vp <= 0) != (vq <= 0) {
 			f := vp / (vp - vq)
-			out = append(out, [2]float64{p[0] + f*(q[0]-p[0]), p[1] + f*(q[1]-p[1])})
+			out = append(out, [2]float64{p[0] + mul(f, q[0]-p[0]), p[1] + mul(f, q[1]-p[1])})
 		}
 	}
 	return out

@@ -171,7 +171,16 @@ func number3(v float64) string {
 	if v == 0 || math.IsNaN(v) || math.IsInf(v, 0) {
 		return fmt.Sprint(v)
 	}
-	digits := 2 - int(math.Floor(math.Log10(math.Abs(v))))
+	// Its power of ten settled by exact comparisons: math.Log10 may differ in its last bit between
+	// processors, and floor differently at a power of ten.
+	a := math.Abs(v)
+	k := int(math.Floor(math.Log10(a)))
+	if math.Pow10(k) > a {
+		k--
+	} else if math.Pow10(k+1) <= a {
+		k++
+	}
+	digits := 2 - k
 	if digits < 0 {
 		digits = 0
 	}

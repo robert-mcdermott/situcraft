@@ -7,7 +7,8 @@
 
 import { toast } from './overlays.js';
 import { cacheJobKey } from './bundles.js';
-import { datasetFilters, methodsMarkdown, showMethods, writeMethods } from './methods.js';
+import { datasetFilters, showMethods, writeMethods } from './methods.js';
+import { methodsMarkdown } from '../lib/methods-text.js';
 import { ATTRIBUTES } from '../lib/cell-attributes.js';
 import { decideSegmentation, DECISIONS, EXPORT_FORMATS, promotedSegmentation } from '../lib/segmentations.js';
 import { CLASS_INFO, RANKS, cellNames, warnings } from '../lib/review.js';
@@ -31,10 +32,20 @@ import { KINDS as GRAPH_KINDS, describeGraph, graphsOf } from '../lib/graphs.js'
 import { NICHES_DEFAULTS, analysesOf, analysisNumbers, bandsOf, compareNumbers, nicheNames, rankCorrelation, rankPairs, rowNames, zoneBands } from '../lib/spatial.js';
 import { ratioText } from './spatial-results.js';
 import { showAnalysisCells } from './spatial-cells.js';
-import { addDesign, designsOf, makeDesign } from '../lib/design.js';
+import { addDesign, designRecord, designsOf, makeDesign } from '../lib/design.js';
+import { canonicalJSON } from '../lib/figure-manifest.js';
 import { FAMILIES, summariesOf } from '../lib/cohort.js';
 import { spatialEffectWords, testsOf } from '../lib/expression.js';
 import { expressionDocument as expressionDocumentOf } from './cohort-expression.js';
+import { FIGURE_SIZES, addPanel, checkFigure, createFigure, figuresOf, mm, panelLetters, panelSummary, removeFigure, saveFigure, toMM } from '../lib/figures.js';
+import { drawFigure, readBackFigure, writeFigure } from './figures.js';
+import { tissueViews, viewRegion } from './mode-reports.js';
+import { RECORD_FORMATS, recordOf } from './record-view.js';
+import { certify } from './certificate.js';
+import { writePackage, writeReport } from './report.js';
+import { verdictText, verifyCertificateFile } from './verify.js';
+import { certificateSummary, shortFingerprint } from '../lib/certificate.js';
+import { recordableResults } from '../lib/record.js';
 import { BUNDLE_FIELDS, addSampleField, fieldValue, readSamplesTable, removeSampleField, renameSample, sampleFields, samplesCSV, samplesOf, setFieldKind, setRegionSamples, setSampleField } from '../lib/samples.js';
 
 export class ActionError extends Error {}
@@ -177,6 +188,54 @@ export function installRemote(app) {
     const found = of.find((f) => f.version === Number(m[2]));
     if (!found) throw new ActionError(`${name} has versions ${of.map((f) => f.version).join(', ')}.`);
     return found;
+  }
+
+  // A figure's panel from remote control's spec of it: what it draws found by name or ID.
+  function figurePanel(spec, i, regionOf, extras) {
+    if (!spec || typeof spec !== 'object') throw new ActionError(`Panel ${i + 1} is not an object.`);
+    const kind = choose(String(spec.kind ?? ''), ['tissue', 'qc', 'map', 'spatial', 'cohort', 'text'], `panel ${i + 1}'s kind`);
+    const p = project();
+    const find = (list, ref, what) => {
+      const value = String(ref ?? '');
+      if (!value) throw new ActionError(`Panel ${i + 1} names its ${what}.`);
+      return list.find((x) => x.id === value) ?? list.find((x) => x.name === choose(value, list.map((y) => y.name), what));
+    };
+    const title = spec.title !== undefined ? { title: String(spec.title) } : {};
+    if (kind === 'text') return { kind, text: String(spec.text ?? ''), h: 40, ...title };
+    if (kind === 'tissue') {
+      const view = find(tissueViews(p), spec.view, 'saved view');
+      const r = regionOf({ ...view, ...(spec.width_um !== undefined || spec.center !== undefined ? { camera: { ...view.camera } } : {}) });
+      if (spec.width_um !== undefined) r.width = finite(spec.width_um, 'width_um');
+      if (spec.center !== undefined) [r.cx, r.cy] = [finite(spec.center[0], 'center'), finite(spec.center[1], 'center')];
+      // Its dataset's regions drawn: all (true), or those named.
+      let regions;
+      if (spec.regions === true || spec.regions === 'all') regions = true;
+      else if (Array.isArray(spec.regions)) {
+        const list = regionsOf(p, view.dataset);
+        regions = spec.regions.map((ref) => (list.find((x) => x.id === String(ref)) ?? list.find((x) => x.name === choose(String(ref), list.map((y) => y.name), 'region'))).id);
+      }
+      return { kind, view: view.id, region: r, ...extras, ...(regions !== undefined ? { regions } : {}), ...title };
+    }
+    if (kind === 'qc') {
+      const dataset = find(p.datasets, spec.dataset ?? (p.datasets.length === 1 ? p.datasets[0].id : ''), 'dataset');
+      const metric = choose(String(spec.metric ?? 'transcripts'), ['transcripts', 'total', 'area', 'nucleusArea'], 'metric');
+      const filters = p.artifacts.filter((a) => a.kind === 'filter' && a.dataset === dataset.id);
+      const filter = spec.filter === undefined ? null : filters.find((a) => a.id === String(spec.filter)) ?? filters.filter((a) => a.name === String(spec.filter)).sort((a, b) => b.version - a.version)[0];
+      if (spec.filter !== undefined && !filter) throw new ActionError(`${dataset.name} has no filter ${spec.filter}.`);
+      return { kind, dataset: dataset.id, metric, ...(spec.log ? { log: true } : {}), ...(filter ? { filter: filter.id } : {}), ...(spec.segmentation ? { segmentation: String(spec.segmentation) } : {}), ...title };
+    }
+    if (kind === 'map') {
+      const map = find(p.artifacts.filter((a) => a.kind === 'embedding'), spec.map ?? p.artifacts.filter((a) => a.kind === 'embedding').at(-1)?.id, 'map');
+      return { kind, map: map.id, color: String(spec.color ?? 'clusters'), ...title };
+    }
+    if (kind === 'spatial') {
+      const analysis = find(p.artifacts.filter((a) => a.kind === 'spatial'), spec.analysis, 'spatial answer');
+      return { kind, analysis: analysis.id, ...title };
+    }
+    const comparison = find(p.artifacts.filter((a) => ['abundance', 'expression', 'spatial-comparison'].includes(a.kind)), spec.comparison, 'comparison');
+    const plot = choose(String(spec.plot ?? (comparison.kind === 'expression' ? 'volcano' : 'forest')), ['forest', 'units', 'volcano', 'gene'], 'plot');
+    const keep = Object.fromEntries(['family', 'label', 'gene', 'contrast', 'key'].filter((k) => spec[k] !== undefined).map((k) => [k, String(spec[k])]));
+    return { kind, comparison: comparison.id, plot, ...keep, ...title };
   }
 
   function resolveExample(ref) {
@@ -2162,19 +2221,38 @@ export function installRemote(app) {
     },
 
     async methods(args) {
-      const dataset = resolveDataset(args.dataset);
-      const item = app.bundles.link(dataset.id)?.item ?? app.bundles.itemByPath(dataset.path);
-      const report = item ? await app.bundles.validate(item).catch(() => null) : null;
-      const { latest } = datasetFilters(project(), dataset);
-      const chosen = args.filters === undefined ? latest : args.filters.map((f) => resolveFilter(f, dataset));
-      const written = await writeMethods(app, dataset, report, chosen);
-      if (args.show) {
-        app.focusItem({ kind: 'dataset', id: dataset.id });
-        await settleMode('data');
-        await showMethods(app, dataset, report, { chosen });
-        await frames();
+      // Of a result, of the project, or of a dataset (its filters chosen; the latest of each if not).
+      let scope;
+      let dataset = null;
+      let chosen = [];
+      if (args.result !== undefined) scope = { kind: 'result', id: resultRef(args.result).id };
+      else if (args.project) scope = { kind: 'project' };
+      else {
+        dataset = resolveDataset(args.dataset);
+        const { latest } = datasetFilters(project(), dataset);
+        chosen = args.filters === undefined ? latest : args.filters.map((f) => resolveFilter(f, dataset));
+        scope = { kind: 'dataset', id: dataset.id, filters: chosen.map((f) => f.id) };
       }
-      return { message: written.text, data: { dataset: dataset.name, text: written.text, references: written.references, filters: chosen.map(filterData) } };
+      const written = await writeMethods(app, scope);
+      if (args.show) {
+        if (dataset) {
+          app.focusItem({ kind: 'dataset', id: dataset.id });
+          await settleMode('data');
+          await showMethods(app, dataset, { chosen });
+          await frames();
+        } else {
+          await settleMode('reports');
+          await app.reportsView?.showMethods(scope);
+        }
+      }
+      return {
+        message: written.text,
+        data: {
+          of: written.subject, title: written.title, text: written.text,
+          paragraphs: written.paragraphs, references: written.references.map((r) => `[${r.n}] ${r.text}${r.doi && !r.text.includes(r.doi) ? ` doi:${r.doi}` : ''}`),
+          ...(dataset ? { dataset: dataset.name, filters: chosen.map(filterData) } : {}),
+        },
+      };
     },
 
     // --- Samples (wave 7) ---------------------------------------------------------------------
@@ -2585,8 +2663,240 @@ export function installRemote(app) {
       };
     },
 
+    // --- Figures (wave 8) ------------------------------------------------------------------------
+
+    async figure(args) {
+      const figs = figuresOf(project());
+      const ref = args.name === undefined ? null : String(args.name).trim();
+      let fig = ref ? figs.find((f) => f.id === ref) ?? figs.find((f) => f.name === ref) ?? null : figs.length === 1 ? figs[0] : null;
+      if (args.remove) {
+        if (!fig) throw new ActionError(ref ? `No figure ${ref}.` : 'Name the figure to remove.');
+        store.commit(removeFigure(project(), fig.id), `Remove figure ${fig.name}`);
+        return { message: `Removed the figure ${fig.name}.` };
+      }
+      const size = args.size === undefined ? null : choose(String(args.size), FIGURE_SIZES.map((x) => x.id), 'size');
+      const region = (view) => {
+        const r = viewRegion(view);
+        if (args.width_um !== undefined) r.width = finite(args.width_um, 'width_um');
+        if (args.center !== undefined) {
+          if (!Array.isArray(args.center) || args.center.length !== 2) throw new ActionError('center is [x, y] in µm.');
+          [r.cx, r.cy] = [finite(args.center[0], 'center'), finite(args.center[1], 'center')];
+        }
+        if (!(r.width > 0)) throw new ActionError('width_um is above 0.');
+        return r;
+      };
+      const extras = {
+        ...(args.scale_bar !== undefined ? { scaleBar: finite(args.scale_bar, 'scale_bar') } : {}),
+        ...(args.point_size !== undefined ? { pointSize: finite(args.point_size, 'point_size') } : {}),
+      };
+      if (args.panels !== undefined) {
+        if (!Array.isArray(args.panels) || !args.panels.length) throw new ActionError('panels is a list of panels, each an object with its kind.');
+        const specs = args.panels.map((spec, i) => figurePanel(spec, i, region, extras));
+        let next = createFigure(ref ?? `Figure ${figs.length + 1}`, size ?? fig?.size ?? 'double', { ...(fig ? { id: fig.id, now: fig.created } : {}), ...(args.text !== undefined ? { text: finite(args.text, 'text') } : {}) });
+        const columns = args.columns === undefined ? Math.min(3, specs.length) : Math.max(1, Math.round(finite(args.columns, 'columns')));
+        for (const panel of specs) next = addPanel(next, panel, { columns }).figure;
+        const bottom = next.panels.reduce((y, p) => Math.max(y, p.y + p.h), 0);
+        next.height = args.height_mm !== undefined ? Math.round(mm(finite(args.height_mm, 'height_mm')) * 100) / 100 : Math.round((bottom + 8) * 100) / 100;
+        fig = next;
+      } else if (args.views !== undefined) {
+        if (!Array.isArray(args.views) || !args.views.length) throw new ActionError('views is a list of saved views, by name or ID.');
+        const list = tissueViews(project());
+        if (!list.length) throw new ActionError('The project has no saved view of the tissue: save_view saves the Viewer\'s.');
+        const views = args.views.map((v) => list.find((x) => x.id === String(v)) ?? list.find((x) => x.name === choose(String(v), list.map((y) => y.name), 'saved view')));
+        let next = createFigure(ref ?? `Figure ${figs.length + 1}`, size ?? fig?.size ?? 'double', { ...(fig ? { id: fig.id, now: fig.created } : {}), ...(args.text !== undefined ? { text: finite(args.text, 'text') } : {}) });
+        const columns = Math.min(3, views.length);
+        for (const v of views) next = addPanel(next, { kind: 'tissue', view: v.id, region: region(v), ...extras }, { columns }).figure;
+        // The page as tall as its panels, unless a height is given.
+        const bottom = next.panels.reduce((y, p) => Math.max(y, p.y + p.h), 0);
+        next.height = args.height_mm !== undefined ? Math.round(mm(finite(args.height_mm, 'height_mm')) * 100) / 100 : Math.round((bottom + 8) * 100) / 100;
+        fig = next;
+      } else {
+        if (!fig) throw new ActionError(ref ? `No figure ${ref}: give views to make it.` : 'Name a figure, or give views to make one.');
+        const s = size ? FIGURE_SIZES.find((x) => x.id === size) : null;
+        const view = (p) => (project().views ?? []).find((v) => v.id === p.view);
+        fig = {
+          ...fig,
+          ...(s ? { size: s.id, width: Math.round(s.width * 100) / 100 } : {}),
+          ...(args.height_mm !== undefined ? { height: Math.round(mm(finite(args.height_mm, 'height_mm')) * 100) / 100 } : {}),
+          ...(args.text !== undefined ? { text: finite(args.text, 'text') } : {}),
+          panels: fig.panels.map((p) => (p.kind === 'tissue' ? { ...p, ...extras, ...(args.width_um !== undefined || args.center !== undefined ? { region: view(p) ? region({ ...view(p), camera: { cx: p.region.cx, cy: p.region.cy, umPerCss: p.region.width / 1000 } }) : p.region } : {}) } : p)),
+        };
+      }
+      try {
+        checkFigure(fig);
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      store.commit(saveFigure(project(), fig), `Figure ${fig.name}`);
+      await settleMode('reports');
+      app.reportsView?.select(fig.id);
+      const { drawn } = await drawFigure(app, fig, { dpi: 300 });
+      const letters = panelLetters(fig);
+      return {
+        message: `${drawn.description}${drawn.notes.length ? ` Notes: ${drawn.notes.join(' ')}` : ''}`,
+        data: {
+          id: fig.id, name: fig.name, size: fig.size, width_mm: toMM(fig.width), height_mm: toMM(fig.height), text: fig.text, description: drawn.description, notes: drawn.notes, smallest: drawn.smallest,
+          panels: fig.panels.map((p, i) => ({ id: p.id, letter: letters.get(p.id) ?? null, kind: p.kind, shows: panelSummary(p, project()), x: p.x, y: p.y, w: p.w, h: p.h, ...(p.region ? { region: p.region } : {}), ...(drawn.panels[i].facts ? { facts: drawn.panels[i].facts } : {}), notes: drawn.panels[i].notes })),
+        },
+      };
+    },
+
+    async write_figure(args) {
+      const figs = figuresOf(project());
+      const ref = args.name === undefined ? null : String(args.name).trim();
+      const fig = ref ? figs.find((f) => f.id === ref) ?? figs.find((f) => f.name === choose(ref, figs.map((x) => x.name), 'figure')) : figs.length === 1 ? figs[0] : null;
+      if (!fig) throw new ActionError(figs.length ? 'Name the figure: the project has several.' : 'The project has no figure: figure makes one.');
+      const ext = String(args.path ?? '').split('.').at(-1).toLowerCase();
+      const format = choose(String(args.format ?? ext), ['svg', 'pdf', 'png', 'json'], 'format');
+      const dpi = args.dpi === undefined ? 300 : finite(args.dpi, 'dpi');
+      if (!(dpi >= 72 && dpi <= 1200)) throw new ActionError('dpi is 72 to 1,200.');
+      let time = null;
+      if (args.time !== undefined) {
+        const t = new Date(String(args.time));
+        if (Number.isNaN(t.getTime())) throw new ActionError(`time is ISO 8601, not ${args.time}.`);
+        time = t.toISOString();
+      }
+      let out;
+      try {
+        out = await writeFigure(app, fig, format, { dpi, time });
+      } catch (error) {
+        throw new ActionError(`${fig.name} could not be written: ${error.message}`);
+      }
+      const m = out.manifest;
+      return {
+        file: out.bytes,
+        message: `${fig.name} as ${format.toUpperCase()}${format === 'png' ? ` at ${dpi} dpi` : ''}, its manifest inside (fingerprint ${m.fingerprint.slice(0, 12)}…).${out.drawn.notes.length ? ` Notes: ${out.drawn.notes.join(' ')}` : ''}`,
+        data: { name: fig.name, format, dpi, created: m.created, fingerprint: m.fingerprint, drawing: m.drawing, notes: out.drawn.notes, panels: m.panels.map((p) => ({ id: p.id, letter: p.letter, shows: p.shows, drawing: p.drawing, inputs: p.inputs, facts: p.facts ?? null })) },
+      };
+    },
+
+    async record(args) {
+      const scope = scopeArg(args, { dataset: false });
+      const ref = scope.kind === 'result' ? resultRef(scope.id) : { id: scope.kind === 'project' ? project().id : scope.id, name: scope.kind === 'project' ? project().name : resolveDataset(scope.id).name };
+      const format = args.format === undefined ? 'json' : choose(String(args.format), Object.keys(RECORD_FORMATS), 'format');
+      let now = new Date().toISOString();
+      if (args.time !== undefined) {
+        const t = new Date(String(args.time));
+        if (Number.isNaN(t.getTime())) throw new ActionError(`time is ISO 8601, not ${args.time}.`);
+        now = t.toISOString();
+      }
+      let rec;
+      try {
+        rec = await recordOf(app, scope, { now });
+      } catch (error) {
+        throw new ActionError(`The record of ${ref.name} could not be read: ${error.message}`);
+      }
+      await settleMode('reports');
+      await app.reportsView?.showRecord(scope);
+      const bundles = rec.steps.filter((x) => x.kind === 'dataset').length;
+      return {
+        message: `What made ${rec.result.name}: ${plural(rec.steps.length, 'step')} from ${plural(bundles, 'bundle')}, with ${plural(rec.references.length, 'reference')} (${rec.software.map((x) => `${x.name} ${x.version}`.trim()).join('; ')}).`,
+        data: { ...rec, ...(format === 'json' ? {} : { text: RECORD_FORMATS[format].write(rec) }) },
+      };
+    },
+
+    // situcraft verify (wave 8, slice 6): the page's records it computes, computed again in the
+    // project opened: a design from its samples, a filter's cells from their attributes, a figure's
+    // drawing (its digests). Each answers { id, checked, same, detail, differ }.
+    async verify_records(args) {
+      const steps = Array.isArray(args.steps) ? args.steps : [];
+      const out = [];
+      for (const s of steps) {
+        try {
+          out.push({ id: s.id, ...(await verifyRecord(s)) });
+        } catch (error) {
+          out.push({ id: s.id, checked: false, same: null, detail: `it could not be computed again: ${error.message}` });
+        }
+      }
+      const same = out.filter((x) => x.checked && x.same).length;
+      return { message: `${same} of ${plural(out.length, 'record')} computed again as recorded.`, data: { steps: out } };
+    },
+
+    async verify_certificate(args) {
+      let report;
+      let name;
+      try {
+        if (args.path !== undefined) {
+          name = String(args.path).split(/[\\/]/).at(-1);
+          report = await verifyCertificateFile(app, { path: String(args.path) });
+        } else {
+          const out = await certify(app, scopeArg(args));
+          name = out.name;
+          report = await verifyCertificateFile(app, { file: new Blob([out.bytes]), name: out.name });
+        }
+      } catch (error) {
+        throw new ActionError(`It could not be verified: ${error.message}`);
+      }
+      return { message: `${name}: ${verdictText(report)}`, data: report };
+    },
+
+    async read_figure(args) {
+      const path = String(args.path ?? '');
+      const response = await fetch(`/api/read-figure?path=${encodeURIComponent(path)}`, { cache: 'no-store' });
+      if (!response.ok) throw new ActionError((await response.json().catch(() => ({}))).error ?? `HTTP ${response.status}`);
+      const read = await readBackFigure(app, new Uint8Array(await response.arrayBuffer()));
+      const name = path.split(/[\\/]/).at(-1);
+      if (!read) throw new ActionError(`${name} carries no SituCraft figure manifest.`);
+      const { manifest: m, comparison: c, redrawn } = read;
+      const same = redrawn.filter((r) => r.same).length;
+      return {
+        message: c.intact
+          ? `${name}: ${m.figure.name}, written by SituCraft ${m.software.version} on ${m.created}${c.sameProject ? ' from this project' : ` from the project ${m.project.name}`}. ${c.panels.map((p) => `${p.letter ?? p.id} ${p.status}${p.changes.length ? ` (${p.changes.join('; ')})` : ''}`).join('; ')}. Drawn again, ${same} of ${redrawn.length} panel${redrawn.length === 1 ? '' : 's'} the same.`
+          : `${name}: its manifest is not as written. ${c.problem}`,
+        data: { name: m.figure.name, intact: c.intact, problem: c.problem, sameProject: c.sameProject, created: m.created, software: m.software, fingerprint: m.fingerprint, panels: c.panels.map((p) => ({ ...p, same: redrawn.find((r) => r.id === p.id)?.same ?? null })) },
+      };
+    },
+
     async export(args) {
-      const what = choose(args.what, ['project', 'archive', 'methods', 'alignment', 'regions', 'reviews', 'samples', 'cohort-table', 'pseudobulk'], 'kind of file');
+      const what = choose(args.what, ['project', 'archive', 'methods', 'alignment', 'regions', 'reviews', 'samples', 'cohort-table', 'pseudobulk', 'record', 'certificate', 'report', 'package'], 'kind of file');
+      if (what === 'report' || what === 'package') {
+        if (!Array.isArray(args.results) || !args.results.length) throw new ActionError('Name the results it reports (results: their IDs or names; a figure is one).');
+        const ids = args.results.map((x) => resultRef(x).id);
+        const options = { title: args.title, results: ids, names: Boolean(args.names) };
+        let out;
+        try {
+          out = what === 'package' ? await writePackage(app, options) : await writeReport(app, options);
+        } catch (error) {
+          throw new ActionError(`The ${what} could not be written: ${error.message}`);
+        }
+        const c = out.certificate;
+        const left = `It leaves out ${plural(out.leftOut.people, 'person\'s name')}, ${plural(out.leftOut.notes, 'note')}${args.names ? ` and ${plural(out.leftOut.names, 'name')} of samples, subjects and sections` : ''}; ${plural(out.checked.texts, 'text')} searched for them, none found.`;
+        const data = { title: c.subject.name, fingerprint: c.fingerprint, short: shortFingerprint(c.fingerprint), results: ids, numbers: out.numbers, steps: c.steps.length, bundles: c.bundles.length, leftOut: out.leftOut, checked: out.checked };
+        if (what === 'package') {
+          return {
+            file: out.zip,
+            message: `The package ${c.subject.name}: the report (${plural(out.numbers, 'number')} traced to its certificate), ${plural(out.views, 'saved view')} in ${plural(out.tiles, 'tile')} with a reader of ${out.views === 1 ? 'its' : 'their'} own, and the certificate (${plural(c.steps.length, 'step')} from ${plural(c.bundles.length, 'bundle')}, fingerprint ${shortFingerprint(c.fingerprint)}), ${plural(out.files, 'file')} in all. ${left}`,
+            data: { ...data, folder: out.folder, views: out.views, tiles: out.tiles, files: out.files, bytes: out.zip.length },
+          };
+        }
+        return {
+          file: out.html,
+          message: `The report ${c.subject.name}: ${plural(out.figures, 'figure')}, the numbers of ${plural(ids.length - out.figures, 'result')} (${plural(out.numbers, 'number')}, each traced to its place in the certificate), its methods and the certificate it carries (${plural(c.steps.length, 'step')} from ${plural(c.bundles.length, 'bundle')}, fingerprint ${shortFingerprint(c.fingerprint)}), which it checks as it opens. ${left}`,
+          data: { ...data, figures: out.figures, bytes: new TextEncoder().encode(out.html).length },
+        };
+      }
+      if (what === 'certificate') {
+        const scope = scopeArg(args);
+        let out;
+        try {
+          out = await certify(app, scope);
+        } catch (error) {
+          throw new ActionError(`It could not be certified: ${error.message}`);
+        }
+        const c = out.certificate;
+        return {
+          file: out.bytes,
+          message: `The certificate of ${certificateSummary(c)}`,
+          data: { fingerprint: c.fingerprint, short: shortFingerprint(c.fingerprint), subject: c.subject, bundles: c.bundles.map((b) => ({ dataset: b.dataset, name: b.name, files: b.files.length })), steps: c.steps.map(({ n, id, kind, name, by }) => ({ n, id, kind, name, by })), notMadeAgain: c.notMadeAgain, bytes: out.bytes.length },
+        };
+      }
+      if (what === 'record') {
+        const scope = scopeArg(args);
+        const ext = String(args.path ?? '').split('.').at(-1).toLowerCase();
+        const format = args.format !== undefined ? choose(String(args.format), Object.keys(RECORD_FORMATS), 'format') : Object.keys(RECORD_FORMATS).find((k) => RECORD_FORMATS[k].ext === ext) ?? 'markdown';
+        const rec = await recordOf(app, scope);
+        return { file: RECORD_FORMATS[format].write(rec), message: `What made ${rec.result.name}, as ${RECORD_FORMATS[format].label}: ${plural(rec.steps.length, 'step')}, ${plural(rec.references.length, 'reference')}.` };
+      }
       if (what === 'cohort-table' || what === 'pseudobulk') {
         const list = summariesOf(project());
         if (!list.length) throw new ActionError('The project has no summary yet: summarize_samples makes one.');
@@ -2633,9 +2943,8 @@ export function installRemote(app) {
         return { file: `${JSON.stringify(parseProject(serializeProject(project())), null, 2)}\n`, message: `The project document of ${project().name}.` };
       }
       if (what === 'methods') {
-        const dataset = resolveDataset(args.dataset);
-        const result = await actions.methods({ dataset: dataset.id });
-        return { file: methodsMarkdown(dataset, result.data), message: `The methods of ${dataset.name}, with ${plural(result.data.references.length, 'reference')}.` };
+        const written = await writeMethods(app, scopeArg(args));
+        return { file: methodsMarkdown(written), message: `The methods of ${written.subject.name}, with ${plural(written.references.length, 'reference')}.` };
       }
       // An archive is written by the program itself (api_project.go), beside the bundles it names.
       const response = await fetch('/api/project-archive', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: args.path, project: project(), overwrite: Boolean(args.overwrite) }) });
@@ -2644,6 +2953,64 @@ export function installRemote(app) {
       return { message: `Wrote ${body.path} (${body.bytes} bytes): ${project().name}, its bundles recorded relative to it.`, data: { path: body.path, bytes: body.bytes } };
     },
   };
+
+  // What a record, methods or certificate is of: a result (args.result, by ID or name), the project
+  // (args.project) or a dataset (args.dataset; the only one when given none and dataset is true).
+  function scopeArg(args, { dataset = true } = {}) {
+    if (args.result !== undefined) return { kind: 'result', id: resultRef(args.result).id };
+    if (args.project) return { kind: 'project' };
+    if (args.dataset !== undefined || dataset) return { kind: 'dataset', id: resolveDataset(args.dataset).id };
+    throw new ActionError('Name the result (result), or ask for the project\'s (project: true) or a dataset\'s (dataset).');
+  }
+
+  // One of the page's records computed again (verify_records).
+  async function verifyRecord(s) {
+    const p = project();
+    if (s.kind === 'design') {
+      const record = p.artifacts.find((a) => a.kind === 'design' && a.id === s.id);
+      if (!record) return { checked: false, same: null, detail: 'the project has no such design' };
+      const design = makeDesign(p, record.spec);
+      if (!design.ok) return { checked: true, same: false, detail: `the samples no longer give the design: ${design.problems[0]}`, differ: ['the design'] };
+      const again = designRecord(design, { name: record.name, now: record.created, id: record.id });
+      const differ = ['samples', 'excluded', ...Object.keys(again.result).map((k) => `result.${k}`)].filter((k) => {
+        const [a, b] = k.startsWith('result.') ? [again.result[k.slice(7)], record.result?.[k.slice(7)]] : [again[k], record[k]];
+        return canonicalJSON(a) !== canonicalJSON(b);
+      });
+      return { checked: true, same: differ.length === 0, detail: differ.length ? 'made again from the samples, it differs' : 'made again from the samples, the same', differ };
+    }
+    if (s.kind === 'filter') {
+      const record = p.artifacts.find((a) => a.kind === 'filter' && a.id === s.id);
+      if (!record) return { checked: false, same: null, detail: 'the project has no such filter' };
+      const dataset = p.datasets.find((d) => d.id === record.dataset);
+      const q = await openIn('qc', dataset);
+      const again = q.verifyFilter(record);
+      return { checked: true, same: again.same, detail: again.same ? `applied again to the cells, it keeps the same ${again.kept.toLocaleString('en-US')} cells` : `applied again, it keeps ${again.kept.toLocaleString('en-US')} cells (recorded ${record.result.kept.toLocaleString('en-US')}), SHA-256 ${again.sha256 === record.result.sha256 ? 'the same' : 'another'}`, differ: again.same ? [] : ['its cells'] };
+    }
+    if (s.kind === 'figure') {
+      const fig = figuresOf(p).find((f) => f.id === s.id);
+      if (!fig) return { checked: false, same: null, detail: 'the project has no such figure' };
+      if (!s.drawing) return { checked: false, same: null, detail: 'the certificate holds no drawing of it' };
+      const written = await writeFigure(app, fig, 'json', { dpi: 300, time: '2026-01-01T00:00:00.000Z' });
+      const m = written.manifest;
+      const differ = (s.drawing.panels ?? []).filter((x) => m.panels.find((y) => y.id === x.id)?.drawing !== x.drawing).map((x) => `panel ${x.letter ?? x.id}`);
+      const same = m.drawing === s.drawing.drawing && differ.length === 0;
+      return { checked: true, same, detail: same ? 'drawn again, every panel the same' : 'drawn again, it differs', differ: same ? [] : (differ.length ? differ : ['the drawing']) };
+    }
+    return { checked: false, same: null, detail: `a ${s.kind} is not computed again` };
+  }
+
+  // A result a record can be made of, by its ID or its name (a name several share needs the ID).
+  function resultRef(ref) {
+    const results = recordableResults(project());
+    if (!results.length) throw new ActionError('The project has no result yet.');
+    const text = String(ref ?? '').trim();
+    const byId = results.find((r) => r.id === text);
+    if (byId) return byId;
+    const name = choose(text, [...new Set(results.map((r) => r.name))], 'result');
+    const named = results.filter((r) => r.name === name);
+    if (named.length > 1) throw new ActionError(`${named.length} results are named "${name}": give one's ID (${named.map((r) => `${r.id}, ${r.kind}`).join('; ')}).`);
+    return named[0];
+  }
 
   // A post-Xenium image of a dataset by its name or artifact ID (its only image if not named).
   function imageRef(dataset, ref) {
@@ -2971,7 +3338,7 @@ export function installRemote(app) {
         const response = await fetch(event.output, { method: 'POST', body: result.file, headers: { 'Content-Type': 'application/octet-stream' } });
         const written = await response.json().catch(() => ({}));
         if (!response.ok) throw new ActionError(`The file could not be written: ${written.error ?? `HTTP ${response.status}`}`);
-        message = `Wrote ${written.path} (${written.bytes} bytes). ${message}`;
+        message = `Wrote ${written.path} (${written.files !== undefined ? `a folder of ${written.files} files` : `${written.bytes} bytes`}). ${message}`;
       }
       outcome = { ok: true, message, data: result.data ?? null };
     } catch (error) {

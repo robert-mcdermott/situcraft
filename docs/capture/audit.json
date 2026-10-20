@@ -530,6 +530,86 @@
   "violations": []
  },
  {
+  "scene": "figures",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "figures",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "figure-results",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "figure-results",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "record",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "record",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "methods-project",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "methods-project",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "report-section",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "report-section",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "report",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "report",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "package-view",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "package-view",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "verify",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "verify",
+  "theme": "light",
+  "violations": []
+ },
+ {
   "scene": "jobs",
   "theme": "dark",
   "violations": []

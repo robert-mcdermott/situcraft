@@ -166,6 +166,11 @@ cells they keep (a SHA-256), so their reproduction can be checked whenever the p
   what a dataset lacks. A view opens through one path (`app.applyView`): the Viewer or QC applies
   it when it has its dataset open. A deep link (`#project=…&view=…`) loads the project from the
   library and applies the view.
+- **Figures** (`lib/figures.js`, wave 8) are project entries, not pictures: pages of panels, each
+  saying what it shows (a tissue panel: a saved view and a region in µm), drawn from the project
+  as marks (`lib/draw.js`) whenever shown or written, so one drawing gives the SVG, the PDF, the
+  PNG and the preview. A written figure carries its manifest (`lib/figure-manifest.js`): what each
+  panel was drawn from and a digest of what it drew, by which SituCraft, with a fingerprint.
 - **The methods paragraph** (`lib/methods.js`) is a pure function of the dataset's record, its
   validation report, the chosen filters and the program's version and commit: it says only what
   was done, numbers its references in order of first citation, and gives the same text for the
@@ -544,7 +549,7 @@ the same result.
 | MaveScape 0.8 | `main.go`, `local.go`, `store.go` | renames; file kinds (bundle directories, zips, OME-TIFF, GeoJSON, Parquet, CSV) |
 | MaveScape 0.8 | `remote.go`, `output.go`, `mcp.go` framework, `run.go`/`verify.go` pattern | transport verbatim; actions and tools new |
 | MaveScape 0.8 | `web/ui/dom.js`, `overlays.js`, `store.js`, `palette.js`, `icons.js`, drawer, inspector, status bar | renames |
-| MaveScape 0.8 | `web/lib/random.js`, `sha256.js`, `zip.js`, `png.js`, `pdf.js`, `colormaps.js`, `colorvision.js`, `stats.js`, `limma.js`, `figure-svg.js`, `methods.js`, `certificate.js` pattern | copied with tests when a slice needs them |
+| MaveScape 0.8 | `web/lib/random.js`, `sha256.js`, `zip.js`, `png.js`, `pdf.js`, `draw.js`, `colormaps.js`, `colorvision.js`, `stats.js`, `limma.js`, `methods.js`; the `figures.js`, `figure-manifest.js` and `certificate.js` patterns | copied with tests when a slice needs them |
 | MaveScape 0.8 | CI and release workflows, installers, `validation/fetch.mjs` + `sources.json`, `docs/capture`, `clients/generate.mjs` | renames; CI as below |
 
 Each copied file keeps an origin comment ("Adapted from MaveScape 0.8.0 security.go"), so fixes

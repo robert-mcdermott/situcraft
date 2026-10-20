@@ -6,127 +6,46 @@
 </picture>
 
 SituCraft is an open-source, local-first workbench for imaging-based spatial transcriptomics,
-starting with 10x Genomics Xenium output bundles. It makes cell segmentation, pathology review and
-tissue-level spatial analysis one reproducible workflow:
+starting with 10x Genomics Xenium output bundles. It takes a section from the instrument's bundle to
+results others can check: the tissue seen at any zoom, cells segmented and typed, the pathology
+brought in, the tissue's organization measured, samples compared, and figures, methods and
+certificates written, each step kept on record.
 
-- open and validate a bundle;
-- see the tissue, its transcripts and its cells at any zoom;
-- segment cells with built-in transcript-informed segmentation, and compare segmentations and
-  choose one with evidence;
-- register H&E;
-- type cells, find niches and compare samples;
-- export open formats with complete provenance.
+It is one self-contained program for macOS, Linux and Windows. It opens as a desktop window, needs
+no Python, R or account, and keeps your data on your computer.
 
-SituCraft runs as one self-contained program on macOS, Linux and Windows. It opens as a desktop
-window, needs no other software, and keeps your data on your computer. 16 GB of memory is
-recommended for whole sections; 8 GB is enough for the examples ([what it needs](docs/INSTALLING.md#what-it-needs)).
+**Current release:** 0.8.0 ([changelog](CHANGELOG.md), [roadmap](situcraft-spec/roadmap.md)).
 
-**Status:** 0.7.0. SituCraft opens a Xenium output bundle (folder or zip), reads every byte of it
-with its own readers, validates it (fatal problems, warnings and notes, and 22 of the run's
-recorded values recomputed from its data) and records it in a project. Its tissue viewer shows the
-morphology stains, the transcripts of chosen genes and the cells at any zoom, every image sample
-exactly as recorded; its QC view explains the run's metrics, maps quality over the tissue and keeps
-cell filters as reproducible versions. Segmentations are artifacts with their lineage: the
-instrument's, SituCraft's own, and other tools' imported from SpatialData, Baysor, GeoJSON or
-Xenium Ranger. Any two are compared cell by cell, with measures of transcripts given to the wrong
-cell; a workspace shows both on the tissue, ranks their differences for review, and records the
-decision that promotes one, with its reason. Any segmentation exports to SpatialData, AnnData,
-Parquet, CSV, Matrix Market and GeoJSON, or is prepared for Xenium Ranger, every file listed by its
-SHA-256. Programs drive the window by remote control.
+## Features
 
-Since 0.3.0, SituCraft segments cells from their transcripts itself (after Jones et al. 2025),
-redrawing the instrument's cells where their transcripts lie, in the app's segmentation studio or
-with `situcraft refine`. The same settings and seed give the same segmentation, byte for byte, on
-any computer. Each transcript's probability of its cell, each cell's boundary certainty and the
-cells it is least sure of are kept, and drawn on the tissue. Large tissues are refined in patches.
-It is validated against simulated tissues whose every cell is known, which `situcraft simulate`
-makes, and against an independent reference: on the standard simulated tissue it puts 84.7% of
-transcripts in their true cell, against 82.2% for the instrument's nucleus expansion and 75.2% for
-the reference. Three example datasets (two public Xenium bundles, downloaded in a click, and a
-simulated tissue with its truth) come with guided tours and worked examples. See the
-[roadmap](situcraft-spec/roadmap.md) and the [changelog](CHANGELOG.md).
+- **Open and check a bundle.** Every file read with SituCraft's own readers, validated, and 22 of
+  the run's recorded values recomputed from its data.
+- **See the tissue.** Morphology stains, transcripts of chosen genes and cell outlines at any
+  zoom; a QC view that explains the run's metrics, maps quality over the tissue and keeps cell
+  filters as versions.
+- **Segment cells.** SituCraft's own transcript-informed segmentation, or other tools' imported
+  (SpatialData, Baysor, GeoJSON, Xenium Ranger); any two compared cell by cell, their differences
+  ranked for review, and the choice recorded with its reason.
+- **Type cells.** Clusters and a map linked to the tissue; labels from marker genes or a
+  single-cell reference, each with its confidence and evidence; a review queue.
+- **Bring in the pathology.** Post-Xenium H&E and immunofluorescence images aligned and checked
+  in µm; regions drawn and exchanged with QuPath; reviews kept with who and why.
+- **Measure the tissue's organization.** Cell graphs, neighborhood enrichment, distances, regions
+  compared, niches and spatially variable genes; any answer made again on another segmentation.
+- **Compare samples.** A study's sections in one project with a stated design, and cell types'
+  abundance, expression and spatial statistics compared between groups with the subject, not the
+  cell, as the unit.
+- **Write results others can check.** Figures with scale bars and legends drawn from the project;
+  a methods section written from the record of every step; certificates that `situcraft verify`
+  makes again from the bundles; reports and packages that open in any browser and check
+  themselves.
+- **Reproducible and open.** Every result is an artifact with its lineage, the same bits on every
+  computer; exports to SpatialData, AnnData, Parquet, CSV and GeoJSON; scripts drive the window by
+  remote control.
 
-Since 0.4.0, SituCraft gives cells identities with their evidence, in the Cell types view. A
-segmentation's cells are clustered by their expression, each cluster with its markers, and laid
-out on a map (UMAP) linked to the tissue: cells selected on either are selected on both. They are
-labeled from marker genes (a hierarchy of cell types, each with positive and negative markers;
-starter sets for the example panels from published cell atlases, edited as versions), from a
-labeled single-cell reference (each cell correlated with each label's profile, then fine-tuned on
-the leading labels' genes), or imported from CSV, Parquet, AnnData or Xenium Explorer's cell
-groups. Each label has its confidence and its evidence; curated and consensus versions sit side by
-side, and a review queue lists the cells most likely mislabeled. A clustering and its labels are
-made again on another segmentation in one step and read through the two segmentations'
-comparison: what the choice of segmentation changes in the cells' identities. Whole sections of
-hundreds of thousands of cells, and Xenium Prime's 5,000-gene panel, are clustered and mapped in
-minutes, the same for a seed on any computer. The steps and defaults are scanpy's and SingleR's,
-and the results are validated against scanpy, leidenalg, umap-learn, scikit-learn and SingleR, and
-against the simulated tissue's true types: labeled from its types' markers, 98.3% of the
-instrument's cells take their true type, and 99.9% of SituCraft's refined cells. Worked examples
-cluster and label the Lung cells, read the simulated tissue's labels against its truth, and the
-Breast cells' labels under two segmentations.
-
-Since 0.5.0, SituCraft bridges to pathology. Post-Xenium H&E and immunofluorescence images of the
-section are drawn on the tissue, read where they lie (pyramidal OME-TIFFs, as Xenium Explorer
-requires, from bundles of Xenium Onboard Analysis 1.0 on), and placed by the alignment Xenium
-Explorer saves, by landmarks placed on both images side by side, or automatically by the nuclei,
-with a smooth deformation for a section that stretched. Every alignment is a version with its
-fit's errors in µm, and is checked over the whole section: a checkerboard, flicker, DAPI's edges,
-and where it is off, measured by local matches. On the breast cancer section of Janesick et al.
-(2023), the automatic alignment of its immunofluorescence image is off by 0.48 µm (median) where
-10x's is off by 0.85 µm. Regions are drawn over any layer (a rectangle, a polygon, freehand or a
-brush), named and classed, their cells counted and chosen, kept as versions and exchanged with
-QuPath as GeoJSON in an image's own pixels, checked against QuPath itself. Cells and regions are
-reviewed (accepted, relabeled, ambiguous, excluded, a segmentation concern, a comment), each review
-kept with who, why, the value before and after, the label set, the label's confidence and the
-alignment in use, and written as CSV or JSON. The simulated example now has an H&E and an
-immunofluorescence image with their truth, and worked examples that align the H&E three ways and
-score each, take regions to QuPath and back, and review the cells a queue ranks first.
-
-Since 0.6.0, SituCraft asks how the tissue is organized, in the Spatial view: graphs of which cells
-are neighbors (the Delaunay triangulation of their centers, their nearest neighbors, a radius, or
-contact in the segmentation), edge for edge those SciPy and Squidpy build; which cell types are
-neighbors more or less often than chance (neighborhood enrichment, its expectation exact, its
-significance by permutation, within regions if asked) and at what distances (co-occurrence),
-Squidpy's numbers on the same cells; how far each type lies from the nearest of each other, and at
-what scale cells gather or keep apart (Ripley's K and L in the tissue or a region, edge-corrected),
-each against the labels dealt at random; each region's cells per mm² of its tissue and per labeled
-cell, regions compared with intervals, and which types fill a region, stay out of it or gather at
-its margin; the tissue's kinds of place (cellular neighborhoods), how stable they are, and their
-genes; which genes are expressed in a spatial pattern (Moran's I, Squidpy's exactly) and where; any
-answer made again on another segmentation in one step and read with the first, number by number,
-with the cells behind each change; and every number's cells shown on the tissue. A million cells'
-graphs, enrichment and niches take seconds on four cores, and their Moran's I under two minutes in
-1 GB. Worked examples ask which cell types are neighbors in the Breast section and whether its
-immune cells enter its tumor, read the simulated tissue's niches against its domains, find the Lung
-genes in a pattern, and make an answer again under another segmentation.
-
-Since 0.7.0, SituCraft compares samples and cohorts, in the Cohort view. A study's sections in one project, each a sample (or
-its regions, such as a tissue microarray's cores), described by the subject it came from, its
-condition and any field added, beside its run, slide and panel read from its bundle, and written
-and read as CSV. Simulated cohorts (`situcraft simulate --cohort`, and the start page's three: a cohort with known
-effects, a null cohort and a cohort before and after) are sections of subjects in groups whose
-differences are known, with their truth, for checking comparisons of groups. The design names the replicate unit, the groups and
-the covariates before any comparison, as a model matrix in treatment coding, and refuses what it
-cannot estimate or what a batch could explain. Every sample is then measured the same way (the
-same labels, graph and questions) and summarized in the cohort table: its cells by label, niches
-found across the samples together, its quality, its spatial statistics and its pseudobulk, each
-number traced to the artifact it came from. Before any comparison, cohort QC lays the samples side
-by side: samples far out flagged with the reason (never passed or failed), the numbers by slide,
-run and panel, a group confounded with a batch said, the pseudobulk's principal components, and the
-panels compared so that only genes every sample measured are compared. Each cell type's share and
-density is then compared between groups with the replicate unit, not the cell, as the unit, by
-quasi-likelihood models of the design: effects with intervals, p-values adjusted over the tests,
-and each result traced to its samples' cells. Each cell type's genes are compared by its
-pseudobulk (filtered by expression, normalized by TMM, weighted by voom and tested by the moderated
-t, validated against limma and edgeR), and the samples' spatial statistics (neighbor enrichment,
-nearest distances, Moran's I) by moderated linear models of the design. Every week the tests'
-error rates are measured on thousands of simulated cohorts (each family's false positives at their
-levels, a known change's interval covering it 95% of the time) beside the same cohorts tested cell
-by cell, whose false positives show why cells are never tested as replicates; and a cohort of 2
-million cells is summarized and compared one section at a time within its budget. Worked examples
-find a gene changed in one cell type, find nothing in a null cohort, find a composition shift in
-subjects sampled before and after, show what pairing gains, and, for teaching only, compare regions
-of one Breast section as pseudo-samples, every result saying that they are not subjects.
+Every method is checked against an independent implementation or a known truth (scanpy, Squidpy,
+SingleR, limma, edgeR, QuPath and simulated tissues among them): see
+[methods and validation](https://robert-mcdermott.github.io/situcraft/science.html).
 
 ## A look around
 
@@ -168,32 +87,16 @@ The Cell types view: the cells' map beside the tissue, linked, colored by cluste
 The Cohort view: a simulated cohort's subjects compared by condition, each subject one observation;
 SIM033, raised in the treated subjects' epithelial-like cells, the only gene found.
 
-More: [checking a bundle](docs/images/data-light.webp), [the tissue's stains](docs/images/viewer-light.webp),
-[transcripts outside cells](docs/images/qc-outside-light.webp), [filters as versions](docs/images/qc-filter-light.webp),
-[saved views](docs/images/saved-views-light.webp), [the methods paragraph](docs/images/methods-light.webp),
-[a guided tour](docs/images/tour-light.webp), [a segmentation's lineage](docs/images/segmentation-light.webp),
-[nucleus expansion compared with the instrument's segmentation](docs/images/expansion-light.webp),
-[a segmentation imported from SpatialData](docs/images/import-light.webp),
-[two segmentations compared](docs/images/comparison-light.webp),
-[the comparison workspace's disagreement map](docs/images/workspace-map-light.webp),
-[a worked example finding planted errors](docs/images/worked-light.webp),
-[the segmentation studio](docs/images/studio-light.webp),
-[a refinement on the tissue, by its certainty](docs/images/refined-light.webp),
-[exporting a segmentation](docs/images/export-light.webp),
-[cells clustered by their expression](docs/images/celltypes-light.webp),
-[the clusters on the tissue](docs/images/clusters-light.webp),
-[cells labeled from marker genes](docs/images/labels-light.webp),
-[cells labeled from a single-cell reference](docs/images/reference-light.webp),
-[the labels under two segmentations](docs/images/impact-light.webp),
-[the instrument's clusters imported as labels](docs/images/imported-light.webp),
-[the review queue and a cell's evidence](docs/images/review-light.webp),
-[a worked example reading labels against the simulated truth](docs/images/worked-labels-light.webp),
-[a cohort's samples](docs/images/samples-light.webp), [the design](docs/images/design-light.webp),
-[sample summaries](docs/images/summary-light.webp), [cohort QC](docs/images/cohort-qc-light.webp),
-[differential abundance](docs/images/abundance-light.webp),
-[spatial statistics between groups](docs/images/spatial-tests-light.webp),
-[a worked example finding a composition shift](docs/images/worked-cohort-light.webp),
-[the Jobs view](docs/images/jobs-light.webp).
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/figure-results-dark.webp">
+  <img alt="The Reports view's preview of a figure of the Lung's results: its transcripts per cell, the cells' map by cluster, the classes' neighborhood enrichment and the genes in a pattern, lettered A to D" src="docs/images/figure-results-light.webp">
+</picture>
+
+The Reports view: a figure of results drawn from the project, previewed as it will print, each file
+written carrying what it was drawn from.
+
+More screenshots, a page for every view, are in the
+[user guide](https://robert-mcdermott.github.io/situcraft/docs/).
 
 ## Install
 
@@ -212,6 +115,9 @@ irm https://raw.githubusercontent.com/robert-mcdermott/situcraft/main/install.ps
 
 Or build from source with Go (the version in `go.mod` or newer): `go build -o situcraft .`
 
+16 GB of memory is recommended for whole sections; 8 GB is enough for the examples
+([what it needs](docs/INSTALLING.md#what-it-needs)).
+
 ## Getting started
 
 ```sh
@@ -225,11 +131,13 @@ in app mode with its own profile, or else your default browser. Name bundles (th
 bundle** in the window. A bundle is read where it is: SituCraft never copies, changes or moves it.
 Running `situcraft <paths>` again hands them to the SituCraft already running.
 
-The [user guide](https://robert-mcdermott.github.io/situcraft/docs/) on SituCraft's website walks
-through the examples and every view, a page a subject (its sources are in
-[docs/site/pages/docs/](docs/site/pages/docs/)).
+The start page offers two public Xenium sections, a simulated tissue whose every cell is known and
+simulated cohorts, each with a guided tour and worked examples: questions answered step by step,
+saying first what to expect. The [user guide](https://robert-mcdermott.github.io/situcraft/docs/)
+walks through the examples and every view.
 
-## Options
+<details>
+<summary>Options</summary>
 
 | Flag | Default | What it does |
 | --- | --- | --- |
@@ -245,28 +153,21 @@ through the examples and every view, a page a subject (its sources are in
 | `--dev` | off | Serve `web/` from the working directory (development) |
 | `--version` | | Print `situcraft X.Y.Z` and exit |
 
-## Simulated tissues
+</details>
 
-`situcraft simulate <new folder>` makes a tissue whose every cell, nucleus and transcript is
-known. It writes the tissue as a Xenium output bundle labeled simulated, with the truth in its
-`truth/` folder, so that any segmentation can be scored against it. SituCraft and other tools
-(spatialdata-io among them) read the bundle as they read Xenium's. The same seed gives the same
-bundle on any computer. `--preset large` makes a tissue of 6 × 5 mm and 55 million transcripts,
-a field at a time, for measuring at scale. `--cohort standard`, `null` or `paired` makes a cohort
-of such sections, subjects in groups with known effects (or none), with each sample's subject and
-condition and the truth of every effect. `--reference N` also writes a single-cell reference of
-the tissue's types (N cells of each, as AnnData Zarr) to label its cells from. `situcraft simulate
--h` lists the settings, and
-[Formats](docs/FORMATS.md#simulated-tissues-situcraft-simulate) describes the files.
+## Command-line tools
 
-## Refinements in the terminal
+- `situcraft verify --data <folder of bundles> <certificate, report or package>` makes a
+  certificate's results again from the bundles and compares every file bit for bit
+  ([the record](https://robert-mcdermott.github.io/situcraft/docs/record.html#verify)).
+- `situcraft refine <bundle> <new folder>` runs SituCraft's transcript-informed segmentation
+  without the window, from a preset or a recipe saved in the app
+  ([Formats](docs/FORMATS.md#refinements-in-the-terminal-situcraft-refine)).
+- `situcraft simulate <new folder>` makes a tissue (or, with `--cohort`, a cohort of sections)
+  whose every cell, transcript and effect is known, as a Xenium bundle with its truth
+  ([Formats](docs/FORMATS.md#simulated-tissues-situcraft-simulate)).
 
-`situcraft refine <bundle> <new folder>` runs SituCraft's transcript-informed segmentation of a
-bundle without the app, from a preset or a recipe saved in the app (`--recipe`), and writes its
-segmentation files with the recipe beside them. The same recipe gives the same segmentation, byte
-for byte, in the app or the terminal; the folder imports back into the app. `situcraft refine -h`
-lists the settings, `--preflight` says what a run would need, and
-[Formats](docs/FORMATS.md#refinements-in-the-terminal-situcraft-refine) describes the files.
+Each takes `-h` for its settings.
 
 ## Documentation
 

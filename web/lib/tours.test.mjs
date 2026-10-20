@@ -94,7 +94,7 @@ test('every worked example asks its question, says what to expect, and its steps
       // made of a design.
       let drafted = null;
       for (const step of w.steps) {
-        assert.ok(['segmentation', 'compare', 'viewer', 'qc', 'data', 'celltypes', 'alignment', 'spatial', 'cohort'].includes(step.mode), step.title);
+        assert.ok(['segmentation', 'compare', 'viewer', 'qc', 'data', 'celltypes', 'alignment', 'spatial', 'cohort', 'reports'].includes(step.mode), step.title);
         assert.ok(step.mode !== 'alignment' || step.alignment, `${step.title}: an Alignment view step says what it shows`);
         assert.ok(step.title && step.text.length > 40, step.title);
         if (step.do) {
@@ -186,7 +186,18 @@ test('every worked example asks its question, says what to expect, and its steps
             assert.ok(made.has('cohort:summary') && drafted, `${step.title}: the summary and a design are made before`);
             made.add(`${d.action.slice('compare-'.length)}:${drafted}`);
           }
+          // Reports: a figure of a view shown in the Viewer and of results asked before (or made
+          // first: prepare); a figure certified and verified, a report and a package written, in the
+          // Reports view, of a figure made before.
+          if (d.action === 'figure') {
+            assert.ok(step.mode === 'viewer' && step.camera && d.name && d.view, step.title);
+            if (!d.prepare) assert.ok(made.has('clustering:instrument') && made.has(answer({ question: 'enrichment', segmentation: 'instrument', level: 0 })) && made.has(answer({ question: 'moran' })), `${step.title}: the map and both answers are made before`);
+            made.add(`figure:${d.name}`);
+          }
+          if (['verify', 'report', 'package'].includes(d.action)) assert.ok(step.mode === 'reports' && made.has(`figure:${d.figure}`), `${step.title}: in the Reports view, its figure made before`);
+          if (['report', 'package'].includes(d.action)) assert.ok(d.title && d.results.every((r) => ['figure', 'enrichment', 'moran'].includes(r)), step.title);
         }
+        if (step.reports) assert.ok(step.mode === 'reports' && ['figure', 'methods', 'record'].includes(step.reports.show) && made.has(`figure:${step.reports.figure}`), `${step.title}: its figure made before`);
         if (step.cohort) {
           const c = step.cohort;
           assert.ok(step.mode === 'cohort' && ['samples', 'design', 'steps', 'summary', 'qc', 'abundance', 'expression', 'spatial'].includes(c.show), step.title);
@@ -220,6 +231,8 @@ test('every worked example asks its question, says what to expect, and its steps
           if (c.section) assert.ok(['map', 'selection', 'clusters', 'labels', 'review'].includes(c.section), step.title);
         }
         const fill = step.cells?.fill ?? '';
+        // A figure made with what it rests on (prepare) makes the labels it fills its view by.
+        if (step.do?.action === 'figure' && step.do.prepare) made.add('clustering:instrument').add('labels:instrument').add('graph:instrument:delaunay');
         if (fill === 'clusters' || /^labels/.test(fill)) assert.ok(made.has(`${fill === 'clusters' ? 'clustering' : 'labels'}:${step.segmentation ?? 'instrument'}`), `${step.title}: what fills the cells is made before`);
         if (fill === 'true-types') assert.ok(made.has('labels:true-types'), `${step.title}: the true types are imported before`);
         if (fill === 'niches') assert.ok(step.niches && made.has(answer({ ...step.niches, question: 'niches' })), `${step.title}: its niches are found before`);

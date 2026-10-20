@@ -653,13 +653,13 @@ func diagnostics(results []*Result, cells []segment.Cell, in *Inputs, idx *Bundl
 		w := float64(s.Transcripts)
 		weight += w
 		all.Sweeps, all.Samples = s.Sweeps, s.Samples
-		all.SplitHalf += w * s.SplitHalf
-		all.MeanProbability += w * s.MeanProbability
-		all.LowProbability += w * s.LowProbability
-		all.LogLikelihoodDrift += w * s.LogLikelihoodDrift
-		all.FalseDecodeShare += w * s.FalseDecodeShare
-		all.AmbientShare += w * s.AmbientShare
-		all.InBackground += w * s.InBackground
+		all.SplitHalf += mul(w, s.SplitHalf)
+		all.MeanProbability += mul(w, s.MeanProbability)
+		all.LowProbability += mul(w, s.LowProbability)
+		all.LogLikelihoodDrift += mul(w, s.LogLikelihoodDrift)
+		all.FalseDecodeShare += mul(w, s.FalseDecodeShare)
+		all.AmbientShare += mul(w, s.AmbientShare)
+		all.InBackground += mul(w, s.InBackground)
 		all.NegativeControls += s.NegativeControls
 		if math.Abs(s.GewekeZ) > math.Abs(all.GewekeZ) {
 			all.GewekeZ = s.GewekeZ
@@ -739,7 +739,7 @@ func gewekeZ(x []float64) (float64, bool) {
 		}
 		var ss float64
 		for _, m := range means {
-			ss += (m - mean) * (m - mean)
+			ss += mul(m-mean, m-mean)
 		}
 		return mean, math.Sqrt(ss / float64(batches-1) / float64(batches)), true
 	}
@@ -751,7 +751,7 @@ func gewekeZ(x []float64) (float64, bool) {
 	if sa+sb == 0 {
 		return 0, true
 	}
-	return (mb - ma) / math.Sqrt(sa*sa+sb*sb), true
+	return (mb - ma) / math.Sqrt(mul(sa, sa)+mul(sb, sb)), true
 }
 
 // minGeweke is the fewest samples Geweke's diagnostic judges: a first tenth of five batches of

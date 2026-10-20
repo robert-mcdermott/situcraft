@@ -35,12 +35,30 @@ import (
 	"situcraft/internal/xenium"
 )
 
-// spatialCitation cites the analyses' methods.
-const spatialCitation = "Schapiro D, Jackson HW, Raghuraman S, et al. histoCAT: analysis of cell phenotypes and interactions in multiplex image cytometry data. Nat Methods 2017;14:873–876. doi:10.1038/nmeth.4391; " +
-	"Palla G, Spitzer H, Klein M, et al. Squidpy: a scalable framework for spatial omics analysis. Nat Methods 2022;19:171–178. doi:10.1038/s41592-021-01358-2; " +
-	"Benjamini Y, Hochberg Y. Controlling the false discovery rate: a practical and powerful approach to multiple testing. J R Stat Soc B 1995;57:289–300; " +
-	"Moran PAP. Notes on continuous stochastic phenomena. Biometrika 1950;37:17–23; Cliff AD, Ord JK. Spatial Processes: Models and Applications. Pion, 1981; " +
-	"Anselin L. Local indicators of spatial association — LISA. Geogr Anal 1995;27:93–115"
+// spatialCitations cite each question's methods; a question testing many pairs, labels or genes
+// adjusts its p-values by Benjamini and Hochberg's procedure.
+const benjaminiHochberg = "Benjamini Y, Hochberg Y. Controlling the false discovery rate: a practical and powerful approach to multiple testing. J R Stat Soc B 1995;57:289–300"
+
+var spatialCitations = map[string]string{
+	spatial.QuestionEnrichment: "Schapiro D, Jackson HW, Raghuraman S, et al. histoCAT: analysis of cell phenotypes and interactions in multiplex image cytometry data. Nat Methods 2017;14:873–876. doi:10.1038/nmeth.4391; " +
+		"Palla G, Spitzer H, Klein M, et al. Squidpy: a scalable framework for spatial omics analysis. Nat Methods 2022;19:171–178. doi:10.1038/s41592-021-01358-2; " + benjaminiHochberg,
+	spatial.QuestionCooccurrence: "Palla G, Spitzer H, Klein M, et al. Squidpy: a scalable framework for spatial omics analysis. Nat Methods 2022;19:171–178. doi:10.1038/s41592-021-01358-2",
+	spatial.QuestionDistances:    "Diggle PJ. Statistical Analysis of Spatial Point Patterns, 2nd ed. Arnold, 2003; " + benjaminiHochberg,
+	spatial.QuestionRipley: "Ripley BD. Modelling spatial patterns. J R Stat Soc B 1977;39:172–212; " +
+		"Besag J. Contribution to the discussion of Dr Ripley's paper. J R Stat Soc B 1977;39:193–195",
+	spatial.QuestionRegions: "Garwood F. Fiducial limits for the Poisson distribution. Biometrika 1936;28:437–442; " +
+		"Wilson EB. Probable inference, the law of succession, and statistical inference. J Am Stat Assoc 1927;22:209–212; " +
+		"Ederer F, Mantel N. Confidence limits on the ratio of two Poisson variables. Am J Epidemiol 1974;100:165–167; " +
+		"Koopman PAR. Confidence intervals for the ratio of two binomial proportions. Biometrics 1984;40:513–517; " + benjaminiHochberg,
+	spatial.QuestionBoundary: "Galon J, Costes A, Sanchez-Cabo F, et al. Type, density, and location of immune cells within human colorectal tumors predict clinical outcome. Science 2006;313:1960–1964; " +
+		"Garwood F. Fiducial limits for the Poisson distribution. Biometrika 1936;28:437–442; " + benjaminiHochberg,
+	spatial.QuestionNiches: "Goltsev Y, Samusik N, Kennedy-Darling J, et al. Deep profiling of mouse splenic architecture with CODEX multiplexed imaging. Cell 2018;174:968–981; " +
+		"Schürch CM, Bhate SS, Barlow GL, et al. Coordinated cellular neighborhoods orchestrate antitumoral immunity at the colorectal cancer invasive front. Cell 2020;182:1341–1359; " +
+		"Arthur D, Vassilvitskii S. k-means++: the advantages of careful seeding. SODA 2007:1027–1035; " +
+		"Hubert L, Arabie P. Comparing partitions. J Classif 1985;2:193–218 (the seeds' agreement)",
+	spatial.QuestionMoran: "Moran PAP. Notes on continuous stochastic phenomena. Biometrika 1950;37:17–23; Cliff AD, Ord JK. Spatial Processes: Models and Applications. Pion, 1981; " +
+		"Anselin L. Local indicators of spatial association — LISA. Geogr Anal 1995;27:93–115; " + benjaminiHochberg,
+}
 
 // cellCodes are a number for each of a segmentation's cells, as the page sends them: base64 of the
 // count (u32) then a signed 32-bit number a cell, little-endian, and the SHA-256 of those bytes.
@@ -283,7 +301,7 @@ func spatialID(r spatialRequest, params json.RawMessage) string {
 
 func (a *app) registerSpatial(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/spatial/defaults", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, map[string]any{"enrichment": spatial.DefaultEnrichment(), "cooccurrence": spatial.DefaultCooccurrence(), "distances": spatial.DefaultNearest(), "ripley": spatial.DefaultRipley(), "regions": spatial.DefaultRegions(), "boundary": spatial.DefaultBoundary(), "niches": spatial.DefaultNiches(), "moran": spatial.DefaultMoran(), "method": spatial.AnalysisVersion, "citation": spatialCitation})
+		writeJSON(w, map[string]any{"enrichment": spatial.DefaultEnrichment(), "cooccurrence": spatial.DefaultCooccurrence(), "distances": spatial.DefaultNearest(), "ripley": spatial.DefaultRipley(), "regions": spatial.DefaultRegions(), "boundary": spatial.DefaultBoundary(), "niches": spatial.DefaultNiches(), "moran": spatial.DefaultMoran(), "method": spatial.AnalysisVersion, "citations": spatialCitations})
 	})
 	mux.HandleFunc("POST /api/local/{index}/spatial", a.startSpatial)
 	mux.HandleFunc("GET /api/analyses/{id}/cells", a.spatialCells)
@@ -821,7 +839,7 @@ func (a *app) spatialJob(spec spatialSpec, id string) jobs.Func {
 			Lineage: artifacts.Lineage{
 				Parents:    parents,
 				Job:        &artifacts.Job{ID: r.ID(), Kind: "spatial", Spec: jobSpec},
-				Method:     artifacts.Method{Name: "SituCraft spatial analysis", Version: spatial.AnalysisVersion, Citation: spatialCitation},
+				Method:     artifacts.Method{Name: "SituCraft spatial analysis", Version: spatial.AnalysisVersion, Citation: spatialCitations[spec.Question]},
 				Parameters: spec.Parameters,
 				Software:   []artifacts.Software{{Name: "situcraft", Version: version, Commit: buildCommit()}},
 			},

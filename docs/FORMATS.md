@@ -197,6 +197,7 @@ A project is one JSON document, saved automatically in the library (`<data dir>/
 | `regions` | The regions drawn on its datasets, each with its versions (from 0.5.0; absent until the first; below) |
 | `reviews` | The reviews of its cells and regions, appended and never changed (from 0.5.0; absent until the first; below) |
 | `samples`, `sampleFields` | What is known of its samples, and the fields that say it (from 0.7.0; absent until the first; below) |
+| `figures` | Its figures (from 0.8.0; absent until the first; below) |
 | `history` | Every change, with its time |
 
 A filter's checksum is the SHA-256 of the cell count (32-bit unsigned, little-endian) followed by
@@ -299,6 +300,167 @@ Relabeling a region appends a version of it with the new class. Curated edits ma
 default), `keep-segmentation` (kept for exploration) or `reject-segmentation`, and `comparison`
 the comparison it rests on, when there is one. A segmentation's status is its latest decision; the
 default is the segmentation of the latest promotion not rejected since.
+
+`figures` lists the project's figures (from 0.8.0), each `{id, name, size, width, height, text,
+letters, panels, created}`: `size` one of `single`, `onehalf`, `double` or `slide`; `width` and
+`height` the page in points (1/72 inch); `text` its text size in points (6 to 36); `letters` whether
+its panels are lettered. Each panel is `{id, kind, x, y, w, h}`, its place on the page in points,
+and what it shows: a `tissue` panel's `view` (a saved view's id), `region` (`{cx, cy, width}`, its
+center and width in µm), and optionally `scaleBar` (µm), `pointSize` (pt) and `regions` (`true`
+for all the dataset's regions, or a list of their ids); a `qc` panel's `dataset`, `metric`
+(`transcripts`, `total`, `area` or `nucleusArea`), and optionally `log`, `filter` (a filter's id,
+whose thresholds are drawn) and `segmentation`; a `map` panel's `map` (a map's id) and `color`
+(`clusters`, or `labels:<label set id>:<level>`); a `spatial` panel's `analysis` (an enrichment's,
+nearest distances' or Moran's I's id); a `cohort` panel's `comparison` (a comparison of abundance,
+expression or spatial statistics), `plot` (`forest`, `units`, `volcano` or `gene`) and optionally
+`family`, `label`, `gene`, `contrast` and `key` (a spatial statistic, as `a|b`); a `text` panel's
+`text`, `size`, `bold` and `align`. Any panel may have a `title`. A panel with `letter: false` is
+not lettered. A figure holds no
+data: it is drawn from the project whenever it is shown or written.
+
+### Figures
+
+A figure is written as SVG, PDF (1.4; its text in Helvetica, the stains one image) or PNG (8-bit
+RGBA, its resolution in a `pHYs` chunk, 300 dpi by default), each carrying the figure's manifest,
+or as the manifest alone (JSON):
+
+- in an SVG, the element `<metadata id="situcraft-figure">`, the JSON in CDATA, first in the
+  document;
+- in a PDF, an attached file `situcraft-figure.json` (`application/json`, stored uncompressed);
+- in a PNG, an `iTXt` chunk, keyword `situcraft-figure`, uncompressed UTF-8, before `IEND`.
+
+| Manifest field | Holds |
+| --- | --- |
+| `format`, `version` | `"situcraft-figure-manifest"`, `1` |
+| `created` | When it was written (ISO 8601) |
+| `software` | `{name, version, commit}`: the SituCraft that wrote it |
+| `project` | `{id, name}` |
+| `figure` | The figure as the project holds it (above) |
+| `description` | The figure in words, panel by panel |
+| `panels` | Each `{id, letter, kind, shows, drawing, inputs, facts}`: `shows` in a few words; `drawing` the SHA-256 of the panel's marks written as SVG, each image in it stood in for by its size and the SHA-256 of its RGBA pixels (so that it does not depend on how a PNG is compressed); `inputs` what it was drawn from (a tissue panel's `dataset`: `{id, name, run, experimentUuid, fingerprint}`, the fingerprint the SHA-256 of the dataset's file fingerprint as canonical JSON; `view`: `{id, name, made}`, `made` the SHA-256 of the saved view as canonical JSON; `region`; `artifacts`: the segmentation, label set or clustering drawn, each post-Xenium image shown and the alignment in use, `{id, kind, name, files?}`; a result panel's `dataset` and `artifacts`, the analysis, map or comparison it draws and what colors it); `facts` what it drew (a tissue panel's `region` `{x0, y0, x1, y1}` in µm, `umPerPt`, `scaleBar` `{um, pt}`, `cells`, `transcripts` and `regions` drawn, `raster` `{width, height, level, images?}` of its stains or null, each image `{id, name, transform, level, covered}`; a result panel's `chart` and what it counted, such as a distribution's `counts`) |
+| `drawing` | The SHA-256 of the panels' drawings' list as canonical JSON |
+| `fingerprint` | The SHA-256 of everything else as canonical JSON (every object's keys sorted): a manifest edited after it was written does not match it |
+
+Canonical JSON is JSON with every object's keys sorted and nothing undefined; the SHA-256 is of its
+UTF-8 bytes. The same figure written at the same time (`write_figure`'s `time`) is the same bytes in
+SVG and PDF.
+
+### What made a result
+
+The record of a result (any analysis, comparison, summary, label set, clustering, map, graph,
+segmentation, alignment, filter or figure), as the Reports view shows it and remote control's
+`record` answers it, read from the project and the artifacts' manifests (their parents and their
+jobs' inputs). Written as JSON:
+
+| Field | Holds |
+| --- | --- |
+| `format`, `version` | `"situcraft-record"`, `1` |
+| `result` | `{id, kind, name}` |
+| `program` | `{name, version, commit?}`: the SituCraft that wrote the record |
+| `recorded` | When (ISO 8601) |
+| `steps` | Each step from the bundles to the result, each after the steps it was made from: `{n, id, kind, name, made, method: {name, version}, parameters, seeds, software: [{name, version, commit?}], references (numbers), inputs (the numbers of the steps it was made from), decisions: [{kind, rationale, by, time}], dataset? (its dataset's name), note?, by?}` |
+| `software` | Every program the steps ran, each `{name, version}` once |
+| `references` | `{n, key, text, doi?, url?}`, numbered as first cited: `key` the reference's in SituCraft's list (`web/lib/references.js`; `situcraft` for SituCraft itself), or null for a citation SituCraft does not list (a marker set's own, an import's), kept as written |
+
+A step's `kind` is `dataset` (a bundle), `image`, `transform`, `alignment-check`, `region`, `filter`,
+`segmentation`, `comparison`, `clustering`, `cluster-names`, `embedding`, `marker-set`, `labels`,
+`curated-labels`, `consensus-labels`, `graph`, `spatial`, `view`, `design`, `cohort-summary`,
+`abundance`, `expression`, `spatial-comparison` or `figure`. As Markdown, the steps of the same
+kind, method, parameters, software and references (each sample's segmentation, say) are written
+once, naming each item, followed by the software and the references in Vancouver style. As BibTeX,
+each reference is an entry under its key (`@article`, `@book`, `@inproceedings`, `@misc` for a
+preprint, `@manual`, `@software` for SituCraft), and one SituCraft does not list a `@misc` under
+`ref<n>` with the citation as its note. Each DOI in SituCraft's list is checked against a recorded
+copy of Crossref's record of it (`validation/reference/crossref/crossref.json`).
+
+### Certificates
+
+A certificate (Reports, **Certificate**; remote control's `export` with `what: certificate`) is a
+zip of what a result, a dataset's results or the whole project rests on and what it reports. It has
+no time of its own and keeps no path of the computer that made it: the same project and SituCraft
+give the same bytes. A bundle's folder is written `situcraft:bundle/<dataset ID>` (a file in it
+with its path in the bundle after it), any other absolute path `situcraft:file/<its name>`.
+
+| Entry | Holds |
+| --- | --- |
+| `README.txt` | What it is of, its fingerprint, what it proves, how to check it (`situcraft verify`), what is not made again |
+| `certificate.json` | What was certified (below) |
+| `project.json` | The project as it was |
+| `record.json`, `record.md` | Each step from the bundles to the result ([What made a result](#what-made-a-result)) |
+| `methods.md`, `references.bib` | The methods, written from the record, and their references |
+| `artifacts/<ID>/manifest.json` | Each step SituCraft's jobs made: its manifest ([Artifacts](#artifacts)) |
+| `manifest.json` | Every other entry with its size and SHA-256 (`situcraft-certificate-files` 1) |
+
+| `certificate.json` field | Holds |
+| --- | --- |
+| `format`, `version` | `"situcraft-certificate"`, `1` |
+| `software` | `{name, version, commit}`: the SituCraft that certified it |
+| `subject` | What it is of: `{id, kind, name}` (a result's kind, or `project`, `dataset`, `report`: the results a report shows) |
+| `project` | `{id, name, modified, path, sha256}`: the project as it was, `project.json` |
+| `record`, `methods` | `{path, sha256}` of `record.json` and `methods.md` |
+| `bundles` | Each `{dataset, name, run, region, analysisUuid, experimentUuid, software, panel, cells, transcripts, files}`: `files` each `{path, size, sha256}`, those the dataset's fingerprint records and those the instrument's segmentation read |
+| `steps` | Each step of the record, in its order: `{n, id, kind, name, inputs, method, parameters, seeds, software, references, decisions, by}`; `by` is `instrument` (a bundle, with `bundle`, its dataset), `program` (with `job`: `{kind, spec}`, the spec's digest; `manifest`: `{path, sha256}`; `files`: each `{path, role, size, sha256, location}`; `content`, for a clustering, a map or labels, the SHA-256 of its content without how long its run took, which its description also records; `summary`: the numbers it reports) or `page` (with `record`, its record's digest; `summary`; a figure's `drawing`: `{drawing, panels: [{id, letter, drawing}]}`, its manifest's digests, and in a report's, `svg`: the SHA-256 of the SVG the report shows) |
+| `notMadeAgain` | Each step not made again in checking it, and why: `{step, what, why}` (the bundles and the instrument's segmentation, checked by their files' SHA-256; an import, by the files read; a person's work, by its digest) |
+| `leftOut` | A report's or a package's only: `{people, notes, names}`, how many of each it leaves out ([Reports](#reports)); a step of SituCraft's whose job was given names left out has `redacted: true` and is not made again from it |
+| `fingerprint` | The SHA-256 of everything else as canonical JSON: cite it with the result |
+
+A digest is the SHA-256 of a value's canonical JSON (every object's keys sorted), with this
+computer's paths stood in for as above.
+
+### Reports
+
+A report (Reports, **A report**; remote control's `export` with `what: report`) is one HTML file of
+results chosen, read in any browser, offline: it loads nothing from the network (its
+Content-Security-Policy is `default-src 'none'`), and the same project and choice give the same
+bytes.
+
+| Part | Holds |
+| --- | --- |
+| Figures | Each figure chosen, as an SVG with its manifest inside ([Figures](#figures)), in an `<img data-figure="<ID>">` |
+| Results | Each other result's numbers, from its step's `summary` in the certificate: each in a `<td data-pointer data-value>`, `data-pointer` its place in `certificate.json` (a JSON pointer, RFC 6901) and `data-value` its value as JSON |
+| Methods, References | The methods, written from the record, each paragraph a `<p class="methods-paragraph">`, and their references |
+| The certificate | The certificate of the results ([Certificates](#certificates); its subject's kind `report`), base64 in `<script type="application/zip" id="situcraft-certificate">` |
+
+As it opens, the report checks itself: the certificate's fingerprint and the SHA-256 of each file
+it names; each number, the value at its place in `certificate.json`, its text that value as the
+report writes it (whole numbers with commas; others to 4 significant digits, below 0.001 and from
+a million up to 3 and a power of ten); each figure's SVG, the SHA-256 its step's `drawing.svg`
+records; the methods' paragraphs, those of `methods.md`. It says what it found at the top, marks a
+number that differs, and sets `data-checked` on `<html>` to `intact`, `differs` or `error`.
+`situcraft verify` takes a report as it takes a certificate, and checks it the same way.
+
+A report, and a package, leave out what this computer and the people using it say of themselves,
+before anything is drawn or certified, so that its figures, record, methods and certificate all
+say the same:
+
+| Left out | As |
+| --- | --- |
+| Paths of this computer | `situcraft:bundle/<dataset ID>[/<path in the bundle>]`, `situcraft:file/<its name>`, as in a certificate |
+| People's names (who reviewed, drew, decided, curated) | `Person 1`, `Person 2`, … in the order the project first names them, wherever named |
+| Notes people wrote on reviews and regions | Emptied, and `(a note, left out)` wherever their text is repeated |
+| The samples', subjects' and sections' names, when asked | `Sample 1`, `Subject 1`, `Section 1`, … wherever named as a word |
+
+Every text it holds (its files', a zip's entries, the SVG figures and the certificate inside its
+HTML) is then searched for each path, its home folder, each person's name, each note and each
+name left out; it is not written if any is found.
+
+### Result packages
+
+A result package (Reports, **Write a package**; remote control's `export` with `what: package`)
+is a folder of static files, or a zip of one, that opens in any browser without SituCraft and
+asks the network for nothing. It leaves out what a report does.
+
+| File | Holds |
+| --- | --- |
+| `index.html` | The report ([Reports](#reports)), with a Views section linking each view |
+| `views/<n>-<name>.html` | Each saved view its figures' tissue panels show, in a reader of its own: drag to move, scroll or + and − to zoom, its scale bar and legend |
+| `views/<n>-<name>/<level>/<x>-<y>.jpg` | The view's tissue drawn in advance, as its figure's tissue panel draws it, as JPEG tiles 512 pixels a side: level 0 at the view's own scale, each next level at half its µm a pixel, to the image's full resolution or two levels finer, 64 tiles at most |
+| `certificate-<fingerprint>.zip` | The certificate, as the report carries it |
+| `README.txt` | What it is, what it leaves out and what was searched, how to check it |
+| `manifest.json` | `format` `"situcraft-package"`, `version` 1, `title`, `software`, `certificate` (`{fingerprint, file, subject}`), `views` (each `{name, file, tiles, levels}`), `leftOut` (`{people, notes, names}`), `checked` (`{texts, strings}`), and `files`: every other file `{path, size, sha256}` |
+
+The views are drawn from the project, as figures are; the certificate does not hold them.
+`situcraft verify` takes a package's folder, or its zip, as it takes its report.
 
 ### Artifacts
 

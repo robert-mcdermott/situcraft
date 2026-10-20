@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"situcraft/internal/cache"
 	"situcraft/internal/jobs"
@@ -113,6 +114,17 @@ func (a *app) cacheJob(path string) jobs.Func {
 		r.Progress(1, "Checking what was built")
 		if err := a.cache.Check(status); err != nil {
 			return fmt.Errorf("%w: %v", jobs.ErrInvalid, err)
+		}
+		// Built, yet not in the cache: said, not taken for done (the page would ask again, and
+		// again).
+		if !status.Ready {
+			var missing []string
+			for _, e := range status.Entries {
+				if e.State != "ready" && e.State != "unavailable" {
+					missing = append(missing, fmt.Sprintf("%s (%s, %s)", e.Title, e.Name, e.State))
+				}
+			}
+			return fmt.Errorf("%w: built, but not found in the cache afterward: %s", jobs.ErrInvalid, strings.Join(missing, ", "))
 		}
 		r.Log("info", "The derived data of %s are ready.", b.Name)
 		return nil

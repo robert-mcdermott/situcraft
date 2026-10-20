@@ -12,8 +12,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"situcraft/internal/artifacts"
+	"situcraft/internal/jobs"
 	"situcraft/internal/segment"
 	"situcraft/internal/spatial"
 	"situcraft/internal/xenium"
@@ -262,4 +264,114 @@ func btoi(b bool) int {
 		return 1
 	}
 	return 0
+}
+
+// A graph and a spatial analysis interrupted by SituCraft stopping are orphaned when it starts
+// again, and resume to the artifacts the same requests name: asked again, they are answered at once.
+func TestInterruptedGraphAndSpatialJobsResume(t *testing.T) {
+	f := newRefineFixture(t, true)
+	all, _ := f.a.artifacts.List()
+	var seg artifacts.Manifest
+	for _, a := range all {
+		if a.Kind == "segmentation" && isBundleOwn(a) {
+			seg = a
+		}
+	}
+	b, err := xenium.Open(f.folder, xenium.Options{CacheDir: f.a.cacheDir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir, err := f.a.segmentationFolder(context.Background(), b, seg)
+	b.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cells, err := segment.ReadCells(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	labels, keep := make([]int32, len(cells)), make([]bool, len(cells))
+	for i := range labels {
+		labels[i], keep[i] = int32(i%3), true
+	}
+	codes, sum := codesOf(labels)
+	chosen := chosenCells(keep, "")
+	graphBody := fmt.Sprintf(`{"segmentation":%q,"parameters":{"kind":"delaunay"},"cells":%s}`, seg.ID, chosen)
+	spatialBody := fmt.Sprintf(`{"question":"distances","segmentation":%q,"cells":%s,"labels":{"id":"lab-x","kind":"labels","name":"By turns","level":0,"names":["A","B","C"],"codes":%q,"checksum":%q},"parameters":{"permutations":50,"seed":3}}`, seg.ID, chosen, codes, sum)
+
+	// Each job's spec as its start handler writes it, SituCraft stopped while the first runs and the
+	// second waits its turn.
+	var gr graphRequest
+	if err := json.Unmarshal([]byte(graphBody), &gr); err != nil {
+		t.Fatal(err)
+	}
+	gs := graphSpec{Bundle: f.folder, Segmentation: seg.ID, Parameters: *gr.Parameters, Cells: *gr.Cells}
+	gid := graphID(seg.ID, gr.Cells.Checksum, gs.Parameters)
+	var sr spatialRequest
+	if err := json.Unmarshal([]byte(spatialBody), &sr); err != nil {
+		t.Fatal(err)
+	}
+	params, err := checkedParameters(sr.Question, sr.Parameters)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sid := spatialID(sr, params)
+	sr.Parameters = params
+	blocked := func(ctx context.Context, r *jobs.Run) error {
+		<-ctx.Done()
+		return ctx.Err()
+	}
+	var ids []string
+	for _, j := range []struct {
+		kind, key string
+		spec      any
+	}{{"graph", "graph\x00" + gid, gs}, {"spatial", "spatial\x00" + sid, spatialSpec{Bundle: f.folder, spatialRequest: sr}}} {
+		job, _, err := f.a.jobs.Submit(j.kind, j.kind, j.key, j.spec, blocked)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, job.ID)
+	}
+	for deadline := time.Now().Add(time.Minute); ; time.Sleep(10 * time.Millisecond) {
+		j, _ := f.a.jobs.Get(ids[0])
+		if j.State == jobs.Running {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the graph's job did not start: %s", j.State)
+		}
+	}
+	f.a.jobs.Close()
+
+	// SituCraft again, on the same folders: both orphaned and resumable, and resumed.
+	root := filepath.Dir(f.folder)
+	a, err := newApp(config{dataDir: root, cacheDir: filepath.Join(root, "cache"), cacheLimit: 10e9, files: []string{f.folder}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { a.jobs.Close() })
+	h, _ := a.handler()
+	g := &refineFixture{t: t, a: a, handler: protect(h, "127.0.0.1", defaultPort), folder: f.folder}
+	for _, id := range ids {
+		j, ok := a.jobs.Get(id)
+		if !ok || j.State != jobs.Orphaned || !j.Resumable {
+			t.Fatalf("after starting again: %+v", j)
+		}
+		if rec := g.post("/api/jobs/"+id+"/resume", ""); rec.Code != http.StatusOK {
+			t.Fatalf("resume: %d %s", rec.Code, rec.Body)
+		}
+		if done := g.wait(id); done.Runs != j.Runs+1 {
+			t.Errorf("%s resumed: runs %d, before %d", j.Kind, done.Runs, j.Runs)
+		}
+	}
+	for _, c := range []struct{ target, body, id string }{{"/api/local/0/graph", graphBody, gid}, {"/api/local/0/spatial", spatialBody, sid}} {
+		var answer struct {
+			ID       string
+			Artifact *artifacts.Manifest
+		}
+		json.NewDecoder(g.post(c.target, c.body).Body).Decode(&answer)
+		if answer.ID != c.id || answer.Artifact == nil || answer.Artifact.State != artifacts.Complete {
+			t.Errorf("%s asked again: %s (resumed %s), %+v", c.target, answer.ID, c.id, answer.Artifact)
+		}
+	}
 }

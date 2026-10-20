@@ -2,7 +2,11 @@ package spatial
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
+	"encoding/hex"
 	"math"
+	"sort"
 	"testing"
 )
 
@@ -141,3 +145,57 @@ func TestRegionAreasByHand(t *testing.T) {
 		}
 	}
 }
+
+// Band and region areas, and the share of circles in a window (Ripley's edge correction), give the
+// same bits on every processor: each product added is rounded on its own, never fused with the
+// addition (as arm64's compiler may and amd64's does not), and the circles' angles are dmath's. The
+// digest pinned is of the bands about a drawn region in a drawn tissue, the areas of two regions in
+// it, and circles' shares at many places, the same on both; before, the bands' areas differed in
+// their last digits between the two.
+func TestAreasTheSameOnEveryProcessor(t *testing.T) {
+	tissue, err := PolygonWindow([][][][2]float64{{{{12.3, 7.9}, {981.7, 31.1}, {1003.9, 877.3}, {611.3, 1011.7}, {23.9, 923.1}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	nest, err := PolygonWindow([][][][2]float64{{{{600, 250}, {800, 260}, {790, 420}, {610, 400}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := PolygonWindow([][][][2]float64{{{{211.7, 533.1}, {397.3, 508.9}, {431.9, 701.3}, {187.1, 688.7}}, {{271.3, 589.9}, {347.7, 581.3}, {339.1, 641.9}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var edges []float64
+	for k := -4; k <= 4; k++ {
+		edges = append(edges, float64(k*10))
+	}
+	edges = append(edges, -10.5, 10.5)
+	sort.Float64s(edges)
+	bands, err := BandAreas(context.Background(), tissue, nest, edges, 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	regions, err := RegionAreas(context.Background(), tissue, []*Window{nest, other}, 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := sha256.New()
+	put := func(v ...float64) {
+		for _, x := range v {
+			binary.Write(h, binary.LittleEndian, math.Float64bits(x))
+		}
+	}
+	put(bands...)
+	put(regions...)
+	for i := 0; i < 400; i++ {
+		x, y := 5+mul(float64(i%20), 51.37), 3+mul(float64(i/20), 50.93)
+		for _, r := range []float64{7.5, 33.3, 101.1} {
+			put(tissue.ArcInside(x, y, r), nest.ArcInside(x, y, r), other.ArcInside(x, y, r))
+		}
+	}
+	if got := hex.EncodeToString(h.Sum(nil))[:16]; got != pinnedAreas {
+		t.Fatalf("the areas have digest %s, pinned %s", got, pinnedAreas)
+	}
+}
+
+const pinnedAreas = "f1b36cc568eacf15"

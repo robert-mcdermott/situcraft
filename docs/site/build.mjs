@@ -54,6 +54,7 @@ const DOCS = [
   { group: 'Pathology', pages: [['images', 'Images and alignment'], ['regions', 'Regions and reviews']] },
   { group: 'Spatial', pages: [['spatial', 'Spatial analysis'], ['niches', 'Niches and genes']] },
   { group: 'Cohorts', pages: [['samples', 'Samples'], ['designs', 'The design'], ['summaries', 'Sample summaries'], ['cohort-qc', 'Cohort QC'], ['abundance', 'Differential abundance'], ['expression', 'Differential expression'], ['spatial-tests', 'Spatial statistics between groups'], ['error-rates', 'Error rates and scale']] },
+  { group: 'Reports', pages: [['figures', 'Figures']] },
   { group: 'Reference', pages: [['remote-control', 'Remote control'], ['record', 'The record'], ['troubleshooting', 'Troubleshooting']] },
 ];
 const ORDER = DOCS.flatMap((g) => g.pages);

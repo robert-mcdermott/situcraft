@@ -12,7 +12,8 @@ package spatial
 //     are not; its boundary the grid's pixel edges, merged along rows and columns.
 //
 // Segments are indexed by a grid of squares, so the boundary near a point, or a circle, is found
-// without scanning all of it.
+// without scanning all of it. Its answers are the same on every processor: each product added is
+// rounded on its own (mul), and the angles of a circle's crossings are dmath's.
 
 import (
 	"context"
@@ -20,6 +21,7 @@ import (
 	"math"
 	"sort"
 
+	"situcraft/internal/dmath"
 	"situcraft/internal/segment"
 	"situcraft/internal/segment/expand"
 )
@@ -121,8 +123,8 @@ func (w *Window) Contains(x, y float64) bool {
 		return px >= 0 && py >= 0 && px < w.pw && py < w.ph && w.pixels[py*w.pw+px]
 	}
 	inside := false
-	xEnd := w.x0 + float64(w.across)*w.side
-	if x > xEnd || y < w.y0 || y > w.y0+float64(w.down)*w.side {
+	xEnd := w.x0 + mul(float64(w.across), w.side)
+	if x > xEnd || y < w.y0 || y > w.y0+mul(float64(w.down), w.side) {
 		return false
 	}
 	w.near(x, y, xEnd, y, func(k int) {
@@ -132,7 +134,7 @@ func (w *Window) Contains(x, y float64) bool {
 		}
 		// Where the segment crosses the ray's line.
 		t := (y - ay) / (by - ay)
-		cx := w.ax[k] + t*(w.bx[k]-w.ax[k])
+		cx := w.ax[k] + mul(t, w.bx[k]-w.ax[k])
 		if cx > x {
 			inside = !inside
 		}
@@ -209,7 +211,7 @@ func segmentNearest(px, py, ax, ay, bx, by float64) (d2, nx, ny float64) {
 	if l2 > 0 {
 		t = math.Max(0, math.Min(1, (mul(px-ax, dx)+mul(py-ay, dy))/l2))
 	}
-	nx, ny = ax+t*dx, ay+t*dy
+	nx, ny = ax+mul(t, dx), ay+mul(t, dy)
 	ex, ey := px-nx, py-ny
 	return mul(ex, ex) + mul(ey, ey), nx, ny
 }
@@ -238,7 +240,7 @@ func (w *Window) ArcInside(x, y, r float64) float64 {
 		s := math.Sqrt(disc)
 		for _, t := range []float64{(-B - s) / A, (-B + s) / A} {
 			if t >= 0 && t < 1 {
-				angles = append(angles, math.Atan2(ay+t*dy, ax+t*dx))
+				angles = append(angles, dmath.Atan2(ay+mul(t, dy), ax+mul(t, dx)))
 			}
 		}
 	})
@@ -259,7 +261,8 @@ func (w *Window) ArcInside(x, y, r float64) float64 {
 			continue
 		}
 		m := (a + b) / 2
-		if w.Contains(x+r*math.Cos(m), y+r*math.Sin(m)) {
+		sin, cos := dmath.SinCos(m)
+		if w.Contains(x+mul(r, cos), y+mul(r, sin)) {
 			inside += b - a
 		}
 	}
@@ -319,7 +322,7 @@ func ringContains(ring [][2]float64, x, y float64) bool {
 	for i, p := range ring {
 		q := ring[(i+1)%len(ring)]
 		if (p[1] <= y) != (q[1] <= y) {
-			if p[0]+(y-p[1])/(q[1]-p[1])*(q[0]-p[0]) > x {
+			if p[0]+mul((y-p[1])/(q[1]-p[1]), q[0]-p[0]) > x {
 				inside = !inside
 			}
 		}

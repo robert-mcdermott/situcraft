@@ -1,6 +1,7 @@
 package main
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -313,6 +314,63 @@ func TestExportsWriteWhereAskedAndNeverReplaceUnlessTold(t *testing.T) {
 	body, _ := json.Marshal(map[string]any{"action": "export", "args": map[string]any{"what": "methods", "path": filepath.Join(dir, "other.md")}})
 	if rec := post(mux, "/api/remote/action", string(body), nil); rec.Code != http.StatusUnauthorized {
 		t.Fatalf("an export without the token: %d", rec.Code)
+	}
+}
+
+// A result package named by a folder (wave 8, slice 8): the page's zip written as that folder, its
+// entries under the zip's own folder; a folder there replaced only when told and only when it
+// holds a package; an entry outside the folder refused.
+func TestAPackageIsWrittenAsAFolder(t *testing.T) {
+	zipOf := func(entries map[string]string) string {
+		var b bytes.Buffer
+		w := zip.NewWriter(&b)
+		for _, name := range []string{"pkg/index.html", "pkg/manifest.json", "pkg/views/1-a/0/0-0.png", "pkg/../evil.txt"} {
+			if text, ok := entries[name]; ok {
+				f, _ := w.Create(name)
+				f.Write([]byte(text))
+			}
+		}
+		w.Close()
+		return b.String()
+	}
+	good := zipOf(map[string]string{"pkg/index.html": "<!doctype html>", "pkg/manifest.json": `{"format":"situcraft-package"}`, "pkg/views/1-a/0/0-0.png": "png"})
+	hub := newRemoteHub()
+	mux := hubMux(hub)
+	stop := uploadingPage(t, hub, mux, good)
+	defer stop()
+	dir := t.TempDir()
+	target := filepath.Join(dir, "Results")
+	call := func(args map[string]any) (int, remoteResult) {
+		body, _ := json.Marshal(map[string]any{"action": "export", "args": args})
+		rec := post(mux, "/api/remote/action", string(body), map[string]string{remoteTokenHeader: hub.token})
+		var result remoteResult
+		json.Unmarshal(rec.Body.Bytes(), &result)
+		return rec.Code, result
+	}
+	if code, result := call(map[string]any{"what": "package", "path": target}); code != http.StatusOK || !result.OK || !strings.Contains(result.Message, `"files":3`) {
+		t.Fatalf("a package: %d %+v", code, result)
+	}
+	if got, _ := os.ReadFile(filepath.Join(target, "views", "1-a", "0", "0-0.png")); string(got) != "png" {
+		t.Fatalf("its tile holds %q", got)
+	}
+	if code, _ := call(map[string]any{"what": "package", "path": target}); code != http.StatusBadRequest {
+		t.Fatalf("an existing package replaced untold: %d", code)
+	}
+	if code, result := call(map[string]any{"what": "package", "path": target, "overwrite": true}); code != http.StatusOK || !result.OK {
+		t.Fatalf("a package replaced: %d %+v", code, result)
+	}
+	other := filepath.Join(dir, "other")
+	os.Mkdir(other, 0o755)
+	body, _ := json.Marshal(map[string]any{"action": "export", "args": map[string]any{"what": "package", "path": other, "overwrite": true}})
+	if rec := post(mux, "/api/remote/action", string(body), map[string]string{remoteTokenHeader: hub.token}); rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "not a SituCraft package") {
+		t.Fatalf("a folder that holds no package replaced: %d %s", rec.Code, rec.Body)
+	}
+	// Nothing left behind but the package and the other folder.
+	if entries, _ := os.ReadDir(dir); len(entries) != 2 {
+		t.Fatalf("the folder holds %d entries", len(entries))
+	}
+	if _, _, err := unpackOutput(filepath.Join(dir, "evil"), false, strings.NewReader(zipOf(map[string]string{"pkg/index.html": "x", "pkg/../evil.txt": "x"}))); err == nil || !strings.Contains(err.Error(), "outside its folder") {
+		t.Fatalf("an entry outside the folder: %v", err)
 	}
 }
 

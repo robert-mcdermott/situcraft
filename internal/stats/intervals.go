@@ -20,10 +20,14 @@ package stats
 //
 // Each answers its lower and upper bound; a bound beyond any finite ratio is +Inf.
 
-import "math"
+import (
+	"math"
+
+	"situcraft/internal/dmath"
+)
 
 // NormalQuantile is the standard normal distribution's p-quantile.
-func NormalQuantile(p float64) float64 { return math.Sqrt2 * math.Erfinv(2*p-1) }
+func NormalQuantile(p float64) float64 { return mul(math.Sqrt2, dmath.Erfinv(2*p-1)) }
 
 // solve finds where an increasing function f crosses target on [lo, hi], by bisection.
 func solve(f func(float64) float64, target, lo, hi float64) float64 {
@@ -51,7 +55,7 @@ func GammaQuantile(p, a float64) float64 {
 	case p == 1:
 		return math.Inf(1)
 	}
-	hi := a + 10*math.Sqrt(a) + 10
+	hi := a + mul(10, math.Sqrt(a)) + 10
 	for GammaP(a, hi) < p {
 		hi *= 2
 	}
@@ -90,9 +94,9 @@ func WilsonInterval(x, n int, level float64) (lo, hi float64) {
 	}
 	z := NormalQuantile(1 - (1-level)/2)
 	nf, p := float64(n), float64(x)/float64(n)
-	z2 := z * z
-	center := (p + z2/(2*nf)) / (1 + z2/nf)
-	half := z / (1 + z2/nf) * math.Sqrt(p*(1-p)/nf+z2/(4*nf*nf))
+	z2 := mul(z, z)
+	center := (p + z2/mul(2, nf)) / (1 + z2/nf)
+	half := mul(z/(1+z2/nf), math.Sqrt(mul(p, 1-p)/nf+z2/mul(mul(4, nf), nf)))
 	return math.Max(0, center-half), math.Min(1, center+half)
 }
 
@@ -150,18 +154,18 @@ func ProportionRatio(x1, n1, x2, n2 int, level float64) (ratio, lo, hi float64) 
 		ratio = math.Inf(1)
 	}
 	z := NormalQuantile(1 - (1-level)/2)
-	critical := z * z
+	critical := mul(z, z)
 	// The Pearson chi-square at the proportions most likely when p1 = θ p2: p2 the smaller root of
 	// θ(n1 + n2) p² − (θ(n1 + x2) + x1 + n2) p + (x1 + x2) = 0.
 	chi2 := func(theta float64) float64 {
-		a := theta * (N1 + N2)
-		b := -(theta*(N1+X2) + X1 + N2)
+		a := mul(theta, N1+N2)
+		b := -(mul(theta, N1+X2) + X1 + N2)
 		c := X1 + X2
-		disc := math.Max(0, b*b-4*a*c)
+		disc := math.Max(0, mul(b, b)-mul(mul(4, a), c))
 		// The smaller root, written to avoid cancellation.
-		p2 := 2 * c / (-b + math.Sqrt(disc))
+		p2 := mul(2, c) / (-b + math.Sqrt(disc))
 		// At p2 = 1/θ (all of the first sample counted) rounding may put p1 a little above 1.
-		p1 := math.Min(1, theta*p2)
+		p1 := math.Min(1, mul(theta, p2))
 		term := func(x, n, p float64) float64 {
 			switch {
 			case p >= 1 && x == n, p <= 0 && x == 0:
@@ -169,8 +173,8 @@ func ProportionRatio(x1, n1, x2, n2 int, level float64) (ratio, lo, hi float64) 
 			case p >= 1, p <= 0:
 				return math.Inf(1)
 			}
-			d := x - n*p
-			return d * d / (n * p * (1 - p))
+			d := x - mul(n, p)
+			return mul(d, d) / mul(mul(n, p), 1-p)
 		}
 		return term(X1, N1, p1) + term(X2, N2, p2)
 	}
@@ -178,25 +182,25 @@ func ProportionRatio(x1, n1, x2, n2 int, level float64) (ratio, lo, hi float64) 
 	// the estimate is θ = 0 and it only rises; with x2 = 0, θ = +Inf and it only falls). Each bound
 	// is where it crosses the critical value, found within θ of 10^±26 of the estimate, else 0 or
 	// +Inf.
-	g := func(t float64) float64 { return chi2(math.Exp(t)) }
+	g := func(t float64) float64 { return chi2(dmath.Exp(t)) }
 	const far = 60.0
 	lo, hi = 0, math.Inf(1)
 	if x1 > 0 {
 		from, to := -far, far
 		if x2 > 0 {
-			from, to = math.Log(ratio)-far, math.Log(ratio)
+			from, to = dmath.Log(ratio)-far, dmath.Log(ratio)
 		}
 		if g(from) > critical {
-			lo = math.Exp(solve(func(t float64) float64 { return -g(t) }, -critical, from, to))
+			lo = dmath.Exp(solve(func(t float64) float64 { return -g(t) }, -critical, from, to))
 		}
 	}
 	if x2 > 0 {
 		from, to := -far, far
 		if x1 > 0 {
-			from, to = math.Log(ratio), math.Log(ratio)+far
+			from, to = dmath.Log(ratio), dmath.Log(ratio)+far
 		}
 		if g(to) > critical {
-			hi = math.Exp(solve(g, critical, from, to))
+			hi = dmath.Exp(solve(g, critical, from, to))
 		}
 	}
 	return ratio, lo, hi
@@ -211,7 +215,7 @@ func StudentTTwoSided(t, df float64) float64 {
 	case math.IsInf(t, 0):
 		return 0
 	}
-	return BetaCDF(df/(df+t*t), df/2, 0.5)
+	return BetaCDF(df/(df+mul(t, t)), df/2, 0.5)
 }
 
 // StudentTQuantile is the p-quantile of Student's t distribution with df degrees of freedom.

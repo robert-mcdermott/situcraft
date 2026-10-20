@@ -10,7 +10,8 @@
 //
 // The budgets are what keeps memory bounded whatever the tissue's size: the simulator holds a tile
 // at a time, the refinement a patch at a time (and keeps within its own estimate), and the Viewer
-// reads a segmentation's transcripts by tile.
+// reads a segmentation's transcripts by tile. On a computer of less memory than the Balanced
+// preset's estimate asks (the weekly runner's 7.8 GB), the refinement takes the Low memory preset.
 package validation
 
 import (
@@ -113,9 +114,26 @@ func TestScale(t *testing.T) {
 		t.Fatalf("a large tissue of %d transcripts", transcripts)
 	}
 
-	// The refinement's preflight: patches, and the memory it expects.
+	// The refinement's preflight: patches, and the memory it expects. A computer whose memory the
+	// Balanced preset's estimate is too much for (the weekly runner's 7.8 GB: 6.6 GB needed, more
+	// than a refinement may take of it) refines with the Low memory preset, as the preflight's
+	// problem advises; the budgets are the same.
 	sched := []string{"--sweeps", "40", "--samples", "20"}
-	text, _ = command(t, "", bin, append(append([]string{"refine", "--preflight"}, sched...), bundle)...)
+	preflight := func() string {
+		text, _ := command(t, "", bin, append(append([]string{"refine", "--preflight"}, sched...), bundle)...)
+		return text
+	}
+	memoryProblem := regexp.MustCompile(`Problem: The refinement needs about [\d.]+ [KMG]B of memory[^\n]*`)
+	refining := "Refining in patches (40 sweeps)"
+	text = preflight()
+	if memoryProblem.MatchString(text) {
+		sched = append([]string{"--preset", "low-memory"}, sched...)
+		refining = "Refining, Low memory (40 sweeps)"
+		t.Logf("the Low memory preset: %s", memoryProblem.FindString(text))
+		if text = preflight(); memoryProblem.MatchString(text) {
+			t.Fatalf("this computer's memory is too little for the Low memory preset too: %s", memoryProblem.FindString(text))
+		}
+	}
 	patches := number(t, text, `refined in (\d+) patches`)
 	estimate := memoryOf(t, text, `Needs about ([\d.]+ [KMG]B) of memory`)
 	if patches < 16 {
@@ -123,7 +141,7 @@ func TestScale(t *testing.T) {
 	}
 
 	// The refinement, a patch at a time.
-	text, s = command(t, "Refining in patches (40 sweeps)", bin, append(append([]string{"refine", "--quiet"}, sched...), bundle, out)...)
+	text, s = command(t, refining, bin, append(append([]string{"refine", "--quiet"}, sched...), bundle, out)...)
 	within(s, refineBudget)
 	// The collector's timing moves the peak by a sixth from run to run (5.1 to 6.2 GB here, against
 	// an estimate of 6.6): within a tenth over the estimate is within it.

@@ -18,7 +18,7 @@ import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { launch, sleep } from '../../validation/cdp.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -103,6 +103,22 @@ async function act(action, actionArgs = {}) {
 }
 
 // --- Page helpers ---------------------------------------------------------------------------------
+
+// The Lung example clustered, labeled, mapped, its graph built, its classes' enrichment and its
+// genes' Moran's I answered, and a figure of them (the report scenes'). Answers { figure,
+// enrichment }.
+async function reportResults() {
+  await act('open_example', { example: 'lung' });
+  await act('cluster_cells', {});
+  await act('label_cells', { markers: 'lung' });
+  await act('show_map', { dataset: 'xenium-lung-2fov' });
+  await act('build_graph', { dataset: 'xenium-lung-2fov' });
+  const ids = await js(`(() => { const p = window.situcraft.store.project; return { labels: p.artifacts.find((a) => a.kind === 'labels')?.id, map: p.artifacts.filter((a) => a.kind === 'embedding').at(-1)?.id }; })()`);
+  const enrichment = await act('spatial_analysis', { question: 'enrichment', dataset: 'xenium-lung-2fov', labels: ids.labels, level: 1 });
+  const moran = await act('spatial_analysis', { question: 'moran', dataset: 'xenium-lung-2fov' });
+  const figure = await act('figure', { name: 'Results', size: 'double', columns: 2, height_mm: 150, panels: [{ kind: 'qc', metric: 'transcripts', log: true }, { kind: 'map', map: ids.map, color: 'clusters' }, { kind: 'spatial', analysis: enrichment.data?.id }, { kind: 'spatial', analysis: moran.data?.id }] });
+  return { figure: figure.data?.id, enrichment: enrichment.data?.id };
+}
 
 let b;
 const js = (expression) => b.eval(expression);
@@ -230,7 +246,7 @@ const scenes = {
     await act('open_view', { view: 'Vessels and pericytes' });
     await act('focus', { kind: 'view', name: 'Vessels and pericytes' });
   },
-  // The Breast example's methods paragraph, its data cited.
+  // The Breast example's methods in the Data view, its data cited.
   async methods() {
     await act('open_example', { example: 'breast' });
     await act('methods', { show: true });
@@ -749,6 +765,116 @@ const scenes = {
     await sleep(600);
     await scrollTo('.cohort-abundance');
     await clearToasts();
+  },
+  // The Reports view (wave 8, slice 1): a figure of a saved view of the Lung (its DAPI stain, three
+  // genes, the cells filled by lineage), its preview as it will print.
+  async figures() {
+    await act('open_example', { example: 'lung' });
+    await act('cluster_cells', {});
+    await act('label_cells', { markers: 'lung' });
+    await act('show_tissue', { center: [750, 300], um_per_pixel: 0.4, genes: ['EPCAM', 'PLVAP', 'CD68'], fill: 'labels:lineage', opacity: 0.5 });
+    await act('save_view', { name: 'Lung lineages' });
+    await act('figure', { name: 'Figure 1', views: ['Lung lineages'], size: 'single', width_um: 300 });
+    await waitFor(`Number(window.situcraft.reportsView?.drawn?.() ?? 0) > 0`);
+    await js(`document.getElementById('app').classList.add('inspector-closed')`);
+    await sleep(400);
+    await scrollTo('.reports-figure');
+    await clearToasts();
+  },
+  // A figure of results (wave 8, slice 2): the Lung's transcripts per cell, its cells' map, its
+  // classes' enrichment and its genes in a pattern, its preview in the Reports view.
+  async 'figure-results'() {
+    await act('open_example', { example: 'lung' });
+    await act('cluster_cells', {});
+    await act('label_cells', { markers: 'lung' });
+    await act('show_map', { dataset: 'xenium-lung-2fov' });
+    await act('build_graph', { dataset: 'xenium-lung-2fov' });
+    const ids = await js(`(() => { const p = window.situcraft.store.project; return { labels: p.artifacts.find((a) => a.kind === 'labels')?.id, map: p.artifacts.filter((a) => a.kind === 'embedding').at(-1)?.id }; })()`);
+    const enrichment = await act('spatial_analysis', { question: 'enrichment', dataset: 'xenium-lung-2fov', labels: ids.labels, level: 1 });
+    const moran = await act('spatial_analysis', { question: 'moran', dataset: 'xenium-lung-2fov' });
+    await act('figure', { name: 'Results', size: 'double', columns: 2, height_mm: 150, panels: [{ kind: 'qc', metric: 'transcripts', log: true }, { kind: 'map', map: ids.map, color: 'clusters' }, { kind: 'spatial', analysis: enrichment.data?.id }, { kind: 'spatial', analysis: moran.data?.id }] });
+    await waitFor(`Number(window.situcraft.reportsView?.drawn?.() ?? 0) > 0`);
+    await js(`document.getElementById('app').classList.add('inspector-closed')`);
+    await sleep(400);
+    await scrollTo('.reports-preview-wrap');
+    await clearToasts();
+  },
+  // What made a result (wave 8, slice 3): the record of the Lung classes' enrichment in the Reports
+  // view, from the bundle through its segmentation, clustering, marker set, labels and graph.
+  async record() {
+    await act('open_example', { example: 'lung' });
+    await act('cluster_cells', {});
+    await act('label_cells', { markers: 'lung' });
+    await act('build_graph', { dataset: 'xenium-lung-2fov' });
+    const labels = await js(`window.situcraft.store.project.artifacts.find((a) => a.kind === 'labels')?.id`);
+    const enrichment = await act('spatial_analysis', { question: 'enrichment', dataset: 'xenium-lung-2fov', labels, level: 1 });
+    await act('record', { result: enrichment.data?.id });
+    await waitFor(`document.querySelectorAll('.record-step').length > 3`);
+    await js(`document.getElementById('app').classList.add('inspector-closed')`);
+    await sleep(400);
+    await scrollTo('.record');
+    await clearToasts();
+  },
+  // The methods (wave 8, slice 4): the Lung example's project, clustered, labeled, its graph and
+  // its classes' enrichment, its methods in the Reports view.
+  async 'methods-project'() {
+    await act('open_example', { example: 'lung' });
+    await act('cluster_cells', {});
+    await act('label_cells', { markers: 'lung' });
+    await act('build_graph', { dataset: 'xenium-lung-2fov' });
+    const labels = await js(`window.situcraft.store.project.artifacts.find((a) => a.kind === 'labels')?.id`);
+    await act('spatial_analysis', { question: 'enrichment', dataset: 'xenium-lung-2fov', labels, level: 1 });
+    await act('methods', { project: true, show: true });
+    await waitFor(`document.querySelectorAll('.methods-section .methods-paragraph').length >= 3`);
+    await js(`document.getElementById('app').classList.add('inspector-closed')`);
+    await sleep(400);
+    await scrollTo('.methods-section');
+    await clearToasts();
+  },
+  // A report (wave 8, slice 7): the Lung's results figure and its classes' enrichment chosen in the
+  // Reports view, its title given.
+  async 'report-section'() {
+    const ids = await reportResults();
+    await act('set_mode', { mode: 'reports' });
+    await waitFor(`Boolean(document.querySelector('.report-section input[value="${ids.figure}"]'))`);
+    await js(`(() => { const section = document.querySelector('.report-section'); for (const id of ${JSON.stringify([ids.figure, ids.enrichment])}) section.querySelector(\`input[value="\${id}"]\`).click(); const title = section.querySelector('input[type="text"]'); title.value = 'The Lung\\'s cell types and their neighbors'; return true; })()`);
+    await js(`document.getElementById('app').classList.add('inspector-closed')`);
+    await sleep(400);
+    await scrollTo('.report-section');
+    await clearToasts();
+  },
+  // The report written of them, opened from the disk as its reader opens it: checked, offline.
+  async report() {
+    const ids = await reportResults();
+    const path = join(places.exports, 'report.html');
+    await act('export', { what: 'report', results: [ids.figure, ids.enrichment], title: 'The Lung\'s cell types and their neighbors', path, overwrite: true });
+    await b.goto(pathToFileURL(path).href, 800);
+    await waitFor(`document.documentElement.dataset.checked === 'intact'`);
+  },
+  // A result package (wave 8, slice 8): a figure of a saved view of the Lung written as a package,
+  // the samples' names left out, and its view opened from the disk in its own reader, zoomed in.
+  async 'package-view'() {
+    await act('open_example', { example: 'lung' });
+    await act('cluster_cells', {});
+    await act('label_cells', { markers: 'lung' });
+    await act('show_tissue', { center: [750, 300], um_per_pixel: 0.4, genes: ['EPCAM', 'PLVAP', 'CD68'], fill: 'labels:lineage', opacity: 0.5 });
+    await act('save_view', { name: 'Lung lineages' });
+    const figure = await act('figure', { name: 'Figure 1', views: ['Lung lineages'], size: 'single', width_um: 300 });
+    const folder = join(places.exports, 'package');
+    await act('export', { what: 'package', results: [figure.data?.id], title: 'The Lung\'s lineages', names: true, path: folder });
+    await b.goto(pathToFileURL(join(folder, 'views', '1-Lung_lineages.html')).href, 800);
+    await waitFor(`document.documentElement.dataset.ready === 'true'`);
+    await js(`document.getElementById('zoom-in').click()`);
+    await waitFor(`[...document.querySelectorAll('#tiles img')].filter((i) => i.style.display !== 'none').every((i) => i.complete)`);
+  },
+  // A certificate verified in SituCraft (wave 8, slice 9): the worked example Results others can
+  // check, its figure of the Lung's results certified and made again from the bundle.
+  async verify() {
+    await act('open_example', { example: 'lung' });
+    await act('tour', { example: 'xenium-lung-2fov', name: 'results-checked' });
+    for (let k = 0; k < 3; k += 1) await act('tour', { run: true });
+    await waitFor(`Boolean(document.querySelector('.dialog .verification[data-verdict]'))`, 300000);
+    await sleep(400);
   },
   // The Jobs view after both examples were opened: each job's state and times, one's log open.
   async jobs() {

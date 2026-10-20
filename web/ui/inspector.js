@@ -12,6 +12,7 @@ import { KIND_ICONS, KIND_LABELS } from './sidebar.js';
 import { askRemoveComparison } from './comparisons.js';
 import { describeLabels, markerSetFile, markerSetVersions } from '../lib/labels.js';
 import { signed } from '../lib/expression.js';
+import { RESULT_KINDS, itemOf } from '../lib/record.js';
 
 export function mountInspector(app) {
   const root = document.getElementById('inspector');
@@ -440,7 +441,20 @@ export function mountInspector(app) {
         } }, icon('download'), 'Save as a file')));
   }
 
+  // The focused item's section, with a link to what made it when it is a result.
   function focusSection() {
+    const section = itemSection();
+    const id = app.store.ui.focus?.id;
+    const item = id ? itemOf(app.store.project, id) : null;
+    if (section && item && RESULT_KINDS.includes(item.kind)) {
+      section.append(h('div.btn-row.inspector-record', { style: { marginTop: '8px' } },
+        h('button.btn.small', { type: 'button', title: 'Each step from the bundles to it, with its method, parameters, seed, software and references (in Reports)', onclick: () => app.showRecord(id) }, icon('report'), 'What made it'),
+        h('button.btn.small', { type: 'button', title: 'A methods section for it, written from its record (in Reports)', onclick: () => app.showMethods({ kind: 'result', id }) }, icon('report'), 'Its methods')));
+    }
+    return section;
+  }
+
+  function itemSection() {
     const focus = app.store.ui.focus;
     if (focus?.kind === 'view') {
       const view = app.store.project.views.find((v) => v.id === focus.id);

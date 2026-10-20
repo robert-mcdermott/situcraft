@@ -650,8 +650,8 @@ func resample(ctx context.Context, img *labelImage, r *segment.Raster) (int, err
 	// The tool's labelled pixels whose centres fall outside the image: none when the corners of its
 	// pixels' centres fall inside (the image within is convex), else counted.
 	inside := func(x, y float64) bool {
-		margin := 1e-9 * (float64(w) + float64(h)) * size
-		return x >= margin && y >= margin && x < float64(w)*size-margin && y < float64(h)*size-margin
+		margin := mul(1e-9*(float64(w)+float64(h)), size)
+		return x >= margin && y >= margin && x < mul(float64(w), size)-margin && y < mul(float64(h), size)-margin
 	}
 	corners := true
 	for _, c := range [][2]float64{{0.5, 0.5}, {float64(img.width) - 0.5, 0.5}, {0.5, float64(img.height) - 0.5}, {float64(img.width) - 0.5, float64(img.height) - 0.5}} {
@@ -748,7 +748,7 @@ func (m *matcher) byID(id uint64, x, y float64) int32 {
 		return -1
 	}
 	if m.recs.hasXY {
-		if dx, dy := m.recs.x[k]-x, m.recs.y[k]-y; dx*dx+dy*dy > sameTranscriptTolerance*sameTranscriptTolerance {
+		if dx, dy := m.recs.x[k]-x, m.recs.y[k]-y; mul(dx, dx)+mul(dy, dy) > sameTranscriptTolerance*sameTranscriptTolerance {
 			m.elsewhere++
 			return -1
 		}
