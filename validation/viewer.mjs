@@ -64,11 +64,11 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { findChrome, launch, sleep } from './cdp.mjs';
-import { inflateSync } from 'node:zlib';
+import { inflateRawSync, inflateSync } from 'node:zlib';
 import { attributeRange, readCells } from '../web/lib/viewer-data.js';
 import { contingency } from '../web/lib/clusterings.js';
 import { certaintyColor, readSegCells } from '../web/lib/segview.js';
@@ -138,6 +138,30 @@ function methodsFacts(text, references) {
   }
   const firsts = [...new Set(cited)];
   return { numbered: firsts.length > 0 && firsts.every((n, i) => n === i + 1) && firsts.length === (references ?? []).length, cited: firsts.length };
+}
+
+// Canonical JSON as the suite writes it (every object's keys sorted, nothing undefined), and a zip
+// read by the suite's own reader (its central directory, each entry stored or deflated): name →
+// bytes (wave 8, slice 5).
+const canonicalOf = (v) => (Array.isArray(v) ? `[${v.map((x) => canonicalOf(x === undefined ? null : x)).join(',')}]` : v && typeof v === 'object' ? `{${Object.keys(v).filter((k) => v[k] !== undefined).sort().map((k) => `${JSON.stringify(k)}:${canonicalOf(v[k])}`).join(',')}}` : JSON.stringify(v ?? null));
+function unzipOwn(buf) {
+  let end = buf.length - 22;
+  while (end >= 0 && buf.readUInt32LE(end) !== 0x06054b50) end -= 1;
+  if (end < 0) throw new Error('not a zip');
+  const out = new Map();
+  let at = buf.readUInt32LE(end + 16);
+  for (let i = 0; i < buf.readUInt16LE(end + 10); i += 1) {
+    const method = buf.readUInt16LE(at + 10);
+    const packed = buf.readUInt32LE(at + 20);
+    const nameLength = buf.readUInt16LE(at + 28);
+    const local = buf.readUInt32LE(at + 42);
+    const name = buf.toString('utf8', at + 46, at + 46 + nameLength);
+    const start = local + 30 + buf.readUInt16LE(local + 26) + buf.readUInt16LE(local + 28);
+    const raw = buf.subarray(start, start + packed);
+    out.set(name, method === 8 ? inflateRawSync(raw) : Buffer.from(raw));
+    at += 46 + nameLength + buf.readUInt16LE(at + 30) + buf.readUInt16LE(at + 32);
+  }
+  return out;
 }
 
 const BUNDLES = ['xenium-lung-2fov', 'xenium-breast-2fov'];
@@ -2416,6 +2440,53 @@ export async function viewerSuite({ check, MissingData, verbose }) {
             check('viewer', 'the methods of the Lung enrichment: written from its record by topic, each number the records\' own (clusters and cells, the share labeled, the graph\'s edges, the pairs found), the seed said, the references numbered as first cited; written as Markdown', `${asked.ok ? `${(asked.data.paragraphs ?? []).map((x) => x.topic).join(', ')}; ${asked.data.references.length} references` : asked.message}; ${missing.length ? `missing: ${missing.join(' | ')}` : 'every number the records\''}; ${mf.numbered ? 'numbered as cited' : 'not numbered as cited'}; Markdown ${wrote.ok ? (inMd && md.startsWith(`# ${asked.data.title}`) ? 'the same text' : 'other') : wrote.message}`,
               asked.ok && ['data', 'cells', 'spatial', 'software'].every((t) => asked.data.paragraphs.some((x) => x.topic === t)) && missing.length === 0 && mf.numbered && asked.data.references.some((r) => r.includes('10.1038/s41467-023-43458-x')) && asked.data.references.some((r) => r.includes('Travaglini')) && wrote.ok && inMd && md.startsWith(`# ${asked.data.title}`),
               'by topic; every number the records\'; numbered as cited; the Markdown the same text');
+          }
+
+          // Certificates (wave 8, slice 5): the Lung enrichment certified, read by the suite's own
+          // zip reader: its fingerprint the suite's own over its canonical JSON; each step the
+          // record's; every file a step of SituCraft's wrote the SHA-256 of that file in the
+          // program's store, every bundle file the SHA-256 of the file in the bundle; every entry
+          // as the archive's list says; no path of this computer anywhere; the same bytes again.
+          {
+            const result = (await chrome.eval(`(() => { const p = window.situcraft.store.project; const ds = p.datasets.find((x) => x.name === 'xenium-lung-2fov'); return p.artifacts.filter((a) => a.kind === 'spatial' && a.dataset === ds.id && a.state === 'complete' && a.question === 'enrichment').at(-1)?.id; })()`));
+            const paths = [join(work, 'certificate.zip'), join(work, 'certificate-again.zip')];
+            const wrote = [];
+            for (const path of paths) wrote.push(await act('export', { what: 'certificate', result, path, overwrite: true }));
+            const zip = existsSync(paths[0]) ? readFileSync(paths[0]) : Buffer.alloc(0);
+            let entries = new Map();
+            try {
+              entries = unzipOwn(zip);
+            } catch {
+              entries = new Map();
+            }
+            const text = (name) => entries.get(name)?.toString('utf8') ?? '';
+            const cert = JSON.parse(text('certificate.json') || 'null');
+            const { fingerprint, ...rest } = cert ?? {};
+            const own = createHash('sha256').update(canonicalOf(rest)).digest('hex');
+            const recordSteps = ((await act('record', { result })).data?.steps ?? []).map((x) => x.id);
+            // Every file SituCraft's steps wrote, against its store; every bundle file, against the bundle.
+            const sha = (bytes) => createHash('sha256').update(bytes).digest('hex');
+            let made = 0;
+            const madeOff = [];
+            for (const st of (cert?.steps ?? []).filter((x) => x.by === 'program')) {
+              for (const f of st.files.filter((x) => x.location !== 'bundle' && x.location !== 'place')) {
+                const response = await fetch(`${url}/api/artifacts/${encodeURIComponent(st.id)}/files/${f.path}`);
+                const got = response.ok ? sha(Buffer.from(await response.arrayBuffer())) : `HTTP ${response.status}`;
+                made += 1;
+                if (got !== f.sha256) madeOff.push(`${st.id}/${f.path}`);
+              }
+            }
+            const bundleDir = join(dataRoot, 'xenium-lung-2fov');
+            const bundleFiles = (cert?.bundles?.[0]?.files ?? []).filter((f) => f.sha256);
+            const bundleOff = bundleFiles.filter((f) => !existsSync(join(bundleDir, f.path)) || sha(readFileSync(join(bundleDir, f.path))) !== f.sha256).map((f) => f.path);
+            const listed = JSON.parse(text('manifest.json') || '{"files":[]}').files;
+            const listOff = listed.filter((f) => !entries.has(f.path) || sha(entries.get(f.path)) !== f.sha256).map((f) => f.path);
+            const leaks = [...entries].filter(([, bytes]) => [dataRoot, work, homedir()].some((p) => bytes.includes(p))).map(([name]) => name);
+            const again = existsSync(paths[1]) && zip.equals(readFileSync(paths[1]));
+            check('viewer', 'a certificate of the Lung enrichment: its fingerprint the suite\'s own; each step the record\'s; every file a step wrote the SHA-256 of the program\'s, every bundle file the bundle\'s; every entry as listed; no path of this computer; the same bytes again', `${wrote.map((w) => (w.ok ? 'written' : w.message)).join(', ')}; ${entries.size} entries; fingerprint ${own === fingerprint ? 'the suite\'s' : 'other'} (${String(fingerprint).slice(0, 16)}); steps ${JSON.stringify((cert?.steps ?? []).map((x) => x.id)) === JSON.stringify(recordSteps) ? 'the record\'s' : 'other'}; ${made} files made, ${madeOff.length} off${madeOff.length ? ` (${madeOff.slice(0, 3).join(', ')})` : ''}; ${bundleFiles.length} bundle files, ${bundleOff.length} off; ${listed.length} listed, ${listOff.length} off; ${leaks.length ? `paths in ${leaks.join(', ')}` : 'no path'}; ${again ? 'the same bytes again' : 'other bytes again'}`,
+              wrote.every((w) => w.ok) && cert?.format === 'situcraft-certificate' && own === fingerprint && JSON.stringify(cert.steps.map((x) => x.id)) === JSON.stringify(recordSteps) && made >= 5 && madeOff.length === 0
+              && bundleFiles.length >= 5 && bundleOff.length === 0 && listed.length === entries.size - 1 && listOff.length === 0 && leaks.length === 0 && again && /^SituCraft certificate\n/.test(text('README.txt')) && text('README.txt').includes(fingerprint),
+              'the suite\'s fingerprint; the record\'s steps; every SHA-256 the files\'; no path; the same bytes');
           }
         }
 

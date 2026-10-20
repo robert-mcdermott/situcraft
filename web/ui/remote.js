@@ -40,6 +40,8 @@ import { FIGURE_SIZES, addPanel, checkFigure, createFigure, figuresOf, mm, panel
 import { drawFigure, readBackFigure, writeFigure } from './figures.js';
 import { tissueViews, viewRegion } from './mode-reports.js';
 import { RECORD_FORMATS, recordOf } from './record-view.js';
+import { certify } from './certificate.js';
+import { certificateSummary, shortFingerprint } from '../lib/certificate.js';
 import { recordableResults } from '../lib/record.js';
 import { BUNDLE_FIELDS, addSampleField, fieldValue, readSamplesTable, removeSampleField, renameSample, sampleFields, samplesCSV, samplesOf, setFieldKind, setRegionSamples, setSampleField } from '../lib/samples.js';
 
@@ -2766,7 +2768,8 @@ export function installRemote(app) {
     },
 
     async record(args) {
-      const ref = resultRef(args.result);
+      const scope = scopeArg(args, { dataset: false });
+      const ref = scope.kind === 'result' ? resultRef(scope.id) : { id: scope.kind === 'project' ? project().id : scope.id, name: scope.kind === 'project' ? project().name : resolveDataset(scope.id).name };
       const format = args.format === undefined ? 'json' : choose(String(args.format), Object.keys(RECORD_FORMATS), 'format');
       let now = new Date().toISOString();
       if (args.time !== undefined) {
@@ -2776,12 +2779,12 @@ export function installRemote(app) {
       }
       let rec;
       try {
-        rec = await recordOf(app, ref.id, { now });
+        rec = await recordOf(app, scope, { now });
       } catch (error) {
         throw new ActionError(`The record of ${ref.name} could not be read: ${error.message}`);
       }
       await settleMode('reports');
-      await app.reportsView?.showRecord(ref.id);
+      await app.reportsView?.showRecord(scope);
       const bundles = rec.steps.filter((x) => x.kind === 'dataset').length;
       return {
         message: `What made ${rec.result.name}: ${plural(rec.steps.length, 'step')} from ${plural(bundles, 'bundle')}, with ${plural(rec.references.length, 'reference')} (${rec.software.map((x) => `${x.name} ${x.version}`.trim()).join('; ')}).`,
@@ -2807,12 +2810,27 @@ export function installRemote(app) {
     },
 
     async export(args) {
-      const what = choose(args.what, ['project', 'archive', 'methods', 'alignment', 'regions', 'reviews', 'samples', 'cohort-table', 'pseudobulk', 'record'], 'kind of file');
+      const what = choose(args.what, ['project', 'archive', 'methods', 'alignment', 'regions', 'reviews', 'samples', 'cohort-table', 'pseudobulk', 'record', 'certificate'], 'kind of file');
+      if (what === 'certificate') {
+        const scope = scopeArg(args);
+        let out;
+        try {
+          out = await certify(app, scope);
+        } catch (error) {
+          throw new ActionError(`It could not be certified: ${error.message}`);
+        }
+        const c = out.certificate;
+        return {
+          file: out.bytes,
+          message: `The certificate of ${certificateSummary(c)}`,
+          data: { fingerprint: c.fingerprint, short: shortFingerprint(c.fingerprint), subject: c.subject, bundles: c.bundles.map((b) => ({ dataset: b.dataset, name: b.name, files: b.files.length })), steps: c.steps.map(({ n, id, kind, name, by }) => ({ n, id, kind, name, by })), notMadeAgain: c.notMadeAgain, bytes: out.bytes.length },
+        };
+      }
       if (what === 'record') {
-        const ref = resultRef(args.result);
+        const scope = scopeArg(args);
         const ext = String(args.path ?? '').split('.').at(-1).toLowerCase();
         const format = args.format !== undefined ? choose(String(args.format), Object.keys(RECORD_FORMATS), 'format') : Object.keys(RECORD_FORMATS).find((k) => RECORD_FORMATS[k].ext === ext) ?? 'markdown';
-        const rec = await recordOf(app, ref.id);
+        const rec = await recordOf(app, scope);
         return { file: RECORD_FORMATS[format].write(rec), message: `What made ${rec.result.name}, as ${RECORD_FORMATS[format].label}: ${plural(rec.steps.length, 'step')}, ${plural(rec.references.length, 'reference')}.` };
       }
       if (what === 'cohort-table' || what === 'pseudobulk') {
@@ -2861,8 +2879,7 @@ export function installRemote(app) {
         return { file: `${JSON.stringify(parseProject(serializeProject(project())), null, 2)}\n`, message: `The project document of ${project().name}.` };
       }
       if (what === 'methods') {
-        const scope = args.result !== undefined ? { kind: 'result', id: resultRef(args.result).id } : args.project ? { kind: 'project' } : { kind: 'dataset', id: resolveDataset(args.dataset).id };
-        const written = await writeMethods(app, scope);
+        const written = await writeMethods(app, scopeArg(args));
         return { file: methodsMarkdown(written), message: `The methods of ${written.subject.name}, with ${plural(written.references.length, 'reference')}.` };
       }
       // An archive is written by the program itself (api_project.go), beside the bundles it names.
@@ -2872,6 +2889,15 @@ export function installRemote(app) {
       return { message: `Wrote ${body.path} (${body.bytes} bytes): ${project().name}, its bundles recorded relative to it.`, data: { path: body.path, bytes: body.bytes } };
     },
   };
+
+  // What a record, methods or certificate is of: a result (args.result, by ID or name), the project
+  // (args.project) or a dataset (args.dataset; the only one when given none and dataset is true).
+  function scopeArg(args, { dataset = true } = {}) {
+    if (args.result !== undefined) return { kind: 'result', id: resultRef(args.result).id };
+    if (args.project) return { kind: 'project' };
+    if (args.dataset !== undefined || dataset) return { kind: 'dataset', id: resolveDataset(args.dataset).id };
+    throw new ActionError('Name the result (result), or ask for the project\'s (project: true) or a dataset\'s (dataset).');
+  }
 
   // A result a record can be made of, by its ID or its name (a name several share needs the ID).
   function resultRef(ref) {

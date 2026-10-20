@@ -112,6 +112,23 @@ a result, a certificate checked by making the result again, and a package that o
     records and written as Markdown, and the simulated cohort's expression comparison's and
     project's.
 
+- **Certificates (wave 8, slice 5).** A certificate of a result, a dataset's results or the whole
+  project: a zip of what it rests on and what it reports.
+  - **What it holds:** the bundles by their files' SHA-256; each step from them to the result, the
+    program's by its job, parameters and the SHA-256 of every file it wrote, the page's own by its
+    record's digest, a figure by its drawing's digests, each with the numbers it reports; the
+    project, the record and the methods.
+  - **Its fingerprint**, the SHA-256 of what it certifies, names it; a README says what it proves,
+    how `situcraft verify` checks it, and what is not made again.
+  - **The same bytes for the same project:** no time of its own, and no path of your computer
+    (a bundle's folder stood in for by its dataset, any other path by its file's name).
+  - **In the Reports view**, **What made a result** is of a result, a dataset or the project, and
+    writes its **Certificate**; remote control: `export` with `what: certificate`, and `record`
+    of a dataset or the project.
+  - **Validated:** in Node, each step's files or digest, no path, the same bytes, edits found;
+    in the page, the Lung enrichment's certificate read by the suite's own zip reader, its
+    fingerprint the suite's own, every file's SHA-256 the program's store's and the bundle's.
+
 ## 0.7.0 (2026-10-19)
 
 Wave 7 of the [roadmap](situcraft-spec/roadmap.md): samples and cohorts. A study's sections in one

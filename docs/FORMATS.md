@@ -373,6 +373,39 @@ preprint, `@manual`, `@software` for SituCraft), and one SituCraft does not list
 `ref<n>` with the citation as its note. Each DOI in SituCraft's list is checked against a recorded
 copy of Crossref's record of it (`validation/reference/crossref/crossref.json`).
 
+### Certificates
+
+A certificate (Reports, **Certificate**; remote control's `export` with `what: certificate`) is a
+zip of what a result, a dataset's results or the whole project rests on and what it reports. It has
+no time of its own and keeps no path of the computer that made it: the same project and SituCraft
+give the same bytes. A bundle's folder is written `situcraft:bundle/<dataset ID>` (a file in it
+with its path in the bundle after it), any other absolute path `situcraft:file/<its name>`.
+
+| Entry | Holds |
+| --- | --- |
+| `README.txt` | What it is of, its fingerprint, what it proves, how to check it (`situcraft verify`), what is not made again |
+| `certificate.json` | What was certified (below) |
+| `project.json` | The project as it was |
+| `record.json`, `record.md` | Each step from the bundles to the result ([What made a result](#what-made-a-result)) |
+| `methods.md`, `references.bib` | The methods, written from the record, and their references |
+| `artifacts/<ID>/manifest.json` | Each step SituCraft's jobs made: its manifest ([Artifacts](#artifacts)) |
+| `manifest.json` | Every other entry with its size and SHA-256 (`situcraft-certificate-files` 1) |
+
+| `certificate.json` field | Holds |
+| --- | --- |
+| `format`, `version` | `"situcraft-certificate"`, `1` |
+| `software` | `{name, version, commit}`: the SituCraft that certified it |
+| `subject` | What it is of: `{id, kind, name}` (a result's kind, or `project`, `dataset`) |
+| `project` | `{id, name, modified, path, sha256}`: the project as it was, `project.json` |
+| `record`, `methods` | `{path, sha256}` of `record.json` and `methods.md` |
+| `bundles` | Each `{dataset, name, run, region, analysisUuid, experimentUuid, software, panel, cells, transcripts, files}`: `files` each `{path, size, sha256}`, those the dataset's fingerprint records and those the instrument's segmentation read |
+| `steps` | Each step of the record, in its order: `{n, id, kind, name, inputs, method, parameters, seeds, software, references, decisions, by}`; `by` is `instrument` (a bundle, with `bundle`, its dataset), `program` (with `job`: `{kind, spec}`, the spec's digest; `manifest`: `{path, sha256}`; `files`: each `{path, role, size, sha256, location}`; `summary`: the numbers it reports) or `page` (with `record`, its record's digest; `summary`; a figure's `drawing`: `{drawing, panels: [{id, letter, drawing}]}`, its manifest's digests) |
+| `notMadeAgain` | Each step not made again in checking it, and why: `{step, what, why}` (the bundles and the instrument's segmentation, checked by their files' SHA-256; an import, by the files read; a person's work, by its digest) |
+| `fingerprint` | The SHA-256 of everything else as canonical JSON: cite it with the result |
+
+A digest is the SHA-256 of a value's canonical JSON (every object's keys sorted), with this
+computer's paths stood in for as above.
+
 ### Artifacts
 
 What jobs make and register is kept in `<data dir>/artifacts/<id>/`, beside a `manifest.json`:

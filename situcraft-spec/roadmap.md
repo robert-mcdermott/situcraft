@@ -3599,9 +3599,42 @@ left in it.
      - **One citation for every spatial question:** each analysis recorded the papers of all of
        them (Moran's for an enrichment, the enrichment's for the niches); each question now
        records its own, and a nearest-neighbor graph no longer cites Delaunay's.
-5. **Certificates (E7).** A result's certificate: what it rests on and what it reports, its
-   fingerprint, written beside the project as a zip with a README saying what it proves and how
-   to check it; in the Reports view and by remote control.
+5. **Certificates (E7): done.**
+   - **The certificate** (`web/lib/certificate.js`, after MaveScape 0.8.0's, the same author's;
+     `web/lib/zip.js` adapted from MaveScape 0.8.0 with its test): of a result, a dataset's
+     results or the whole project (`record.js`'s `scopeRoots`), built from its record: the bundles
+     by their runs and files' SHA-256 (the dataset's fingerprint's and those the instrument's
+     segmentation read); each step in the record's order, the program's by its job's kind, its
+     spec's digest and every file it wrote by SHA-256, the page's own by its record's digest, a
+     figure by its drawing's digests (drawn again at 300 dpi), each with the numbers it reports;
+     the project, the record and the methods by SHA-256; what is not made again in checking it,
+     and why. Its fingerprint is the SHA-256 of its canonical JSON.
+   - **Written as a zip** with a README (what it is of, its fingerprint, what it proves, how
+     `situcraft verify` checks it and its exit codes, what it holds, what is not made again),
+     the project, the record, the methods and their references, each artifact's manifest, and a
+     list of every entry by SHA-256. No time of its own (each entry dated 2026-01-01) and no path
+     of the computer that made it: a bundle's folder is `situcraft:bundle/<dataset ID>`, any other
+     path `situcraft:file/<its name>`, wherever it appears (a whole value or within a sentence).
+     The same project gives the same bytes.
+   - **Read back** (`readCertificate`): its fingerprint, each file it names and the list's SHA-256
+     checked; an edit found.
+   - **In the Reports view**, **What made a result** is of a result, a dataset or the project, and
+     writes its **Certificate**; remote control: `export` with `what: certificate`, and `record`
+     of a dataset or the project.
+   - Validation:
+     - **In Node** (`certificate.test.mjs`, `zip.test.mjs`): the bundles' files and each step's
+       job, files or digest; no path of this computer in any entry, within sentences too; the
+       same bytes again; the README; every entry as listed; an edit to a number found; another
+       result, step or SituCraft another fingerprint; a result not complete, or not in the store,
+       refused; the project's certificate.
+     - **In the page** (viewer suite): the Lung enrichment certified twice and read by the suite's
+       own zip reader: the same bytes; its fingerprint the suite's own over its canonical JSON;
+       its steps the record's; every file a step wrote the SHA-256 of the file in the program's
+       store, every bundle file the SHA-256 of the file in the bundle; every entry as listed; no
+       path of this computer.
+   - Found by slice 5:
+     - **A path within a sentence:** the project's history says where a bundle was opened from;
+       paths are now stood in for within text as well as whole values.
 6. **`situcraft verify` (E7).** The certificate's steps made again from the bundles (found by
    their fingerprints in the folders given), in a store of its own; the page's records
    recomputed in a headless page; verified, differs or not checkable, with exit codes; a

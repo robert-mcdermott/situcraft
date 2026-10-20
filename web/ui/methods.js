@@ -7,9 +7,10 @@
 import { h, icon, clear, formatCount, downloadBlob } from './dom.js';
 import { showDialog, toast } from './overlays.js';
 import { exampleSource } from '../lib/examples.js';
-import { gatherManifests, itemOf, plural, recordableResults, resultRecord, scopeResults, STEP_KINDS } from '../lib/record.js';
+import { gatherManifests, itemOf, recordableResults, resultRecord, scopeRoots } from '../lib/record.js';
+import { scopeOfValue, scopeOptions, scopeValue } from './scopes.js';
 import { methodsBibTeX, methodsMarkdown, methodsPlain, methodsText } from '../lib/methods-text.js';
-import { manifestOf } from './record-view.js';
+import { manifestOf } from './manifests.js';
 
 // The dataset's filters, and the latest version of each.
 export function datasetFilters(project, dataset) {
@@ -19,22 +20,14 @@ export function datasetFilters(project, dataset) {
   return { filters, latest: [...latest.values()] };
 }
 
-// The methods text of a scope: { kind: 'project' }, { kind: 'dataset', id, filters (ids: those
-// described; the latest version of each if not given) } or { kind: 'result', id }.
-export async function writeMethods(app, scope, { now = new Date().toISOString() } = {}) {
+// The record of a scope and its methods: { project, manifests, record (without a time), methods }.
+// scope: { kind: 'project' }, { kind: 'dataset', id, filters (ids: those described; the latest
+// version of each if not given) } or { kind: 'result', id }.
+export async function recordAndMethods(app, scope) {
   const project = app.store.project;
-  let roots;
-  let subject = null;
-  if (scope.kind === 'project') {
-    roots = scopeResults(project);
-    subject = { id: project.id, kind: 'project', name: project.name };
-  } else if (scope.kind === 'dataset') {
-    const dataset = project.datasets.find((d) => d.id === scope.id);
-    roots = scope.filters ? [...scopeResults(project, dataset.id).filter((id) => itemOf(project, id)?.kind !== 'filter'), ...scope.filters] : scopeResults(project, dataset.id);
-    subject = { id: dataset.id, kind: 'dataset', name: dataset.name };
-  } else roots = [scope.id];
+  const { roots, subject } = scopeRoots(project, scope);
   const manifests = await gatherManifests(project, roots, manifestOf);
-  const record = resultRecord(project, roots, { manifests, program: { version: app.version ?? '', commit: app.commit ?? '' }, now, subject });
+  const record = resultRecord(project, roots, { manifests, program: { version: app.version ?? '', commit: app.commit ?? '' }, subject });
   // Each dataset's validation report (its panel's genes, the transcripts counted, the instrument's
   // segmentation methods) and, for an example, its source.
   if (!app.examples.list()) await app.examples.refresh().catch(() => null);
@@ -46,7 +39,12 @@ export async function writeMethods(app, scope, { now = new Date().toISOString() 
     reports[dataset.id] = item ? await app.bundles.validate(item).catch(() => null) : null;
     sources[dataset.id] = exampleSource(app.examples.forDataset(dataset));
   }
-  return methodsText(project, record, { reports, sources, scope: scope.kind });
+  return { project, manifests, record, methods: methodsText(project, record, { reports, sources, scope: scope.kind }) };
+}
+
+// The methods text of a scope (as recordAndMethods).
+export async function writeMethods(app, scope) {
+  return (await recordAndMethods(app, scope)).methods;
 }
 
 export const METHODS_FORMATS = {
@@ -122,7 +120,7 @@ export async function showMethods(app, dataset, { chosen: initial = null } = {})
 // The Reports view's section: the methods of the project, a dataset or a result, chosen. Answers {
 // element, update(), show(scope) }.
 export function mountMethods(app) {
-  const picker = h('select.input.small', { 'aria-label': 'What the methods describe', onchange: (e) => show(scopeOf(e.target.value)) });
+  const picker = h('select.input.small', { 'aria-label': 'What the methods describe', onchange: (e) => show(scopeOfValue(e.target.value)) });
   const body = h('div.record-body');
   const element = h('div.methods-section',
     h('div.section-title', 'Methods'),
@@ -133,30 +131,17 @@ export function mountMethods(app) {
   let written = null;
   let shape = '';
   let generation = 0;
-  const scopeOf = (value) => (value === 'project' ? { kind: 'project' } : value.startsWith('dataset:') ? { kind: 'dataset', id: value.slice(8) } : { kind: 'result', id: value.slice(7) });
-  const valueOf = (scope) => (scope.kind === 'project' ? 'project' : `${scope.kind}:${scope.id}`);
-
   function fillPicker() {
     const p = app.store.project;
-    const results = recordableResults(p);
-    const next = JSON.stringify([p.name, p.datasets.map((d) => [d.id, d.name]), results]);
+    const next = JSON.stringify([p.name, p.datasets.map((d) => [d.id, d.name]), recordableResults(p)]);
     if (next === shape) return false;
     shape = next;
-    const groups = new Map();
-    for (const r of results) {
-      if (!groups.has(r.kind)) groups.set(r.kind, []);
-      groups.get(r.kind).push(r);
-    }
-    clear(picker).append(
-      h('option', { value: 'project', selected: current === 'project' }, `The project, ${p.name}`),
-      p.datasets.length ? h('optgroup', { label: 'Datasets' }, ...p.datasets.map((d) => h('option', { value: `dataset:${d.id}`, selected: current === `dataset:${d.id}` }, d.name))) : null,
-      ...[...groups].map(([kind, list]) => h('optgroup', { label: plural(STEP_KINDS[kind] ?? kind) }, ...list.map((r) => h('option', { value: `result:${r.id}`, selected: current === `result:${r.id}` }, r.name)))),
-    );
+    clear(picker).append(...scopeOptions(p, current));
     return true;
   }
 
   async function show(scope, { scroll = false } = {}) {
-    current = valueOf(scope);
+    current = scopeValue(scope);
     picker.value = current;
     const mine = (generation += 1);
     clear(body).append(h('p.muted', 'Writing…'));
@@ -177,14 +162,14 @@ export function mountMethods(app) {
   }
 
   fillPicker();
-  show(scopeOf(current));
+  show(scopeOfValue(current));
   return {
     element,
     // Written again when the project's results change.
     update() {
       if (fillPicker()) {
         if (current !== 'project' && ![...picker.options].some((o) => o.value === current)) current = 'project';
-        show(scopeOf(current));
+        show(scopeOfValue(current));
       }
     },
     show,

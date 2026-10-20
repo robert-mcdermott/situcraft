@@ -86,6 +86,21 @@ export function scopeResults(project, datasetId = null) {
   return [...datasets, ...recordableResults(project).filter(keep).map((r) => r.id)];
 }
 
+// What a record (its methods, its certificate) is of: { kind: 'project' }, { kind: 'dataset', id,
+// filters (ids: the filters described; the latest version of each if not given) } or { kind:
+// 'result', id }. Answers { roots (the results it starts from), subject (null for one result) }.
+export function scopeRoots(project, scope) {
+  if (scope.kind === 'project') return { roots: scopeResults(project), subject: { id: project.id, kind: 'project', name: project.name } };
+  if (scope.kind === 'dataset') {
+    const dataset = project.datasets.find((d) => d.id === scope.id);
+    if (!dataset) throw new Error(`The project has no dataset ${scope.id}.`);
+    const own = scopeResults(project, dataset.id);
+    const roots = scope.filters ? [...own.filter((id) => itemOf(project, id)?.kind !== 'filter'), ...scope.filters] : own;
+    return { roots, subject: { id: dataset.id, kind: 'dataset', name: dataset.name } };
+  }
+  return { roots: [scope.id], subject: null };
+}
+
 // An item of the project by its id: { kind, record } or null.
 export function itemOf(project, id) {
   const d = project.datasets.find((x) => x.id === id);
