@@ -20,7 +20,7 @@ import { clusterColors, clusterNames, mergedOf, nameOf } from '../lib/clustering
 import { labelColor, labelColors, parseLabelFill } from '../lib/labels.js';
 import { labelSource, perCell, refOf } from './label-sources.js';
 import { panelBox } from '../lib/figures.js';
-import { rasterSize, tissueLayout, compositeStains, compositeImage, legendHeight } from '../lib/figure-tissue.js';
+import { rasterSize, tissueLayout, tissuePanel, compositeStains, compositeImage, legendHeight } from '../lib/figure-tissue.js';
 import { placedImages } from '../lib/images.js';
 import { invert, levelScale, overlayLevel, overlayTileRange } from '../lib/overlays.js';
 import { resultPanelData } from './figure-results.js';
@@ -448,4 +448,34 @@ export async function resolveFigure(app, fig, options = {}) {
     }
   }
   return out;
+}
+
+// --- A view's tiles (wave 8, slice 8) ------------------------------------------------------------
+
+// What a saved view's tiles are drawn from, over a region (µm; lib/view-reader.js viewExtent): its
+// view read, its cells, fill and outlines around the region, as a tissue panel of the region
+// reads them. options: { regions (true, or the IDs of the dataset's regions drawn; none if not
+// given) }. Answers { prep, fullRes (µm a pixel of the morphology image), legend (its items over
+// the region), regions: [{ name, color }], notes }.
+export async function viewTilesSource(app, view, extent, { regions = null } = {}) {
+  const width = extent.x1 - extent.x0;
+  const height = extent.y1 - extent.y0;
+  const fig = { width: 1000, height: (1000 * height) / width, text: 7, letters: false };
+  const panel = { id: 'view', kind: 'tissue', view: view.id, region: { cx: (extent.x0 + extent.x1) / 2, cy: (extent.y0 + extent.y1) / 2, width }, x: 0, y: 0, w: fig.width, h: fig.height, regions: regions ?? [] };
+  fig.panels = [panel];
+  const prep = await prepareTissue(app, fig, panel);
+  return { prep, fullRes: prep.desc.grid.pixelSize, legend: prep.itemsIn(extent), regions: prep.regions.map((r) => ({ name: r.name, color: r.color })), notes: prep.notes };
+}
+
+// One tile of a view (a square region, µm: { cx, cy, width }) drawn at size pixels a side: its
+// marks, as a tissue panel draws them (bare: no scale bar, legend or region names), its outlines
+// a pixel wide and its transcripts the view's size.
+export async function viewTileMarks(app, source, region, size) {
+  const fig = { width: size, height: size, text: 7, letters: false };
+  const box = { x: 0, y: 0, w: size, h: size };
+  const panel = { region, ...box };
+  const data = await finishTissue(app, fig, panel, { ...source.prep, box, items: [], itemsIn: () => [] }, { dpi: 72, reserve: 0 });
+  if (data.cells?.outline) data.cells = { ...data.cells, outline: { ...data.cells.outline, width: 1 } };
+  if (data.nuclei?.outline) data.nuclei = { ...data.nuclei, outline: { ...data.nuclei.outline, width: 1 } };
+  return tissuePanel(box, data, { region, text: 7, bare: true, pointSize: source.prep.t?.pointSize ?? 2 }).marks;
 }

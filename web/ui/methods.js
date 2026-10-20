@@ -11,6 +11,8 @@ import { gatherManifests, itemOf, recordableResults, resultRecord, scopeRoots } 
 import { scopeOfValue, scopeOptions, scopeValue } from './scopes.js';
 import { methodsBibTeX, methodsMarkdown, methodsPlain, methodsText } from '../lib/methods-text.js';
 import { manifestOf } from './manifests.js';
+import { redact } from '../lib/redact.js';
+import { digestOf } from '../lib/certificate.js';
 
 // The dataset's filters, and the latest version of each.
 export function datasetFilters(project, dataset) {
@@ -23,11 +25,23 @@ export function datasetFilters(project, dataset) {
 // The record of a scope and its methods: { project, manifests, record (without a time), methods }.
 // scope: { kind: 'project' }, { kind: 'dataset', id, filters (ids: those described; the latest
 // version of each if not given) }, { kind: 'result', id } or { kind: 'results', ids, name } (a
-// report's, its methods as a result's).
-export async function recordAndMethods(app, scope) {
+// report's, its methods as a result's). options: { redaction (lib/redact.js: what a report or a
+// package leaves out of the manifests and validation reports read; the project given is redacted
+// already) }; then answers also redactedSpecs, the IDs of the steps whose job's spec it changed.
+export async function recordAndMethods(app, scope, { redaction = null } = {}) {
   const project = app.store.project;
   const { roots, subject } = scopeRoots(project, scope);
-  const manifests = await gatherManifests(project, roots, manifestOf);
+  let manifests = await gatherManifests(project, roots, manifestOf);
+  const redactedSpecs = new Set();
+  if (redaction) {
+    const left = new Map();
+    for (const [id, m] of manifests) {
+      const r = m ? redact(m, redaction) : m;
+      if (m && digestOf(redaction.paths(m.lineage?.job?.spec ?? null)) !== digestOf(r.lineage?.job?.spec ?? null)) redactedSpecs.add(id);
+      left.set(id, r);
+    }
+    manifests = left;
+  }
   const record = resultRecord(project, roots, { manifests, program: { version: app.version ?? '', commit: app.commit ?? '' }, subject });
   // Each dataset's validation report (its panel's genes, the transcripts counted, the instrument's
   // segmentation methods) and, for an example, its source.
@@ -39,8 +53,9 @@ export async function recordAndMethods(app, scope) {
     const item = app.bundles.link(dataset.id)?.item ?? app.bundles.itemByPath(dataset.path);
     reports[dataset.id] = item ? await app.bundles.validate(item).catch(() => null) : null;
     sources[dataset.id] = exampleSource(app.examples.forDataset(dataset));
+    if (redaction) [reports[dataset.id], sources[dataset.id]] = [redact(reports[dataset.id], redaction), redact(sources[dataset.id], redaction)];
   }
-  return { project, manifests, record, methods: methodsText(project, record, { reports, sources, scope: scope.kind === 'results' ? 'result' : scope.kind }) };
+  return { project, manifests, record, methods: methodsText(project, record, { reports, sources, scope: scope.kind === 'results' ? 'result' : scope.kind }), redactedSpecs };
 }
 
 // The methods text of a scope (as recordAndMethods).

@@ -102,6 +102,10 @@ th, td { border-bottom: 1px solid var(--line); padding: 4px 10px 4px 0; text-ali
 td.num { font-variant-numeric: tabular-nums; text-align: right; cursor: help; }
 td.differs { color: var(--bad); text-decoration: underline wavy; }
 .methods-paragraph { margin: 0 0 12px; }
+.views { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+a.view { display: flex; flex-direction: column; gap: 6px; text-decoration: none; color: inherit; border: 1px solid var(--line); border-radius: 8px; padding: 8px; background: var(--panel); }
+a.view:hover, a.view:focus-visible { border-color: var(--accent); }
+a.view img { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; background: #000000; border-radius: 4px; }
 ol.refs { font-size: 13.5px; padding-left: 26px; } code { font-size: 13px; }
 a { color: var(--accent); }
 `;
@@ -109,16 +113,17 @@ a { color: var(--accent); }
 // The report's HTML. input: { title, certificate (its JSON), zip (Uint8Array: the certificate's
 // zip), methods (lib/methods-text.js's), figures: [{ id, name, svg (text, its manifest inside; the
 // SHA-256 of its UTF-8 the certificate's), description }], results: [ID] (the results whose tables
-// it shows, in order) }.
-export function reportHTML({ title, certificate, zip, methods, figures = [], results = [] }) {
+// it shows, in order), views: [{ name, href, thumb, description }] (a package's: each saved view's
+// reader and its first tile, beside the report) }.
+export function reportHTML({ title, certificate, zip, methods, figures = [], results = [], views = [] }) {
   const c = certificate;
   const stepIndex = (id) => c.steps.findIndex((s) => s.id === id);
   const parts = [];
-  parts.push(`<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<meta name="generator" content="SituCraft ${escapeHTML(c.software.version ?? '')}">\n<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src data: blob:">\n<title>${escapeHTML(title)}</title>\n<style>${STYLE}</style>\n</head>\n<body>\n<main>`);
+  parts.push(`<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<meta name="generator" content="SituCraft ${escapeHTML(c.software.version ?? '')}">\n<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: blob:${views.length ? ' \'self\' file:' : ''}; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src data: blob:">\n<title>${escapeHTML(title)}</title>\n<style>${STYLE}</style>\n</head>\n<body>\n<main>`);
   parts.push(`<h1>${escapeHTML(title)}</h1>`);
   parts.push(`<p class="meta">From the project ${escapeHTML(c.project.name)}, as of ${escapeHTML(c.project.modified)}. Written by SituCraft ${escapeHTML(c.software.version ?? '')}${c.software.commit ? ` (commit ${escapeHTML(c.software.commit.slice(0, 7))})` : ''}. Its certificate's fingerprint: <code>${escapeHTML(c.fingerprint)}</code> (${escapeHTML(shortFingerprint(c.fingerprint))}).</p>`);
   parts.push('<div id="report-check" class="check">This report checks the certificate it carries as it opens; with scripts off, it is not checked.</div>');
-  const sections = [figures.length ? ['figures', 'Figures'] : null, results.length ? ['results', 'Results'] : null, methods?.paragraphs?.length ? ['methods', 'Methods'] : null, methods?.references?.length ? ['references', 'References'] : null, ['certificate', 'The certificate']].filter(Boolean);
+  const sections = [figures.length ? ['figures', 'Figures'] : null, views.length ? ['views', 'Views'] : null, results.length ? ['results', 'Results'] : null, methods?.paragraphs?.length ? ['methods', 'Methods'] : null, methods?.references?.length ? ['references', 'References'] : null, ['certificate', 'The certificate']].filter(Boolean);
   parts.push(`<nav>${sections.map(([id, name]) => `<a href="#${id}">${name}</a>`).join('')}</nav>`);
 
   if (figures.length) {
@@ -128,6 +133,12 @@ export function reportHTML({ title, certificate, zip, methods, figures = [], res
       parts.push(`<figure id="${escapeHTML(f.id)}"><img data-figure="${escapeHTML(f.id)}" alt="${escapeHTML(f.description)}" src="data:image/svg+xml;base64,${base64(encoder.encode(f.svg))}"><figcaption><b>Figure ${i + 1}. ${escapeHTML(f.name)}.</b> ${escapeHTML(f.description)}${n >= 0 ? ` <span class="muted">(Step ${c.steps[n].n} of the certificate, which holds the SHA-256 of this SVG.)</span>` : ''}</figcaption></figure>`);
     });
     parts.push('</section>');
+  }
+
+  if (views.length) {
+    parts.push('<section id="views"><h2>Views</h2><p class="muted">The saved views the figures show, each in a page of its own beside this report: its tissue drawn in advance as tiles, to move about and zoom into without SituCraft. They are drawn from the project, as the figures are; the certificate does not hold them.</p><div class="views">');
+    for (const v of views) parts.push(`<a class="view" href="${escapeHTML(v.href)}"><img src="${escapeHTML(v.thumb)}" alt=""><span><b>${escapeHTML(v.name)}</b><br><span class="muted">${escapeHTML(v.description)}</span></span></a>`);
+    parts.push('</div></section>');
   }
 
   if (results.length) {

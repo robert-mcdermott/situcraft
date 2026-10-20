@@ -42,7 +42,7 @@ import { drawFigure, readBackFigure, writeFigure } from './figures.js';
 import { tissueViews, viewRegion } from './mode-reports.js';
 import { RECORD_FORMATS, recordOf } from './record-view.js';
 import { certify } from './certificate.js';
-import { writeReport } from './report.js';
+import { writePackage, writeReport } from './report.js';
 import { certificateSummary, shortFingerprint } from '../lib/certificate.js';
 import { recordableResults } from '../lib/record.js';
 import { BUNDLE_FIELDS, addSampleField, fieldValue, readSamplesTable, removeSampleField, renameSample, sampleFields, samplesCSV, samplesOf, setFieldKind, setRegionSamples, setSampleField } from '../lib/samples.js';
@@ -2829,21 +2829,31 @@ export function installRemote(app) {
     },
 
     async export(args) {
-      const what = choose(args.what, ['project', 'archive', 'methods', 'alignment', 'regions', 'reviews', 'samples', 'cohort-table', 'pseudobulk', 'record', 'certificate', 'report'], 'kind of file');
-      if (what === 'report') {
+      const what = choose(args.what, ['project', 'archive', 'methods', 'alignment', 'regions', 'reviews', 'samples', 'cohort-table', 'pseudobulk', 'record', 'certificate', 'report', 'package'], 'kind of file');
+      if (what === 'report' || what === 'package') {
         if (!Array.isArray(args.results) || !args.results.length) throw new ActionError('Name the results it reports (results: their IDs or names; a figure is one).');
         const ids = args.results.map((x) => resultRef(x).id);
+        const options = { title: args.title, results: ids, names: Boolean(args.names) };
         let out;
         try {
-          out = await writeReport(app, { title: args.title, results: ids });
+          out = what === 'package' ? await writePackage(app, options) : await writeReport(app, options);
         } catch (error) {
-          throw new ActionError(`The report could not be written: ${error.message}`);
+          throw new ActionError(`The ${what} could not be written: ${error.message}`);
         }
         const c = out.certificate;
+        const left = `It leaves out ${plural(out.leftOut.people, 'person\'s name')}, ${plural(out.leftOut.notes, 'note')}${args.names ? ` and ${plural(out.leftOut.names, 'name')} of samples, subjects and sections` : ''}; ${plural(out.checked.texts, 'text')} searched for them, none found.`;
+        const data = { title: c.subject.name, fingerprint: c.fingerprint, short: shortFingerprint(c.fingerprint), results: ids, numbers: out.numbers, steps: c.steps.length, bundles: c.bundles.length, leftOut: out.leftOut, checked: out.checked };
+        if (what === 'package') {
+          return {
+            file: out.zip,
+            message: `The package ${c.subject.name}: the report (${plural(out.numbers, 'number')} traced to its certificate), ${plural(out.views, 'saved view')} in ${plural(out.tiles, 'tile')} with a reader of ${out.views === 1 ? 'its' : 'their'} own, and the certificate (${plural(c.steps.length, 'step')} from ${plural(c.bundles.length, 'bundle')}, fingerprint ${shortFingerprint(c.fingerprint)}), ${plural(out.files, 'file')} in all. ${left}`,
+            data: { ...data, folder: out.folder, views: out.views, tiles: out.tiles, files: out.files, bytes: out.zip.length },
+          };
+        }
         return {
           file: out.html,
-          message: `The report ${c.subject.name}: ${plural(out.figures, 'figure')}, the numbers of ${plural(ids.length - out.figures, 'result')} (${plural(out.numbers, 'number')}, each traced to its place in the certificate), its methods and the certificate it carries (${plural(c.steps.length, 'step')} from ${plural(c.bundles.length, 'bundle')}, fingerprint ${shortFingerprint(c.fingerprint)}), which it checks as it opens.`,
-          data: { title: c.subject.name, fingerprint: c.fingerprint, short: shortFingerprint(c.fingerprint), figures: out.figures, results: ids, numbers: out.numbers, steps: c.steps.length, bundles: c.bundles.length, bytes: new TextEncoder().encode(out.html).length },
+          message: `The report ${c.subject.name}: ${plural(out.figures, 'figure')}, the numbers of ${plural(ids.length - out.figures, 'result')} (${plural(out.numbers, 'number')}, each traced to its place in the certificate), its methods and the certificate it carries (${plural(c.steps.length, 'step')} from ${plural(c.bundles.length, 'bundle')}, fingerprint ${shortFingerprint(c.fingerprint)}), which it checks as it opens. ${left}`,
+          data: { ...data, figures: out.figures, bytes: new TextEncoder().encode(out.html).length },
         };
       }
       if (what === 'certificate') {
@@ -3309,7 +3319,7 @@ export function installRemote(app) {
         const response = await fetch(event.output, { method: 'POST', body: result.file, headers: { 'Content-Type': 'application/octet-stream' } });
         const written = await response.json().catch(() => ({}));
         if (!response.ok) throw new ActionError(`The file could not be written: ${written.error ?? `HTTP ${response.status}`}`);
-        message = `Wrote ${written.path} (${written.bytes} bytes). ${message}`;
+        message = `Wrote ${written.path} (${written.files !== undefined ? `a folder of ${written.files} files` : `${written.bytes} bytes`}). ${message}`;
       }
       outcome = { ok: true, message, data: result.data ?? null };
     } catch (error) {

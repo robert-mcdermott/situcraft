@@ -186,7 +186,7 @@ jobs:
           path: certificates
       - name: Build
         run: go build -o situcraft .
-      - name: situcraft verify, on arm64, of each certificate (and report) written on x86-64
+      - name: situcraft verify, on arm64, of each certificate, report and package written on x86-64
         run: |
           for certificate in certificates/*.zip certificates/*.html; do
             ./situcraft verify --data validation/cache "$certificate"

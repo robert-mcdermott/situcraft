@@ -171,6 +171,34 @@ a result, a certificate checked by making the result again, and a package that o
     number the certificate's as the suite reads it, a number's text edited and found, and verified
     from its bundle; in CI, verified on arm64.
 
+- **Result packages (wave 8, slice 8).** The report and the saved views its figures show, in a
+  folder that opens in any browser without SituCraft (Reports, **Write a package**).
+  - **Its views** each open in a page of their own: the tissue drawn in advance as tiles, from the
+    view's own scale to the image's full resolution, as a figure's tissue panel draws it (the
+    stains, post-Xenium images, cells, fills, transcripts and regions); drag to move, scroll to
+    zoom, with a scale bar and the view's legend.
+  - **Beside them:** the certificate, a README, and every file listed with its SHA-256. Nothing in
+    it asks the network for anything.
+  - **What it leaves out, and the report too:** where files lay on this computer, people's names
+    (each written "Person 1", …) and the notes they wrote on reviews and regions; and, when asked,
+    the samples', subjects' and sections' names ("Sample 1", …). Done to the project before
+    anything is drawn or certified, so everything in it says the same; then every text it holds,
+    the figures and certificate inside the report among them, is searched for each, and it is not
+    written if one is found.
+  - **`situcraft verify`** takes a package's folder or zip. A step whose job was given the names
+    left out is not made again from it, and says so.
+  - **Remote control:** `export` with `what: package` writes a folder, or a zip when the path ends
+    in `.zip`; `names` leaves the names out of a report or a package.
+  - **Validated:** in Node, the redaction (people, notes, names as words, paths first, base64 left
+    alone) and the search for what was left out, the tiles' pyramid and its reader, the package's
+    README and list of files; in Go, a package read by verify as a folder and as a zip, a step made
+    with names left out not made again, a package written as a folder and replaced only when it is
+    one; in the page, a package of the Lung's figures and enrichment with a person's review and
+    note planted and the names left out, written as a folder and a zip (the same files), every
+    file read by the suite and none holding a path, the user, the person, a note or the dataset's
+    name, opened from the disk asking the network for nothing (the report intact, each view drawn
+    and zoomed to its finest tiles), and verified from its bundle; in CI, verified on arm64.
+
 ## 0.7.0 (2026-10-19)
 
 Wave 7 of the [roadmap](situcraft-spec/roadmap.md): samples and cohorts. A study's sections in one

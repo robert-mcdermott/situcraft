@@ -3725,9 +3725,59 @@ left in it.
      - **A number's text and its value:** checking the value a cell carries would miss its text
        edited; the text shown is checked too, and a figure by its SVG's bytes, not only the
        manifest inside.
-8. **The result package (E8).** The report, its views as static tiles with a reader of their
+8. **The result package (E8): done.** The report, its views as static tiles with a reader of their
    own, and the certificate, in a folder or zip that opens in any browser without SituCraft;
    redacted as above; nothing in it that it was asked to leave out, checked.
+   - **The redaction** (`web/lib/redact.js`), of the project and the steps' manifests before
+     anything is drawn or certified: this computer's paths stood in for first (as the
+     certificate's), then each person a record names (every `by` but SituCraft's and a program's)
+     by "Person 1", …, each note a person wrote on a review or a region left out wherever its text
+     occurs, and, when asked, each sample, subject and section by "Sample 1", "Subject 1",
+     "Section 1", … as a word (not within an identifier or a file's extension; base64 left alone).
+     A step whose job's spec it changed is marked `redacted` in the certificate, which says what
+     it left out (`leftOut`).
+   - **The search** (`findLeftOut`, `packageTexts`): every text a report or a package holds (its
+     files, a zip's entries, the SVG figures and the certificate inside its HTML) searched for each
+     path of this computer the project and manifests hold, its home folder, each person, note and
+     name; nothing is written if one is found. The report (slice 7) is redacted and searched too.
+   - **The views** (`web/lib/view-reader.js`; `viewTilesSource`, `viewTileMarks` in
+     `web/ui/figure-data.js`): each saved view a figure's tissue panel shows, over its own region
+     and the panels', drawn tile by tile as the tissue panel draws it (bare: no scale bar, legend
+     or region names), JPEG 512 pixels a side, level 0 at the view's own scale and each next at
+     half its µm a pixel, to the image's full resolution or two levels finer, 64 tiles at most; a
+     reader of its own (its script written into the page as it is): the coarsest level always and
+     the finest needed over it, of the part shown; drag, wheel, keys and buttons; scale bar and
+     legend.
+   - **The package** (`web/lib/package.js`, `writePackage` in `web/ui/report.js`): `index.html`
+     (the report, a Views section linking each reader), `views/`, the certificate, `README.txt` and
+     `manifest.json` (format `situcraft-package`: every other file by SHA-256, what was left out and
+     searched); zipped under its folder, dated as a certificate is. Remote control's `export` with
+     `what: package` writes the folder (`output.go`: unpacked beside it, renamed into place; a
+     folder replaced only when told and only when it holds a package) or the zip.
+   - **`situcraft verify`** reads a package's folder or zip by its report (`submitted`); a
+     `redacted` step is not checkable, before anything is made again.
+   - Validation:
+     - **In Node** (`redact.test.mjs`, `view-reader.test.mjs`, `package.test.mjs`): people, notes and
+       names left out wherever they occur, a bundle's folder named as its dataset stood in for
+       rather than renamed, base64 untouched; the search finding each kind as written in HTML and
+       JSON, and nothing in what was redacted; the pyramid's levels and tiles; the reader's page;
+       a certificate's `leftOut` and `redacted` steps; the package's texts, README and list.
+     - **In Go**: a package read as a folder and as a zip; a `redacted` step not made again; a
+       package written as a folder, replaced only when it is one, an entry outside its folder
+       refused.
+     - **In the page** (viewer suite): a package of the Lung's figure of a saved view, its results
+       figure and its enrichment, a person's review and note planted and the names left out,
+       written as a folder and a zip (the same files): its list each file's SHA-256; the suite's own
+       reading of every text finding no path, user, person, note or dataset name; opened from the
+       disk in a browser of its own asking the network for nothing, the report intact, its
+       thumbnails drawn, each view's reader its tiles, zoomed into its finest level; verified from
+       its bundle. CI verifies the package on arm64 too.
+   - Found by slice 8:
+     - **A dataset named as its folder:** the dataset's name, left out, was replaced within its
+       bundle's path in every job's spec; paths are now stood in for first, so a spec changes only
+       where it names a sample.
+     - **Tiles of the stains:** the tissue's own texture leaves lossless tiles large whatever the
+       filter; a view's tiles are JPEG (the figures, in SVG, are the record).
 9. **Examples, documentation, release 0.8.0.** Worked examples making a figure, a methods text,
    a certificate verified and a package; the project fixture
    `validation/projects/0.8.0-*.situcraft.json`; the guide's pages; CHANGELOG; release, and the

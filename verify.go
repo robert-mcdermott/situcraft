@@ -92,10 +92,11 @@ func parseVerifyArgs(args []string, stderr io.Writer) (verifyOptions, error) {
 	flags.DurationVar(&opts.timeout, "timeout", 6*time.Hour, "stop a verification that takes longer")
 	flags.Usage = func() {
 		out := flags.Output()
-		fmt.Fprintln(out, "Usage: situcraft verify [--data DIR]... [--report verification.json] certificate.zip|report.html")
+		fmt.Fprintln(out, "Usage: situcraft verify [--data DIR]... [--report verification.json] certificate.zip|report.html|package")
 		fmt.Fprintln(out, "Makes a SituCraft certificate's result again from its bundles, found in the folders")
 		fmt.Fprintln(out, "given by their files' SHA-256, and compares every file bit for bit. A report is checked")
-		fmt.Fprintln(out, "by the certificate it carries, and its numbers, figures and methods against it.")
+		fmt.Fprintln(out, "by the certificate it carries, and its numbers, figures and methods against it; a result")
+		fmt.Fprintln(out, "package (its folder, or a zip of it) by its report, index.html.")
 		fmt.Fprintln(out, "Exit status: 0 verified, 1 something differs (listed), 2 it could not be checked (a bundle")
 		fmt.Fprintln(out, "or file missing: give its folder with --data; no browser; a wrong command line).")
 		flags.PrintDefaults()
@@ -105,13 +106,17 @@ func parseVerifyArgs(args []string, stderr io.Writer) (verifyOptions, error) {
 		return opts, err
 	}
 	if len(positional) != 1 {
-		return opts, errors.New("name one certificate (.zip) or report (.html) to verify")
+		return opts, errors.New("name one certificate (.zip), report (.html) or package (a folder or .zip) to verify")
 	}
 	if opts.certificate, err = filepath.Abs(positional[0]); err != nil {
 		return opts, err
 	}
-	if info, err := os.Stat(opts.certificate); err != nil || info.IsDir() {
+	if info, err := os.Stat(opts.certificate); err != nil {
 		return opts, fmt.Errorf("%s is not a file", positional[0])
+	} else if info.IsDir() {
+		if _, err := os.Stat(filepath.Join(opts.certificate, "index.html")); err != nil {
+			return opts, fmt.Errorf("%s is a folder without a report (index.html): not a SituCraft package", positional[0])
+		}
 	}
 	for _, d := range data {
 		path, err := filepath.Abs(d)
@@ -173,7 +178,10 @@ type certStep struct {
 	Record   string                       `json:"record,omitempty"`
 	Drawing  json.RawMessage              `json:"drawing,omitempty"`
 	// Content: the SHA-256 of a clustering's, a map's or labels' content (contentDigest).
-	Content  string `json:"content,omitempty"`
+	Content string `json:"content,omitempty"`
+	// Redacted: its job was given names a report's or a package's certificate leaves out (wave 8,
+	// slice 8); it cannot be made again from it.
+	Redacted bool `json:"redacted,omitempty"`
 	Software []struct {
 		Name    string `json:"name"`
 		Version string `json:"version"`
@@ -219,12 +227,12 @@ const certificateVersion = 1
 // entries (name → bytes), and what is not as certified (its fingerprint, a file it names, an entry
 // its list names).
 func readCertificateZip(path string) (*certificate, map[string][]byte, []string, error) {
-	raw, err := os.ReadFile(path)
+	page, raw, err := submitted(path)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	if isReport(raw) {
-		if raw, err = carriedCertificate(raw); err != nil {
+	if page != nil {
+		if raw, err = carriedCertificate(page); err != nil {
 			return nil, nil, nil, fmt.Errorf("%s is not a SituCraft report: %v", filepath.Base(path), err)
 		}
 	}
@@ -659,7 +667,7 @@ func verifyCertificate(ctx context.Context, opts verifyOptions, out io.Writer) (
 		fmt.Fprintln(out, "  The archive:", p)
 	}
 	// A report: its numbers, figures and methods, the certificate's.
-	if page, err := os.ReadFile(opts.certificate); err == nil && isReport(page) {
+	if page, _, err := submitted(opts.certificate); err == nil && page != nil {
 		checked, more := checkReport(page, c, files)
 		if len(more) == 0 {
 			fmt.Fprintf(out, "The report carries it: its %s are the certificate's.\n", checked)
@@ -799,6 +807,10 @@ func bundleOf(list []foundBundle, dataset string) *foundBundle {
 
 // remakeStep makes one of SituCraft's steps again from its recorded spec and compares its files.
 func remakeStep(ctx context.Context, a *app, s certStep, files map[string][]byte, bundles map[string]string, file func(string) string, byNumber map[int]*stepFound, ran map[string]bool, found *stepFound) {
+	if s.Redacted {
+		found.Verdict, found.Detail = stepUnchecked, "its job was given names this certificate leaves out (the samples' or subjects'); the certificate made without leaving them out can be verified"
+		return
+	}
 	// Its inputs: made again (or found) first.
 	for _, n := range s.Inputs {
 		in := byNumber[n]

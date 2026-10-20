@@ -80,6 +80,20 @@ export function redactPaths(value, project) {
   return walk(value);
 }
 
+// Every absolute path of this computer a value holds (a whole text, or within a sentence).
+export function absolutePaths(value) {
+  const out = new Set();
+  const walk = (v) => {
+    if (typeof v === 'string') {
+      if (ROOTED.test(v)) out.add(v);
+      else for (const m of v.matchAll(WITHIN)) out.add(m[0]);
+    } else if (Array.isArray(v)) v.forEach(walk);
+    else if (v && typeof v === 'object') Object.values(v).forEach(walk);
+  };
+  walk(value);
+  return [...out];
+}
+
 // --- The certificate ----------------------------------------------------------------------------
 
 // A bundle as the certificate names it: its run, and its files by SHA-256 (those its dataset's
@@ -116,6 +130,7 @@ function notMadeAgain(project, steps) {
     else if (s.kind === 'transform') say('an alignment, by landmarks, a matrix supplied or found automatically: recorded as made, its file by SHA-256');
     else if (s.kind === 'alignment-check') say('an alignment\'s check: recorded as made, its files by SHA-256');
     else if (['region', 'curated-labels', 'cluster-names', 'marker-set', 'design', 'consensus-labels', 'view'].includes(s.kind)) say('a person\'s work, recorded as made (its digest); what follows from it is made again');
+    if (s.redacted) say('made with names this certificate leaves out: its files are certified by SHA-256, and it, and what is made from it, cannot be made again from this certificate');
   }
   return out;
 }
@@ -126,10 +141,13 @@ function notMadeAgain(project, steps) {
 // a clustering's, a map's, labels'; GET /api/artifacts/<ID>/digest), figures (figure ID → {
 // drawing, panels: [{ id, letter, drawing }] }, as its manifest has them, and svg: the SHA-256 of
 // the SVG a report shows, written at the certificate's time), software: { version,
-// commit } }. Throws when a step SituCraft made is not complete, or its
-// manifest is missing. Answers { certificate, files: [{ name, data }] } without the README and
-// the files' list (writeCertificate adds them).
-export function buildCertificate(project, record, methods, { manifests = new Map(), contents = new Map(), figures = new Map(), software = {} } = {}) {
+// commit }, and for a report's or a package's (wave 8, slice 8): leftOut ({ people, notes, names
+// }: how many of each lib/redact.js left out of the project and manifests given) and redacted (the
+// IDs of SituCraft's steps whose spec held names left out: they cannot be made again from it) }.
+// Throws when a step SituCraft made is not complete, or its manifest is missing. Answers {
+// certificate, files: [{ name, data }] (without the README and the files' list, which
+// writeCertificate adds), methods (as methods.md holds them: this computer's paths stood in for) }.
+export function buildCertificate(project, record, methods, { manifests = new Map(), contents = new Map(), figures = new Map(), software = {}, leftOut = null, redacted = new Set() } = {}) {
   const red = (v) => redactPaths(v, project);
   const files = [];
   const add = (name, text) => {
@@ -160,6 +178,7 @@ export function buildCertificate(project, record, methods, { manifests = new Map
         manifest: add(`artifacts/${s.id}/manifest.json`, text),
         files: (manifest.files ?? []).map(({ path, role, size, sha256: sum, location }) => ({ path, role: role ?? '', size: size ?? null, sha256: sum, location: location ?? '' })),
         ...(contents.get(s.id) ? { content: contents.get(s.id) } : {}),
+        ...(redacted.has(s.id) ? { redacted: true } : {}),
         summary: m.summary ?? null,
       });
       continue;
@@ -170,6 +189,7 @@ export function buildCertificate(project, record, methods, { manifests = new Map
     steps.push(step);
   }
   const projectText = `${JSON.stringify(red(project), null, 1)}\n`;
+  const shownMethods = red(methods);
   const certificate = {
     format: CERTIFICATE_FORMAT,
     version: CERTIFICATE_VERSION,
@@ -177,15 +197,16 @@ export function buildCertificate(project, record, methods, { manifests = new Map
     subject: record.result,
     project: { id: project.id, name: project.name, modified: project.modified, ...add('project.json', projectText) },
     record: add('record.json', recordJSON(red(record))),
-    methods: add('methods.md', methodsMarkdown(red(methods))),
+    methods: add('methods.md', methodsMarkdown(shownMethods)),
     bundles,
     steps,
     notMadeAgain: notMadeAgain(project, steps),
+    ...(leftOut ? { leftOut } : {}),
   };
   add('record.md', recordMarkdown(red(record)));
   add('references.bib', methodsBibTeX(methods));
   certificate.fingerprint = certificateFingerprint(certificate);
-  return { certificate, files };
+  return { certificate, files, methods: shownMethods };
 }
 
 export function certificateFingerprint(certificate) {
@@ -267,6 +288,14 @@ export function readme(certificate) {
     '-----',
     'Where files lay on the computer that certified it is not kept: a bundle\'s folder is written',
     'situcraft:bundle/<its dataset\'s ID>, any other file situcraft:file/<its name>.',
+    ...(c.leftOut ? [
+      '',
+      'Left out',
+      '--------',
+      `Made for others to read, it leaves out ${plural(c.leftOut.people, 'person\'s name', 'people\'s names')} (each written`,
+      `"Person 1", "Person 2", …) and ${plural(c.leftOut.notes, 'note')} people wrote on reviews and regions${c.leftOut.names ? `, and ${plural(c.leftOut.names, 'name')}` : ''}`,
+      ...(c.leftOut.names ? ['of samples, subjects and sections (each written "Sample 1", "Subject 1", "Section 1", …). A step', 'whose job was given those names cannot be made again from it.'] : ['(the samples\' and subjects\' names are kept).']),
+    ] : []),
   ];
   return `${lines.join('\n')}\n`;
 }

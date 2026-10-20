@@ -401,6 +401,7 @@ with its path in the bundle after it), any other absolute path `situcraft:file/<
 | `bundles` | Each `{dataset, name, run, region, analysisUuid, experimentUuid, software, panel, cells, transcripts, files}`: `files` each `{path, size, sha256}`, those the dataset's fingerprint records and those the instrument's segmentation read |
 | `steps` | Each step of the record, in its order: `{n, id, kind, name, inputs, method, parameters, seeds, software, references, decisions, by}`; `by` is `instrument` (a bundle, with `bundle`, its dataset), `program` (with `job`: `{kind, spec}`, the spec's digest; `manifest`: `{path, sha256}`; `files`: each `{path, role, size, sha256, location}`; `content`, for a clustering, a map or labels, the SHA-256 of its content without how long its run took, which its description also records; `summary`: the numbers it reports) or `page` (with `record`, its record's digest; `summary`; a figure's `drawing`: `{drawing, panels: [{id, letter, drawing}]}`, its manifest's digests, and in a report's, `svg`: the SHA-256 of the SVG the report shows) |
 | `notMadeAgain` | Each step not made again in checking it, and why: `{step, what, why}` (the bundles and the instrument's segmentation, checked by their files' SHA-256; an import, by the files read; a person's work, by its digest) |
+| `leftOut` | A report's or a package's only: `{people, notes, names}`, how many of each it leaves out ([Reports](#reports)); a step of SituCraft's whose job was given names left out has `redacted: true` and is not made again from it |
 | `fingerprint` | The SHA-256 of everything else as canonical JSON: cite it with the result |
 
 A digest is the SHA-256 of a value's canonical JSON (every object's keys sorted), with this
@@ -427,6 +428,39 @@ a million up to 3 and a power of ten); each figure's SVG, the SHA-256 its step's
 records; the methods' paragraphs, those of `methods.md`. It says what it found at the top, marks a
 number that differs, and sets `data-checked` on `<html>` to `intact`, `differs` or `error`.
 `situcraft verify` takes a report as it takes a certificate, and checks it the same way.
+
+A report, and a package, leave out what this computer and the people using it say of themselves,
+before anything is drawn or certified, so that its figures, record, methods and certificate all
+say the same:
+
+| Left out | As |
+| --- | --- |
+| Paths of this computer | `situcraft:bundle/<dataset ID>[/<path in the bundle>]`, `situcraft:file/<its name>`, as in a certificate |
+| People's names (who reviewed, drew, decided, curated) | `Person 1`, `Person 2`, … in the order the project first names them, wherever named |
+| Notes people wrote on reviews and regions | Emptied, and `(a note, left out)` wherever their text is repeated |
+| The samples', subjects' and sections' names, when asked | `Sample 1`, `Subject 1`, `Section 1`, … wherever named as a word |
+
+Every text it holds (its files', a zip's entries, the SVG figures and the certificate inside its
+HTML) is then searched for each path, its home folder, each person's name, each note and each
+name left out; it is not written if any is found.
+
+### Result packages
+
+A result package (Reports, **Write a package**; remote control's `export` with `what: package`)
+is a folder of static files, or a zip of one, that opens in any browser without SituCraft and
+asks the network for nothing. It leaves out what a report does.
+
+| File | Holds |
+| --- | --- |
+| `index.html` | The report ([Reports](#reports)), with a Views section linking each view |
+| `views/<n>-<name>.html` | Each saved view its figures' tissue panels show, in a reader of its own: drag to move, scroll or + and − to zoom, its scale bar and legend |
+| `views/<n>-<name>/<level>/<x>-<y>.jpg` | The view's tissue drawn in advance, as its figure's tissue panel draws it, as JPEG tiles 512 pixels a side: level 0 at the view's own scale, each next level at half its µm a pixel, to the image's full resolution or two levels finer, 64 tiles at most |
+| `certificate-<fingerprint>.zip` | The certificate, as the report carries it |
+| `README.txt` | What it is, what it leaves out and what was searched, how to check it |
+| `manifest.json` | `format` `"situcraft-package"`, `version` 1, `title`, `software`, `certificate` (`{fingerprint, file, subject}`), `views` (each `{name, file, tiles, levels}`), `leftOut` (`{people, notes, names}`), `checked` (`{texts, strings}`), and `files`: every other file `{path, size, sha256}` |
+
+The views are drawn from the project, as figures are; the certificate does not hold them.
+`situcraft verify` takes a package's folder, or its zip, as it takes its report.
 
 ### Artifacts
 

@@ -324,7 +324,8 @@ function legendMarks(legend, size) {
 // xy }], fill (RGBA per cell, alpha 0 for none) or null, fillName, opacity, outline: { color,
 // width, opacity } or null } or null, nuclei: { rings, outline } or null, transcripts: { x, y (µm), gene (index), genes: [{ name,
 // color }] } or null }. options: the panel ({ region, scaleBar?, pointSize? }) and the figure's
-// text. Returns { marks, description, notes, facts }.
+// text; bare: true draws the tissue alone (a view's tile, lib/view-reader.js: no scale bar, legend
+// or region names, which its reader shows). Returns { marks, description, notes, facts }.
 export function tissuePanel(box, data, options) {
   const size = Math.max(MIN_TEXT, options.text ?? 7);
   const layout = tissueLayout(box, options, data.legend ?? [], size, data.reserve ?? 0);
@@ -384,7 +385,7 @@ export function tissuePanel(box, data, options) {
       x0 = Math.min(x0, x);
       y0 = Math.min(y0, y);
     }
-    inner.push({ type: 'text', x: Math.max(image.x + 2, X(x0) + 2), y: Math.max(image.y + 2, Y(y0) + 2), text: r.name, size, bold: true, fill: r.color, baseline: 'top' });
+    if (!options.bare) inner.push({ type: 'text', x: Math.max(image.x + 2, X(x0) + 2), y: Math.max(image.y + 2, Y(y0) + 2), text: r.name, size, bold: true, fill: r.color, baseline: 'top' });
     regionsDrawn += 1;
   }
   // Transcripts: a point each, of its gene's color, those in the region.
@@ -408,13 +409,13 @@ export function tissuePanel(box, data, options) {
   const ink = data.light || luminanceOf(data.background ?? '#000000') >= 0.5 ? INK : '#ffffff';
   const barY = image.y + image.h - margin - 1.5;
   const barX = image.x + image.w - margin - barPt;
-  if (barPt > image.w - 2 * margin) notes.push(`The scale bar (${lengthText(barUm)}) is wider than the tissue shown.`);
+  if (options.bare) { /* a tile: its reader draws the scale bar */ } else if (barPt > image.w - 2 * margin) notes.push(`The scale bar (${lengthText(barUm)}) is wider than the tissue shown.`);
   else {
     inner.push({ type: 'rect', x: barX, y: barY, w: barPt, h: 1.5, fill: ink });
     inner.push({ type: 'text', x: barX + barPt / 2, y: barY - size * 0.35, text: lengthText(barUm), size, fill: ink, anchor: 'middle' });
   }
   const marks = [{ type: 'group', clip: { ...image }, label: `The tissue of ${data.dataset}`, marks: inner }];
-  marks.push(...legendMarks(layout.legend, size));
+  if (!options.bare) marks.push(...legendMarks(layout.legend, size));
   const parts = [];
   if (data.channels?.length) parts.push(`the ${joinList(data.channels)} stain${data.channels.length > 1 ? 's' : ''}`);
   if (data.images?.length) parts.push(`the post-Xenium image${data.images.length > 1 ? 's' : ''} ${joinList(data.images.map((n) => `"${n}"`))} placed by ${data.images.length > 1 ? 'their alignments' : 'its alignment'}`);

@@ -17,10 +17,11 @@ export function certificateFileName(certificate) {
 
 // The certificate of a scope ({ kind: 'project' }, { kind: 'dataset', id }, { kind: 'result', id }
 // or { kind: 'results', ids, name }). options: { drawn (figure ID → { manifest, svg (the SHA-256 of
-// the SVG a report shows) }, a figure already drawn at DRAWN_AT) }. Answers { bytes (the zip),
-// certificate, methods, name }.
-export async function certify(app, scope, { drawn = new Map() } = {}) {
-  const { project, manifests, record, methods } = await recordAndMethods(app, scope);
+// the SVG a report shows) }, a figure already drawn at DRAWN_AT), redaction (lib/redact.js: what a
+// report or a package leaves out; app's project redacted already) }. Answers { bytes (the zip),
+// certificate, methods (as methods.md holds them), name }.
+export async function certify(app, scope, { drawn = new Map(), redaction = null } = {}) {
+  const { project, manifests, record, methods, redactedSpecs } = await recordAndMethods(app, scope, { redaction });
   const figures = new Map();
   for (const s of record.steps.filter((x) => x.kind === 'figure')) {
     const fig = (project.figures ?? []).find((f) => f.id === s.id);
@@ -34,6 +35,6 @@ export async function certify(app, scope, { drawn = new Map() } = {}) {
     const content = response.ok ? (await response.json()).content : null;
     if (content) contents.set(s.id, content);
   }
-  const built = buildCertificate(project, record, methods, { manifests, contents, figures, software: { version: app.version ?? null, commit: app.commit ?? null } });
-  return { bytes: await writeCertificate(built), certificate: built.certificate, methods, name: certificateFileName(built.certificate) };
+  const built = buildCertificate(project, record, methods, { manifests, contents, figures, software: { version: app.version ?? null, commit: app.commit ?? null }, ...(redaction ? { leftOut: redaction.counts, redacted: redactedSpecs } : {}) });
+  return { bytes: await writeCertificate(built), certificate: built.certificate, methods: built.methods, manifests, name: certificateFileName(built.certificate) };
 }

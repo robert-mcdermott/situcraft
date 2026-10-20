@@ -590,6 +590,16 @@
   "violations": []
  },
  {
+  "scene": "package-view",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "package-view",
+  "theme": "light",
+  "violations": []
+ },
+ {
   "scene": "jobs",
   "theme": "dark",
   "violations": []

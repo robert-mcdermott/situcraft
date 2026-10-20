@@ -247,3 +247,51 @@ func TestNumberTextAsThePageWritesIt(t *testing.T) {
 		}
 	}
 }
+
+// A result package (wave 8, slice 8) given to verify: its folder, or a zip of it, read by its
+// report (index.html), the certificate it carries read as intact.
+func TestPackageReadByItsReport(t *testing.T) {
+	page, err := os.ReadFile(filepath.Join("testdata", "report.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(t.TempDir(), "Results-12345678")
+	os.MkdirAll(filepath.Join(dir, "views"), 0o755)
+	os.WriteFile(filepath.Join(dir, "index.html"), page, 0o644)
+	os.WriteFile(filepath.Join(dir, "manifest.json"), []byte(`{"format":"situcraft-package"}`), 0o644)
+	var b bytes.Buffer
+	w := zip.NewWriter(&b)
+	for name, data := range map[string][]byte{"Results-12345678/index.html": page, "Results-12345678/manifest.json": []byte("{}")} {
+		f, _ := w.Create(name)
+		f.Write(data)
+	}
+	w.Close()
+	zipped := filepath.Join(t.TempDir(), "Results-12345678.zip")
+	os.WriteFile(zipped, b.Bytes(), 0o644)
+	for _, path := range []string{dir, zipped} {
+		c, files, problems, err := readCertificateZip(path)
+		if err != nil || len(problems) > 0 || c.Subject.Kind != "report" {
+			t.Fatalf("%s: %v %v", filepath.Base(path), problems, err)
+		}
+		got, _, err := submitted(path)
+		if err != nil || !bytes.Equal(got, page) {
+			t.Fatalf("%s: its report not read: %v", filepath.Base(path), err)
+		}
+		if _, problems := checkReport(got, c, files); len(problems) > 0 {
+			t.Fatalf("%s: %v", filepath.Base(path), problems)
+		}
+	}
+	if _, _, err := submitted(t.TempDir()); err == nil {
+		t.Fatal("a folder without a report read as a package")
+	}
+}
+
+// A step whose job was given names the certificate leaves out: not checkable, before anything is
+// made again.
+func TestARedactedStepIsNotMadeAgain(t *testing.T) {
+	found := stepFound{}
+	remakeStep(nil, nil, certStep{N: 3, ID: "coh-1", By: "program", Redacted: true}, nil, nil, nil, map[int]*stepFound{}, map[string]bool{}, &found)
+	if found.Verdict != stepUnchecked || !strings.Contains(found.Detail, "names this certificate leaves out") {
+		t.Fatalf("%+v", found)
+	}
+}

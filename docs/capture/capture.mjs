@@ -851,6 +851,22 @@ const scenes = {
     await b.goto(pathToFileURL(path).href, 800);
     await waitFor(`document.documentElement.dataset.checked === 'intact'`);
   },
+  // A result package (wave 8, slice 8): a figure of a saved view of the Lung written as a package,
+  // the samples' names left out, and its view opened from the disk in its own reader, zoomed in.
+  async 'package-view'() {
+    await act('open_example', { example: 'lung' });
+    await act('cluster_cells', {});
+    await act('label_cells', { markers: 'lung' });
+    await act('show_tissue', { center: [750, 300], um_per_pixel: 0.4, genes: ['EPCAM', 'PLVAP', 'CD68'], fill: 'labels:lineage', opacity: 0.5 });
+    await act('save_view', { name: 'Lung lineages' });
+    const figure = await act('figure', { name: 'Figure 1', views: ['Lung lineages'], size: 'single', width_um: 300 });
+    const folder = join(places.exports, 'package');
+    await act('export', { what: 'package', results: [figure.data?.id], title: 'The Lung\'s lineages', names: true, path: folder });
+    await b.goto(pathToFileURL(join(folder, 'views', '1-Lung_lineages.html')).href, 800);
+    await waitFor(`document.documentElement.dataset.ready === 'true'`);
+    await js(`document.getElementById('zoom-in').click()`);
+    await waitFor(`[...document.querySelectorAll('#tiles img')].filter((i) => i.style.display !== 'none').every((i) => i.complete)`);
+  },
   // The Jobs view after both examples were opened: each job's state and times, one's log open.
   async jobs() {
     await act('open_example', { example: 'lung' });

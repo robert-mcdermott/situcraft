@@ -26,6 +26,10 @@ th, td { border-bottom: 1px solid var(--line); padding: 4px 10px 4px 0; text-ali
 td.num { font-variant-numeric: tabular-nums; text-align: right; cursor: help; }
 td.differs { color: var(--bad); text-decoration: underline wavy; }
 .methods-paragraph { margin: 0 0 12px; }
+.views { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+a.view { display: flex; flex-direction: column; gap: 6px; text-decoration: none; color: inherit; border: 1px solid var(--line); border-radius: 8px; padding: 8px; background: var(--panel); }
+a.view:hover, a.view:focus-visible { border-color: var(--accent); }
+a.view img { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; background: #000000; border-radius: 4px; }
 ol.refs { font-size: 13.5px; padding-left: 26px; } code { font-size: 13px; }
 a { color: var(--accent); }
 </style>

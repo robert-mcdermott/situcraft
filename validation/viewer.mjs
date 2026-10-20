@@ -63,7 +63,7 @@
 
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -2651,6 +2651,115 @@ export async function viewerSuite({ check, MissingData, verbose }) {
               'intact, offline; every number the certificate\'s; an edit found; verified');
             const keep = process.env.SITUCRAFT_CERTIFICATES;
             if (keep && existsSync(reportPath)) copyFileSync(reportPath, join(keep, 'lung-report.html'));
+          }
+
+          // The result package (wave 8, slice 8): the Lung's figure of a saved view, its results
+          // figure and its enrichment, the samples' names left out, written as a folder and as a
+          // zip (the same files). A review by a person with a note of their own is planted first.
+          // The suite reads every file itself: the list's SHA-256 each file's; no path of this
+          // computer, its user's name, the person, a note or the dataset's name in any text it holds
+          // (its HTML, the SVG figures and the certificate inside it, the certificate's entries).
+          // Opened from the disk in a browser of its own, asking the network for nothing: the
+          // report intact, its views' thumbnails drawn; each view's reader its tiles, zoomed into
+          // its finest level. situcraft verify, given the folder, makes its results again.
+          {
+            const note = 'Kept to myself: the coverslip cracked near the second FOV';
+            await act('review', { dataset: 'xenium-lung-2fov', action: 'comment', cells: ['#7'], note, by: 'Ada Lovelace' });
+            // A figure of a saved view of the tissue, whose view the package draws as tiles.
+            await act('show_tissue', { dataset: 'xenium-lung-2fov', center: [750, 300], um_per_pixel: 0.4, genes: ['EPCAM', 'PLVAP', 'CD68'], fill: 'labels:lineage', opacity: 0.5, outlines: true, nuclei: false, transcripts: true });
+            await act('save_view', { name: 'The Lung, packaged' });
+            await act('figure', { name: 'The Lung\'s tissue', views: ['The Lung, packaged'], size: 'single', width_um: 300 });
+            const ids = await chrome.eval(`(() => { const p = window.situcraft.store.project; const ds = p.datasets.find((x) => x.name === 'xenium-lung-2fov'); return { figure1: p.figures.find((f) => f.name === 'The Lung\\'s tissue')?.id ?? null, results: p.figures.find((f) => f.name === 'Results of the Lung')?.id ?? null, enrichment: p.artifacts.filter((a) => a.kind === 'spatial' && a.dataset === ds.id && a.state === 'complete' && a.question === 'enrichment').at(-1)?.id ?? null }; })()`);
+            const folder = join(work, 'package');
+            const zipPath = join(work, 'package.zip');
+            const args = { what: 'package', results: [ids.figure1, ids.results, ids.enrichment], title: 'The Lung\'s results', names: true, overwrite: true };
+            const wrote = await act('export', { ...args, path: folder });
+            const zipped = await act('export', { ...args, path: zipPath });
+            // Every file, read by the suite.
+            const walk = (dir, base = '') => readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(join(dir, e.name), `${base}${e.name}/`) : [`${base}${e.name}`]));
+            const files = existsSync(folder) ? walk(folder).sort() : [];
+            const bytes = new Map(files.map((f) => [f, readFileSync(join(folder, f))]));
+            const sha = (b) => createHash('sha256').update(b).digest('hex');
+            const listed = JSON.parse(bytes.get('manifest.json')?.toString('utf8') ?? '{"files":[]}');
+            const listOff = listed.files.filter((f) => !bytes.has(f.path) || sha(bytes.get(f.path)) !== f.sha256).map((f) => f.path);
+            const unlisted = files.filter((f) => f !== 'manifest.json' && !listed.files.some((x) => x.path === f));
+            // The zip: the same files under its folder.
+            let zipSame = false;
+            try {
+              const entries = unzipOwn(readFileSync(zipPath));
+              zipSame = entries.size === files.length && files.every((f) => entries.get(`${zipped.data?.folder}/${f}`)?.equals(bytes.get(f)));
+            } catch {
+              zipSame = false;
+            }
+            // Every text it holds, and what it must not hold.
+            const texts = [];
+            const fromZip = (name, data) => {
+              for (const [entry, b] of unzipOwn(data)) if (!/\.(jpg|png)$/.test(entry)) texts.push([`${name}: ${entry}`, b.toString('utf8')]);
+            };
+            for (const [f, b] of bytes) {
+              if (f.endsWith('.zip')) fromZip(f, b);
+              else if (!f.endsWith('.jpg')) {
+                const text = b.toString('utf8');
+                texts.push([f, text]);
+                for (const m of text.matchAll(/data:image\/svg\+xml;base64,([A-Za-z0-9+/=]+)/g)) texts.push([`${f}: a figure`, Buffer.from(m[1], 'base64').toString('utf8')]);
+                for (const m of text.matchAll(/id="situcraft-certificate">([^<]*)</g)) fromZip(`${f}: its certificate`, Buffer.from(m[1], 'base64'));
+              }
+            }
+            const user = basename(homedir());
+            const word = (w) => new RegExp(`(?<![A-Za-z0-9.-])${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![A-Za-z0-9-]|\\.[A-Za-z0-9])`);
+            const forbidden = [['a path', (t) => t.includes(dataRoot) || t.includes(work) || t.includes(homedir())], ['the user', (t) => new RegExp(`[\\/]${user}[\\/]`).test(t)], ['a person', (t) => t.includes('Ada Lovelace')], ['a note', (t) => t.includes(note) || t.includes('Folded tissue at the edge')], ['the dataset\'s name', (t) => word('xenium-lung-2fov').test(t.replace(/[A-Za-z0-9+/=]{40,}/g, ' '))]];
+            const leaks = texts.flatMap(([name, text]) => forbidden.filter(([, test]) => test(text)).map(([what]) => `${what} in ${name}`));
+            const tiles = files.filter((f) => f.endsWith('.jpg'));
+            const jpeg = tiles.every((f) => bytes.get(f)[0] === 0xff && bytes.get(f)[1] === 0xd8);
+            // Opened from the disk, as its reader opens it.
+            const opened = async (path, script) => {
+              const browser = await launch({ width: 1200, height: 850, args: (process.env.SITUCRAFT_CHROME_ARGS ?? '').split(' ').filter(Boolean) });
+              const asked = [];
+              try {
+                await browser.send('Network.enable');
+                browser.on('Network.requestWillBeSent', (e) => {
+                  if (!/^(data|blob|file):/.test(e.request.url)) asked.push(e.request.url);
+                });
+                await browser.goto(pathToFileURL(path).href, 300);
+                return { asked, ...(await browser.eval(script)) };
+              } finally {
+                await browser.close();
+              }
+            };
+            const report = existsSync(join(folder, 'index.html')) ? await opened(join(folder, 'index.html'), `(async () => {
+              for (let k = 0; k < 80 && !document.documentElement.dataset.checked; k += 1) await new Promise((r) => setTimeout(r, 250));
+              const thumbs = [...document.querySelectorAll('#views img')];
+              for (let k = 0; k < 40 && !thumbs.every((i) => i.complete); k += 1) await new Promise((r) => setTimeout(r, 250));
+              return { state: document.documentElement.dataset.checked, thumbs: thumbs.length, drawn: thumbs.filter((i) => i.naturalWidth === 512).length, links: [...document.querySelectorAll('#views a')].map((a) => a.getAttribute('href')) };
+            })()`) : { asked: [], links: [] };
+            const readers = [];
+            for (const link of report.links ?? []) {
+              readers.push(await opened(join(folder, link), `(async () => {
+                const ready = async () => { for (let k = 0; k < 80 && document.documentElement.dataset.ready !== 'true'; k += 1) await new Promise((r) => setTimeout(r, 250)); };
+                await ready();
+                const first = { level: document.documentElement.dataset.level, shown: [...document.querySelectorAll('#tiles img')].filter((i) => i.style.display !== 'none' && i.naturalWidth === 512).length };
+                const stage = document.getElementById('stage');
+                stage.focus();
+                for (let k = 0; k < 6; k += 1) stage.dispatchEvent(new KeyboardEvent('keydown', { key: '+', bubbles: true }));
+                const shown = () => [...document.querySelectorAll('#tiles img')].filter((i) => i.style.display !== 'none');
+                for (let k = 0; k < 40 && !shown().every((i) => i.complete); k += 1) await new Promise((r) => setTimeout(r, 250));
+                return { first, level: document.documentElement.dataset.level, deepShown: shown().filter((i) => i.naturalWidth === 512).length, missing: Number(document.documentElement.dataset.missing ?? 0), legend: document.querySelectorAll('aside li').length };
+              })()`));
+            }
+            const finestOf = (link) => {
+              const view = listed.views?.find((v) => v.file === link);
+              return view ? String(view.levels - 1) : null;
+            };
+            const verified = spawnSync(bin, ['verify', '--data', dataRoot, ...(findChrome() ? ['--chrome', findChrome()] : []), folder], { encoding: 'utf8', timeout: 30 * 60e3 });
+            const verifyOut = `${verified.stdout ?? ''}${verified.stderr ?? ''}`;
+            const asked = [...report.asked, ...readers.flatMap((r) => r.asked)];
+            check('viewer', 'a result package of the Lung\'s figures and enrichment, the samples\' names left out, as a folder and a zip (the same files): its list each file\'s SHA-256; no path of this computer, its user, the person who reviewed, their notes or the dataset\'s name in any text it holds; opened from the disk asking the network for nothing, its report intact and its views drawn, each zoomed to its finest tiles; verified from its bundle', `${wrote.ok ? `${wrote.data.files} files, ${wrote.data.views} view${wrote.data.views === 1 ? '' : 's'} in ${wrote.data.tiles} tiles, ${wrote.data.leftOut.people} person, ${wrote.data.leftOut.notes} note and ${wrote.data.leftOut.names} name left out, ${wrote.data.checked.texts} texts searched by SituCraft` : wrote.message}; zip ${zipped.ok ? (zipSame ? 'the same files' : 'other files') : zipped.message}; ${files.length} files read, ${listOff.length} off the list${unlisted.length ? `, ${unlisted.length} not listed` : ''}; ${texts.length} texts read by the suite, ${leaks.length ? `found ${leaks.slice(0, 3).join(', ')}` : 'nothing left out found'}; ${tiles.length} tiles, ${jpeg ? 'JPEG' : 'not all JPEG'}; report ${report.state}, ${report.drawn}/${report.thumbs} thumbnails; readers ${readers.map((r, k) => `${r.first?.shown} tiles at level ${r.first?.level}, zoomed to level ${r.level} of ${finestOf(report.links[k])} (${r.deepShown} tiles, ${r.missing} missing, ${r.legend} legend items)`).join('; ')}; ${asked.length ? `asked ${asked.slice(0, 2).join(', ')}` : 'nothing asked of the network'}; verify: exit ${verified.status}${verified.status !== 0 ? ` ${verifyOut.slice(-400)}` : ''}`,
+              wrote.ok && zipped.ok && zipSame && files.length === wrote.data.files && listOff.length === 0 && unlisted.length === 0 && texts.length >= 20 && leaks.length === 0 && tiles.length >= 4 && jpeg && wrote.data.leftOut.people >= 1 && wrote.data.leftOut.notes >= 1 && wrote.data.leftOut.names >= 1
+              && report.state === 'intact' && report.thumbs >= 1 && report.drawn === report.thumbs && readers.length === report.thumbs && readers.every((r, k) => r.first?.shown >= 1 && r.level === finestOf(report.links[k]) && r.deepShown >= 1 && r.missing === 0 && r.legend >= 1) && asked.length === 0
+              && verified.status === 0 && /The report carries it: its \d+ numbers, 2 figures and its methods are the certificate's\./.test(verifyOut),
+              'the same files; nothing left out found; offline, intact, drawn; verified');
+            const keep = process.env.SITUCRAFT_CERTIFICATES;
+            if (keep && existsSync(zipPath)) copyFileSync(zipPath, join(keep, 'lung-package.zip'));
           }
         }
 

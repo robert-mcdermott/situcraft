@@ -1,14 +1,18 @@
 package main
 
 import (
+	"archive/zip"
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"html"
+	"io"
 	"math"
 	"math/big"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -26,6 +30,52 @@ var (
 	reportFigure    = regexp.MustCompile(`<img data-figure="([^"]*)"[^>]*? src="data:image/svg\+xml;base64,([A-Za-z0-9+/=]*)"`)
 	reportParagraph = regexp.MustCompile(`<p class="methods-paragraph">([^<]*)</p>`)
 )
+
+// submitted reads what verify was given: a certificate (its zip's bytes), a report (its page), or a
+// result package (wave 8, slice 8: its folder, or a zip of it, whose index.html is its report).
+// Answers the report's page (nil for a certificate) or the certificate's bytes.
+func submitted(path string) ([]byte, []byte, error) {
+	if info, err := os.Stat(path); err == nil && info.IsDir() {
+		page, err := os.ReadFile(filepath.Join(path, "index.html"))
+		if err != nil || !isReport(page) {
+			return nil, nil, fmt.Errorf("%s holds no report (index.html): not a SituCraft package", filepath.Base(path))
+		}
+		return page, nil, nil
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, nil, err
+	}
+	if isReport(raw) {
+		return raw, nil, nil
+	}
+	z, err := zip.NewReader(bytes.NewReader(raw), int64(len(raw)))
+	if err != nil {
+		return nil, nil, fmt.Errorf("%s is not a SituCraft certificate: %v", filepath.Base(path), err)
+	}
+	var index *zip.File
+	for _, f := range z.File {
+		if f.Name == "certificate.json" {
+			return nil, raw, nil
+		}
+		if dir, rest, _ := strings.Cut(f.Name, "/"); f.Name == "index.html" || (dir != "" && rest == "index.html") {
+			index = f
+		}
+	}
+	if index == nil {
+		return nil, raw, nil
+	}
+	r, err := index.Open()
+	if err != nil {
+		return nil, nil, err
+	}
+	defer r.Close()
+	page, err := io.ReadAll(io.LimitReader(r, 1<<30))
+	if err != nil || !isReport(page) {
+		return nil, nil, fmt.Errorf("%s: its index.html is not a SituCraft report", filepath.Base(path))
+	}
+	return page, nil, nil
+}
 
 // isReport says whether a file is HTML (a report) rather than a zip.
 func isReport(data []byte) bool {
