@@ -422,6 +422,7 @@ func newApp(cfg config) (*app, error) {
 		a.control = newRemoteHub()
 		a.control.session = a.session
 		a.control.scripts = !cfg.mcp
+		a.control.program = a.programAction
 		a.control.open = func(paths []string) ([]localFile, []string) {
 			problems := a.files.add(paths)
 			return a.files.within(paths), problems

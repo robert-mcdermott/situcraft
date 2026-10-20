@@ -39,6 +39,7 @@ import { spatialEffectWords, testsOf } from '../lib/expression.js';
 import { expressionDocument as expressionDocumentOf } from './cohort-expression.js';
 import { FIGURE_SIZES, addPanel, checkFigure, createFigure, figuresOf, mm, panelLetters, panelSummary, removeFigure, saveFigure, toMM } from '../lib/figures.js';
 import { drawFigure, readBackFigure, writeFigure } from './figures.js';
+import { figurePicture, panelPicture, pictureWidth, tissuePicture } from './pictures.js';
 import { tissueViews, viewRegion } from './mode-reports.js';
 import { RECORD_FORMATS, recordOf } from './record-view.js';
 import { certify } from './certificate.js';
@@ -126,6 +127,10 @@ export function installRemote(app) {
   const project = () => store.project;
   // Who sent the action being performed (what the script calls itself).
   let author = 'a program on this computer';
+  // The leave of the action's sender (an agent's, situcraft mcp's --allow); null for a script, whose
+  // actions are the person's own.
+  let leave = null;
+  const allowed = (what) => !leave || leave.has(what);
   let counter = 0;
 
   // The samples as answers give them: each with its dataset, region, cells (under its dataset's
@@ -717,7 +722,17 @@ export function installRemote(app) {
         await waitFor(() => window.situcraftViewer?.focus?.()?.title === shownCells.title, 30000, 'the cells to be shown');
       }
       const now = showing();
-      return { message: `${dataset.name} in the Viewer${now.camera ? ` at (${now.camera.cx.toFixed(0)}, ${now.camera.cy.toFixed(0)}) µm, ${now.camera.umPerCss.toPrecision(3)} µm per pixel` : ''}${now.transcripts.genes.length ? `, ${now.transcripts.genes.join(', ')}` : ''}${missing.length ? `. Not in this dataset: ${missing.join(', ')}` : ''}.`, data: { showing: now, missing } };
+      // A picture of it, as a figure's tissue panel draws the view the Viewer shows (ui/pictures.js).
+      let picture = null;
+      if (args.picture) {
+        const shown = { ...(shownNow.captureView?.('') ?? view), id: `remote-${(counter += 1)}` };
+        try {
+          picture = await tissuePicture(app, shown, shownNow.stageSize?.(), { width: pictureWidth(args), caption: `${dataset.name} as the Viewer shows it` });
+        } catch (error) {
+          throw new ActionError(`The picture could not be drawn: ${error.message}`);
+        }
+      }
+      return { message: `${dataset.name} in the Viewer${now.camera ? ` at (${now.camera.cx.toFixed(0)}, ${now.camera.cy.toFixed(0)}) µm, ${now.camera.umPerCss.toPrecision(3)} µm per pixel` : ''}${now.transcripts.genes.length ? `, ${now.transcripts.genes.join(', ')}` : ''}${missing.length ? `. Not in this dataset: ${missing.join(', ')}` : ''}${picture ? `; a picture of it, ${picture.width} × ${picture.height} pixels` : ''}.`, data: { showing: now, missing, ...(picture ? { picture } : {}) } };
     },
 
     async add_image(args) {
@@ -1535,6 +1550,7 @@ export function installRemote(app) {
       const list = clusteringsOf(project(), dataset.id).filter((c) => c.state === 'complete');
       if (!list.length) throw new ActionError(`${dataset.name} has no clustering: cluster_cells makes one.`);
       const c = clusteringRef(list, args.clustering);
+      if (!allowed('compute') && !mapsOf(project(), dataset.id, c.segmentation).length) throw new ActionError(`${dataset.name}'s cells have no map yet, and making one runs a job: this agent was not given leave to (situcraft mcp --allow compute).`);
       await settleMode('celltypes');
       let map;
       try {
@@ -1593,9 +1609,21 @@ export function installRemote(app) {
         }
       }
       const shownMap = maps.find((m) => m.id === st.mapId);
+      // A picture of the map, as a figure's map panel draws it: by its clusters or a label set.
+      let picture = null;
+      if (args.picture) {
+        if (!st.mapId) throw new ActionError('No map is shown to picture.');
+        const color = st.color.kind === 'labels' ? `labels:${st.color.labels}:${st.color.level ?? 0}` : 'clusters';
+        try {
+          picture = await panelPicture(app, { kind: 'map', map: st.mapId, color }, { width: pictureWidth(args), caption: `${shownMap?.name ?? 'The map'}, ${color === 'clusters' ? 'by cluster' : 'by label'}` });
+        } catch (error) {
+          throw new ActionError(`The picture could not be drawn: ${error.message}`);
+        }
+        if (!['clusters', 'labels'].includes(st.color.kind)) picture.notes = [...picture.notes, 'A picture colors the map by its clusters or a label set; the window colors it otherwise.'];
+      }
       return {
-        message: `${c.name} on ${shownMap?.name.toLowerCase() ?? 'no map'} and the tissue${st.count ? `: ${plural(st.count, 'cell')} selected` : ''}.`,
-        data: { clustering: c.id, map: st.mapId, trustworthiness: shownMap?.summary?.trustworthiness ?? null, color: st.color, selected: st.count, composition },
+        message: `${c.name} on ${shownMap?.name.toLowerCase() ?? 'no map'} and the tissue${st.count ? `: ${plural(st.count, 'cell')} selected` : ''}${picture ? `; a picture of the map, ${picture.width} × ${picture.height} pixels` : ''}.`,
+        data: { clustering: c.id, map: st.mapId, trustworthiness: shownMap?.summary?.trustworthiness ?? null, color: st.color, selected: st.count, composition, ...(picture ? { picture } : {}) },
       };
     },
 
@@ -2732,9 +2760,18 @@ export function installRemote(app) {
       app.reportsView?.select(fig.id);
       const { drawn } = await drawFigure(app, fig, { dpi: 300 });
       const letters = panelLetters(fig);
+      let picture = null;
+      if (args.picture) {
+        try {
+          picture = await figurePicture(app, fig, { width: pictureWidth(args), drawn });
+        } catch (error) {
+          throw new ActionError(`The picture could not be drawn: ${error.message}`);
+        }
+      }
       return {
         message: `${drawn.description}${drawn.notes.length ? ` Notes: ${drawn.notes.join(' ')}` : ''}`,
         data: {
+          ...(picture ? { picture } : {}),
           id: fig.id, name: fig.name, size: fig.size, width_mm: toMM(fig.width), height_mm: toMM(fig.height), text: fig.text, description: drawn.description, notes: drawn.notes, smallest: drawn.smallest,
           panels: fig.panels.map((p, i) => ({ id: p.id, letter: letters.get(p.id) ?? null, kind: p.kind, shows: panelSummary(p, project()), x: p.x, y: p.y, w: p.w, h: p.h, ...(p.region ? { region: p.region } : {}), ...(drawn.panels[i].facts ? { facts: drawn.panels[i].facts } : {}), notes: drawn.panels[i].notes })),
         },
@@ -3323,6 +3360,7 @@ export function installRemote(app) {
       if (!handler) throw new ActionError(`Unknown action "${event.action}". Actions: ${Object.keys(actions).join(', ')}.`);
       const args = typeof event.args === 'object' && event.args && !Array.isArray(event.args) ? event.args : {};
       author = event.client || 'a program on this computer';
+      leave = event.restricted ? new Set(event.leave ?? []) : null;
       app.log(`${author}: ${event.action}${Object.keys(args).length ? ` ${JSON.stringify(args).slice(0, 200)}` : ''}`);
       // A dialog left open (one an earlier action showed, or the user's) would hide what this
       // action shows: it is closed as Escape closes it, its question unanswered.

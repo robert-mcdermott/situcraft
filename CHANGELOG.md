@@ -34,6 +34,26 @@ a window.
     the real command's stdout carrying only the protocol, and attaching to a running SituCraft; in
     the browser, an agent's changes named in the History drawer.
 
+- **Answers that name their sources (wave 9, slice 2).** Three actions the program answers itself,
+  from the library and the results' folders, with or without a window:
+  - **`list_projects`:** the library's projects, the most recently changed first.
+  - **`describe_project`:** what a project holds without opening it: its datasets, every result
+    with its id, kind, method and the ids of what it was made from, the page's records, regions,
+    saved views, figures and decisions.
+  - **`get_result`:** a result's record (method, parameters, what it was made from, software,
+    job, findings, the projects holding it) and its numbers as tables, a page at a time: each
+    spatial question's (an enrichment's pairs, Ripley's curves, the bands across an edge, Moran's
+    I by gene…), a clustering's clusters, a label set's labels, a cohort comparison's tests and a
+    cohort summary's table, and its summary as the report shows it.
+  - **Pictures:** `show_tissue`, `show_map` and `figure` with `picture` also give a picture of what
+    they show, drawn as a figure draws it (the tissue with its scale bar and legend, a map by
+    cluster or label, a figure), which an agent receives as an image.
+  - **A read-only agent sees maps:** `show_map` now needs no leave, and the window does not make a
+    map for an agent not given compute.
+  - **Validated:** the tables against the numbers in the results' files, paging, a project's
+    results and records, the program answering a script and an agent with no window open; on the
+    development library, every kind of result read and two pictures looked at.
+
 ### Changed
 
 - **Files named by an argument need the token.** A script that has `import_labels` or

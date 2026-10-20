@@ -33,6 +33,9 @@ type remoteAction struct {
 	readsAt bool
 	// writes: a job writes files on this computer where the arguments say, so it needs the token.
 	writes bool
+	// program: the program answers it itself, from the library and the artifacts (results.go),
+	// without a page.
+	program bool
 }
 
 func schema(properties map[string]any, required ...string) map[string]any {
@@ -59,6 +62,16 @@ var datasetArg = textArg("A dataset of the project by name or id; the one in foc
 
 var remoteActions = []remoteAction{
 	{Name: "get_state", Title: "Describe the project", Description: "The open project: its datasets (each bundle's place, whether it is found, its check, its derived data), filters and saved views; the view shown, the item in focus, the cells chosen, what the Viewer or QC view shows (dataset, place, zoom, genes, map); the items on this computer; the examples; the jobs running.", InputSchema: schema(map[string]any{})},
+	{Name: "list_projects", Title: "List the projects", Description: "The library's projects, the most recently changed first: each one's id, name, when it was made and changed, its datasets, and how many results, figures and saved views it has. Answered by the program from the library, with or without a window.", InputSchema: schema(map[string]any{}), program: true},
+	{Name: "describe_project", Title: "Describe a project", Description: "What a project of the library holds, without opening it: its datasets (each bundle's place, run, panel, tissue, cells and transcripts), its results (each one's id, kind, name, dataset, method and the ids of what it was made from: segmentations, comparisons, clusterings and maps, label sets, graphs, spatial analyses, cohort summaries and comparisons, images and alignments), the page's records (filters, designs, marker sets, curated and consensus labels), its regions, saved views, figures and decisions. get_result gives a result's record and numbers by its id. Answered by the program from the library, with or without a window.", InputSchema: schema(map[string]any{
+		"project": textArg("The project's name (or part of it) or id; the most recently changed if not given."),
+	}), program: true},
+	{Name: "get_result", Title: "Read a result", Description: "A result by its id (describe_project lists them): its record (kind, name, dataset, state, method with its version and citation, parameters, what it was made from, the software and the job, the checks' findings, the projects holding it), its summary, and its numbers as tables, a page of one table's rows at a time: a spatial analysis's by its question (an enrichment's or nearest distances' pairs, a co-occurrence's ratios by distance, Ripley's tests and curves, regions compared and their ratios, the bands, zones and ratios across an edge, the niches and their composition, Moran's I by gene), a clustering's clusters with their leading markers, a label set's labels, a cohort comparison's tests and a cohort summary's table (as their CSV files hold them), and every result's summary as the report shows it. Numbers are numbers, null where there is none. Answered by the program from the artifacts, with or without a window.", InputSchema: schema(map[string]any{
+		"id":     textArg("The result's id, such as spa-…, clu-…, lab-…, seg-…, coh-…, abu-…"),
+		"table":  textArg("The table to read (its first if not given; the answer lists them)."),
+		"offset": map[string]any{"type": "integer", "minimum": 0, "description": "The first row (0)."},
+		"limit":  map[string]any{"type": "integer", "minimum": 0, "description": "Rows to answer (100; 0 for all, up to 10,000)."},
+	}, "id"), program: true},
 	{Name: "new_project", Title: "Start a new project", Description: "Starts a new, empty project (the open one is saved in the library first).", InputSchema: schema(map[string]any{
 		"name": textArg("A name for it."),
 	})},
@@ -114,6 +127,8 @@ var remoteActions = []remoteAction{
 		"images":          map[string]any{"type": "object", "description": "Post-Xenium images, by name or artifact ID: {visible, opacity (0 to 1), channels: {by name: {visible, color, window, gamma}} (immunofluorescence)}, each optional."},
 		"graph":           textArg("A graph of the segmentation drawn, its edges drawn over the cells when zoomed in: by artifact ID, latest for the last built, none for none."),
 		"cells_of":        map[string]any{"type": "object", "description": "A spatial analysis's cells: {analysis (its ID, or latest), a, b (labels by name), distance (a co-occurrence's, a nearest distance's or a Ripley radius, µm)}: an enrichment's pair, their cells neighboring each other and the edges between them; or label b's cells within the distance of a's. Regions compared: {analysis, a, region (a region's name, or the row of the tissue in none)}: label a's cells in it. Across an edge: {analysis, a (any label if not given), zone (core, margin, around or all)}: label a's cells there. Niches: {analysis, niche (its number from 1)}: the niche's cells, filled by niche. Moran's I: {analysis, gene (one whose local Moran's I was kept), class (high, low, high-low, low-high or all)}: the gene's cells of that local class. The cells filled by the analysis's labels."},
+		"picture":         flagArg("Answer a picture of what the Viewer shows too, drawn as a figure's tissue panel draws it, with its scale bar and legend (a JPEG): an agent gets it as an image."),
+		"picture_width":   numberArg("The picture's width in pixels (1,000; 300 to 2,000)."),
 	}), long: true},
 	{Name: "add_image", Title: "Add a post-Xenium image", Description: "Adds an H&E or immunofluorescence image of a dataset's section, stained and scanned after the Xenium run, as a job: a pyramidal, tiled OME-TIFF (as Xenium Explorer requires; RGB, or channels of 8 or 16 bits; deflate, LZW, JPEG or JPEG 2000), read where it lies, never copied, and recorded as an image artifact with its SHA-256. Its alignment, the transformation matrix or keypoints Xenium Explorer saves (found beside the image when 10x named it, else named; null for none), is recorded as the image's first transform and places it; without one the image is not aligned until align_image places it. The Viewer draws an aligned image under the transcripts and cells. Needs the token (it reads files). Answers what the image is and how it is placed.", InputSchema: schema(map[string]any{
 		"dataset":   datasetArg,
@@ -326,11 +341,13 @@ var remoteActions = []remoteAction{
 		"segmentation": textArg("The other segmentation, by name or artifact id."),
 	}, "segmentation"), long: true},
 	{Name: "show_map", Title: "Show the map", Description: "Shows a clustering in the Cell types view, with its map (UMAP; made first if it has none) beside the tissue, linked: the cells colored by a clustering's clusters, a gene's expression, their gene transcripts, area or how faithfully the map keeps their neighbors, and a selection of cells (by cluster, or inside a polygon on the map or the tissue) drawn on both. Answers the map's trustworthiness, the selection's size and its composition by cluster.", InputSchema: schema(map[string]any{
-		"dataset":    datasetArg,
-		"clustering": textArg("A clustering, by artifact id or name; SituCraft's latest if not given."),
-		"map":        textArg("The map: a map's artifact id, or instrument for the instrument's; the clustering's own if not given."),
-		"color_by":   textArg("clusters (the clustering's), clusters:<clustering>, labels (its latest label set, the first level), labels:<level>, labels:<label set>:<level>, confidence, a gene's name, transcripts, area or reliability."),
-		"select":     map[string]any{"description": "{\"clusters\": [numbers from 1]}, {\"polygon\": [[x, y], …], \"on\": \"map\" or \"tissue\" (µm)}, or \"none\"."},
+		"dataset":       datasetArg,
+		"clustering":    textArg("A clustering, by artifact id or name; SituCraft's latest if not given."),
+		"map":           textArg("The map: a map's artifact id, or instrument for the instrument's; the clustering's own if not given."),
+		"color_by":      textArg("clusters (the clustering's), clusters:<clustering>, labels (its latest label set, the first level), labels:<level>, labels:<label set>:<level>, confidence, a gene's name, transcripts, area or reliability."),
+		"select":        map[string]any{"description": "{\"clusters\": [numbers from 1]}, {\"polygon\": [[x, y], …], \"on\": \"map\" or \"tissue\" (µm)}, or \"none\"."},
+		"picture":       flagArg("Answer a picture of the map too, by its clusters or a label set (a PNG): an agent gets it as an image."),
+		"picture_width": numberArg("The picture's width in pixels (1,000; 300 to 2,000)."),
 	}), long: true},
 	{Name: "name_clusters", Title: "Name clusters", Description: "Names a clustering's clusters (a new version of its names, appended; the clusters keep their numbers). Clusters given the same name are merged on the map and the tissue. An empty name removes one.", InputSchema: schema(map[string]any{
 		"dataset":    datasetArg,
@@ -593,18 +610,20 @@ var remoteActions = []remoteAction{
 		"names":       flagArg("For a report or a package: leave out the samples' and subjects' names (each written Sample 1, Subject 1, …)."),
 	}, "what", "path"), long: true, output: true},
 	{Name: "figure", Title: "Make or change a figure", Description: "Makes or changes a figure of the project, in the Reports view: a page of panels (a journal's column, 85, 114 or 174 mm wide, or a 16:9 slide), each a saved view of the tissue at the figure's size (its stains composited from their samples, its cells' outlines and fill and its genes' transcripts, in µm, with a scale bar and a legend), lettered A, B, C in reading order. With views, the figure's panels are those views side by side; with panels, any panels (the tissue, a QC distribution, the cells' map, a spatial answer, a cohort's comparison, text) laid out in rows; either makes a new figure when none has the name. The tissue panels of a row share their images' height. Answers what it shows, each panel's letter, region in µm, µm a point, scale bar and the cells and transcripts it draws, and notes (a fill not drawn, too many transcripts). remove: true removes it.", InputSchema: schema(map[string]any{
-		"name":       textArg("The figure, by name or ID (a new one with views)."),
-		"views":      map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Saved views of the tissue, by name or ID, each a panel, side by side."},
-		"panels":     map[string]any{"type": "array", "items": map[string]any{"type": "object"}, "description": "The panels, in order, each an object of its kind: {kind: tissue, view, width_um?, center?, regions? (true for all, or their names)}; {kind: qc, dataset, metric (transcripts, total, area, nucleusArea), log?, filter?, segmentation?}; {kind: map, map, color? (clusters, or labels:<label set ID>:<level>)}; {kind: spatial, analysis (enrichment, distances or Moran's I)}; {kind: cohort, comparison, plot (forest, units, volcano, gene), family?, label?, gene?, contrast?, key?}; {kind: text, text}. Each names what it draws by name or ID; the title of any."},
-		"columns":    numberArg("How many panels a row holds (as many as the panels, up to 3, if not given)."),
-		"size":       textArg("single (85 mm), onehalf (114 mm), double (174 mm, the default) or slide."),
-		"height_mm":  numberArg("The page's height in mm (the size's if not given)."),
-		"text":       numberArg("The text's size in pt (6 to 36; 7 if not given, 14 on a slide)."),
-		"width_um":   numberArg("Each tissue panel's width of tissue in µm (what the view shows in a Viewer 1,000 CSS pixels wide if not given)."),
-		"center":     map[string]any{"type": "array", "items": map[string]any{"type": "number"}, "minItems": 2, "maxItems": 2, "description": "Each tissue panel's center, [x, y] in µm (its view's if not given)."},
-		"scale_bar":  numberArg("The scale bar's length in µm (a round length about a fifth of the width if not given)."),
-		"point_size": numberArg("The transcripts' points, in pt across (1.2 if not given)."),
-		"remove":     flagArg("Remove the figure."),
+		"name":          textArg("The figure, by name or ID (a new one with views)."),
+		"views":         map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Saved views of the tissue, by name or ID, each a panel, side by side."},
+		"panels":        map[string]any{"type": "array", "items": map[string]any{"type": "object"}, "description": "The panels, in order, each an object of its kind: {kind: tissue, view, width_um?, center?, regions? (true for all, or their names)}; {kind: qc, dataset, metric (transcripts, total, area, nucleusArea), log?, filter?, segmentation?}; {kind: map, map, color? (clusters, or labels:<label set ID>:<level>)}; {kind: spatial, analysis (enrichment, distances or Moran's I)}; {kind: cohort, comparison, plot (forest, units, volcano, gene), family?, label?, gene?, contrast?, key?}; {kind: text, text}. Each names what it draws by name or ID; the title of any."},
+		"columns":       numberArg("How many panels a row holds (as many as the panels, up to 3, if not given)."),
+		"size":          textArg("single (85 mm), onehalf (114 mm), double (174 mm, the default) or slide."),
+		"height_mm":     numberArg("The page's height in mm (the size's if not given)."),
+		"text":          numberArg("The text's size in pt (6 to 36; 7 if not given, 14 on a slide)."),
+		"width_um":      numberArg("Each tissue panel's width of tissue in µm (what the view shows in a Viewer 1,000 CSS pixels wide if not given)."),
+		"center":        map[string]any{"type": "array", "items": map[string]any{"type": "number"}, "minItems": 2, "maxItems": 2, "description": "Each tissue panel's center, [x, y] in µm (its view's if not given)."},
+		"scale_bar":     numberArg("The scale bar's length in µm (a round length about a fifth of the width if not given)."),
+		"point_size":    numberArg("The transcripts' points, in pt across (1.2 if not given)."),
+		"remove":        flagArg("Remove the figure."),
+		"picture":       flagArg("Answer a picture of the figure too, as it draws now (a PNG): an agent gets it as an image."),
+		"picture_width": numberArg("The picture's width in pixels (1,000; 300 to 2,000)."),
 	}), long: true},
 	{Name: "write_figure", Title: "Write a figure", Description: "Writes a figure as SVG, PDF (vector, its text in Helvetica) or PNG (300 dpi by default), or its manifest as JSON, with its manifest inside: the figure, what each panel shows and was drawn from (the dataset by its bundle's run and fingerprint, the saved view, the artifacts drawn), a digest of each panel's drawing, SituCraft's version and commit, and a fingerprint. Answers the manifest's fingerprint and digests and each panel's facts. The same figure written at the same time is the same bytes in SVG and PDF.", InputSchema: schema(map[string]any{
 		"name":      textArg("The figure, by name or ID (the only one if not given)."),
@@ -716,6 +735,9 @@ type actionHint struct {
 var actionHints = map[string]actionHint{
 	// Reading, and showing in the window.
 	"get_state":            {},
+	"list_projects":        {},
+	"describe_project":     {},
+	"get_result":           {},
 	"open_project":         {},
 	"set_mode":             {},
 	"focus":                {},
@@ -734,16 +756,18 @@ var actionHints = map[string]actionHint{
 	"label_evidence":       {},
 	"reviews":              {},
 	"show_comparison":      {},
-	"jobs":                 {flags: map[string]uint8{"do": leaveCompute}},
-	"methods":              {},
-	"samples":              {},
-	"cohort_table":         {},
-	"cohort_qc":            {},
-	"show_gene":            {},
-	"show_sample_cells":    {},
-	"compare_panels":       {},
-	"record":               {},
-	"verify_records":       {},
+	// It makes a map when the segmentation has none: the page does not for an agent without compute.
+	"show_map":          {},
+	"jobs":              {flags: map[string]uint8{"do": leaveCompute}},
+	"methods":           {},
+	"samples":           {},
+	"cohort_table":      {},
+	"cohort_qc":         {},
+	"show_gene":         {},
+	"show_sample_cells": {},
+	"compare_panels":    {},
+	"record":            {},
+	"verify_records":    {},
 	// Changing the project.
 	"new_project":         {leave: leaveEdits},
 	"use_transform":       {leave: leaveEdits},
@@ -773,7 +797,6 @@ var actionHints = map[string]actionHint{
 	"build_graph":            {leave: leaveCompute},
 	"spatial_analysis":       {leave: leaveCompute},
 	"remake_analysis":        {leave: leaveCompute},
-	"show_map":               {leave: leaveCompute},
 	"instrument_clusters":    {leave: leaveCompute},
 	"label_cells":            {leave: leaveCompute},
 	"reference_labels":       {leave: leaveCompute | leaveFiles, files: []string{"path"}},

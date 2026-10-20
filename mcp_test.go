@@ -275,7 +275,8 @@ func TestMCPToolCallsReachThePageUnderTheAgentsName(t *testing.T) {
 	server := &mcpServer{hub: hub, pageWait: time.Second}
 	replies := runLines(t, server, `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"segmentations","arguments":{"dataset":"xenium-lung-2fov"}}}`)
 	result := replies[0]["result"].(map[string]any)
-	if seen.Action != "segmentations" || seen.Client != "an AI agent" {
+	// Restricted to its leave, none given: the page computes nothing on the way.
+	if seen.Action != "segmentations" || seen.Client != "an AI agent" || !seen.Restricted || len(seen.Leave) != 0 {
 		t.Fatalf("page saw %+v", seen)
 	}
 	var args map[string]any
@@ -552,7 +553,7 @@ func TestMCPAttachesToTheSituCraftServingTheLibrary(t *testing.T) {
 	if r := replies[3]["result"].(map[string]any); r["isError"] != true || !strings.Contains(textOf(t, r), "--allow compute") {
 		t.Fatalf("cluster_cells: %v", r)
 	}
-	if len(seen) != 1 || seen[0].Action != "get_state" || seen[0].Client != "Claude Code" {
+	if len(seen) != 1 || seen[0].Action != "get_state" || seen[0].Client != "Claude Code" || !seen[0].Restricted {
 		t.Fatalf("the page saw %+v", seen)
 	}
 }

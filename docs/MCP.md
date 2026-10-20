@@ -18,6 +18,8 @@ the project's history with its name, and you can undo it or take over at any tim
 - [Your window, or one of its own](#your-window-or-one-of-its-own)
 - [What to ask](#what-to-ask)
 - [Tools](#tools)
+- [Results as tables](#results-as-tables)
+- [Pictures](#pictures)
 - [Files](#files)
 - [Privacy and security](#privacy-and-security)
 - [Troubleshooting](#troubleshooting)
@@ -196,12 +198,15 @@ banner (in the client's logs) yourself.
 
 ## What to ask
 
-Start with what is open, and say what you want to know:
+Start with what is in your library, or what is open, and say what you want to know:
 
+- "Which projects do I have, and what was found in the Lung one?" (`list_projects`,
+  `describe_project`, `get_result`, without opening anything)
 - "What is in SituCraft now? Which datasets, and is each bundle healthy?" (`get_state`,
   `qc_metrics`)
 - "List the Lung dataset's segmentations and say how each was made." (`segmentations`, `record`)
-- "Show the tissue around the tumor nest region with CD3E and EPCAM." (`regions`, `show_tissue`)
+- "Show me the tissue around the tumor nest region with CD3E and EPCAM." (`regions`,
+  `show_tissue` with `picture`: the agent sees it too)
 - "Which labels are enriched near each other in the Lung, and is the answer the same on the
   refined segmentation?" (needs `--allow compute`: `spatial_analysis`, `remake_analysis`)
 - "Write the methods for the whole project, with their references." (`methods`)
@@ -220,11 +225,12 @@ may replace or remove something, and whether it may reach the network (downloadi
 
 | Area | Tools |
 | --- | --- |
+| The library | `list_projects`, `describe_project`, `get_result` (answered without the window) |
 | The project | `get_state` (start here), `open_project`, `set_mode`, `focus`, `jobs` (with `do`, needs compute) |
-| The tissue | `show_tissue`, `select_cell`, `open_view`, `regions`, `show_alignment` |
+| The tissue | `show_tissue` (with `picture`), `select_cell`, `open_view`, `regions`, `show_alignment` |
 | Quality control | `qc_metrics`, `set_qc_map`, `select_cells` |
 | Segmentations | `segmentations`, `refinement_preflight`, `show_comparison`, `label_impact` |
-| Labels and reviews | `label_evidence`, `review_labels`, `reviews` |
+| Cell types | `show_map` (with `picture`; making a map where there is none needs compute), `label_evidence`, `review_labels`, `reviews` |
 | Cohorts | `samples`, `compare_panels`, `cohort_table`, `cohort_qc`, `show_gene`, `show_sample_cells` |
 | The record | `record`, `methods`, `verify_records` |
 
@@ -239,7 +245,7 @@ may replace or remove something, and whether it may reach the network (downloadi
 | Data | `add_dataset`, `open_example`, `tour` |
 | Images | `align_image`, `register_image`, `check_alignment` |
 | Segmentations | `expand_nuclei`, `refine_segmentation`, `compare_segmentations`, `plant_errors` |
-| Cell types | `cluster_cells`, `show_map`, `instrument_clusters`, `label_cells`, `import_labels` (an instrument's clusters; a table needs files), `repeat_on_segmentation`, `consensus_labels` |
+| Cell types | `cluster_cells`, `instrument_clusters`, `label_cells`, `import_labels` (an instrument's clusters; a table needs files), `repeat_on_segmentation`, `consensus_labels` |
 | Spatial | `build_graph`, `spatial_analysis`, `remake_analysis` |
 | Cohorts | `cohort_steps`, `summarize_samples`, `compare_abundance`, `compare_expression`, `compare_spatial` |
 
@@ -251,6 +257,54 @@ may replace or remove something, and whether it may reach the network (downloadi
 A result is the action's sentence and its data: as text (the data's JSON after the sentence) and
 as structured content. An action SituCraft refuses is a tool error carrying its reason (`No
 dataset "liver" in the project.`), which the agent can act on.
+
+The tools SituCraft's product requirements name, and the tool that does each:
+
+| Named in the requirements | SituCraft's tool |
+| --- | --- |
+| `list_projects`, `describe_project` | the same |
+| `list_datasets`, `list_segmentations`, `list_label_sets`, `list_saved_analyses` | `describe_project`; in the open project, `get_state` and `segmentations` |
+| `get_dataset_qc` | `qc_metrics` |
+| `get_analysis_result` | `get_result` |
+| `compare_segmentations` | `compare_segmentations` (with compute), `show_comparison`, `get_result` |
+| `query_cells`, `summarize_roi` | the typed filter tree, in the next slice; `regions` counts a region's cells |
+| `create_saved_view` | `save_view` (with edits) |
+| `get_job_status`, `cancel_job` | `jobs`, and `jobs` with `do` (with compute) |
+| `submit_segmentation_job` | `refine_segmentation` (with compute) |
+
+## Results as tables
+
+`describe_project` lists a project's results by id, with what each was made from, without opening
+it. `get_result` gives a result's record and its numbers as tables, one table's rows at a time:
+
+| A result | Its tables |
+| --- | --- |
+| Neighborhood enrichment | `pairs`: each pair of labels' count, expected, permutations' mean and SD, z, p and adjusted p |
+| Co-occurrence | `ratios`: each distance and pair's count and ratio |
+| Nearest distances | `pairs`: each pair's cells beyond reach, median and mean distance, the permutations', z, p and adjusted p |
+| Ripley's K | `pairs` (p and adjusted p) and `curves` (each pair and radius: K, L, the permutations' mean and band) |
+| Regions compared | `rows` (each region and the tissue in none, by label: area, count, density and share with intervals) and `ratios` (one row over another) |
+| Across an edge | `bands`, `zones` (core, margin, around) and `ratios` (the zones compared, by label) |
+| Niches | `niches` (cells, defining labels, leading genes) and `composition` |
+| Moran's I | `genes`: I, z, p, adjusted p, the permutations', mean expression, cells detected |
+| A clustering | `clusters`: cells, share and leading markers |
+| A label set | `labels`: each level's labels, cells and share |
+| A cohort's comparison | `results`: every test, as its `results.csv` holds it |
+| A cohort summary | `table` (every sample's numbers) and `pseudobulk` |
+| Every result | `summary` (its numbers and words) and `summary.<key>` (its lists), as the report shows them |
+
+`table` chooses a table (the first if not given), `offset` and `limit` a page of its rows (100 at a
+time; `limit: 0` for up to 10,000). The answer lists every table with its columns and rows. Numbers
+are numbers, `null` where there is none.
+
+## Pictures
+
+`show_tissue`, `show_map` and `figure` with `picture: true` give a picture too, drawn as a figure
+draws it: the tissue as the Viewer shows it, with its scale bar and legend (a JPEG); a clustering's
+map, by its clusters or a label set (a PNG); a figure as it draws now (a PNG). `picture_width` sets
+its width in pixels (1,000; 300 to 2,000). The agent receives each as an image after the text,
+captioned, and the data names it by its number; a script gets it as a data URL. The pictures of
+one result are limited to 8 MB in all.
 
 ## Files
 

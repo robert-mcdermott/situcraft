@@ -48,7 +48,7 @@ const (
 	mcpReopenAfter  = 20 * time.Second
 	mcpProgressTick = 5 * time.Second
 	mcpEndGrace     = time.Second
-	mcpInstructions = "SituCraft analyzes imaging spatial transcriptomics (10x Genomics Xenium output bundles) in a window on this computer, which the user watches: the tissue and its transcripts, segmentations and their comparison, quality control, clusters and cell types, post-Xenium H&E and immunofluorescence images, regions, spatial statistics, cohorts of samples compared between groups, figures, and a record anyone can check. Start with get_state (the open project) and jobs. Open data with open_example (10x Genomics' example bundles and simulated tissues whose truth is known) or open_paths (absolute paths of Xenium output bundles). Every result is an artifact with its lineage; record says what made one and methods writes its methods. Results are research findings, never a diagnosis. You may have been given read-only tools only: the user starts this server with --allow edits (change the project: regions, views, filters, names, decisions, figures), --allow compute (start jobs: clustering, labels, graphs, spatial analyses, segmentation, cohort comparisons) or --allow files (read and write files by absolute path, download examples). A tool refused for its leave says which it needs; do not try to work around it. Every change appears in the window, is named in the project's history with your name, and can be undone there. Files are written only at absolute paths in folders that exist, never over a file unless overwrite is given."
+	mcpInstructions = "SituCraft analyzes imaging spatial transcriptomics (10x Genomics Xenium output bundles) in a window on this computer, which the user watches: the tissue and its transcripts, segmentations and their comparison, quality control, clusters and cell types, post-Xenium H&E and immunofluorescence images, regions, spatial statistics, cohorts of samples compared between groups, figures, and a record anyone can check. Start with get_state (the open project) and jobs; list_projects, describe_project and get_result read the library's projects and any result's record and numbers (as tables, a page at a time) without opening anything. show_tissue, show_map and figure with picture: true also give you a picture of what they show. Open data with open_example (10x Genomics' example bundles and simulated tissues whose truth is known) or open_paths (absolute paths of Xenium output bundles). Every result is an artifact with its lineage; record says what made one and methods writes its methods. Results are research findings, never a diagnosis. You may have been given read-only tools only: the user starts this server with --allow edits (change the project: regions, views, filters, names, decisions, figures), --allow compute (start jobs: clustering, labels, graphs, spatial analyses, segmentation, cohort comparisons) or --allow files (read and write files by absolute path, download examples). A tool refused for its leave says which it needs; do not try to work around it. Every change appears in the window, is named in the project's history with your name, and can be undone there. Files are written only at absolute paths in folders that exist, never over a file unless overwrite is given."
 )
 
 type mcpMessage struct {
@@ -539,13 +539,18 @@ func (s *mcpServer) callTool(ctx context.Context, action remoteAction, raw json.
 		}
 		return commandResult(outcome)
 	}
+	if action.program && s.hub.program != nil {
+		if outcome, ok := s.hub.program(ctx, action.Name, encoded); ok {
+			return commandResult(outcome)
+		}
+	}
 	if s.hub.latest() == nil && s.openPage != nil {
 		s.openPage()
 	}
 	if !s.hub.waitForPage(ctx, s.pageWait) {
 		return toolError(fmt.Sprintf("No SituCraft page is connected. Open %s in a browser, then try again.", s.url))
 	}
-	event, release, err := s.hub.prepare(remoteEvent{Action: action.Name, Args: encoded, Client: client}, action)
+	event, release, err := s.hub.prepare(remoteEvent{Action: action.Name, Args: encoded, Client: client, Restricted: true, Leave: leaveList(s.allowed)}, action)
 	if err != nil {
 		return toolError(err.Error())
 	}
@@ -563,7 +568,7 @@ func (s *mcpServer) callAttached(ctx context.Context, action remoteAction, args 
 	deadline := time.Now().Add(s.pageWait)
 	opened := false
 	for {
-		outcome, status, err := s.attached.call(ctx, action.Name, args, client)
+		outcome, status, err := s.attached.call(ctx, action.Name, args, client, leaveList(s.allowed))
 		if status != http.StatusServiceUnavailable || !strings.Contains(err.Error(), "No SituCraft page") {
 			return outcome, err
 		}
@@ -580,6 +585,18 @@ func (s *mcpServer) callAttached(ctx context.Context, action remoteAction, args 
 		case <-time.After(500 * time.Millisecond):
 		}
 	}
+}
+
+// leaveList names the leave given, for the page (never null: an agent given none is still
+// restricted).
+func leaveList(allowed uint8) []string {
+	out := []string{}
+	for _, l := range leaveNames {
+		if allowed&l.bit != 0 {
+			out = append(out, l.name)
+		}
+	}
+	return out
 }
 
 func toolError(message string) map[string]any {
@@ -759,8 +776,8 @@ func sameFolder(a, b string) bool {
 
 // call sends an action as a script with the token does: its outcome, or the HTTP status and why
 // it could not be performed.
-func (a *attachedSituCraft) call(ctx context.Context, action string, args json.RawMessage, client string) (remoteResult, int, error) {
-	payload, _ := json.Marshal(map[string]any{"action": action, "args": args, "client": client})
+func (a *attachedSituCraft) call(ctx context.Context, action string, args json.RawMessage, client string, leave []string) (remoteResult, int, error) {
+	payload, _ := json.Marshal(map[string]any{"action": action, "args": args, "client": client, "leave": leave})
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, a.url+"/api/remote/action", bytes.NewReader(payload))
 	if err != nil {
 		return remoteResult{}, 0, err

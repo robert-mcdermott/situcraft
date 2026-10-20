@@ -3956,11 +3956,34 @@ without a model, in CI.
      attaching to a SituCraft serving the library. In the browser, a session through `situcraft
      mcp` attached to the development SituCraft: the agent's region, clustering and map in the
      History drawer under its name, an export refused for its leave.
-2. **Answers that name their sources (A2).** Read tools served by the program from the library and
-   the artifacts, without the window: the projects, a project's datasets and what was made of them,
-   segmentations, label sets, clusterings, analyses and comparisons, a result's numbers as rows,
-   and its record; every answer naming its artifacts; pictures as image content (the tissue as the
-   Viewer shows it, a map, a figure), so that an agent sees what it asked for.
+2. **Answers that name their sources (A2): done.**
+   - **Answered by the program** (`results.go`; actions marked `program`, which the hub and the MCP
+     server answer without a page): `list_projects`; `describe_project` (a project's datasets, its
+     results with their ids, kinds, methods and parents' ids, the page's records, regions, saved
+     views, figures and decisions; of several projects of one name, the most recently changed,
+     said); `get_result` (any result's record from its manifest, or a page record's from its
+     project, with the projects holding it).
+   - **Numbers as tables,** paged (`table`, `offset`, `limit`): each spatial question's from
+     `analysis.json`'s arrays as their comments lay them out (pairs, ratios by distance, Ripley's
+     tests and curves, regions' rows and ratios, bands, zones and ratios across an edge, niches and
+     their composition, Moran's I by gene); a clustering's clusters and leading markers; a label
+     set's labels; the CSV files a result keeps (a comparison's tests, a cohort summary's table,
+     its pseudobulk last); and its summary walked as the report walks it, its keys in order
+     (`summary`, `summary.<key>`). Numbers as numbers, null where there is none.
+   - **Pictures** (`web/ui/pictures.js`): a figure made for the moment and never kept, one panel
+     filling it, painted at `picture_width`: the tissue as the Viewer shows it (its view captured,
+     carried by the panel, `prepareTissue` reading it), with scale bar and legend, as a JPEG; a map
+     by clusters or a label set, and a figure, as PNGs; `show_tissue`, `show_map` and `figure` with
+     `picture`.
+   - **Found on the way:** `show_map` made a map where there was none, so a read-only agent could
+     not see one already made; it needs no leave now, and an agent's actions carry its leave
+     (`restricted`, `leave`) so that the page makes no map for one not given compute.
+   - **Validated** (`results_test.go`): an enrichment's pairs the numbers its `analysis.json`
+     holds, paging, tables by name, refusals; nearest distances' pairs; a project's results and
+     records; a filter's record; the program answering a script and an agent with no page; the
+     summary's tables as the report's. On the audit libraries, every kind of result read through
+     `situcraft mcp`; in the browser, a picture of the Lung's tissue and of its map looked at, and
+     the map's picture reaching a read-only agent as image content.
 3. **The typed filter tree (A3).** `internal/query`: the tree's schema, evaluated over a dataset's
    cell attributes, labels, clusters, niches and regions, and its transcripts; `query_cells`,
    `query_transcripts` and `summarize_region` (composition, densities, genes); the cells kept saved

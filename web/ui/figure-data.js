@@ -265,7 +265,8 @@ function ringMeets(xy, region) {
 // height. Throws when its view or dataset cannot be read.
 async function prepareTissue(app, fig, panel) {
   const project = app.store.project;
-  const view = (project.views ?? []).find((v) => v.id === panel.view);
+  // A picture's panel carries its view, never saved (ui/pictures.js).
+  const view = panel.inlineView ?? (project.views ?? []).find((v) => v.id === panel.view);
   if (!view) throw new Error(`The saved view ${panel.view} is not in the project.`);
   const dataset = project.datasets.find((d) => d.id === view.dataset);
   if (!dataset) throw new Error(`The saved view "${view.name}" is of a dataset no longer in the project.`);

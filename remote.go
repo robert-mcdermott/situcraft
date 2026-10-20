@@ -55,6 +55,8 @@ type remoteHub struct {
 	// scripts: programs may send actions (POST /api/remote/action). Off while an agent drives the
 	// window (situcraft mcp), whose actions come only from its stdin (after CytoWeave 0.8.0).
 	scripts bool
+	// program answers the actions the program performs itself (results.go), without a page.
+	program func(ctx context.Context, action string, args json.RawMessage) (remoteResult, bool)
 }
 
 type remoteClient struct {
@@ -72,6 +74,11 @@ type remoteEvent struct {
 	Files  []localFile     `json:"files,omitempty"`
 	Client string          `json:"client,omitempty"`
 	Output string          `json:"output,omitempty"`
+	// Restricted: the sender was given only the Leave named (an agent, situcraft mcp), so the page
+	// does not compute, or change, what the action would otherwise make on the way (a map
+	// show_map makes when there is none). A script is not restricted.
+	Restricted bool     `json:"restricted,omitempty"`
+	Leave      []string `json:"leave,omitempty"`
 }
 
 var (
@@ -247,6 +254,8 @@ func (h *remoteHub) serveAction(w http.ResponseWriter, r *http.Request) {
 		Action string          `json:"action"`
 		Args   json.RawMessage `json:"args"`
 		Client string          `json:"client"`
+		// Leave restricts the sender to what it names (situcraft mcp attached here sends its own).
+		Leave *[]string `json:"leave"`
 	}
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxRemoteActionBytes))
 	if err == nil {
@@ -257,6 +266,9 @@ func (h *remoteHub) serveAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	event := remoteEvent{Action: request.Action, Args: request.Args, Client: clientName(request.Client, "a program on this computer")}
+	if request.Leave != nil {
+		event.Restricted, event.Leave = true, *request.Leave
+	}
 	action, known := findAction(request.Action)
 	if !known {
 		// The page answers with the actions it knows; the hub need not know them all first.
@@ -272,6 +284,12 @@ func (h *remoteHub) serveAction(w http.ResponseWriter, r *http.Request) {
 		}
 		writeError(w, http.StatusUnauthorized, what+" needs the "+remoteTokenHeader+" header with the token SituCraft printed when it started (also in remote.json).")
 		return
+	}
+	if action.program && h.program != nil {
+		if outcome, ok := h.program(r.Context(), action.Name, request.Args); ok {
+			writeJSON(w, outcome)
+			return
+		}
 	}
 	event, release, err := h.prepare(event, action)
 	if err != nil {
