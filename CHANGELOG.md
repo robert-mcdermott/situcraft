@@ -54,6 +54,28 @@ a window.
     results and records, the program answering a script and an agent with no window open; on the
     development library, every kind of result read and two pictures looked at.
 
+- **Asking which cells and transcripts (wave 9, slice 3).** Questions put as a tree of conditions
+  in JSON, never a query string: `all`, `any` and `not` of conditions on a cell's QC numbers, its
+  count of a gene, its label, cluster or niche, its region or its distance from one, a box, or a
+  saved filter; on a transcript's gene, region, distance, cell and quality. SituCraft checks the
+  tree, refuses one it cannot read with the reason, and evaluates it over the dataset's columns.
+  - **`query_cells`:** the cells a tree keeps, counted, with the checksum a filter would record, a
+    page of them with the columns asked for, and how they divide among a label set's labels, a
+    clustering's clusters or a niches analysis's niches against all the cells.
+  - **`query_transcripts`:** the transcripts a tree keeps, counted by gene.
+  - **`summarize_region`:** a region's or box's area, its cells and their density, its labels
+    against the whole tissue, and the genes most abundant in it and most above the rest.
+  - All three are answered by the program from the library, with or without a window, on the
+    segmentation asked for (by default the one promoted).
+  - **Saved as a filter:** `save_filter` takes the same tree (`where`), and the cells it keeps
+    become a filter that clusterings, graphs and spatial analyses use, shown, compared and verified
+    in the QC view as any other.
+  - **Validated:** every kind of condition against counts made directly from the bundle's
+    columns; 500 random trees against a reading of each one cell at a time; the 17 filters the
+    page saved on the Lung bundle (0.1.0 to 0.6.0) reproduced cell for cell by the program; on the
+    development library, questions about the Lung's tumor nest through `situcraft mcp`, and a
+    filter saved from a tree used by a graph and verified again.
+
 ### Changed
 
 - **Files named by an argument need the token.** A script that has `import_labels` or

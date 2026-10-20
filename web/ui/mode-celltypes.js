@@ -10,7 +10,8 @@ import { h, icon, clear, formatCount, relativeTime } from './dom.js';
 import { toast } from './overlays.js';
 import { categoricalColor, colormapLUT } from '../lib/colormaps.js';
 import { promotedSegmentation, segmentationsOf } from '../lib/segmentations.js';
-import { evaluate, keepChecksum } from '../lib/filters.js';
+import { isTreeFilter } from '../lib/filters.js';
+import { filterKeep } from './filter-keeps.js';
 import { readCells } from '../lib/viewer-data.js';
 import { PARAMETERS, checkParameters, clusterName, clusterNames, clusteringsOf, contingency, describeClustering, filterRequest, mapsOf, mergedOf, nameClusters, nameOf } from '../lib/clusterings.js';
 import { mountCellMap } from './cell-map.js';
@@ -82,13 +83,17 @@ export function mountCellTypes(app, container) {
     return app.store.project.artifacts.filter((a) => a.kind === 'filter' && a.dataset === t.dataset.id).sort((a, b) => b.version - a.version || (a.created < b.created ? 1 : -1));
   }
 
-  // A filter's cells, applied again to the dataset's cells and checked against its recorded checksum.
+  // A filter's cells, applied again to the dataset's cells (by the program, a filter saved from a
+  // tree) and checked against its recorded checksum.
   async function filterCells(t, filter) {
-    const response = await fetch(`${t.item.url}/cells`);
-    if (!response.ok) throw new Error(`the dataset's cells: HTTP ${response.status}`);
-    const cells = readCells(await response.arrayBuffer());
-    const { keep } = evaluate(filter.conditions, cells);
-    if (keepChecksum(keep) !== filter.result.sha256) throw new Error(`the filter ${filter.name} v${filter.version} no longer keeps the cells it recorded`);
+    let cells = null;
+    if (!isTreeFilter(filter)) {
+      const response = await fetch(`${t.item.url}/cells`);
+      if (!response.ok) throw new Error(`the dataset's cells: HTTP ${response.status}`);
+      cells = readCells(await response.arrayBuffer());
+    }
+    const { keep, sha256 } = await filterKeep(t.item.url, app.store.project, filter, cells);
+    if (sha256 !== filter.result.sha256) throw new Error(`the filter ${filter.name} v${filter.version} no longer keeps the cells it recorded`);
     return filterRequest(filter, keep);
   }
 

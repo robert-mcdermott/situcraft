@@ -3984,11 +3984,37 @@ without a model, in CI.
      summary's tables as the report's. On the audit libraries, every kind of result read through
      `situcraft mcp`; in the browser, a picture of the Lung's tissue and of its map looked at, and
      the map's picture reaching a read-only agent as image content.
-3. **The typed filter tree (A3).** `internal/query`: the tree's schema, evaluated over a dataset's
-   cell attributes, labels, clusters, niches and regions, and its transcripts; `query_cells`,
-   `query_transcripts` and `summarize_region` (composition, densities, genes); the cells kept saved
-   as a filter; the page's filters read as the same tree, and the two evaluators checked against
-   each other.
+3. **The typed filter tree (A3): done.**
+   - **The tree** (`internal/query`): `all`, `any` and `not` of conditions, read strictly (one
+     kind a condition, only its own keys, bounds as numbers, `in` as names or whole numbers; at
+     most 32 deep, 1,000 nodes, 1,000 values a list) and refused with the reason; evaluated a
+     column at a time. On cells: a QC attribute's bounds, the instrument's segmentation method, a
+     gene's count, a label set's labels at a level, a clustering's clusters (by their names),
+     a niches analysis's niches, a region, the distance from its edge (negative inside), a box and
+     a saved filter; on transcripts: genes, region, distance, box, assigned or not, and a tree of
+     the cells they lie in.
+   - **Over the dataset's columns** (`queries.go`): the instrument's cells as the page reads its
+     cells table (each attribute computed as `lib/cell-attributes.js` computes it), another
+     segmentation's from its cells and counts; labels, clusters and niches from their artifacts,
+     refused when of another segmentation; regions by `spatial.Window`; transcripts from the
+     derived data's index, bounded by the tree's region, distance or box when it has one.
+   - **Answered by the program:** `query_cells` (the cells kept, the checksum a filter records, a
+     page with columns, the composition by a label set, clustering or niches against all),
+     `query_transcripts` (by gene) and `summarize_region` (area, cells, density, labels against
+     the tissue with their densities, the most abundant genes and those most above the rest), on
+     the segmentation asked for, by default the promoted one.
+   - **Filters as trees:** `save_filter` with `where` saves a filter holding the tree and its
+     words, its cells applied by the program (`POST /api/local/{index}/query`, given the page's
+     regions, filters and cluster names); the QC view, the Cell types and Spatial views'
+     analyses, the inspector, the methods and `verify_records` use it as any filter. A filter of
+     conditions reads as the tree of them.
+   - **Validated** (`internal/query/query_test.go`, `queries_test.go`): every kind of condition
+     against counts made directly from the bundle's columns; 500 random trees against a reading of
+     each, one cell at a time; refusals; transcripts by gene and by cell; a region summarized; the
+     17 filters the page saved on the Lung bundle (0.1.0 to 0.6.0) reproduced cell for cell by the
+     program through the page's route. In the browser, a filter saved from a tree reproduced in the
+     QC view, compared with another, used for a graph and verified again; on the audit library,
+     the Lung's tumor nest asked about through `situcraft mcp`.
 4. **The audit log (A4).** Every agent's and script's call logged in the library, refusals and
    errors too; shown, filtered and exported in the app; a call's artifacts linked to their records.
 5. **Recipes (E5).** A result's recipe from its record, saved as JSON and read back; `situcraft run

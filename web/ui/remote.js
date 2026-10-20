@@ -341,7 +341,8 @@ export function installRemote(app) {
   const datasetName = (id) => project().datasets.find((d) => d.id === id)?.name ?? id;
 
   function filterData(f) {
-    return { id: f.id, name: f.name, version: f.version, dataset: datasetName(f.dataset), conditions: f.conditions, cells: f.result.cells, kept: f.result.kept, sha256: f.result.sha256 };
+    const definition = f.tree ? { tree: f.tree, text: f.text } : { conditions: f.conditions };
+    return { id: f.id, name: f.name, version: f.version, dataset: datasetName(f.dataset), ...definition, cells: f.result.cells, kept: f.result.kept, sha256: f.result.sha256 };
   }
 
   const link = (view) => viewLink(location.href, project().id, view.id);
@@ -1104,7 +1105,19 @@ export function installRemote(app) {
       const dataset = resolveDataset(args.dataset);
       const name = String(args.name ?? '').trim();
       if (!name) throw new ActionError('Give the filter a name.');
-      if (!Array.isArray(args.conditions) || !args.conditions.length) throw new ActionError('conditions is a list: [{"attribute": "transcripts", "min": 20}, …].');
+      if (args.where !== undefined && args.where !== null) {
+        if (args.conditions !== undefined) throw new ActionError('Give conditions or where (a tree of conditions), not both.');
+        const q = await openIn('qc', dataset);
+        let filter;
+        try {
+          filter = await q.saveTreeFilter(name, typeof args.where === 'string' ? JSON.parse(args.where) : args.where);
+        } catch (err) {
+          throw new ActionError(`The tree was not applied: ${err.message}`);
+        }
+        await frames();
+        return { message: `Saved ${filter.name}, version ${filter.version}: it keeps ${plural(filter.result.kept, 'cell')} of ${filter.result.cells.toLocaleString('en-US')}, those ${filter.text}.`, data: filterData(filter) };
+      }
+      if (!Array.isArray(args.conditions) || !args.conditions.length) throw new ActionError('conditions is a list: [{"attribute": "transcripts", "min": 20}, …]; or give where, a tree of conditions.');
       const q = await openIn('qc', dataset);
       const methods = q.desc.cells?.methods ?? [];
       const conditions = args.conditions.map((c) => {
@@ -3020,7 +3033,7 @@ export function installRemote(app) {
       if (!record) return { checked: false, same: null, detail: 'the project has no such filter' };
       const dataset = p.datasets.find((d) => d.id === record.dataset);
       const q = await openIn('qc', dataset);
-      const again = q.verifyFilter(record);
+      const again = await q.verifyFilter(record);
       return { checked: true, same: again.same, detail: again.same ? `applied again to the cells, it keeps the same ${again.kept.toLocaleString('en-US')} cells` : `applied again, it keeps ${again.kept.toLocaleString('en-US')} cells (recorded ${record.result.kept.toLocaleString('en-US')}), SHA-256 ${again.sha256 === record.result.sha256 ? 'the same' : 'another'}`, differ: again.same ? [] : ['its cells'] };
     }
     if (s.kind === 'figure') {

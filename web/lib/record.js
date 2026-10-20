@@ -355,7 +355,8 @@ function stepOf(project, id, item, manifest, inputs) {
   }
   if (item.kind === 'filter') {
     step.method = { name: 'QC filter', version: String(r.version) };
-    step.parameters = { conditions: (r.conditions ?? []).map((c) => c.text ?? JSON.stringify(c)), kept: r.result?.kept, cells: r.result?.cells, checksum: r.result?.sha256 };
+    const definition = r.tree ? { tree: r.text ?? JSON.stringify(r.tree) } : { conditions: (r.conditions ?? []).map((c) => c.text ?? JSON.stringify(c)) };
+    step.parameters = { ...definition, kept: r.result?.kept, cells: r.result?.cells, checksum: r.result?.sha256 };
     return step;
   }
   if (item.kind === 'region') {

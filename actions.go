@@ -60,11 +60,20 @@ func numberArg(description string) map[string]any {
 
 var datasetArg = textArg("A dataset of the project by name or id; the one in focus, else the first, if not given.")
 
+// The project and dataset of an action the program answers from the library (no focus).
+var (
+	projectArg        = textArg("The project's name (or part of it) or id; the most recently changed if not given.")
+	libraryDatasetArg = textArg("A dataset of the project by name or id; its only one if not given.")
+)
+
+// cellTreeHelp is the grammar of a tree of cells (internal/query).
+const cellTreeHelp = "A tree is {all: [trees]}, {any: [trees]}, {not: tree} or one condition: {attribute: transcripts, genes, total, controls, area, nucleusArea, nucleusShare, density or nuclearShare, min, max} (bounds included; a cell without a value fails); {attribute: method, in: [names or numbers from 0]} (the instrument's segmentation's alone); {gene: name, min, max} (its transcripts in the cell; at least 1 when no bound); {labels: label set id, level, in: [names or numbers from 0]}; {clusters: clustering id, in: [names or numbers from 1]}; {niches: niches analysis id, in: [numbers from 1]}; {region: name or id} (its centroid inside); {distance: region, min, max} (µm from the region's edge, negative inside); {box: [x0, y0, x1, y1]} (µm); {filter: a saved filter's name or id} (the instrument's segmentation's alone)."
+
 var remoteActions = []remoteAction{
 	{Name: "get_state", Title: "Describe the project", Description: "The open project: its datasets (each bundle's place, whether it is found, its check, its derived data), filters and saved views; the view shown, the item in focus, the cells chosen, what the Viewer or QC view shows (dataset, place, zoom, genes, map); the items on this computer; the examples; the jobs running.", InputSchema: schema(map[string]any{})},
 	{Name: "list_projects", Title: "List the projects", Description: "The library's projects, the most recently changed first: each one's id, name, when it was made and changed, its datasets, and how many results, figures and saved views it has. Answered by the program from the library, with or without a window.", InputSchema: schema(map[string]any{}), program: true},
 	{Name: "describe_project", Title: "Describe a project", Description: "What a project of the library holds, without opening it: its datasets (each bundle's place, run, panel, tissue, cells and transcripts), its results (each one's id, kind, name, dataset, method and the ids of what it was made from: segmentations, comparisons, clusterings and maps, label sets, graphs, spatial analyses, cohort summaries and comparisons, images and alignments), the page's records (filters, designs, marker sets, curated and consensus labels), its regions, saved views, figures and decisions. get_result gives a result's record and numbers by its id. Answered by the program from the library, with or without a window.", InputSchema: schema(map[string]any{
-		"project": textArg("The project's name (or part of it) or id; the most recently changed if not given."),
+		"project": projectArg,
 	}), program: true},
 	{Name: "get_result", Title: "Read a result", Description: "A result by its id (describe_project lists them): its record (kind, name, dataset, state, method with its version and citation, parameters, what it was made from, the software and the job, the checks' findings, the projects holding it), its summary, and its numbers as tables, a page of one table's rows at a time: a spatial analysis's by its question (an enrichment's or nearest distances' pairs, a co-occurrence's ratios by distance, Ripley's tests and curves, regions compared and their ratios, the bands, zones and ratios across an edge, the niches and their composition, Moran's I by gene), a clustering's clusters with their leading markers, a label set's labels, a cohort comparison's tests and a cohort summary's table (as their CSV files hold them), and every result's summary as the report shows it. Numbers are numbers, null where there is none. Answered by the program from the artifacts, with or without a window.", InputSchema: schema(map[string]any{
 		"id":     textArg("The result's id, such as spa-…, clu-…, lab-…, seg-…, coh-…, abu-…"),
@@ -72,6 +81,34 @@ var remoteActions = []remoteAction{
 		"offset": map[string]any{"type": "integer", "minimum": 0, "description": "The first row (0)."},
 		"limit":  map[string]any{"type": "integer", "minimum": 0, "description": "Rows to answer (100; 0 for all, up to 10,000)."},
 	}, "id"), program: true},
+	{Name: "query_cells", Title: "Ask which cells", Description: "The cells of a dataset that a tree of conditions keeps (where), counted, with the SHA-256 of which they are (as a saved filter records it), a page of them (each one's row, id and centroid, and the columns asked for), and, with by, how they divide among a label set's labels, a clustering's clusters or a niches analysis's niches against all the cells. " + cellTreeHelp + " Answered by the program from the library, with or without a window; save_filter with the same tree saves them as a filter.", InputSchema: schema(map[string]any{
+		"where":        map[string]any{"type": "object", "description": "The tree of conditions."},
+		"project":      projectArg,
+		"dataset":      libraryDatasetArg,
+		"segmentation": textArg("The segmentation whose cells are asked about, by id or name, or instrument: the dataset's default (the one promoted, else the instrument's) if not given."),
+		"by":           textArg("A label set's, clustering's or niches analysis's id: the cells kept divided among its labels, clusters or niches."),
+		"level":        map[string]any{"type": "integer", "minimum": 0, "description": "The label set's level for by (0)."},
+		"columns":      map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Attributes or genes to give for each cell of the page."},
+		"offset":       map[string]any{"type": "integer", "minimum": 0, "description": "The first cell kept of the page (0)."},
+		"limit":        map[string]any{"type": "integer", "minimum": 0, "description": "Cells of the page (20; 0 for the most, 10,000)."},
+	}, "where"), program: true},
+	{Name: "query_transcripts", Title: "Ask which transcripts", Description: "The transcripts of a dataset that a tree of conditions keeps (where), of quality min_quality or more (20), counted by gene. A transcript condition is one of: {gene: name or [names]}; {region: name or id}; {distance: region, min, max} (µm from its edge, negative inside); {box: [x0, y0, x1, y1]} (µm); {assigned: true or false} (to a cell of the instrument's segmentation); {cells: a tree of cells} (assigned to a cell it keeps; the same conditions as query_cells). Combine them with {all: [...]}, {any: [...]} and {not: ...}. Bound the tree with a region, a distance's max or a box on a large dataset. Answered by the program from the library, with or without a window.", InputSchema: schema(map[string]any{
+		"where":       map[string]any{"type": "object", "description": "The tree of conditions."},
+		"project":     projectArg,
+		"dataset":     libraryDatasetArg,
+		"min_quality": map[string]any{"type": "number", "minimum": 0, "description": "The least quality (Q) a transcript has (20)."},
+		"limit":       map[string]any{"type": "integer", "minimum": 0, "description": "Genes to list (20; 0 for all)."},
+	}, "where"), program: true},
+	{Name: "summarize_region", Title: "Summarize a region", Description: "What a region of a dataset (or a box) holds: its area, its cells (by centroid) and their density, how they divide among a label set's labels against the whole tissue (by default the latest label set of the segmentation), and its genes: the most transcripts, and those most above the rest of the tissue (mean transcripts per cell inside against outside, among genes with ten or more inside). Answered by the program from the library, with or without a window.", InputSchema: schema(map[string]any{
+		"region":       textArg("The region by name or id (regions lists them); or give box."),
+		"box":          map[string]any{"type": "array", "items": map[string]any{"type": "number"}, "minItems": 4, "maxItems": 4, "description": "[x0, y0, x1, y1] in µm, in place of a region."},
+		"project":      projectArg,
+		"dataset":      libraryDatasetArg,
+		"segmentation": textArg("The segmentation, by id or name, or instrument: the dataset's default if not given."),
+		"labels":       textArg("A label set's id: its labels' cells inside, against all its cells."),
+		"level":        map[string]any{"type": "integer", "minimum": 0, "description": "The label set's level (0)."},
+		"genes":        map[string]any{"type": "integer", "minimum": 0, "description": "Genes in each list (10; up to 200)."},
+	}), program: true},
 	{Name: "new_project", Title: "Start a new project", Description: "Starts a new, empty project (the open one is saved in the library first).", InputSchema: schema(map[string]any{
 		"name": textArg("A name for it."),
 	})},
@@ -248,11 +285,12 @@ var remoteActions = []remoteAction{
 		"dataset":   datasetArg,
 		"clear":     flagArg("Clear the choice."),
 	}), long: true},
-	{Name: "save_filter", Title: "Save a cell filter", Description: "Saves a cell filter as a new version (a filter's earlier versions are kept): conditions on the cells' attributes, each {attribute, min, max} (bounds included, either optional) or {attribute: \"method\", values: [segmentation methods by name or number]}. Returns its version and result: the cells it keeps and the SHA-256 of which.", InputSchema: schema(map[string]any{
+	{Name: "save_filter", Title: "Save a cell filter", Description: "Saves a cell filter of the instrument's segmentation's cells as a new version (a filter's earlier versions are kept), which clusterings, graphs and spatial analyses can use: conditions on the cells' attributes, each {attribute, min, max} (bounds included, either optional) or {attribute: \"method\", values: [segmentation methods by name or number]}; or where, a tree of conditions as query_cells takes it (its labels, clusters, niches, regions, genes; SituCraft applies it). Returns its version and result: the cells it keeps and the SHA-256 of which.", InputSchema: schema(map[string]any{
 		"name":       textArg("The filter's name."),
 		"conditions": map[string]any{"type": "array", "items": map[string]any{"type": "object"}, "description": "The conditions, all of which a cell must meet."},
+		"where":      map[string]any{"type": "object", "description": "A tree of conditions (query_cells), in place of conditions."},
 		"dataset":    datasetArg,
-	}, "name", "conditions"), long: true},
+	}, "name"), long: true},
 	{Name: "segmentations", Title: "List the segmentations", Description: "A dataset's segmentations (all datasets' if none is named), each an artifact with its lineage (method and version, software, the job that made or registered it, what it was made from), its files by SHA-256, what its check found, its state, and whether it is the dataset's default (promoted, with the decision's reason). show: true shows the first in the inspector.", InputSchema: schema(map[string]any{
 		"dataset": textArg("A dataset by name or id; every dataset's if not given."),
 		"show":    flagArg("Show it in the inspector."),
@@ -738,6 +776,9 @@ var actionHints = map[string]actionHint{
 	"list_projects":        {},
 	"describe_project":     {},
 	"get_result":           {},
+	"query_cells":          {},
+	"query_transcripts":    {},
+	"summarize_region":     {},
 	"open_project":         {},
 	"set_mode":             {},
 	"focus":                {},

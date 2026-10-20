@@ -112,8 +112,8 @@ func (w *Window) pixelsIn(x0, y0, x1, y1 int) (in, all int) {
 	return int(w.sat[y1*W+x1] - w.sat[y0*W+x1] - w.sat[y1*W+x0] + w.sat[y0*W+x0]), (x1 - x0) * (y1 - y0)
 }
 
-// bounds is the box holding the window's boundary.
-func (w *Window) bounds() (x0, y0, x1, y1 float64) {
+// Bounds is the box holding the window's boundary.
+func (w *Window) Bounds() (x0, y0, x1, y1 float64) {
 	x0, y0, x1, y1 = math.Inf(1), math.Inf(1), math.Inf(-1), math.Inf(-1)
 	for k := range w.ax {
 		x0, x1 = math.Min(x0, math.Min(w.ax[k], w.bx[k])), math.Max(x1, math.Max(w.ax[k], w.bx[k]))
@@ -127,7 +127,7 @@ func tissueAreas(ctx context.Context, tissue *Window, outputs int, newMeasure fu
 	if workers < 1 {
 		workers = 1
 	}
-	bx0, by0, bx1, by1 := tissue.bounds()
+	bx0, by0, bx1, by1 := tissue.Bounds()
 	if !(bx1 > bx0) || !(by1 > by0) {
 		return nil, errors.New("spatial: a window with no extent")
 	}

@@ -202,6 +202,8 @@ Start with what is in your library, or what is open, and say what you want to kn
 
 - "Which projects do I have, and what was found in the Lung one?" (`list_projects`,
   `describe_project`, `get_result`, without opening anything)
+- "How many T cells are within 50 µm of the tumor nest, and which genes stand out in it?"
+  (`query_cells`, `summarize_region`, without opening anything)
 - "What is in SituCraft now? Which datasets, and is each bundle healthy?" (`get_state`,
   `qc_metrics`)
 - "List the Lung dataset's segmentations and say how each was made." (`segmentations`, `record`)
@@ -225,7 +227,7 @@ may replace or remove something, and whether it may reach the network (downloadi
 
 | Area | Tools |
 | --- | --- |
-| The library | `list_projects`, `describe_project`, `get_result` (answered without the window) |
+| The library | `list_projects`, `describe_project`, `get_result`, `query_cells`, `query_transcripts`, `summarize_region` (answered without the window) |
 | The project | `get_state` (start here), `open_project`, `set_mode`, `focus`, `jobs` (with `do`, needs compute) |
 | The tissue | `show_tissue` (with `picture`), `select_cell`, `open_view`, `regions`, `show_alignment` |
 | Quality control | `qc_metrics`, `set_qc_map`, `select_cells` |
@@ -267,7 +269,8 @@ The tools SituCraft's product requirements name, and the tool that does each:
 | `get_dataset_qc` | `qc_metrics` |
 | `get_analysis_result` | `get_result` |
 | `compare_segmentations` | `compare_segmentations` (with compute), `show_comparison`, `get_result` |
-| `query_cells`, `summarize_roi` | the typed filter tree, in the next slice; `regions` counts a region's cells |
+| `query_cells` | the same, with `query_transcripts` |
+| `summarize_roi` | `summarize_region` |
 | `create_saved_view` | `save_view` (with edits) |
 | `get_job_status`, `cancel_job` | `jobs`, and `jobs` with `do` (with compute) |
 | `submit_segmentation_job` | `refine_segmentation` (with compute) |
@@ -296,6 +299,40 @@ it. `get_result` gives a result's record and its numbers as tables, one table's 
 `table` chooses a table (the first if not given), `offset` and `limit` a page of its rows (100 at a
 time; `limit: 0` for up to 10,000). The answer lists every table with its columns and rows. Numbers
 are numbers, `null` where there is none.
+
+## Asking which cells
+
+`query_cells` and `query_transcripts` take `where`, a tree of conditions in JSON, never a query
+string: SituCraft checks it against its grammar, refuses one it cannot read with the reason, and
+evaluates it over the dataset's columns; nothing in it is run. A tree is `{"all": [trees]}`,
+`{"any": [trees]}`, `{"not": tree}` or one condition:
+
+| A condition on cells | Keeps a cell |
+| --- | --- |
+| `{"attribute": "transcripts", "min": 20, "max": 500}` | whose QC attribute is within the bounds (both included, either optional): `transcripts`, `genes`, `total`, `controls`, `area`, `nucleusArea`, `nucleusShare`, `density` or `nuclearShare`; a cell without a value fails |
+| `{"attribute": "method", "in": [0]}` | the instrument found by one of these methods (by name or number) |
+| `{"gene": "EPCAM", "min": 3}` | with that many of the gene's transcripts (at least 1 when no bound is given) |
+| `{"labels": "lab-…", "level": 0, "in": ["T cells"]}` | labeled so by the label set (by name, or number from 0) |
+| `{"clusters": "clu-…", "in": ["Cluster 3", 5]}` | in one of the clusters (by name, or number from 1) |
+| `{"niches": "spa-…", "in": [1]}` | in one of the niches (numbers from 1) |
+| `{"region": "Tumor nest"}` | whose centroid lies in the region (by name or id) |
+| `{"distance": "Tumor nest", "min": 0, "max": 50}` | whose centroid is so far from the region's edge, in µm (negative inside) |
+| `{"box": [x0, y0, x1, y1]}` | whose centroid lies in the box, in µm |
+| `{"filter": "Enough signal"}` | kept by the saved filter (its latest version, or one by id) |
+
+A transcript's conditions are `{"gene": "EPCAM"}` or `{"gene": ["EPCAM", "KRT8"]}`, `region`,
+`distance` and `box` as above, `{"assigned": true}` (to a cell of the instrument's segmentation),
+and `{"cells": tree}` (assigned to a cell the tree keeps); `min_quality` sets the least quality
+(20). A tree on a large dataset's transcripts is bounded by a region, a distance's `max` or a box.
+
+`query_cells` answers how many cells are kept and the SHA-256 of which (as a saved filter records
+it), a page of them with the `columns` asked for, and with `by` (a label set, clustering or niches
+analysis) how they divide against all the cells. `summarize_region` gives a region's (or box's)
+area, cells, density, labels against the whole tissue, and its genes: the most transcripts and
+those most above the rest. Both name the segmentation they read (`segmentation`; by default the
+one promoted, else the instrument's). With `--allow edits`, `save_filter` with the same `where`
+saves the cells as a filter of the instrument's segmentation's cells, which clusterings, graphs and
+spatial analyses can then use.
 
 ## Pictures
 

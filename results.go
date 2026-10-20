@@ -49,6 +49,12 @@ func (a *app) programAction(ctx context.Context, name string, raw json.RawMessag
 		result, err = a.describeProjectAction(args)
 	case "get_result":
 		result, err = a.getResultAction(args)
+	case "query_cells":
+		result, err = a.queryCellsAction(ctx, args)
+	case "query_transcripts":
+		result, err = a.queryTranscriptsAction(ctx, args)
+	case "summarize_region":
+		result, err = a.summarizeRegionAction(ctx, args)
 	default:
 		return remoteResult{}, false
 	}
@@ -91,15 +97,7 @@ type libraryProject struct {
 		Name    string `json:"name"`
 		Dataset string `json:"dataset"`
 	} `json:"views"`
-	Regions []struct {
-		ID       string `json:"id"`
-		Dataset  string `json:"dataset"`
-		Versions []struct {
-			Name    string `json:"name"`
-			Cls     string `json:"cls"`
-			Removed bool   `json:"removed"`
-		} `json:"versions"`
-	} `json:"regions"`
+	Regions []queryRegion `json:"regions"`
 	Figures []struct {
 		ID     string            `json:"id"`
 		Name   string            `json:"name"`

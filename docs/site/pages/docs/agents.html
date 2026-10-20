@@ -35,10 +35,11 @@ lede: An AI agent such as Claude Code can ask SituCraft about your projects, dat
         <li>"What is open in SituCraft, and is each bundle healthy?"</li>
         <li>"List the Lung dataset's segmentations and say how each was made."</li>
         <li>"Show the tissue around the tumor nest region with CD3E and EPCAM."</li>
+        <li>"How many T cells lie within 50 µm of the tumor nest, and which genes stand out inside it?"</li>
         <li>"Which labels are enriched near each other, and is the answer the same on the refined segmentation?" (with <code>--allow compute</code>)</li>
         <li>"Write the methods for the whole project, with their references."</li>
       </ul>
-      <p>An agent can read your library without opening anything: <code>list_projects</code>, <code>describe_project</code> (a project's datasets and every result, with what each was made from) and <code>get_result</code> (a result's record and its numbers as tables: an enrichment's pairs, Moran's I by gene, a comparison's tests). Asked with <code>picture</code>, <code>show_tissue</code>, <code>show_map</code> and <code>figure</code> also give it a picture of what they show, so it sees what you see.</p>
+      <p>An agent can read your library without opening anything: <code>list_projects</code>, <code>describe_project</code> (a project's datasets and every result, with what each was made from) and <code>get_result</code> (a result's record and its numbers as tables: an enrichment's pairs, Moran's I by gene, a comparison's tests). It asks which cells and transcripts meet conditions with <code>query_cells</code> and <code>query_transcripts</code>, and what a region holds with <code>summarize_region</code>: the conditions are a tree of JSON (all, any and not of a cell's QC numbers, genes, labels, clusters, niches, regions and distances from them), checked and evaluated by SituCraft, never a query string or a command. With <code>--allow edits</code>, <code>save_filter</code> keeps the same cells as a filter your analyses can use. Asked with <code>picture</code>, <code>show_tissue</code>, <code>show_map</code> and <code>figure</code> also give it a picture of what they show, so it sees what you see.</p>
       <p>The tools are SituCraft's remote-control actions, under the same names; the <a href="{{github}}/blob/main/docs/MCP.md#tools">MCP reference</a> lists them by the leave each needs. SituCraft's results are research findings about a tissue, never a diagnosis, and its instructions to the agent say so.</p>
 
       <h2 id="security">Privacy and security</h2>

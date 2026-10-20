@@ -79,7 +79,45 @@ export function createFilter({ dataset, name, conditions, cells, previous = null
   };
 }
 
-// Whether a filter, applied again to the cells, keeps the cells it recorded.
+// A filter saved from a tree of conditions (all, any and not of conditions on a cell's attributes,
+// its label, cluster or niche, its region or its distance from one, its count of a gene;
+// internal/query), which the program evaluates (POST /api/local/{index}/query): the tree, the
+// program's description of it, and its result as the program gave it ({ cells, kept, sha256 }).
+export function createTreeFilter({ dataset, name, tree, text, result, previous = null, now = new Date().toISOString(), id = newId() }) {
+  return {
+    kind: 'filter',
+    id,
+    name,
+    version: previous ? previous.version + 1 : 1,
+    parent: previous?.id ?? null,
+    dataset,
+    created: now,
+    tree,
+    text,
+    result: { cells: result.cells, kept: result.kept, sha256: result.sha256 },
+  };
+}
+
+// Whether a filter is a tree of conditions (the program applies it), not conditions on attributes.
+export const isTreeFilter = (filter) => Boolean(filter?.tree);
+
+// What a filter keeps, in words: its conditions, or its tree as the program described it.
+export function describeFilter(filter, methods = []) {
+  if (isTreeFilter(filter)) return filter.text ?? JSON.stringify(filter.tree);
+  return filter.conditions.map((c) => describeCondition(c, methods)).join('; ') || 'No conditions';
+}
+
+// Which cells are kept (1 kept) from keepBytes.
+export function keepFromBytes(bytes) {
+  const n = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(0, true);
+  if (bytes.length !== 4 + Math.ceil(n / 8)) throw new Error(`${bytes.length} bytes of which cells are kept, for ${n} cells`);
+  const keep = new Uint8Array(n);
+  for (let i = 0; i < n; i += 1) keep[i] = (bytes[4 + (i >> 3)] >> (i & 7)) & 1;
+  return keep;
+}
+
+// Whether a filter, applied again to the cells, keeps the cells it recorded (a filter of
+// conditions; the program applies a tree, ui/filter-keeps.js).
 export function verifyFilter(filter, cells) {
   const { keep, kept } = evaluate(filter.conditions, cells);
   const sum = keepChecksum(keep);

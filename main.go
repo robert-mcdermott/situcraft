@@ -561,6 +561,7 @@ func (a *app) registerAPI(mux *http.ServeMux) {
 	a.registerCache(mux)
 	a.registerJobs(mux)
 	a.registerView(mux)
+	a.registerQueries(mux)
 	a.registerProject(mux)
 	a.registerExamples(mux)
 	a.registerSegmentations(mux)

@@ -13,6 +13,7 @@ import (
 
 	"situcraft/internal/cache"
 	"situcraft/internal/view"
+	"situcraft/internal/xenium"
 )
 
 func (a *app) registerView(mux *http.ServeMux) {
@@ -120,24 +121,7 @@ func (a *app) dataset(w http.ResponseWriter, r *http.Request) (*view.Dataset, bo
 		return nil, false
 	}
 	defer b.Close()
-	// Open already, with the same entries? A bundle that changed has new ones.
-	open := func() (*view.Dataset, bool) {
-		d, ok := a.views.path(file.path)
-		if !ok {
-			return nil, false
-		}
-		status, err := a.cache.Status(b)
-		return d, err == nil && sameEntries(status, d.Entries)
-	}
-	if d, ok := open(); ok {
-		return d, true
-	}
-	a.views.opening.Lock()
-	defer a.views.opening.Unlock()
-	if d, ok := open(); ok {
-		return d, true
-	}
-	d, err := view.Open(a.cache, b)
+	d, err := a.openView(b, file.path)
 	if errors.Is(err, view.ErrNotReady) {
 		writeError(w, http.StatusConflict, "Its derived data are not built yet; build them in the Data view.")
 		return nil, false
@@ -146,8 +130,35 @@ func (a *app) dataset(w http.ResponseWriter, r *http.Request) (*view.Dataset, bo
 		writeError(w, http.StatusUnprocessableEntity, err.Error())
 		return nil, false
 	}
-	a.views.put(d)
 	return d, true
+}
+
+// openView opens (or finds open) a bundle's dataset for viewing, kept by its path: view.ErrNotReady
+// when its derived data are not all built. The views keep it open; its users do not close it.
+func (a *app) openView(b *xenium.Bundle, path string) (*view.Dataset, error) {
+	// Open already, with the same entries? A bundle that changed has new ones.
+	open := func() (*view.Dataset, bool) {
+		d, ok := a.views.path(path)
+		if !ok {
+			return nil, false
+		}
+		status, err := a.cache.Status(b)
+		return d, err == nil && sameEntries(status, d.Entries)
+	}
+	if d, ok := open(); ok {
+		return d, nil
+	}
+	a.views.opening.Lock()
+	defer a.views.opening.Unlock()
+	if d, ok := open(); ok {
+		return d, nil
+	}
+	d, err := view.Open(a.cache, b)
+	if err != nil {
+		return nil, err
+	}
+	a.views.put(d)
+	return d, nil
 }
 
 func sameEntries(s *cache.Status, entries map[string]string) bool {

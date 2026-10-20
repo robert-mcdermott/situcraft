@@ -17,7 +17,8 @@ import { TissueRenderer } from '../render/renderer.js';
 import { fitCamera, scaleBar } from '../lib/viewport.js';
 import { readCells } from '../lib/viewer-data.js';
 import { ATTRIBUTES, attribute, attributeValues } from '../lib/cell-attributes.js';
-import { addFilter, compareKeeps, createFilter, describeCondition, effect, evaluate, removeFilter, verifyFilter, versions } from '../lib/filters.js';
+import { addFilter, compareKeeps, createFilter, createTreeFilter, describeCondition, describeFilter, effect, evaluate, isTreeFilter, removeFilter, versions } from '../lib/filters.js';
+import { askTree, filterKeep, filterKeepNow } from './filter-keeps.js';
 import { countMarked, selectRange, selectRect } from '../lib/plots.js';
 import { METRIC_GROUPS, formatMetric, metricRows } from '../lib/metrics.js';
 import { categoricalColor, colormapCSS, colormapLUT } from '../lib/colormaps.js';
@@ -183,11 +184,14 @@ export function mountQC(app, container) {
     });
     observer.observe(stage);
 
+    // A filter's cells, at once (a filter saved from a tree when the program has applied it: the
+    // view is drawn again when it has).
+    const applied = (f) => filterKeepNow(t.item.url, app.store.project, f, cells, () => refreshKeep());
     // The cells the view counts: all, or those a filter in use keeps.
     const keepOf = () => {
       if (!session.active) return null;
       const f = app.store.project.artifacts.find((a) => a.id === session.active);
-      return f ? verifyFilter(f, cells).keep : null;
+      return (f && applied(f)?.keep) || null;
     };
     let keep = keepOf();
 
@@ -455,19 +459,21 @@ export function mountQC(app, container) {
       if (names.length) panel.append(h('h4', 'Saved filters'));
       for (const n of names) {
         for (const f of versions(app.store.project, t.dataset.id, n)) {
-          const check = verifyFilter(f, cells);
+          const check = applied(f);
           const active = session.active === f.id;
+          const badge = !check ? h('span.badge', { title: 'SituCraft is applying its tree of conditions to the cells' }, 'Checking')
+            : check.error ? h('span.badge.danger', { title: check.error.message }, 'Not applied')
+              : check.same ? h('span.badge.ok', { title: 'Applied again, it keeps exactly the cells it recorded (SHA-256 of which cells)' }, 'Reproduced') : h('span.badge.danger', { title: 'The cells it keeps now differ from those it recorded' }, 'Differs');
           panel.append(h(`div.qc-saved${active ? '.active' : ''}`,
-            h('div.row', h('b', `${f.name} · version ${f.version}`), h('span.spacer'),
-              check.same ? h('span.badge.ok', { title: 'Applied again, it keeps exactly the cells it recorded (SHA-256 of which cells)' }, 'Reproduced') : h('span.badge.danger', { title: 'The cells it keeps now differ from those it recorded' }, 'Differs')),
-            h('div.muted', f.conditions.map((c) => describeCondition(c, methods)).join('; ') || 'No conditions'),
+            h('div.row', h('b', `${f.name} · version ${f.version}`), h('span.spacer'), badge),
+            h('div.muted', describeFilter(f, methods)),
             h('div.muted', `Keeps ${formatCount(f.result.kept)} of ${formatCount(f.result.cells)} cells · ${new Date(f.created).toLocaleString()}`),
             h('div.btn-row',
               h('button.btn.small', { type: 'button', 'aria-pressed': String(active), onclick: () => {
                 session.active = active ? null : f.id;
                 refreshKeep();
               } }, icon('filter'), active ? 'Stop using' : 'Use in plots and maps'),
-              h('button.btn.small.ghost', { type: 'button', onclick: () => {
+              isTreeFilter(f) ? null : h('button.btn.small.ghost', { type: 'button', onclick: () => {
                 session.draft = f.conditions.map((c) => ({ ...c, values: c.values ? [...c.values] : undefined }));
                 session.name = f.name;
                 renderSide();
@@ -490,10 +496,14 @@ export function mountQC(app, container) {
           session.compare = [aSel.value, bSel.value];
           const fa = saved.find((f) => f.id === aSel.value);
           const fb = saved.find((f) => f.id === bSel.value);
-          const ka = verifyFilter(fa, cells).keep;
-          const kb = verifyFilter(fb, cells).keep;
-          const c = compareKeeps(ka, kb);
+          const [aa, ab] = [applied(fa), applied(fb)];
           clear(out);
+          if (!aa || !ab || aa.error || ab.error) {
+            out.append(h('p.muted', aa?.error || ab?.error ? `A filter could not be applied: ${(aa?.error ?? ab.error).message}` : 'Applying the filters…'));
+            return;
+          }
+          const [ka, kb] = [aa.keep, ab.keep];
+          const c = compareKeeps(ka, kb);
           out.append(h('table.data', h('tbody',
             h('tr', h('td', 'Kept by both'), h('td.r', formatCount(c.both))),
             h('tr', h('td', `Only by ${fa.name} v${fa.version}`), h('td.r', formatCount(c.onlyA))),
@@ -587,8 +597,8 @@ export function mountQC(app, container) {
       },
       chosen: () => (app.selection?.dataset === t.dataset.id ? Array.from(app.selection.mask) : null),
       // A filter applied again to the cells (situcraft verify): { same, kept, sha256 }.
-      verifyFilter: (filter) => {
-        const { same, kept, sha256 } = verifyFilter(filter, cells);
+      verifyFilter: async (filter) => {
+        const { same, kept, sha256 } = await filterKeep(t.item.url, app.store.project, filter, cells);
         return { same, kept, sha256 };
       },
       saveFilter: (name, conditions) => {
@@ -596,6 +606,16 @@ export function mountQC(app, container) {
         session.draft = conditions;
         saveDraft();
         return app.store.project.artifacts.filter((a) => a.kind === 'filter' && a.name === name).at(-1);
+      },
+      // Saves the cells a tree of conditions keeps as a filter, the program applying the tree.
+      saveTreeFilter: async (name, tree) => {
+        const answer = await askTree(t.item.url, app.store.project, t.dataset.id, tree);
+        const project = app.store.project;
+        const previous = versions(project, t.dataset.id, name).at(-1) ?? null;
+        const filter = createTreeFilter({ dataset: t.dataset.id, name, tree, text: answer.text, result: answer, previous });
+        app.store.commit(addFilter(project, filter), `Save filter ${filter.name} version ${filter.version}`);
+        refreshKeep();
+        return filter;
       },
       settled: () => renderer.settled(),
       captureView: (name) => captureNow(name),

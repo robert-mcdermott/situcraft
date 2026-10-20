@@ -105,10 +105,23 @@ case, then the one name that starts with or contains what was given. An error li
 | `list_projects` | | The library's projects, the most recently changed first: each one's id, name, when it was made and changed, its datasets, and how many results, figures and saved views it has |
 | `describe_project` | `project` (name, part of it, or id; the most recently changed if not given, and of several with one name, the most recently changed) | What a project holds without opening it: its datasets, its results (each one's id, kind, name, dataset, method and the ids of what it was made from), the page's records (filters, designs, marker sets, curated and consensus labels), regions, saved views, figures and decisions |
 | `get_result` | `id` (a result's or record's), `table`, `offset` (0), `limit` (100; 0 for all, up to 10,000) | A result's record (kind, name, dataset, state, method, parameters, what it was made from, software, job, findings, the projects holding it), its summary, and its numbers as tables, a page of one table's rows: a spatial analysis's by its question, a clustering's clusters, a label set's labels, a cohort comparison's tests and a cohort summary's table as their CSV files hold them, and its summary as the report shows it (`summary`, `summary.<key>`). Numbers are numbers, null where there is none |
+| `query_cells` | `where` (a tree of conditions), `project`, `dataset` (its only one if not given), `segmentation` (by id or name, or `instrument`; the one promoted, else the instrument's, if not given), `by` (a label set's, clustering's or niches analysis's id), `level` (0), `columns` (attributes or genes), `offset` (0), `limit` (20) | The cells the tree keeps: how many of all, the SHA-256 of which (as a saved filter records it), a page of them (row, id, centroid and the columns asked for), and with `by` how they divide among its labels, clusters or niches against all the cells |
+| `query_transcripts` | `where` (a tree of conditions), `project`, `dataset`, `min_quality` (20), `limit` (20 genes; 0 for all) | The transcripts the tree keeps, of that quality or more, counted by gene |
+| `summarize_region` | `region` (name or id) or `box` ([x0, y0, x1, y1] in µm), `project`, `dataset`, `segmentation`, `labels` (a label set's id; the latest of the segmentation in the project if not given), `level` (0), `genes` (10 a list) | A region's area, its cells by centroid and their density, how they divide among the labels against the whole tissue (with each label's density), and its genes: the most transcripts, and those most above the rest of the tissue |
 
-`list_projects`, `describe_project` and `get_result` are answered by the program itself, from the
-library and the results' folders, whether or not a window is open; every other action is performed
-by the window.
+`list_projects`, `describe_project`, `get_result`, `query_cells`, `query_transcripts` and
+`summarize_region` are answered by the program itself, from the library and the results' folders,
+whether or not a window is open; every other action is performed by the window.
+
+A tree of conditions (`where`) is JSON, never a query string: `{"all": [trees]}`, `{"any":
+[trees]}`, `{"not": tree}`, or one condition. On cells: `{"attribute": …, "min", "max"}` (a QC
+attribute, bounds included), `{"attribute": "method", "in": [...]}`, `{"gene": …, "min", "max"}`
+(at least 1 when no bound), `{"labels": id, "level", "in": [names or numbers from 0]}`,
+`{"clusters": id, "in": [names or numbers from 1]}`, `{"niches": id, "in": [numbers from 1]}`,
+`{"region": name}`, `{"distance": region, "min", "max"}` (µm from its edge, negative inside),
+`{"box": [x0, y0, x1, y1]}` and `{"filter": name}`. On transcripts: `{"gene": name or [names]}`,
+`region`, `distance`, `box`, `{"assigned": true or false}` and `{"cells": a tree of cells}`. A tree
+SituCraft cannot read is refused with the reason; [MCP](MCP.md#asking-which-cells) has examples.
 
 ### Projects and data
 
@@ -272,7 +285,7 @@ the replicate unit as the unit.
 | `qc_metrics` | `dataset` | The run's recorded metrics, each explained, with SituCraft's recomputed value and whether they agree |
 | `set_qc_map` | `map`, `dataset`, `filter` (or `none`), `center`, `um_per_pixel` | Shows a QC map: `cell:<attribute>` or `bin:outside`, `bin:quality`, `bin:controls`, `bin:density`, `none` |
 | `select_cells` | `attribute`, `min`, `max`, `dataset`, `clear` | Chooses cells by an attribute's range, as dragging across a plot does; answers how many |
-| `save_filter` | `name`, `conditions`, `dataset` | Saves a new version of a filter: conditions `{attribute, min, max}` or `{attribute: "method", values: [...]}`; answers the cells it keeps and their SHA-256 |
+| `save_filter` | `name`, `conditions` or `where`, `dataset` | Saves a new version of a filter of the instrument's segmentation's cells: conditions `{attribute, min, max}` or `{attribute: "method", values: [...]}`, or `where`, a tree of conditions as `query_cells` takes it, which SituCraft applies; answers the cells it keeps and their SHA-256 |
 
 Cell attributes: `transcripts`, `genes`, `total`, `controls`, `area`, `nucleusArea`,
 `nucleusShare`, `density`, `nuclearShare`, `method`.

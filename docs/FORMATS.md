@@ -204,6 +204,12 @@ A filter's checksum is the SHA-256 of the cell count (32-bit unsigned, little-en
 one bit per cell, in the order of `cells.parquet`, the first cell in the lowest bit of the first
 byte, set when the cell is kept. Anyone can recompute it from the bundle and the conditions.
 
+From 0.9.0 a filter may instead hold a `tree` of conditions (`all`, `any` and `not` of conditions on
+a cell's attributes, gene counts, labels, clusters, niches, regions, distances from them, a box,
+and other saved filters, as [MCP](MCP.md#asking-which-cells) lists them) and `text`, the tree in
+words; SituCraft applies it to the instrument's segmentation's cells, the result recorded the same
+way. A filter of `conditions` reads as the tree `{"all": [...]}` of them.
+
 A saved view records its dataset, its mode (Viewer or QC), the segmentation shown (`segmentation`:
 `instrument` for the dataset's own, else the segmentation artifact's id), the place and zoom
 (`camera`: the center in µm and the µm per CSS pixel), each stain by name with its visibility,
