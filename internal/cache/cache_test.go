@@ -176,6 +176,52 @@ func TestOneBuildAtATimePerEntry(t *testing.T) {
 	}
 }
 
+// An entry whose files were deleted from outside SituCraft, its folder left (as a cleaner of old
+// temporary files leaves them), is built again and kept; one complete already stays as it is.
+func TestAnEmptiedEntryIsBuiltAgain(t *testing.T) {
+	c := openCache(t, 0)
+	spec := Spec{Kind: "test", Params: 2}
+	build := func(content string) *Manifest {
+		t.Helper()
+		b, err := c.begin(spec)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := b.writeFile("data", []byte(content)); err != nil {
+			t.Fatal(err)
+		}
+		m, err := b.commit(nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return m
+	}
+	m := build("x")
+	dir := c.EntryDir(m.Name)
+	files, _ := os.ReadDir(dir)
+	for _, f := range files {
+		os.Remove(filepath.Join(dir, f.Name()))
+	}
+	if _, ok := c.Lookup(m.Name); ok {
+		t.Fatal("an emptied entry was found")
+	}
+	build("x")
+	if _, ok := c.Lookup(m.Name); !ok {
+		t.Fatal("the entry built again is not found")
+	}
+	if err := c.Verify(m.Name); err != nil {
+		t.Error(err)
+	}
+	// Another program's copy of a complete entry is set aside, the entry untouched.
+	build("yy")
+	if got, ok := c.Lookup(m.Name); !ok || got.Size() != 1 {
+		t.Errorf("a complete entry was replaced: %+v", got)
+	}
+	if _, err := os.Stat(c.buildingDirOf(m.Name)); err == nil {
+		t.Error("the copy set aside is still in building/")
+	}
+}
+
 // makeItem makes a complete entry of a given size last used at a given time.
 func makeItem(t *testing.T, c *Cache, name string, size int, used time.Time) {
 	t.Helper()

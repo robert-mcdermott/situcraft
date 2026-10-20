@@ -15,6 +15,11 @@
 //     26.5.8, evaluated by Lentz's method), for the beta distribution function;
 //   - the two-sample Kolmogorov–Smirnov test, its p-value from the limiting distribution at the
 //     samples' effective size n₁n₂/(n₁ + n₂), with Stephens' correction.
+//
+// The comparisons of a cohort test by them (Student's t, the intervals), so they give the same bits
+// on every processor: their logarithms, exponentials, log-gamma and inverse error function are
+// internal/dmath's, and each product added to something is rounded on its own (mul), never fused
+// into a multiply-add, as the compiler may on some processors (arm64) and not others (amd64).
 package stats
 
 import (
@@ -54,16 +59,18 @@ func GammaQ(a, x float64) float64 {
 	return gammaFraction(a, x)
 }
 
+// mul is a product rounded on its own, never fused with an addition.
+func mul(a, b float64) float64 { return float64(a * b) }
+
 // prefix is x^a e^-x / Γ(a).
 func prefix(a, x float64) float64 {
-	lg, _ := math.Lgamma(a)
-	return math.Exp(a*math.Log(x) - x - lg)
+	return dmath.Exp(mul(a, dmath.Log(x)) - x - dmath.Lgamma(a))
 }
 
 func gammaSeries(a, x float64) float64 {
 	sum, term := 1/a, 1/a
 	for n := 1; n < 10000; n++ {
-		term *= x / (a + float64(n))
+		term = mul(term, x/(a+float64(n)))
 		sum += term
 		if math.Abs(term) < math.Abs(sum)*1e-16 {
 			break
@@ -81,7 +88,7 @@ func gammaFraction(a, x float64) float64 {
 	for i := 1; i < 10000; i++ {
 		an := -float64(i) * (float64(i) - a)
 		b += 2
-		d = an*d + b
+		d = mul(an, d) + b
 		if math.Abs(d) < tiny {
 			d = tiny
 		}
@@ -90,7 +97,7 @@ func gammaFraction(a, x float64) float64 {
 			c = tiny
 		}
 		d = 1 / d
-		delta := d * c
+		delta := mul(d, c)
 		h *= delta
 		if math.Abs(delta-1) < 1e-16 {
 			break
@@ -118,8 +125,7 @@ func PoissonPMF(k int, m float64) float64 {
 	if k < 0 {
 		return 0
 	}
-	lg, _ := math.Lgamma(float64(k) + 1)
-	return math.Exp(float64(k)*math.Log(m) - m - lg)
+	return dmath.Exp(mul(float64(k), dmath.Log(m)) - m - dmath.Lgamma(float64(k)+1))
 }
 
 // BinomialPMF is P(N = k) for n trials of probability p.
@@ -127,10 +133,8 @@ func BinomialPMF(k, n int, p float64) float64 {
 	if k < 0 || k > n {
 		return 0
 	}
-	lc, _ := math.Lgamma(float64(n + 1))
-	lk, _ := math.Lgamma(float64(k + 1))
-	lnk, _ := math.Lgamma(float64(n - k + 1))
-	return math.Exp(lc - lk - lnk + float64(k)*math.Log(p) + float64(n-k)*math.Log1p(-p))
+	lc, lk, lnk := dmath.Lgamma(float64(n+1)), dmath.Lgamma(float64(k+1)), dmath.Lgamma(float64(n-k+1))
+	return dmath.Exp(lc - lk - lnk + mul(float64(k), dmath.Log(p)) + mul(float64(n-k), dmath.Log1p(-p)))
 }
 
 // NegativeBinomialPMF is P(N = k) for mean m and dispersion r (variance m + m²/r).
@@ -138,11 +142,9 @@ func NegativeBinomialPMF(k int, m, r float64) float64 {
 	if k < 0 {
 		return 0
 	}
-	a, _ := math.Lgamma(float64(k) + r)
-	b, _ := math.Lgamma(r)
-	c, _ := math.Lgamma(float64(k) + 1)
+	a, b, c := dmath.Lgamma(float64(k)+r), dmath.Lgamma(r), dmath.Lgamma(float64(k)+1)
 	p := r / (r + m)
-	return math.Exp(a - b - c + r*math.Log(p) + float64(k)*math.Log1p(-p))
+	return dmath.Exp(a - b - c + mul(r, dmath.Log(p)) + mul(float64(k), dmath.Log1p(-p)))
 }
 
 // KS is the one-sample Kolmogorov–Smirnov test of a sample against a continuous distribution
@@ -165,7 +167,7 @@ func KolmogorovQ(lambda float64) float64 {
 	}
 	sum, sign := 0.0, 1.0
 	for k := 1; k <= 100; k++ {
-		term := sign * math.Exp(-2*float64(k*k)*lambda*lambda)
+		term := sign * dmath.Exp(mul(mul(mul(-2, float64(k*k)), lambda), lambda))
 		sum += term
 		if math.Abs(term) < 1e-12 {
 			break
@@ -217,10 +219,8 @@ func BetaCDF(x, a, b float64) float64 {
 	case x >= 1:
 		return 1
 	}
-	la, _ := math.Lgamma(a)
-	lb, _ := math.Lgamma(b)
-	lab, _ := math.Lgamma(a + b)
-	front := math.Exp(a*math.Log(x) + b*math.Log1p(-x) - (la + lb - lab))
+	la, lb, lab := dmath.Lgamma(a), dmath.Lgamma(b), dmath.Lgamma(a+b)
+	front := dmath.Exp(mul(a, dmath.Log(x)) + mul(b, dmath.Log1p(-x)) - (la + lb - lab))
 	// The fraction converges fast below the mean; above it, by symmetry.
 	if x < (a+1)/(a+b+2) {
 		return front * betaFraction(x, a, b) / a
@@ -231,7 +231,7 @@ func BetaCDF(x, a, b float64) float64 {
 // betaFraction is A&S 26.5.8's continued fraction, by Lentz's method.
 func betaFraction(x, a, b float64) float64 {
 	const tiny = 1e-300
-	c, d := 1.0, 1-(a+b)*x/(a+1)
+	c, d := 1.0, 1-mul(a+b, x)/(a+1)
 	if math.Abs(d) < tiny {
 		d = tiny
 	}
@@ -241,10 +241,10 @@ func betaFraction(x, a, b float64) float64 {
 		fm := float64(m)
 		// The even step, then the odd.
 		for _, num := range []float64{
-			fm * (b - fm) * x / ((a + 2*fm - 1) * (a + 2*fm)),
-			-(a + fm) * (a + b + fm) * x / ((a + 2*fm) * (a + 2*fm + 1)),
+			mul(mul(fm, b-fm), x) / mul(a+mul(2, fm)-1, a+mul(2, fm)),
+			mul(mul(-(a+fm), a+b+fm), x) / mul(a+mul(2, fm), a+mul(2, fm)+1),
 		} {
-			d = 1 + num*d
+			d = 1 + mul(num, d)
 			if math.Abs(d) < tiny {
 				d = tiny
 			}
@@ -253,9 +253,9 @@ func betaFraction(x, a, b float64) float64 {
 				c = tiny
 			}
 			d = 1 / d
-			h *= d * c
+			h *= mul(d, c)
 		}
-		if math.Abs(d*c-1) < 1e-15 {
+		if math.Abs(mul(d, c)-1) < 1e-15 {
 			break
 		}
 	}

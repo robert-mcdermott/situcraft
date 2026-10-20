@@ -1220,6 +1220,14 @@ export function createBundles(app) {
       const known = app.jobs?.get(asked.id);
       return known ? null : asked;
     },
+    // The last build of the bundle's derived data, when it ended without them (failed, or they
+    // were not in the cache afterward): a view waiting for them says so rather than starting
+    // another, which would end the same way (Build now in the Data view tries again).
+    cacheFailure(item) {
+      const key = cacheJobKey(item.path);
+      const last = (app.jobs?.list() ?? []).filter((job) => job.key === key).at(-1);
+      return last && (last.state === 'failed' || last.state === 'invalid') ? last : null;
+    },
     // The project's dataset for a bundle on this computer, if it has one.
     datasetFor: (item) => findDataset(app.store.project, { path: item.path }),
   };

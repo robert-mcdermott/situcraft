@@ -3815,6 +3815,38 @@ left in it.
      - **0.7.0's cohort, another run:** a simulated bundle records the version that wrote it, so the
        cohort 0.8.0 makes is not the one 0.7.0's fixture recorded, and its bundles were refused; the
        suite makes the cohort as 0.7.0 made it (`SITUCRAFT_SIMULATE_AS`, the simulator unchanged).
+     - **An audit of every processor:** certificates made on arm64 verified with an amd64 build
+       (under Rosetta), a cohort's 70 steps and the Lung's spatial analyses. The cohort's comparisons
+       differed in their p-values and intervals (Student's t by the beta function, `math.Lgamma`,
+       `math.Log1p`, fused products) and a profile across a region's edge in its band areas. The
+       compiler's arm64 output was searched for every fused multiply-add (`go build
+       -gcflags=-S`): each in a result is now rounded on its own, the rest exact (a product by a
+       power of two) or a progress bar's. `dmath` gains `Lgamma`, `Log1p`, `Erfinv` and `Atan2`;
+       Ripley's circles take `dmath.SinCos`; powers of ten are settled exactly. Tests pin their
+       digests and the areas' on both; both certificates verify.
+     - **A cache entry emptied from outside** (a cleaner of old temporary files deleted its files,
+       leaving its folder) was taken for another program's copy at every build, and the Viewer
+       asked for builds every two seconds: such an entry is replaced; a build leaving its data
+       missing fails, and the Viewer and QC view say so rather than build again.
+     - **Jobs that could not be resumed:** graphs, spatial analyses, images, registrations and
+       alignment checks interrupted by a restart are resumed like the others (a test interrupts a
+       graph and an analysis); a verification is discarded, what it was sent not kept.
+     - **The cache's build budget under the race detector:** two minutes is a claim of the
+       program's speed, not the race detector's (about 130 s for the Breast bundle with every
+       package's tests beside it); its time is only logged under `-race`.
+     - **The refinement's memory estimates, measured unsteadily:** reading a mask decodes each chunk
+       into a buffer that is garbage once copied (one chunk the whole mask on the test's tissues),
+       so the reading's peak holds none, one or two of them as the collector keeps up: the same
+       block peaked at 54 to 109 MB with the other packages' tests beside it, 75 alone (the weekly
+       run's 38 against 28 MB the same). A case outside 30% is measured again, up to three times.
+       Decoding into a reused buffer would steady the peak itself (a change to the zarr reader and
+       the estimate's coefficients).
+     - **The weekly real-data run's references:** the graphs', spatial analyses' and segmentation's
+       reference numbers were made from SituCraft's outputs before later changes (the Delaunay
+       graph, the spatial analyses, the refinement), so their digests no longer matched, on either
+       processor; every agreement with SciPy, Squidpy, Shapely, astropy, scikit-learn and Proseg
+       held. They are made again (the Python packages from uv's cache, offline; Proseg's
+       segmentations as before), their numbers the same but in their last digits.
 
 ## 0.9.0: agents and scripts (wave 9)
 

@@ -119,6 +119,11 @@ export function mountQC(app, container) {
       report = await app.bundles.validate(t.item);
     } catch (error) {
       if (mine !== generation) return;
+      const failed = error.status === 409 && !app.bundles.cacheJob(t.item) && app.bundles.cacheFailure(t.item);
+      if (failed) {
+        message('warning', `${t.dataset.name}'s derived data could not be built`, failed.error ?? '', [h('button.btn', { type: 'button', onclick: () => app.setMode('data') }, icon('database'), 'Go to Data')]);
+        return;
+      }
       if (error.status === 409) {
         if (!app.bundles.cacheJob(t.item)) app.bundles.buildCache(t.item);
         message('layers', 'Its derived data are being built', 'The QC maps and plots show here when they are ready.', [h('button.btn', { type: 'button', onclick: () => app.setMode('data') }, icon('database'), 'Go to Data')]);

@@ -1,7 +1,7 @@
 {
  "dataSet": "xenium-lung-2fov",
  "situcraft": {
-  "version": "0.2.0",
+  "version": "0.8.0",
   "command": "situcraft refine --seed <seed> <bundle> <folder> (Balanced)",
   "cores": 10
  },
@@ -79,9 +79,9 @@
    "medianAreaUm2": 37.118439,
    "spuriousCoexpression": 1.678085,
    "mecr": 0.008783,
-   "seconds": 93.4,
-   "peakResidentBytes": 276791296,
-   "digest": "a35d1cfcbb718a83694a8e3235fab5484734ab8b53d3ead9f3c44546c3300831"
+   "seconds": 123.9,
+   "peakResidentBytes": 277250048,
+   "digest": "256b876c8b354ffeb7c237f0559b61fd4f75cd707f7911d862a50d22f254f5cb"
   },
   "situcraft-2": {
    "cells": 11898,
@@ -91,9 +91,9 @@
    "medianAreaUm2": 36.666874,
    "spuriousCoexpression": 1.704352,
    "mecr": 0.009212,
-   "seconds": 95.7,
-   "peakResidentBytes": 280903680,
-   "digest": "e6eb75f1f04ff17a4dd7c27bacca53c9e71bfd6eb5ed4ca0cb792194d4f8cbbb"
+   "seconds": 134.7,
+   "peakResidentBytes": 277446656,
+   "digest": "b69017d351d0ea9470b8b364b20b77deae64e82d7a84116f4fd92abc7fc16f30"
   }
  },
  "pairs": {

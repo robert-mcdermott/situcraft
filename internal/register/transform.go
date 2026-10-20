@@ -9,6 +9,8 @@ import (
 	"errors"
 	"fmt"
 	"math"
+
+	"situcraft/internal/dmath"
 )
 
 // mul is a product rounded on its own: an explicit conversion keeps the compiler from fusing it
@@ -62,7 +64,7 @@ func (t Affine) Reflected() bool { return t.Det() < 0 }
 // Rotation is the angle (degrees, counter-clockwise in a system whose y points down: clockwise as
 // seen) the transform turns the x axis by, after any reflection of y.
 func (t Affine) Rotation() float64 {
-	return math.Atan2(t.D, t.A) * 180 / math.Pi
+	return dmath.Atan2(t.D, t.A) * 180 / math.Pi
 }
 
 // Valid reports whether every coefficient is finite and the transform invertible.

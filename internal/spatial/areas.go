@@ -13,7 +13,8 @@ package spatial
 // square (an arc; the corner of a region's inner bands). The tissue's own pixels are counted exactly (summed counts over the grid); a drawn
 // tissue window's edge splits the finest squares it crosses alike, their share inside it weighing
 // what the measure adds. Squares are summed in a fixed order, so the areas are the same on any
-// number of workers.
+// number of workers; and each product added is rounded on its own (mul), so they are the same on
+// any processor.
 
 import (
 	"context"
@@ -50,7 +51,7 @@ func belowLine(gx, gy, t, h float64) float64 {
 		}
 		if (vp < 0) != (vq < 0) {
 			f := vp / (vp - vq)
-			poly = append(poly, [2]float64{p[0] + f*(q[0]-p[0]), p[1] + f*(q[1]-p[1])})
+			poly = append(poly, [2]float64{p[0] + mul(f, q[0]-p[0]), p[1] + mul(f, q[1]-p[1])})
 		}
 	}
 	a := 0.0
@@ -161,7 +162,7 @@ func tissueAreas(ctx context.Context, tissue *Window, outputs int, newMeasure fu
 			var visit func(ix, iy int64, level uint)
 			visit = func(ix, iy int64, level uint) {
 				n := int64(1) << level
-				x0, y0 := ox+float64(ix)*unit, oy+float64(iy)*unit
+				x0, y0 := ox+mul(float64(ix), unit), oy+mul(float64(iy), unit)
 				side := float64(n) * unit
 				cx, cy := x0+side/2, y0+side/2
 				// The tissue over the square: all, none or some of it.
@@ -261,7 +262,7 @@ type bandMeasure struct {
 }
 
 func (m *bandMeasure) uniform(x, y, h float64) bool {
-	half := h * math.Sqrt2 * (1 + 1e-12)
+	half := mul(mul(h, math.Sqrt2), 1+1e-12)
 	s := signed(m.region, x, y, m.limit+half)
 	k := bandOf(m.edges, s)
 	if k > 0 && s-m.edges[k-1] <= half || k < len(m.edges) && m.edges[k]-s <= half {
@@ -271,7 +272,7 @@ func (m *bandMeasure) uniform(x, y, h float64) bool {
 }
 
 func (m *bandMeasure) add(x, y, h, inTissue float64, finest bool, sums []float64) {
-	area := 4 * h * h * inTissue
+	area := mul(4*h*h, inTissue)
 	s := signed(m.region, x, y, m.limit+2*h)
 	k := bandOf(m.edges, s)
 	if finest {
@@ -286,8 +287,8 @@ func (m *bandMeasure) add(x, y, h, inTissue float64, finest bool, sums []float64
 		if e >= 0 {
 			_, gx, gy := signedNearest(m.region, x, y, m.limit+2*h)
 			below := belowLine(gx, gy, m.edges[e]-s, h)
-			sums[e] += below * area
-			sums[e+1] += (1 - below) * area
+			sums[e] += mul(below, area)
+			sums[e+1] += mul(1-below, area)
 			return
 		}
 	}
@@ -312,7 +313,7 @@ type regionMeasure struct {
 }
 
 func (m *regionMeasure) uniform(x, y, h float64) bool {
-	half := h * math.Sqrt2 * (1 + 1e-12)
+	half := mul(mul(h, math.Sqrt2), 1+1e-12)
 	for _, r := range m.regions {
 		if r.DistanceWithin(x, y, half) <= half {
 			return false
@@ -322,7 +323,7 @@ func (m *regionMeasure) uniform(x, y, h float64) bool {
 }
 
 func (m *regionMeasure) add(x, y, h, inTissue float64, finest bool, sums []float64) {
-	area := 4 * h * h * inTissue
+	area := mul(4*h*h, inTissue)
 	// At the finest size, one region's boundary crossing the square splits it; the others' (rarely
 	// two cross one square) are placed by its center.
 	crossing, share := -1, 0.0
@@ -347,10 +348,10 @@ func (m *regionMeasure) add(x, y, h, inTissue float64, finest bool, sums []float
 		} else if r.Contains(x, y) {
 			in = 1
 		}
-		sums[k] += in * area
+		sums[k] += mul(in, area)
 		elsewhere = math.Min(elsewhere, 1-in)
 	}
-	sums[len(m.regions)] += elsewhere * area
+	sums[len(m.regions)] += mul(elsewhere, area)
 }
 
 // RegionAreas are the areas (µm²) of the tissue within each region, and of the tissue in none.

@@ -1131,7 +1131,7 @@ func inRange(v, lo, hi float64) bool {
 	if math.IsNaN(v) {
 		return true
 	}
-	tol := 1e-9 * math.Max(1, math.Abs(v))
+	tol := mul(1e-9, math.Max(1, math.Abs(v)))
 	return (math.IsNaN(lo) || lo <= v+tol) && (math.IsNaN(hi) || v <= hi+tol)
 }
 

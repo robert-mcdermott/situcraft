@@ -419,4 +419,67 @@ func (a *app) handleJobs() {
 			a.examples.Clean(p.Example)
 		}
 	})
+	// A graph and a spatial analysis are named by what they are made from, as when they were
+	// asked for; one discarded clears away what it staged.
+	a.jobs.Handle("graph", func(spec json.RawMessage) (jobs.Func, error) {
+		if a.cache == nil {
+			return nil, errors.New("SituCraft has no cache folder")
+		}
+		var p graphSpec
+		if json.Unmarshal(spec, &p) != nil || p.Bundle == "" || p.Segmentation == "" || p.Parameters.Check() != nil {
+			return nil, errors.New("its spec names no bundle, segmentation and parameters")
+		}
+		return a.graphJob(p, graphID(p.Segmentation, p.Cells.Checksum, p.Parameters)), nil
+	}, func(id string, spec json.RawMessage) {
+		var p graphSpec
+		if json.Unmarshal(spec, &p) == nil && p.Segmentation != "" {
+			a.artifacts.Discard(graphID(p.Segmentation, p.Cells.Checksum, p.Parameters))
+		}
+	})
+	a.jobs.Handle("spatial", func(spec json.RawMessage) (jobs.Func, error) {
+		if a.cache == nil {
+			return nil, errors.New("SituCraft has no cache folder")
+		}
+		var p spatialSpec
+		if json.Unmarshal(spec, &p) != nil || p.Bundle == "" || p.Segmentation == "" || p.Question == "" {
+			return nil, errors.New("its spec names no bundle, segmentation and question")
+		}
+		params, err := checkedParameters(p.Question, p.Parameters)
+		if err != nil {
+			return nil, err
+		}
+		return a.spatialJob(p, spatialID(p.spatialRequest, params)), nil
+	}, func(id string, spec json.RawMessage) {
+		var p spatialSpec
+		if json.Unmarshal(spec, &p) == nil && p.Question != "" {
+			if params, err := checkedParameters(p.Question, p.Parameters); err == nil {
+				a.artifacts.Discard(spatialID(p.spatialRequest, params))
+			}
+		}
+	})
+	// An image, a registration and an alignment's check are named by what they find (the image's
+	// checksum, the placement, the check's numbers), so what an interrupted one staged is not
+	// known from its spec: they are made again, and nothing is cleared away.
+	a.jobs.Handle("image", func(spec json.RawMessage) (jobs.Func, error) {
+		var p imageSpec
+		if json.Unmarshal(spec, &p) != nil || p.Bundle == "" || p.Path == "" {
+			return nil, errors.New("its spec names no bundle and image")
+		}
+		return a.imageJob(p), nil
+	}, nil)
+	a.jobs.Handle("register", func(spec json.RawMessage) (jobs.Func, error) {
+		var p registerSpec
+		if json.Unmarshal(spec, &p) != nil || p.Bundle == "" || p.Image == "" {
+			return nil, errors.New("its spec names no bundle and image")
+		}
+		return a.registerJob(p), nil
+	}, nil)
+	a.jobs.Handle("check", func(spec json.RawMessage) (jobs.Func, error) {
+		var p checkSpec
+		if json.Unmarshal(spec, &p) != nil || p.Bundle == "" || p.Image == "" || p.Transform == "" {
+			return nil, errors.New("its spec names no bundle, image and alignment")
+		}
+		return a.checkJob(p), nil
+	}, nil)
+	// A verification is not resumed: what it was sent is not kept (verify it again).
 }

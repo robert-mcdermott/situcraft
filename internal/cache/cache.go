@@ -387,10 +387,16 @@ func (b *building) commit(summary any) (*Manifest, error) {
 	}
 	b.release()
 	target := b.c.EntryDir(b.name)
-	if _, err := os.Stat(target); err == nil {
+	if _, ok := b.c.Lookup(b.name); ok {
 		// Another program finished the same entry first: its copy is the same.
 		_ = os.RemoveAll(b.dir)
 		return m, nil
+	}
+	// A folder there that is not a complete entry (its files deleted from outside SituCraft, as a
+	// cleaner of old temporary files does, leaving the folders) is replaced: kept, it would be
+	// built again and set aside again, on every request.
+	if err := os.RemoveAll(target); err != nil {
+		return nil, err
 	}
 	if err := os.Rename(b.dir, target); err != nil {
 		return nil, err

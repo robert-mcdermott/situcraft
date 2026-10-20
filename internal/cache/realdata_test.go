@@ -79,7 +79,10 @@ func TestRealBundleCaches(t *testing.T) {
 				t.Fatal(err)
 			}
 			took := time.Since(start)
-			if took > buildBudget {
+			// The budget is a claim about the program's speed, which the race detector's
+			// instrumentation does not keep (the Breast bundle about 130 s with every package's
+			// tests running beside it); its time is only logged then.
+			if took > buildBudget && !raceDetector {
 				t.Errorf("building took %v, over the %v budget", took, buildBudget)
 			}
 			if !status.Ready {

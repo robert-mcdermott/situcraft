@@ -212,7 +212,7 @@ func Enrich(ctx context.Context, g *Graph, label []int32, K int, stratum []int32
 					out.s1[c] += d
 					out.s2[c] += mul(d, d)
 					// At least as far from the expectation, allowing for the sums' rounding.
-					if math.Abs(d) >= dev[c]-1e-9*math.Max(1, dev[c]) {
+					if math.Abs(d) >= dev[c]-mul(1e-9, math.Max(1, dev[c])) {
 						out.far[c]++
 					}
 				}

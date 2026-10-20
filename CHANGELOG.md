@@ -232,6 +232,34 @@ a result, a certificate checked by making the result again, and a package that o
   `math.Erfc`, fused the same way. Each product is now rounded on its own, and the tails come from
   SituCraft's own `Erfc`, the same everywhere. Certificates of a Moran's I made on one processor
   now verify on the other; a test pins its every number on both.
+- **Every certified result the same on every processor.** Certificates made on Apple silicon (arm64)
+  were verified with an x86-64 (amd64) build, for a cohort (70 steps: per-sample graphs and
+  answers, the summary, and the abundance, expression and spatial comparisons) and the Lung's
+  spatial analyses (all six questions, regions compared and a profile across a region's edge).
+  - **What differed:** the cohort comparisons' p-values and intervals (Student's t, the beta,
+    gamma and Poisson distributions) and the band areas across a region's edge, in their last
+    digits.
+  - **What changed:**
+    - each product added to something is rounded on its own wherever results are made: the
+      distributions; the areas of regions and bands; a window's edges, which Ripley's K corrects
+      by; the permutation tests' ties; the refinement's diagnostics; an import's checks; the
+      simulator's centroids;
+    - log-gamma, `log1p`, the inverse error function and the arctangent are SituCraft's own (from
+      fdlibm, and AS 241 for the inverse error function), like the logarithm and exponential
+      before them;
+    - the powers of ten that round a histogram's step and the cohort QC's numbers are settled
+      exactly.
+  - **Tested:** the compiler's arm64 output was searched for every fused multiply-add, each one
+    rounded on its own or found exact (a product by a power of two); tests pin the new functions'
+    digests, and the areas', on both processors.
+- **A cache entry emptied from outside SituCraft** (its files deleted by a cleaner of old temporary
+  files, its folder left) was built again on every request and set aside each time, as if another
+  program had built it first; the Viewer asked again every two seconds. Such an entry is now
+  replaced. A build that leaves its data missing ends as failed and says why, and the Viewer and the
+  QC view say so instead of starting another.
+- **Interrupted graphs, spatial analyses, images, registrations and alignment checks** can be resumed
+  after SituCraft restarts, as other jobs could; a verification can only be discarded (what it was
+  sent is not kept).
 
 ### Changed
 

@@ -312,7 +312,7 @@ func NearestDistances(ctx context.Context, x, y []float32, label []int32, K int,
 		dev := math.Abs(out.Median[q] - m)
 		far := 0
 		for s := 0; s < P; s++ {
-			if math.Abs(permMedian[s*K*K+q]-m) >= dev-1e-9*math.Max(1, dev) {
+			if math.Abs(permMedian[s*K*K+q]-m) >= dev-mul(1e-9, math.Max(1, dev)) {
 				far++
 			}
 		}
