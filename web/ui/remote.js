@@ -38,6 +38,8 @@ import { expressionDocument as expressionDocumentOf } from './cohort-expression.
 import { FIGURE_SIZES, addPanel, checkFigure, createFigure, figuresOf, mm, panelLetters, panelSummary, removeFigure, saveFigure, toMM } from '../lib/figures.js';
 import { drawFigure, readBackFigure, writeFigure } from './figures.js';
 import { tissueViews, viewRegion } from './mode-reports.js';
+import { RECORD_FORMATS, recordOf } from './record-view.js';
+import { recordableResults } from '../lib/record.js';
 import { BUNDLE_FIELDS, addSampleField, fieldValue, readSamplesTable, removeSampleField, renameSample, sampleFields, samplesCSV, samplesOf, setFieldKind, setRegionSamples, setSampleField } from '../lib/samples.js';
 
 export class ActionError extends Error {}
@@ -2743,6 +2745,30 @@ export function installRemote(app) {
       };
     },
 
+    async record(args) {
+      const ref = resultRef(args.result);
+      const format = args.format === undefined ? 'json' : choose(String(args.format), Object.keys(RECORD_FORMATS), 'format');
+      let now = new Date().toISOString();
+      if (args.time !== undefined) {
+        const t = new Date(String(args.time));
+        if (Number.isNaN(t.getTime())) throw new ActionError(`time is ISO 8601, not ${args.time}.`);
+        now = t.toISOString();
+      }
+      let rec;
+      try {
+        rec = await recordOf(app, ref.id, { now });
+      } catch (error) {
+        throw new ActionError(`The record of ${ref.name} could not be read: ${error.message}`);
+      }
+      await settleMode('reports');
+      await app.reportsView?.showRecord(ref.id);
+      const bundles = rec.steps.filter((x) => x.kind === 'dataset').length;
+      return {
+        message: `What made ${rec.result.name}: ${plural(rec.steps.length, 'step')} from ${plural(bundles, 'bundle')}, with ${plural(rec.references.length, 'reference')} (${rec.software.map((x) => `${x.name} ${x.version}`.trim()).join('; ')}).`,
+        data: { ...rec, ...(format === 'json' ? {} : { text: RECORD_FORMATS[format].write(rec) }) },
+      };
+    },
+
     async read_figure(args) {
       const path = String(args.path ?? '');
       const response = await fetch(`/api/read-figure?path=${encodeURIComponent(path)}`, { cache: 'no-store' });
@@ -2761,7 +2787,14 @@ export function installRemote(app) {
     },
 
     async export(args) {
-      const what = choose(args.what, ['project', 'archive', 'methods', 'alignment', 'regions', 'reviews', 'samples', 'cohort-table', 'pseudobulk'], 'kind of file');
+      const what = choose(args.what, ['project', 'archive', 'methods', 'alignment', 'regions', 'reviews', 'samples', 'cohort-table', 'pseudobulk', 'record'], 'kind of file');
+      if (what === 'record') {
+        const ref = resultRef(args.result);
+        const ext = String(args.path ?? '').split('.').at(-1).toLowerCase();
+        const format = args.format !== undefined ? choose(String(args.format), Object.keys(RECORD_FORMATS), 'format') : Object.keys(RECORD_FORMATS).find((k) => RECORD_FORMATS[k].ext === ext) ?? 'markdown';
+        const rec = await recordOf(app, ref.id);
+        return { file: RECORD_FORMATS[format].write(rec), message: `What made ${rec.result.name}, as ${RECORD_FORMATS[format].label}: ${plural(rec.steps.length, 'step')}, ${plural(rec.references.length, 'reference')}.` };
+      }
       if (what === 'cohort-table' || what === 'pseudobulk') {
         const list = summariesOf(project());
         if (!list.length) throw new ActionError('The project has no summary yet: summarize_samples makes one.');
@@ -2819,6 +2852,19 @@ export function installRemote(app) {
       return { message: `Wrote ${body.path} (${body.bytes} bytes): ${project().name}, its bundles recorded relative to it.`, data: { path: body.path, bytes: body.bytes } };
     },
   };
+
+  // A result a record can be made of, by its ID or its name (a name several share needs the ID).
+  function resultRef(ref) {
+    const results = recordableResults(project());
+    if (!results.length) throw new ActionError('The project has no result yet.');
+    const text = String(ref ?? '').trim();
+    const byId = results.find((r) => r.id === text);
+    if (byId) return byId;
+    const name = choose(text, [...new Set(results.map((r) => r.name))], 'result');
+    const named = results.filter((r) => r.name === name);
+    if (named.length > 1) throw new ActionError(`${named.length} results are named "${name}": give one's ID (${named.map((r) => `${r.id}, ${r.kind}`).join('; ')}).`);
+    return named[0];
+  }
 
   // A post-Xenium image of a dataset by its name or artifact ID (its only image if not named).
   function imageRef(dataset, ref) {

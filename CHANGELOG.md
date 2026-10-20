@@ -64,6 +64,32 @@ a result, a certificate checked by making the result again, and a package that o
     H&E (60 pixels the suite's own placing of the image through its deformation and transform, and
     the Viewer's within four levels).
 
+- **What made a result (wave 8, slice 3).** The record of any result: an analysis, a comparison, a
+  summary, a label set, a clustering, a map, a graph, a segmentation, an alignment, a filter or a
+  figure.
+  - **Each step** from the bundles to the result, in an order where each comes after the steps it
+    was made from: its method and version, its parameters and seeds, the software that ran it, the
+    decisions about it (a segmentation promoted, an alignment chosen) and the publications it
+    follows. A cohort's result reaches back through each sample's segmentation, clustering, labels,
+    graph and analyses, as the summary's job recorded them, and through the design.
+  - **The references in one place:** every publication SituCraft cites (the methods' papers, the
+    starter marker sets' atlases, the science page's list), numbered as first cited, each with its
+    DOI; a marker set's or an import's own citation kept as written.
+  - **Shown** in the Reports view, below the figures (choose a result, or **What made it** in the
+    inspector), and **written** as Markdown (the samples' same steps written once), JSON
+    (`situcraft-record`) or BibTeX.
+  - **Remote control:** `record`, and `export` with `what: record`.
+  - The cohort summary's citation names the published muscat paper (Crowell et al. 2020) by its
+    title.
+  - **Validated:** each DOI against a recorded copy of Crossref's record of it (its title,
+    journal, year, volume, first page and first author); every citation the program records, the
+    starter sets' atlases and the science page's references found in the list; in Node, the
+    steps' order, inputs, seeds and references of a sample's and a cohort's results; in the page,
+    the Lung enrichment's record (from the bundle through its segmentation, clustering, marker set,
+    labels and graph, the clustering's seed its parameters', the methods' and atlas's papers cited,
+    the same record in every format) and the simulated cohort's expression comparison's (eight of
+    each sample's steps, the design, the summary, every method's paper).
+
 ## 0.7.0 (2026-10-19)
 
 Wave 7 of the [roadmap](situcraft-spec/roadmap.md): samples and cohorts. A study's sections in one

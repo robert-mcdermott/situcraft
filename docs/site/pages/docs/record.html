@@ -1,7 +1,7 @@
 ---
 title: The record
-description: What SituCraft keeps: projects that save themselves with their history, artifacts with their lineage and checksums, decisions and reviews never removed, a methods paragraph with references, project archives, and where it all lives.
-lede: Everything you do is kept: projects save themselves with their history, every result is an artifact with its lineage and the SHA-256 of its files, and decisions and reviews are appended, never removed. The methods paragraph and project archives take the record elsewhere.
+description: What SituCraft keeps: projects that save themselves with their history, artifacts with their lineage and checksums, decisions and reviews never removed, what made a result with its software and references, a methods paragraph, project archives, and where it all lives.
+lede: Everything you do is kept: projects save themselves with their history, every result is an artifact with its lineage and the SHA-256 of its files, and decisions and reviews are appended, never removed. What made a result, the methods paragraph and project archives take the record elsewhere.
 ---
       <h2 id="projects">Projects</h2>
       <p><strong>Projects save themselves</strong> to the library as you work; the start page and the project menu (the project's name, top left) reopen them. <strong>Undo</strong> and <strong>Redo</strong> (⌘Z, ⇧⌘Z) cover every change, and the drawer (⌘J) shows the project's history and the session's log.</p>
@@ -10,6 +10,11 @@ lede: Everything you do is kept: projects save themselves with their history, ev
 
       <h2 id="artifacts">Artifacts and their lineage</h2>
       <p>Each result is an artifact of the project: a segmentation, a comparison, a clustering and its map, a label set, a graph, an analysis, an export. Each is kept with what it was made from (its lineage), the method's version, every parameter and seed, and the SHA-256 of its files, so the same inputs and settings give the same result on any computer, and asking again answers the one already made. Decisions (a segmentation promoted, kept or rejected), reviews and the versions of filters, names, marker sets, regions and alignments are appended to the project with who made them, when and why, and never removed: taking one back is another. <a href="{{github}}/blob/main/docs/FORMATS.md">Formats</a> describes every file SituCraft reads and writes.</p>
+
+      <h2 id="what-made">What made a result</h2>
+      <shot name="record" alt="The Reports view's record of the Lung classes' neighborhood enrichment: the bundle, its segmentation, clustering, marker set and labels, each with its method, parameters, seed, software and references">What made the Lung classes' enrichment: each step from the bundle, with its method, parameters, seed, software and references.</shot>
+      <p><strong>What made a result</strong>, below the figures in the Reports view (or <strong>What made it</strong> in the inspector, for any analysis, comparison, summary, label set, clustering, map, graph, segmentation, alignment or filter, and for a figure), lists each step from the bundles to the result, each after the steps it was made from: its method and version, its parameters and seed, the software that ran it, the decisions about it (a segmentation promoted, an alignment chosen) and the publications it follows. A cohort's comparison reaches back through each sample's segmentation, clustering, labels and graph and through the design; the samples' same steps are written once.</p>
+      <p>The publications SituCraft cites are kept in one list, each with its DOI, checked against a recorded copy of Crossref's record of it; a marker set's or an import's own citation is kept as written. <strong>Write it as</strong> Markdown (to read, or to paste into a methods section), JSON (<code>situcraft-record</code>, <a href="{{github}}/blob/main/docs/FORMATS.md#what-made-a-result">Formats</a>) or BibTeX (for a reference manager). Remote control's <code>record</code> answers it.</p>
 
       <h2 id="methods">The methods paragraph</h2>
       <shot name="methods" alt="The Data view's methods paragraph for the Breast example: the platform, panel and software, the segmentation and how the bundle was checked, and the data cited with references">The Breast example's methods paragraph, its data cited.</shot>

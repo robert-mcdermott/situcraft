@@ -30,7 +30,7 @@ import (
 
 // cohortCitation cites the pseudobulk's approach, and nichesCitation the niches across samples'.
 const (
-	cohortCitation = "Crowell HL et al. (2020) On the discovery of subpopulation-specific state transitions from multi-sample multi-condition single-cell RNA sequencing data. Nat Commun 11:6077."
+	cohortCitation = "Crowell HL, Soneson C, Germain P-L, et al. muscat detects subpopulation-specific state transitions from multi-sample multi-condition single-cell transcriptomics data. Nat Commun 2020;11:6077. doi:10.1038/s41467-020-19894-4"
 	nichesCitation = "Schürch CM, Bhate SS, Barlow GL, et al. Coordinated cellular neighborhoods orchestrate antitumoral immunity at the colorectal cancer invasive front. Cell 2020;182:1341–1359."
 )
 

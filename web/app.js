@@ -177,6 +177,16 @@ async function start() {
 
   app.focusItem = (focus) => store.setUI({ focus }, ['focus']);
 
+  // What made a result: its record, in the Reports view.
+  app.showRecord = async (id) => {
+    if (store.ui.mode === 'reports' && app.reportsView) {
+      app.reportsView.showRecord(id);
+      return;
+    }
+    app.recordFocus = id;
+    await app.setMode('reports');
+  };
+
   // Opens a dataset's post-Xenium image in the Alignment view; with transform, that version's
   // landmarks to edit.
   app.showAlignment = async (datasetId, imageId, { transform = null } = {}) => {

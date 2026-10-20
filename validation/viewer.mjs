@@ -110,6 +110,21 @@ function embeddedImage(part) {
 }
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+// What made a result, as the suite reads it (wave 8, slice 3): whether each step comes after the
+// steps it was made from, the steps' kinds, the registry's keys among the references, the Markdown's
+// numbered references and the BibTeX's entries.
+function recordFacts(rec, md = '', bib = '') {
+  const steps = rec?.steps ?? [];
+  return {
+    ordered: steps.length > 0 && steps.every((s, i) => s.n === i + 1 && s.inputs.every((k) => k < s.n)),
+    kinds: steps.map((s) => s.kind),
+    keys: (rec?.references ?? []).map((r) => r.key).filter(Boolean),
+    numbered: (rec?.references ?? []).every((r, i) => r.n === i + 1) && steps.every((s) => s.references.every((n) => n >= 1 && n <= rec.references.length)),
+    mdRefs: (md.split('\n## References\n')[1] ?? '').split('\n').filter((l) => /^\d+\. /.test(l)).length,
+    bibEntries: [...bib.matchAll(/^@\w+\{([^,]+),$/gm)].map((m) => m[1]),
+  };
+}
+
 const BUNDLES = ['xenium-lung-2fov', 'xenium-breast-2fov'];
 const BUDGET = { fps: 30, revisitMs: 500, queryMs: 500 };
 
@@ -2328,6 +2343,35 @@ export async function viewerSuite({ check, MissingData, verbose }) {
               && barNames.length >= 5 && barNames.join() === pattern.slice(0, barNames.length).map((g) => mo.moran.genes[g]).join() && Math.min(...sizes) >= 6,
               'every bar, point, square, dot and gene the suite\'s; 6 pt or more');
           }
+
+          // What made a result (wave 8, slice 3): the record of the Lung classes' enrichment, each
+          // step from the bundle to it after the steps it was made from, with its method, the
+          // clustering's seed its parameters' own, and the publications each follows (the bundle
+          // Xenium's, the clustering scanpy's and Leiden's, the labels' the panel's starter atlas);
+          // written as Markdown, JSON and BibTeX by export, the same record; shown in Reports.
+          {
+            const ids = await chrome.eval(`(() => { const p = window.situcraft.store.project; const ds = p.datasets.find((x) => x.name === 'xenium-lung-2fov'); return { dataset: ds.id, enrichment: p.artifacts.filter((a) => a.kind === 'spatial' && a.dataset === ds.id && a.state === 'complete' && a.question === 'enrichment').at(-1)?.id }; })()`);
+            const time = '2026-10-19T12:00:00Z';
+            const asked = await act('record', { result: ids.enrichment, format: 'markdown', time });
+            const rec = asked.data;
+            const paths = { md: join(work, 'record.md'), json: join(work, 'record.json'), bib: join(work, 'record.bib') };
+            const wrote = {};
+            for (const [ext, path] of Object.entries(paths)) wrote[ext] = await act('export', { what: 'record', result: ids.enrichment, path, overwrite: true });
+            const read = (ext) => (existsSync(paths[ext]) ? readFileSync(paths[ext], 'utf8') : '');
+            const fromJSON = JSON.parse(read('json') || 'null');
+            const f = recordFacts(rec, read('md'), read('bib'));
+            const step = (kind) => rec?.steps.find((x) => x.kind === kind);
+            const clustering = step('clustering');
+            const shown = await chrome.eval(`(() => ({ record: document.querySelector('.record')?.dataset.record ?? null, steps: document.querySelectorAll('.record-step').length, refs: document.querySelectorAll('.record-refs li').length }))()`);
+            const undated = (text) => String(text ?? '').replace(/ on \d{4}-\d{2}-\d{2}:/, ':');
+            const sameSteps = fromJSON && JSON.stringify(fromJSON.steps) === JSON.stringify(rec?.steps) && JSON.stringify(fromJSON.references) === JSON.stringify(rec?.references);
+            const want = ['janesick2023', 'situcraft', 'wolf2018', 'traag2019', 'tirosh2016', 'travaglini2020', 'schapiro2017', 'palla2022'];
+            check('viewer', 'what made a result: the Lung enrichment\'s record, each step after what made it, from the bundle through its segmentation, clustering, marker set, labels and graph; the clustering\'s seed its parameters\'; the publications each follows, numbered; Markdown, JSON and BibTeX the same record; shown in Reports', `${asked.ok ? asked.message.slice(0, 160) : asked.message}; ${Object.entries(wrote).map(([k, w]) => `${k} ${w.ok ? 'written' : w.message}`).join(', ')}; ${f.kinds.join(' > ')}; ${f.ordered ? 'in order' : 'out of order'}; seed ${clustering?.seeds} (parameters ${clustering?.parameters?.seed}); ${rec?.references.length} references (${want.filter((k) => !f.keys.includes(k)).join(', ') || 'all expected'}), Markdown ${f.mdRefs}, BibTeX ${f.bibEntries.length}; JSON ${sameSteps ? 'the same' : 'other'}; shown ${JSON.stringify(shown)}`,
+              asked.ok && Object.values(wrote).every((w) => w.ok) && f.ordered && f.numbered && f.kinds[0] === 'dataset' && f.kinds.at(-1) === 'spatial' && ['segmentation', 'clustering', 'marker-set', 'labels', 'graph'].every((k) => f.kinds.includes(k))
+              && clustering?.seeds.length === 1 && clustering.seeds[0] === clustering.parameters.seed && want.every((k) => f.keys.includes(k)) && f.mdRefs === rec.references.length && f.bibEntries.length === rec.references.length && f.bibEntries.includes('wolf2018')
+              && undated(read('md')) === undated(asked.data.text) && sameSteps && shown.record === ids.enrichment && shown.steps > 0 && shown.refs === rec.references.length,
+              'in order, from the bundle; the seed recorded; Xenium, scanpy, Leiden, the starter atlas and the analysis cited; the same record in each format; shown');
+          }
         }
 
         // The simulated example, made on this computer, and its worked example scoring the
@@ -3157,6 +3201,25 @@ export async function viewerSuite({ check, MissingData, verbose }) {
               && vPoints === epiResult.genes.length && vRed === genesFound && /<text[^>]*>SIM033<\/text>/.test(volcano) && dots === 8
               && spRows.length >= 5 && spRows.length <= enr.length && spRows.filter((m) => m[3] === '#d63b4a').length === enr.slice(0, spRows.length).filter((t) => t.padj < 0.05).length && Math.min(...sizes) >= 6,
               'four labels on the log scale, the found red; a point each gene, the found red, SIM033 named; 8 units; the enrichments; 6 pt or more');
+          }
+
+          // What made a cohort's result (wave 8, slice 3): the record of the expression comparison,
+          // from the eight bundles through each sample's segmentation, clustering, labels and graph
+          // (found in the summary's job, as the program kept it), the design and the summary, to the
+          // comparison; the eight samples' steps written once in the Markdown; the methods' papers
+          // (muscat, edgeR's quasi-likelihood, TMM, voom, limma, Benjamini–Hochberg) cited.
+          {
+            const asked = await act('record', { result: de.data?.id, format: 'markdown' });
+            const rec = asked.data;
+            const f = recordFacts(rec, asked.data?.text ?? '');
+            const count = (kind) => f.kinds.filter((k) => k === kind).length;
+            const summary = rec?.steps.find((x) => x.kind === 'cohort-summary');
+            const fromSummary = new Set((summary?.inputs ?? []).map((n) => rec.steps[n - 1].kind));
+            const want = ['crowell2020', 'chen2016', 'robinson2010', 'law2014', 'smyth2004', 'benjamini1995'];
+            check('viewer', 'what made a cohort\'s result: the expression comparison\'s record, from the eight bundles through each sample\'s segmentation, clustering, labels and graph, the design and the summary; the samples\' steps written once; the methods\' papers cited', `${asked.ok ? asked.message.slice(0, 160) : asked.message}; ${['dataset', 'segmentation', 'clustering', 'labels', 'graph', 'design', 'cohort-summary', 'expression'].map((k) => `${k} ${count(k)}`).join(', ')}; the summary from ${[...fromSummary].join(', ')}; ${f.ordered ? 'in order' : 'out of order'}; ${want.filter((k) => !f.keys.includes(k)).join(', ') || 'every method\'s paper'} ${want.some((k) => !f.keys.includes(k)) ? 'missing' : 'cited'}`,
+              asked.ok && f.ordered && f.numbered && count('dataset') === 8 && count('segmentation') === 8 && count('labels') === 8 && count('graph') >= 8 && count('design') === 1 && count('cohort-summary') === 1 && f.kinds.at(-1) === 'expression'
+              && ['dataset', 'segmentation', 'labels', 'graph'].every((k) => fromSummary.has(k)) && /\*\*Xenium output bundles, one for each of 8:\*\*/.test(asked.data.text) && want.every((k) => f.keys.includes(k)) && f.mdRefs === rec.references.length,
+              'eight of each, then the design, the summary and the comparison, in order; the bundles written once; every method\'s paper');
           }
 
           // Worked examples on the simulated cohorts (wave 7, slice 9), each run step by step and

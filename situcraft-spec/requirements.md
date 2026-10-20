@@ -164,7 +164,7 @@ Status: **planned (wave N)** until built. Then **done**, **partial** (the gap no
 | E6 | Figures (SVG, PDF, PNG) with scale bar, legend and provenance | partial (wave 8, slice 1: figures of saved views of the tissue, the stains composited from their samples, the cells and their fills and the transcripts in µm, a scale bar and a legend, lettered panels on a journal's page; written as SVG, PDF and PNG with a manifest of what each panel was drawn from inside, read back and compared with the project; slice 2: plots of results beside the tissue (QC distributions, the cells' map, spatial answers, a cohort's comparisons), post-Xenium images placed by their alignments, regions and every fill on a tissue panel, rows of panels as tall as each other) |
 | E7 | A certificate that `situcraft verify` checks by recomputing | planned (wave 8) |
 | E8 | A redacted, self-contained static result package | planned (wave 8) |
-| E9 | A list of the software and methods behind a result, with versions and citations | planned (wave 8) |
+| E9 | A list of the software and methods behind a result, with versions and citations | done (wave 8, slice 3) |
 
 ## Automation
 

@@ -783,6 +783,22 @@ const scenes = {
     await scrollTo('.reports-preview-wrap');
     await clearToasts();
   },
+  // What made a result (wave 8, slice 3): the record of the Lung classes' enrichment in the Reports
+  // view, from the bundle through its segmentation, clustering, marker set, labels and graph.
+  async record() {
+    await act('open_example', { example: 'lung' });
+    await act('cluster_cells', {});
+    await act('label_cells', { markers: 'lung' });
+    await act('build_graph', { dataset: 'xenium-lung-2fov' });
+    const labels = await js(`window.situcraft.store.project.artifacts.find((a) => a.kind === 'labels')?.id`);
+    const enrichment = await act('spatial_analysis', { question: 'enrichment', dataset: 'xenium-lung-2fov', labels, level: 1 });
+    await act('record', { result: enrichment.data?.id });
+    await waitFor(`document.querySelectorAll('.record-step').length > 3`);
+    await js(`document.getElementById('app').classList.add('inspector-closed')`);
+    await sleep(400);
+    await scrollTo('.record');
+    await clearToasts();
+  },
   // The Jobs view after both examples were opened: each job's state and times, one's log open.
   async jobs() {
     await act('open_example', { example: 'lung' });

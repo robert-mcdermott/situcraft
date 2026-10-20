@@ -1405,3 +1405,16 @@ table.data.cohort-balance { width: auto; min-width: 360px; margin-bottom: 8px; }
 .reports-notes:empty { display: none; }
 .reports-panel .seg-card-title { display: flex; align-items: center; gap: 4px; }
 .reports .spacer { flex: 1; }
+/* What made a result (ui/record-view.js). */
+.record { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.record-picker select { width: min(640px, 100%); }
+.record-body { display: flex; flex-direction: column; gap: 10px; font-size: 12.5px; }
+.record-body > p { margin: 0; }
+.record-steps { margin: 0; padding-left: 24px; display: flex; flex-direction: column; gap: 10px; }
+.record-step-head { line-height: 1.5; }
+.record-step-head .badge { vertical-align: 1px; }
+.record-items { font-size: 12px; margin: 2px 0 0; }
+.record-kv { grid-template-columns: 7.5em 1fr; margin-top: 4px; }
+.record-kv dd { text-align: left; white-space: normal; overflow-wrap: anywhere; }
+.record-refs { margin: 4px 0 0; padding-left: 24px; font-size: 12px; line-height: 1.45; color: var(--text-2); }
+.record-software ul { margin-top: 4px; }

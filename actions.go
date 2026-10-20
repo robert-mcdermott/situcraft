@@ -566,15 +566,16 @@ var remoteActions = []remoteAction{
 		"summary": textArg("The summary, by ID (the latest if not given)."),
 	}, "sample", "label"), long: true},
 	{Name: "compare_panels", Title: "Compare the samples' panels", Description: "Compares the gene panels of the project's samples (their bundles' gene_panel.json), before any summary: the panels (each one's name, design, version and genes, and the samples read with it), the genes every panel has (the only ones compared across samples), those in some panels only, shared genes read by other codewords, and genes whose Ensembl IDs or names differ.", InputSchema: schema(map[string]any{}), long: true},
-	{Name: "export", Title: "Write a file", Description: "Writes a file: the project document (project, JSON), a project archive (archive, .scz: the project, its bundles recorded relative to the archive), a dataset's methods paragraph with its references (methods, Markdown), a post-Xenium image's alignment as Xenium Explorer reads it (alignment: its transformation matrix, the image's pixels to the Xenium image's, or its landmarks as keypoints; CSV), a dataset's regions as QuPath imports annotations (regions: GeoJSON, in µm, the Xenium image's pixels or a post-Xenium image's), a dataset's reviews (reviews: CSV, a row a cell, cluster or region reviewed; or JSON, the record), the project's samples (samples: CSV, a row a sample with its fields and its bundle's), or a cohort summary's table (cohort-table: CSV, a row each number of each sample, with the artifact it came from) or pseudobulk (pseudobulk: CSV, a row a sample's label, a column a gene). Needs the token.", InputSchema: schema(map[string]any{
-		"what":        textArg("project, archive, methods, alignment, regions, reviews, samples, cohort-table or pseudobulk."),
+	{Name: "export", Title: "Write a file", Description: "Writes a file: the project document (project, JSON), a project archive (archive, .scz: the project, its bundles recorded relative to the archive), a dataset's methods paragraph with its references (methods, Markdown), a post-Xenium image's alignment as Xenium Explorer reads it (alignment: its transformation matrix, the image's pixels to the Xenium image's, or its landmarks as keypoints; CSV), a dataset's regions as QuPath imports annotations (regions: GeoJSON, in µm, the Xenium image's pixels or a post-Xenium image's), a dataset's reviews (reviews: CSV, a row a cell, cluster or region reviewed; or JSON, the record), the project's samples (samples: CSV, a row a sample with its fields and its bundle's), or a cohort summary's table (cohort-table: CSV, a row each number of each sample, with the artifact it came from) or pseudobulk (pseudobulk: CSV, a row a sample's label, a column a gene), or what made a result (record: Markdown, JSON or BibTeX, as record answers it). Needs the token.", InputSchema: schema(map[string]any{
+		"what":        textArg("project, archive, methods, alignment, regions, reviews, samples, cohort-table, pseudobulk or record."),
 		"summary":     textArg("For a cohort table or pseudobulk: the summary, by ID (the latest if not given)."),
+		"result":      textArg("For a record: the result, by ID or name."),
 		"path":        textArg("The absolute path of the file to write."),
 		"overwrite":   flagArg("Replace the file if it exists."),
 		"dataset":     datasetArg,
 		"image":       textArg("For an alignment: the image, by name or artifact ID."),
 		"transform":   textArg("For an alignment: the version, by name or ID (the one in use if not given)."),
-		"format":      textArg("For an alignment: matrix (the default) or keypoints; for reviews: csv (the default) or json."),
+		"format":      textArg("For an alignment: matrix (the default) or keypoints; for reviews: csv (the default) or json; for a record: markdown, json or bibtex (from the path's extension, .md, .json or .bib, if not given)."),
 		"coordinates": textArg("For regions: um (the default), xenium (the Xenium image's pixels) or a post-Xenium image by name or artifact ID (its pixels, as QuPath opens it)."),
 		"regions":     map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "For regions: which, by name or ID (all if not given)."},
 	}, "what", "path"), long: true, output: true},
@@ -600,6 +601,11 @@ var remoteActions = []remoteAction{
 		"time":      textArg("The time written, ISO 8601 (now if not given): the same time, the same bytes."),
 		"overwrite": flagArg("Replace the file if it exists."),
 	}, "path"), long: true, output: true},
+	{Name: "record", Title: "What made a result", Description: "Answers what made a result, as the Reports view shows it: each step from the bundles to it (a bundle, a segmentation, a clustering, a marker set, labels, a graph, an analysis, a design, a summary, a comparison, a figure…), in an order where each comes after the steps it was made from, with its method and version, its parameters and seed, the software that ran it, the decisions about it, and the publications it follows (numbered as first cited, each with its DOI). The result is any analysis, comparison, summary, label set, clustering, map, graph, segmentation, alignment, filter or figure of the project. format markdown or bibtex also answers the record as that text; export (what: record) writes it to a file.", InputSchema: schema(map[string]any{
+		"result": textArg("The result, by ID or name."),
+		"format": textArg("json (the default), markdown or bibtex."),
+		"time":   textArg("The time recorded, ISO 8601 (now if not given)."),
+	}, "result"), long: true},
 	{Name: "read_figure", Title: "Read a figure back", Description: "Reads a figure SituCraft wrote (SVG, PDF, PNG or JSON) and compares it with the project: whether its manifest is as written, what changed since in each panel's view, dataset and artifacts, and whether each panel draws the same now.", InputSchema: schema(map[string]any{
 		"path": textArg("The figure file on this computer."),
 	}, "path"), long: true, readsAt: true},

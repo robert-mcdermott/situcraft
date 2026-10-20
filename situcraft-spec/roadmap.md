@@ -3515,10 +3515,48 @@ left in it.
        compared with a little slack.
      - **A map's legend of 29 clusters took the panel:** clusters past twelve are named on the
        map instead, and a legend never takes more than a third of its panel.
-3. **What made a result (E9).** A result's record: each step from the bundles to it, its method,
-   version, parameters, seed, software and reference, in the Reports view and the inspector; the
-   references kept in one place, each publication's DOI checked against a recorded copy of its
-   Crossref record; written as Markdown, JSON and BibTeX; remote control `record`.
+3. **What made a result (E9): done.**
+   - **The references in one place** (`web/lib/references.js`): every publication SituCraft cites
+     (the methods' citations the program records, the starter marker sets' atlases, the science
+     page's list), each with its authors, title, journal, year, volume, pages and DOI, written in
+     Vancouver style and as BibTeX; a citation as the program records it is read into the list's
+     references by each one's first author and year, what the list does not hold kept as written.
+   - **The record** (`web/lib/record.js`): from the result back to the bundles, each item's inputs
+     from its project record (a label set's clustering and marker set, an analysis's graph and
+     labels, a comparison's summary and design, a figure's panels…) and from its artifact's
+     manifest (its parents, and its job's inputs: a cohort summary's samples' segmentations,
+     labels, graphs and analyses); the steps ordered so that each comes after its inputs (kinds in
+     a fixed order where either may come first, then the oldest first), each with its method and
+     version, parameters, seeds, software, decisions and references, numbered as first cited
+     (SituCraft itself with the first step it ran). Written as Markdown (consecutive steps the
+     same but for their items written once), JSON (`situcraft-record` 1) and BibTeX.
+   - **Shown** in the Reports view below the figures (`web/ui/record-view.js`: a result chosen
+     among the project's, its steps and references, the files written); **What made it** in the
+     inspector for any result. Remote control: `record` (the record, and its Markdown or BibTeX),
+     `export` with `what: record`.
+   - Validation:
+     - **Crossref** (`validation/reference/crossref/`): `make-crossref.mjs` records Crossref's
+       record of each DOI (metadata CC0); `references.test.mjs` checks each reference against it
+       (title, or its part before a subtitle; the journal, its NLM abbreviation word by word;
+       year; volume; first page; first author), with four exceptions saying why.
+     - **In Node** (`references.test.mjs`, `record.test.mjs`): every citation the Go code records
+       found in the list, nothing left over; the science page's 55 and the starter sets' atlases
+       found; the steps, inputs, seeds and numbering of a sample's enrichment and of a cohort's
+       expression comparison, without and with the manifests; the Markdown's groups and the
+       BibTeX's entries.
+     - **In the page** (viewer suite): the Lung enrichment's record (in order from the bundle
+       through its segmentation, clustering, marker set, labels and graph; the clustering's seed
+       its parameters'; Xenium's, scanpy's, Leiden's, the atlas's and the analysis's papers cited;
+       the same record in Markdown, JSON and BibTeX; shown in Reports); the simulated cohort's
+       expression comparison's (eight of each sample's steps, the design and the summary, the
+       bundles written once, every method's paper).
+   - Found by slice 3:
+     - **A DOI of another paper:** Ederer and Mantel's 1974 note was cited by the DOI of the
+       article before it in the journal; Crossref's record named a measles paper.
+     - **A preprint's title for a paper:** the cohort summary cited muscat (Nat Commun 2020) by
+       its preprint's title; it now cites it as the expression comparison does.
+     - **A cohort's analyses were never read:** a dangling `else` in reading a job's inputs left
+       a summary's analyses out of its record; the cohort test found it.
 4. **The methods text (E4).** Every kind of step described, from the record: the segmentation
    (expanded, refined, imported, decided), filters, clusters and maps, labels (markers, a
    reference, imported, curated, consensus, reviews), images and their alignment, regions,

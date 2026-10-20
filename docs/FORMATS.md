@@ -345,6 +345,34 @@ Canonical JSON is JSON with every object's keys sorted and nothing undefined; th
 UTF-8 bytes. The same figure written at the same time (`write_figure`'s `time`) is the same bytes in
 SVG and PDF.
 
+### What made a result
+
+The record of a result (any analysis, comparison, summary, label set, clustering, map, graph,
+segmentation, alignment, filter or figure), as the Reports view shows it and remote control's
+`record` answers it, read from the project and the artifacts' manifests (their parents and their
+jobs' inputs). Written as JSON:
+
+| Field | Holds |
+| --- | --- |
+| `format`, `version` | `"situcraft-record"`, `1` |
+| `result` | `{id, kind, name}` |
+| `program` | `{name, version, commit?}`: the SituCraft that wrote the record |
+| `recorded` | When (ISO 8601) |
+| `steps` | Each step from the bundles to the result, each after the steps it was made from: `{n, id, kind, name, made, method: {name, version}, parameters, seeds, software: [{name, version, commit?}], references (numbers), inputs (the numbers of the steps it was made from), decisions: [{kind, rationale, by, time}], dataset? (its dataset's name), note?, by?}` |
+| `software` | Every program the steps ran, each `{name, version}` once |
+| `references` | `{n, key, text, doi?, url?}`, numbered as first cited: `key` the reference's in SituCraft's list (`web/lib/references.js`; `situcraft` for SituCraft itself), or null for a citation SituCraft does not list (a marker set's own, an import's), kept as written |
+
+A step's `kind` is `dataset` (a bundle), `image`, `transform`, `alignment-check`, `region`, `filter`,
+`segmentation`, `comparison`, `clustering`, `cluster-names`, `embedding`, `marker-set`, `labels`,
+`curated-labels`, `consensus-labels`, `graph`, `spatial`, `view`, `design`, `cohort-summary`,
+`abundance`, `expression`, `spatial-comparison` or `figure`. As Markdown, the steps of the same
+kind, method, parameters, software and references (each sample's segmentation, say) are written
+once, naming each item, followed by the software and the references in Vancouver style. As BibTeX,
+each reference is an entry under its key (`@article`, `@book`, `@inproceedings`, `@misc` for a
+preprint, `@manual`, `@software` for SituCraft), and one SituCraft does not list a `@misc` under
+`ref<n>` with the citation as its note. Each DOI in SituCraft's list is checked against a recorded
+copy of Crossref's record of it (`validation/reference/crossref/crossref.json`).
+
 ### Artifacts
 
 What jobs make and register is kept in `<data dir>/artifacts/<id>/`, beside a `manifest.json`:

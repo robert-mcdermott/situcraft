@@ -3,13 +3,15 @@
 // made from a saved view (a tissue panel: the view's place and look at the figure's size, a scale
 // bar and a legend), laid out and lettered, previewed as it will print, and written as SVG, PDF or
 // PNG with its manifest inside (ui/figures.js). A figure written earlier is read back and compared
-// with the project: what changed since, and whether each panel draws the same now.
+// with the project: what changed since, and whether each panel draws the same now. Below them,
+// what made a result (slice 3, ui/record-view.js).
 
 import { h, icon, clear, downloadBlob, debounce } from './dom.js';
 import { confirmDialog, promptDialog, showDialog, showMenu, toast } from './overlays.js';
 import { COHORT_PLOTS, FIGURE_SIZES, addPanel, createFigure, figureSize, figuresOf, panelLetters, panelSummary, removeFigure, removePanel, saveFigure, toMM, updatePanel } from '../lib/figures.js';
 import { QC_METRICS } from './figure-results.js';
 import { drawFigure, paintFigure, readBackFigure, writeFigure } from './figures.js';
+import { mountRecord } from './record-view.js';
 
 // A tissue panel's region from a saved view: its center, and the width a Viewer a thousand CSS
 // pixels wide shows at its zoom.
@@ -53,6 +55,7 @@ export function newPanel(project, kind) {
 export function mountReports(app, container) {
   const list = h('div.reports-list');
   const editor = h('div.reports-editor');
+  const record = mountRecord(app);
   const root = h('div.view.reports',
     h('div.workbench-head', h('h1', icon('report'), 'Reports')),
     h('div.workbench-scroll', h('div.reports-body',
@@ -62,7 +65,8 @@ export function mountReports(app, container) {
         h('button.btn.primary', { type: 'button', onclick: () => newFigure() }, icon('plus'), 'New figure'),
         h('button.btn', { type: 'button', onclick: () => readBack() }, icon('upload'), 'Read a figure back…')),
       list,
-      editor)));
+      editor,
+      record.element)));
   container.append(root);
   let selected = app.reportsFocus ?? null;
   app.reportsFocus = null;
@@ -315,14 +319,24 @@ export function mountReports(app, container) {
     else clear(editor);
   }
 
-  const later = debounce(() => render(), 50);
+  const later = debounce(() => {
+    render();
+    record.update();
+  }, 50);
   render(true);
+  if (app.recordFocus) record.show(app.recordFocus, { scroll: true });
+  app.recordFocus = null;
   app.reportsView = {
     select(id) {
       selected = id;
       render(true);
     },
     drawn: () => Number(root.dataset.drawn ?? 0),
+    // What made a result, shown in the section below the figures.
+    showRecord(id) {
+      return record.show(id, { scroll: true });
+    },
+    recordShown: () => record.shown(),
   };
   return {
     update(topics) {
