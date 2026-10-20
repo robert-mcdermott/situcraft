@@ -29,6 +29,7 @@ import (
 // clusteringCitation cites the methods a clustering uses.
 const clusteringCitation = "Wolf FA, Angerer P, Theis FJ. SCANPY: large-scale single-cell gene expression data analysis. Genome Biol 2018;19:15. doi:10.1186/s13059-017-1382-0; " +
 	"Traag VA, Waltman L, van Eck NJ. From Louvain to Leiden: guaranteeing well-connected communities. Sci Rep 2019;9:5233. doi:10.1038/s41598-019-41695-z; " +
+	"Reichardt J, Bornholdt S. Statistical mechanics of community detection. Phys Rev E 2006;74:016110 (the resolution); " +
 	"McInnes L, Healy J, Melville J. UMAP: Uniform Manifold Approximation and Projection for dimension reduction. arXiv:1802.03426, 2018 (the neighbor graph); " +
 	"Mann HB, Whitney DR. On a test of whether one of two random variables is stochastically larger than the other. Ann Math Stat 1947;18:50–60 (the markers)"
 

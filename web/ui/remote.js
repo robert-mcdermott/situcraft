@@ -7,7 +7,8 @@
 
 import { toast } from './overlays.js';
 import { cacheJobKey } from './bundles.js';
-import { datasetFilters, methodsMarkdown, showMethods, writeMethods } from './methods.js';
+import { datasetFilters, showMethods, writeMethods } from './methods.js';
+import { methodsMarkdown } from '../lib/methods-text.js';
 import { ATTRIBUTES } from '../lib/cell-attributes.js';
 import { decideSegmentation, DECISIONS, EXPORT_FORMATS, promotedSegmentation } from '../lib/segmentations.js';
 import { CLASS_INFO, RANKS, cellNames, warnings } from '../lib/review.js';
@@ -2215,19 +2216,38 @@ export function installRemote(app) {
     },
 
     async methods(args) {
-      const dataset = resolveDataset(args.dataset);
-      const item = app.bundles.link(dataset.id)?.item ?? app.bundles.itemByPath(dataset.path);
-      const report = item ? await app.bundles.validate(item).catch(() => null) : null;
-      const { latest } = datasetFilters(project(), dataset);
-      const chosen = args.filters === undefined ? latest : args.filters.map((f) => resolveFilter(f, dataset));
-      const written = await writeMethods(app, dataset, report, chosen);
-      if (args.show) {
-        app.focusItem({ kind: 'dataset', id: dataset.id });
-        await settleMode('data');
-        await showMethods(app, dataset, report, { chosen });
-        await frames();
+      // Of a result, of the project, or of a dataset (its filters chosen; the latest of each if not).
+      let scope;
+      let dataset = null;
+      let chosen = [];
+      if (args.result !== undefined) scope = { kind: 'result', id: resultRef(args.result).id };
+      else if (args.project) scope = { kind: 'project' };
+      else {
+        dataset = resolveDataset(args.dataset);
+        const { latest } = datasetFilters(project(), dataset);
+        chosen = args.filters === undefined ? latest : args.filters.map((f) => resolveFilter(f, dataset));
+        scope = { kind: 'dataset', id: dataset.id, filters: chosen.map((f) => f.id) };
       }
-      return { message: written.text, data: { dataset: dataset.name, text: written.text, references: written.references, filters: chosen.map(filterData) } };
+      const written = await writeMethods(app, scope);
+      if (args.show) {
+        if (dataset) {
+          app.focusItem({ kind: 'dataset', id: dataset.id });
+          await settleMode('data');
+          await showMethods(app, dataset, { chosen });
+          await frames();
+        } else {
+          await settleMode('reports');
+          await app.reportsView?.showMethods(scope);
+        }
+      }
+      return {
+        message: written.text,
+        data: {
+          of: written.subject, title: written.title, text: written.text,
+          paragraphs: written.paragraphs, references: written.references.map((r) => `[${r.n}] ${r.text}${r.doi && !r.text.includes(r.doi) ? ` doi:${r.doi}` : ''}`),
+          ...(dataset ? { dataset: dataset.name, filters: chosen.map(filterData) } : {}),
+        },
+      };
     },
 
     // --- Samples (wave 7) ---------------------------------------------------------------------
@@ -2841,9 +2861,9 @@ export function installRemote(app) {
         return { file: `${JSON.stringify(parseProject(serializeProject(project())), null, 2)}\n`, message: `The project document of ${project().name}.` };
       }
       if (what === 'methods') {
-        const dataset = resolveDataset(args.dataset);
-        const result = await actions.methods({ dataset: dataset.id });
-        return { file: methodsMarkdown(dataset, result.data), message: `The methods of ${dataset.name}, with ${plural(result.data.references.length, 'reference')}.` };
+        const scope = args.result !== undefined ? { kind: 'result', id: resultRef(args.result).id } : args.project ? { kind: 'project' } : { kind: 'dataset', id: resolveDataset(args.dataset).id };
+        const written = await writeMethods(app, scope);
+        return { file: methodsMarkdown(written), message: `The methods of ${written.subject.name}, with ${plural(written.references.length, 'reference')}.` };
       }
       // An archive is written by the program itself (api_project.go), beside the bundles it names.
       const response = await fetch('/api/project-archive', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: args.path, project: project(), overwrite: Boolean(args.overwrite) }) });

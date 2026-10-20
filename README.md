@@ -178,7 +178,7 @@ SIM033, raised in the treated subjects' epithelial-like cells, the only gene fou
 
 More: [checking a bundle](docs/images/data-light.webp), [the tissue's stains](docs/images/viewer-light.webp),
 [transcripts outside cells](docs/images/qc-outside-light.webp), [filters as versions](docs/images/qc-filter-light.webp),
-[saved views](docs/images/saved-views-light.webp), [the methods paragraph](docs/images/methods-light.webp),
+[saved views](docs/images/saved-views-light.webp), [the methods](docs/images/methods-light.webp),
 [a guided tour](docs/images/tour-light.webp), [a segmentation's lineage](docs/images/segmentation-light.webp),
 [nucleus expansion compared with the instrument's segmentation](docs/images/expansion-light.webp),
 [a segmentation imported from SpatialData](docs/images/import-light.webp),

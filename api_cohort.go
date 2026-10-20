@@ -31,7 +31,9 @@ import (
 // cohortCitation cites the pseudobulk's approach, and nichesCitation the niches across samples'.
 const (
 	cohortCitation = "Crowell HL, Soneson C, Germain P-L, et al. muscat detects subpopulation-specific state transitions from multi-sample multi-condition single-cell transcriptomics data. Nat Commun 2020;11:6077. doi:10.1038/s41467-020-19894-4"
-	nichesCitation = "Schürch CM, Bhate SS, Barlow GL, et al. Coordinated cellular neighborhoods orchestrate antitumoral immunity at the colorectal cancer invasive front. Cell 2020;182:1341–1359."
+	nichesCitation = "Goltsev Y, Samusik N, Kennedy-Darling J, et al. Deep profiling of mouse splenic architecture with CODEX multiplexed imaging. Cell 2018;174:968–981; " +
+		"Schürch CM, Bhate SS, Barlow GL, et al. Coordinated cellular neighborhoods orchestrate antitumoral immunity at the colorectal cancer invasive front. Cell 2020;182:1341–1359; " +
+		"Arthur D, Vassilvitskii S. k-means++: the advantages of careful seeding. SODA 2007:1027–1035"
 )
 
 type cohortSampleRequest struct {
@@ -285,7 +287,7 @@ func (a *app) cohortSummaryJob(spec cohortSummarySpec, id string) jobs.Func {
 		}
 		citation := cohortCitation
 		if spec.Niches != nil {
-			citation += " " + nichesCitation
+			citation += "; " + nichesCitation
 		}
 		noun := "samples"
 		if S == 1 {

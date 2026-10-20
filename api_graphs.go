@@ -26,10 +26,19 @@ import (
 	"situcraft/internal/xenium"
 )
 
-// graphCitation cites the methods a graph may use.
+// graphCitation cites a Delaunay graph's methods (a nearest-neighbor, radius or contact graph cites
+// none: each is its definition).
 const graphCitation = "Lee DT, Schachter BJ. Two algorithms for constructing a Delaunay triangulation. Int J Comput Inf Sci 1980;9:219–242. doi:10.1007/BF00977785; " +
 	"Bowyer A. Computing Dirichlet tessellations. Comput J 1981;24:162–166; Watson DF. Computing the n-dimensional Delaunay tessellation with application to Voronoi polytopes. Comput J 1981;24:167–172; " +
 	"Shewchuk JR. Adaptive precision floating-point arithmetic and fast robust geometric predicates. Discrete Comput Geom 1997;18:305–363. doi:10.1007/PL00009321"
+
+// graphCitationOf cites a graph's kind.
+func graphCitationOf(kind string) string {
+	if kind == spatial.Delaunay {
+		return graphCitation
+	}
+	return ""
+}
 
 // graphCells are the cells a graph is built over, as the page sends them: the bits of
 // lib/filters.js's keepChecksum (base64), their checksum, and how they were chosen.
@@ -244,7 +253,7 @@ func (a *app) graphJob(spec graphSpec, id string) jobs.Func {
 			Lineage: artifacts.Lineage{
 				Parents:    parents,
 				Job:        &artifacts.Job{ID: r.ID(), Kind: "graph", Spec: jobSpec},
-				Method:     artifacts.Method{Name: "SituCraft cell graph", Version: spatial.MethodVersion, Citation: graphCitation},
+				Method:     artifacts.Method{Name: "SituCraft cell graph", Version: spatial.MethodVersion, Citation: graphCitationOf(spec.Parameters.Kind)},
 				Parameters: params,
 				Software:   []artifacts.Software{{Name: "situcraft", Version: version, Commit: buildCommit()}},
 			},

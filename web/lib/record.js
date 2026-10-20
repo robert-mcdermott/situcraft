@@ -42,6 +42,9 @@ export const STEP_KINDS = {
 };
 const RANK = Object.fromEntries(Object.keys(STEP_KINDS).map((k, i) => [k, i]));
 
+// What a record of several results is of.
+const SUBJECTS = { project: 'Project', dataset: 'Dataset' };
+
 // The kinds a record can be asked of, as the Reports view lists them.
 export const RESULT_KINDS = ['figure', 'abundance', 'expression', 'spatial-comparison', 'cohort-summary', 'spatial', 'graph', 'embedding', 'labels', 'curated-labels', 'consensus-labels', 'clustering', 'comparison', 'segmentation', 'alignment-check', 'transform', 'filter'];
 
@@ -61,6 +64,26 @@ function nameOf(kind, r) {
   if (kind === 'design' || kind === 'marker-set') return `${r.name}, version ${r.version}`;
   if (kind === 'cluster-names') return `Cluster names, version ${r.version}`;
   return r.name ?? r.id;
+}
+
+// The results the record of the whole project, or of one of its datasets, starts from: its
+// datasets (one's bundle, described even with nothing made of it) and each complete result but a
+// filter's older versions and segmentations planted for practice; a dataset's, those made of it.
+export function scopeResults(project, datasetId = null) {
+  const latest = new Map();
+  for (const a of project.artifacts) {
+    if (a.kind !== 'filter') continue;
+    const key = `${a.dataset}\n${a.name}`;
+    if (!latest.has(key) || latest.get(key).version < a.version) latest.set(key, a);
+  }
+  const keep = (r) => {
+    const rec = itemOf(project, r.id).record;
+    if (r.kind === 'filter' && latest.get(`${rec.dataset}\n${rec.name}`) !== rec) return false;
+    if (r.kind === 'segmentation' && rec.source === 'planted') return false;
+    return !datasetId || rec.dataset === datasetId;
+  };
+  const datasets = project.datasets.filter((d) => !datasetId || d.id === datasetId).map((d) => d.id);
+  return [...datasets, ...recordableResults(project).filter(keep).map((r) => r.id)];
 }
 
 // An item of the project by its id: { kind, record } or null.
@@ -190,11 +213,11 @@ export function inputsOf(project, item, manifest = null) {
   return [...new Set(ids)].filter((id) => itemOf(project, id));
 }
 
-// The manifests a record of a result reads, fetched as the walk finds the artifacts they describe
-// (fetch: id → manifest, or null when the program no longer has it).
-export async function gatherManifests(project, id, fetch, manifests = new Map()) {
+// The manifests a record of a result (or of several) reads, fetched as the walk finds the
+// artifacts they describe (fetch: id → manifest, or null when the program no longer has it).
+export async function gatherManifests(project, ids, fetch, manifests = new Map()) {
   for (;;) {
-    const wanted = walk(project, id, manifests).order.filter((x) => hasManifest(itemOf(project, x)) && !manifests.has(x));
+    const wanted = walk(project, [ids].flat(), manifests).order.filter((x) => hasManifest(itemOf(project, x)) && !manifests.has(x));
     if (!wanted.length) return manifests;
     for (const x of wanted) {
       let m = null;
@@ -208,11 +231,11 @@ export async function gatherManifests(project, id, fetch, manifests = new Map())
   }
 }
 
-// The items a result was made from, in an order where each comes after its inputs: kinds in
+// The items results were made from, in an order where each comes after its inputs: kinds in
 // STEP_KINDS's order where either may come first, then the oldest first.
-function walk(project, id, manifests) {
+function walk(project, roots, manifests) {
   const inputs = new Map();
-  const stack = [id];
+  const stack = [...roots].reverse();
   while (stack.length) {
     const x = stack.pop();
     if (inputs.has(x)) continue;
@@ -284,7 +307,7 @@ function stepOf(project, id, item, manifest, inputs) {
     software: [],
     references: { keys: [], others: [] },
     inputs,
-    decisions: (project.decisions ?? []).filter((d) => d.artifact === id).map(({ kind, rationale, by, time }) => ({ kind, rationale, by, time })),
+    decisions: (project.decisions ?? []).filter((d) => d.artifact === id).map(({ kind, rationale, by, time, comparison }) => ({ kind, rationale, by, time, ...(comparison ? { comparison } : {}) })),
   };
   const dataset = item.kind !== 'dataset' && r.dataset ? project.datasets.find((d) => d.id === r.dataset) : null;
   if (dataset) step.dataset = dataset.name;
@@ -356,11 +379,14 @@ function stepOf(project, id, item, manifest, inputs) {
 // The record of a result: { format, version, result: { id, kind, name }, program, recorded, steps,
 // software, references: [{ n, key, text, doi, url }] }. Each step: { n, id, kind, name, made,
 // method, parameters, seeds, software, references (numbers), inputs (step numbers), decisions,
-// note?, by? }.
-export function resultRecord(project, id, { manifests = new Map(), program = { version: '', commit: '' }, now = null } = {}) {
-  const item = itemOf(project, id);
-  if (!item) throw new Error(`The project has no result ${id}.`);
-  const { order, inputs } = walk(project, id, manifests);
+// note?, by?, dataset? }. Of several results (ids a list), the record of them all, its result the
+// subject given ({ id, kind: 'project' or 'dataset', name }).
+export function resultRecord(project, ids, { manifests = new Map(), program = { version: '', commit: '' }, now = null, subject = null } = {}) {
+  const roots = [ids].flat();
+  for (const id of roots) if (!itemOf(project, id)) throw new Error(`The project has no result ${id}.`);
+  if (roots.length !== 1 && !subject) throw new Error('A record of several results names its subject.');
+  const item = roots.length === 1 ? itemOf(project, roots[0]) : null;
+  const { order, inputs } = walk(project, roots, manifests);
   const steps = order.map((x) => stepOf(project, x, itemOf(project, x), manifests.get(x) ?? null, inputs.get(x) ?? []));
   const numberOf = new Map(order.map((x, i) => [x, i + 1]));
   // References numbered as first cited; SituCraft itself with the first step it made.
@@ -388,7 +414,7 @@ export function resultRecord(project, id, { manifests = new Map(), program = { v
   return {
     format: RECORD_FORMAT,
     version: RECORD_VERSION,
-    result: { id, kind: item.kind, name: nameOf(item.kind, item.record) },
+    result: subject ?? { id: roots[0], kind: item.kind, name: nameOf(item.kind, item.record) },
     program: { name: 'SituCraft', version: program.version ?? '', ...(program.commit ? { commit: program.commit } : {}) },
     ...(now ? { recorded: now } : {}),
     steps: steps.map(({ n, ...rest }) => ({ n, ...rest })),
@@ -463,7 +489,7 @@ export function groupSteps(record) {
 // written once), the software and the references.
 export function recordMarkdown(record) {
   const lines = [`# What made ${md(record.result.name)}`, ''];
-  lines.push(`${STEP_KINDS[record.result.kind] ?? record.result.kind} \`${record.result.id}\`, recorded by SituCraft${record.program.version ? ` ${record.program.version}` : ''}${record.recorded ? ` on ${record.recorded.slice(0, 10)}` : ''}: ${record.steps.length} ${record.steps.length === 1 ? 'step' : 'steps'}, each after the steps it was made from.`, '', '## Steps', '');
+  lines.push(`${SUBJECTS[record.result.kind] ?? STEP_KINDS[record.result.kind] ?? record.result.kind} \`${record.result.id}\`, recorded by SituCraft${record.program.version ? ` ${record.program.version}` : ''}${record.recorded ? ` on ${record.recorded.slice(0, 10)}` : ''}: ${record.steps.length} ${record.steps.length === 1 ? 'step' : 'steps'}, each after the steps it was made from.`, '', '## Steps', '');
   for (const g of groupSteps(record)) {
     const s = g[0];
     const kind = STEP_KINDS[s.kind] ?? s.kind;
@@ -532,11 +558,16 @@ export function recordJSON(record) {
   return `${JSON.stringify(record, null, 2)}\n`;
 }
 
-// The record's references as BibTeX: the registry's under their keys, SituCraft as software, others
-// as notes under ref<n>.
+// The record's references as BibTeX.
 export function recordBibTeX(record) {
-  const entries = record.references.map((r) => {
-    if (r.key === 'situcraft') return bibtexEntry('situcraft', situcraftReference(record.program.version));
+  return referencesBibTeX(record.references, record.program.version);
+}
+
+// References ([{ n, key, text, doi }]) as BibTeX: the registry's under their keys, SituCraft (at a
+// version) as software, others as notes under ref<n>.
+export function referencesBibTeX(references, version = '') {
+  const entries = references.map((r) => {
+    if (r.key === 'situcraft') return bibtexEntry('situcraft', situcraftReference(version));
     if (r.key && REFERENCES[r.key]) return bibtexEntry(r.key, REFERENCES[r.key]);
     const fields = [`  note = {${String(r.text).replace(/[{}]/g, '')}}`, ...(r.doi ? [`  doi = {${r.doi}}`] : [])];
     return `@misc{ref${r.n},\n${fields.join(',\n')}\n}`;

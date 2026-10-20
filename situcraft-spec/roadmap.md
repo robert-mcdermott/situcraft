@@ -3557,11 +3557,48 @@ left in it.
        its preprint's title; it now cites it as the expression comparison does.
      - **A cohort's analyses were never read:** a dangling `else` in reading a job's inputs left
        a summary's analyses out of its record; the cohort test found it.
-4. **The methods text (E4).** Every kind of step described, from the record: the segmentation
-   (expanded, refined, imported, decided), filters, clusters and maps, labels (markers, a
-   reference, imported, curated, consensus, reviews), images and their alignment, regions,
-   spatial analyses, and a cohort's samples, design, summary and comparisons; for the project or
-   a chosen result; its references numbered as first cited.
+4. **The methods text (E4): done.**
+   - **Written from the record** (`web/lib/methods-text.js`): the record of a result, of a dataset
+     and everything made of it, or of the whole project (`record.js` now takes several results,
+     `scopeResults`: a project's datasets and complete results but a filter's older versions and
+     planted segmentations). Each kind of step said as what was done, in paragraphs by topic: the
+     data (a dataset's paragraph as before, `methods.js`; sections made alike said once, with
+     their check); images (read where they lie), alignments (Xenium Explorer's matrix or
+     keypoints, landmarks, automatic, each with its fit, and why one was chosen) and their checks;
+     regions; segmentations (expanded, refined, imported, planted for practice, chosen after a
+     comparison, with why) and comparisons; filters and reviews (a dataset's or the project's);
+     clusters, cluster names, maps, marker sets, labels (from markers, a reference, imported),
+     curated and consensus sets; graphs and every spatial question; a cohort's design (in its
+     words), summary, abundance, expression and spatial statistics compared, with what they
+     found; figures; the software and its versions. Each step's parameters and seed are said; a
+     step made the same way for several sections, segmentations or regions is said once, each
+     named or their results as a range. References numbered as first cited, each with its DOI.
+   - **Shown** in the Reports view (the project, a dataset or a result chosen; copied, or written
+     as Markdown or BibTeX), in the Data view's Methods (a dataset's, its filters chosen), and by
+     **Its methods** in the inspector. Remote control: `methods` takes `result` or `project` as
+     well as `dataset`; `export` writes any of them.
+   - **The program records each method's own citations:** each spatial question's (the enrichment
+     its, Ripley's K Ripley's and Besag's, the niches Goltsev's, Schürch's and k-means++'s…), a
+     graph's by its kind (Delaunay's for a Delaunay graph, none for the others), Reichardt and
+     Bornholdt's resolution with the clusters, Hooke and Jeeves's search with automatic
+     registration, and the niches across samples Goltsev's and k-means++'s.
+   - Validation:
+     - **In Node** (`methods-text.test.mjs`, with the record's fixture, `record.fixture.mjs`): a
+       result's methods by topic, each sentence's numbers its records', the references numbered
+       as first cited (every citation's first appearance the next number); a project's, the two
+       sections' same steps said once, the design, the summary and the comparison with the gene
+       it found; a segmentation a person chose said with why and SituCraft's own choice not; a
+       dataset's reviews; Markdown, plain text and BibTeX.
+     - **In the page** (viewer suite): the Lung enrichment's methods, each number the records'
+       own (clusters and cells, the share labeled, the graph's edges, the pairs found), the seed
+       said, numbered as first cited, and written as Markdown the same text; the simulated
+       cohort's expression comparison's (the eight sections once, each sample's steps once, the
+       design, the summary, the genes found with the comparison's fold changes) and the whole
+       project's by topic.
+   - Found by slice 4:
+     - **One citation for every spatial question:** each analysis recorded the papers of all of
+       them (Moran's for an enrichment, the enrichment's for the niches); each question now
+       records its own, and a nearest-neighbor graph no longer cites Delaunay's.
 5. **Certificates (E7).** A result's certificate: what it rests on and what it reports, its
    fingerprint, written beside the project as a zip with a README saying what it proves and how
    to check it; in the Reports view and by remote control.

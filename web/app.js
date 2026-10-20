@@ -177,6 +177,16 @@ async function start() {
 
   app.focusItem = (focus) => store.setUI({ focus }, ['focus']);
 
+  // The methods of the project, a dataset or a result (scope), in the Reports view.
+  app.showMethods = async (scope) => {
+    if (store.ui.mode === 'reports' && app.reportsView) {
+      app.reportsView.showMethods(scope);
+      return;
+    }
+    app.methodsFocus = scope;
+    await app.setMode('reports');
+  };
+
   // What made a result: its record, in the Reports view.
   app.showRecord = async (id) => {
     if (store.ui.mode === 'reports' && app.reportsView) {

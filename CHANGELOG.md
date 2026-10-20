@@ -90,6 +90,28 @@ a result, a certificate checked by making the result again, and a package that o
     the same record in every format) and the simulated cohort's expression comparison's (eight of
     each sample's steps, the design, the summary, every method's paper).
 
+- **The methods text (wave 8, slice 4).** A methods section written from the record of the whole
+  project, a dataset (and everything made of it) or a result.
+  - **Every kind of step said as what was done**, in paragraphs by topic: the data and its check;
+    images and their alignments (and why one was chosen) and checks; regions; segmentations
+    (expanded, refined, imported, chosen after a comparison, with why) and comparisons; filters
+    and reviews; clusters, maps, marker sets and labels (from markers, a reference, imported,
+    curated, consensus); graphs and every spatial question; a cohort's design, summary and
+    comparisons, with what they found; figures; the software and its versions.
+  - **Each step's parameters and seed** are said, and what it found; a step made the same way for
+    several sections, segmentations or regions is said once, naming each.
+  - **References numbered as first cited**, each with its DOI.
+  - **Shown** in the Reports view (copied, or written as Markdown or BibTeX), in the Data view's
+    Methods (a dataset's) and by **Its methods** in the inspector. Remote control: `methods` takes
+    `result` or `project`, and `export` writes any of them.
+  - **Each method's own citations:** each spatial question now records its own papers, a graph
+    those of its kind, the clusters Reichardt and Bornholdt's resolution, automatic registration
+    Hooke and Jeeves's search, and niches across samples Goltsev's and k-means++'s.
+  - **Validated:** in Node, a result's, a project's and a dataset's methods, each number their
+    records', numbered as first cited; in the page, the Lung enrichment's methods against its
+    records and written as Markdown, and the simulated cohort's expression comparison's and
+    project's.
+
 ## 0.7.0 (2026-10-19)
 
 Wave 7 of the [roadmap](situcraft-spec/roadmap.md): samples and cohorts. A study's sections in one

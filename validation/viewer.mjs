@@ -125,6 +125,21 @@ function recordFacts(rec, md = '', bib = '') {
   };
 }
 
+// A methods text as the suite reads it (wave 8, slice 4): its citations in the order they appear
+// ([1, 3–5] is 1, 3, 4, 5), and whether its references are numbered as first cited, every one
+// cited.
+function methodsFacts(text, references) {
+  const cited = [];
+  for (const m of String(text ?? '').matchAll(/\[([\d,–\s]+)\]/g)) {
+    for (const part of m[1].split(/,\s*/)) {
+      const [a, b] = part.split('–').map(Number);
+      for (let n = a; n <= (b ?? a); n += 1) cited.push(n);
+    }
+  }
+  const firsts = [...new Set(cited)];
+  return { numbered: firsts.length > 0 && firsts.every((n, i) => n === i + 1) && firsts.length === (references ?? []).length, cited: firsts.length };
+}
+
 const BUNDLES = ['xenium-lung-2fov', 'xenium-breast-2fov'];
 const BUDGET = { fps: 30, revisitMs: 500, queryMs: 500 };
 
@@ -2372,6 +2387,36 @@ export async function viewerSuite({ check, MissingData, verbose }) {
               && undated(read('md')) === undated(asked.data.text) && sameSteps && shown.record === ids.enrichment && shown.steps > 0 && shown.refs === rec.references.length,
               'in order, from the bundle; the seed recorded; Xenium, scanpy, Leiden, the starter atlas and the analysis cited; the same record in each format; shown');
           }
+
+          // The methods text (wave 8, slice 4): the Lung enrichment's methods, written from its
+          // record, each number the records' own (the clusters and their cells, the share labeled
+          // at the class level, the graph's edges, the pairs found among those asked), the seed
+          // said, the references numbered as first cited; written as Markdown by export.
+          {
+            const result = (await chrome.eval(`(() => { const p = window.situcraft.store.project; const ds = p.datasets.find((x) => x.name === 'xenium-lung-2fov'); return p.artifacts.filter((a) => a.kind === 'spatial' && a.dataset === ds.id && a.state === 'complete' && a.question === 'enrichment').at(-1)?.id; })()`));
+            const rec = (await act('record', { result })).data;
+            const ofKind = (kind) => rec?.steps.find((x) => x.kind === kind)?.id ?? '';
+            const facts = await chrome.eval(`(() => { const p = window.situcraft.store.project; const a = (id) => p.artifacts.find((x) => x.id === id) ?? {}; const clu = a(${JSON.stringify(ofKind('clustering'))}); const lab = a(${JSON.stringify(ofKind('labels'))}); const g = a(${JSON.stringify(ofKind('graph'))}); const e = a(${JSON.stringify(result)}); return { clusters: clu.summary?.clusters, cells: clu.summary?.cells, seed: clu.parameters?.seed, labeled: lab.summary?.labeled?.[0], labCells: lab.summary?.cells, level: lab.summary?.levels?.[0], edges: g.summary?.edges, significant: e.summary?.significant, count: e.summary?.labels?.count }; })()`);
+            const asked = await act('methods', { result });
+            const text = asked.data?.text ?? '';
+            const fmt = (n) => Number(n).toLocaleString('en-US');
+            const want = [
+              `This gave ${fmt(facts.clusters)} clusters of ${fmt(facts.cells)} cells.`,
+              `${((100 * facts.labeled) / facts.labCells).toFixed(1)}% at the ${String(facts.level).toLowerCase()} level`,
+              `${fmt(facts.edges)} edges`,
+              `${fmt(facts.significant)} of ${fmt((facts.count * (facts.count + 1)) / 2)} pairs differed from chance`,
+              `seed ${facts.seed}`,
+            ];
+            const missing = want.filter((w) => !text.includes(w));
+            const mf = methodsFacts(text, asked.data?.references);
+            const mdPath = join(work, 'methods.md');
+            const wrote = await act('export', { what: 'methods', result, path: mdPath, overwrite: true });
+            const md = existsSync(mdPath) ? readFileSync(mdPath, 'utf8') : '';
+            const inMd = (asked.data?.paragraphs ?? []).every((x) => md.includes(`## ${x.heading}\n\n${x.text}\n`));
+            check('viewer', 'the methods of the Lung enrichment: written from its record by topic, each number the records\' own (clusters and cells, the share labeled, the graph\'s edges, the pairs found), the seed said, the references numbered as first cited; written as Markdown', `${asked.ok ? `${(asked.data.paragraphs ?? []).map((x) => x.topic).join(', ')}; ${asked.data.references.length} references` : asked.message}; ${missing.length ? `missing: ${missing.join(' | ')}` : 'every number the records\''}; ${mf.numbered ? 'numbered as cited' : 'not numbered as cited'}; Markdown ${wrote.ok ? (inMd && md.startsWith(`# ${asked.data.title}`) ? 'the same text' : 'other') : wrote.message}`,
+              asked.ok && ['data', 'cells', 'spatial', 'software'].every((t) => asked.data.paragraphs.some((x) => x.topic === t)) && missing.length === 0 && mf.numbered && asked.data.references.some((r) => r.includes('10.1038/s41467-023-43458-x')) && asked.data.references.some((r) => r.includes('Travaglini')) && wrote.ok && inMd && md.startsWith(`# ${asked.data.title}`),
+              'by topic; every number the records\'; numbered as cited; the Markdown the same text');
+          }
         }
 
         // The simulated example, made on this computer, and its worked example scoring the
@@ -3220,6 +3265,24 @@ export async function viewerSuite({ check, MissingData, verbose }) {
               asked.ok && f.ordered && f.numbered && count('dataset') === 8 && count('segmentation') === 8 && count('labels') === 8 && count('graph') >= 8 && count('design') === 1 && count('cohort-summary') === 1 && f.kinds.at(-1) === 'expression'
               && ['dataset', 'segmentation', 'labels', 'graph'].every((k) => fromSummary.has(k)) && /\*\*Xenium output bundles, one for each of 8:\*\*/.test(asked.data.text) && want.every((k) => f.keys.includes(k)) && f.mdRefs === rec.references.length,
               'eight of each, then the design, the summary and the comparison, in order; the bundles written once; every method\'s paper');
+          }
+
+          // The methods text of a cohort's result (wave 8, slice 4): the expression comparison's
+          // methods say the eight simulated sections once, each sample's same steps once, the design
+          // in its words, the summary, the comparison's steps and the genes it found, with their
+          // log2 fold changes the comparison's own; and the whole project's methods by topic.
+          {
+            const asked = await act('methods', { result: de.data?.id });
+            const text = asked.data?.text ?? '';
+            const exp = await chrome.eval(`(() => window.situcraft.store.project.artifacts.find((a) => a.id === ${JSON.stringify(de.data?.id)})?.summaryOf ?? null)()`);
+            const found = (exp?.found ?? []).slice(0, 3).map((f) => `${f.gene} (${f.label}; ${f.contrast}; log2 fold change ${f.logFC >= 0 ? '+' : ''}${f.logFC.toFixed(2)}`);
+            const mf = methodsFacts(text, asked.data?.references);
+            const whole = await act('methods', { project: true });
+            const topics = (whole.data?.paragraphs ?? []).map((x) => x.topic);
+            check('viewer', 'the methods of a cohort\'s result: the eight sections said once, each sample\'s same steps once, the design in its words, the summary and the comparison, the genes found with the comparison\'s fold changes; numbered as first cited; the project\'s methods by topic', `${asked.ok ? `${(asked.data.paragraphs ?? []).map((x) => x.topic).join(', ')}; ${asked.data.references.length} references` : asked.message}; found ${found.filter((f) => text.includes(f)).length} of ${found.length} as the comparison has them; ${mf.numbered ? 'numbered as cited' : 'not numbered as cited'}; the project: ${whole.ok ? topics.join(', ') : whole.message}`,
+              asked.ok && /The 8 sections \(S01, .* and S08\) were simulated by SituCraft/.test(text) && /The cells of each section were clustered/.test(text) && /were compared by the design "/.test(text) && /Each sample was summarized/.test(text) && /Each label's pseudobulk was compared between the groups/.test(text)
+              && found.length > 0 && found.every((f) => text.includes(f)) && mf.numbered && whole.ok && ['data', 'cells', 'spatial', 'cohort', 'figures', 'software'].every((t) => topics.includes(t)) && methodsFacts(whole.data.text, whole.data.references).numbered,
+              'the sections once, each step once; the genes found as the comparison has them; numbered as cited; the project by topic');
           }
 
           // Worked examples on the simulated cohorts (wave 7, slice 9), each run step by step and

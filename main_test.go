@@ -100,7 +100,7 @@ func TestEveryWebModuleIsEmbedded(t *testing.T) {
 			return err
 		}
 		name := filepath.ToSlash(path)
-		if strings.HasSuffix(name, ".test.mjs") || strings.HasSuffix(name, "package.json") {
+		if strings.HasSuffix(name, ".test.mjs") || strings.HasSuffix(name, ".fixture.mjs") || strings.HasSuffix(name, "package.json") {
 			if _, err := fs.Stat(content, name); err == nil {
 				t.Errorf("%s is embedded but is not part of the app", name)
 			}

@@ -9,7 +9,7 @@ import { STEP_KINDS, decisionWords, gatherManifests, groupSteps, numbers, parame
 // The program's manifests, kept once complete (a complete artifact's manifest does not change).
 const kept = new Map();
 
-async function manifestOf(id) {
+export async function manifestOf(id) {
   if (kept.has(id)) return kept.get(id);
   const response = await fetch(`/api/artifacts/${encodeURIComponent(id)}`);
   if (!response.ok) return null;

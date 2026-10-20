@@ -18,7 +18,7 @@ function segmentationText(methods, counts) {
   return parts;
 }
 
-function joinList(parts) {
+export function joinList(parts) {
   if (parts.length <= 1) return parts.join('');
   return `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
 }
@@ -27,17 +27,19 @@ function joinList(parts) {
 // validation report, or null), filters (the dataset's filter versions to describe), program:
 // { version, commit }, source: { title, attribution, license } for public data, or null,
 // segmentation: the dataset's default when it is not the instrument's, { record, decision,
-// comparison: { other (the segmentation compared with), citation } or null }, or null }.
-export function methodsParagraph({ dataset, report = null, filters = [], program, source = null, segmentation = null }) {
+// comparison: { other (the segmentation compared with), citation } or null }, or null; cite: (key,
+// text) → its number in brackets, for a text numbering its references itself (lib/methods-text.js),
+// or null to number them here }.
+export function methodsParagraph({ dataset, report = null, filters = [], program, source = null, segmentation = null, cite: citeAs = null }) {
   const refs = [];
-  const cite = (key, text) => {
+  const cite = citeAs ?? ((key, text) => {
     let i = refs.findIndex((r) => r.key === key);
     if (i < 0) {
       refs.push({ key, text });
       i = refs.length - 1;
     }
     return `[${i + 1}]`;
-  };
+  });
   const s = report?.summary ?? {};
   const sentences = [];
   const panel = dataset.panel ? `the ${dataset.panel} panel${s.panelGenes ? ` (${count(s.panelGenes)} genes)` : ''}` : 'its gene panel';
@@ -64,22 +66,11 @@ export function methodsParagraph({ dataset, report = null, filters = [], program
   const v = dataset.validation ?? {};
   const version = `SituCraft ${program.version}${program.commit ? ` (commit ${program.commit.slice(0, 7)})` : ''} ${cite('situcraft', `McDermott R. SituCraft, version ${program.version}. https://github.com/robert-mcdermott/situcraft`)}`;
   const checks = v.metricsCompared ? `, and recomputed ${count(v.metricsCompared)} of the values the run recorded from its data (${v.metricsAgreeing === v.metricsCompared ? 'all agreeing' : `${count(v.metricsAgreeing)} agreeing`})` : '';
-  sentences.push(`The output bundle was read with ${version}, whose own readers decoded every file, including the ${simulated ? 'morphology image' : 'JPEG 2000 morphology images (ITU-T T.800)'}, checked the files' consistency (${count(v.fatal ?? 0)} fatal problems, ${count(v.warnings ?? 0)} warnings, ${count(v.info ?? 0)} notes)${checks}.`);
+  sentences.push(`The output bundle was read with ${version}, whose own readers decoded every file, including the ${simulated ? 'morphology image' : 'JPEG 2000 morphology images (ITU-T T.800)'}, checked the files' consistency (${count(v.fatal ?? 0)} fatal ${v.fatal === 1 ? 'problem' : 'problems'}, ${count(v.warnings ?? 0)} ${v.warnings === 1 ? 'warning' : 'warnings'}, ${count(v.info ?? 0)} ${v.info === 1 ? 'note' : 'notes'})${checks}.`);
   const r = segmentation?.record;
   if (r && r.source !== 'instrument') {
     const m = r.method ?? {};
-    const citeMethod = m.citation ? ` ${cite(`segmentation:${m.name}`, m.citation)}` : '';
-    const p = r.parameters ?? {};
-    const stages = (p.stages ?? []).map((st) => `${st.voxel_um} µm voxels in ${st.layers === 1 ? 'one layer' : `${st.layers} layers`} for ${count(st.sweeps)} sweeps`);
-    const how = r.source === 'imported'
-      ? `with ${m.name}${m.version ? ` ${m.version}` : ''}${citeMethod}, imported into SituCraft and checked against the dataset's transcripts and image`
-      : p.distance_um !== undefined
-        ? `with SituCraft's nucleus expansion (version ${m.version}): each nucleus grew by up to ${p.distance_um} µm, every pixel going to the nearest nucleus within that distance${citeMethod}`
-        : m.name === REFINE_METHOD
-          ? `with SituCraft's transcript-informed segmentation (version ${m.version}), after Jones et al.${citeMethod}: starting from the instrument's cells and their nuclei, each cell's extent was sampled from its posterior given the transcripts (each cell's transcripts a Poisson process over a background, with a mixture of expression states and transcripts repositioned within their likely displacement) at ${joinList(stages)}, seed ${p.seed}, and the summary over the last ${count(p.samples)} sweeps taken, each transcript in its most probable cell`
-          : `with ${m.name}${citeMethod}`;
-    const assigned = Number.isFinite(r.summary?.assignedFraction) ? `, ${(100 * r.summary.assignedFraction).toFixed(1)}% of the gene transcripts of quality 20 or more assigned to them` : '';
-    sentences.push(`Cells were segmented again ${how}, giving ${count(r.summary?.cells ?? 0)} cells${assigned}.`);
+    sentences.push(segmentationSentence(r, m.citation ? ` ${cite(`segmentation:${m.name}`, m.citation)}` : ''));
     const d = segmentation.decision;
     const c = segmentation.comparison;
     if (d) {
@@ -87,10 +78,31 @@ export function methodsParagraph({ dataset, report = null, filters = [], program
       sentences.push(`It was chosen as the dataset's segmentation${compared}: "${d.rationale}".`);
     }
   }
-  for (const f of filters) {
-    const conditions = (f.conditions ?? []).map((c) => c.text ?? '').filter(Boolean);
-    const share = f.result.cells ? ` (${((100 * f.result.kept) / f.result.cells).toFixed(1)}%)` : '';
-    sentences.push(`Cells were filtered with "${f.name}" (version ${f.version}${conditions.length ? `: ${joinList(conditions)}` : ''}), which kept ${count(f.result.kept)} of ${count(f.result.cells)} cells${share}; SituCraft records which cells under the SHA-256 checksum ${f.result.sha256.slice(0, 16)}….`);
-  }
+  for (const f of filters) sentences.push(filterSentence(f));
   return { text: sentences.join(' '), references: refs.map((r, i) => `[${i + 1}] ${r.text}`) };
+}
+
+// A segmentation other than the instrument's, in a sentence: how it was made (an import, a nucleus
+// expansion, a transcript-informed segmentation, another method), citeMethod (" [n]" or '') after
+// its method, and the cells it gave.
+export function segmentationSentence(r, citeMethod = '') {
+  const m = r.method ?? {};
+  const p = r.parameters ?? {};
+  const stages = (p.stages ?? []).map((st) => `${st.voxel_um} µm voxels in ${st.layers === 1 ? 'one layer' : `${st.layers} layers`} for ${count(st.sweeps)} sweeps`);
+  const how = r.source === 'imported'
+    ? `with ${m.name}${m.version ? ` ${m.version}` : ''}${citeMethod}, imported into SituCraft and checked against the dataset's transcripts and image`
+    : p.distance_um !== undefined
+      ? `with SituCraft's nucleus expansion (version ${m.version}): each nucleus grew by up to ${p.distance_um} µm, every pixel going to the nearest nucleus within that distance${citeMethod}`
+      : m.name === REFINE_METHOD
+        ? `with SituCraft's transcript-informed segmentation (version ${m.version}), after Jones et al.${citeMethod}: starting from the instrument's cells and their nuclei, each cell's extent was sampled from its posterior given the transcripts (each cell's transcripts a Poisson process over a background, with a mixture of expression states and transcripts repositioned within their likely displacement) at ${joinList(stages)}, seed ${p.seed}, and the summary over the last ${count(p.samples)} sweeps taken, each transcript in its most probable cell`
+        : `with ${m.name}${citeMethod}`;
+  const assigned = Number.isFinite(r.summary?.assignedFraction) ? `, ${(100 * r.summary.assignedFraction).toFixed(1)}% of the gene transcripts of quality 20 or more assigned to them` : '';
+  return `Cells were segmented again ${how}, giving ${count(r.summary?.cells ?? 0)} cells${assigned}.`;
+}
+
+// A filter in a sentence, its conditions as given (each with its text).
+export function filterSentence(f) {
+  const conditions = (f.conditions ?? []).map((c) => c.text ?? '').filter(Boolean);
+  const share = f.result.cells ? ` (${((100 * f.result.kept) / f.result.cells).toFixed(1)}%)` : '';
+  return `Cells were filtered with "${f.name}" (version ${f.version}${conditions.length ? `: ${joinList(conditions)}` : ''}), which kept ${count(f.result.kept)} of ${count(f.result.cells)} cells${share}; SituCraft records which cells under the SHA-256 checksum ${f.result.sha256.slice(0, 16)}….`;
 }

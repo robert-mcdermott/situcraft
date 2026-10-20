@@ -317,6 +317,14 @@ func transformName(d transformDescription, file *imageSource) string {
 	return fmt.Sprintf("%d landmarks, %s, by %s", len(d.Landmarks), d.Model, d.By)
 }
 
+// article is a word with "a" or "an" before it.
+func article(word string) string {
+	if word != "" && strings.ContainsRune("aeiou", rune(word[0])) {
+		return "an " + word
+	}
+	return "a " + word
+}
+
 // methodOf is how a transform was made, as its artifact's lineage says it.
 func methodOf(d transformDescription) artifacts.Method {
 	umeyama := "Umeyama S. Least-squares estimation of transformation parameters between two point patterns. IEEE Trans Pattern Anal Mach Intell 1991;13(4):376–380. doi:10.1109/34.88573"
@@ -328,8 +336,8 @@ func methodOf(d transformDescription) artifacts.Method {
 	case d.Method == "keypoints":
 		return artifacts.Method{Name: "Aligned by Xenium Explorer's keypoints: a similarity fitted by least squares", Version: "1", Citation: explorer + " " + umeyama + "; " + stone}
 	case d.Method == "automatic":
-		cite := "Ruifrok AC, Johnston DA. Quantification of histochemical staining by color deconvolution. Anal Quant Cytol Histol 2001;23(4):291–299; Kuglin CD, Hines DC. The phase correlation image alignment method. Proc IEEE Conf Cybernetics and Society 1975; Reddy BS, Chatterji BN. An FFT-based technique for translation, rotation, and scale-invariant image registration. IEEE Trans Image Process 1996;5(8):1266–1271; Studholme C, Hill DLG, Hawkes DJ. An overlap invariant entropy measure of 3D medical image alignment. Pattern Recognit 1999;32(1):71–86; Foroosh H, Zerubia J, Berthod M. Extension of phase correlation to subpixel registration. IEEE Trans Image Process 2002;11(3):188–200; " + umeyama
-		name := "Aligned automatically by the nuclei: a " + string(d.Model) + " found by phase correlation, refined by normalized mutual information and fitted to local matches"
+		cite := "Ruifrok AC, Johnston DA. Quantification of histochemical staining by color deconvolution. Anal Quant Cytol Histol 2001;23(4):291–299; Kuglin CD, Hines DC. The phase correlation image alignment method. Proc IEEE Conf Cybernetics and Society 1975; Reddy BS, Chatterji BN. An FFT-based technique for translation, rotation, and scale-invariant image registration. IEEE Trans Image Process 1996;5(8):1266–1271; Studholme C, Hill DLG, Hawkes DJ. An overlap invariant entropy measure of 3D medical image alignment. Pattern Recognit 1999;32(1):71–86; Hooke R, Jeeves TA. \"Direct search\" solution of numerical and statistical problems. J ACM 1961;8:212–229; Foroosh H, Zerubia J, Berthod M. Extension of phase correlation to subpixel registration. IEEE Trans Image Process 2002;11(3):188–200; " + umeyama
+		name := "Aligned automatically by the nuclei: " + article(string(d.Model)) + " found by phase correlation, refined by normalized mutual information and fitted to local matches"
 		if d.Deformation != nil {
 			name += ", then a smooth deformation"
 			cite += "; Rueckert D, Sonoda LI, Hayes C, Hill DLG, Leach MO, Hawkes DJ. Nonrigid registration using free-form deformations. IEEE Trans Med Imaging 1999;18(8):712–721"

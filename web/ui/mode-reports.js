@@ -4,7 +4,7 @@
 // bar and a legend), laid out and lettered, previewed as it will print, and written as SVG, PDF or
 // PNG with its manifest inside (ui/figures.js). A figure written earlier is read back and compared
 // with the project: what changed since, and whether each panel draws the same now. Below them,
-// what made a result (slice 3, ui/record-view.js).
+// the methods (slice 4, ui/methods.js) and what made a result (slice 3, ui/record-view.js).
 
 import { h, icon, clear, downloadBlob, debounce } from './dom.js';
 import { confirmDialog, promptDialog, showDialog, showMenu, toast } from './overlays.js';
@@ -12,6 +12,7 @@ import { COHORT_PLOTS, FIGURE_SIZES, addPanel, createFigure, figureSize, figures
 import { QC_METRICS } from './figure-results.js';
 import { drawFigure, paintFigure, readBackFigure, writeFigure } from './figures.js';
 import { mountRecord } from './record-view.js';
+import { mountMethods } from './methods.js';
 
 // A tissue panel's region from a saved view: its center, and the width a Viewer a thousand CSS
 // pixels wide shows at its zoom.
@@ -56,6 +57,7 @@ export function mountReports(app, container) {
   const list = h('div.reports-list');
   const editor = h('div.reports-editor');
   const record = mountRecord(app);
+  const methods = mountMethods(app);
   const root = h('div.view.reports',
     h('div.workbench-head', h('h1', icon('report'), 'Reports')),
     h('div.workbench-scroll', h('div.reports-body',
@@ -66,6 +68,7 @@ export function mountReports(app, container) {
         h('button.btn', { type: 'button', onclick: () => readBack() }, icon('upload'), 'Read a figure back…')),
       list,
       editor,
+      methods.element,
       record.element)));
   container.append(root);
   let selected = app.reportsFocus ?? null;
@@ -321,11 +324,14 @@ export function mountReports(app, container) {
 
   const later = debounce(() => {
     render();
+    methods.update();
     record.update();
   }, 50);
   render(true);
   if (app.recordFocus) record.show(app.recordFocus, { scroll: true });
+  if (app.methodsFocus) methods.show(app.methodsFocus, { scroll: true });
   app.recordFocus = null;
+  app.methodsFocus = null;
   app.reportsView = {
     select(id) {
       selected = id;
@@ -337,6 +343,11 @@ export function mountReports(app, container) {
       return record.show(id, { scroll: true });
     },
     recordShown: () => record.shown(),
+    // The methods of the project, a dataset or a result, in the section between them.
+    showMethods(scope) {
+      return methods.show(scope, { scroll: true });
+    },
+    methodsShown: () => methods.shown(),
   };
   return {
     update(topics) {

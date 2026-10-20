@@ -1406,7 +1406,7 @@ table.data.cohort-balance { width: auto; min-width: 360px; margin-bottom: 8px; }
 .reports-panel .seg-card-title { display: flex; align-items: center; gap: 4px; }
 .reports .spacer { flex: 1; }
 /* What made a result (ui/record-view.js). */
-.record { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.record, .methods-section { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
 .record-picker select { width: min(640px, 100%); }
 .record-body { display: flex; flex-direction: column; gap: 10px; font-size: 12.5px; }
 .record-body > p { margin: 0; }

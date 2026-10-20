@@ -230,7 +230,7 @@ const scenes = {
     await act('open_view', { view: 'Vessels and pericytes' });
     await act('focus', { kind: 'view', name: 'Vessels and pericytes' });
   },
-  // The Breast example's methods paragraph, its data cited.
+  // The Breast example's methods in the Data view, its data cited.
   async methods() {
     await act('open_example', { example: 'breast' });
     await act('methods', { show: true });
@@ -797,6 +797,22 @@ const scenes = {
     await js(`document.getElementById('app').classList.add('inspector-closed')`);
     await sleep(400);
     await scrollTo('.record');
+    await clearToasts();
+  },
+  // The methods (wave 8, slice 4): the Lung example's project, clustered, labeled, its graph and
+  // its classes' enrichment, its methods in the Reports view.
+  async 'methods-project'() {
+    await act('open_example', { example: 'lung' });
+    await act('cluster_cells', {});
+    await act('label_cells', { markers: 'lung' });
+    await act('build_graph', { dataset: 'xenium-lung-2fov' });
+    const labels = await js(`window.situcraft.store.project.artifacts.find((a) => a.kind === 'labels')?.id`);
+    await act('spatial_analysis', { question: 'enrichment', dataset: 'xenium-lung-2fov', labels, level: 1 });
+    await act('methods', { project: true, show: true });
+    await waitFor(`document.querySelectorAll('.methods-section .methods-paragraph').length >= 3`);
+    await js(`document.getElementById('app').classList.add('inspector-closed')`);
+    await sleep(400);
+    await scrollTo('.methods-section');
     await clearToasts();
   },
   // The Jobs view after both examples were opened: each job's state and times, one's log open.

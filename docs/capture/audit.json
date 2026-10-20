@@ -560,6 +560,16 @@
   "violations": []
  },
  {
+  "scene": "methods-project",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "methods-project",
+  "theme": "light",
+  "violations": []
+ },
+ {
   "scene": "jobs",
   "theme": "dark",
   "violations": []
