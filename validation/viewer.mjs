@@ -2761,6 +2761,102 @@ export async function viewerSuite({ check, MissingData, verbose }) {
             const keep = process.env.SITUCRAFT_CERTIFICATES;
             if (keep && existsSync(zipPath)) copyFileSync(zipPath, join(keep, 'lung-package.zip'));
           }
+
+          // The worked examples of wave 8 (slice 9), walked step by step in this project, each number
+          // their cards state checked: A figure of results, and its methods (the figure's size, its
+          // panels and what each shows, its methods' references, its record's steps), and Results
+          // others can check (the figure certified and verified in SituCraft itself, its steps made
+          // again; the report's numbers; the package's files, view, tiles, what it left out and the
+          // texts searched).
+          // A Lung worked example started in the page (the bundle is this run's, not a downloaded
+          // example), then walked step by step; with steps, only its first ones.
+          const walkLung = async (name, steps = 16) => {
+            await chrome.eval(`(async () => {
+              const app = window.situcraft;
+              const { guideFor } = await import('/lib/tours.js');
+              const { startTour } = await import('/ui/tour.js');
+              const dataset = app.store.project.datasets.find((d) => d.name === 'xenium-lung-2fov');
+              for (let k = 0; k < 600 && !app.store.project.artifacts.some((a) => a.kind === 'segmentation' && a.dataset === dataset.id); k += 1) await new Promise((r) => setTimeout(r, 100));
+              startTour(app, { tour: guideFor('xenium-lung-2fov', ${JSON.stringify(name)}), dataset: dataset.id });
+              return true;
+            })()`);
+            const out = [];
+            for (let k = 0; k < steps; k += 1) {
+              const x = await act('tour', { run: true });
+              out.push(x);
+              if (!x.ok || x.data?.finished) break;
+            }
+            return out;
+          };
+          {
+            // In a project of the Lung alone, as a reader starts them.
+            await act('new_project', { name: 'Lung worked examples of wave 8' });
+            await act('open_paths', { paths: [join(dataRoot, 'xenium-lung-2fov')], add: true });
+            const walk = (name) => walkLung(name);
+            const walked = (steps) => steps.every((x) => x.ok) && steps.at(-1)?.data?.finished;
+            const first = await walk('figure-and-methods');
+            const fig = await act('figure', { name: 'The Lung\'s results' });
+            const methods = await act('methods', { result: 'The Lung\'s results' });
+            const record = await act('record', { result: 'The Lung\'s results' });
+            check('viewer', 'the worked example A figure of results, and its methods: the figure two columns wide of the view of the tissue, the cells\' map, the classes\' enrichment and the genes in a pattern, each as its cards state; its methods\' references and its record\'s steps', `${first.map((x) => (x.ok ? `step ${x.data?.step ?? 'finished'}` : x.message)).join('; ')}; ${fig.ok ? `${fig.data.width_mm} × ${fig.data.height_mm} mm, ${fig.data.panels.map((p) => p.kind).join(', ')}${fig.data.notes.length ? `, notes: ${fig.data.notes.join(' ')}` : ''}` : fig.message}; methods ${methods.ok ? `${methods.data.references.length} references, ${methods.data.paragraphs.map((x) => x.topic).join(', ')}` : methods.message}; record ${record.ok ? `${record.data.steps.length} steps, ${record.data.references.length} references` : record.message}`,
+              walked(first) && fig.ok && fig.data.width_mm === 174 && fig.data.height_mm === 157.3 && fig.data.panels.map((p) => p.kind).join() === 'tissue,map,spatial,spatial' && fig.data.notes.length === 0
+              && /400 µm across: the DAPI stain; 2,298 cells outlined and filled by the label set/.test(fig.data.description) && /11,820 cells, colored by their clusters/.test(fig.data.description) && /\(7 pairs\)/.test(fig.data.description) && /The 15 genes of 289 whose Moran's I is highest among the 162 in a pattern/.test(fig.data.description)
+              && methods.ok && methods.data.references.length === 23 && methods.data.paragraphs.some((x) => x.topic === 'figures') && record.ok && record.data.steps.length === 11 && record.data.references.length === 22,
+              '174 × 157.3 mm; 2,298 cells, 11,820 mapped, 7 pairs, 15 of 162 genes; 23 references; 11 steps and 22 references');
+            const second = await walk('results-checked');
+            const made = await chrome.eval('window.situcraft.tour?.reports?.() ?? null');
+            const v = made?.verification;
+            check('viewer', 'the worked example Results others can check: the figure certified and verified in SituCraft itself (its steps made again from the bundle, the figure drawn again), its report\'s numbers and its package\'s files, view and tiles, the dataset\'s name left out, each as its cards state', `${second.map((x) => (x.ok ? `step ${x.data?.step ?? 'finished'}` : x.message)).join('; ')}; verification ${v ? `${v.verdict}, ${v.steps} steps from ${v.bundles} bundle, ${v.madeAgain} made again; ${v.stepVerdicts.map((x) => `${x.n} ${x.verdict}`).join(', ')}` : 'none'}; report ${made?.report ? `${made.report.numbers} numbers` : 'none'}; package ${made?.package ? `${made.package.files} files, ${made.package.views} view in ${made.package.tiles} tiles, ${made.package.leftOut.names} name left out, ${made.package.checked.texts} texts searched` : 'none'}`,
+              walked(second) && v?.verdict === 'verified' && v.steps === 11 && v.bundles === 1 && v.madeAgain === 7 && v.stepVerdicts.every((x) => ['verified', 'as certified'].includes(x.verdict))
+              && made.report?.numbers === 23 && made.report.figures === 1 && made.package?.files === 25 && made.package.views === 1 && made.package.tiles === 20 && made.package.leftOut.names === 1 && made.package.checked.texts === 35,
+              'verified: 11 steps, 7 made again; 23 numbers; 25 files, 1 view in 20 tiles, 1 name left out, 35 texts');
+          }
+
+          // The Lung as 0.8.0 saves a figure of its results, and the figure's certificate
+          // (validation/projects/0.8.0-lung.situcraft.json and 0.8.0-lung.certificate.zip): written
+          // when asked (SITUCRAFT_WRITE_FIXTURE=0.8.0), a project of its own made by the worked
+          // example Results others can check, its bundle's place made neutral. Then, as every later
+          // version must: the certificate verified from the bundle by situcraft verify (every step
+          // made again, the figure drawn again); the project reopened, its bundle found where this
+          // run keeps it, and its figure drawn the same as the certificate records.
+          {
+            const projectFixture = join(root, 'validation', 'projects', '0.8.0-lung.situcraft.json');
+            const certificateFixture = join(root, 'validation', 'projects', '0.8.0-lung.certificate.zip');
+            const lungDir = join(dataRoot, 'xenium-lung-2fov');
+            if (process.env.SITUCRAFT_WRITE_FIXTURE === '0.8.0') {
+              await act('new_project', { name: 'The Lung, as SituCraft 0.8.0 saved it' });
+              await act('open_paths', { paths: [lungDir], add: true });
+              // Its first two steps: the question, and the figure made with all it rests on.
+              await walkLung('results-checked', 2);
+              await act('tour', { end: true });
+              const doc = await chrome.eval(`(async () => (await import('/lib/project.js')).serializeProject(window.situcraft.store.project))()`);
+              const neutral = JSON.parse(doc.split(lungDir).join('/data/xenium-lung-2fov').split(dataRoot).join('/data').split(work).join('/data/work'));
+              writeFileSync(projectFixture, `${JSON.stringify({ ...neutral, id: 'p-situcraft-0-8-0-lung' }, null, 1)}\n`);
+              await act('export', { what: 'certificate', result: 'The Lung\'s results', path: certificateFixture, overwrite: true });
+            }
+            if (existsSync(projectFixture) && existsSync(certificateFixture)) {
+              const fixtureReport = join(work, 'fixture-0.8.0.json');
+              const verified = spawnSync(bin, ['verify', '--data', dataRoot, '--report', fixtureReport, '--overwrite', ...(findChrome() ? ['--chrome', findChrome()] : []), certificateFixture], { encoding: 'utf8', timeout: 30 * 60e3 });
+              const report = existsSync(fixtureReport) ? JSON.parse(readFileSync(fixtureReport, 'utf8')) : null;
+              const certified = JSON.parse(unzipOwn(readFileSync(certificateFixture)).get('certificate.json').toString('utf8'));
+              const figureStep = certified.steps.find((x) => x.kind === 'figure');
+              const text = readFileSync(projectFixture, 'utf8');
+              const reopened = await chrome.eval(`(async () => {
+                const app = window.situcraft;
+                const doc = ${JSON.stringify(text)};
+                const saved = JSON.parse(doc);
+                await app.library.saveProject(saved.id, doc);
+                await app.openProject(saved.id);
+                const d = app.store.project.datasets[0];
+                const link = await app.bundles.locate(d.id, ${JSON.stringify(lungDir)});
+                return { state: link?.state ?? null, figures: app.store.project.figures.map((f) => f.name), software: saved.software ?? null };
+              })()`);
+              const drawn = await act('write_figure', { name: 'The Lung\'s results', path: join(work, 'fixture-0.8.0-figure.json'), format: 'json', overwrite: true });
+              check('viewer', '0.8.0 Lung project and its figure\'s certificate: the certificate verified from the bundle (its steps made again, the figure drawn again); the project reopened, its bundle found, its figure drawn the same as the certificate records', `verify: exit ${verified.status}, ${report?.verdict}, ${report?.steps?.length} steps (${(report?.steps ?? []).filter((x) => x.verdict === 'verified').length} verified)${verified.status !== 0 ? ` ${`${verified.stdout ?? ''}${verified.stderr ?? ''}`.slice(-400)}` : ''}; certified by ${certified.software.version}; reopened ${JSON.stringify(reopened)}; drawn ${drawn.ok ? (drawn.data.drawing === figureStep?.drawing?.drawing ? 'the same' : 'otherwise') : drawn.message}`,
+                verified.status === 0 && report?.verdict === 'verified' && certified.software.version === '0.8.0' && reopened.state === 'ok' && reopened.figures.includes('The Lung\'s results') && drawn.ok && drawn.data.drawing === figureStep?.drawing?.drawing,
+                'verified; reopened; the figure drawn the same');
+            }
+          }
         }
 
         // The simulated example, made on this computer, and its worked example scoring the
@@ -3702,7 +3798,7 @@ export async function viewerSuite({ check, MissingData, verbose }) {
           // The project as 0.7.0 saves a cohort (validation/projects/0.7.0-cohort.situcraft.json):
           // the simulated cohort's samples with their subjects and conditions, a saved design, the
           // same steps on every sample, its summary and its comparisons of abundance, expression and
-          // arrangement. Written when asked (SITUCRAFT_WRITE_FIXTURE=1), its folders' places made
+          // arrangement. Written when asked (SITUCRAFT_WRITE_FIXTURE=0.7.0), its folders' places made
           // neutral and given its own id. Then reopened: each sample's bundle found again where this
           // run made it, its samples, fields and design as saved; and the steps, summary and
           // comparisons made again by this build with the same ids, each artifact the project
@@ -3717,7 +3813,7 @@ export async function viewerSuite({ check, MissingData, verbose }) {
             await act('compare_expression', { design: 'By condition' }),
             await act('compare_spatial', { design: 'By condition' }),
           ];
-          if (process.env.SITUCRAFT_WRITE_FIXTURE && cohortHome) {
+          if (process.env.SITUCRAFT_WRITE_FIXTURE === '0.7.0' && cohortHome) {
             await act('new_project', { name: 'Simulated cohort, as SituCraft 0.7.0 saved it' });
             await act('open_example', { example: 'cohort' });
             await act('design', { unit: 'subject', group: 'condition', reference: 'control', save: 'By condition' });
@@ -3726,7 +3822,12 @@ export async function viewerSuite({ check, MissingData, verbose }) {
             const neutral = JSON.parse(doc.split(cohortHome).join('/data/examples/simulated-cohort').split(work).join('/data/work'));
             writeFileSync(cohortFixture, `${JSON.stringify({ ...neutral, id: 'p-situcraft-0-7-0-cohort' }, null, 1)}\n`);
           }
-          if (existsSync(cohortFixture) && cohortHome) {
+          // Reopened against the cohort as 0.7.0 made it: a simulated bundle records the version that
+          // wrote it, so the cohort this version makes is another run; the same simulator, told to
+          // record 0.7.0 (SITUCRAFT_SIMULATE_AS), makes 0.7.0's bundles again exactly.
+          const cohort070 = join(work, 'cohort-0.7.0');
+          if (existsSync(cohortFixture) && !existsSync(cohort070)) spawnSync(bin, ['simulate', '--cohort', 'standard', '--quiet', cohort070], { encoding: 'utf8', timeout: 30 * 60e3, env: { ...process.env, SITUCRAFT_SIMULATE_AS: '0.7.0' } });
+          if (existsSync(cohortFixture) && existsSync(cohort070)) {
             const text = readFileSync(cohortFixture, 'utf8');
             const fixture = JSON.parse(text);
             const reopened = await chrome.eval(`(async () => {
@@ -3738,7 +3839,12 @@ export async function viewerSuite({ check, MissingData, verbose }) {
               await app.library.saveProject(saved.id, doc);
               await app.openProject(saved.id);
               const states = [];
-              for (const d of app.store.project.datasets) states.push((await app.bundles.locate(d.id, ${JSON.stringify(cohortHome)} + '/' + d.path.split('/').pop()))?.state);
+              for (const d of app.store.project.datasets) {
+                const link = await app.bundles.locate(d.id, ${JSON.stringify(cohort070)} + '/' + d.path.split('/').pop());
+                states.push(link?.state);
+                // Its instrument's segmentation registered, as opening it registers it.
+                if (link?.item) await app.bundles.registerSegmentation(link.item, d.id);
+              }
               const p = app.store.project;
               return { states, samples: samplesOf(p).map((x) => [x.name, x.fields.subject, x.fields.condition].join(' ')).join(', '), designs: designsOf(p).map((d) => d.name + ' v' + d.version).join() };
             })()`);

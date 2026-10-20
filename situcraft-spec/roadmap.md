@@ -3778,10 +3778,36 @@ left in it.
        where it names a sample.
      - **Tiles of the stains:** the tissue's own texture leaves lossless tiles large whatever the
        filter; a view's tiles are JPEG (the figures, in SVG, are the record).
-9. **Examples, documentation, release 0.8.0.** Worked examples making a figure, a methods text,
-   a certificate verified and a package; the project fixture
+9. **Examples, documentation, release 0.8.0: done.** Worked examples making a figure, a methods
+   text, a certificate verified and a package; the project fixture
    `validation/projects/0.8.0-*.situcraft.json`; the guide's pages; CHANGELOG; release, and the
    product site published for it.
+   - **Verifying in SituCraft** (`api_verify.go`, `web/ui/verify.js`): a certificate, report or
+     package sent to the program (or named by its path) is verified as `situcraft verify` verifies
+     it, as a job (`verifyCertificate`, its printing the job's log): the bundles looked for among
+     each project's datasets' folders and the examples'; what it found kept beside the file and
+     answered (`GET /api/verify/{job}`). The Reports view's **Verify a certificate…**, a record's
+     **Verify** (certified first), remote control's `verify_certificate`.
+   - **Worked examples** (`web/lib/tours.js`; the Reports view's actions in `web/ui/tour.js`:
+     `figure`, a view saved and a figure of it and the results asked before, with what it rests on
+     made first when asked; `verify`; `report`; `package`; and steps showing a figure, its methods
+     or what made it): **A figure of results, and its methods** and **Results others can check**,
+     on the Lung.
+   - **The release fixture** (`validation/projects/0.8.0-lung.situcraft.json` and
+     `0.8.0-lung.certificate.zip`): a project made by the worked example Results others can check
+     and its figure's certificate, written by the viewer suite with `SITUCRAFT_WRITE_FIXTURE=0.8.0`
+     (each release's fixture now written only when its own version is asked for). Every later
+     version verifies the certificate from the bundle and draws the figure the same.
+   - **Release:** version 0.8.0; the guide (getting started, the record, the worked examples), the
+     science page's figures and record, the README, the site's front page, CITATION.cff.
+   - Found by slice 9:
+     - **A figure's last bar:** the worked example's figure at a panel's default height left the
+       genes in a pattern one bar short at 6 pt; its panels are nine tenths as tall as wide.
+     - **The cohort fixture written again:** any value of `SITUCRAFT_WRITE_FIXTURE` rewrote 0.7.0's
+       cohort fixture with the version running; each release's is now written only for its own.
+     - **0.7.0's cohort, another run:** a simulated bundle records the version that wrote it, so the
+       cohort 0.8.0 makes is not the one 0.7.0's fixture recorded, and its bundles were refused; the
+       suite makes the cohort as 0.7.0 made it (`SITUCRAFT_SIMULATE_AS`, the simulator unchanged).
 
 ## 0.9.0: agents and scripts (wave 9)
 

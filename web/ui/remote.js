@@ -43,6 +43,7 @@ import { tissueViews, viewRegion } from './mode-reports.js';
 import { RECORD_FORMATS, recordOf } from './record-view.js';
 import { certify } from './certificate.js';
 import { writePackage, writeReport } from './report.js';
+import { verdictText, verifyCertificateFile } from './verify.js';
 import { certificateSummary, shortFingerprint } from '../lib/certificate.js';
 import { recordableResults } from '../lib/record.js';
 import { BUNDLE_FIELDS, addSampleField, fieldValue, readSamplesTable, removeSampleField, renameSample, sampleFields, samplesCSV, samplesOf, setFieldKind, setRegionSamples, setSampleField } from '../lib/samples.js';
@@ -2809,6 +2810,24 @@ export function installRemote(app) {
       }
       const same = out.filter((x) => x.checked && x.same).length;
       return { message: `${same} of ${plural(out.length, 'record')} computed again as recorded.`, data: { steps: out } };
+    },
+
+    async verify_certificate(args) {
+      let report;
+      let name;
+      try {
+        if (args.path !== undefined) {
+          name = String(args.path).split(/[\\/]/).at(-1);
+          report = await verifyCertificateFile(app, { path: String(args.path) });
+        } else {
+          const out = await certify(app, scopeArg(args));
+          name = out.name;
+          report = await verifyCertificateFile(app, { file: new Blob([out.bytes]), name: out.name });
+        }
+      } catch (error) {
+        throw new ActionError(`It could not be verified: ${error.message}`);
+      }
+      return { message: `${name}: ${verdictText(report)}`, data: report };
     },
 
     async read_figure(args) {

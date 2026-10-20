@@ -33,6 +33,11 @@ import { addSampleField, sampleFields, samplesOf, setRegionSamples, setSampleFie
 import { summariesOf } from '../lib/cohort.js';
 import { comparisonsOf as abundanceComparisons } from '../lib/abundance.js';
 import { testsOf } from '../lib/expression.js';
+import { addPanel, createFigure, figuresOf, saveFigure } from '../lib/figures.js';
+import { certify } from './certificate.js';
+import { verificationView, verifyCertificateFile } from './verify.js';
+import { writePackage, writeReport } from './report.js';
+import { showDialog } from './overlays.js';
 
 let active = null;
 
@@ -45,6 +50,9 @@ const POST_XENIUM_ACTIONS = new Set(['add-image', 'landmarks', 'register', 'chec
 const SPATIAL_ACTIONS = new Set(['graph', 'ask', 'remake-analysis', 'import-truth-domains']);
 
 // The cohorts' worked examples' actions (runCohort).
+// The Reports view's (wave 8, slice 9): a figure of a step's view and the results asked before,
+// what made it certified and verified, the report and the package written.
+const REPORT_ACTIONS = new Set(['figure', 'verify', 'report', 'package']);
 const COHORT_ACTIONS = new Set(['sample-fields', 'region-samples', 'cohort-design', 'cohort-steps', 'summarize', 'compare-abundance', 'compare-expression', 'compare-spatial']);
 
 // The Cohort view's sections a cohort step may show.
@@ -183,6 +191,9 @@ export function startTour(app, { tour, dataset }) {
     if (d.action === 'sample-fields') return fieldsSet(d);
     if (d.action === 'region-samples') return regionSamplesMade(d);
     if (d.action === 'cohort-design') return Boolean(!d.refused && d.save && savedDesign(d) && drafted(d));
+    if (d.action === 'figure') return Boolean(figureNamed(d.name));
+    // A certificate verified, a report and a package written: each time asked.
+    if (REPORT_ACTIONS.has(d.action)) return false;
     // The steps, the summary and the comparisons are answered at once when made already.
     if (COHORT_ACTIONS.has(d.action)) return false;
     return true;
@@ -196,6 +207,7 @@ export function startTour(app, { tour, dataset }) {
     if (POST_XENIUM_ACTIONS.has(d.action)) return runPostXenium(d, ds);
     if (SPATIAL_ACTIONS.has(d.action)) return runSpatial(d, ds);
     if (COHORT_ACTIONS.has(d.action)) return runCohort(d, ds);
+    if (REPORT_ACTIONS.has(d.action)) return runReports(step, d);
     if (step.mode === 'celltypes') {
       for (let k = 0; k < 200 && !app.cellTypesView; k += 1) await sleep(25);
       if (!app.cellTypesView) throw new Error('the Cell types view did not open');
@@ -336,6 +348,99 @@ export function startTour(app, { tour, dataset }) {
 
   // The spatial worked examples' actions: a graph built, a question asked, an answer made again on
   // another segmentation, the truth's domains imported as labels of the true cells.
+  // --- The Reports view's actions (wave 8, slice 9) ---------------------------------------------
+
+  const figureNamed = (name) => figuresOf(app.store.project).find((f) => f.name === name) ?? null;
+  // What made the figure's results, asked on the instrument's cells (the classes' enrichment).
+  const ENRICHMENT = { question: 'enrichment', segmentation: 'instrument', level: 0 };
+  const MORAN = { question: 'moran', segmentation: 'instrument' };
+  const mapOf = () => {
+    const c = clusteringOf('instrument');
+    return c ? app.store.project.artifacts.filter((a) => a.kind === 'embedding' && a.clustering === c.id && a.state === 'complete').at(-1) ?? null : null;
+  };
+  // A result a report step names: the figure, the enrichment or Moran's I.
+  const resultOf = (key, d) => (key === 'figure' ? figureNamed(d.figure) : key === 'enrichment' ? analysisOf(ENRICHMENT) : key === 'moran' ? analysisOf(MORAN) : null);
+  // What the report actions made, for remote control: { figure, verification, report, package }.
+  const made = {};
+  // The steps a figure of results rests on, each made when it is not yet, in its view.
+  const PREPARE = [
+    { mode: 'celltypes', do: { action: 'cluster' } },
+    { mode: 'celltypes', do: { action: 'label', markers: 'lung' } },
+    { mode: 'spatial', do: { action: 'graph', kind: 'delaunay' } },
+    { mode: 'spatial', do: { action: 'ask', ...ENRICHMENT } },
+    { mode: 'spatial', do: { action: 'ask', ...MORAN } },
+  ];
+
+  async function runReports(step, d) {
+    const before = 'do the steps before this one first';
+    if (d.action === 'figure') {
+      if (d.prepare) {
+        for (const s of PREPARE) {
+          if (done(s)) continue;
+          app.focusItem({ kind: 'dataset', id: dataset });
+          app.setMode(s.mode);
+          await run(s);
+        }
+        applyStepView(step, index);
+      }
+      const map = mapOf();
+      const enrichment = analysisOf(ENRICHMENT);
+      const moran = analysisOf(MORAN);
+      if (!map || !enrichment || !moran) throw new Error(`${before}: the map, the classes' enrichment and the genes in a pattern are not made yet`);
+      // The Viewer's view, as the step shows it, saved; then a figure of it and the results.
+      const hook = await viewer();
+      await hook.settled?.();
+      const view = (app.store.project.views ?? []).find((v) => v.name === d.view && v.dataset === dataset) ?? hook.saveView(d.view);
+      let fig = createFigure(d.name, 'double');
+      // Two panels a row, each nine tenths as tall as it is wide: room for the genes in a pattern.
+      const h = Math.round(((fig.width - 24) / 2) * 0.9);
+      for (const panel of [
+        { kind: 'tissue', view: view.id, region: { cx: view.camera.cx, cy: view.camera.cy, width: Math.round(view.camera.umPerCss * 1000 * 1e6) / 1e6 } },
+        { kind: 'map', map: map.id, color: 'clusters' },
+        { kind: 'spatial', analysis: enrichment.id },
+        { kind: 'spatial', analysis: moran.id },
+      ]) fig = addPanel({ ...fig, height: 2 * h + 40 }, { ...panel, h }, { columns: 2 }).figure;
+      fig = { ...fig, height: Math.round((fig.panels.reduce((y, p) => Math.max(y, p.y + p.h), 0) + 8) * 100) / 100 };
+      app.store.commit(saveFigure(app.store.project, fig), `New figure ${fig.name}`);
+      made.figure = fig.id;
+      return fig;
+    }
+    const fig = figureNamed(d.figure);
+    if (!fig) throw new Error(`${before}: the figure is not made yet`);
+    if (d.action === 'verify') {
+      const out = await certify(app, { kind: 'result', id: fig.id });
+      const report = await verifyCertificateFile(app, { file: new Blob([out.bytes]), name: out.name });
+      made.verification = { name: out.name, fingerprint: out.certificate.fingerprint, steps: out.certificate.steps.length, bundles: out.certificate.bundles.length, verdict: report.verdict, madeAgain: report.steps.filter((x) => x.by === 'program' && x.verdict === 'verified').length, stepVerdicts: report.steps.map(({ n, kind, verdict }) => ({ n, kind, verdict })) };
+      showDialog({ title: `Verified: ${out.name}`, width: 'wide', content: [verificationView(report)], buttons: [{ label: 'Close', primary: true }] });
+      return report;
+    }
+    const results = d.results.map((key) => resultOf(key, d));
+    if (results.some((r) => !r)) throw new Error(`${before}: the figure and the results it reports are not made yet`);
+    const options = { title: d.title, results: results.map((r) => r.id), names: Boolean(d.names) };
+    if (d.action === 'report') {
+      const out = await writeReport(app, options);
+      downloadBlob(new Blob([out.html], { type: 'text/html' }), out.name);
+      made.report = { name: out.name, numbers: out.numbers, figures: out.figures, fingerprint: out.certificate.fingerprint, leftOut: out.leftOut };
+      return out;
+    }
+    const out = await writePackage(app, options);
+    downloadBlob(new Blob([out.zip], { type: 'application/zip' }), out.name);
+    made.package = { name: out.name, files: out.files, views: out.views, tiles: out.tiles, numbers: out.numbers, leftOut: out.leftOut, checked: out.checked };
+    return out;
+  }
+
+  // Shows a step of the Reports view: the figure it names selected, its methods or what made it.
+  async function showReports(step) {
+    const r = step.reports;
+    app.setMode('reports');
+    for (let k = 0; k < 200 && !app.reportsView; k += 1) await sleep(25);
+    const fig = figureNamed(r.figure);
+    if (!app.reportsView || !fig) return;
+    if (r.show === 'figure') app.reportsView.select(fig.id);
+    if (r.show === 'methods') await app.reportsView.showMethods({ kind: 'result', id: fig.id });
+    if (r.show === 'record') await app.reportsView.showRecord(fig.id);
+  }
+
   async function runSpatial(d, ds) {
     const before = 'do the steps before this one first';
     for (let k = 0; k < 200 && !app.spatialView; k += 1) await sleep(25);
@@ -692,7 +797,25 @@ export function startTour(app, { tour, dataset }) {
         note.hidden = false;
         note.textContent = `The clustering could not be shown: ${error.message}`;
       });
+    } else if (step.reports) {
+      controller.shown = showReports(step).catch((error) => {
+        note.hidden = false;
+        note.textContent = `The Reports view could not be shown: ${error.message}`;
+      });
     } else {
+      applyStepView(step, i);
+      controller.shown = step.reveal ? (async () => {
+        for (let k = 0; k < 200 && !app.segmentationView; k += 1) await sleep(25);
+        app.segmentationView?.revealAnswers?.(dataset);
+      })() : Promise.resolve();
+    }
+    next.focus();
+  }
+
+  // A step's view of the tissue (or QC) applied, its fill and images by what they are; a step of
+  // another view shown.
+  function applyStepView(step, i) {
+    {
       const view = stepView(step, dataset, i);
       // A step's segmentation, by what it is.
       if (view && step.segmentation) {
@@ -720,12 +843,7 @@ export function startTour(app, { tour, dataset }) {
         app.focusItem({ kind: 'dataset', id: dataset });
         app.setMode(step.mode);
       }
-      controller.shown = step.reveal ? (async () => {
-        for (let k = 0; k < 200 && !app.segmentationView; k += 1) await sleep(25);
-        app.segmentationView?.revealAnswers?.(dataset);
-      })() : Promise.resolve();
     }
-    next.focus();
   }
 
   function close() {
@@ -744,7 +862,7 @@ export function startTour(app, { tour, dataset }) {
     if (!c) return null;
     return { summary: summariesOf(app.store.project)[0]?.id ?? null, comparison: ['abundance', 'expression', 'spatial'].includes(c.show) ? cohortComparison(c.show, c.design)?.id ?? null : null };
   };
-  const controller = { close, go, advance, step: () => index, card, tour, dataset, open: () => card.isConnected, done: () => done(tour.steps[index]), answers: () => answers(tour.steps[index]), cohort: () => cohortAnswers(tour.steps[index]), shown: Promise.resolve() };
+  const controller = { close, go, advance, step: () => index, card, tour, dataset, open: () => card.isConnected, done: () => done(tour.steps[index]), answers: () => answers(tour.steps[index]), cohort: () => cohortAnswers(tour.steps[index]), reports: () => ({ ...made }), shown: Promise.resolve() };
   active = controller;
   app.tour = controller;
   go(0);

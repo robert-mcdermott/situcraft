@@ -4,9 +4,12 @@ import (
 	"archive/zip"
 	"bytes"
 	"encoding/json"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -293,5 +296,48 @@ func TestARedactedStepIsNotMadeAgain(t *testing.T) {
 	remakeStep(nil, nil, certStep{N: 3, ID: "coh-1", By: "program", Redacted: true}, nil, nil, nil, map[int]*stepFound{}, map[string]bool{}, &found)
 	if found.Verdict != stepUnchecked || !strings.Contains(found.Detail, "names this certificate leaves out") {
 		t.Fatalf("%+v", found)
+	}
+}
+
+// Verifying in SituCraft itself (wave 8, slice 9): what is not a certificate refused at once; the
+// bundles it looks among, each project's datasets' folders and the examples'.
+func TestVerifyInSituCraft(t *testing.T) {
+	dir := t.TempDir()
+	a, err := newApp(config{dataDir: filepath.Join(dir, "library"), cacheDir: filepath.Join(dir, "cache"), examplesDir: filepath.Join(dir, "examples")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler, err := a.handler()
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := protect(handler, "127.0.0.1", defaultPort)
+	if rec := request(t, h, http.MethodPost, "/api/verify?name=notes.zip", strings.NewReader("not a zip"), nil); rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "not a SituCraft certificate") {
+		t.Fatalf("not a certificate: %d %s", rec.Code, rec.Body)
+	}
+	if rec := request(t, h, http.MethodPost, "/api/verify", strings.NewReader(`{"path":"certificate.zip"}`), map[string]string{"Content-Type": "application/json"}); rec.Code != http.StatusBadRequest {
+		t.Fatalf("a relative path: %d %s", rec.Code, rec.Body)
+	}
+	if rec := request(t, h, http.MethodGet, "/api/verify/job-unknown", nil, nil); rec.Code != http.StatusNotFound {
+		t.Fatalf("an unknown verification: %d", rec.Code)
+	}
+	// A bundle a project names, one among the examples (and a generated cohort's section); a
+	// missing folder and a zipped bundle are not looked in.
+	bundle := filepath.Join(dir, "data", "S01")
+	example := filepath.Join(a.examples.Dir, "xenium-lung-2fov")
+	section := filepath.Join(a.examples.Dir, "simulated-cohort", "S02")
+	for _, d := range []string{bundle, example, section} {
+		os.MkdirAll(d, 0o755)
+		os.WriteFile(filepath.Join(d, "experiment.xenium"), []byte("{}"), 0o644)
+	}
+	project := `{"id":"p-1","datasets":[{"id":"d-1","path":` + strconv.Quote(bundle) + `},{"id":"d-2","path":` + strconv.Quote(filepath.Join(dir, "gone")) + `},{"id":"d-3","path":` + strconv.Quote(filepath.Join(dir, "S03.zip")) + `}]}`
+	os.MkdirAll(filepath.Join(a.store.dir, "projects"), 0o755)
+	os.WriteFile(filepath.Join(a.store.dir, "projects", "p-1.json"), []byte(project), 0o644)
+	got := a.knownBundleFolders()
+	sort.Strings(got)
+	want := []string{bundle, example, section}
+	sort.Strings(want)
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("bundles known: %v", got)
 	}
 }

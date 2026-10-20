@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (0.8.0)
+## 0.8.0 (2026-10-19)
 
 Wave 8 of the [roadmap](situcraft-spec/roadmap.md): figures and a provable record. What others can
 check: figures with scale bars and legends, the methods text, the software and publications behind
@@ -198,6 +198,35 @@ a result, a certificate checked by making the result again, and a package that o
     file read by the suite and none holding a path, the user, the person, a note or the dataset's
     name, opened from the disk asking the network for nothing (the report intact, each view drawn
     and zoomed to its finest tiles), and verified from its bundle; in CI, verified on arm64.
+
+- **Worked examples of the record, and verifying in SituCraft (wave 8, slice 9).**
+  - **Verify a certificate…** in the Reports view (and **Verify** beside a record's Certificate,
+    which certifies it first) makes a certificate's, report's or package's results again in
+    SituCraft itself, as `situcraft verify` does, as a job: the bundles looked for among those this
+    library knows (each project's datasets and the examples), each step made again and every file
+    compared, the page's records computed again in a headless browser, what it found shown step by
+    step.
+  - **A figure of results, and its methods** (the Lung): its cells clustered and labeled, a graph,
+    the classes' enrichment and the genes in a pattern; a view of the tissue made a figure of four
+    panels two columns wide (174 × 157 mm: the view, its 2,298 cells filled by class; the map of
+    11,820 cells; the 7 pairs found; the 15 leading genes of the 162 in a pattern); its methods (23
+    references) and what made it (11 steps from the bundle).
+  - **Results others can check** (the Lung): the figure certified and verified in SituCraft (its 7
+    steps SituCraft made made again from the bundle, every file the same; the figure drawn again
+    the same), its report (23 numbers traced to the certificate) and a package with the dataset's
+    name left out (25 files, the view in 20 tiles, 35 texts searched).
+  - **Remote control:** `verify_certificate` verifies a file, or what made a result; `tour` runs the
+    new worked examples.
+  - **Validated:** in Go, a file that is no certificate refused at once and the bundles looked
+    among; in the page, each worked example walked to its end and every number its cards state
+    checked; the Lung project saved by 0.8.0 (`validation/projects/0.8.0-lung.situcraft.json`) and
+    its figure's certificate (`0.8.0-lung.certificate.zip`): the certificate verified from the
+    bundle, every step made again, and the project reopened, its figure drawn the same as certified.
+
+### Changed
+
+- **The README** says what SituCraft is and does, shows it, and says how to install and start it,
+  pointing to the guide; what each release added is in this changelog and the roadmap.
 
 ## 0.7.0 (2026-10-19)
 

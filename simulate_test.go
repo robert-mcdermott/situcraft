@@ -97,3 +97,16 @@ func TestSimulateWritesACohort(t *testing.T) {
 		t.Errorf("an unknown cohort: exit %d, %s", code, errs.String())
 	}
 }
+
+// A simulated bundle records this version as what wrote it, unless the validation suite asks for
+// an earlier release's (SITUCRAFT_SIMULATE_AS), to make its bundles again exactly.
+func TestSimulatedByThisVersionOrTheOneAskedFor(t *testing.T) {
+	t.Setenv("SITUCRAFT_SIMULATE_AS", "")
+	if simulatedBy() != version {
+		t.Fatalf("by %q", simulatedBy())
+	}
+	t.Setenv("SITUCRAFT_SIMULATE_AS", "0.7.0")
+	if simulatedBy() != "0.7.0" {
+		t.Fatalf("by %q", simulatedBy())
+	}
+}

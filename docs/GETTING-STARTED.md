@@ -26,7 +26,8 @@ The guide is on SituCraft's website, a page a subject:
   [differential expression](https://robert-mcdermott.github.io/situcraft/docs/expression.html);
   [spatial statistics between groups](https://robert-mcdermott.github.io/situcraft/docs/spatial-tests.html);
   [error rates and scale](https://robert-mcdermott.github.io/situcraft/docs/error-rates.html).
-- **Reports:** [figures](https://robert-mcdermott.github.io/situcraft/docs/figures.html).
+- **Reports:** [figures](https://robert-mcdermott.github.io/situcraft/docs/figures.html);
+  [what made a result, its methods, certificates, reports and packages](https://robert-mcdermott.github.io/situcraft/docs/record.html).
 - **Reference:** [remote control](https://robert-mcdermott.github.io/situcraft/docs/remote-control.html);
   [the record](https://robert-mcdermott.github.io/situcraft/docs/record.html);
   [troubleshooting](https://robert-mcdermott.github.io/situcraft/docs/troubleshooting.html).

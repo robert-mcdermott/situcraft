@@ -867,6 +867,15 @@ const scenes = {
     await js(`document.getElementById('zoom-in').click()`);
     await waitFor(`[...document.querySelectorAll('#tiles img')].filter((i) => i.style.display !== 'none').every((i) => i.complete)`);
   },
+  // A certificate verified in SituCraft (wave 8, slice 9): the worked example Results others can
+  // check, its figure of the Lung's results certified and made again from the bundle.
+  async verify() {
+    await act('open_example', { example: 'lung' });
+    await act('tour', { example: 'xenium-lung-2fov', name: 'results-checked' });
+    for (let k = 0; k < 3; k += 1) await act('tour', { run: true });
+    await waitFor(`Boolean(document.querySelector('.dialog .verification[data-verdict]'))`, 300000);
+    await sleep(400);
+  },
   // The Jobs view after both examples were opened: each job's state and times, one's log open.
   async jobs() {
     await act('open_example', { example: 'lung' });

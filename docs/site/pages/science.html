@@ -67,8 +67,22 @@ lede: SituCraft implements each method itself, from its publication, and checks 
       </div>
       <p>Every comparison of a cohort is of its replicate units, never its cells. Tested cell by cell, the same null cohorts find differences everywhere; see <a href="docs/error-rates.html">Error rates and scale</a>.</p>
 
+      <h2 id="record">Figures and the record</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Method</th><th>Source</th><th>Checked against</th><th>Agreement</th></tr></thead>
+          <tbody>
+            <tr><td>Figures: the tissue's stains composited from their samples, the cells, transcripts and plots drawn as marks, written as SVG, PDF and PNG</td><td>SituCraft's own drawing</td><td>The suite's own readers of SVG and PDF, its own composite of the tiles' samples, and the Viewer</td><td class="agree">every mark; every pixel, the Viewer's within one level of 255; no text below 6 pt</td></tr>
+            <tr><td>The methods text, written from the record of each step</td><td>SituCraft's record</td><td>The projects' own records</td><td class="agree">every step said, each number the records' own, every reference the project's</td></tr>
+            <tr><td>Certificates: the bundles' files and each step's by SHA-256, fingerprinted over canonical JSON</td><td>FIPS 180-4; JSON with its keys sorted, as JSON.stringify writes values</td><td><code>situcraft verify</code>, making each step again on x86-64 and on arm64; copies tampered with</td><td class="agree">every file bit for bit; each edit found</td></tr>
+            <tr><td>Reports and packages checking themselves offline</td><td>RFC 6901 pointers into the certificate</td><td>The suite's own reading of every number, figure and text they hold</td><td class="agree">every number the certificate's; nothing left out found</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>A certificate proves that these bundles, analyzed as recorded, give these files and numbers, not that a result is right; see <a href="docs/record.html">What made a result</a>.</p>
+
       <h2 id="cite">Cite SituCraft</h2>
-      <p>If you use SituCraft in your research, please cite it (the repository's <a href="{{github}}/blob/main/CITATION.cff">CITATION.cff</a>), with its version, and the methods you used as its methods section lists them:</p>
+      <p>If you use SituCraft in your research, please cite it (the repository's <a href="{{github}}/blob/main/CITATION.cff">CITATION.cff</a>), with its version, the methods you used as its methods section lists them, and a result's certificate by its fingerprint:</p>
       <div class="code wrap" data-no-copy><pre><code>McDermott R. SituCraft: a local-first workbench for imaging-based spatial transcriptomics. Version {{version}}. https://github.com/robert-mcdermott/situcraft</code></pre></div>
 
       <h2 id="references">References</h2>

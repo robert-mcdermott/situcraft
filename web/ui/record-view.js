@@ -4,11 +4,12 @@
 // the record written as Markdown, JSON or BibTeX, or certified (slice 5, ui/certificate.js).
 
 import { h, icon, clear, downloadBlob } from './dom.js';
-import { toast } from './overlays.js';
+import { showDialog, toast } from './overlays.js';
 import { STEP_KINDS, decisionWords, gatherManifests, groupSteps, numbers, parameterText, plural, recordBibTeX, recordJSON, recordMarkdown, recordableResults, resultRecord, scopeRoots } from '../lib/record.js';
 import { shortFingerprint } from '../lib/certificate.js';
 import { manifestOf } from './manifests.js';
 import { certify } from './certificate.js';
+import { verificationPending, verifyCertificateFile } from './verify.js';
 import { scopeOfValue, scopeOptions, scopeValue } from './scopes.js';
 
 // The record of a scope (a result's ID, or { kind, id }), its artifacts' manifests read from the
@@ -89,6 +90,18 @@ export function mountRecord(app) {
     }
   }
 
+  // Certified, then verified by the program: each step made again from its bundles.
+  async function verifyScope(scope) {
+    const pending = verificationPending('Certifying, then making each step again from the bundles…');
+    showDialog({ title: 'Verify what made it', width: 'wide', content: [pending.element], buttons: [{ label: 'Close', primary: true }] });
+    try {
+      const out = await certify(app, scope);
+      pending.show(await verifyCertificateFile(app, { file: new Blob([out.bytes]), name: out.name }));
+    } catch (error) {
+      pending.element.replaceChildren(h('p.verification-verdict.bad', `It could not be verified: ${error.message}`));
+    }
+  }
+
   function recordView(record, scope) {
     const refText = (list) => (list.length ? `[${numbers(list)}]` : '');
     const steps = groupSteps(record).map((g) => {
@@ -125,7 +138,8 @@ export function mountRecord(app) {
       h('div.btn-row',
         h('span.field-label', 'Write it as'),
         ...Object.entries(RECORD_FORMATS).map(([id, f]) => h('button.btn.small', { type: 'button', onclick: () => write(id) }, icon('download'), f.label)),
-        h('button.btn.small', { type: 'button', title: 'A zip of what it rests on and what it reports, fingerprinted, with a README saying how to check it', onclick: () => writeCertificateFile(scope) }, icon('download'), 'Certificate')),
+        h('button.btn.small', { type: 'button', title: 'A zip of what it rests on and what it reports, fingerprinted, with a README saying how to check it', onclick: () => writeCertificateFile(scope) }, icon('download'), 'Certificate'),
+        h('button.btn.small', { type: 'button', title: 'Certify it, then make each step again from the bundles and compare every file, as situcraft verify does', onclick: () => verifyScope(scope) }, icon('check'), 'Verify')),
       h('ol.record-steps', ...steps),
       record.software.length ? h('div.record-software', h('div.muted', 'Software'), h('ul.inspector-list', ...record.software.map((x) => h('li', `${x.name} ${x.version}`.trim())))) : null,
       record.references.length ? h('div.record-references', h('div.muted', 'References'), h('ol.record-refs', ...record.references.map((r) => h('li', { value: r.n }, r.text, r.doi && !r.text.includes(r.doi) ? ` doi:${r.doi}` : '')))) : null,

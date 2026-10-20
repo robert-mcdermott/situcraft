@@ -15,6 +15,7 @@ import { drawFigure, paintFigure, readBackFigure, writeFigure } from './figures.
 import { mountRecord } from './record-view.js';
 import { mountMethods } from './methods.js';
 import { mountReport } from './report.js';
+import { verificationPending, verifyCertificateFile } from './verify.js';
 
 // A tissue panel's region from a saved view: its center, and the width a Viewer a thousand CSS
 // pixels wide shows at its zoom.
@@ -68,7 +69,8 @@ export function mountReports(app, container) {
       h('div.section-title', 'Figures'),
       h('div.btn-row.reports-actions',
         h('button.btn.primary', { type: 'button', onclick: () => newFigure() }, icon('plus'), 'New figure'),
-        h('button.btn', { type: 'button', onclick: () => readBack() }, icon('upload'), 'Read a figure back…')),
+        h('button.btn', { type: 'button', onclick: () => readBack() }, icon('upload'), 'Read a figure back…'),
+        h('button.btn', { type: 'button', title: 'A certificate, a report or a result package: each step made again from the bundles this library knows, and every file compared', onclick: () => verifyOne() }, icon('check'), 'Verify a certificate…')),
       list,
       editor,
       report.element,
@@ -97,6 +99,22 @@ export function mountReports(app, container) {
     commit(fig, `New figure ${fig.name}`);
     selected = fig.id;
     render(true);
+  }
+
+  // A certificate, report or package chosen, verified by the program (ui/verify.js), what it found
+  // shown as it comes.
+  function verifyOne() {
+    const input = h('input', { type: 'file', accept: '.zip,.html' });
+    input.addEventListener('change', () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const pending = verificationPending();
+      showDialog({ title: `Verify ${file.name}`, width: 'wide', content: [pending.element], buttons: [{ label: 'Close', primary: true }] });
+      verifyCertificateFile(app, { file, name: file.name })
+        .then((report) => pending.show(report))
+        .catch((error) => pending.element.replaceChildren(h('p.verification-verdict.bad', `It could not be verified: ${error.message}`)));
+    });
+    input.click();
   }
 
   async function readBack() {

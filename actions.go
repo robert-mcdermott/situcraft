@@ -617,6 +617,12 @@ var remoteActions = []remoteAction{
 	{Name: "verify_records", Title: "Compute the page's records again", Description: "Used by situcraft verify: the page's own records named (a design, a filter, a figure, by ID) computed again in the project open, a design from its samples, a filter's cells from their attributes, a figure's drawing; answers each one's id, whether it was computed (checked), whether it is the same (same), how (detail) and what differs (differ).", InputSchema: schema(map[string]any{
 		"steps": map[string]any{"type": "array", "items": map[string]any{"type": "object"}, "description": "Each {id, kind (design, filter or figure), drawing (a figure's drawing as its certificate records it: {drawing, panels: [{id, letter, drawing}]})}."},
 	}, "steps"), long: true},
+	{Name: "verify_certificate", Title: "Verify a certificate", Description: "Verifies a certificate, a report or a result package as situcraft verify does, in SituCraft itself: each step SituCraft made is made again, in a SituCraft of its own, from the bundles this library knows (each project's datasets and the examples, found by their files' SHA-256), and every file compared bit for bit; the page's records are checked by their digests and its designs, filters and figures computed again in a headless browser. With path, the file there; with result, dataset or project, what made it, certified first. Answers the verdict (verified, differs or not checkable), each bundle found and each step's verdict, as verify's --report writes them. Needs the token with path (it reads the file).", InputSchema: schema(map[string]any{
+		"path":    textArg("The absolute path of a certificate (.zip), a report (.html) or a result package (its folder or .zip)."),
+		"result":  textArg("Or a result, by ID or name: certified, then verified."),
+		"project": flagArg("Or the whole project's results: certified, then verified."),
+		"dataset": datasetArg,
+	}), long: true, readsAt: true},
 	{Name: "read_figure", Title: "Read a figure back", Description: "Reads a figure SituCraft wrote (SVG, PDF, PNG or JSON) and compares it with the project: whether its manifest is as written, what changed since in each panel's view, dataset and artifacts, and whether each panel draws the same now.", InputSchema: schema(map[string]any{
 		"path": textArg("The figure file on this computer."),
 	}, "path"), long: true, readsAt: true},

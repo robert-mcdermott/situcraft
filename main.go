@@ -24,6 +24,7 @@ import (
 	"runtime/debug"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -36,7 +37,7 @@ import (
 //go:embed web/index.html web/styles.css web/app.js web/favicon.svg web/lib/*.js web/ui/*.js web/render/*.js
 var content embed.FS
 
-var version = "0.7.0"
+var version = "0.8.0"
 
 // commit is the source revision the program was built from. Release builds set it with
 // -ldflags "-X main.commit=..."; otherwise it comes from the version-control stamp Go records
@@ -94,6 +95,9 @@ type app struct {
 	examples *examples.Library
 	// control is the remote-control hub (remote.go), with --remote-control.
 	control *remoteHub
+	// verifications are the folders of the certificates verified here, by job (api_verify.go).
+	verifyMu      sync.Mutex
+	verifications map[string]string
 	// refineInputs are the last bundle's inputs read for a refinement's preflight.
 	refineInputs refineInputs
 	// images are the post-Xenium images the page draws, kept open (api_images.go).
@@ -569,6 +573,7 @@ func (a *app) registerAPI(mux *http.ServeMux) {
 	a.registerPlant(mux)
 	a.registerExports(mux)
 	a.registerFigures(mux)
+	a.registerVerify(mux)
 	if a.control != nil {
 		a.control.register(mux)
 	}

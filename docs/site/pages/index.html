@@ -1,13 +1,13 @@
 ---
 title: SituCraft
 head: SituCraft: spatial transcriptomics you can check
-description: A local-first workbench for imaging-based spatial transcriptomics, starting with 10x Genomics Xenium: bundles checked, a tissue viewer, quality control, segmentations made, compared and decided, cell types, pathology images and regions, spatial statistics, and cohorts compared with the subject as the unit, in one program on your own computer.
+description: A local-first workbench for imaging-based spatial transcriptomics, starting with 10x Genomics Xenium: bundles checked, a tissue viewer, quality control, segmentations made, compared and decided, cell types, pathology images and regions, spatial statistics, cohorts compared with the subject as the unit, and figures, methods and certificates others can check, in one program on your own computer.
 ---
     <section class="hero">
       <div class="container hero-grid">
-        <a class="eyebrow" href="{{github}}/releases/tag/v{{version}}"><span class="pill">v{{version}}</span> Samples and cohorts: several sections in a project, their design, and groups compared with the subject, not the cell, as the unit</a>
+        <a class="eyebrow" href="{{github}}/releases/tag/v{{version}}"><span class="pill">v{{version}}</span> Figures and a provable record: figures drawn from the project, the methods written, and certificates that make a result again</a>
         <h1>Spatial transcriptomics <span class="accent">you can check</span></h1>
-        <p class="lede">SituCraft opens the output of a 10x Genomics Xenium run, checks it, and shows the tissue, its transcripts and its cells at any zoom. It makes and compares cell segmentations, types and reviews the cells, brings in the H&amp;E, asks how the tissue is organized, and compares groups of subjects, keeping every decision on record. It runs on your own computer as one self-contained program, installed with a single command: no account, Python or R, and your data never leave your machine.</p>
+        <p class="lede">SituCraft opens the output of a 10x Genomics Xenium run, checks it, and shows the tissue, its transcripts and its cells at any zoom. It makes and compares cell segmentations, types and reviews the cells, brings in the H&amp;E, asks how the tissue is organized, compares groups of subjects, and writes figures, methods and certificates that anyone can check by making the results again, keeping every decision on record. It runs on your own computer as one self-contained program, installed with a single command: no account, Python or R, and your data never leave your machine.</p>
         <shot name="viewer-genes" alt="SituCraft's Viewer on the Lung example: transcripts of EPCAM, COL5A2, PLVAP and CD68 over the gray DAPI stain and the cells' outlines, a selected cell's transcripts by gene in the inspector" window eager>The Xenium human Lung section (10x Genomics, CC BY 4.0), one of the examples: four genes' transcripts over the DAPI stain and the cells, one cell in the inspector.</shot>
         <div class="btn-row">
           <a class="btn btn-primary" href="install.html">
@@ -63,8 +63,8 @@ description: A local-first workbench for imaging-based spatial transcriptomics, 
       <div class="container">
         <div class="section-head">
           <span class="kicker">What it does</span>
-          <h2 id="features-title">From the instrument's bundle to a cohort compared</h2>
-          <p>Open a Xenium bundle, check it, look at the tissue, decide which cells to trust, name them, bring in the pathology, ask which cells are neighbors and where, and compare groups of subjects, each step kept on record.</p>
+          <h2 id="features-title">From the instrument's bundle to results others can check</h2>
+          <p>Open a Xenium bundle, check it, look at the tissue, decide which cells to trust, name them, bring in the pathology, ask which cells are neighbors and where, compare groups of subjects, and write it up so that others can check it, each step kept on record.</p>
         </div>
 
         <article class="feature">
@@ -172,6 +172,21 @@ description: A local-first workbench for imaging-based spatial transcriptomics, 
           </div>
           <shot name="expression" alt="The Cohort view's differential expression of the simulated cohort's epithelial-like cells: the volcano with SIM033 far above the rest, SIM033's subjects by condition, and the genes ranked by p-value with SIM033 first and marked higher">The simulated cohort's subjects compared by condition: SIM033, raised in the treated subjects' epithelial-like cells, the only gene found.</shot>
         </article>
+
+        <article class="feature reverse">
+          <div class="feature-text">
+            <span class="kicker">Figures and a provable record</span>
+            <h3>Results others can check</h3>
+            <p>Figures are drawn from the project at a journal's column width, the tissue beside plots of results, each file carrying what it was drawn from. The methods are written from the record of every step. A certificate holds what a result rests on, and <code>situcraft verify</code>, or SituCraft itself, makes it again from the bundles and compares every file; a report or a package carries it to a reader, opens offline, and checks itself.</p>
+            <ul class="checklist">
+              <li>Figures read back by independent readers of SVG and PDF, the stains every pixel the suite's own composite</li>
+              <li>Certificates written on x86-64 made again on arm64, every file the same, bit for bit</li>
+              <li>Reports and packages opened offline: every number the certificate's, nothing left out found</li>
+            </ul>
+            <a class="more-link" href="docs/record.html">The record and its certificate</a>
+          </div>
+          <shot name="figure-results" alt="The Reports view's preview of a figure of the Lung's results: its transcripts per cell, the cells' map by cluster, the classes' neighborhood enrichment and the genes in a pattern, lettered A to D">A figure of the Lung's results, drawn from the project and previewed as it will print.</shot>
+        </article>
       </div>
     </section>
 
@@ -185,7 +200,7 @@ description: A local-first workbench for imaging-based spatial transcriptomics, 
           <a class="card" href="docs/getting-started.html#worked-examples">
             <span class="icon-badge mint"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6M10 3v6L4 19a1 1 0 0 0 .9 1.5h14.2A1 1 0 0 0 20 19l-6-10V3"/></svg></span>
             <h3>Examples with known answers</h3>
-            <p>Two public Xenium sections; a simulated tissue whose every cell, transcript and type is known, with an H&amp;E and an immunofluorescence image of it; and three simulated cohorts with known effects, or none. Twenty worked examples, each a question answered step by step.</p>
+            <p>Two public Xenium sections; a simulated tissue whose every cell, transcript and type is known, with an H&amp;E and an immunofluorescence image of it; and three simulated cohorts with known effects, or none. Twenty-two worked examples, each a question answered step by step.</p>
           </a>
           <a class="card" href="docs/remote-control.html">
             <span class="icon-badge"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 9-4 3 4 3M16 9l4 3-4 3M13 6l-2 12"/></svg></span>
@@ -233,6 +248,8 @@ description: A local-first workbench for imaging-based spatial transcriptomics, 
               <tr><td><strong>Differential expression</strong></td><td>limma 3.68.5 and edgeR 4.10.5 on nine pseudobulk tables</td><td class="agree">the same genes kept; every fold change, interval, t and p within 10⁻⁹</td></tr>
               <tr><td><strong>Spatial statistics compared</strong></td><td>limma 3.68.5 and statsmodels 0.15.0 on ten cases</td><td class="agree">within 10⁻¹³</td></tr>
               <tr><td><strong>Error rates</strong></td><td>2,000 simulated null cohorts and 500 with known effects</td><td class="agree">each family within half a point of 5%; the effect gene found in 98%, its interval covering the truth in 95.0%</td></tr>
+              <tr><td><strong>Figures</strong></td><td>The suite's own readers of SVG and PDF; its own composite of the stains' samples</td><td class="agree">every mark as drawn; every pixel, and the Viewer's within one level</td></tr>
+              <tr><td><strong>Certificates</strong></td><td>Results made again by <code>situcraft verify</code> on x86-64 and arm64; copies tampered with</td><td class="agree">every file bit for bit; each edit found</td></tr>
               <tr><td><strong>Scale</strong></td><td>A million generated cells, each analysis in a process of its own; a cohort of 2 million cells</td><td class="agree">within budget: Moran's I in 88 s and 0.94 GB on four cores; the cohort in 4.2 minutes and 0.65 GB</td></tr>
             </tbody>
           </table>
@@ -259,7 +276,8 @@ description: A local-first workbench for imaging-based spatial transcriptomics, 
               <tr><td><strong>0.5.0</strong></td><td>The pathology bridge: post-Xenium images aligned and checked in µm, regions exchanged with QuPath, and reviews with their provenance</td></tr>
               <tr><td><strong>0.6.0</strong></td><td>Niches and spatial statistics: graphs, enrichment, distances, regions measured, niches, spatially variable genes, and any answer made again on another segmentation</td></tr>
               <tr><td><strong>0.7.0</strong></td><td>Samples and cohorts: several sections in a project, their QC and design, and abundances, expression and spatial statistics compared between groups with the subject as the unit, their error rates measured</td></tr>
-              <tr><td><strong>0.8.0</strong> (coming)</td><td>Figures and a provable record: figures with scale bars, legends and provenance, the full methods text, and a certificate that a result is what it says</td></tr>
+              <tr><td><strong>0.8.0</strong></td><td>Figures and a provable record: figures with scale bars, legends and provenance, the methods text, certificates made again by <code>situcraft verify</code>, and reports and packages that check themselves</td></tr>
+              <tr><td><strong>0.9.0</strong> (coming)</td><td>Agents and scripts: an MCP server, headless runs for batch and HPC, and R and Python clients</td></tr>
             </tbody>
           </table>
         </div>
