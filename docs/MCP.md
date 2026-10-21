@@ -238,7 +238,7 @@ may replace or remove something, and whether it may reach the network (downloadi
 | Cohorts | `samples`, `compare_panels`, `cohort_table`, `cohort_qc`, `show_gene`, `show_sample_cells` |
 | The record | `record`, `methods`, `verify_records` |
 
-**Changing the project**, with `--allow edits`: `new_project`, `draw_region`, `edit_region`,
+**Changing the project**, with `--allow edits`: `new_project`, `add_results`, `draw_region`, `edit_region`,
 `save_view`, `remove_view`, `save_filter`, `name_clusters`, `curate_labels`, `review`,
 `decide_segmentation`, `use_transform`, `set_samples`, `design`, `figure`.
 

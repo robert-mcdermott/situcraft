@@ -119,6 +119,30 @@ a window.
     (segmentation, graph, clusters, labels, enrichment) made again in 2 seconds, its derived
     data already built, and verified.
 
+- **Runs at scale (wave 9, slice 6).**
+  - **The window's choices, made again on other bundles.** A step carrying cells the window chose
+    is now made on any bundle when the program can choose them as the window did: every cell, a
+    saved filter's cells (its conditions or tree), and each cell's label of a label set the recipe
+    makes. A recipe says so only when the program, choosing them on the bundle it was written
+    from, gets the very cells the window chose. A region's cells, a review's, curated labels and
+    niches are still made only on their own bundle.
+  - **The report, without a window:** `situcraft run --report` writes, in a headless Chrome,
+    Chromium, Edge or Brave, the result's report and methods, and the run's project (its bundle
+    and every result) in its library, to open in SituCraft. A new `add_results` action adds
+    results of the library to the open project.
+  - **Batches:** `--bundle-dir` or `--bundles` makes a recipe on many bundles, each in a folder of
+    its own, with `batch.json`; `--index` makes one, as a cluster's array task does.
+  - **Clusters and containers:** the headless browser runs without its sandbox as root and does
+    not rely on a small `/dev/shm`. On Linux it ends with the run. One that stops answering is
+    started again. A scheduler's SIGTERM ends a run, and `run.json` says so.
+  - **Documented:** the guide's new page *Running at scale* (recipes, `situcraft run`, the report,
+    batches, array jobs on Slurm, Grid Engine, PBS, LSF and AWS Batch, containers).
+  - **Validated:** a filtered clustering and an enrichment by a label set's labels made on another
+    bundle and verified; a batch, one of its bundles alone and a list of bundles; in the viewer
+    suite, the Lung enrichment's recipe written from the window's results with every carried
+    step chosen again as the window chose it, made again with the same ids, its report written
+    in a headless page and its certificate verified.
+
 ### Changed
 
 - **Files named by an argument need the token.** A script that has `import_labels` or

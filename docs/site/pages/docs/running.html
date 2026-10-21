@@ -1,0 +1,48 @@
+---
+title: Running at scale
+description: Make a result again without the window, from its recipe, on a server, a cluster's nodes or in a container; on one bundle or a hundred, one an array job's task, each with its run.json and a certificate.
+lede: A result's recipe is every step from the bundles to it. situcraft run makes it again without the window, on your computer, a server, a cluster's nodes or in a container; on the bundle it was made from, or on others, one bundle or a hundred, with a record of each run and a certificate anyone can check.
+---
+      <h2 id="recipes">Recipes</h2>
+      <p>In the Reports view's <strong>What made a result</strong>, <strong>Recipe</strong> saves the recipe of the result shown: each step from the bundles to it, the job that made it and its parameters, as readable JSON (agents and scripts ask for it with <code>recipe</code>). Nothing of your computer is in it: a bundle is named by its role (its folder's name), another file a step read (a table of labels, a reference) by its name, and what an earlier step made by that step. Its format is in <a href="{{github}}/blob/main/docs/FORMATS.md#recipes-of-results">Formats</a>.</p>
+      <p>Some steps carry cells the window chose: a clustering of a filter's cells, a graph of every cell, an enrichment by each cell's label. On another bundle the program chooses them again, as the window did, when it can: every cell, a saved filter's cells (its conditions or its tree, whose label sets and clusterings the recipe makes too), and each cell's label of a label set the recipe makes. The recipe says so only when the program, choosing them on the bundle it was written from, gets the very cells the window chose. The cells of a region, those a review left out, curated or consensus labels and niches are the window's alone: such a step is made only on its own bundle.</p>
+
+      <h2 id="run">situcraft run</h2>
+      <div class="code"><pre><code><span class="prompt">$ </span>situcraft run --recipe enrichment.recipe.json --bundle /data/lung-1 --out /results/lung-1</code></pre></div>
+      <ul>
+        <li>It works in a SituCraft of its own, with its library in the output folder (<code>library/</code>), and builds the bundle's derived data first, in a temporary folder (<code>--cache</code> keeps them for another run of the same bundle).</li>
+        <li>It makes each step in turn, and writes <code>run.json</code>: the recipe and the bundles by SHA-256, each step's result and files by SHA-256, and why it stopped when it did not finish. The output folder also holds <code>certificate.zip</code>, which <code>situcraft verify</code> checks.</li>
+        <li>Exit status: 0 made; 1 a step failed (or the run was stopped); 2 it could not run (a wrong command line, a bundle or file missing, a step it cannot make on that bundle). <code>--dry-run</code> checks the recipe, the bundle and the files without making anything.</li>
+        <li>A file the recipe reads is given with <code>--file name=path</code>, or found in a folder by its name and SHA-256 with <code>--data</code>.</li>
+        <li>The same recipe on the same bundle gives the same files on any number of threads (<code>--threads</code>, every core if not given) and on any computer. <code>--clock 2026-01-01T00:00:00Z</code> records everything as made at that time, so that two runs give the same certificate, byte for byte. A clustering's, a map's and labels' files also record how long they took; their content is the same.</li>
+      </ul>
+
+      <h2 id="report">The report</h2>
+      <p><code>--report</code> also writes, in a headless Chrome, Chromium, Edge or Brave (<code>--chrome</code>, or <code>CHROME</code>), what the window writes: the result's <a href="record.html#report">report</a> (<code>report.html</code>, its numbers, methods and certificate in one file that opens offline) and its methods (<code>methods.md</code>), and the run's project in its library, with the bundle and every result the run made. To look at it in the window:</p>
+      <div class="code"><pre><code><span class="prompt">$ </span>situcraft --data-dir /results/lung-1/library</code></pre></div>
+
+      <h2 id="batches">Batches</h2>
+      <p>Given several bundles, it makes the recipe on each, in a folder of its own under <code>--out</code> named after the bundle's, and writes <code>batch.json</code>: each bundle's exit status, reason, result and certificate's fingerprint. The bundles are every folder holding an <code>experiment.xenium</code> in a folder (<code>--bundle-dir</code>, by name), or those a file lists, one a line (<code>--bundles</code>; blank lines and lines starting with <code>#</code> are passed over). It goes on after a bundle that fails, and exits with 0 when every bundle was made, 2 when none could be, else 1.</p>
+      <div class="code"><pre><code><span class="prompt">$ </span>situcraft run --recipe enrichment.recipe.json --bundle-dir /data/bundles --out /results/enrichment</code></pre></div>
+
+      <h2 id="arrays">Array jobs on a cluster</h2>
+      <p>On a cluster, one task an array job's makes one bundle: <code>--index</code> chooses the nth bundle of the batch (from 1), and each task writes its own folder. A Slurm script for 96 bundles:</p>
+      <div class="code"><pre><code>#!/bin/bash
+#SBATCH --array=1-96
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=16G
+situcraft run --recipe enrichment.recipe.json --bundle-dir /data/bundles \
+  --index "$SLURM_ARRAY_TASK_ID" --threads "$SLURM_CPUS_PER_TASK" \
+  --out /results/enrichment</code></pre></div>
+      <p>Other schedulers number their tasks the same way: <code>$SGE_TASK_ID</code> (Grid Engine), <code>$PBS_ARRAY_INDEX</code> (PBS Pro; <code>$PBS_ARRAYID</code> on Torque), <code>$LSB_JOBINDEX</code> (LSF). AWS Batch counts from 0: give <code>--index $((AWS_BATCH_JOB_ARRAY_INDEX + 1))</code>. The array's size is the batch's: <code>--dry-run</code> lists its bundles in order.</p>
+      <p>A scheduler that stops a task (its time is up, or it is canceled) sends it SIGTERM: the run stops the step under way, says so in <code>run.json</code>, and exits with 1.</p>
+
+      <h2 id="containers">Containers</h2>
+      <ul>
+        <li>SituCraft is one program with no dependencies: copy it into the image. Only <code>--report</code> needs a browser; install Chromium in the image for it.</li>
+        <li>In a container the browser runs without its sandbox when the run is root, and does not rely on <code>/dev/shm</code>, which containers keep small. On Linux it ends with the run, so a stopped run leaves no browser behind.</li>
+        <li>Give the run the cores the container has (<code>--threads</code>), and memory as the steps need it: a refinement's preset says how much (<a href="refinement.html">refinement</a>; its <em>Low memory</em> preset runs on small machines and gives the same result).</li>
+      </ul>
+
+      <h2 id="checking">Checking what was made</h2>
+      <p>Each run's <code>certificate.zip</code> is checked as any certificate: <code>situcraft verify --data /data/bundles /results/lung-1/certificate.zip</code> makes each step again from the bundle and compares every file. A recipe made on the bundle it was written from gives the same results, by the same ids, as the window made: <code>run.json</code> says so for each step (<code>sameAsRecipe</code>).</p>

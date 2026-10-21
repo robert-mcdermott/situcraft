@@ -24,8 +24,9 @@ import (
 // (situcraft:step/<n>). situcraft run makes it again on a bundle (run.go).
 //
 // A step whose spec carries cells the window chose (a filter's, each cell's label, the cells of
-// regions, as base64 of a number for each cell) is made again only on the bundle the recipe was
-// made from, where those cells are the same.
+// regions, as base64 of a number for each cell) is made again on another bundle only when the
+// program chooses them again as the window did (recipe_choices.go); otherwise only on the bundle
+// the recipe was made from, where those cells are the same.
 
 const recipeKindResult = "result"
 
@@ -74,9 +75,12 @@ type recipeStep struct {
 	Job    string `json:"job"`
 	Method string `json:"method,omitempty"`
 	Inputs []int  `json:"inputs,omitempty"`
-	// Carries: the spec holds cells the window chose; made again only on the same bundle.
-	Carries bool            `json:"carries,omitempty"`
-	Spec    json.RawMessage `json:"spec"`
+	// Carries: the spec holds cells the window chose. Portable: the program chooses them again as
+	// the window did (choices, recipe_choices.go), so that the step is made on another bundle too.
+	Carries  bool            `json:"carries,omitempty"`
+	Portable bool            `json:"portable,omitempty"`
+	Choices  []recipeChoice  `json:"choices,omitempty"`
+	Spec     json.RawMessage `json:"spec"`
 }
 
 // jsonString is a JSON string literal, escapes and all.
@@ -195,6 +199,15 @@ func (a *app) resultRecipe(id string) (*resultRecipe, error) {
 			inputs = append(inputs, s)
 			return "", false
 		})
+		// A saved filter's tree may name label sets, clusterings and niches too.
+		for _, id := range specFilters(job.Spec) {
+			if f, err := a.filterDefinition(id); err == nil && len(f.Tree) > 0 {
+				rewriteStrings(f.Tree, func(s string) (string, bool) {
+					inputs = append(inputs, s)
+					return "", false
+				})
+			}
+		}
 		for _, in := range inputs {
 			if in == m.ID || seen[in] || !callIDPattern.MatchString(in) {
 				continue
@@ -294,6 +307,9 @@ func (a *app) resultRecipe(id string) (*resultRecipe, error) {
 			return nil, fmt.Errorf("%s's spec: %v", m.Name, err)
 		}
 		step := recipeStep{N: n, Kind: m.Kind, Name: m.Name, Made: m.ID, Job: m.Lineage.Job.Kind, Spec: compact.Bytes(), Carries: carriesCells(spec)}
+		if step.Carries {
+			step.Choices, step.Portable = a.portableChoices(m, stepOf, n)
+		}
 		if m.Lineage.Method.Name != "" {
 			step.Method = strings.TrimSpace(m.Lineage.Method.Name + " " + m.Lineage.Method.Version)
 		}
@@ -406,6 +422,11 @@ func readResultRecipe(raw []byte) (*resultRecipe, error) {
 		if problem != nil {
 			return nil, problem
 		}
+		for _, c := range s.Choices {
+			if c.Labels != nil && (c.Labels.Step < 1 || c.Labels.Step >= s.N) {
+				return nil, fmt.Errorf("step %d's labels are of step %d, not one before it", s.N, c.Labels.Step)
+			}
+		}
 	}
 	return &r, nil
 }
@@ -491,16 +512,22 @@ func (a *app) recipeAction(args map[string]any) (remoteResult, error) {
 		return remoteResult{}, err
 	}
 	var steps []string
-	carried := 0
+	rechosen, own := 0, 0
 	for _, s := range recipe.Steps {
 		steps = append(steps, fmt.Sprintf("%d. %s (%s)", s.N, s.Name, s.Job))
-		if s.Carries {
-			carried++
+		switch {
+		case s.Carries && s.Portable:
+			rechosen++
+		case s.Carries:
+			own++
 		}
 	}
 	message := fmt.Sprintf("The recipe of %s: %s from %s. situcraft run makes it again without a window: %s.", recipe.Name, plural(len(recipe.Steps), "step"), plural(len(recipe.Bundles), "bundle"), strings.Join(steps, "; "))
-	if carried > 0 {
-		message += fmt.Sprintf(" %s carry cells the window chose (a filter's, labels', regions'): those are made again only on the bundle the recipe was made from.", plural(carried, "step"))
+	if rechosen > 0 {
+		message += fmt.Sprintf(" On another bundle, the cells the window chose for %s are chosen there again.", plural(rechosen, "step"))
+	}
+	if own > 0 {
+		message += fmt.Sprintf(" %s carr%s cells the window chose that only its own bundle has (a region's, a review's, labels it was given): made again only there.", plural(own, "step"), map[bool]string{true: "ies", false: "y"}[own == 1])
 	}
 	return answer(message, recipe)
 }

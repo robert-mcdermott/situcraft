@@ -294,6 +294,9 @@ var remoteActions = []remoteAction{
 		"where":      map[string]any{"type": "object", "description": "A tree of conditions (query_cells), in place of conditions."},
 		"dataset":    datasetArg,
 	}, "name"), long: true},
+	{Name: "add_results", Title: "Add results to the project", Description: "Adds results of the library (segmentations, clusterings and their maps, label sets, graphs, spatial analyses, by id) to the open project, each to the dataset of its bundle, as the view that made it adds it: situcraft run --report adds those it made, and a result made in another project can be brought into this one. One already in the project, of no dataset of it, or of another kind is passed over, said why.", InputSchema: schema(map[string]any{
+		"ids": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "The results' ids."},
+	}, "ids")},
 	{Name: "segmentations", Title: "List the segmentations", Description: "A dataset's segmentations (all datasets' if none is named), each an artifact with its lineage (method and version, software, the job that made or registered it, what it was made from), its files by SHA-256, what its check found, its state, and whether it is the dataset's default (promoted, with the decision's reason). show: true shows the first in the inspector.", InputSchema: schema(map[string]any{
 		"dataset": textArg("A dataset by name or id; every dataset's if not given."),
 		"show":    flagArg("Show it in the inspector."),
@@ -821,6 +824,7 @@ var actionHints = map[string]actionHint{
 	"save_view":           {leave: leaveEdits},
 	"remove_view":         {leave: leaveEdits, destructive: true},
 	"save_filter":         {leave: leaveEdits},
+	"add_results":         {leave: leaveEdits},
 	"name_clusters":       {leave: leaveEdits},
 	"curate_labels":       {leave: leaveEdits},
 	"review":              {leave: leaveEdits},

@@ -166,8 +166,9 @@ walks through the examples and every view.
   certificate's results again from the bundles and compares every file bit for bit
   ([the record](https://robert-mcdermott.github.io/situcraft/docs/record.html#verify)).
 - `situcraft run --recipe <recipe> --bundle <bundle> --out <new folder>` makes a result's recipe,
-  saved from the app, without the window: its artifacts, `run.json` and a certificate
-  ([the record](https://robert-mcdermott.github.io/situcraft/docs/record.html#recipes)).
+  saved from the app, without the window: its artifacts, `run.json`, a certificate and with
+  `--report` its report; on a batch of bundles, one a cluster's array task
+  ([running at scale](https://robert-mcdermott.github.io/situcraft/docs/running.html)).
 - `situcraft refine <bundle> <new folder>` runs SituCraft's transcript-informed segmentation
   without the window, from a preset or a recipe saved in the app
   ([Formats](docs/FORMATS.md#refinements-in-the-terminal-situcraft-refine)).

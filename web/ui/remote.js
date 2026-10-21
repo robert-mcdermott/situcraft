@@ -10,7 +10,7 @@ import { cacheJobKey } from './bundles.js';
 import { datasetFilters, showMethods, writeMethods } from './methods.js';
 import { methodsMarkdown } from '../lib/methods-text.js';
 import { ATTRIBUTES } from '../lib/cell-attributes.js';
-import { decideSegmentation, DECISIONS, EXPORT_FORMATS, promotedSegmentation } from '../lib/segmentations.js';
+import { addSegmentation, decideSegmentation, DECISIONS, EXPORT_FORMATS, promotedSegmentation, segmentationRecord } from '../lib/segmentations.js';
 import { CLASS_INFO, RANKS, cellNames, warnings } from '../lib/review.js';
 import { workedExamples } from '../lib/tours.js';
 import { describeImage, describePlacement, imagesOf } from '../lib/images.js';
@@ -22,14 +22,14 @@ import { defaultImageLayer } from '../lib/overlays.js';
 import { parseProject, rename, serializeProject } from '../lib/project.js';
 import { removeView, sameView, viewLink } from '../lib/views.js';
 import { SEG_FILLS, defaultChoice, segmentationChoices } from '../lib/segview.js';
-import { clusterName, clusterNames, clusteringsOf, mapsOf, nameClusters } from '../lib/clusterings.js';
-import { composition as labelComposition, labelSetName, labelSetsFor, lowConfidenceDefault, namesFromLabels } from '../lib/labels.js';
+import { addClustering, addEmbedding, clusteringRecord, clusterName, clusterNames, clusteringsOf, embeddingRecord, mapsOf, nameClusters } from '../lib/clusterings.js';
+import { addLabels, composition as labelComposition, labelSetName, labelSetsFor, labelsRecord, lowConfidenceDefault, namesFromLabels } from '../lib/labels.js';
 import { RULES, createCurated, crossTable, curatedSetsOf, saveConsensus } from '../lib/curation.js';
 import { labelSource, labelVersions, refOf } from './label-sources.js';
 import { defaultPair, impactLines, sideOf } from '../lib/impact.js';
 import { remakeOnSegmentation } from './remake.js';
-import { KINDS as GRAPH_KINDS, describeGraph, graphsOf } from '../lib/graphs.js';
-import { NICHES_DEFAULTS, analysesOf, analysisNumbers, bandsOf, compareNumbers, nicheNames, rankCorrelation, rankPairs, rowNames, zoneBands } from '../lib/spatial.js';
+import { KINDS as GRAPH_KINDS, addGraph, describeGraph, graphRecord, graphsOf } from '../lib/graphs.js';
+import { NICHES_DEFAULTS, addAnalysis, analysesOf, analysisNumbers, analysisRecord, bandsOf, compareNumbers, nicheNames, rankCorrelation, rankPairs, rowNames, zoneBands } from '../lib/spatial.js';
 import { ratioText } from './spatial-results.js';
 import { showAnalysisCells } from './spatial-cells.js';
 import { addDesign, designRecord, designsOf, makeDesign } from '../lib/design.js';
@@ -1136,6 +1136,50 @@ export function installRemote(app) {
       const filter = q.saveFilter(name, conditions);
       await frames();
       return { message: `Saved ${filter.name}, version ${filter.version}: it keeps ${plural(filter.result.kept, 'cell')} of ${filter.result.cells.toLocaleString('en-US')}.`, data: filterData(filter) };
+    },
+
+    // Results of the library added to the open project (situcraft run --report adds those it made):
+    // each by its manifest, to the dataset of its bundle, as the view that made it adds it.
+    async add_results(args) {
+      const ids = Array.isArray(args.ids) ? args.ids.map((x) => String(x).trim()).filter(Boolean) : [];
+      if (!ids.length) throw new ActionError('ids is a list of results\' ids, such as those describe_project lists.');
+      const RECORDS = {
+        segmentation: [segmentationRecord, addSegmentation],
+        clustering: [clusteringRecord, addClustering],
+        embedding: [embeddingRecord, addEmbedding],
+        labels: [(d, m) => labelsRecord(d, m), addLabels],
+        graph: [graphRecord, addGraph],
+        spatial: [analysisRecord, addAnalysis],
+      };
+      let p = project();
+      const added = [];
+      const skipped = [];
+      for (const id of ids) {
+        if (p.artifacts.some((a) => a.id === id)) {
+          skipped.push({ id, why: 'already in the project' });
+          continue;
+        }
+        const response = await fetch(`api/artifacts/${encodeURIComponent(id)}`, { cache: 'no-store' });
+        if (!response.ok) {
+          skipped.push({ id, why: 'not in the library' });
+          continue;
+        }
+        const manifest = await response.json();
+        const run = (manifest.lineage?.parents ?? []).find((x) => x.kind === 'bundle')?.id;
+        const dataset = p.datasets.find((d) => run && d.analysisUuid === run) ?? (p.datasets.length === 1 ? p.datasets[0] : null);
+        const make = RECORDS[manifest.kind];
+        if (!make) skipped.push({ id, why: `a ${manifest.kind}, which is not added this way` });
+        else if (manifest.state !== 'complete') skipped.push({ id, why: manifest.state });
+        else if (!dataset) skipped.push({ id, why: 'of no dataset of the project' });
+        else {
+          p = make[1](p, make[0](dataset, manifest));
+          added.push({ id, kind: manifest.kind, name: manifest.name, dataset: dataset.name });
+        }
+      }
+      if (added.length) app.store.commit(p, `Add ${plural(added.length, 'result')} of the library`);
+      await frames();
+      const said = skipped.length ? `; ${skipped.map((x) => `${x.id} not (${x.why})`).join('; ')}` : '';
+      return { message: `Added ${plural(added.length, 'result')} of the library to ${p.name}${said}.`, data: { added, skipped } };
     },
 
     async segmentations(args) {

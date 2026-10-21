@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"situcraft/internal/artifacts"
+	"situcraft/internal/jobs"
 	"situcraft/internal/segment"
 	"situcraft/internal/xenium"
 )
@@ -105,11 +106,13 @@ func TestARecipeIsMadeAgainWithoutAWindow(t *testing.T) {
 		t.Errorf("stand-ins: %s", spec.String())
 	}
 	spatialRecipe, spatialPath := recipeOf(enrichment)
-	if n := len(spatialRecipe.Steps); n != 3 || !spatialRecipe.Steps[1].Carries || !spatialRecipe.Steps[2].Carries || spatialRecipe.Steps[2].Job != "spatial" {
+	// The graph's cells (every cell) are chosen again anywhere; the enrichment's labels, given by
+	// the window from no step of the recipe, only on this bundle.
+	if n := len(spatialRecipe.Steps); n != 3 || !spatialRecipe.Steps[1].Carries || !spatialRecipe.Steps[1].Portable || !spatialRecipe.Steps[2].Carries || spatialRecipe.Steps[2].Portable || spatialRecipe.Steps[2].Job != "spatial" {
 		t.Fatalf("the enrichment's recipe: %+v", spatialRecipe.Steps)
 	}
 	// As an action, in words.
-	if outcome, ok := f.a.programAction(context.Background(), "recipe", json.RawMessage(`{"id":"`+enrichment+`"}`)); !ok || !outcome.OK || !strings.Contains(outcome.Message, "3 steps from 1 bundle") || !strings.Contains(outcome.Message, "2 steps carry cells the window chose") {
+	if outcome, ok := f.a.programAction(context.Background(), "recipe", json.RawMessage(`{"id":"`+enrichment+`"}`)); !ok || !outcome.OK || !strings.Contains(outcome.Message, "3 steps from 1 bundle") || !strings.Contains(outcome.Message, "1 step carries cells the window chose that only its own bundle has") || !strings.Contains(outcome.Message, "for 1 step are chosen there again") {
 		t.Errorf("the recipe action: %+v", outcome)
 	}
 
@@ -179,7 +182,7 @@ func TestARecipeIsMadeAgainWithoutAWindow(t *testing.T) {
 	if code != exitRunMade || elsewhere.Bundles[0].Same || elsewhere.Steps[0].Same || elsewhere.Result.ID == embedding {
 		t.Fatalf("on another bundle: exit %d: %s", code, said)
 	}
-	if code, _, _, said := makeIt(spatialPath, other.folder); code != exitRunNotRun || !strings.Contains(said, "2 steps carry cells the window chose") {
+	if code, _, _, said := makeIt(spatialPath, other.folder); code != exitRunNotRun || !strings.Contains(said, "1 step carries cells the window chose") || !strings.Contains(said, "step 3, Neighborhood enrichment") {
 		t.Fatalf("carried cells on another bundle: exit %d: %s", code, said)
 	}
 	if code, _, _, said := makeIt(mapPath, other.folder, "--dry-run"); code != exitRunMade || !strings.Contains(said, "3. Map of") || !strings.Contains(said, "nothing made") {
@@ -268,4 +271,215 @@ func sameRunFiles(a, b *runReport) bool {
 		}
 	}
 	return true
+}
+
+// The window's choices made again on another bundle (recipe_choices.go): a clustering of a saved
+// filter's cells, a label set from the simulated tissue's markers and an enrichment by its labels
+// over a graph of every cell; each recipe says so only when the program, choosing them on this
+// bundle, gives the very cells it was given; on another bundle they are chosen there, and the run
+// is verified.
+func TestTheWindowsChoicesAreMadeAgainOnAnotherBundle(t *testing.T) {
+	if testing.Short() {
+		t.Skip("short mode")
+	}
+	f := newRefineFixture(t, true)
+	t.Cleanup(f.a.views.closeAll)
+	var building struct{ Job *jobs.Job }
+	json.NewDecoder(f.post("/api/local/0/cache", "").Body).Decode(&building)
+	if building.Job != nil {
+		f.wait(building.Job.ID)
+	}
+	all, _ := f.a.artifacts.List()
+	var seg artifacts.Manifest
+	for _, m := range all {
+		if m.Kind == "segmentation" && isBundleOwn(m) {
+			seg = m
+		}
+	}
+	run := func(target, body string) string {
+		t.Helper()
+		var started struct {
+			ID  string
+			Job *struct{ ID string }
+		}
+		rec := f.post(target, body)
+		json.Unmarshal(rec.Body.Bytes(), &started)
+		if started.Job != nil {
+			f.wait(started.Job.ID)
+		}
+		if started.ID == "" {
+			t.Fatalf("%s: no id (%d %s)", target, rec.Code, rec.Body)
+		}
+		return started.ID
+	}
+	// A saved filter, as the window keeps it in a project, and its cells as the window sends them.
+	project := `{"format":"situcraft-project","version":1,"id":"p-choices","name":"Choices","created":"2026-10-20T10:00:00Z","modified":"2026-10-20T10:00:00Z","datasets":[{"id":"d-1","name":"simulated","path":` + jsonQuote(f.folder) + `}],"artifacts":[{"kind":"filter","id":"f-0123456789abcdef","name":"Enough signal","version":1,"dataset":"d-1","conditions":[{"attribute":"transcripts","min":60,"max":null}],"result":{}}]}`
+	os.MkdirAll(filepath.Join(f.a.store.dir, "projects"), 0o755)
+	os.WriteFile(filepath.Join(f.a.store.dir, "projects", "p-choices.json"), []byte(project), 0o644)
+	c := choiceContext{a: f.a, ctx: context.Background(), bundle: f.folder, made: map[int]string{}}
+	keep, err := c.filterKeep(&recipeFilter{ID: "f-0123456789abcdef", Name: "Enough signal v1", Conditions: []json.RawMessage{json.RawMessage(`{"attribute":"transcripts","min":60,"max":null}`)}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b64, sum := keepPayload(keep)
+	filtered := run("/api/local/0/cluster", fmt.Sprintf(`{"segmentation":%q,"filter":{"id":"f-0123456789abcdef","name":"Enough signal v1","checksum":%q,"keep":%q}}`, seg.ID, sum, b64))
+	// Labels from the simulated tissue's markers, and an enrichment by them over every cell's graph.
+	clustering := run("/api/local/0/cluster", fmt.Sprintf(`{"segmentation":%q}`, seg.ID))
+	var starters struct {
+		Starters []struct {
+			ID  string
+			Set json.RawMessage
+		}
+	}
+	json.Unmarshal(request(t, f.handler, http.MethodGet, "/api/local/0/clusterings/"+clustering+"/markers", nil, nil).Body.Bytes(), &starters)
+	var markers json.RawMessage
+	for _, s := range starters.Starters {
+		if s.ID == "simulated" {
+			markers = s.Set
+		}
+	}
+	if markers == nil {
+		t.Fatal("no simulated marker set")
+	}
+	labelSet := run("/api/local/0/label", fmt.Sprintf(`{"clustering":%q,"markers":%s}`, clustering, markers))
+	n, _ := c.segmentationCells(seg.ID)
+	every := make([]bool, n)
+	for i := range every {
+		every[i] = true
+	}
+	graph := run("/api/local/0/graph", fmt.Sprintf(`{"segmentation":%q,"parameters":{"kind":"delaunay"},"cells":%s}`, seg.ID, chosenCells(every, "")))
+	c.made = map[int]string{1: labelSet}
+	labels, err := c.labelsOf(&recipeLabels{Step: 1, Level: 0, Name: "Simulated tissue's types"}, seg.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	labelsJSON, _ := json.Marshal(labels)
+	enrichment := run("/api/local/0/spatial", fmt.Sprintf(`{"question":"enrichment","segmentation":%q,"graph":%q,"labels":%s,"parameters":{"permutations":100,"seed":3}}`, seg.ID, graph, labelsJSON))
+
+	write := func(id string) (*resultRecipe, string) {
+		t.Helper()
+		rec := request(t, f.handler, http.MethodGet, "/api/artifacts/"+id+"/recipe", nil, nil)
+		r, err := readResultRecipe(rec.Body.Bytes())
+		if err != nil {
+			t.Fatalf("%s: %v (%s)", id, err, rec.Body)
+		}
+		path := filepath.Join(t.TempDir(), id+".recipe.json")
+		os.WriteFile(path, rec.Body.Bytes(), 0o644)
+		return r, path
+	}
+	clusterRecipe, clusterPath := write(filtered)
+	if s := clusterRecipe.Steps[1]; !s.Carries || !s.Portable || len(s.Choices) != 1 || s.Choices[0].Filter == nil || s.Choices[0].Filter.Name != "Enough signal v1" {
+		t.Fatalf("the filtered clustering's recipe: %+v", s)
+	}
+	enrichRecipe, enrichPath := write(enrichment)
+	var steps []string
+	for _, s := range enrichRecipe.Steps {
+		steps = append(steps, fmt.Sprintf("%s portable=%v", s.Job, s.Portable || !s.Carries))
+	}
+	if strings.Join(steps, "; ") != "segmentation portable=true; graph portable=true; clustering portable=true; labels portable=true; spatial portable=true" {
+		t.Fatalf("the enrichment's recipe: %s", strings.Join(steps, "; "))
+	}
+
+	other := newRefineFixtureOf(t, false, 70, 60)
+	for _, path := range []string{clusterPath, enrichPath} {
+		out := filepath.Join(t.TempDir(), "run")
+		var said bytes.Buffer
+		code := runRun([]string{"--recipe", path, "--bundle", other.folder, "--out", out}, &said, &said)
+		raw, _ := os.ReadFile(filepath.Join(out, "run.json"))
+		var report runReport
+		json.Unmarshal(raw, &report)
+		rechosen := 0
+		for _, s := range report.Steps {
+			if s.Rechosen {
+				rechosen++
+			}
+		}
+		if code != exitRunMade || rechosen == 0 || report.Result.Same {
+			t.Fatalf("%s on another bundle: exit %d, %d rechosen: %s", filepath.Base(path), code, rechosen, said.String())
+		}
+		var verified bytes.Buffer
+		if code := runVerify([]string{"--data", filepath.Dir(other.folder), "--no-page", filepath.Join(out, "certificate.zip")}, &verified, io.Discard); code != exitVerified {
+			t.Fatalf("verify %s: exit %d\n%s", filepath.Base(path), code, verified.String())
+		}
+	}
+}
+
+// A batch: a recipe made on every bundle of a folder, each in a folder of its own, batch.json
+// saying how each went; one of them alone, as a cluster's array job makes it (--index); a list of
+// bundles; a recipe one bundle cannot make, the others made.
+func TestARecipeIsMadeOnABatch(t *testing.T) {
+	if testing.Short() {
+		t.Skip("short mode")
+	}
+	f := newRefineFixture(t, true)
+	other := newRefineFixtureOf(t, false, 70, 60)
+	clustering := ""
+	{
+		var started struct {
+			ID  string
+			Job *struct{ ID string }
+		}
+		all, _ := f.a.artifacts.List()
+		var seg artifacts.Manifest
+		for _, m := range all {
+			if m.Kind == "segmentation" && isBundleOwn(m) {
+				seg = m
+			}
+		}
+		json.Unmarshal(f.post("/api/local/0/cluster", fmt.Sprintf(`{"segmentation":%q}`, seg.ID)).Body.Bytes(), &started)
+		if started.Job != nil {
+			f.wait(started.Job.ID)
+		}
+		clustering = started.ID
+	}
+	raw := request(t, f.handler, http.MethodGet, "/api/artifacts/"+clustering+"/recipe", nil, nil).Body.Bytes()
+	dir := t.TempDir()
+	recipe := filepath.Join(dir, "clusters.recipe.json")
+	os.WriteFile(recipe, raw, 0o644)
+	batch := filepath.Join(dir, "bundles")
+	os.MkdirAll(batch, 0o755)
+	os.Symlink(f.folder, filepath.Join(batch, "first"))
+	os.Symlink(other.folder, filepath.Join(batch, "second"))
+	os.MkdirAll(filepath.Join(batch, "notes"), 0o755)
+
+	out := filepath.Join(dir, "all")
+	var said bytes.Buffer
+	if code := runRun([]string{"--recipe", recipe, "--bundle-dir", batch, "--out", out}, &said, &said); code != exitRunMade {
+		t.Fatalf("the batch: exit %d: %s", code, said.String())
+	}
+	var summary struct {
+		Made    int
+		Bundles []batchEntry
+	}
+	text, _ := os.ReadFile(filepath.Join(out, "batch.json"))
+	json.Unmarshal(text, &summary)
+	if summary.Made != 2 || len(summary.Bundles) != 2 || summary.Bundles[0].Bundle != "first" || summary.Bundles[0].Result != clustering || summary.Bundles[1].Result == clustering || summary.Bundles[1].Fingerprint == "" {
+		t.Fatalf("batch.json: %s", text)
+	}
+	// The second alone, as an array job's task 2 makes it.
+	one := filepath.Join(dir, "array")
+	if code := runRun([]string{"--recipe", recipe, "--bundle-dir", batch, "--index", "2", "--out", one}, io.Discard, io.Discard); code != exitRunMade {
+		t.Fatalf("--index 2: exit %d", code)
+	}
+	if _, err := os.Stat(filepath.Join(one, "second", "run.json")); err != nil {
+		t.Fatalf("--index 2 made no second/run.json: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(one, "first")); err == nil {
+		t.Error("--index 2 made the first bundle too")
+	}
+	// A list of bundles, its comments passed over; an index past its end refused.
+	list := filepath.Join(dir, "bundles.txt")
+	os.WriteFile(list, []byte("# the batch\n"+f.folder+"\n\n"), 0o644)
+	if code := runRun([]string{"--recipe", recipe, "--bundles", list, "--out", filepath.Join(dir, "listed")}, io.Discard, io.Discard); code != exitRunMade {
+		t.Fatalf("--bundles: exit %d", code)
+	}
+	var stderr bytes.Buffer
+	if code := runRun([]string{"--recipe", recipe, "--bundles", list, "--index", "3", "--out", filepath.Join(dir, "past")}, io.Discard, &stderr); code != exitRunNotRun || !strings.Contains(stderr.String(), "the batch has 1 bundle (1 to 1)") {
+		t.Errorf("--index past the end: exit %d, %s", code, stderr.String())
+	}
+}
+
+func jsonQuote(s string) string {
+	raw, _ := json.Marshal(s)
+	return string(raw)
 }

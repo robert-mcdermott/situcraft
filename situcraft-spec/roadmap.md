@@ -4069,10 +4069,35 @@ without a model, in CI.
      clock; their files pinned as made on arm64 and made again on x86-64 (Rosetta, and CI); on
      another bundle the map made and the enrichment refused; the command line's refusals. On the
      Lung bundle, its enrichment's recipe made again in 2 seconds and verified.
-6. **Headless runs and batches (A5).** The page's steps in a headless page (filters, designs,
-   figures, reports, exports); a recipe applied to many bundles, one a process for a cluster's array
-   jobs; containers and clusters (no sandbox as root, little shared memory, a browser that stalls
-   started again, the run ended with its parent); the guide's page on running at scale.
+6. **Headless runs and batches (A5): done.**
+   - **The window's choices, by the program** (`recipe_choices.go`): a carried step's fields chosen
+     again on another bundle: every cell; a saved filter's cells, its conditions or tree from the
+     library project holding it (its label sets and clusterings by step, the filter's tree walked
+     for the recipe's steps), evaluated by `internal/query`; each cell's label of a label set at a
+     level, as `lib/spatial.js labelsRequest` gives them (the labels some cell has, numbered again,
+     the window's colors by name, else the set's or the palette's). A step is `portable` only when
+     the program, choosing them on the recipe's own bundle, gives the window's checksums. A
+     region's, a review's, curated, consensus labels and niches stay the window's.
+   - **The window's outputs in a headless page** (`run_page.go`, `--report`): the run's SituCraft
+     serving its page (remote control, no script route); `new_project`, `open_paths` with `add`,
+     the new `add_results` (each result's record from its manifest, as its view makes it), and
+     `export` of the result's report and methods; the project waited for in the run's library; a
+     page that stops answering started again, the project reopened and the action asked again.
+     Figures stay the window's (a figure's panels are saved views of a bundle's tissue); designs
+     belong to a cohort's samples.
+   - **Batches** (`--bundle-dir`, `--bundles`, `--index`): each bundle in a folder of its own,
+     `batch.json`, exit 0, 1 or 2; SIGTERM and Ctrl-C end the step under way and say so.
+   - **Containers and clusters** (`browser_linux.go`): `--no-sandbox` as root,
+     `--disable-dev-shm-usage`, the browser killed when the run dies (`Pdeathsig`), also for
+     `situcraft verify`'s page; a browser that stalls started again.
+   - **Documented:** the guide's *Running at scale*; formats of a recipe's choices, `run.json`'s
+     page, `batch.json`.
+   - **Validated** (`run_test.go`, the viewer suite): a clustering of a saved filter's cells and an
+     enrichment by a label set from markers made on another bundle and verified; batches by folder,
+     by list and by index; the command line's refusals. In the viewer suite, the Lung enrichment
+     made by the window: its recipe's graph and labels chosen again by the program exactly as the
+     window chose them, made again by `situcraft run --report` with the same ids, its report and
+     methods written in a headless page, verified.
 7. **Python and R clients (A6).** Generated from the tool list (`clients/generate.mjs`): a function
    per tool, results as data frames, pictures saved; a notebook and an R script on the examples,
    run in CI against a headless SituCraft.

@@ -161,7 +161,7 @@ func verifyPageRecords(ctx context.Context, opts verifyOptions, c *certificate, 
 // 20 s is replaced, up to three times (a fresh profile's first start is sometimes slow). After
 // MaveScape 0.8.0's startHeadlessPage.
 func headlessPage(ctx context.Context, browser string, running *runningServer) (func(), error) {
-	profiles, err := os.MkdirTemp("", "situcraft-verify-page-")
+	profiles, err := os.MkdirTemp("", "situcraft-page-")
 	if err != nil {
 		return nil, err
 	}
@@ -176,8 +176,9 @@ func headlessPage(ctx context.Context, browser string, running *runningServer) (
 			}
 		}
 	}
-	// More flags, as the validation suite's (SITUCRAFT_CHROME_ARGS: in CI, WebGL in software).
-	extra := strings.Fields(os.Getenv("SITUCRAFT_CHROME_ARGS"))
+	// More flags: a container's (browserFlags), and the validation suite's (SITUCRAFT_CHROME_ARGS: in
+	// CI, WebGL in software).
+	extra := append(browserFlags(), strings.Fields(os.Getenv("SITUCRAFT_CHROME_ARGS"))...)
 	for attempt := 1; ; attempt++ {
 		args := append([]string{
 			"--headless=new",
@@ -194,6 +195,7 @@ func headlessPage(ctx context.Context, browser string, running *runningServer) (
 			"--window-size=1600,1000",
 		}, extra...)
 		chrome = exec.CommandContext(ctx, browser, append(args, running.url+"/")...)
+		browserProcess(chrome)
 		if err := chrome.Start(); err != nil {
 			os.RemoveAll(profiles)
 			return nil, fmt.Errorf("could not start %s: %v", browser, err)

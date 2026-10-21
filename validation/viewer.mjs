@@ -22,7 +22,8 @@
 // - remote control (wave 2, slice 1): the window driven by a program through the program's
 //   remote-control hub: the state described, the tissue shown as asked, a view saved and reopened
 //   exactly, a filter, the methods, and a file written only with the token; every call in the
-//   library's log and the drawer's Calls tab, the refusal too (wave 9, slice 4);
+//   library's log and the drawer's Calls tab, the refusal too (wave 9, slice 4); the Lung
+//   enrichment's recipe made again by situcraft run, with its report (wave 9, slices 5 and 6);
 // - nucleus expansion (wave 2, slice 3): the Lung bundle's nuclei grown by 5 µm by a program, in
 //   the Segmentation view, nearly as the instrument's segmentation; recorded in the project; the
 //   same distance again the same artifact, with no job;
@@ -2600,6 +2601,27 @@ export async function viewerSuite({ check, MissingData, verbose }) {
               copyFileSync(certPath, join(keep, 'lung-enrichment.zip'));
               if (existsSync(figurePath)) copyFileSync(figurePath, join(keep, 'lung-figure.zip'));
             }
+
+            // situcraft run (wave 9, slices 5 and 6): the enrichment's recipe, written by the program
+            // from the window's results: each step whose cells the window chose (the graph's, every
+            // cell; the enrichment's labels) chosen again by the program as the window chose them, so
+            // made again on any bundle; made again on the Lung without a window, every result the
+            // same, its report and methods written in a headless page, and its certificate verified.
+            const recipeText = await fetch(`${url}/api/artifacts/${encodeURIComponent(cert.subject.id)}/recipe`).then((r) => r.text());
+            const recipe = JSON.parse(recipeText);
+            const carried = recipe.steps.filter((x) => x.carries);
+            const recipePath = join(work, 'lung-enrichment.recipe.json');
+            writeFileSync(recipePath, recipeText);
+            const runOut = join(work, 'run');
+            const ran = spawnSync(bin, ['run', '--recipe', recipePath, '--bundle', join(dataRoot, 'xenium-lung-2fov'), '--out', runOut, '--report', ...(chromePath ? ['--chrome', chromePath] : [])], { encoding: 'utf8', timeout: 30 * 60e3 });
+            const runRecord = existsSync(join(runOut, 'run.json')) ? JSON.parse(readFileSync(join(runOut, 'run.json'), 'utf8')) : null;
+            const sameIds = runRecord?.steps?.every((x) => x.sameAsRecipe) ?? false;
+            const runVerified = existsSync(join(runOut, 'certificate.zip')) ? verifyRun(join(runOut, 'certificate.zip'), dataRoot, 'run-verified') : { status: null };
+            const reported = existsSync(join(runOut, 'report.html')) && existsSync(join(runOut, 'methods.md'));
+            check('viewer', 'situcraft run: the Lung enrichment\'s recipe, the window\'s choices chosen again by the program as the window chose them; made again without a window, every result the same, its report and methods written in a headless page, its certificate verified',
+              `${recipe.steps.length} steps, ${carried.length} carrying the window's cells (${carried.map((x) => `${x.job} ${x.portable ? 'chosen again' : 'its own bundle\'s'}`).join(', ')}); run: exit ${ran.status}, ${runRecord?.steps?.length ?? 0} steps${sameIds ? ', the same ids' : ''}${reported ? ', report and methods' : ''}; verify: exit ${runVerified.status}${ran.status !== 0 ? `; ${(ran.stdout + ran.stderr).slice(-600)}` : ''}`,
+              recipe.steps.length >= 5 && carried.length >= 2 && carried.every((x) => x.portable) && ran.status === 0 && sameIds && reported && runVerified.status === 0,
+              'every carried step chosen again; exit 0, the same ids, report and methods; verified');
           }
 
           // The report (wave 8, slice 7): the Lung's results figure and its enrichment in one HTML

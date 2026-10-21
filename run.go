@@ -8,10 +8,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"situcraft/internal/artifacts"
@@ -53,24 +55,34 @@ type runOptions struct {
 	dryRun    bool
 	timeout   time.Duration
 	keepCache bool
+	report    bool
+	chrome    string
+	// A batch: bundles' folders, each made in a folder of its own (--index: only the nth).
+	batch []string
+	index int
 }
 
 func parseRunArgs(args []string, stderr io.Writer) (runOptions, error) {
 	opts := runOptions{bundles: map[string]string{}, files: map[string]string{}}
 	var bundles, files, data dataFlag
-	var clock string
+	var clock, list, folder string
 	flags := flag.NewFlagSet("situcraft run", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	flags.StringVar(&opts.recipe, "recipe", "", "the recipe to make (a result's, saved from SituCraft)")
 	flags.Var(&bundles, "bundle", "the bundle's folder; with several, role=folder for each (the recipe names the roles); may be repeated")
 	flags.Var(&files, "file", "name=path: a file the recipe names (a table of labels, a reference); may be repeated")
 	flags.Var(&data, "data", "a folder holding the files the recipe names, found by their name and SHA-256; may be repeated")
+	flags.StringVar(&list, "bundles", "", "a batch: a file listing bundles' folders, one a line, each made in a folder of its own under --out")
+	flags.StringVar(&folder, "bundle-dir", "", "a batch: every bundle in this folder (each folder holding experiment.xenium), each made in a folder of its own under --out")
+	flags.IntVar(&opts.index, "index", 0, "with --bundles or --bundle-dir, make only the nth bundle (from 1; a cluster's array job passes its task's number)")
 	flags.StringVar(&opts.out, "out", "", "a new (or empty) folder for its library, run.json and certificate.zip")
 	flags.StringVar(&opts.cache, "cache", "", "the folder for the bundles' derived data, kept to be used again (default: a temporary folder, removed)")
 	flags.IntVar(&opts.threads, "threads", 0, "the threads it may use (default: every core); the result is the same on any number")
 	flags.StringVar(&clock, "clock", "", "record what it makes as made at this time (RFC 3339, such as 2026-01-01T00:00:00Z), so that the same recipe gives the same files and manifests")
 	flags.BoolVar(&opts.dryRun, "dry-run", false, "check the recipe, its bundles and files, and say what it would make, without making it")
 	flags.DurationVar(&opts.timeout, "timeout", 72*time.Hour, "stop a run that takes longer")
+	flags.BoolVar(&opts.report, "report", false, "also write, in a headless Chrome, Chromium, Edge or Brave, the result's report (report.html) and methods (methods.md), and the run's project in its library")
+	flags.StringVar(&opts.chrome, "chrome", "", "the browser --report writes in (default: CHROME, else one installed)")
 	flags.Usage = func() {
 		out := flags.Output()
 		fmt.Fprintln(out, "Usage: situcraft run --recipe recipe.json --bundle DIR --out DIR [--file NAME=PATH]... [--threads N] [--clock TIME]")
@@ -90,8 +102,21 @@ func parseRunArgs(args []string, stderr io.Writer) (runOptions, error) {
 	if opts.recipe == "" {
 		return opts, errors.New("name the recipe with --recipe")
 	}
-	if len(bundles) == 0 {
-		return opts, errors.New("name the bundle's folder with --bundle")
+	if list != "" || folder != "" {
+		if len(bundles) > 0 || list != "" && folder != "" {
+			return opts, errors.New("name the bundles with one of --bundle, --bundles and --bundle-dir")
+		}
+		if opts.batch, err = batchBundles(list, folder); err != nil {
+			return opts, err
+		}
+		if opts.index < 0 || opts.index > len(opts.batch) {
+			return opts, fmt.Errorf("--index %d: the batch has %s (1 to %d)", opts.index, plural(len(opts.batch), "bundle"), len(opts.batch))
+		}
+	} else if opts.index != 0 {
+		return opts, errors.New("--index chooses a bundle of --bundles or --bundle-dir")
+	}
+	if len(bundles) == 0 && len(opts.batch) == 0 {
+		return opts, errors.New("name the bundle's folder with --bundle (or a batch's with --bundles or --bundle-dir)")
 	}
 	for _, b := range bundles {
 		role, folder, named := strings.Cut(b, "=")
@@ -180,6 +205,7 @@ type runReport struct {
 	Steps   []runStep       `json:"steps"`
 	Result  *runStep        `json:"result,omitempty"`
 	Cert    *runCertificate `json:"certificate,omitempty"`
+	Page    *runPageRecord  `json:"page,omitempty"`
 	Exit    struct {
 		Code   int    `json:"code"`
 		Reason string `json:"reason"`
@@ -199,18 +225,20 @@ type runBundle struct {
 }
 
 type runStep struct {
-	N       int        `json:"n"`
-	Kind    string     `json:"kind"`
-	Name    string     `json:"name"`
-	Job     string     `json:"job"`
-	State   string     `json:"state"`
-	ID      string     `json:"id,omitempty"`
-	Made    string     `json:"recipeMade"`
-	Same    bool       `json:"sameAsRecipe"`
-	Files   []certFile `json:"files,omitempty"`
-	Content string     `json:"content,omitempty"`
-	Error   string     `json:"error,omitempty"`
-	Seconds float64    `json:"seconds"`
+	N     int    `json:"n"`
+	Kind  string `json:"kind"`
+	Name  string `json:"name"`
+	Job   string `json:"job"`
+	State string `json:"state"`
+	ID    string `json:"id,omitempty"`
+	Made  string `json:"recipeMade"`
+	Same  bool   `json:"sameAsRecipe"`
+	// Rechosen: the cells the window chose were chosen again on this bundle (recipe_choices.go).
+	Rechosen bool       `json:"rechosen,omitempty"`
+	Files    []certFile `json:"files,omitempty"`
+	Content  string     `json:"content,omitempty"`
+	Error    string     `json:"error,omitempty"`
+	Seconds  float64    `json:"seconds"`
 }
 
 func runRun(args []string, stdout, stderr io.Writer) int {
@@ -224,7 +252,158 @@ func runRun(args []string, stdout, stderr io.Writer) int {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), opts.timeout)
 	defer cancel()
+	// Stopped (Ctrl-C, or its scheduler's SIGTERM): the step under way ends, run.json says so, and
+	// the browser ends with it.
+	defer cancelOnSignal(cancel, stderr)()
+	if len(opts.batch) > 0 {
+		return makeBatch(ctx, opts, stdout, stderr)
+	}
 	return makeRecipe(ctx, opts, stdout, stderr)
+}
+
+// cancelOnSignal cancels the run on an interrupt or SIGTERM; the function returned stops listening.
+// After MaveScape 0.8.0's run.go.
+func cancelOnSignal(cancel context.CancelFunc, stderr io.Writer) func() {
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-signals:
+			fmt.Fprintln(stderr, "situcraft run: stopped")
+			cancel()
+		case <-done:
+		}
+	}()
+	return func() {
+		signal.Stop(signals)
+		close(done)
+	}
+}
+
+// batchBundles are a batch's bundles: the folders a file lists (one a line; blank lines and those
+// starting with # passed over), or every folder of a folder holding experiment.xenium, by name.
+func batchBundles(list, folder string) ([]string, error) {
+	var out []string
+	if list != "" {
+		raw, err := os.ReadFile(list)
+		if err != nil {
+			return nil, err
+		}
+		base := filepath.Dir(list)
+		for n, line := range strings.Split(string(raw), "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			if !filepath.IsAbs(line) {
+				line = filepath.Join(base, line)
+			}
+			if _, err := os.Stat(filepath.Join(line, "experiment.xenium")); err != nil {
+				return nil, fmt.Errorf("%s, line %d: %s is not a Xenium output bundle", filepath.Base(list), n+1, line)
+			}
+			out = append(out, line)
+		}
+	} else {
+		abs, err := filepath.Abs(folder)
+		if err != nil {
+			return nil, err
+		}
+		entries, err := os.ReadDir(abs)
+		if err != nil {
+			return nil, err
+		}
+		for _, e := range entries {
+			path := filepath.Join(abs, e.Name())
+			if _, err := os.Stat(filepath.Join(path, "experiment.xenium")); err == nil {
+				out = append(out, path)
+			}
+		}
+	}
+	if len(out) == 0 {
+		return nil, errors.New("the batch has no bundle")
+	}
+	return out, nil
+}
+
+// batchEntry is a bundle of a batch, as batch.json says how it went.
+type batchEntry struct {
+	Bundle      string `json:"bundle"`
+	Folder      string `json:"folder"`
+	Exit        int    `json:"exit"`
+	Reason      string `json:"reason"`
+	Result      string `json:"result,omitempty"`
+	Fingerprint string `json:"fingerprint,omitempty"`
+}
+
+// makeBatch makes the recipe on each bundle of a batch (or, with --index, on one), each in a folder
+// of its own under --out named by the bundle's; a whole batch also writes batch.json. Its exit
+// status: 0 every bundle made; 2 none could run; 1 otherwise.
+func makeBatch(ctx context.Context, opts runOptions, out, stderr io.Writer) int {
+	taken := map[string]bool{}
+	names := make([]string, len(opts.batch))
+	for i, folder := range opts.batch {
+		names[i] = roleOf(folder, taken)
+	}
+	chosen := make([]int, 0, len(opts.batch))
+	for i := range opts.batch {
+		if opts.index == 0 || opts.index == i+1 {
+			chosen = append(chosen, i)
+		}
+	}
+	var entries []batchEntry
+	made, notRun := 0, 0
+	for k, i := range chosen {
+		if ctx.Err() != nil {
+			break
+		}
+		one := opts
+		one.batch, one.index = nil, 0
+		one.bundles = map[string]string{"": opts.batch[i]}
+		one.out = filepath.Join(opts.out, names[i])
+		fmt.Fprintf(out, "== %s (%d of %d)\n", names[i], k+1, len(chosen))
+		code := makeRecipe(ctx, one, out, stderr)
+		entry := batchEntry{Bundle: names[i], Folder: names[i], Exit: code}
+		if raw, err := os.ReadFile(filepath.Join(one.out, "run.json")); err == nil {
+			var r runReport
+			if json.Unmarshal(raw, &r) == nil {
+				entry.Reason = r.Exit.Reason
+				if r.Result != nil {
+					entry.Result = r.Result.ID
+				}
+				if r.Cert != nil {
+					entry.Fingerprint = r.Cert.Fingerprint
+				}
+			}
+		}
+		switch code {
+		case exitRunMade:
+			made++
+		case exitRunNotRun:
+			notRun++
+			if entry.Reason == "" {
+				entry.Reason = "not run (said above)"
+			}
+		}
+		entries = append(entries, entry)
+	}
+	if opts.index == 0 {
+		raw, _ := os.ReadFile(opts.recipe)
+		summary := map[string]any{"format": "situcraft-batch", "version": 1, "recipe": map[string]string{"sha256": sha256Hex(raw)}, "made": made, "bundles": entries}
+		text, _ := json.MarshalIndent(summary, "", " ")
+		os.MkdirAll(opts.out, 0o755)
+		if err := os.WriteFile(filepath.Join(opts.out, "batch.json"), append(text, '\n'), 0o644); err != nil {
+			fmt.Fprintln(stderr, "situcraft run: batch.json:", err)
+		}
+		fmt.Fprintf(out, "The batch: %d of %s made.\n", made, plural(len(chosen), "bundle"))
+	}
+	switch {
+	case made == len(chosen):
+		return exitRunMade
+	case notRun == len(chosen):
+		return exitRunNotRun
+	}
+	return exitRunFailed
 }
 
 // makeRecipe does the work, saying what it does as it goes, and answers the exit status.
@@ -325,21 +504,27 @@ func makeRecipe(ctx context.Context, opts runOptions, out, stderr io.Writer) int
 		report.Files = append(report.Files, recipeFile{Name: f.Name, SHA256: sum})
 	}
 
-	// A step carrying cells the window chose is made only on the bundle the recipe was made from.
+	// A step carrying cells the window chose is made on another bundle only when the program
+	// chooses them again as the window did; its cells are chosen there before it is made.
 	var refused []string
+	rechoose := map[int]bool{}
 	for _, s := range recipe.Steps {
 		if !s.Carries {
 			continue
 		}
 		for _, role := range stepRoles(s.Spec) {
-			if !same[role] {
-				refused = append(refused, fmt.Sprintf("step %d, %s", s.N, s.Name))
-				break
+			if same[role] {
+				continue
 			}
+			if !s.Portable {
+				refused = append(refused, fmt.Sprintf("step %d, %s", s.N, s.Name))
+			}
+			rechoose[s.N] = true
+			break
 		}
 	}
 	if len(refused) > 0 {
-		return fail(fmt.Errorf("%s carr%s cells the window chose on the bundle the recipe was made from (a filter's, labels', regions'), and %s made only on that bundle: %s", plural(len(refused), "step"), map[bool]string{true: "ies", false: "y"}[len(refused) == 1], map[bool]string{true: "is", false: "are"}[len(refused) == 1], strings.Join(refused, "; ")))
+		return fail(fmt.Errorf("%s carr%s cells the window chose on the bundle the recipe was made from (a region's, a review's, curated labels', niches'), and %s made only on that bundle: %s", plural(len(refused), "step"), map[bool]string{true: "ies", false: "y"}[len(refused) == 1], map[bool]string{true: "is", false: "are"}[len(refused) == 1], strings.Join(refused, "; ")))
 	}
 	if opts.dryRun {
 		for _, s := range recipe.Steps {
@@ -372,11 +557,15 @@ func makeRecipe(ctx context.Context, opts runOptions, out, stderr io.Writer) int
 		return fail(err)
 	}
 	defer os.RemoveAll(examples)
-	a, err := newApp(config{host: "127.0.0.1", window: "none", dataDir: filepath.Join(opts.out, "library"), cacheDir: cacheDir, examplesDir: examples})
+	// A SituCraft of its own, serving this computer alone (its page, for --report), taking no
+	// script's actions.
+	running, err := start(config{host: "127.0.0.1", window: "none", remote: true, mcp: true, dataDir: filepath.Join(opts.out, "library"), cacheDir: cacheDir, examplesDir: examples}, io.Discard)
 	if err != nil {
 		return fail(err)
 	}
-	defer a.jobs.Close()
+	go running.serve()
+	defer running.stop(5 * time.Second)
+	a := running.app
 	if !opts.clock.IsZero() {
 		at := opts.clock.UTC()
 		a.artifacts.Clock = func() time.Time { return at }
@@ -428,6 +617,16 @@ func makeRecipe(ctx context.Context, opts runOptions, out, stderr io.Writer) int
 		if s.Job == "refinement" {
 			spec = withThreads(spec, opts.threads)
 		}
+		if rechoose[s.N] {
+			c := choiceContext{a: a, ctx: ctx, bundle: folders[stepRolesFirst(s.Spec)], made: made}
+			chosen, err := c.remakeChoices(spec, s.Choices)
+			if err != nil {
+				step.State, step.Error = "failed", "its cells could not be chosen again: "+err.Error()
+				report.Steps = append(report.Steps, step)
+				return finish(exitRunFailed, fmt.Sprintf("step %d, %s: %s", s.N, s.Name, step.Error))
+			}
+			spec, step.Rechosen = chosen, true
+		}
 		t0 := time.Now()
 		fmt.Fprintf(out, "  %d. %s…", s.N, s.Name)
 		fn, err := a.jobs.Remake(s.Job, spec)
@@ -440,6 +639,8 @@ func makeRecipe(ctx context.Context, opts runOptions, out, stderr io.Writer) int
 		}
 		step.Seconds = time.Since(t0).Seconds()
 		switch {
+		case ctx.Err() != nil:
+			step.State, step.Error = "failed", "stopped before it finished"
 		case err != nil:
 			step.State, step.Error = "failed", err.Error()
 		case job.State != jobs.Complete:
@@ -473,6 +674,16 @@ func makeRecipe(ctx context.Context, opts runOptions, out, stderr io.Writer) int
 		return finish(exitRunFailed, "the certificate could not be written: "+err.Error())
 	}
 	report.Cert = cert
+
+	// The window's records and outputs, in a headless page: the run's project, its report and methods.
+	if opts.report {
+		fmt.Fprintln(out, "Writing the report in a headless page…")
+		page, err := runPage(ctx, opts, running, recipe, report)
+		report.Page = page
+		if err != nil {
+			return finish(exitRunFailed, "the report could not be written: "+err.Error())
+		}
+	}
 	return finish(exitRunMade, fmt.Sprintf("%s, %s, certificate %s", result.Name, result.ID, shortFingerprint(cert.Fingerprint)))
 }
 
