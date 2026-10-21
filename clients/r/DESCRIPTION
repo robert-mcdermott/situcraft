@@ -1,0 +1,22 @@
+Package: situcraft
+Type: Package
+Title: Remote Control of a Running 'SituCraft'
+Version: 0.8.0
+Authors@R: person("Robert", "McDermott", email = "robert.c.mcdermott@gmail.com", role = c("aut", "cre"))
+Description: Drives 'SituCraft', a workbench for imaging spatial
+    transcriptomics (10x Genomics Xenium output), from R: every action an AI
+    agent can take in 'SituCraft' (open bundles, segment, cluster and label
+    cells, ask which cells meet conditions, run spatial analyses and cohort
+    comparisons, read results, show the tissue, write files) is an R function
+    that the open 'SituCraft' window performs, so the analysis stays visible
+    and recorded. Tables come back as data frames and pictures as files.
+License: Apache License (== 2.0)
+URL: https://github.com/robert-mcdermott/situcraft
+BugReports: https://github.com/robert-mcdermott/situcraft/issues
+Encoding: UTF-8
+Imports:
+    curl,
+    jsonlite
+Suggests:
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3

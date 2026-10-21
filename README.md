@@ -158,6 +158,12 @@ walks through the examples and every view.
 
 </details>
 
+## Python and R
+
+The `situcraft` packages for Python and R drive a running SituCraft from a script or a notebook:
+each action is a function, tables come back as data frames and pictures as files
+([clients](clients/README.md)).
+
 ## Command-line tools
 
 - `situcraft mcp` is a Model Context Protocol server for AI agents: read-only tools by default,

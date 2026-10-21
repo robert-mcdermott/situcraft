@@ -4098,9 +4098,29 @@ without a model, in CI.
      made by the window: its recipe's graph and labels chosen again by the program exactly as the
      window chose them, made again by `situcraft run --report` with the same ids, its report and
      methods written in a headless page, verified.
-7. **Python and R clients (A6).** Generated from the tool list (`clients/generate.mjs`): a function
-   per tool, results as data frames, pictures saved; a notebook and an R script on the examples,
-   run in CI against a headless SituCraft.
+7. **Python and R clients (A6): done.**
+   - **Generated from the tool list** (`clients/generate.mjs`, after MaveScape 0.8.0's, the same
+     author's; `clients/tools.json` kept equal to `actions.go` by `clients_test.go`): a Python
+     method and an R function (`sc_`) per action with its help, required arguments first, a
+     keyword's name ending in `_`; the packages' versions `main.go`'s; `--check` in CI and at
+     release.
+   - **The clients** (`clients/python`, the standard library alone; `clients/r`, curl and
+     jsonlite): the connection from `remote.json` or the environment; any action by name;
+     tables of columns and rows or records as data frames, each column of one type (R reads the
+     answer as written for them); JPEG and PNG pictures saved; what an action changed; errors
+     with SituCraft's reason, status and action; a warning when the actions' version differs.
+   - **The examples:** `simulated-tissue.ipynb` (metrics checked, clusters and labels from the
+     simulated tissue's markers, the labels against its true types by `query_cells`, 97.0%
+     agreeing, the neighborhood enrichment's heatmap, the tissue filled by label, its recipe),
+     committed with its outputs; `simulated-cohort.R` (the cohort-gene question from R:
+     SIM033 in the epithelial-like cells, alone below an adjusted p of 0.05).
+   - **Found on the way:** the window saves a changed project before answering an action, so
+     that the program's answers from the library (`describe_project`, `query_cells`, a recipe)
+     follow it; the Viewer fits the whole tissue to a nominal 1600 by 1000 pixels when its page
+     has no size, and a picture of a page not shown uses the same.
+   - **Validated** (`clients/test-clients.mjs`, a CI job): both clients against SituCraft in
+     headless Chrome, results equal to the HTTP API's; the notebook executed with nbclient and
+     the R script run, their checks passing; `R CMD check` clean.
 8. **The agent benchmark (A7).** `benchmark/`: tasks on the simulated tissues and cohorts and on the
    Lung, graded by code; reference solutions run in CI; the harness for a model's runs (Claude Code
    with the server alone), results recorded and shown on the site.

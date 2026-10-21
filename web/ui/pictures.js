@@ -31,9 +31,10 @@ export async function panelPicture(app, panel, { width = 1000, aspect = 0.75, ca
 }
 
 // The tissue as the Viewer shows it: its view (captured from the Viewer, never saved) over the
-// stage's extent, the stage's shape kept (between 1:2 and 6:5).
+// stage's extent, the stage's shape kept (between 1:2 and 6:5). A page not shown has no stage: the
+// extent the Viewer then fits the tissue to (1600 by 1000).
 export function tissuePicture(app, view, stage, { width = 1000, caption = '' } = {}) {
-  const [w, h] = stage ?? [1000, 750];
+  const [w, h] = stage?.[0] > 0 && stage?.[1] > 0 ? stage : [1600, 1000];
   const camera = view.camera;
   if (!camera) throw new Error('The Viewer shows no tissue to picture yet.');
   const panel = { kind: 'tissue', view: view.id, inlineView: view, region: { cx: camera.cx, cy: camera.cy, width: Number((camera.umPerCss * w).toPrecision(6)) }, regions: true };

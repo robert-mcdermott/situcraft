@@ -143,6 +143,25 @@ a window.
     step chosen again as the window chose it, made again with the same ids, its report written
     in a headless page and its certificate verified.
 
+- **Python and R clients (wave 9, slice 7).** The `situcraft` packages for Python and R
+  (`clients/`) drive a running SituCraft from a script or a notebook.
+  - **Each action a function,** with its arguments and help, generated from the list of actions
+    so that every one is there: `sc.query_cells(...)` in Python, `sc_query_cells(...)` in R.
+  - **Results:** tables as data frames, each column of one type; pictures saved as files (the
+    tissue's a JPEG, a map's and a figure's a PNG); what an action changed; SituCraft's reason
+    when it refuses one. The running SituCraft is found through its `remote.json`.
+  - **Two worked examples:** a Python notebook on the simulated tissue (its labels against the
+    true types, 97% agreeing; which labels neighbor each other; its recipe), and an R script on
+    the simulated cohort (the gene the simulator changed in one cell type, found between the
+    conditions, and nothing else).
+  - **Found on the way:** a script asking the library right after an action could miss what the
+    action did (the project was saved a moment later); the window now saves a changed project
+    before it answers. A picture of the whole tissue from a window not shown was not of the
+    whole tissue; it is now.
+  - **Validated:** both clients against SituCraft in headless Chrome (results equal to the HTTP
+    API's, tables, pictures, errors, the connection file); the notebook executed and the R
+    script run, every check passing; `R CMD check` clean.
+
 ### Changed
 
 - **Files named by an argument need the token.** A script that has `import_labels` or

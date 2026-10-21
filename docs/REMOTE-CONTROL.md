@@ -36,7 +36,9 @@ curl -s -X POST http://127.0.0.1:8840/api/remote/action \
   -d '{"action": "show_tissue", "args": {"genes": ["EPCAM", "CD68"], "center": [750, 300], "um_per_pixel": 0.4}, "client": "my script"}'
 ```
 
-In Python, with only the standard library:
+The `situcraft` packages for Python and R ([clients](../clients/README.md)) make each action a
+function, with tables as data frames and pictures as files. Without them, in Python with only the
+standard library:
 
 ```python
 import json, pathlib, urllib.request

@@ -3451,6 +3451,9 @@ export function installRemote(app) {
     }
     const changed = projectChanges(before, app.store.project);
     if (changed.length) outcome.changed = changed;
+    // A changed project saved before the answer, so that what the program answers from the library
+    // (describe_project, query_cells, a recipe) is what the action left.
+    if (app.store.project !== before) await app.saveNow?.().catch(() => {});
     await fetch(`api/remote/result/${encodeURIComponent(event.id)}`, { method: 'POST', body: JSON.stringify(outcome), headers: { 'Content-Type': 'application/json' } }).catch(() => {});
   }
 
