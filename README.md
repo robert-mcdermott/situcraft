@@ -14,7 +14,7 @@ certificates written, each step kept on record.
 It is one self-contained program for macOS, Linux and Windows. It opens as a desktop window, needs
 no Python, R or account, and keeps your data on your computer.
 
-**Current release:** 0.8.0 ([changelog](CHANGELOG.md), [roadmap](situcraft-spec/roadmap.md)).
+**Current release:** 0.9.0 ([changelog](CHANGELOG.md), [roadmap](situcraft-spec/roadmap.md)).
 
 ## Features
 
@@ -40,8 +40,14 @@ no Python, R or account, and keeps your data on your computer.
   makes again from the bundles; reports and packages that open in any browser and check
   themselves.
 - **Reproducible and open.** Every result is an artifact with its lineage, the same bits on every
-  computer; exports to SpatialData, AnnData, Parquet, CSV and GeoJSON; scripts drive the window by
-  remote control.
+  computer; exports to SpatialData, AnnData, Parquet, CSV and GeoJSON; a result's recipe made again
+  by `situcraft run` without a window, on a server or a cluster's nodes, one bundle or a hundred.
+- **Agents and scripts.** An AI agent such as Claude Code works in a window you watch through
+  `situcraft mcp`, a Model Context Protocol server: it reads results and their records, asks which
+  cells meet conditions as a typed tree, and, given leave, changes the project, runs jobs or
+  touches files; every change carries its name and every call is logged. Python and R packages
+  call the same actions. An [agent benchmark](benchmark/) grades agents on tasks whose answers are
+  known.
 
 Every method is checked against an independent implementation or a known truth (scanpy, Squidpy,
 SingleR, limma, edgeR, QuPath and simulated tissues among them): see
@@ -155,11 +161,23 @@ walks through the examples and every view.
 
 </details>
 
+## Python and R
+
+The `situcraft` packages for Python and R drive a running SituCraft from a script or a notebook:
+each action is a function, tables come back as data frames and pictures as files
+([clients](clients/README.md)).
+
 ## Command-line tools
 
+- `situcraft mcp` is a Model Context Protocol server for AI agents: read-only tools by default,
+  `--allow edits,compute,files` for more ([AI agents](docs/MCP.md)).
 - `situcraft verify --data <folder of bundles> <certificate, report or package>` makes a
   certificate's results again from the bundles and compares every file bit for bit
   ([the record](https://robert-mcdermott.github.io/situcraft/docs/record.html#verify)).
+- `situcraft run --recipe <recipe> --bundle <bundle> --out <new folder>` makes a result's recipe,
+  saved from the app, without the window: its artifacts, `run.json`, a certificate and with
+  `--report` its report; on a batch of bundles, one a cluster's array task
+  ([running at scale](https://robert-mcdermott.github.io/situcraft/docs/running.html)).
 - `situcraft refine <bundle> <new folder>` runs SituCraft's transcript-informed segmentation
   without the window, from a preset or a recipe saved in the app
   ([Formats](docs/FORMATS.md#refinements-in-the-terminal-situcraft-refine)).
@@ -174,6 +192,11 @@ Each takes `-h` for its settings.
 - [The website](https://robert-mcdermott.github.io/situcraft/): the user guide, installing, and
   the methods with their validation ([docs/site/](docs/site/README.md) builds it).
 - [Formats](docs/FORMATS.md): what SituCraft reads and writes.
+- [AI agents (MCP)](docs/MCP.md): setting up Claude Code, Claude Desktop and other clients, and what
+  an agent may do.
+- [Agents and scripts](https://robert-mcdermott.github.io/situcraft/docs/agents.html): what working
+  with an agent looks like (two sessions, every number in them checked in CI), Python and R, and a
+  recipe made again.
 - [Remote control](docs/REMOTE-CONTROL.md): driving the window from scripts and notebooks.
 - [Installing](docs/INSTALLING.md): release files, installers, upgrading, uninstalling.
 - [Requirements](situcraft-spec/requirements.md): what SituCraft must do.

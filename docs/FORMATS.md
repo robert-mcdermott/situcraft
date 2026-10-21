@@ -204,6 +204,12 @@ A filter's checksum is the SHA-256 of the cell count (32-bit unsigned, little-en
 one bit per cell, in the order of `cells.parquet`, the first cell in the lowest bit of the first
 byte, set when the cell is kept. Anyone can recompute it from the bundle and the conditions.
 
+From 0.9.0 a filter may instead hold a `tree` of conditions (`all`, `any` and `not` of conditions on
+a cell's attributes, gene counts, labels, clusters, niches, regions, distances from them, a box,
+and other saved filters, as [MCP](MCP.md#asking-which-cells) lists them) and `text`, the tree in
+words; SituCraft applies it to the instrument's segmentation's cells, the result recorded the same
+way. A filter of `conditions` reads as the tree `{"all": [...]}` of them.
+
 A saved view records its dataset, its mode (Viewer or QC), the segmentation shown (`segmentation`:
 `instrument` for the dataset's own, else the segmentation artifact's id), the place and zoom
 (`camera`: the center in µm and the µm per CSS pixel), each stain by name with its visibility,
@@ -863,6 +869,24 @@ Each job is kept in `<data dir>/jobs/<id>.json`: its kind, title, spec (every ef
 parameter), state, times, number of runs, error and log. A job interrupted by SituCraft stopping is
 `orphaned` when it starts again, to be resumed or discarded.
 
+### The log of calls
+
+Every call an agent or a script makes of SituCraft is a line of `<data dir>/calls/YYYY-MM.jsonl`
+(the month in UTC), a JSON object a line, appended:
+
+| Field | Value |
+| --- | --- |
+| `time` | When it was asked, UTC, RFC 3339 with milliseconds |
+| `by`, `via` | The caller's name (an agent's client, a script's `client`), and `agent` or `script` |
+| `leave` | An agent's leave (`edits`, `compute`, `files`; none: it may only read) |
+| `tool`, `args` | The action and its arguments, texts cut at 500 characters and lists at 50 items |
+| `outcome` | `done`, `refused` (not performed) or `failed` (performed, or tried, and not done) |
+| `message` | The sentence it answered, or why not (cut at 1,000 characters) |
+| `changed` | The project's records it added, changed or removed: `{id, kind, name, change}` |
+| `ids` | The ids of records its answer named, each once |
+| `ms` | How long it took |
+| `session` | The run of SituCraft that took it |
+
 ### Reviews
 
 A dataset's reviews (from 0.5.0) are written from the Viewer's **Reviews** or by `export` (`what:
@@ -959,6 +983,57 @@ beside its output):
 
 The same recipe on the same bundle gives the same segmentation, byte for byte, in the app or the
 terminal, on any computer and any number of threads.
+
+### Recipes of results
+
+A result's recipe (the Reports view's **Recipe**, `recipe`, `GET /api/artifacts/<id>/recipe`) is
+every step from its bundles to it, made again by `situcraft run`:
+
+| Field | Holds |
+| --- | --- |
+| `format`, `version`, `kind` | `"situcraft-recipe"`, 1, `"result"`. A newer version, another kind or a field this SituCraft does not know is refused |
+| `name`, `software` | The result's name, and the SituCraft that wrote the recipe |
+| `result` | The step that makes the result (the last) |
+| `bundles` | Each bundle by its `role` (its folder's name), `name` and `analysis` (its run's analysis UUID), and the `files` its steps read, by `path` and `sha256`, so that the same bundle is known again |
+| `files` | Other files its steps read (a table of labels, a reference), by `name` and `sha256` |
+| `steps` | Each step: `n`, the artifact's `kind` and `name`, the id it `made` where the recipe was written, the `job` that makes it, its `method`, the steps it is made `inputs` from, whether it `carries` cells the window chose and, when the program chooses them again as the window did, `portable` and its `choices`, and the job's `spec` |
+| `run` | How to make it again |
+
+A spec is the job's, as its artifact's manifest records it, with `situcraft:bundle/<role>[/<path
+in it>]` for a bundle's folder, `situcraft:file/<name>` for another file, and
+`situcraft:step/<n>` for what an earlier step made. A choice says how a carried field of the spec
+(`field`: a clustering's `filter`, a graph's or spatial analysis's `cells`, a spatial analysis's
+`labels`) is chosen again on another bundle: every cell (`all`), a saved filter's cells (`filter`:
+its `id`, `name`, and `conditions` or `tree`, its label sets and clusterings by step), or each
+cell's label of a label set (`labels`: its `step`, `level`, the source's `name` and the `colors`
+the window gave its labels). A step that carries cells without being portable (a region's, a
+review's, curated or consensus labels, niches) is made only on its own bundle.
+
+### Runs (`situcraft run`)
+
+`situcraft run --recipe <recipe> --bundle [<role>=]<folder> --out <new folder>` writes, in its
+output folder, `library/` (its SituCraft's library, the artifacts it made in `library/artifacts`),
+`certificate.zip` (a certificate of the result, as the window writes one, which `situcraft
+verify` checks) and `run.json`:
+
+| Field | Holds |
+| --- | --- |
+| `format`, `version` | `"situcraft-run"`, 1 |
+| `software`, `recipe` | The SituCraft that ran it; the recipe's `name`, `sha256` and the SituCraft that wrote it (`madeBy`) |
+| `clock`, `threads` | The time it recorded everything as made (`--clock`), and the threads it was given (0, every core) |
+| `bundles` | Each bundle by its `role` and `analysis`, whether it is the one the recipe was made from (`sameAsRecipe`, else the files that `differ`), and its `files` by SHA-256 |
+| `files` | The other files it read, by name and SHA-256 |
+| `steps` | Each step: `n`, `kind`, `name`, `job`, its `state` (`made`, `failed`, `not made`), the `id` it made and the one the recipe's step made (`recipeMade`, `sameAsRecipe`), whether the window's cells were chosen again on this bundle (`rechosen`), its `files` by SHA-256, a clustering's, map's or labels' `content` digest, its `error`, and `seconds` |
+| `page` | With `--report`: the `browser`, how many times it was started (`starts`), the run's `project`, each action the page took (`steps`) and the files it wrote (`outputs`: `report.html`, `methods.md`) by SHA-256 |
+| `result`, `certificate` | The result's step, and the certificate's `path` and `fingerprint` |
+| `exit` | Its exit status (`code`: 0 made, 1 a step failed, 2 not run) and the `reason` |
+| `seconds` | How long it took |
+
+A batch (`--bundles`, `--bundle-dir`) makes each bundle in a folder of its own under `--out`,
+named after the bundle's, and (without `--index`) writes `batch.json`: `format`
+(`"situcraft-batch"`), `version` (1), the `recipe`'s `sha256`, how many bundles were `made`, and
+for each of the `bundles` its name (`bundle`, `folder`), `exit` status, `reason`, `result` and
+certificate's `fingerprint`.
 
 ### Refinements in the terminal (`situcraft refine`)
 

@@ -52,12 +52,21 @@ type remoteHub struct {
 	// that a tab left open while SituCraft was started again (another version, another library) is
 	// refused when it reconnects. Empty: any page (the tests' hubs).
 	session string
+	// scripts: programs may send actions (POST /api/remote/action). Off while an agent drives the
+	// window (situcraft mcp), whose actions come only from its stdin (after CytoWeave 0.8.0).
+	scripts bool
+	// program answers the actions the program performs itself (results.go), without a page.
+	program func(ctx context.Context, action string, args json.RawMessage) (remoteResult, bool)
+	// log is the library's log of programs' calls (calls.go); nil, none kept.
+	log *callLog
 }
 
 type remoteClient struct {
 	id     uint64
 	events chan remoteEvent
-	done   chan struct{}
+	// notices are calls logged, for the page to show at once (dropped when it is behind).
+	notices chan []byte
+	done    chan struct{}
 }
 
 // An event carries an action for the page: { id, action, args }, the local items it opens, where
@@ -69,6 +78,11 @@ type remoteEvent struct {
 	Files  []localFile     `json:"files,omitempty"`
 	Client string          `json:"client,omitempty"`
 	Output string          `json:"output,omitempty"`
+	// Restricted: the sender was given only the Leave named (an agent, situcraft mcp), so the page
+	// does not compute, or change, what the action would otherwise make on the way (a map
+	// show_map makes when there is none). A script is not restricted.
+	Restricted bool     `json:"restricted,omitempty"`
+	Leave      []string `json:"leave,omitempty"`
 }
 
 var (
@@ -82,6 +96,8 @@ type remoteResult struct {
 	OK      bool            `json:"ok"`
 	Message string          `json:"message"`
 	Data    json.RawMessage `json:"data,omitempty"`
+	// Changed: what the action added, changed or removed in the project, as the page saw it.
+	Changed []callChange `json:"changed,omitempty"`
 }
 
 func newRemoteHub() *remoteHub {
@@ -91,6 +107,7 @@ func newRemoteHub() *remoteHub {
 		turn:      make(chan struct{}, 1),
 		connected: make(chan struct{}),
 		token:     randomToken(),
+		scripts:   true,
 	}
 }
 
@@ -106,8 +123,19 @@ func (h *remoteHub) register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/remote/events", localOnly(h.serveEvents))
 	mux.HandleFunc("POST /api/remote/result/{id}", localOnly(h.serveResult))
 	mux.HandleFunc("POST /api/remote/output/{token}", localOnly(h.serveOutput))
-	mux.HandleFunc("POST /api/remote/action", localOnly(h.serveAction))
+	if h.scripts {
+		mux.HandleFunc("POST /api/remote/action", localOnly(h.serveAction))
+	}
 	mux.HandleFunc("GET /api/remote/tools", localOnly(h.serveTools))
+	mux.HandleFunc("GET /api/remote/pages", localOnly(h.servePages))
+}
+
+// servePages answers how many pages take remote control (an attached situcraft mcp waits for one).
+func (h *remoteHub) servePages(w http.ResponseWriter, r *http.Request) {
+	h.mu.Lock()
+	pages := len(h.clients)
+	h.mu.Unlock()
+	writeJSON(w, map[string]int{"pages": pages})
 }
 
 // clientName is a sender's name as the page shows it: printable, at most 60 characters.
@@ -143,7 +171,7 @@ func (h *remoteHub) connect() *remoteClient {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.counter++
-	client := &remoteClient{id: h.counter, events: make(chan remoteEvent, 16), done: make(chan struct{})}
+	client := &remoteClient{id: h.counter, events: make(chan remoteEvent, 16), notices: make(chan []byte, 64), done: make(chan struct{})}
 	h.clients = append(h.clients, client)
 	close(h.connected)
 	h.connected = make(chan struct{})
@@ -221,6 +249,11 @@ func (h *remoteHub) serveEvents(w http.ResponseWriter, r *http.Request) {
 			if err := stream.Flush(); err != nil {
 				return
 			}
+		case notice := <-client.notices:
+			fmt.Fprintf(w, "event: call\ndata: %s\n\n", notice)
+			if err := stream.Flush(); err != nil {
+				return
+			}
 		case <-ticker.C:
 			fmt.Fprint(w, ": ping\n\n")
 			if err := stream.Flush(); err != nil {
@@ -234,44 +267,90 @@ func (h *remoteHub) hasToken(r *http.Request) bool {
 	return subtle.ConstantTimeCompare([]byte(r.Header.Get(remoteTokenHeader)), []byte(h.token)) == 1
 }
 
+// logged tells every page of a call logged (the drawer's Calls tab shows it at once).
+func (h *remoteHub) logged(e callEntry) {
+	notice, err := json.Marshal(e)
+	if err != nil {
+		return
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for _, client := range h.clients {
+		select {
+		case client.notices <- notice:
+		default:
+		}
+	}
+}
+
 // serveAction runs {"action": "...", "args": {...}, "client": "..."} in the page. Actions that
-// read or write files need the token.
+// read or write files need the token. Each call is logged (calls.go), refused ones too.
 func (h *remoteHub) serveAction(w http.ResponseWriter, r *http.Request) {
 	var request struct {
 		Action string          `json:"action"`
 		Args   json.RawMessage `json:"args"`
 		Client string          `json:"client"`
+		// Leave restricts the sender to what it names (situcraft mcp attached here sends its own).
+		Leave *[]string `json:"leave"`
 	}
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxRemoteActionBytes))
 	if err == nil {
 		err = json.Unmarshal(body, &request)
 	}
+	event := remoteEvent{Action: request.Action, Args: request.Args, Client: clientName(request.Client, "a program on this computer")}
+	via := viaScript
+	if request.Leave != nil {
+		event.Restricted, event.Leave, via = true, *request.Leave, viaAgent
+	}
+	call := h.log.start(event.Client, via, event.Leave, request.Action, request.Args)
+	refuse := func(status int, message string) {
+		h.log.end(call, callRefused, remoteResult{Message: message}, nil)
+		writeError(w, status, message)
+	}
 	if err != nil || request.Action == "" {
-		writeError(w, http.StatusBadRequest, `Send JSON such as {"action": "get_state"}.`)
+		refuse(http.StatusBadRequest, `Send JSON such as {"action": "get_state"}.`)
 		return
 	}
-	event := remoteEvent{Action: request.Action, Args: request.Args, Client: clientName(request.Client, "a program on this computer")}
 	action, known := findAction(request.Action)
 	if !known {
-		// The page answers with the actions it knows; the hub need not know them all first.
-		h.respond(w, r, event)
+		// The page answers with the actions it knows; the hub need not know them all first. One it
+		// does not know either is refused.
+		h.respond(w, r, event, call, callRefused)
 		return
 	}
-	if (action.output || action.reads || action.readsAt || action.writes) && !h.hasToken(r) {
+	var args map[string]any
+	json.Unmarshal(request.Args, &args)
+	if action.touchesFiles(args) && !h.hasToken(r) {
 		what := "Writing files"
-		if action.reads || action.readsAt {
+		if action.reads || action.readsAt || action.namesFile(args) {
 			what = "Reading files"
 		}
-		writeError(w, http.StatusUnauthorized, what+" needs the "+remoteTokenHeader+" header with the token SituCraft printed when it started (also in remote.json).")
+		refuse(http.StatusUnauthorized, what+" needs the "+remoteTokenHeader+" header with the token SituCraft printed when it started (also in remote.json).")
 		return
+	}
+	if action.program && h.program != nil {
+		if outcome, ok := h.program(r.Context(), action.Name, request.Args); ok {
+			h.log.end(call, outcomeOf(outcome), outcome, nil)
+			writeJSON(w, outcome)
+			return
+		}
 	}
 	event, release, err := h.prepare(event, action)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		refuse(http.StatusBadRequest, err.Error())
 		return
 	}
 	defer release()
-	h.respond(w, r, event)
+	h.respond(w, r, event, call, callFailed)
+}
+
+// outcomeOf is an answer's outcome in the log: done, or failed (SituCraft performed it, or tried,
+// and said why it could not).
+func outcomeOf(outcome remoteResult) string {
+	if outcome.OK {
+		return callDone
+	}
+	return callFailed
 }
 
 // prepare completes an event for its action: where the page uploads the file it writes (an upload
@@ -318,8 +397,20 @@ func (h *remoteHub) openFiles(args json.RawMessage) ([]localFile, error) {
 	return files, nil
 }
 
-func (h *remoteHub) respond(w http.ResponseWriter, r *http.Request, event remoteEvent) {
+// respond performs the event in the page and answers its outcome, logging the call: done, or (not
+// done) as notDone says.
+func (h *remoteHub) respond(w http.ResponseWriter, r *http.Request, event remoteEvent, call *callStart, notDone string) {
 	outcome, err := h.dispatch(r.Context(), event)
+	switch {
+	case err == nil && outcome.OK:
+		h.log.end(call, callDone, outcome, nil)
+	case err == nil:
+		h.log.end(call, notDone, outcome, nil)
+	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+		h.log.end(call, callFailed, outcome, errors.New("the caller stopped waiting"))
+	default:
+		h.log.end(call, callFailed, outcome, err)
+	}
 	switch {
 	case err == nil:
 		writeJSON(w, outcome)

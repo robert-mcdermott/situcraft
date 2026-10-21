@@ -240,30 +240,7 @@ export function mountSidebar(app) {
           type: 'button',
           'aria-current': selected ? 'true' : null,
           title: section.label(item, app),
-          onclick: () => {
-            app.focusItem({ kind: section.kind, id });
-            // Bundles and datasets are shown by the Data view; from the start page, go there.
-            const bundle = section.kind === 'dataset' || item.kind === 'bundle' || item.kind === 'archive';
-            if (bundle && app.store.ui.mode === 'welcome') app.setMode('data');
-            // A filter is edited and compared in the QC view; a saved view opens.
-            if (section.kind === 'filter') app.setMode('qc');
-            if (section.kind === 'clustering') app.setMode('celltypes');
-            if (section.kind === 'graph' || section.kind === 'spatial') app.setMode('spatial');
-            if (['sample', 'design', 'cohort-summary', 'abundance', 'expression', 'spatial-comparison'].includes(section.kind)) app.setMode('cohort');
-            // An image is shown on its dataset's tissue; one not aligned yet, in the Alignment view.
-            if (section.kind === 'image') {
-              if (transformInUse(app.store.project, item.id)) {
-                app.focusItem({ kind: 'dataset', id: item.dataset });
-                app.setMode('viewer');
-              } else app.showAlignment(item.dataset, item.id);
-            }
-            if (section.kind === 'view') app.applyView(item);
-            if (section.kind === 'figure') {
-              app.reportsFocus = item.id;
-              app.setMode('reports');
-              app.reportsView?.select(item.id);
-            }
-          },
+          onclick: () => openItem(app, section.kind, item),
         }, icon(section.itemIcon?.(item) ?? section.icon), h('span.label', section.label(item, app)), h('span.meta', section.meta(item, app)))));
       }
       if (!items.length) {
@@ -283,4 +260,30 @@ export function mountSidebar(app) {
       if (topics.has('project') || topics.has('focus') || topics.has('project-loaded') || topics.has('local') || topics.has('bundles')) render();
     },
   };
+}
+
+// Shows an item of the project tree: in focus in the inspector, and in the view that shows it.
+export function openItem(app, kind, item) {
+  app.focusItem({ kind, id: item.id ?? item.url });
+  // Bundles and datasets are shown by the Data view; from the start page, go there.
+  const bundle = kind === 'dataset' || item.kind === 'bundle' || item.kind === 'archive';
+  if (bundle && app.store.ui.mode === 'welcome') app.setMode('data');
+  // A filter is edited and compared in the QC view; a saved view opens.
+  if (kind === 'filter') app.setMode('qc');
+  if (kind === 'clustering') app.setMode('celltypes');
+  if (kind === 'graph' || kind === 'spatial') app.setMode('spatial');
+  if (['sample', 'design', 'cohort-summary', 'abundance', 'expression', 'spatial-comparison'].includes(kind)) app.setMode('cohort');
+  // An image is shown on its dataset's tissue; one not aligned yet, in the Alignment view.
+  if (kind === 'image') {
+    if (transformInUse(app.store.project, item.id)) {
+      app.focusItem({ kind: 'dataset', id: item.dataset });
+      app.setMode('viewer');
+    } else app.showAlignment(item.dataset, item.id);
+  }
+  if (kind === 'view') app.applyView(item);
+  if (kind === 'figure') {
+    app.reportsFocus = item.id;
+    app.setMode('reports');
+    app.reportsView?.select(item.id);
+  }
 }

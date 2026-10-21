@@ -11,9 +11,10 @@
 // pages) and holds only its own content: the header, documentation menu, pager and footer are
 // added here. <shot name="viewer" alt="…">caption</shot> becomes a figure with the screenshot in
 // both themes, docs/images/viewer-light.webp and viewer-dark.webp (written by docs/capture, copied
-// to assets/img), of which the page shows the one matching its theme. The build then checks every
-// local link, anchor and image, and fails if one is broken. Adapted from MaveScape 0.8.0's
-// docs/site/build.mjs.
+// to assets/img), of which the page shows the one matching its theme; <benchmark-results>
+// </benchmark-results> becomes the agent benchmark's results (benchmark/report.mjs, from
+// benchmark/results/). The build then checks every local link, anchor and image, and fails if one
+// is broken. Adapted from MaveScape 0.8.0's docs/site/build.mjs.
 
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
@@ -55,7 +56,7 @@ const DOCS = [
   { group: 'Spatial', pages: [['spatial', 'Spatial analysis'], ['niches', 'Niches and genes']] },
   { group: 'Cohorts', pages: [['samples', 'Samples'], ['designs', 'The design'], ['summaries', 'Sample summaries'], ['cohort-qc', 'Cohort QC'], ['abundance', 'Differential abundance'], ['expression', 'Differential expression'], ['spatial-tests', 'Spatial statistics between groups'], ['error-rates', 'Error rates and scale']] },
   { group: 'Reports', pages: [['figures', 'Figures']] },
-  { group: 'Reference', pages: [['remote-control', 'Remote control'], ['record', 'The record'], ['troubleshooting', 'Troubleshooting']] },
+  { group: 'Reference', pages: [['agents', 'Agents and scripts'], ['remote-control', 'Remote control'], ['record', 'The record'], ['running', 'Running at scale'], ['troubleshooting', 'Troubleshooting']] },
 ];
 const ORDER = DOCS.flatMap((g) => g.pages);
 
@@ -124,6 +125,7 @@ function header(root, current) {
         ${link('docs/', 'Documentation', 'docs')}
         ${link('install.html', 'Install', 'install')}
         ${link('science.html', 'Science', 'science')}
+        ${link('benchmark.html', 'Benchmark', 'benchmark')}
       </nav>
       <div class="header-actions">
         <a class="icon-button" href="${GITHUB}" aria-label="SituCraft on GitHub">
@@ -157,6 +159,7 @@ function footer(root) {
             <li><a href="${home(root)}#features">Features</a></li>
             <li><a href="${root}install.html">Install</a></li>
             <li><a href="${root}science.html">Science</a></li>
+            <li><a href="${root}benchmark.html">Agent benchmark</a></li>
             <li><a href="${GITHUB}/blob/main/CHANGELOG.md">Changelog</a></li>
           </ul>
         </div>
@@ -234,7 +237,10 @@ function shots(html, root) {
   });
 }
 
-const fill = (html) => html.replaceAll('{{version}}', VERSION).replaceAll('{{github}}', GITHUB);
+// The agent benchmark's results (benchmark/results/), as the benchmark page shows them.
+const { benchmarkHTML } = await import('../../benchmark/report.mjs');
+const BENCHMARK = benchmarkHTML(join(repo, 'benchmark', 'results'));
+const fill = (html) => html.replaceAll('{{version}}', VERSION).replaceAll('{{github}}', GITHUB).replace('<benchmark-results></benchmark-results>', BENCHMARK);
 
 function write(path, html) {
   const file = join(out, path);
@@ -245,7 +251,7 @@ function write(path, html) {
 const written = [];
 
 // Top-level pages.
-for (const [slug, key] of [['index', 'home'], ['install', 'install'], ['science', 'science'], ['404', '404']]) {
+for (const [slug, key] of [['index', 'home'], ['install', 'install'], ['science', 'science'], ['benchmark', 'benchmark'], ['404', '404']]) {
   const { meta, body } = parse(join(here, 'pages', `${slug}.html`));
   const root = slug === '404' ? '/situcraft/' : '';
   const path = slug === 'index' ? '' : `${slug}.html`;

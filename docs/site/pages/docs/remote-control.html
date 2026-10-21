@@ -30,12 +30,34 @@ act("label_cells", markers="lung")
 print(act("methods")["message"])</code></pre></div>
       <p>Actions run one at a time, in the window most recently opened from this run of SituCraft. Most answer within seconds; those that build derived data, download an example or run a long job may take minutes. <code>GET /api/remote/tools</code> lists every action with its arguments as a JSON schema, under an API version that changes only when an action, an argument or a result's field is removed or changes its meaning.</p>
 
+      <h2 id="clients">Python and R</h2>
+      <p>The <code>situcraft</code> packages for Python and R make each action a function, with its arguments and help: they find the running SituCraft through its <code>remote.json</code>, give tables as data frames (each column of one type) and pictures as files, and raise SituCraft's reason when it refuses an action. They are generated from the list of actions, so they always have every one.</p>
+      <div class="code"><pre><code><span class="prompt">$ </span>pip install "git+https://github.com/robert-mcdermott/situcraft#subdirectory=clients/python"</code></pre></div>
+      <div class="code"><pre><code>import situcraft
+
+sc = situcraft.connect()
+sc.open_example("simulated")
+sc.cluster_cells()
+labels = sc.label_cells(markers="simulated")
+cells = sc.query_cells({"labels": labels["id"], "in": ["immune-like"]}, limit=0).frame("rows")
+sc.show_tissue(fill="labels", file="tissue.jpg")</code></pre></div>
+      <div class="code"><pre><code>remotes::install_github("robert-mcdermott/situcraft", subdir = "clients/r")
+library(situcraft)
+sc_connect()
+sc_open_example("simulated-cohort")
+sc_design(unit = "subject", group = "condition", reference = "control", save = "By condition")
+sc_cohort_steps(markers = "simulated")
+sc_summarize_samples()
+compared &lt;- sc_compare_expression(design = "By condition")
+tests &lt;- as.data.frame(sc_get_result(compared$data$id, limit = 0))</code></pre></div>
+      <p>Two worked examples come with them, a Python notebook on the simulated tissue (its labels against the true types, their neighbors, its recipe) and an R script on the simulated cohort (the gene the simulator changed in one cell type, found between the conditions): <a href="{{github}}/tree/main/clients">clients</a>.</p>
+
       <h2 id="what">What it can do</h2>
       <p>Every view's work: projects and data (open bundles and examples, add datasets), seeing the tissue (genes, stains, layers, a cell, any segmentation's fill), regions and reviews, saved views, segmentations (expand, refine, import, compare, decide, export), cell types (cluster, map, label from markers or a reference, import labels, review), post-Xenium images and their alignment, spatial analysis (graphs, every question, an answer made again on another segmentation), quality control (filters, metrics), figures, and the record (the methods paragraph, what made a result). The <a href="{{github}}/blob/main/docs/REMOTE-CONTROL.md">remote control reference</a> lists each action with its arguments and what it answers.</p>
 
       <h2 id="security">Security</h2>
       <ul>
         <li>SituCraft listens on this computer only, and refuses requests that do not name it (DNS rebinding) and web pages of other sites.</li>
-        <li>Actions that open paths, read files or write them also need the header <code>X-SituCraft-Token</code> with the token from <code>remote.json</code>: another user of a shared computer can reach the port, but not your files.</li>
+        <li>Actions that open paths, read files or write them (an action given a path to read, such as <code>import_labels</code> with a table) also need the header <code>X-SituCraft-Token</code> with the token from <code>remote.json</code>: another user of a shared computer can reach the port, but not your files.</li>
         <li>A file is written only at an absolute path in a folder that exists, never over an existing file unless asked, and through a temporary file renamed into place.</li>
       </ul>

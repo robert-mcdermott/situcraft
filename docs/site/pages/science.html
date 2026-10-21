@@ -81,6 +81,20 @@ lede: SituCraft implements each method itself, from its publication, and checks 
       </div>
       <p>A certificate proves that these bundles, analyzed as recorded, give these files and numbers, not that a result is right; see <a href="docs/record.html">What made a result</a>.</p>
 
+      <h2 id="agents">Agents and scripts</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Method</th><th>Source</th><th>Checked against</th><th>Agreement</th></tr></thead>
+          <tbody>
+            <tr><td>Cells and transcripts asked for by a tree of conditions (all, any and not), never a query string</td><td>SituCraft's own grammar, checked before anything is read</td><td>Counts made directly from the bundle's columns and its matrix; 500 random trees read a cell at a time; the 17 filters the window saved on the Lung from 0.1.0 to 0.6.0</td><td class="agree">every cell kept, every filter cell for cell</td></tr>
+            <tr><td>Recipes made again without a window</td><td>Each step's record: its job and parameters</td><td><code>situcraft run</code> on the same bundle, on any number of threads and on x86-64 and arm64; <code>situcraft verify</code></td><td class="agree">the same ids and files, bit for bit; verified</td></tr>
+            <tr><td>An agent's session through <code>situcraft mcp</code></td><td>The Model Context Protocol, 2024-11-05 to 2025-11-25</td><td>Every tool called over stdio in a headless window, with no model, in CI</td><td class="agree">every tool answering; the read-only ones changing nothing; every call logged; the guide's numbers</td></tr>
+            <tr><td>The agent benchmark's tasks</td><td>Simulated truth; the Lung bundle's own tables</td><td>A reference solution for each, through the same tools, and an agent answering nothing</td><td class="agree">100% and 0%</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>An agent's and a script's tools are SituCraft's own actions: what they compute is validated above. What is checked here is that they ask and answer as the window does, and that a result made again without it is the same.</p>
+
       <h2 id="cite">Cite SituCraft</h2>
       <p>If you use SituCraft in your research, please cite it (the repository's <a href="{{github}}/blob/main/CITATION.cff">CITATION.cff</a>), with its version, the methods you used as its methods section lists them, and a result's certificate by its fingerprint:</p>
       <div class="code wrap" data-no-copy><pre><code>McDermott R. SituCraft: a local-first workbench for imaging-based spatial transcriptomics. Version {{version}}. https://github.com/robert-mcdermott/situcraft</code></pre></div>

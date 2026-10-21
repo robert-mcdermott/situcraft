@@ -83,7 +83,7 @@ export function mountInspector(app) {
       h('dl.kv',
         h('dt', 'Dataset'), h('dd', dataset?.name ?? '—'),
         h('dt', 'Keeps'), h('dd', `${f.result.kept.toLocaleString('en-US')} of ${f.result.cells.toLocaleString('en-US')} cells`),
-        h('dt', 'Conditions'), h('dd', String(f.conditions.length)),
+        f.tree ? [h('dt', 'Keeps cells'), h('dd', f.text ?? 'by a tree of conditions')] : [h('dt', 'Conditions'), h('dd', String(f.conditions.length))],
         h('dt', 'Saved'), h('dd', relativeTime(f.created))),
       h('p.muted.mono', { style: { margin: '8px 0 0', fontSize: '10.5px', wordBreak: 'break-all' } }, `SHA-256 of the cells kept: ${f.result.sha256}`));
   }

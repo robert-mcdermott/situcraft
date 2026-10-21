@@ -1,0 +1,523 @@
+{
+ "benchmark": {
+  "version": "1",
+  "tasks": [
+   {
+    "id": "tissue-cell-types",
+    "category": "cell types",
+    "title": "Label every cell with its type",
+    "data": "tissue",
+    "seed": 51001
+   },
+   {
+    "id": "tissue-neighbors",
+    "category": "spatial",
+    "title": "Find the two cell types that neighbor each other",
+    "data": "tissue",
+    "seed": 51002
+   },
+   {
+    "id": "cohort-outlier",
+    "category": "cohort QC",
+    "title": "Find the sample with a quality problem",
+    "data": "cohort",
+    "seed": 51003
+   },
+   {
+    "id": "cohort-expression",
+    "category": "differential expression",
+    "title": "Find the gene a treatment changes",
+    "data": "cohort",
+    "seed": 51004
+   },
+   {
+    "id": "cohort-null",
+    "category": "statistics",
+    "title": "Compare groups that do not differ",
+    "data": "cohort",
+    "seed": 51005
+   },
+   {
+    "id": "cohort-paired",
+    "category": "study design",
+    "title": "Find the cell type that changes after treatment",
+    "data": "cohort",
+    "seed": 51006
+   },
+   {
+    "id": "lung-endothelial",
+    "category": "querying cells",
+    "title": "Count and save the endothelial cells of a lung section",
+    "data": "lung",
+    "seed": null
+   },
+   {
+    "id": "lung-qc",
+    "category": "quality control",
+    "title": "Read a run's quality",
+    "data": "lung",
+    "seed": null
+   },
+   {
+    "id": "tissue-report",
+    "category": "reporting",
+    "title": "Make a figure of the cell types and write its methods",
+    "data": "tissue",
+    "seed": 51007
+   },
+   {
+    "id": "tissue-certificate",
+    "category": "the record",
+    "title": "Certify an analysis so others can check it",
+    "data": "tissue",
+    "seed": 51008
+   }
+  ]
+ },
+ "agent": {
+  "id": "none",
+  "program": null,
+  "model": null,
+  "requestedModel": null,
+  "effort": null,
+  "maxTurns": 60
+ },
+ "situcraft": {
+  "version": "0.9.0",
+  "commit": "78897c0",
+  "dirty": false
+ },
+ "date": "2026-10-21T04:44:06.939Z",
+ "repeat": 1,
+ "score": 0,
+ "byTask": {
+  "tissue-cell-types": 0,
+  "tissue-neighbors": 0,
+  "cohort-outlier": 0,
+  "cohort-expression": 0,
+  "cohort-null": 0,
+  "cohort-paired": 0,
+  "lung-endothelial": 0,
+  "lung-qc": 0,
+  "tissue-report": 0,
+  "tissue-certificate": 0
+ },
+ "runs": [
+  {
+   "task": "tissue-cell-types",
+   "category": "cell types",
+   "repeat": 1,
+   "score": 0,
+   "parts": [
+    {
+     "name": "a label set agreeing with the true types (full credit from 90% of the cells)",
+     "weight": 0.6,
+     "score": 0,
+     "detail": "no label set"
+    },
+    {
+     "name": "each type's percentage (within 3 points)",
+     "weight": 0.4,
+     "score": 0,
+     "detail": "epithelial-like — (true 19.9), fibroblast-like — (true 13.2), immune-like — (true 5.9), endothelial-like — (true 61.1)"
+    }
+   ],
+   "answer": null,
+   "answered": false,
+   "replacedWorkspace": false,
+   "toolCalls": 0,
+   "failedToolCalls": 0,
+   "tools": [],
+   "turns": null,
+   "tokens": null,
+   "costUSD": null,
+   "model": null,
+   "timedOut": false,
+   "error": null,
+   "seconds": 8,
+   "reply": "",
+   "attempts": 1
+  },
+  {
+   "task": "tissue-neighbors",
+   "category": "spatial",
+   "repeat": 1,
+   "score": 0,
+   "parts": [
+    {
+     "name": "the pair (immune-like and fibroblast-like)",
+     "weight": 0.7,
+     "score": 0,
+     "detail": "none"
+    },
+    {
+     "name": "a neighborhood enrichment in the project",
+     "weight": 0.3,
+     "score": 0,
+     "detail": "none"
+    }
+   ],
+   "answer": null,
+   "answered": false,
+   "replacedWorkspace": false,
+   "toolCalls": 0,
+   "failedToolCalls": 0,
+   "tools": [],
+   "turns": null,
+   "tokens": null,
+   "costUSD": null,
+   "model": null,
+   "timedOut": false,
+   "error": null,
+   "seconds": 8,
+   "reply": "",
+   "attempts": 1
+  },
+  {
+   "task": "cohort-outlier",
+   "category": "cohort QC",
+   "repeat": 1,
+   "score": 0,
+   "parts": [
+    {
+     "name": "the sample (S03, and no other)",
+     "weight": 0.6,
+     "score": 0,
+     "detail": "none"
+    },
+    {
+     "name": "what is wrong (it detected fewer transcripts)",
+     "weight": 0.2,
+     "score": 0,
+     "detail": "none"
+    },
+    {
+     "name": "the samples summarized in the project, with their quality",
+     "weight": 0.2,
+     "score": 0,
+     "detail": "none"
+    }
+   ],
+   "answer": null,
+   "answered": false,
+   "replacedWorkspace": false,
+   "toolCalls": 0,
+   "failedToolCalls": 0,
+   "tools": [],
+   "turns": null,
+   "tokens": null,
+   "costUSD": null,
+   "model": null,
+   "timedOut": false,
+   "error": null,
+   "seconds": 9,
+   "reply": "",
+   "attempts": 1
+  },
+  {
+   "task": "cohort-expression",
+   "category": "differential expression",
+   "repeat": 1,
+   "score": 0,
+   "parts": [
+    {
+     "name": "the gene (SIM072)",
+     "weight": 0.35,
+     "score": 0,
+     "detail": "none"
+    },
+    {
+     "name": "its cell type (fibroblast-like)",
+     "weight": 0.25,
+     "score": 0,
+     "detail": "—"
+    },
+    {
+     "name": "its direction (up)",
+     "weight": 0.1,
+     "score": 0,
+     "detail": "—"
+    },
+    {
+     "name": "no other change claimed",
+     "weight": 0.1,
+     "score": 0,
+     "detail": "0 claimed"
+    },
+    {
+     "name": "the groups' expression compared in the project",
+     "weight": 0.2,
+     "score": 0,
+     "detail": "none"
+    }
+   ],
+   "answer": null,
+   "answered": false,
+   "replacedWorkspace": false,
+   "toolCalls": 0,
+   "failedToolCalls": 0,
+   "tools": [],
+   "turns": null,
+   "tokens": null,
+   "costUSD": null,
+   "model": null,
+   "timedOut": false,
+   "error": null,
+   "seconds": 9,
+   "reply": "",
+   "attempts": 1
+  },
+  {
+   "task": "cohort-null",
+   "category": "statistics",
+   "repeat": 1,
+   "score": 0,
+   "parts": [
+    {
+     "name": "cell types' abundance compared, and nothing claimed",
+     "weight": 0.5,
+     "score": 0,
+     "detail": "not compared; no answer"
+    },
+    {
+     "name": "genes' expression compared, and nothing claimed",
+     "weight": 0.5,
+     "score": 0,
+     "detail": "not compared; no answer"
+    }
+   ],
+   "answer": null,
+   "answered": false,
+   "replacedWorkspace": false,
+   "toolCalls": 0,
+   "failedToolCalls": 0,
+   "tools": [],
+   "turns": null,
+   "tokens": null,
+   "costUSD": null,
+   "model": null,
+   "timedOut": false,
+   "error": null,
+   "seconds": 10,
+   "reply": "",
+   "attempts": 1
+  },
+  {
+   "task": "cohort-paired",
+   "category": "study design",
+   "repeat": 1,
+   "score": 0,
+   "parts": [
+    {
+     "name": "the cell type (immune-like)",
+     "weight": 0.5,
+     "score": 0,
+     "detail": "none"
+    },
+    {
+     "name": "its direction (down)",
+     "weight": 0.2,
+     "score": 0,
+     "detail": "—"
+    },
+    {
+     "name": "abundance compared with each subject paired with itself",
+     "weight": 0.3,
+     "score": 0,
+     "detail": "no paired comparison"
+    }
+   ],
+   "answer": null,
+   "answered": false,
+   "replacedWorkspace": false,
+   "toolCalls": 0,
+   "failedToolCalls": 0,
+   "tools": [],
+   "turns": null,
+   "tokens": null,
+   "costUSD": null,
+   "model": null,
+   "timedOut": false,
+   "error": null,
+   "seconds": 12,
+   "reply": "",
+   "attempts": 1
+  },
+  {
+   "task": "lung-endothelial",
+   "category": "querying cells",
+   "repeat": 1,
+   "score": 0,
+   "parts": [
+    {
+     "name": "the number of endothelial cells (within 1%)",
+     "weight": 0.3,
+     "score": 0,
+     "detail": "none (true 238)"
+    },
+    {
+     "name": "how many of them hold ACE (within 1)",
+     "weight": 0.2,
+     "score": 0,
+     "detail": "none (true 125)"
+    },
+    {
+     "name": "a filter \"Endothelial cells\" keeping exactly them",
+     "weight": 0.5,
+     "score": 0,
+     "detail": "no filter \"Endothelial cells\""
+    }
+   ],
+   "answer": null,
+   "answered": false,
+   "replacedWorkspace": false,
+   "toolCalls": 0,
+   "failedToolCalls": 0,
+   "tools": [],
+   "turns": null,
+   "tokens": null,
+   "costUSD": null,
+   "model": null,
+   "timedOut": false,
+   "error": null,
+   "seconds": 8,
+   "reply": "",
+   "attempts": 1
+  },
+  {
+   "task": "lung-qc",
+   "category": "quality control",
+   "repeat": 1,
+   "score": 0,
+   "parts": [
+    {
+     "name": "the cells detected",
+     "weight": 0.3,
+     "score": 0,
+     "detail": "none (true 11898)"
+    },
+    {
+     "name": "the median transcripts per cell (within 1)",
+     "weight": 0.3,
+     "score": 0,
+     "detail": "none (true 56)"
+    },
+    {
+     "name": "the percentage of cells with fewer than 30 transcripts (within 0.5 points)",
+     "weight": 0.4,
+     "score": 0,
+     "detail": "none (true 14.11)"
+    }
+   ],
+   "answer": null,
+   "answered": false,
+   "replacedWorkspace": false,
+   "toolCalls": 0,
+   "failedToolCalls": 0,
+   "tools": [],
+   "turns": null,
+   "tokens": null,
+   "costUSD": null,
+   "model": null,
+   "timedOut": false,
+   "error": null,
+   "seconds": 4,
+   "reply": "",
+   "attempts": 1
+  },
+  {
+   "task": "tissue-report",
+   "category": "reporting",
+   "repeat": 1,
+   "score": 0,
+   "parts": [
+    {
+     "name": "the figure written as a PDF",
+     "weight": 0.2,
+     "score": 0,
+     "detail": "no PDF"
+    },
+    {
+     "name": "SituCraft's figure of this project, unchanged",
+     "weight": 0.2,
+     "score": 0,
+     "detail": "—"
+    },
+    {
+     "name": "its cells filled by their labels",
+     "weight": 0.2,
+     "score": 0,
+     "detail": "—"
+    },
+    {
+     "name": "the methods written",
+     "weight": 0.2,
+     "score": 0,
+     "detail": "no file"
+    },
+    {
+     "name": "citing how the cells were labeled (Tirosh et al. 2016)",
+     "weight": 0.2,
+     "score": 0,
+     "detail": "not cited"
+    }
+   ],
+   "answer": null,
+   "answered": false,
+   "replacedWorkspace": false,
+   "toolCalls": 0,
+   "failedToolCalls": 0,
+   "tools": [],
+   "turns": null,
+   "tokens": null,
+   "costUSD": null,
+   "model": null,
+   "timedOut": false,
+   "error": null,
+   "seconds": 8,
+   "reply": "",
+   "attempts": 1
+  },
+  {
+   "task": "tissue-certificate",
+   "category": "the record",
+   "repeat": 1,
+   "score": 0,
+   "parts": [
+    {
+     "name": "the certificate written",
+     "weight": 0.3,
+     "score": 0,
+     "detail": "no file"
+    },
+    {
+     "name": "of a neighborhood enrichment",
+     "weight": 0.3,
+     "score": 0,
+     "detail": "—"
+    },
+    {
+     "name": "verified by situcraft verify",
+     "weight": 0.4,
+     "score": 0,
+     "detail": "—"
+    }
+   ],
+   "answer": null,
+   "answered": false,
+   "replacedWorkspace": false,
+   "toolCalls": 0,
+   "failedToolCalls": 0,
+   "tools": [],
+   "turns": null,
+   "tokens": null,
+   "costUSD": null,
+   "model": null,
+   "timedOut": false,
+   "error": null,
+   "seconds": 8,
+   "reply": "",
+   "attempts": 1
+  }
+ ]
+}

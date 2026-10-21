@@ -21,7 +21,10 @@
 //   own, the same artifact; the jobs all complete;
 // - remote control (wave 2, slice 1): the window driven by a program through the program's
 //   remote-control hub: the state described, the tissue shown as asked, a view saved and reopened
-//   exactly, a filter, the methods, and a file written only with the token;
+//   exactly, a filter, the methods, and a file written only with the token; every call in the
+//   library's log and the drawer's Calls tab, the refusal too (wave 9, slice 4); the Lung
+//   enrichment's recipe made again by situcraft run, with its report (wave 9, slices 5 and 6); the
+//   Lung project 0.9.0 saved, its filter of a tree and its enrichment's recipe made again (slice 9);
 // - nucleus expansion (wave 2, slice 3): the Lung bundle's nuclei grown by 5 µm by a program, in
 //   the Segmentation view, nearly as the instrument's segmentation; recorded in the project; the
 //   same distance again the same artifact, with no job;
@@ -645,6 +648,24 @@ export async function viewerSuite({ check, MissingData, verbose }) {
         const exported = await act('export', { what: 'project', path: target });
         const written = existsSync(target) ? JSON.parse(readFileSync(target, 'utf8')) : null;
         check('viewer', 'remote control: export writes the project only with the token', `${refused.status} without, ${exported.ok ? 'written' : exported.message} with`, refused.status === 401 && exported.ok && written?.views?.length === 4 && written.artifacts.filter((a) => a.kind === 'filter').length === 3 && written.artifacts.filter((a) => a.kind === 'segmentation').length === 1, '401, then the project written');
+        // The log of calls (wave 9, slice 4): the drawer's Calls tab lists this suite's calls as the
+        // library's log holds them, the export refused for want of the token among them, and the
+        // filter saved with the record it added.
+        const logged = await chrome.eval(`(async () => {
+          window.situcraft.toggleDrawer(true, 'calls');
+          let rows = [];
+          for (let k = 0; k < 100; k += 1) {
+            rows = [...document.querySelectorAll('.calls-list .call-row')];
+            if (rows.some((r) => r.querySelector('.call-tool')?.textContent === 'export')) break;
+            await new Promise((r) => setTimeout(r, 100));
+          }
+          const shown = rows.map((r) => r.querySelector('.call-tool').textContent + ' ' + r.querySelector('.badge').textContent);
+          const log = await fetch('/api/calls?by=validation&limit=1000').then((r) => r.json());
+          const saved = log.calls.find((c) => c.tool === 'save_filter');
+          window.situcraft.toggleDrawer(false, 'history');
+          return { shown: shown.slice(0, 4), total: log.total, refused: log.calls.filter((c) => c.outcome === 'refused').map((c) => c.tool), saved: saved?.changed?.[0] ?? null };
+        })()`);
+        check('viewer', 'remote control: every call is in the library\'s log and the Calls tab, the export refused for want of the token among them', `${logged.total} calls; shown first: ${logged.shown.join(', ')}; refused: ${logged.refused.join(', ')}; the filter ${logged.saved ? `${logged.saved.change} ${logged.saved.id}` : 'not recorded'}`, logged.shown[0] === 'export done' && logged.shown[1] === 'export refused' && logged.refused.join() === 'export' && logged.saved?.change === 'added' && logged.saved.id === filter.data?.id && logged.total >= 10, 'the newest first, the refusal logged, the filter added');
         // Clusters (wave 4, slice 1): the instrument's segmentation clustered by a program, and its
         // clusters drawn on the tissue: each cell in its cluster's color, cells not analyzed clear.
         const clustered = await act('cluster_cells', { dataset: 'xenium-lung-2fov' });
@@ -2581,6 +2602,27 @@ export async function viewerSuite({ check, MissingData, verbose }) {
               copyFileSync(certPath, join(keep, 'lung-enrichment.zip'));
               if (existsSync(figurePath)) copyFileSync(figurePath, join(keep, 'lung-figure.zip'));
             }
+
+            // situcraft run (wave 9, slices 5 and 6): the enrichment's recipe, written by the program
+            // from the window's results: each step whose cells the window chose (the graph's, every
+            // cell; the enrichment's labels) chosen again by the program as the window chose them, so
+            // made again on any bundle; made again on the Lung without a window, every result the
+            // same, its report and methods written in a headless page, and its certificate verified.
+            const recipeText = await fetch(`${url}/api/artifacts/${encodeURIComponent(cert.subject.id)}/recipe`).then((r) => r.text());
+            const recipe = JSON.parse(recipeText);
+            const carried = recipe.steps.filter((x) => x.carries);
+            const recipePath = join(work, 'lung-enrichment.recipe.json');
+            writeFileSync(recipePath, recipeText);
+            const runOut = join(work, 'run');
+            const ran = spawnSync(bin, ['run', '--recipe', recipePath, '--bundle', join(dataRoot, 'xenium-lung-2fov'), '--out', runOut, '--report', ...(chromePath ? ['--chrome', chromePath] : [])], { encoding: 'utf8', timeout: 30 * 60e3 });
+            const runRecord = existsSync(join(runOut, 'run.json')) ? JSON.parse(readFileSync(join(runOut, 'run.json'), 'utf8')) : null;
+            const sameIds = runRecord?.steps?.every((x) => x.sameAsRecipe) ?? false;
+            const runVerified = existsSync(join(runOut, 'certificate.zip')) ? verifyRun(join(runOut, 'certificate.zip'), dataRoot, 'run-verified') : { status: null };
+            const reported = existsSync(join(runOut, 'report.html')) && existsSync(join(runOut, 'methods.md'));
+            check('viewer', 'situcraft run: the Lung enrichment\'s recipe, the window\'s choices chosen again by the program as the window chose them; made again without a window, every result the same, its report and methods written in a headless page, its certificate verified',
+              `${recipe.steps.length} steps, ${carried.length} carrying the window's cells (${carried.map((x) => `${x.job} ${x.portable ? 'chosen again' : 'its own bundle\'s'}`).join(', ')}); run: exit ${ran.status}, ${runRecord?.steps?.length ?? 0} steps${sameIds ? ', the same ids' : ''}${reported ? ', report and methods' : ''}; verify: exit ${runVerified.status}${ran.status !== 0 ? `; ${(ran.stdout + ran.stderr).slice(-600)}` : ''}`,
+              recipe.steps.length >= 5 && carried.length >= 2 && carried.every((x) => x.portable) && ran.status === 0 && sameIds && reported && runVerified.status === 0,
+              'every carried step chosen again; exit 0, the same ids, report and methods; verified');
           }
 
           // The report (wave 8, slice 7): the Lung's results figure and its enrichment in one HTML
@@ -2855,6 +2897,65 @@ export async function viewerSuite({ check, MissingData, verbose }) {
               check('viewer', '0.8.0 Lung project and its figure\'s certificate: the certificate verified from the bundle (its steps made again, the figure drawn again); the project reopened, its bundle found, its figure drawn the same as the certificate records', `verify: exit ${verified.status}, ${report?.verdict}, ${report?.steps?.length} steps (${(report?.steps ?? []).filter((x) => x.verdict === 'verified').length} verified)${verified.status !== 0 ? ` ${`${verified.stdout ?? ''}${verified.stderr ?? ''}`.slice(-400)}` : ''}; certified by ${certified.software.version}; reopened ${JSON.stringify(reopened)}; drawn ${drawn.ok ? (drawn.data.drawing === figureStep?.drawing?.drawing ? 'the same' : 'otherwise') : drawn.message}`,
                 verified.status === 0 && report?.verdict === 'verified' && certified.software.version === '0.8.0' && reopened.state === 'ok' && reopened.figures.includes('The Lung\'s results') && drawn.ok && drawn.data.drawing === figureStep?.drawing?.drawing,
                 'verified; reopened; the figure drawn the same');
+            }
+          }
+
+          // The Lung as 0.9.0 saves a filter of a tree of conditions and the recipe of an analysis of
+          // its cells (validation/projects/0.9.0-lung.situcraft.json and 0.9.0-lung.recipe.json):
+          // written when asked (SITUCRAFT_WRITE_FIXTURE=0.9.0), a project of its own: the cells with
+          // 20 transcripts or more and no EPCAM kept by a filter saved from its tree, clustered,
+          // labeled from the lung markers, a graph of them and its neighborhood enrichment; the
+          // project saved, its bundle's place made neutral, and the enrichment's recipe. Then, as
+          // every later version must: the project reopened, its bundle found, its filter keeping the
+          // very cells it recorded (their SHA-256), by the program's evaluation of its tree; the
+          // recipe made again by situcraft run on the bundle, every step with the recipe's id, and
+          // its certificate verified.
+          {
+            const projectFixture = join(root, 'validation', 'projects', '0.9.0-lung.situcraft.json');
+            const recipeFixture = join(root, 'validation', 'projects', '0.9.0-lung.recipe.json');
+            const lungDir = join(dataRoot, 'xenium-lung-2fov');
+            const projectName = 'The Lung, as SituCraft 0.9.0 saved it';
+            const filterName = 'Not epithelial';
+            if (process.env.SITUCRAFT_WRITE_FIXTURE === '0.9.0') {
+              await act('new_project', { name: projectName });
+              await act('open_paths', { paths: [lungDir], add: true });
+              await act('save_filter', { name: filterName, where: { all: [{ attribute: 'transcripts', min: 20 }, { not: { gene: 'EPCAM' } }] } });
+              await act('cluster_cells', { filter: filterName });
+              const labels = await act('label_cells', { markers: 'lung' });
+              const graph = await act('build_graph', { filter: filterName });
+              const enrichment = await act('spatial_analysis', { question: 'enrichment', labels: labels.data?.id, graph: graph.data?.id });
+              const doc = await chrome.eval(`(async () => (await import('/lib/project.js')).serializeProject(window.situcraft.store.project))()`);
+              const neutral = JSON.parse(doc.split(lungDir).join('/data/xenium-lung-2fov').split(dataRoot).join('/data').split(work).join('/data/work'));
+              writeFileSync(projectFixture, `${JSON.stringify({ ...neutral, id: 'p-situcraft-0-9-0-lung' }, null, 1)}\n`);
+              const recipe = await act('recipe', { id: enrichment.data?.id });
+              writeFileSync(recipeFixture, `${JSON.stringify(recipe.data, null, 1)}\n`);
+            }
+            if (existsSync(projectFixture) && existsSync(recipeFixture)) {
+              const text = readFileSync(projectFixture, 'utf8');
+              const saved = JSON.parse(text).artifacts.filter((a) => a.kind === 'filter' && a.name === filterName).at(-1);
+              const reopened = await chrome.eval(`(async () => {
+                const app = window.situcraft;
+                const doc = ${JSON.stringify(text)};
+                const saved = JSON.parse(doc);
+                await app.library.saveProject(saved.id, doc);
+                await app.openProject(saved.id);
+                const d = app.store.project.datasets[0];
+                const link = await app.bundles.locate(d.id, ${JSON.stringify(lungDir)});
+                return { state: link?.state ?? null };
+              })()`);
+              // The filter's tree evaluated again by the program, in the project reopened.
+              const computed = await act('verify_records', { steps: [{ id: saved?.id, kind: 'filter' }] });
+              const again = (computed.data?.steps ?? computed.data ?? [])[0];
+              const recipe = JSON.parse(readFileSync(recipeFixture, 'utf8'));
+              const runOut = join(work, 'fixture-0.9.0-run');
+              const ran = spawnSync(bin, ['run', '--recipe', recipeFixture, '--bundle', lungDir, '--out', runOut], { encoding: 'utf8', timeout: 30 * 60e3 });
+              const runRecord = existsSync(join(runOut, 'run.json')) ? JSON.parse(readFileSync(join(runOut, 'run.json'), 'utf8')) : null;
+              const runReport = join(work, 'fixture-0.9.0-verified.json');
+              const runVerified = existsSync(join(runOut, 'certificate.zip')) ? spawnSync(bin, ['verify', '--data', dataRoot, '--report', runReport, '--overwrite', ...(findChrome() ? ['--chrome', findChrome()] : []), join(runOut, 'certificate.zip')], { encoding: 'utf8', timeout: 30 * 60e3 }) : { status: null };
+              const sameIds = runRecord?.steps?.every((x) => x.sameAsRecipe) && runRecord.result?.id === recipe.steps.at(-1).made;
+              check('viewer', '0.9.0 Lung project and its enrichment\'s recipe: the project reopened, its bundle found, its filter of a tree keeping the very cells it recorded; the recipe made again by situcraft run, every step the recipe\'s, and verified', `reopened ${JSON.stringify(reopened)}; filter ${saved?.result?.kept} cells: ${computed.ok ? `${again?.checked ? 'computed again' : 'not computed'}, ${again?.same ? 'the same' : `otherwise (${again?.detail})`}` : computed.message}; run: exit ${ran.status}, ${runRecord?.steps?.length ?? 0} steps${sameIds ? ', the same ids' : ''}${ran.status !== 0 ? ` ${`${ran.stdout ?? ''}${ran.stderr ?? ''}`.slice(-400)}` : ''}; verify: exit ${runVerified.status}`,
+                reopened.state === 'ok' && saved?.tree && computed.ok && again?.checked && again.same && recipe.software?.version === '0.9.0' && recipe.steps.some((x) => x.carries && x.portable) && ran.status === 0 && sameIds && runVerified.status === 0,
+                'reopened; the same cells; exit 0, the same ids; verified');
             }
           }
         }

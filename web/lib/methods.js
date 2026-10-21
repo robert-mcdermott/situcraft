@@ -100,9 +100,9 @@ export function segmentationSentence(r, citeMethod = '') {
   return `Cells were segmented again ${how}, giving ${count(r.summary?.cells ?? 0)} cells${assigned}.`;
 }
 
-// A filter in a sentence, its conditions as given (each with its text).
+// A filter in a sentence, its conditions as given (each with its text), or its tree's words.
 export function filterSentence(f) {
-  const conditions = (f.conditions ?? []).map((c) => c.text ?? '').filter(Boolean);
+  const conditions = f.tree ? [`cells ${f.text ?? 'kept by a tree of conditions'}`] : (f.conditions ?? []).map((c) => c.text ?? '').filter(Boolean);
   const share = f.result.cells ? ` (${((100 * f.result.kept) / f.result.cells).toFixed(1)}%)` : '';
   return `Cells were filtered with "${f.name}" (version ${f.version}${conditions.length ? `: ${joinList(conditions)}` : ''}), which kept ${count(f.result.kept)} of ${count(f.result.cells)} cells${share}; SituCraft records which cells under the SHA-256 checksum ${f.result.sha256.slice(0, 16)}….`;
 }

@@ -37,7 +37,7 @@ import (
 //go:embed web/index.html web/styles.css web/app.js web/favicon.svg web/lib/*.js web/ui/*.js web/render/*.js
 var content embed.FS
 
-var version = "0.8.0"
+var version = "0.9.0"
 
 // commit is the source revision the program was built from. Release builds set it with
 // -ldflags "-X main.commit=..."; otherwise it comes from the version-control stamp Go records
@@ -62,6 +62,9 @@ type config struct {
 	cacheLimit  int64
 	examplesDir string
 	remote      bool
+	// mcp: an agent drives SituCraft over stdin and stdout (situcraft mcp): no script routes and no
+	// remote.json; the banner says so.
+	mcp         bool
 	dev         bool
 	showVersion bool
 	files       []string
@@ -95,6 +98,8 @@ type app struct {
 	examples *examples.Library
 	// control is the remote-control hub (remote.go), with --remote-control.
 	control *remoteHub
+	// calls is the library's log of programs' calls (calls.go).
+	calls *callLog
 	// verifications are the folders of the certificates verified here, by job (api_verify.go).
 	verifyMu      sync.Mutex
 	verifications map[string]string
@@ -123,6 +128,12 @@ func main() {
 	}
 	if len(os.Args) > 1 && os.Args[1] == "verify" {
 		os.Exit(runVerify(os.Args[2:], os.Stdout, os.Stderr))
+	}
+	if len(os.Args) > 1 && os.Args[1] == "run" {
+		os.Exit(runRun(os.Args[2:], os.Stdout, os.Stderr))
+	}
+	if len(os.Args) > 1 && os.Args[1] == "mcp" {
+		os.Exit(runMCP(os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
 	}
 	cfg, err := parseConfig(os.Args[1:])
 	if errors.Is(err, flag.ErrHelp) {
@@ -283,7 +294,7 @@ func start(cfg config, out io.Writer) (*runningServer, error) {
 	}
 	url := "http://" + net.JoinHostPort(cfg.host, strconv.Itoa(actualPort))
 	connection := ""
-	if a.control != nil {
+	if a.control != nil && a.control.scripts {
 		if connection, err = writeConnectionFile(a.store.dir, url, a.control.token); err != nil {
 			log.Printf("could not write the connection file for scripts: %v", err)
 			connection = ""
@@ -415,6 +426,8 @@ func newApp(cfg config) (*app, error) {
 	if cfg.remote {
 		a.control = newRemoteHub()
 		a.control.session = a.session
+		a.control.scripts = !cfg.mcp
+		a.control.program = a.programAction
 		a.control.open = func(paths []string) ([]localFile, []string) {
 			problems := a.files.add(paths)
 			return a.files.within(paths), problems
@@ -458,6 +471,11 @@ func newApp(cfg config) (*app, error) {
 		return nil, fmt.Errorf("the project library (%s): %w", cfg.dataDir, err)
 	}
 	a.store = s
+	a.calls = newCallLog(s.dir, a.session)
+	if a.control != nil {
+		a.control.log = a.calls
+		a.calls.logged = a.control.logged
+	}
 	if !cfg.dev {
 		return a, nil
 	}
@@ -490,9 +508,13 @@ func (a *app) printBanner(out io.Writer, url, connection string) {
 	if n := len(a.files.list()); n > 0 {
 		fmt.Fprintf(out, "Opening %d item(s) named on the command line\n", n)
 	}
+	if a.control != nil && !a.control.scripts {
+		fmt.Fprintln(out, "MCP: answering on stdin and stdout; the SituCraft window opens when a tool needs it, and SituCraft stops when the agent closes stdin.")
+		return
+	}
 	if a.control != nil {
 		fmt.Fprintf(out, "Remote control: POST {\"action\": ..., \"args\": {...}} to %s/api/remote/action (the actions: %s/api/remote/tools)\n", url, url)
-		fmt.Fprintf(out, "Opening paths and writing files (open_paths, export) need the header %s: %s\n", remoteTokenHeader, a.control.token)
+		fmt.Fprintf(out, "Reading and writing files by path (open_paths, export…) need the header %s: %s\n", remoteTokenHeader, a.control.token)
 		if connection != "" {
 			fmt.Fprintln(out, connectionNotice(connection))
 		}
@@ -549,6 +571,9 @@ func (a *app) registerAPI(mux *http.ServeMux) {
 	a.registerCache(mux)
 	a.registerJobs(mux)
 	a.registerView(mux)
+	a.registerQueries(mux)
+	a.registerCalls(mux)
+	a.registerRecipes(mux)
 	a.registerProject(mux)
 	a.registerExamples(mux)
 	a.registerSegmentations(mux)

@@ -1,0 +1,3668 @@
+[
+  {
+    "name": "get_state",
+    "title": "Describe the project",
+    "description": "The open project: its datasets (each bundle's place, whether it is found, its check, its derived data), filters and saved views; the view shown, the item in focus, the cells chosen, what the Viewer or QC view shows (dataset, place, zoom, genes, map); the items on this computer; the examples; the jobs running.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Describe the project"
+    }
+  },
+  {
+    "name": "list_projects",
+    "title": "List the projects",
+    "description": "The library's projects, the most recently changed first: each one's id, name, when it was made and changed, its datasets, and how many results, figures and saved views it has. Answered by the program from the library, with or without a window.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "List the projects"
+    }
+  },
+  {
+    "name": "describe_project",
+    "title": "Describe a project",
+    "description": "What a project of the library holds, without opening it: its datasets (each bundle's place, run, panel, tissue, cells and transcripts), its results (each one's id, kind, name, dataset, method and the ids of what it was made from: segmentations, comparisons, clusterings and maps, label sets, graphs, spatial analyses, cohort summaries and comparisons, images and alignments), the page's records (filters, designs, marker sets, curated and consensus labels), its regions, saved views, figures and decisions. get_result gives a result's record and numbers by its id. Answered by the program from the library, with or without a window.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "project": {
+          "description": "The project's name (or part of it) or id; the most recently changed if not given.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Describe a project"
+    }
+  },
+  {
+    "name": "get_result",
+    "title": "Read a result",
+    "description": "A result by its id (describe_project lists them): its record (kind, name, dataset, state, method with its version and citation, parameters, what it was made from, the software and the job, the checks' findings, the projects holding it), its summary, and its numbers as tables, a page of one table's rows at a time: a spatial analysis's by its question (an enrichment's or nearest distances' pairs, a co-occurrence's ratios by distance, Ripley's tests and curves, regions compared and their ratios, the bands, zones and ratios across an edge, the niches and their composition, Moran's I by gene), a clustering's clusters with their leading markers, a label set's labels, a cohort comparison's tests and a cohort summary's table (as their CSV files hold them), and every result's summary as the report shows it. Numbers are numbers, null where there is none. Answered by the program from the artifacts, with or without a window.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "description": "The result's id, such as spa-…, clu-…, lab-…, seg-…, coh-…, abu-…",
+          "type": "string"
+        },
+        "limit": {
+          "description": "Rows to answer (100; 0 for all, up to 10,000).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "offset": {
+          "description": "The first row (0).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "table": {
+          "description": "The table to read (its first if not given; the answer lists them).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Read a result"
+    }
+  },
+  {
+    "name": "query_cells",
+    "title": "Ask which cells",
+    "description": "The cells of a dataset that a tree of conditions keeps (where), counted, with the SHA-256 of which they are (as a saved filter records it), a page of them (each one's row, id and centroid, and the columns asked for), and, with by, how they divide among a label set's labels, a clustering's clusters or a niches analysis's niches against all the cells. A tree is {all: [trees]}, {any: [trees]}, {not: tree} or one condition: {attribute: transcripts, genes, total, controls, area, nucleusArea, nucleusShare, density or nuclearShare, min, max} (bounds included; a cell without a value fails); {attribute: method, in: [names or numbers from 0]} (the instrument's segmentation's alone); {gene: name, min, max} (its transcripts in the cell; at least 1 when no bound); {labels: label set id, level, in: [names or numbers from 0]}; {clusters: clustering id, in: [names or numbers from 1]}; {niches: niches analysis id, in: [numbers from 1]}; {region: name or id} (its centroid inside); {distance: region, min, max} (µm from the region's edge, negative inside); {box: [x0, y0, x1, y1]} (µm); {filter: a saved filter's name or id} (the instrument's segmentation's alone). Answered by the program from the library, with or without a window; save_filter with the same tree saves them as a filter.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "by": {
+          "description": "A label set's, clustering's or niches analysis's id: the cells kept divided among its labels, clusters or niches.",
+          "type": "string"
+        },
+        "columns": {
+          "description": "Attributes or genes to give for each cell of the page.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "dataset": {
+          "description": "A dataset of the project by name or id; its only one if not given.",
+          "type": "string"
+        },
+        "level": {
+          "description": "The label set's level for by (0).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "limit": {
+          "description": "Cells of the page (20; 0 for the most, 10,000).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "offset": {
+          "description": "The first cell kept of the page (0).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "project": {
+          "description": "The project's name (or part of it) or id; the most recently changed if not given.",
+          "type": "string"
+        },
+        "segmentation": {
+          "description": "The segmentation whose cells are asked about, by id or name, or instrument: the dataset's default (the one promoted, else the instrument's) if not given.",
+          "type": "string"
+        },
+        "where": {
+          "description": "The tree of conditions.",
+          "type": "object"
+        }
+      },
+      "required": [
+        "where"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Ask which cells"
+    }
+  },
+  {
+    "name": "query_transcripts",
+    "title": "Ask which transcripts",
+    "description": "The transcripts of a dataset that a tree of conditions keeps (where), of quality min_quality or more (20), counted by gene. A transcript condition is one of: {gene: name or [names]}; {region: name or id}; {distance: region, min, max} (µm from its edge, negative inside); {box: [x0, y0, x1, y1]} (µm); {assigned: true or false} (to a cell of the instrument's segmentation); {cells: a tree of cells} (assigned to a cell it keeps; the same conditions as query_cells). Combine them with {all: [...]}, {any: [...]} and {not: ...}. Bound the tree with a region, a distance's max or a box on a large dataset. Answered by the program from the library, with or without a window.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "dataset": {
+          "description": "A dataset of the project by name or id; its only one if not given.",
+          "type": "string"
+        },
+        "limit": {
+          "description": "Genes to list (20; 0 for all).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "min_quality": {
+          "description": "The least quality (Q) a transcript has (20).",
+          "minimum": 0,
+          "type": "number"
+        },
+        "project": {
+          "description": "The project's name (or part of it) or id; the most recently changed if not given.",
+          "type": "string"
+        },
+        "where": {
+          "description": "The tree of conditions.",
+          "type": "object"
+        }
+      },
+      "required": [
+        "where"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Ask which transcripts"
+    }
+  },
+  {
+    "name": "summarize_region",
+    "title": "Summarize a region",
+    "description": "What a region of a dataset (or a box) holds: its area, its cells (by centroid) and their density, how they divide among a label set's labels against the whole tissue (by default the latest label set of the segmentation), and its genes: the most transcripts, and those most above the rest of the tissue (mean transcripts per cell inside against outside, among genes with ten or more inside). Answered by the program from the library, with or without a window.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "box": {
+          "description": "[x0, y0, x1, y1] in µm, in place of a region.",
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 4,
+          "minItems": 4,
+          "type": "array"
+        },
+        "dataset": {
+          "description": "A dataset of the project by name or id; its only one if not given.",
+          "type": "string"
+        },
+        "genes": {
+          "description": "Genes in each list (10; up to 200).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "labels": {
+          "description": "A label set's id: its labels' cells inside, against all its cells.",
+          "type": "string"
+        },
+        "level": {
+          "description": "The label set's level (0).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "project": {
+          "description": "The project's name (or part of it) or id; the most recently changed if not given.",
+          "type": "string"
+        },
+        "region": {
+          "description": "The region by name or id (regions lists them); or give box.",
+          "type": "string"
+        },
+        "segmentation": {
+          "description": "The segmentation, by id or name, or instrument: the dataset's default if not given.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Summarize a region"
+    }
+  },
+  {
+    "name": "recipe",
+    "title": "Write a result's recipe",
+    "description": "A result's recipe: every step from its bundles to it, each the job that made it and its spec as readable JSON, with the bundles named by their roles, other files read by their names and each step's inputs by the steps that make them (no path or id of this computer). situcraft run --recipe makes it again on a bundle without a window, with its artifacts, run.json and a certificate. A step carrying cells the window chose (a filter's, labels', regions') is made again only on the bundle the recipe was made from. Answered by the program from the library, with or without a window.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "description": "The result's id (describe_project lists them).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Write a result's recipe"
+    }
+  },
+  {
+    "name": "new_project",
+    "title": "Start a new project",
+    "description": "Starts a new, empty project (the open one is saved in the library first).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "description": "A name for it.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Start a new project"
+    }
+  },
+  {
+    "name": "open_project",
+    "title": "Open a saved project",
+    "description": "Opens a project from the library by its name or id; each dataset's bundle is looked for where the project recorded it.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "project": {
+          "description": "The project's name (or part of it) or id.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Open a saved project"
+    }
+  },
+  {
+    "name": "open_paths",
+    "title": "Open bundles by path",
+    "description": "Opens what is on this computer, as Open a bundle does: Xenium output bundles (their folder, .zip or experiment.xenium), project archives (.scz), or folders of them. A bundle is checked and shown in the Data view (add: true adds it to the project, which builds its derived data); an archive's project opens. Needs the token.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "add": {
+          "description": "Add each bundle with no fatal problem to the project, and wait for its derived data.",
+          "type": "boolean"
+        },
+        "paths": {
+          "description": "Absolute paths.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "paths"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Open bundles by path"
+    }
+  },
+  {
+    "name": "add_dataset",
+    "title": "Add a bundle to the project",
+    "description": "Adds a bundle already on this computer (open_paths, the command line or Open a bundle opened it) to the project: it is checked, recorded, and its derived data built (waited for unless wait is false). Refused when the check finds a fatal problem.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "bundle": {
+          "description": "The bundle by its name or path.",
+          "type": "string"
+        },
+        "wait": {
+          "description": "Wait for its derived data to be built (true if not given).",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "bundle"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Add a bundle to the project"
+    }
+  },
+  {
+    "name": "open_example",
+    "title": "Open an example dataset",
+    "description": "Opens an example dataset (xenium-lung-2fov, xenium-breast-2fov: 10x Genomics' Xenium 2-FOV bundles, CC BY 4.0; simulated-standard: a tissue SituCraft simulates on this computer, with an H\u0026E and an immunofluorescence image of the section, its truth beside it; simulated-cohort: eight simulated sections of subjects in two groups, with known effects between the groups; simulated-null-cohort: eight sections in two groups with no difference between them; simulated-paired-cohort: six subjects' sections before and after, with known effects) in the project, or in a new project when this one has other datasets, and builds its derived data; a cohort's samples are added together, each with its subject and condition. A 10x Genomics example not on this computer is downloaded only with download: true (280 to 380 MB, checked by checksums); the simulated one is made in seconds, and one made by an earlier SituCraft (without its images) is made again with remake: true (the same run, cells and transcripts).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "download": {
+          "description": "Download it first if it is not on this computer.",
+          "type": "boolean"
+        },
+        "example": {
+          "description": "xenium-lung-2fov, xenium-breast-2fov, simulated-standard, simulated-cohort, simulated-null-cohort or simulated-paired-cohort (or lung, breast, simulated, cohort, null-cohort, paired-cohort).",
+          "type": "string"
+        },
+        "remake": {
+          "description": "Make the simulated example again if an earlier SituCraft made it.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "example"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+      "title": "Open an example dataset"
+    }
+  },
+  {
+    "name": "tour",
+    "title": "Take an example's tour",
+    "description": "Starts the guided tour of an example (opening it as open_example does), or one of its worked examples (name: compare-expansion, refine-compare, labels-two-segmentations, neighbors-breast, tumor-edge or pseudo-samples on the Breast example; planted-errors, cluster-label, moran-genes or remake-enrichment on the Lung example; score-against-truth, labels-against-truth, align-he, regions-qupath, pathologist-review or niches-domains on the simulated one; cohort-gene on the simulated cohort, cohort-null on the null cohort, cohort-shift or cohort-paired on the paired cohort: a question answered step by step, some steps running a job first), or goes to one of its steps; run: true does the step's job (expanding, planting, refining, importing the truth, comparing, clustering, labeling, adding and aligning the H\u0026E, checking its alignments, drawing regions, reviewing, analyzing, setting the samples, describing the design, summarizing, comparing the groups) and goes on to the next; end: true closes it. Returns the step's title and text, and the comparison a step shows.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "end": {
+          "description": "Close the tour.",
+          "type": "boolean"
+        },
+        "example": {
+          "description": "xenium-lung-2fov, xenium-breast-2fov, simulated-standard, simulated-cohort, simulated-null-cohort or simulated-paired-cohort; the tour running if not given.",
+          "type": "string"
+        },
+        "name": {
+          "description": "tour (the default; the 10x Genomics examples), or a worked example: compare-expansion, refine-compare, labels-two-segmentations, neighbors-breast, tumor-edge, pseudo-samples, planted-errors, cluster-label, moran-genes, remake-enrichment, score-against-truth, labels-against-truth, align-he, regions-qupath, pathologist-review, niches-domains, cohort-gene, cohort-null, cohort-shift, cohort-paired.",
+          "type": "string"
+        },
+        "run": {
+          "description": "Do the step's job, then go on to the next step.",
+          "type": "boolean"
+        },
+        "step": {
+          "description": "The step to show, from 1 (1 if not given).",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Take an example's tour"
+    }
+  },
+  {
+    "name": "set_mode",
+    "title": "Show a view",
+    "description": "Shows a view: start, data, viewer, qc, segmentation, compare, celltypes, spatial, cohort, reports or jobs.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "description": "start, data, viewer, qc, segmentation, celltypes, spatial, cohort, reports or jobs.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mode"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Show a view"
+    }
+  },
+  {
+    "name": "focus",
+    "title": "Focus an item",
+    "description": "Shows an item in the inspector, and in the view that shows it: a dataset, filter, saved view or item on this computer, by name. With no name, clears the focus.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "description": "dataset, filter, view or local; found by name among all of them if not given.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Its name.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Focus an item"
+    }
+  },
+  {
+    "name": "show_tissue",
+    "title": "Show the tissue",
+    "description": "Shows a dataset in the Viewer as asked, everything else as the Viewer shows it now: where (a center in µm and µm per screen pixel, or a width in µm; the whole section with whole: true), the stains (by name: visible, color, brightness window, gamma), the transcripts of genes by name (up to 16) or all of them, their minimum quality and point size, which of the dataset's segmentations is drawn, the cell and nucleus outlines, a cell fill and its opacity, a graph of the cells, a spatial analysis's cells, the transcripts colored by gene or by their assignment's probability, and a cell to select. Returns what it shows, as a saved view records it, and what the dataset lacks.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "all_transcripts": {
+          "description": "Show every transcript, in one color.",
+          "type": "boolean"
+        },
+        "cell": {
+          "description": "A cell to select, by its ID in the segmentation drawn (as cells.parquet names the instrument's).",
+          "type": "string"
+        },
+        "cells_of": {
+          "description": "A spatial analysis's cells: {analysis (its ID, or latest), a, b (labels by name), distance (a co-occurrence's, a nearest distance's or a Ripley radius, µm)}: an enrichment's pair, their cells neighboring each other and the edges between them; or label b's cells within the distance of a's. Regions compared: {analysis, a, region (a region's name, or the row of the tissue in none)}: label a's cells in it. Across an edge: {analysis, a (any label if not given), zone (core, margin, around or all)}: label a's cells there. Niches: {analysis, niche (its number from 1)}: the niche's cells, filled by niche. Moran's I: {analysis, gene (one whose local Moran's I was kept), class (high, low, high-low, low-high or all)}: the gene's cells of that local class. The cells filled by the analysis's labels.",
+          "type": "object"
+        },
+        "center": {
+          "description": "The center, [x, y] in µm.",
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        },
+        "channels": {
+          "description": "By stain name (DAPI, ATP1A1/CD45/E-Cadherin, 18S, alphaSMA/Vimentin…): {visible, color (#rrggbb), window: [low, high], gamma}, each optional.",
+          "type": "object"
+        },
+        "color_by": {
+          "description": "Color the transcripts by gene (as listed) or probability (their assignment's, a refinement's; seen close up).",
+          "type": "string"
+        },
+        "dataset": {
+          "description": "A dataset of the project by name or id; the one in focus, else the first, if not given.",
+          "type": "string"
+        },
+        "fill": {
+          "description": "Fill the cells by transcripts, total, area, nucleusArea or method (the instrument's); limitations, certainty or probability (a refinement's); clusters (the latest clustering of the segmentation drawn) or clusters:\u003cartifact id\u003e; labels (the latest label set, its first level), labels:\u003clevel\u003e or labels:\u003cartifact id\u003e:\u003clevel\u003e; review (each cell by its review: excluded, a segmentation concern, ambiguous, relabeled, accepted or commented); none for no fill.",
+          "type": "string"
+        },
+        "genes": {
+          "description": "Genes whose transcripts are shown, by name (each in its color); [] for none.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "graph": {
+          "description": "A graph of the segmentation drawn, its edges drawn over the cells when zoomed in: by artifact ID, latest for the last built, none for none.",
+          "type": "string"
+        },
+        "images": {
+          "description": "Post-Xenium images, by name or artifact ID: {visible, opacity (0 to 1), channels: {by name: {visible, color, window, gamma}} (immunofluorescence)}, each optional.",
+          "type": "object"
+        },
+        "min_quality": {
+          "description": "The lowest quality (qv) shown: 20 (the default) or 0 for all.",
+          "type": "number"
+        },
+        "nuclei": {
+          "description": "Draw the nucleus outlines.",
+          "type": "boolean"
+        },
+        "opacity": {
+          "description": "The fill's opacity, 0 to 1.",
+          "type": "number"
+        },
+        "outlines": {
+          "description": "Draw the cell outlines.",
+          "type": "boolean"
+        },
+        "picture": {
+          "description": "Answer a picture of what the Viewer shows too, drawn as a figure's tissue panel draws it, with its scale bar and legend (a JPEG): an agent gets it as an image.",
+          "type": "boolean"
+        },
+        "picture_width": {
+          "description": "The picture's width in pixels (1,000; 300 to 2,000).",
+          "type": "number"
+        },
+        "point_size": {
+          "description": "The transcripts' point size, 1 to 8 pixels.",
+          "type": "number"
+        },
+        "segmentation": {
+          "description": "The segmentation drawn: by its name or artifact ID, instrument for the instrument's, default for the dataset's default.",
+          "type": "string"
+        },
+        "transcripts": {
+          "description": "Show transcripts at all (false hides them).",
+          "type": "boolean"
+        },
+        "um_per_pixel": {
+          "description": "The zoom: µm per screen (CSS) pixel.",
+          "type": "number"
+        },
+        "whole": {
+          "description": "Show the whole section.",
+          "type": "boolean"
+        },
+        "width_um": {
+          "description": "The zoom as the width of tissue shown, in µm.",
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Show the tissue"
+    }
+  },
+  {
+    "name": "add_image",
+    "title": "Add a post-Xenium image",
+    "description": "Adds an H\u0026E or immunofluorescence image of a dataset's section, stained and scanned after the Xenium run, as a job: a pyramidal, tiled OME-TIFF (as Xenium Explorer requires; RGB, or channels of 8 or 16 bits; deflate, LZW, JPEG or JPEG 2000), read where it lies, never copied, and recorded as an image artifact with its SHA-256. Its alignment, the transformation matrix or keypoints Xenium Explorer saves (found beside the image when 10x named it, else named; null for none), is recorded as the image's first transform and places it; without one the image is not aligned until align_image places it. The Viewer draws an aligned image under the transcripts and cells. Needs the token (it reads files). Answers what the image is and how it is placed.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "alignment": {
+          "description": "Its alignment: \u003cname\u003e_imagealignment.csv (the transformation matrix) or \u003cname\u003e_keypoints.csv (found beside the image if not given; null to add it unaligned).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dataset": {
+          "description": "A dataset of the project by name or id; the one in focus, else the first, if not given.",
+          "type": "string"
+        },
+        "name": {
+          "description": "What to call it (from its file's name if not given).",
+          "type": "string"
+        },
+        "path": {
+          "description": "The image: an OME-TIFF on this computer.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Add a post-Xenium image"
+    }
+  },
+  {
+    "name": "align_image",
+    "title": "Align an image by landmarks",
+    "description": "Fits a post-Xenium image's alignment to landmarks, each a point placed on both images, and records it as a version of the image's alignment (a transform artifact: its landmarks, the fit, each landmark's residual and leave-one-out error in µm, who made it, a note and the version it was made from). A similarity (move, turn, one scale and a mirror when that fits better; Umeyama 1991) or an affine transform (also stretched and sheared), by least squares, from three landmarks or more. With use (the default), the version places the image. Answers the fit.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "by": {
+          "description": "Who placed the landmarks (the client's name if not given).",
+          "type": "string"
+        },
+        "dataset": {
+          "description": "A dataset of the project by name or id; the one in focus, else the first, if not given.",
+          "type": "string"
+        },
+        "image": {
+          "description": "The image, by name or artifact ID (the dataset's only image if not given).",
+          "type": "string"
+        },
+        "landmarks": {
+          "description": "Each landmark: {\"fixed\": [x, y] on the tissue (µm, Xenium's coordinates), \"moving\": [x, y] on the image (its full-resolution pixels, (0, 0) the corner of its first)}.",
+          "items": {
+            "properties": {
+              "fixed": {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              "moving": {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              }
+            },
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "model": {
+          "description": "similarity (the default) or affine.",
+          "type": "string"
+        },
+        "note": {
+          "description": "A note kept with the version (and the reason, when it is used).",
+          "type": "string"
+        },
+        "parent": {
+          "description": "The version it is made from, by name or ID.",
+          "type": "string"
+        },
+        "use": {
+          "description": "Place the image by it (the default true).",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "landmarks"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Align an image by landmarks"
+    }
+  },
+  {
+    "name": "register_image",
+    "title": "Align an image automatically",
+    "description": "Aligns a post-Xenium image to its dataset's Xenium image automatically, by the nuclei (an H\u0026E's hematoxylin by color deconvolution, an immunofluorescence image's nuclear stain, against DAPI), as a job: its scale, turn and mirroring found whatever its metadata says (phase correlation and its log-polar form), refined by normalized mutual information, then fitted to local matches over the tissue; optionally a smooth deformation after it (B-splines), kept only when it predicts the matches better. Recorded as a version of the image's alignment with its matches, fit and what the search found; with use (the default), it places the image. The same images give the same version on any computer. Answers the fit.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "by": {
+          "description": "Who asked for it (the client's name if not given).",
+          "type": "string"
+        },
+        "channel": {
+          "description": "An immunofluorescence image's nuclear stain, by name (the channel named as one, DAPI or Hoechst, if not given).",
+          "type": "string"
+        },
+        "dataset": {
+          "description": "A dataset of the project by name or id; the one in focus, else the first, if not given.",
+          "type": "string"
+        },
+        "image": {
+          "description": "The image, by name or artifact ID (the dataset's only image if not given).",
+          "type": "string"
+        },
+        "model": {
+          "description": "similarity (the default) or affine.",
+          "type": "string"
+        },
+        "nonrigid": {
+          "description": "Allow a smooth deformation after the model, for a section that stretched.",
+          "type": "boolean"
+        },
+        "note": {
+          "description": "A note kept with the version (and the reason, when it is used).",
+          "type": "string"
+        },
+        "start": {
+          "description": "A version to start from instead of searching, by name or ID ('in use' for the one placing the image).",
+          "type": "string"
+        },
+        "use": {
+          "description": "Place the image by it (the default true).",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Align an image automatically"
+    }
+  },
+  {
+    "name": "use_transform",
+    "title": "Place an image by a version of its alignment",
+    "description": "Chooses which version of a post-Xenium image's alignment places it, as a decision recorded with its reason, who and when.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "by": {
+          "description": "Who chooses it (the client's name if not given).",
+          "type": "string"
+        },
+        "dataset": {
+          "description": "A dataset of the project by name or id; the one in focus, else the first, if not given.",
+          "type": "string"
+        },
+        "image": {
+          "description": "The image, by name or artifact ID (the dataset's only image if not given).",
+          "type": "string"
+        },
+        "rationale": {
+          "description": "Why it is chosen.",
+          "type": "string"
+        },
+        "transform": {
+          "description": "The version, by name or artifact ID.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "transform"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Place an image by a version of its alignment"
+    }
+  },
+  {
+    "name": "show_alignment",
+    "title": "Show an image's alignment",
+    "description": "Opens the Alignment view on a post-Xenium image: the Xenium image and the post-Xenium image side by side with the landmarks, their fit and each landmark's residual and leave-one-out error, and the image's versions of its alignment; with transform, that version's landmarks loaded to edit. What the Xenium image shows of the image: show (a version, 'in use', 'fit' for the landmarks' fit, 'none'), as display (overlay at opacity, checkerboard of cell µm squares, or flicker), with DAPI's edges and the nuclei's outlines over it, and where a checked version is off (map). Answers the landmarks, the fit, what is shown and the versions with their latest checks.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "cell": {
+          "description": "A checkerboard's squares' side, 10 to 400 µm.",
+          "type": "number"
+        },
+        "dataset": {
+          "description": "A dataset of the project by name or id; the one in focus, else the first, if not given.",
+          "type": "string"
+        },
+        "display": {
+          "description": "overlay, checkerboard or flicker.",
+          "type": "string"
+        },
+        "edges": {
+          "description": "DAPI's edges over the image.",
+          "type": "boolean"
+        },
+        "image": {
+          "description": "The image, by name or artifact ID (the dataset's only image if not given).",
+          "type": "string"
+        },
+        "map": {
+          "description": "Where the version shown is off, by its latest check.",
+          "type": "boolean"
+        },
+        "opacity": {
+          "description": "Over the stains, the image's opacity, 0 to 1.",
+          "type": "number"
+        },
+        "outlines": {
+          "description": "The nuclei's outlines over the image.",
+          "type": "boolean"
+        },
+        "show": {
+          "description": "What the Xenium image shows of the image: a version by name or ID, 'in use', 'fit' or 'none'.",
+          "type": "string"
+        },
+        "transform": {
+          "description": "A version whose landmarks to load, by name or ID.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Show an image's alignment"
+    }
+  },
+  {
+    "name": "check_alignment",
+    "title": "Check an image's alignment",
+    "description": "Measures where a version of a post-Xenium image's alignment places it off, as a job: patches of the Xenium image's DAPI over the tissue (between those an automatic alignment matched) against the image's nuclear signal drawn as the version places it, each one's residual shift by phase correlation in µm. Recorded as a check of the version. Answers how far it is off (median, 90th percentile, most, root-mean-square), over how many patches, and a bound of the matches' own error, below which an error is not the alignment's.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "dataset": {
+          "description": "A dataset of the project by name or id; the one in focus, else the first, if not given.",
+          "type": "string"
+        },
+        "image": {
+          "description": "The image, by name or artifact ID (the dataset's only image if not given).",
+          "type": "string"
+        },
+        "transform": {
+          "description": "The version, by name or ID (the one in use if not given).",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Check an image's alignment"
+    }
+  },
+  {
+    "name": "draw_region",
+    "title": "Draw a region",
+    "description": "Draws a region on a dataset's tissue, as the Viewer's tools draw one, and keeps it in the project as its first version (who drew it, when and why): a rectangle, a polygon, or a brush stroke (its points and radius), in µm (the dataset's coordinates), the Xenium image's pixels, or a post-Xenium image's pixels (through the version of its alignment placing it, and any deformation). Named and classed: QuPath's classes (Tumor, Stroma, Immune cells, Necrosis, Other, Region*, Ignore*) or any other. Opens the Viewer on the dataset. Answers the region: its area and the cells in it (by centroid, of the segmentation the Viewer draws).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "brush": {
+          "description": "A brush stroke: {\"points\": [[x, y], …] along it, \"radius\": the brush's radius in µm}.",
+          "type": "object"
+        },
+        "by": {
+          "description": "Who drew it (the client's name if not given).",
+          "type": "string"
+        },
+        "class": {
+          "description": "Its class (Region* if not given).",
+          "type": "string"
+        },
+        "coordinates": {
+          "description": "What the points are in: um (the default), xenium (the Xenium image's full-resolution pixels) or a post-Xenium image, by name or artifact ID (its full-resolution pixels, as QuPath opens it).",
+          "type": "string"
+        },
+        "dataset": {
+          "description": "A dataset of the project by name or id; the one in focus, else the first, if not given.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Its name (its class and a number if not given).",
+          "type": "string"
+        },
+        "note": {
+          "description": "A note kept with it.",
+          "type": "string"
+        },
+        "polygon": {
+          "description": "Its corners, [[x, y], …], three or more, in order.",
+          "items": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array"
+          },
+          "type": "array"
+        },
+        "rectangle": {
+          "description": "[x0, y0, x1, y1]: two opposite corners.",
+          "items": {
+            "type": "number"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Draw a region"
+    }
+  },
+  {
+    "name": "edit_region",
+    "title": "Change a region",
+    "description": "Changes a region of a dataset, each change a version appended (who, when and why; the earlier kept): its name or class, its shape painted onto or erased from with a brush stroke, an earlier version restored, or the region removed (or returned). Answers the region as it now is.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "brush": {
+          "description": "A brush stroke painted onto it: {\"points\": [[x, y], …], \"radius\": µm, \"erase\": true to erase it from the region}.",
+          "type": "object"
+        },
+        "by": {
+          "description": "Who changed it (the client's name if not given).",
+          "type": "string"
+        },
+        "class": {
+          "description": "Its new class.",
+          "type": "string"
+        },
+        "coordinates": {
+          "description": "What the brush's points are in: um (the default), xenium or a post-Xenium image by name or artifact ID (its pixels).",
+          "type": "string"
+        },
+        "dataset": {
+          "description": "A dataset of the project by name or id; the one in focus, else the first, if not given.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Its new name.",
+          "type": "string"
+        },
+        "note": {
+          "description": "Why (kept with the version).",
+          "type": "string"
+        },
+        "region": {
+          "description": "The region, by name or ID.",
+          "type": "string"
+        },
+        "remove": {
+          "description": "true removes it (kept with its versions), false returns it.",
+          "type": "boolean"
+        },
+        "restore": {
+          "description": "A version to restore, from 1.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "region"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Change a region"
+    }
+  },
+  {
+    "name": "regions",
+    "title": "List the regions",
+    "description": "Lists a dataset's regions: each one's name, class, version, area (µm²) and the cells in it (by centroid, of the segmentation the Viewer draws); with versions, each one's versions too. With choose, chooses the cells of the dataset's own segmentation in a region, as select_cells chooses cells: the Viewer, the QC view and the inspector show them. Opens the Viewer on the dataset.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "choose": {
+          "description": "A region whose cells to choose, by name or ID.",
+          "type": "string"
+        },
+        "dataset": {
+          "description": "A dataset of the project by name or id; the one in focus, else the first, if not given.",
+          "type": "string"
+        },
+        "removed": {
+          "description": "Regions removed too.",
+          "type": "boolean"
+        },
+        "versions": {
+          "description": "Each region's versions too.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "List the regions"
+    }
+  },
+  {
+    "name": "import_regions",
+    "title": "Read regions from GeoJSON",
+    "description": "Reads regions from a GeoJSON file as QuPath exports annotations (a FeatureCollection or a list of Features; Polygon and MultiPolygon shapes, each one's name and classification, its name and color; detections, cells, points and lines are left out), its coordinates in µm, the Xenium image's pixels or a post-Xenium image's pixels (as QuPath opened that image, placed through the version of its alignment in use), each added to the project as a region. Needs the token (it reads a file). Answers how many were added and what was left out.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "by": {
+          "description": "Who imported them (the client's name if not given).",
+          "type": "string"
+        },
+        "coordinates": {
+          "description": "What its coordinates are in: um (the default), xenium or a post-Xenium image by name or artifact ID (its pixels).",
+          "type": "string"
+        },
+        "dataset": {
+          "description": "A dataset of the project by name or id; the one in focus, else the first, if not given.",
+          "type": "string"
+        },
+        "path": {
+          "description": "The GeoJSON file on this computer.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Read regions from GeoJSON"
+    }
+  },
+  {
+    "name": "select_cell",
+    "title": "Select a cell",
+    "description": "Selects a cell of the segmentation the Viewer draws and shows it in the inspector: its ID, position, areas, segmentation method (or, for another segmentation, the instrument's cell it came from and what its method flags), and its transcripts by gene. With no cell, clears the selection.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "cell": {
+          "description": "The cell's ID in the segmentation drawn (as cells.parquet names the instrument's), or its row from 0 as \"#123\".",
+          "type": "string"
+        },
+        "center": {
+          "description": "Center the view on it (true if not given).",
+          "type": "boolean"
+        },
+        "dataset": {
+          "description": "A dataset of the project by name or id; the one in focus, else the first, if not given.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Select a cell"
+    }
+  },
+  {
+    "name": "save_view",
+    "title": "Save the view",
+    "description": "Saves what the Viewer or the QC view shows, under a name, in the project: the place and zoom, the stains, genes and layers, the selected cell, and in QC the map and filter. Returns the view and its link.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "description": "The view's name.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Save the view"
+    }
+  },
+  {
+    "name": "open_view",
+    "title": "Open a saved view",
+    "description": "Opens a saved view exactly as it was saved. Returns it, what the dataset no longer has, and its link.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "view": {
+          "description": "The view's name or id.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "view"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Open a saved view"
+    }
+  },
+  {
+    "name": "remove_view",
+    "title": "Remove a saved view",
+    "description": "Removes a saved view from the project (undoable, in the history).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "view": {
+          "description": "The view's name or id.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "view"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Remove a saved view"
+    }
+  },
+  {
+    "name": "qc_metrics",
+    "title": "Read the run's metrics",
+    "description": "The run's recorded metrics, each with what it measures and, where SituCraft recomputes it from the data, its value and whether they agree; shows them in the QC view.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "dataset": {
+          "description": "A dataset of the project by name or id; the one in focus, else the first, if not given.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Read the run's metrics"
+    }
+  },
+  {
+    "name": "set_qc_map",
+    "title": "Map quality over the tissue",
+    "description": "Shows a QC map over the tissue: cells colored by an attribute (cell:transcripts, cell:genes, cell:total, cell:controls, cell:area, cell:nucleusArea, cell:nucleusShare, cell:density, cell:nuclearShare, cell:method), small regions by the share of gene transcripts outside cells (bin:outside), below quality 20 (bin:quality), negative-control density (bin:controls) or gene transcript density (bin:density), or none. Optionally with a filter in use, and a place.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "center": {
+          "description": "The center, [x, y] in µm.",
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        },
+        "dataset": {
+          "description": "A dataset of the project by name or id; the one in focus, else the first, if not given.",
+          "type": "string"
+        },
+        "filter": {
+          "description": "A filter in use, by name (its latest version) or id; none for no filter.",
+          "type": "string"
+        },
+        "map": {
+          "description": "The map's id (above) or label.",
+          "type": "string"
+        },
+        "um_per_pixel": {
+          "description": "The zoom: µm per screen pixel.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "map"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Map quality over the tissue"
+    }
+  },
+  {
+    "name": "select_cells",
+    "title": "Choose cells by an attribute",
+    "description": "Chooses the cells whose attribute is between min and max (each optional), as dragging across a QC plot does; they are shown in the QC view, the Viewer and the inspector. Returns how many. clear: true clears the choice.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "attribute": {
+          "description": "transcripts, genes, total, controls, area, nucleusArea, nucleusShare, density or nuclearShare.",
+          "type": "string"
+        },
+        "clear": {
+          "description": "Clear the choice.",
+          "type": "boolean"
+        },
+        "dataset": {
+          "description": "A dataset of the project by name or id; the one in focus, else the first, if not given.",
+          "type": "string"
+        },
+        "max": {
+          "description": "The highest value chosen.",
+          "type": "number"
+        },
+        "min": {
+          "description": "The lowest value chosen.",
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Choose cells by an attribute"
+    }
+  },
+  {
+    "name": "save_filter",
+    "title": "Save a cell filter",
+    "description": "Saves a cell filter of the instrument's segmentation's cells as a new version (a filter's earlier versions are kept), which clusterings, graphs and spatial analyses can use: conditions on the cells' attributes, each {attribute, min, max} (bounds included, either optional) or {attribute: \"method\", values: [segmentation methods by name or number]}; or where, a tree of conditions as query_cells takes it (its labels, clusters, niches, regions, genes; SituCraft applies it). Returns its version and result: the cells it keeps and the SHA-256 of which.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "conditions": {
+          "description": "The conditions, all of which a cell must meet.",
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "dataset": {
+          "description": "A dataset of the project by name or id; the one in focus, else the first, if not given.",
+          "type": "string"
+        },
+        "name": {
+          "description": "The filter's name.",
+          "type": "string"
+        },
+        "where": {
+          "description": "A tree of conditions (query_cells), in place of conditions.",
+          "type": "object"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Save a cell filter"
+    }
+  },
+  {
+    "name": "add_results",
+    "title": "Add results to the project",
+    "description": "Adds results of the library (segmentations, clusterings and their maps, label sets, graphs, spatial analyses, by id) to the open project, each to the dataset of its bundle, as the view that made it adds it: situcraft run --report adds those it made, and a result made in another project can be brought into this one. One already in the project, of no dataset of it, or of another kind is passed over, said why.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "ids": {
+          "description": "The results' ids.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "ids"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Add results to the project"
+    }
+  },
+  {
+    "name": "segmentations",
+    "title": "List the segmentations",
+    "description": "A dataset's segmentations (all datasets' if none is named), each an artifact with its lineage (method and version, software, the job that made or registered it, what it was made from), its files by SHA-256, what its check found, its state, and whether it is the dataset's default (promoted, with the decision's reason). show: true shows the first in the inspector.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "dataset": {
+          "description": "A dataset by name or id; every dataset's if not given.",
+          "type": "string"
+        },
+        "show": {
+          "description": "Show it in the inspector.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "List the segmentations"
+    }
+  },
+  {
+    "name": "expand_nuclei",
+    "title": "Expand the nuclei",
+    "description": "SituCraft's nucleus expansion of a dataset: each nucleus of the instrument's segmentation grows by up to distance_um (5 if not given), every pixel going to the nearest nucleus within it, and transcripts to the cell holding their pixel. Runs as a job (seconds) in the Segmentation view, which shows it; the result is a segmentation artifact recorded in the project, compared with the instrument's segmentation. Answers its summary and that comparison.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "dataset": {
+          "description": "A dataset of the project by name or id; the one in focus, else the first, if not given.",
+          "type": "string"
+        },
+        "distance_um": {
+          "description": "How far each nucleus grows, in µm (5 if not given).",
+          "maximum": 100,
+          "minimum": 0,
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Expand the nuclei"
+    }
+  },
+  {
+    "name": "refine_segmentation",
+    "title": "Refine the segmentation from the transcripts",
+    "description": "SituCraft's transcript-informed segmentation of a dataset (after Jones et al. 2025), in the Segmentation view's studio: starting from the instrument's cells and their nuclei, each cell's boundary moves to where its own transcripts are, sampled from the posterior; the result is its summary over the last sweeps, with each transcript's probability of its cell. A preset sets the model (balanced if not given); regions or sections limit what it covers, the rest keeping the instrument's cells. Runs as a job (minutes per square millimetre); its failures are classified with what to do. The segmentation artifact is recorded in the project and compared with the instrument's segmentation. Answers its summary, diagnostics and that comparison.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "dataset": {
+          "description": "A dataset of the project by name or id; the one in focus, else the first, if not given.",
+          "type": "string"
+        },
+        "layers": {
+          "description": "Voxel layers in depth (1 if not given).",
+          "maximum": 16,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "min_qv": {
+          "description": "The quality the modeled transcripts reach (20 if not given).",
+          "maximum": 40,
+          "minimum": 0,
+          "type": "number"
+        },
+        "preset": {
+          "description": "The settings' preset: balanced (the default), conservative, flexible, low-memory, roi-pilot (a region, run with two seeds) or expert.",
+          "type": "string"
+        },
+        "regions": {
+          "description": "Regions to refine, each [x0, y0, x1, y1] in µm; the rest of the tissue keeps the instrument's cells.",
+          "items": {
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 4,
+            "minItems": 4,
+            "type": "array"
+          },
+          "type": "array"
+        },
+        "samples": {
+          "description": "The last sweeps summarized (the preset's if not given, at most the sweeps).",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "sections": {
+          "description": "Refine the tissue's separate sections apart, each with a model of its own.",
+          "type": "boolean"
+        },
+        "seed": {
+          "description": "The random seed (20250 if not given); a seed gives the same segmentation on any computer.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "seed_check": {
+          "description": "Run again with the next seed and report how many transcripts both runs put in the same cell.",
+          "type": "boolean"
+        },
+        "sweeps": {
+          "description": "Sweeps of the sampler (the preset's if not given; changing it makes the settings expert).",
+          "maximum": 100000,
+          "minimum": 10,
+          "type": "integer"
+        },
+        "threads": {
+          "description": "Threads to run on (every core if not given); the result does not depend on them.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Refine the segmentation from the transcripts"
+    }
+  },
+  {
+    "name": "refinement_preflight",
+    "title": "Check a refinement before it runs",
+    "description": "What a transcript-informed segmentation of a dataset would model, cover and cost, without running it: the transcripts at the quality, the cells it starts from, the regions or sections, its memory, disk and time against what the computer has, its problems (which stop it) and risks, and its recipe (JSON, to keep or run with `situcraft refine --recipe`). Takes the same arguments as refine_segmentation.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "dataset": {
+          "description": "A dataset of the project by name or id; the one in focus, else the first, if not given.",
+          "type": "string"
+        },
+        "layers": {
+          "description": "Voxel layers in depth (1 if not given).",
+          "maximum": 16,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "min_qv": {
+          "description": "The quality the modeled transcripts reach (20 if not given).",
+          "maximum": 40,
+          "minimum": 0,
+          "type": "number"
+        },
+        "preset": {
+          "description": "The settings' preset: balanced (the default), conservative, flexible, low-memory, roi-pilot (a region, run with two seeds) or expert.",
+          "type": "string"
+        },
+        "regions": {
+          "description": "Regions to refine, each [x0, y0, x1, y1] in µm; the rest of the tissue keeps the instrument's cells.",
+          "items": {
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 4,
+            "minItems": 4,
+            "type": "array"
+          },
+          "type": "array"
+        },
+        "samples": {
+          "description": "The last sweeps summarized (the preset's if not given, at most the sweeps).",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "sections": {
+          "description": "Refine the tissue's separate sections apart, each with a model of its own.",
+          "type": "boolean"
+        },
+        "seed": {
+          "description": "The random seed (20250 if not given); a seed gives the same segmentation on any computer.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "seed_check": {
+          "description": "Run again with the next seed and report how many transcripts both runs put in the same cell.",
+          "type": "boolean"
+        },
+        "sweeps": {
+          "description": "Sweeps of the sampler (the preset's if not given; changing it makes the settings expert).",
+          "maximum": 100000,
+          "minimum": 10,
+          "type": "integer"
+        },
+        "threads": {
+          "description": "Threads to run on (every core if not given); the result does not depend on them.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Check a refinement before it runs"
+    }
+  },
+  {
+    "name": "import_segmentation",
+    "title": "Import a segmentation",
+    "description": "Imports another tool's segmentation into a dataset, in the Segmentation view, which shows it: a SpatialData Zarr store (spatialdata), Baysor's segmentation.csv with its polygons (baysor), GeoJSON polygons with an optional transcript table (geojson), a Xenium Ranger output bundle of the same run (xenium), or a folder of SituCraft's own segmentation files, as `situcraft refine` writes them (situcraft). A job reads it, checks it against the dataset (the transcripts it names, where its cells lie, its ids) and records it as a segmentation artifact with the files' SHA-256; an import whose check finds a fatal problem is recorded as invalid. Coordinates are read in units (um, else pixels of the morphology image), never guessed. Needs the token (it reads files).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "cell_column": {
+          "description": "The assignment's cell column (chosen from the usual names if not given).",
+          "type": "string"
+        },
+        "cell_property": {
+          "description": "GeoJSON: the property naming each polygon's cell.",
+          "type": "string"
+        },
+        "cells": {
+          "description": "SpatialData: the shapes or labels element holding the cells.",
+          "type": "string"
+        },
+        "citation": {
+          "description": "The paper to cite for it.",
+          "type": "string"
+        },
+        "coordinate_system": {
+          "description": "SpatialData: the coordinate system (global).",
+          "type": "string"
+        },
+        "dataset": {
+          "description": "A dataset of the project by name or id; the one in focus, else the first, if not given.",
+          "type": "string"
+        },
+        "format": {
+          "description": "spatialdata, baysor, geojson, xenium or situcraft.",
+          "type": "string"
+        },
+        "paths": {
+          "description": "The files: a store or bundle; or Baysor's segmentation.csv and its polygons; or GeoJSON polygons and a transcript table (CSV or Parquet); or the folder situcraft refine wrote.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "points": {
+          "description": "SpatialData: the points element with each transcript's cell.",
+          "type": "string"
+        },
+        "table": {
+          "description": "SpatialData: the table annotating the cells.",
+          "type": "string"
+        },
+        "tool": {
+          "description": "What made it (recorded with it).",
+          "type": "string"
+        },
+        "tool_version": {
+          "description": "Its version.",
+          "type": "string"
+        },
+        "units": {
+          "description": "um (the default) or pixels (of the morphology image).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "format",
+        "paths"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Import a segmentation"
+    }
+  },
+  {
+    "name": "compare_segmentations",
+    "title": "Compare two segmentations",
+    "description": "Compares two segmentations of a dataset (by name or artifact id; A the default segmentation and B the latest other if not given), as a job, in the Segmentation view: which cells correspond (a shared nucleus, or half of one within the other), each difference's class (one-to-one, expanded, contracted, split, merged, rearranged, only in A or B, assignment-only), each segmentation's cells, nuclei, assigned fraction, transcripts per cell, areas, spurious co-expression (Jones et al. 2025) and mutually exclusive co-expression (Hartman and Satija 2024), and between them the pixels that agree, the transcripts whose cell changed, the IoU and the boundary displacement. Recorded as a comparison artifact; asking again answers it.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "a": {
+          "description": "Segmentation A, by name or artifact id.",
+          "type": "string"
+        },
+        "b": {
+          "description": "Segmentation B, by name or artifact id.",
+          "type": "string"
+        },
+        "dataset": {
+          "description": "A dataset of the project by name or id; the one in focus, else the first, if not given.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Compare two segmentations"
+    }
+  },
+  {
+    "name": "cluster_cells",
+    "title": "Cluster the cells",
+    "description": "Clusters a segmentation's cells by their gene expression, as a job, in the Cell types view: the cells with at least a number of gene transcripts of quality 20 or more (or those a QC filter keeps), each cell's counts scaled to the median total and log-transformed, each gene scaled (clipped at ±10), exact principal components, each cell's nearest neighbors weighted as UMAP's graph, and Leiden communities at a resolution, seeded; each cluster's markers by the Wilcoxon rank-sum test, exploratory. Recorded as a clustering artifact; asking again answers it. Answers the clusters, their sizes and leading markers.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "components": {
+          "description": "Principal components (50).",
+          "type": "number"
+        },
+        "dataset": {
+          "description": "A dataset of the project by name or id; the one in focus, else the first, if not given.",
+          "type": "string"
+        },
+        "filter": {
+          "description": "A QC filter choosing the cells (the instrument's segmentation only), by name (its latest version), \"name vN\" or id.",
+          "type": "string"
+        },
+        "min_transcripts": {
+          "description": "Without a filter, the cells analyzed have at least this many gene transcripts (10).",
+          "type": "number"
+        },
+        "neighbors": {
+          "description": "Each cell's neighborhood, the cell included (15).",
+          "type": "number"
+        },
+        "resolution": {
+          "description": "Leiden's resolution: higher, more clusters (1).",
+          "type": "number"
+        },
+        "seed": {
+          "description": "Leiden's seed (20250).",
+          "type": "number"
+        },
+        "segmentation": {
+          "description": "The segmentation, by name or artifact id (the default if not given).",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Cluster the cells"
+    }
+  },
+  {
+    "name": "build_graph",
+    "title": "Build a graph of the cells",
+    "description": "Builds a graph of which of a segmentation's cells are neighbors, as a job, in the Spatial view: by the Delaunay triangulation of their centroids (its edges up to a longest length), each cell's k nearest (an edge when either is among the other's k), a radius, or contact in the segmentation's label raster (cells touching, or within a gap, with the boundary they share). Built over all the cells, a QC filter's or those in regions, never cells a review excluded. Recorded as a graph artifact; asking again answers it. Answers the cells and edges, the neighbors a cell, the cells without one, the pieces and the edges' lengths.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "dataset": {
+          "description": "A dataset of the project by name or id; the one in focus, else the first, if not given.",
+          "type": "string"
+        },
+        "filter": {
+          "description": "A QC filter choosing the cells (the instrument's segmentation only), by name (its latest version), \"name vN\" or id.",
+          "type": "string"
+        },
+        "gap": {
+          "description": "A contact graph's gap closed, µm (0: touching).",
+          "type": "number"
+        },
+        "k": {
+          "description": "A k-nearest graph's neighbors of each cell (6).",
+          "type": "number"
+        },
+        "kind": {
+          "description": "delaunay (the default), knn, radius or contact.",
+          "type": "string"
+        },
+        "longest": {
+          "description": "A Delaunay graph's longest edge, µm (50; 0 keeps every edge).",
+          "type": "number"
+        },
+        "radius": {
+          "description": "A radius graph's distance, µm (20).",
+          "type": "number"
+        },
+        "regions": {
+          "description": "Only the cells in these regions, by name or ID.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "segmentation": {
+          "description": "The segmentation, by name or artifact id (the default if not given).",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Build a graph of the cells"
+    }
+  },
+  {
+    "name": "spatial_analysis",
+    "title": "Ask how the cells are arranged",
+    "description": "Asks a question of a label set's cells, as a job, in the Spatial view. Neighborhood enrichment: for each pair of labels, the neighbors between their cells in a graph against the number expected if the labels were dealt to the same cells at random (exactly), as a ratio, with a z-score and two-sided p-value from seeded permutations of the labels (within regions, optionally, keeping each one's composition), Benjamini–Hochberg adjusted. Co-occurrence: at each distance, how much likelier each label's cells are within it (or since the distance before) of another label's than of any cell. Nearest distances: each label's cells' distance to the nearest of each label, its median against the labels dealt at random (z, p), and its distribution with an envelope. Ripley's K and L: of each label and across each pair, in a window (the tissue or a region), with Ripley's isotropic edge correction, against the envelope of the labels dealt at random, with a global test. Regions compared: each region's cells by label per mm² of the tissue within it (a density, Garwood's interval) and per labeled cell (a share, Wilson's), the tissue in none of them a row of its own; each region over it as ratios (exact conditional and Koopman's intervals). Across a region's edge: each label's density in bands of signed distance from the edge (inside negative), each band's own tissue its denominator; the core, the margin and around compared, saying which labels fill the region, stay out or gather at its margin. Niches (cellular neighborhoods): each cell's neighborhood (its nearest labeled cells, or those within a radius) by its labels' shares, the cells grouped by k-means with k-means++ seeding into niches, each with its make-up against the tissue's, its defining labels and leading genes, and the niches from further seeds compared by the adjusted Rand index; the niches are a label set too (fill labels:\u003ctheir id\u003e:0, or niches). Spatially variable genes (moran, of genes, no labels): each gene's Moran's I over a graph, its variances under normality and randomization, the analytic test and permutations, Benjamini–Hochberg over the genes; the leading genes' local Moran's I (each cell high among high, low among low, or unlike its neighbors). A section's cells are not replicates: these describe this section. Recorded as an analysis artifact; asking again answers it. Answers the pairs, the ratios at each distance, the curves, the regions' table, the bands and readings, the niches, or the genes ranked by Moran's I.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "closing": {
+          "description": "Ripley's K in the tissue, regions compared, across an edge: gaps between cells narrower than twice this are tissue, µm (10).",
+          "type": "number"
+        },
+        "correction": {
+          "description": "Ripley's K: the edge correction, isotropic (the default) or none.",
+          "type": "string"
+        },
+        "dataset": {
+          "description": "A dataset of the project by name or id; the one in focus, else the first, if not given.",
+          "type": "string"
+        },
+        "every": {
+          "description": "The step between distances, µm: co-occurrence 10, Ripley's K 5, nearest distances' distribution 2.5, the bands across an edge 10.",
+          "type": "number"
+        },
+        "filter": {
+          "description": "All but enrichment: a QC filter choosing the cells (the instrument's segmentation only).",
+          "type": "string"
+        },
+        "graph": {
+          "description": "Enrichment, Moran's I: a graph of the segmentation, by id (the latest built if not given).",
+          "type": "string"
+        },
+        "labels": {
+          "description": "A label set of the segmentation, by id (the latest if not given); niches too, by their analysis's id.",
+          "type": "string"
+        },
+        "level": {
+          "description": "The label set's level, by number from 1 or name.",
+          "type": "string"
+        },
+        "local": {
+          "description": "Moran's I: the leading genes whose local Moran's I is kept (10).",
+          "type": "number"
+        },
+        "local_permutations": {
+          "description": "Moran's I: each cell's conditional permutations for its local Moran's I (199).",
+          "type": "number"
+        },
+        "margin": {
+          "description": "Across an edge: the margin's half-width, µm (20): the core is inside beyond it, around is outside beyond it.",
+          "type": "number"
+        },
+        "neighbors": {
+          "description": "Niches: each cell's neighborhood, its nearest labeled cells (10).",
+          "type": "number"
+        },
+        "niches": {
+          "description": "Niches: how many (6).",
+          "type": "number"
+        },
+        "pairs": {
+          "description": "Co-occurrence: within (each distance, as Squidpy; the default) or between (since the distance before).",
+          "type": "string"
+        },
+        "permutations": {
+          "description": "How many times the labels are dealt again: enrichment 1,000; nearest distances and Ripley's K 199. Moran's I: the cells' values dealt again, 199 (0: the analytic test).",
+          "type": "number"
+        },
+        "question": {
+          "description": "enrichment (the default), cooccurrence, distances, ripley, regions, boundary, niches or moran.",
+          "type": "string"
+        },
+        "radius": {
+          "description": "Niches: each cell's neighborhood, the labeled cells within this, µm (instead of the nearest).",
+          "type": "number"
+        },
+        "reach": {
+          "description": "Nearest distances: the farthest searched, µm (100); a cell with none nearer counts at it. Across an edge: how far the bands reach either side, µm (100).",
+          "type": "number"
+        },
+        "region": {
+          "description": "Across an edge: the region whose edge to cross, by name or ID.",
+          "type": "string"
+        },
+        "regions": {
+          "description": "Regions compared: the regions to compare (names or IDs, up to 20). Co-occurrence, nearest distances, Ripley's K: only the cells in these regions.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "seed": {
+          "description": "The permutations' seed (20250).",
+          "type": "number"
+        },
+        "seeds": {
+          "description": "Niches: further seeds whose niches are compared with these (4).",
+          "type": "number"
+        },
+        "segmentation": {
+          "description": "The segmentation, by name or artifact id (the default if not given).",
+          "type": "string"
+        },
+        "starts": {
+          "description": "Niches: k-means's starts, the best kept (10).",
+          "type": "number"
+        },
+        "up_to": {
+          "description": "Co-occurrence: the farthest distance, µm (150); Ripley's K: the farthest radius (100).",
+          "type": "number"
+        },
+        "weight": {
+          "description": "Enrichment: edges (the default) or boundary (a contact graph's shared boundary).",
+          "type": "string"
+        },
+        "weights": {
+          "description": "Moran's I: row (standardized, the default) or binary.",
+          "type": "string"
+        },
+        "window": {
+          "description": "Ripley's K: the window, tissue (the default: the cells' footprint, its gaps closed) or a region by name or ID.",
+          "type": "string"
+        },
+        "within": {
+          "description": "Enrichment: deal the labels within each of these regions (names or IDs).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Ask how the cells are arranged"
+    }
+  },
+  {
+    "name": "remake_analysis",
+    "title": "Make an analysis again on another segmentation",
+    "description": "Makes a spatial analysis again on another segmentation of its dataset, in one step, in the Spatial view: the two segmentations compared (unless they are), its labels made again from the same clustering parameters and marker set (or reference), its graph built again with the same definition over the same regions' cells, and the question asked with the same parameters, regions and window. The new analysis is recorded as made from the first. Answers the two read together: each number under both (keyed by label and gene names), the change, the numbers' rank correlation, and the largest changes. Labels imported, curated or in a consensus, and niches, are not made again.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "analysis": {
+          "description": "The analysis, by id (the latest if not given).",
+          "type": "string"
+        },
+        "dataset": {
+          "description": "A dataset of the project by name or id; the one in focus, else the first, if not given.",
+          "type": "string"
+        },
+        "segmentation": {
+          "description": "The other segmentation, by name or artifact id.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "segmentation"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Make an analysis again on another segmentation"
+    }
+  },
+  {
+    "name": "show_map",
+    "title": "Show the map",
+    "description": "Shows a clustering in the Cell types view, with its map (UMAP; made first if it has none) beside the tissue, linked: the cells colored by a clustering's clusters, a gene's expression, their gene transcripts, area or how faithfully the map keeps their neighbors, and a selection of cells (by cluster, or inside a polygon on the map or the tissue) drawn on both. Answers the map's trustworthiness, the selection's size and its composition by cluster.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "clustering": {
+          "description": "A clustering, by artifact id or name; SituCraft's latest if not given.",
+          "type": "string"
+        },
+        "color_by": {
+          "description": "clusters (the clustering's), clusters:\u003cclustering\u003e, labels (its latest label set, the first level), labels:\u003clevel\u003e, labels:\u003clabel set\u003e:\u003clevel\u003e, confidence, a gene's name, transcripts, area or reliability.",
+          "type": "string"
+        },
+        "dataset": {
+          "description": "A dataset of the project by name or id; the one in focus, else the first, if not given.",
+          "type": "string"
+        },
+        "map": {
+          "description": "The map: a map's artifact id, or instrument for the instrument's; the clustering's own if not given.",
+          "type": "string"
+        },
+        "picture": {
+          "description": "Answer a picture of the map too, by its clusters or a label set (a PNG): an agent gets it as an image.",
+          "type": "boolean"
+        },
+        "picture_width": {
+          "description": "The picture's width in pixels (1,000; 300 to 2,000).",
+          "type": "number"
+        },
+        "select": {
+          "description": "{\"clusters\": [numbers from 1]}, {\"polygon\": [[x, y], …], \"on\": \"map\" or \"tissue\" (µm)}, or \"none\"."
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Show the map"
+    }
+  },
+  {
+    "name": "name_clusters",
+    "title": "Name clusters",
+    "description": "Names a clustering's clusters (a new version of its names, appended; the clusters keep their numbers). Clusters given the same name are merged on the map and the tissue. An empty name removes one.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "clustering": {
+          "description": "A clustering, by artifact id or name; SituCraft's latest if not given.",
+          "type": "string"
+        },
+        "dataset": {
+          "description": "A dataset of the project by name or id; the one in focus, else the first, if not given.",
+          "type": "string"
+        },
+        "names": {
+          "description": "By cluster number from 1: {\"1\": \"T cells\", \"4\": \"Fibroblasts\"}.",
+          "type": "object"
+        }
+      },
+      "required": [
+        "names"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Name clusters"
+    }
+  },
+  {
+    "name": "instrument_clusters",
+    "title": "Add the instrument's clusters",
+    "description": "Adds one of the instrument's own clusterings (analysis.tar.gz: graph-based, or k-means of 2 to 10 clusters) to the project as a clustering of its segmentation, its markers computed by SituCraft, and the instrument's map with it the first time.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "clustering": {
+          "description": "graph-based (the default), k-means N, or its folder's name (gene_expression_kmeans_5_clusters).",
+          "type": "string"
+        },
+        "dataset": {
+          "description": "A dataset of the project by name or id; the one in focus, else the first, if not given.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Add the instrument's clusters"
+    }
+  },
+  {
+    "name": "label_cells",
+    "title": "Label the cells from markers",
+    "description": "Labels a clustering's cells from a marker set, as a job, in the Cell types view: each cell scored for each label by its markers' expression against control genes binned by mean expression (Tirosh et al. 2016, as scanpy's score_genes), a label's negative markers counting against it where expressed; labels assigned from the top of the hierarchy down, a level only when its best label leads the next by the margin. The marker set: one of the project's (by name or id, its latest version), one SituCraft ships (breast, lung, or simulated for a simulated tissue; the first that fits the panel if none is given), or a set given in full (saved in the project). Recorded as a labels artifact; asking again answers it. Answers the cells labeled at each level, each label's cells and markers, and each cluster's leading labels.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "bins": {
+          "description": "Expression bins (25).",
+          "type": "number"
+        },
+        "clustering": {
+          "description": "A clustering, by artifact id or name; SituCraft's latest if not given.",
+          "type": "string"
+        },
+        "controls": {
+          "description": "Control genes per bin (50).",
+          "type": "number"
+        },
+        "dataset": {
+          "description": "A dataset of the project by name or id; the one in focus, else the first, if not given.",
+          "type": "string"
+        },
+        "lineage": {
+          "description": "Leave each label's lineage's markers out of its controls (true).",
+          "type": "boolean"
+        },
+        "margin": {
+          "description": "How far a level's best label must lead the next (0.1).",
+          "type": "number"
+        },
+        "markers": {
+          "description": "A marker set: the project's by name or id, or SituCraft's breast, lung or simulated.",
+          "type": "string"
+        },
+        "minimum": {
+          "description": "The score a label must reach (0).",
+          "type": "number"
+        },
+        "name_clusters": {
+          "description": "Name the clusters by their labels: true, or the share of a cluster's cells its label must hold (0.3 to 1; 0.5 for true)."
+        },
+        "seed": {
+          "description": "The draws of control genes (20250).",
+          "type": "number"
+        },
+        "set": {
+          "description": "A marker set in full (docs/FORMATS.md): {\"format\": \"situcraft-markers\", \"version\": 1, \"name\", \"levels\", \"labels\": [{\"name\", \"parent\", \"positive\", \"negative\"}], \"states\"}.",
+          "type": "object"
+        },
+        "state": {
+          "description": "The score a state's markers must reach (0.25).",
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Label the cells from markers"
+    }
+  },
+  {
+    "name": "reference_labels",
+    "title": "Label the cells from a reference",
+    "description": "Labels a clustering's cells from a labeled single-cell reference, as a job, in the Cell types view: an AnnData object in Zarr (a folder or a zip; its cells' labels in an obs column, its counts or log-normalized values in X, raw/X or a layer), or a table of each label's mean expression (CSV, TSV or Parquet; a row per label or per gene). The reference is restricted to the panel's genes; each label's profile is its cells' mean log-normalized expression; each cell is correlated (Spearman) with each label's profile over the genes most higher in one label than another, then again on the leading labels' own genes until one is left (Aran et al. 2019), and takes the last round's best when it leads the next by the margin. An .h5ad file is read once written as Zarr (anndata's write_zarr). The columns are found by their usual names unless given. Recorded as a labels artifact; asking again answers it. Answers the genes shared, the cells labeled, each label's cells and each cluster's leading labels.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "clustering": {
+          "description": "A clustering, by artifact id or name; SituCraft's latest if not given.",
+          "type": "string"
+        },
+        "dataset": {
+          "description": "A dataset of the project by name or id; the one in focus, else the first, if not given.",
+          "type": "string"
+        },
+        "gene_column": {
+          "description": "The var column of gene names (the index if not given; or, for a table of a row per gene, its genes' column).",
+          "type": "string"
+        },
+        "label_column": {
+          "description": "The obs column of the reference cells' labels (or, for a table of a row per label, its labels' column).",
+          "type": "string"
+        },
+        "margin": {
+          "description": "How far the best label must lead the next, in correlation (0).",
+          "type": "number"
+        },
+        "markers": {
+          "description": "Genes per pair of labels (0: 500 × (2/3)^log₂(labels)).",
+          "type": "number"
+        },
+        "matrix": {
+          "description": "The AnnData object's matrix: X, raw/X or layers/\u003cname\u003e (counts preferred; found if not given).",
+          "type": "string"
+        },
+        "name_clusters": {
+          "description": "Name the clusters by their labels: true, or the share of a cluster's cells its label must hold (0.3 to 1; 0.5 for true)."
+        },
+        "path": {
+          "description": "The reference's path on this computer: a .zarr folder, a zip of one, or a table of profiles.",
+          "type": "string"
+        },
+        "tune": {
+          "description": "Fine-tuning: the labels within this of the best correlation are scored again (0.05).",
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Label the cells from a reference"
+    }
+  },
+  {
+    "name": "import_labels",
+    "title": "Import labels",
+    "description": "Imports labels made elsewhere for a segmentation's cells, as a job: a table (CSV or TSV, gzipped or not; Parquet; an AnnData object's obs in Zarr, a folder or a zip, or a SpatialData store's table; Xenium Explorer's cell groups), its rows matched to the cells by id, or one of the instrument's clusterings. A table naming cells the segmentation does not have is refused, with how many; cells it does not name are counted. The columns are found by their usual names unless given. Recorded as a labels artifact with its source; asking again answers it. Answers the labels and their cells.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "color_column": {
+          "description": "A column of colors (#rrggbb), each label's (optional).",
+          "type": "string"
+        },
+        "column": {
+          "description": "The column of the labels (group, cell_type, label, annotation, cluster … if not given).",
+          "type": "string"
+        },
+        "confidence_column": {
+          "description": "A column of numbers: each cell's confidence (optional).",
+          "type": "string"
+        },
+        "dataset": {
+          "description": "A dataset of the project by name or id; the one in focus, else the first, if not given.",
+          "type": "string"
+        },
+        "id_column": {
+          "description": "The column of the cells' ids (cell_id, Cell ID, barcode, an AnnData index … if not given).",
+          "type": "string"
+        },
+        "instrument": {
+          "description": "Or the instrument's clusters: graph-based, k-means N, or its folder's name.",
+          "type": "string"
+        },
+        "path": {
+          "description": "The table's path on this computer.",
+          "type": "string"
+        },
+        "segmentation": {
+          "description": "The segmentation whose cells the labels are, by name or artifact id, or instrument (the default if not given).",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Import labels"
+    }
+  },
+  {
+    "name": "review_labels",
+    "title": "Make the review queue",
+    "description": "Ranks a label set's cells for review: those whose label at most a share of their nearest labeled cells in the tissue carry (most carrying another: spatially implausible), those whose counterparts under another segmentation carry another label in a set of it (segmentation-sensitive, with against), and those of low confidence (from markers, by default under twice the margin), the reviewed left out. Answers the counts and the queue's first cells, each with why.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "against": {
+          "description": "A label set of another segmentation (its id, id:level, or name) the two segmentations' comparison matches cells with: flag the cells whose counterparts carry another label.",
+          "type": "string"
+        },
+        "dataset": {
+          "description": "A dataset of the project by name or id; the one in focus, else the first, if not given.",
+          "type": "string"
+        },
+        "implausible": {
+          "description": "Flag a cell when at most this share of them carry its label (0.2).",
+          "type": "number"
+        },
+        "labels": {
+          "description": "A label set's artifact id, or a curated (cur-…) or consensus (con-…) set's; the latest if not given.",
+          "type": "string"
+        },
+        "level": {
+          "description": "Its level, by name or number from 1 (the first if not given).",
+          "type": "string"
+        },
+        "limit": {
+          "description": "The cells answered (20).",
+          "type": "number"
+        },
+        "low_confidence": {
+          "description": "Flag a cell whose confidence is below this.",
+          "type": "number"
+        },
+        "neighbors": {
+          "description": "The nearest labeled cells counted (10).",
+          "type": "number"
+        },
+        "segmentation": {
+          "description": "The segmentation, by name, id or instrument (the default if not given).",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Make the review queue"
+    }
+  },
+  {
+    "name": "repeat_on_segmentation",
+    "title": "Make a clustering and its labels again on another segmentation",
+    "description": "Makes a clustering of SituCraft's, its map and its label sets from markers or a reference again on another segmentation of the dataset, with the same parameters, as jobs, in one step: to compare the labels under the two segmentations (label_impact, review_labels with against). A QC filter's cells are the instrument segmentation's, so the cells are then chosen by the rule; imported label sets are not made again. Answers the clustering and each label set made, and any not made with why.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "clustering": {
+          "description": "The clustering, by artifact id or name; SituCraft's latest if not given.",
+          "type": "string"
+        },
+        "dataset": {
+          "description": "A dataset of the project by name or id; the one in focus, else the first, if not given.",
+          "type": "string"
+        },
+        "segmentation": {
+          "description": "The segmentation to make it again on, by name, id or instrument.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Make a clustering and its labels again on another segmentation"
+    }
+  },
+  {
+    "name": "label_impact",
+    "title": "What a segmentation changes in the labels",
+    "description": "Opens a comparison's Labels tab in the Compare view: a label set of each of its two segmentations, read through its differences. Answers each label's cells under each, the cells matched one to one labeled alike and every pair of labels, what split and merged cells carry, the cells without a counterpart by label, the differences whose labels change, the cells whose label changes with the segmentation, and marker mixing by label (the share of each label's cells expressing a pair of mutually exclusive markers together, and the MECR among them).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "color": {
+          "description": "Color the tissue's cells by each side's labels (true) or by their difference (false).",
+          "type": "boolean"
+        },
+        "comparison": {
+          "description": "A comparison, by id or \"A and B\"; the latest if not given.",
+          "type": "string"
+        },
+        "dataset": {
+          "description": "A dataset of the project by name or id; the one in focus, else the first, if not given.",
+          "type": "string"
+        },
+        "labels_a": {
+          "description": "A label set of A's segmentation (its id, id:level, or name); by default one made as B's was, else the latest.",
+          "type": "string"
+        },
+        "labels_b": {
+          "description": "A label set of B's segmentation, the same way.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "What a segmentation changes in the labels"
+    }
+  },
+  {
+    "name": "label_evidence",
+    "title": "A cell's label evidence",
+    "description": "Answers a cell's evidence: its label in each label set of its segmentation; from markers, at each level the label it took and the next, with their markers' transcripts in the cell; its nearest cells in expression; and its reviews (who, when and why).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "cell": {
+          "description": "The cell's row in the segmentation (#123 or 123).",
+          "type": "string"
+        },
+        "clustering": {
+          "description": "The clustering (SituCraft's latest of the segmentation if not given).",
+          "type": "string"
+        },
+        "dataset": {
+          "description": "A dataset of the project by name or id; the one in focus, else the first, if not given.",
+          "type": "string"
+        },
+        "labels": {
+          "description": "The label set whose markers explain it (the latest if not given).",
+          "type": "string"
+        },
+        "level": {
+          "description": "Its level.",
+          "type": "string"
+        },
+        "segmentation": {
+          "description": "The segmentation, by name, id or instrument (the default if not given).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "cell"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "A cell's label evidence"
+    }
+  },
+  {
+    "name": "curate_labels",
+    "title": "Curate labels",
+    "description": "Appends an edit to a curated label set: cells or a clustering's clusters relabeled, or cells' labels accepted, with the reason kept and who, recorded as a review (as review records one). Given a predicted set, the curated set begun from it (made the first time). Edits are never changed or removed: undoing one is another edit.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "accept": {
+          "description": "Accept the cells' label as it is, instead.",
+          "type": "boolean"
+        },
+        "by": {
+          "description": "Who (remote control if not given).",
+          "type": "string"
+        },
+        "cells": {
+          "description": "Cells' rows (#123 or 123).",
+          "type": "array"
+        },
+        "clustering": {
+          "description": "The clustering of the clusters (SituCraft's latest if not given).",
+          "type": "string"
+        },
+        "clusters": {
+          "description": "Or a clustering's clusters, by number from 1.",
+          "type": "array"
+        },
+        "dataset": {
+          "description": "A dataset of the project by name or id; the one in focus, else the first, if not given.",
+          "type": "string"
+        },
+        "label": {
+          "description": "The new label (a new name is added).",
+          "type": "string"
+        },
+        "labels": {
+          "description": "A curated set (cur-…), or a predicted label set whose curated set to append to.",
+          "type": "string"
+        },
+        "level": {
+          "description": "The predicted set's level.",
+          "type": "string"
+        },
+        "name": {
+          "description": "The curated set's name, when it is begun.",
+          "type": "string"
+        },
+        "reason": {
+          "description": "Why (kept with the edit).",
+          "type": "string"
+        },
+        "segmentation": {
+          "description": "The segmentation, by name, id or instrument (the default if not given).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "reason"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Curate labels"
+    }
+  },
+  {
+    "name": "review",
+    "title": "Review cells or a region",
+    "description": "Reviews cells of a segmentation (by ID or row), the cells chosen, or a region, recorded in the project with its provenance: who, the action, the value before and after, when, the segmentation, the label set, each cell's label and its confidence as shown, and the post-Xenium images' alignments in use. Actions: accept (the label, or a region's class), relabel (a new label, with a reason; a region is reclassed), ambiguous (with the labels it could be), exclude (from analyses, with a reason; a region's cells too unless cells_too is false), include (again), concern (its segmentation looks wrong: merged, split, boundary, not-a-cell, missed or other), resolve (the concern) and comment. Accepting and relabeling cells append to the curated set begun from the label set reviewed. Answers the review.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "description": "accept, relabel, ambiguous, exclude, include, concern, resolve or comment.",
+          "type": "string"
+        },
+        "alternatives": {
+          "description": "ambiguous: the labels it could be.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "by": {
+          "description": "Who reviews (the client's name if not given).",
+          "type": "string"
+        },
+        "cells": {
+          "description": "Cells by ID (as the segmentation names them), or row as \"#123\".",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "cells_too": {
+          "description": "Excluding a region: its cells too (true if not given).",
+          "type": "boolean"
+        },
+        "chosen": {
+          "description": "The cells chosen (the instrument's), instead.",
+          "type": "boolean"
+        },
+        "concern": {
+          "description": "concern: merged, split, boundary, not-a-cell, missed or other.",
+          "type": "string"
+        },
+        "dataset": {
+          "description": "A dataset of the project by name or id; the one in focus, else the first, if not given.",
+          "type": "string"
+        },
+        "label": {
+          "description": "relabel: the new label (or class).",
+          "type": "string"
+        },
+        "labels": {
+          "description": "The label set reviewed (its ID; the latest if not given): for accept, relabel and ambiguous.",
+          "type": "string"
+        },
+        "level": {
+          "description": "The label set's level.",
+          "type": "string"
+        },
+        "note": {
+          "description": "Why, or the comment (needed to relabel, exclude and comment).",
+          "type": "string"
+        },
+        "region": {
+          "description": "Or a region, by name or ID.",
+          "type": "string"
+        },
+        "segmentation": {
+          "description": "The cells' segmentation, by name, ID or instrument (the default if not given).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Review cells or a region"
+    }
+  },
+  {
+    "name": "reviews",
+    "title": "List the reviews",
+    "description": "Lists a dataset's reviews, the latest first (those of a reviewer, an action, a cell or a region if asked), with how many of a segmentation's cells are accepted, relabeled, ambiguous, excluded, of concern and commented, and each reviewed region's state. Label edits made before reviews were recorded are listed as reviews too.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "description": "Only reviews of this action.",
+          "type": "string"
+        },
+        "cell": {
+          "description": "Only a cell's, by ID or row (#123).",
+          "type": "string"
+        },
+        "dataset": {
+          "description": "A dataset of the project by name or id; the one in focus, else the first, if not given.",
+          "type": "string"
+        },
+        "limit": {
+          "description": "At most this many (50 if not given).",
+          "type": "number"
+        },
+        "region": {
+          "description": "Only a region's, by name or ID.",
+          "type": "string"
+        },
+        "reviewer": {
+          "description": "Only this reviewer's.",
+          "type": "string"
+        },
+        "segmentation": {
+          "description": "The segmentation whose cells are counted (the default if not given).",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "List the reviews"
+    }
+  },
+  {
+    "name": "consensus_labels",
+    "title": "Make a consensus",
+    "description": "Makes a consensus label set of a segmentation's label sets (two or more): each cell's label by a rule — unanimous (every set gives it), majority (at least min sets give it, more than any other) or priority (the first set's, else the next's) — with each set's labels mapped to common names where they differ. Answers the cells labeled and how far the first two sets agree.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "dataset": {
+          "description": "A dataset of the project by name or id; the one in focus, else the first, if not given.",
+          "type": "string"
+        },
+        "mapping": {
+          "description": "For each set, {its label: the common name}.",
+          "type": "array"
+        },
+        "members": {
+          "description": "The sets: their ids, with a level after a colon (lab-…:1), or their names.",
+          "type": "array"
+        },
+        "min": {
+          "description": "For a majority, the sets agreeing at least (more than half if not given).",
+          "type": "number"
+        },
+        "name": {
+          "description": "The consensus's name.",
+          "type": "string"
+        },
+        "rule": {
+          "description": "unanimous, majority or priority (majority).",
+          "type": "string"
+        },
+        "segmentation": {
+          "description": "The segmentation, by name, id or instrument (the default if not given).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "members"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Make a consensus"
+    }
+  },
+  {
+    "name": "show_comparison",
+    "title": "Show a comparison",
+    "description": "Opens a comparison of two segmentations (by id, or 'A and B' by their names; the dataset's latest if not given) in the Compare workspace: A and B side by side, overlaid or flickering, cells filled by the class of their difference, a map of disagreement. Ranks the review queue (reassigned transcripts, contamination, disagreement or low counts) among the classes and reassigned transcripts the rules keep, and shows a difference (by its place in the queue, or by a cell's id). Answers the queue's first ten, the difference shown and the cautions about the comparison's measures.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "cell": {
+          "description": "Show the difference of this cell (an id of either segmentation's).",
+          "type": "string"
+        },
+        "classes": {
+          "description": "The classes the queue and the fills keep (one-to-one, expanded, contracted, split, merged, rearranged, only in A, only in B, assignment-only); every differing class if not given.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "comparison": {
+          "description": "A comparison, by artifact id or 'A and B' (the segmentations' names).",
+          "type": "string"
+        },
+        "dataset": {
+          "description": "A dataset of the project by name or id; the one in focus, else the first, if not given.",
+          "type": "string"
+        },
+        "difference": {
+          "description": "Show the difference at this place in the queue (from 1).",
+          "minimum": 1,
+          "type": "number"
+        },
+        "map": {
+          "description": "Show the disagreement map.",
+          "type": "boolean"
+        },
+        "min_changed": {
+          "description": "Keep only differences with at least this many reassigned transcripts.",
+          "minimum": 0,
+          "type": "number"
+        },
+        "mode": {
+          "description": "side, overlay or flicker.",
+          "type": "string"
+        },
+        "rank": {
+          "description": "reassigned, contamination, disagreement or low-counts.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Show a comparison"
+    }
+  },
+  {
+    "name": "decide_segmentation",
+    "title": "Decide about a segmentation",
+    "description": "Records a decision about one of a dataset's segmentations: promote (the dataset's default), keep (for exploration) or reject, with a reason (required), and optionally the comparison it rests on. Decisions are appended to the project and never removed; the default cannot be rejected (promote another first).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "comparison": {
+          "description": "The comparison it rests on (artifact id).",
+          "type": "string"
+        },
+        "dataset": {
+          "description": "A dataset of the project by name or id; the one in focus, else the first, if not given.",
+          "type": "string"
+        },
+        "decision": {
+          "description": "promote, keep or reject.",
+          "type": "string"
+        },
+        "rationale": {
+          "description": "Why (recorded with the decision).",
+          "type": "string"
+        },
+        "segmentation": {
+          "description": "The segmentation, by name or artifact id.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "segmentation",
+        "decision",
+        "rationale"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Decide about a segmentation"
+    }
+  },
+  {
+    "name": "plant_errors",
+    "title": "Plant errors in a segmentation",
+    "description": "For practice: a copy of a dataset's instrument segmentation with known errors planted in it (neighboring cells of different lineages merged, large cells split in two, cells missed, cells drawn too wide), simulated and named so (never promoted or exported), made as a job in the Segmentation view and recorded as a segmentation artifact with its answer key (planted.json). Compare it with the instrument's to find them. The same parameters (20 merges, 20 splits, 10 missed, 10 grown by 1 µm, seed 20261014 if not given) answer the same artifact. Answers its summary, and with reveal the answer key.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "dataset": {
+          "description": "A dataset of the project by name or id; the one in focus, else the first, if not given.",
+          "type": "string"
+        },
+        "grow_um": {
+          "description": "How far a grown cell reaches into its neighbors, µm (1).",
+          "maximum": 20,
+          "minimum": 0,
+          "type": "number"
+        },
+        "grown": {
+          "description": "Cells drawn too wide (10).",
+          "maximum": 1000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "merges": {
+          "description": "Neighboring cells merged (20 if not given).",
+          "maximum": 1000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "missed": {
+          "description": "Cells missed (10).",
+          "maximum": 1000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "reveal": {
+          "description": "Answer the planted errors: each one's kind, cells and place.",
+          "type": "boolean"
+        },
+        "seed": {
+          "description": "The seed choosing the cells (20261014).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "splits": {
+          "description": "Cells split in two (20).",
+          "maximum": 1000,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Plant errors in a segmentation"
+    }
+  },
+  {
+    "name": "export_segmentation",
+    "title": "Export a segmentation",
+    "description": "Writes a segmentation of a dataset (its default if not named) into a folder, in the formats asked for: spatialdata (a SpatialData Zarr store: the cells as labels and polygons, the transcripts as points with their cells, the counts as an AnnData table; µm), anndata (AnnData Zarr), parquet and csv (cells, transcripts with their cells, outlines and counts, in Xenium's column names), mex (Matrix Market, as Read10X reads it), geojson (the outlines) and xenium-ranger (label masks for Xenium Ranger's import-segmentation, the inputs checked, and the command, which SituCraft does not run). A job in the Segmentation view; situcraft-export.json lists every file by its SHA-256 with the totals and content fingerprints every format holds. A folder that exists is replaced only with overwrite, and only when it is a SituCraft export; a segmentation with planted errors is refused. Needs the token (it writes files). Answers the manifest.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "dataset": {
+          "description": "A dataset of the project by name or id; the one in focus, else the first, if not given.",
+          "type": "string"
+        },
+        "folder": {
+          "description": "The export's folder, an absolute path; the export makes it.",
+          "type": "string"
+        },
+        "formats": {
+          "description": "spatialdata, anndata, parquet, csv, mex, geojson and xenium-ranger: one or more.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "overwrite": {
+          "description": "Replace the folder if it is an earlier SituCraft export.",
+          "type": "boolean"
+        },
+        "segmentation": {
+          "description": "The segmentation, by name or artifact id (the dataset's default if not given).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "formats",
+        "folder"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Export a segmentation"
+    }
+  },
+  {
+    "name": "jobs",
+    "title": "List and control jobs",
+    "description": "The program's jobs (building derived data, downloading examples, registering segmentations…): each one's id, kind, state, progress, runs and error, and whether an interrupted one can be resumed. With job, that job with its whole log and its spec; with job and do, stops (cancel), resumes (resume) or forgets (discard) it. show: true shows the Jobs view.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "do": {
+          "description": "cancel, resume or discard.",
+          "type": "string"
+        },
+        "job": {
+          "description": "A job's id.",
+          "type": "string"
+        },
+        "show": {
+          "description": "Show the Jobs view.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "List and control jobs"
+    }
+  },
+  {
+    "name": "methods",
+    "title": "Write the methods",
+    "description": "A methods section written from the record (as record answers it), of a dataset and everything made of it (by default), of a result, or of the whole project: every step from the bundles said as what was done (the data and its check, images and their alignment, regions, segmentations and their comparisons and choices, filters, clusters, maps, marker sets and labels, reviews, graphs, spatial analyses, a cohort's design, summary and comparisons, figures) with its parameters, seeds and what it found, in paragraphs by topic, and the software; its references numbered as first cited, each with its DOI. show: true shows it (a dataset's as the Data view's Methods does; any other in the Reports view).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "dataset": {
+          "description": "A dataset of the project by name or id; the one in focus, else the first, if not given.",
+          "type": "string"
+        },
+        "filters": {
+          "description": "For a dataset: the filters to describe, by name (their latest version) or id; the latest version of each if not given; [] for none.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "project": {
+          "description": "The whole project instead.",
+          "type": "boolean"
+        },
+        "result": {
+          "description": "A result instead, by ID or name (any record answers).",
+          "type": "string"
+        },
+        "show": {
+          "description": "Show the methods in the window.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Write the methods"
+    }
+  },
+  {
+    "name": "samples",
+    "title": "List the samples",
+    "description": "Lists the project's samples, in the Cohort view: each dataset is a sample, or its regions are instead (a tissue microarray's cores, sections on one slide). Answers each sample's name, its dataset and region (a region removed is flagged and left out of a cohort), its cells under its dataset's default segmentation (counted in its region), its region's area, its fields (the user's: subject, condition and any added; missing values null, never zero) and those read from its bundle (run, slide, Xenium region, panel, software), and the fields with their kinds.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "List the samples"
+    }
+  },
+  {
+    "name": "set_samples",
+    "title": "Describe the samples",
+    "description": "Sets what is known of the project's samples, in one step (nothing changes if any part is refused): a dataset's regions made its samples instead of the dataset (or, with none, the dataset one sample again); fields added (text or number) or retyped (to a number only when every value is one); fields removed with their values; samples named; a table read (CSV or tab-separated text with a sample column: its rows matched to samples by name, its columns that are fields set, an empty cell clearing a value, its other columns added as fields, the bundles' columns left alone; rows naming no sample said); and values set by sample and field (null or an empty string clears). Answers the samples, as samples does.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "fields": {
+          "description": "Fields to add or retype: [{name, kind (text or number; text if not given)}].",
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "names": {
+          "description": "New names: {sample (name or ID): name}; an empty name gives back the dataset's or region's.",
+          "type": "object"
+        },
+        "regions": {
+          "description": "A dataset's regions as its samples: {dataset (name or ID), regions (names or IDs; empty for the whole section)}.",
+          "type": "object"
+        },
+        "remove_fields": {
+          "description": "Fields to remove, with their values.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "table": {
+          "description": "A table of the samples' fields as CSV or tab-separated text, with a sample column.",
+          "type": "string"
+        },
+        "values": {
+          "description": "Values: {sample (name or ID): {field: value}}; null or an empty string clears one.",
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Describe the samples"
+    }
+  },
+  {
+    "name": "design",
+    "title": "Describe the experimental design",
+    "description": "Makes the cohort's experimental design from its samples, in the Cohort view, before any comparison of groups: the replicate unit (a field naming each biological replicate, such as subject), the field whose groups are compared and its reference level, the contrasts (each level against the reference if not given), covariates (fields, or the bundles' run, slide and panel: numbers as they are, text as factors) and samples left out with their reasons. A unit's samples in one group are technical replicates, combined into one row; a unit in more than one group pairs them (the units enter the model). Answers the design in words, its rows (units in groups, with their samples), its matrix's columns (treatment coding, as patsy's) and rows, its rank and residual degrees of freedom, the contrasts, the samples left out, notes, and, when it cannot be used, why: a group of fewer than two units, regions of one section as separate units (unless pseudo_samples, for teaching), a term confounded with another, no degrees of freedom left, or the groups confounded with a slide, run or panel. With save, keeps it in the project as a new version of that name. Without a unit or group, answers the latest saved design.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "contrasts": {
+          "description": "Contrasts as [a, b] pairs, each a − b (each level against the reference if not given).",
+          "items": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "type": "array"
+        },
+        "covariates": {
+          "description": "Fields to adjust for: the user's, or run, slide, panel.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "exclude": {
+          "description": "Samples left out: {sample (name or ID): reason}.",
+          "type": "object"
+        },
+        "group": {
+          "description": "The field whose groups are compared, such as condition.",
+          "type": "string"
+        },
+        "pseudo_samples": {
+          "description": "For a teaching example only: regions of one section given different units kept as pseudo-samples (not independent replicates), said so in the design and in every comparison made of it, instead of refused.",
+          "type": "boolean"
+        },
+        "reference": {
+          "description": "The reference group (the first in code-point order if not given).",
+          "type": "string"
+        },
+        "save": {
+          "description": "Keep the design in the project under this name, as its next version.",
+          "type": "string"
+        },
+        "unit": {
+          "description": "The replicate unit: a field, such as subject.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Describe the experimental design"
+    }
+  },
+  {
+    "name": "cohort_steps",
+    "title": "Run the same steps on every sample",
+    "description": "Runs the same steps on every sample of the cohort, in the Cohort view: each dataset's cells clustered (SituCraft's defaults, on its default segmentation) and labeled from one marker set (a starter's resolved on the first dataset and used for the rest) or one labeled single-cell reference, so that every sample's labels have the same names; then a graph of each sample's cells (a region sample's, its region's; never those a review excluded) and the same questions asked of it with the same parameters: neighborhood enrichment over the graph, nearest distances, Moran's I. A step made already is answered at once. Answers the labels' source (the marker set or the reference) and, for each sample, its clustering, labels, graph and answers.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "graph": {
+          "description": "The graph of each sample's cells: delaunay (the default), knn, radius or contact, with its default parameter.",
+          "type": "string"
+        },
+        "level": {
+          "description": "The labels' level the questions are asked of (1, the first, if not given).",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "markers": {
+          "description": "The marker set: a project set's name or ID, or a starter's ID (SituCraft's starter set that fits the first sample's panel if not given).",
+          "type": "string"
+        },
+        "questions": {
+          "description": "The questions: enrichment, distances, moran (enrichment if not given; [] for none).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "reference": {
+          "description": "Instead of a marker set, a labeled single-cell reference on this computer, by its path (an AnnData object saved with write_zarr): every sample's cells labeled from it.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Run the same steps on every sample"
+    }
+  },
+  {
+    "name": "summarize_samples",
+    "title": "Summarize the samples",
+    "description": "Summarizes every sample of the cohort the same way, in the Cohort view, as an artifact of kind cohort-summary: each sample's cells by label (counts, shares of its labeled cells, densities per mm² of its tissue: the tissue window's area, within its region for a region sample), its niches' shares (niches found across the samples together, so that a niche is the same kind of place in every sample), its quality (cells, median transcripts, genes and areas, nuclei, transcripts per area), its graph's numbers, its answers' numbers (an enrichment's ratios, nearest distances' medians, Moran's I by gene) and its pseudobulk (each label's cells' transcripts summed gene by gene), each number traced to the artifact it came from. The samples are labeled from one marker set (cohort_steps labels them); the cohort's names are every label of the level. Answers the summary's ID, the cohort's labels, each sample's cells, labeled cells, counts by label, tissue and niches' shares, the niches (each one's defining labels), and the table's families.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "closing": {
+          "description": "The tissue window's closing radius in µm (10 if not given).",
+          "maximum": 100,
+          "minimum": 0,
+          "type": "number"
+        },
+        "level": {
+          "description": "The labels' level (1, the first, if not given).",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "markers": {
+          "description": "The marker set every sample is labeled from, by name or ID (the one the steps used, or the first that labels every sample, if not given).",
+          "type": "string"
+        },
+        "neighbors": {
+          "description": "The labeled cells each cell's window holds, nearest first, in its own sample (10 if not given).",
+          "maximum": 200,
+          "minimum": 2,
+          "type": "integer"
+        },
+        "niches": {
+          "description": "The niches to find across the samples (6 if not given; 0 for none).",
+          "maximum": 30,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "reference": {
+          "description": "Instead, the reference every sample is labeled from, by its path or SHA-256.",
+          "type": "string"
+        },
+        "samples": {
+          "description": "Only these samples, by name or ID (every sample if not given).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Summarize the samples"
+    }
+  },
+  {
+    "name": "cohort_table",
+    "title": "Read the cohort table",
+    "description": "Reads a cohort summary's table, in the Cohort view: for one family of numbers (cells, share, density, niche, qc, graph, enrichment, nearest or moran), each sample's numbers by key with the artifact each came from. Answers the families, the keys and the samples' values.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "family": {
+          "description": "cells (the default), share, density, niche, qc, graph, enrichment, nearest or moran.",
+          "type": "string"
+        },
+        "keys": {
+          "description": "Only these keys (all if not given).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "summary": {
+          "description": "The summary, by ID (the latest if not given).",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Read the cohort table"
+    }
+  },
+  {
+    "name": "cohort_qc",
+    "title": "Read the cohort's QC",
+    "description": "Reads a cohort summary's QC in the Cohort view, before any comparison: each sample's quality numbers (cells per mm², median transcripts and genes, transcripts per 100 µm², median cell and nucleus areas, the shares of cells with a nucleus and without a transcript; a nucleus's numbers null where the segmentation records none) with its bundle's run, slide and panel; the samples far out on one (a robust z-score, the median absolute deviation's, of 3.5 or more, and a difference that matters: 20% for a quantity, 5 points for a share), each with the reason, never passed or failed; the numbers' medians by slide, run and panel; the design draft's samples by batch and group, with what it says of a group confounded with a batch; the pseudobulk's principal components (each sample's scores, each component's share of the variance, over the genes every panel has); and the panels compared. Nothing is corrected for a batch unless the design adjusts for it.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "summary": {
+          "description": "The summary, by ID (the latest if not given).",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Read the cohort's QC"
+    }
+  },
+  {
+    "name": "compare_abundance",
+    "title": "Compare the groups' abundances",
+    "description": "Compares each label's cells between the design's groups, in the Cohort view, with the replicate unit (not the cell) as the unit, as an artifact of kind abundance made from the summary: each label's share of the labeled cells by a quasi-binomial generalized linear model of the design (its pairing and covariates), its density per mm² of tissue by a quasi-Poisson model with the tissue's area as offset, and the niches' shares as shares; each contrast's effect (an odds ratio or density ratio) with its interval, its t test on the residual degrees of freedom, the dispersion, and p-values adjusted by Benjamini and Hochberg over each family's tests, the universe said. The design is the Cohort view's draft unless a saved one is named. Answers every test.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "design": {
+          "description": "A saved design, by name (its latest version; the Cohort view's draft if not given).",
+          "type": "string"
+        },
+        "families": {
+          "description": "share, density, niche (share and density if not given).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "level": {
+          "description": "The intervals' level (0.95 if not given).",
+          "maximum": 0.999,
+          "minimum": 0.5,
+          "type": "number"
+        },
+        "summary": {
+          "description": "The summary, by ID (the one shown, or the latest, if not given).",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Compare the groups' abundances"
+    }
+  },
+  {
+    "name": "compare_expression",
+    "title": "Compare the groups' expression",
+    "description": "Compares each label's genes between the design's groups, in the Cohort view, with the replicate unit (not the cell) as the unit, as an artifact of kind expression made from the summary: each label's pseudobulk (its cells' transcripts summed over each unit's samples) over the genes every panel has, in the units with enough of its cells; genes filtered by expression (a count of 10 over the median library size in the smallest group's number of units, and 15 in all); TMM normalization; voom's precision weights; each gene's weighted model of the design (its pairing and covariates) and limma's moderated t, its variance moderated toward the genes' prior; each contrast's log2 fold change with its interval, and p-values adjusted by Benjamini and Hochberg over every label, gene and contrast tested, the universe said. A label in too few units is left untested, with the reason. The design is the Cohort view's draft unless a saved one is named. Answers each label's genes below an adjusted p of 0.05 (and the 10 lowest p's of each), its units, genes tested and prior.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "design": {
+          "description": "A saved design, by name (its latest version; the Cohort view's draft if not given).",
+          "type": "string"
+        },
+        "level": {
+          "description": "The intervals' level (0.95 if not given).",
+          "maximum": 0.999,
+          "minimum": 0.5,
+          "type": "number"
+        },
+        "min_cells": {
+          "description": "The fewest cells of a label a unit is tested with (10 if not given).",
+          "maximum": 10000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "summary": {
+          "description": "The summary, by ID (the one shown, or the latest, if not given).",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Compare the groups' expression"
+    }
+  },
+  {
+    "name": "show_gene",
+    "title": "Show a gene's expression by group",
+    "description": "Shows a gene's expression in a label, by group, in the Cohort view's differential expression: each unit's log2 counts per million of the label's pseudobulk (its count and library size), with the gene's test of each contrast.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "comparison": {
+          "description": "The expression comparison, by ID (the latest if not given).",
+          "type": "string"
+        },
+        "gene": {
+          "description": "The gene, by name.",
+          "type": "string"
+        },
+        "label": {
+          "description": "The label, by name.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "gene",
+        "label"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Show a gene's expression by group"
+    }
+  },
+  {
+    "name": "compare_spatial",
+    "title": "Compare the groups' spatial statistics",
+    "description": "Compares the samples' spatial statistics between the design's groups, in the Cohort view, with the replicate unit as the unit (its samples' mean), as an artifact of kind spatial-comparison made from the summary: a pair of labels' neighbor enrichment (found over expected) and a label's median distance to the nearest cell of another, as log2 ratios; a gene's Moran's I (a niche's share is compared by compare_abundance). Each statistic in every unit is a linear model of the design (its pairing and covariates); each family's variances are moderated across its statistics (limma's empirical Bayes); each contrast's effect (a ratio, or a difference) with its interval and moderated t, and p-values adjusted by Benjamini and Hochberg over each family's tests, the universe said. A statistic some unit has none of is left untested. The summary's samples need a spatial question answered (summarize_samples). Answers every test.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "design": {
+          "description": "A saved design, by name (its latest version; the Cohort view's draft if not given).",
+          "type": "string"
+        },
+        "families": {
+          "description": "enrichment, nearest, moran (all the summary has if not given).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "level": {
+          "description": "The intervals' level (0.95 if not given).",
+          "maximum": 0.999,
+          "minimum": 0.5,
+          "type": "number"
+        },
+        "summary": {
+          "description": "The summary, by ID (the one shown, or the latest, if not given).",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Compare the groups' spatial statistics"
+    }
+  },
+  {
+    "name": "show_sample_cells",
+    "title": "Show a sample's cells of a label",
+    "description": "Shows a sample's cells of a label on its tissue, in the Viewer: of its cells chosen (its section's, or its region's; never those a review excluded), those whose label in the summary's label set is the one named. Answers the cells shown.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "description": "The label, by name.",
+          "type": "string"
+        },
+        "sample": {
+          "description": "The sample, by name or ID.",
+          "type": "string"
+        },
+        "summary": {
+          "description": "The summary, by ID (the latest if not given).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sample",
+        "label"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Show a sample's cells of a label"
+    }
+  },
+  {
+    "name": "compare_panels",
+    "title": "Compare the samples' panels",
+    "description": "Compares the gene panels of the project's samples (their bundles' gene_panel.json), before any summary: the panels (each one's name, design, version and genes, and the samples read with it), the genes every panel has (the only ones compared across samples), those in some panels only, shared genes read by other codewords, and genes whose Ensembl IDs or names differ.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Compare the samples' panels"
+    }
+  },
+  {
+    "name": "export",
+    "title": "Write a file",
+    "description": "Writes a file: the project document (project, JSON), a project archive (archive, .scz: the project, its bundles recorded relative to the archive), the methods of a dataset, a result or the project with their references (methods, Markdown), a post-Xenium image's alignment as Xenium Explorer reads it (alignment: its transformation matrix, the image's pixels to the Xenium image's, or its landmarks as keypoints; CSV), a dataset's regions as QuPath imports annotations (regions: GeoJSON, in µm, the Xenium image's pixels or a post-Xenium image's), a dataset's reviews (reviews: CSV, a row a cell, cluster or region reviewed; or JSON, the record), the project's samples (samples: CSV, a row a sample with its fields and its bundle's), or a cohort summary's table (cohort-table: CSV, a row each number of each sample, with the artifact it came from) or pseudobulk (pseudobulk: CSV, a row a sample's label, a column a gene), what made a result (record: Markdown, JSON or BibTeX, as record answers it), a certificate (certificate: a zip of what a result, a dataset's results or the project rests on and reports, fingerprinted, with a README saying how situcraft verify checks it; answers its fingerprint), a report of results chosen (report: one HTML file, opened in any browser offline, of their figures, a table of each other result's numbers, each traced to its place in the certificate, the methods and their references, and the certificate itself, which the report checks as it opens; answers how many numbers it traces and the fingerprint), or a result package (package: the report, each saved view its figures show drawn in advance as tiles with a reader of its own, and the certificate, as a folder, or a zip when the path ends in .zip, that opens in any browser without SituCraft). A report and a package leave out where files lay on this computer, people's names and their notes, and with names: true the samples' and subjects' names; every text they hold is searched for them before they are written. Needs the token.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "coordinates": {
+          "description": "For regions: um (the default), xenium (the Xenium image's pixels) or a post-Xenium image by name or artifact ID (its pixels, as QuPath opens it).",
+          "type": "string"
+        },
+        "dataset": {
+          "description": "A dataset of the project by name or id; the one in focus, else the first, if not given.",
+          "type": "string"
+        },
+        "format": {
+          "description": "For an alignment: matrix (the default) or keypoints; for reviews: csv (the default) or json; for a record: markdown, json or bibtex (from the path's extension, .md, .json or .bib, if not given).",
+          "type": "string"
+        },
+        "image": {
+          "description": "For an alignment: the image, by name or artifact ID.",
+          "type": "string"
+        },
+        "names": {
+          "description": "For a report or a package: leave out the samples' and subjects' names (each written Sample 1, Subject 1, …).",
+          "type": "boolean"
+        },
+        "overwrite": {
+          "description": "Replace the file if it exists.",
+          "type": "boolean"
+        },
+        "path": {
+          "description": "The absolute path of the file to write (for a package, a folder that does not exist yet, or a .zip).",
+          "type": "string"
+        },
+        "project": {
+          "description": "For a record, methods or a certificate: the whole project's (a dataset's if neither this nor result is given).",
+          "type": "boolean"
+        },
+        "regions": {
+          "description": "For regions: which, by name or ID (all if not given).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "result": {
+          "description": "For a record, methods or a certificate: the result, by ID or name.",
+          "type": "string"
+        },
+        "results": {
+          "description": "For a report or a package: the results it reports, by ID or name (figures among them); its figures first, then the others' tables in this order.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "summary": {
+          "description": "For a cohort table or pseudobulk: the summary, by ID (the latest if not given).",
+          "type": "string"
+        },
+        "title": {
+          "description": "For a report or a package: its title (\"Results of\" the project if not given).",
+          "type": "string"
+        },
+        "transform": {
+          "description": "For an alignment: the version, by name or ID (the one in use if not given).",
+          "type": "string"
+        },
+        "what": {
+          "description": "project, archive, methods, alignment, regions, reviews, samples, cohort-table, pseudobulk, record, certificate, report or package.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "what",
+        "path"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Write a file"
+    }
+  },
+  {
+    "name": "figure",
+    "title": "Make or change a figure",
+    "description": "Makes or changes a figure of the project, in the Reports view: a page of panels (a journal's column, 85, 114 or 174 mm wide, or a 16:9 slide), each a saved view of the tissue at the figure's size (its stains composited from their samples, its cells' outlines and fill and its genes' transcripts, in µm, with a scale bar and a legend), lettered A, B, C in reading order. With views, the figure's panels are those views side by side; with panels, any panels (the tissue, a QC distribution, the cells' map, a spatial answer, a cohort's comparison, text) laid out in rows; either makes a new figure when none has the name. The tissue panels of a row share their images' height. Answers what it shows, each panel's letter, region in µm, µm a point, scale bar and the cells and transcripts it draws, and notes (a fill not drawn, too many transcripts). remove: true removes it.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "center": {
+          "description": "Each tissue panel's center, [x, y] in µm (its view's if not given).",
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        },
+        "columns": {
+          "description": "How many panels a row holds (as many as the panels, up to 3, if not given).",
+          "type": "number"
+        },
+        "height_mm": {
+          "description": "The page's height in mm (the size's if not given).",
+          "type": "number"
+        },
+        "name": {
+          "description": "The figure, by name or ID (a new one with views).",
+          "type": "string"
+        },
+        "panels": {
+          "description": "The panels, in order, each an object of its kind: {kind: tissue, view, width_um?, center?, regions? (true for all, or their names)}; {kind: qc, dataset, metric (transcripts, total, area, nucleusArea), log?, filter?, segmentation?}; {kind: map, map, color? (clusters, or labels:\u003clabel set ID\u003e:\u003clevel\u003e)}; {kind: spatial, analysis (enrichment, distances or Moran's I)}; {kind: cohort, comparison, plot (forest, units, volcano, gene), family?, label?, gene?, contrast?, key?}; {kind: text, text}. Each names what it draws by name or ID; the title of any.",
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "picture": {
+          "description": "Answer a picture of the figure too, as it draws now (a PNG): an agent gets it as an image.",
+          "type": "boolean"
+        },
+        "picture_width": {
+          "description": "The picture's width in pixels (1,000; 300 to 2,000).",
+          "type": "number"
+        },
+        "point_size": {
+          "description": "The transcripts' points, in pt across (1.2 if not given).",
+          "type": "number"
+        },
+        "remove": {
+          "description": "Remove the figure.",
+          "type": "boolean"
+        },
+        "scale_bar": {
+          "description": "The scale bar's length in µm (a round length about a fifth of the width if not given).",
+          "type": "number"
+        },
+        "size": {
+          "description": "single (85 mm), onehalf (114 mm), double (174 mm, the default) or slide.",
+          "type": "string"
+        },
+        "text": {
+          "description": "The text's size in pt (6 to 36; 7 if not given, 14 on a slide).",
+          "type": "number"
+        },
+        "views": {
+          "description": "Saved views of the tissue, by name or ID, each a panel, side by side.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "width_um": {
+          "description": "Each tissue panel's width of tissue in µm (what the view shows in a Viewer 1,000 CSS pixels wide if not given).",
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Make or change a figure"
+    }
+  },
+  {
+    "name": "write_figure",
+    "title": "Write a figure",
+    "description": "Writes a figure as SVG, PDF (vector, its text in Helvetica) or PNG (300 dpi by default), or its manifest as JSON, with its manifest inside: the figure, what each panel shows and was drawn from (the dataset by its bundle's run and fingerprint, the saved view, the artifacts drawn), a digest of each panel's drawing, SituCraft's version and commit, and a fingerprint. Answers the manifest's fingerprint and digests and each panel's facts. The same figure written at the same time is the same bytes in SVG and PDF.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "dpi": {
+          "description": "A PNG's resolution, and the stains' in every format (300 if not given).",
+          "type": "number"
+        },
+        "format": {
+          "description": "svg, pdf, png or json (from the path's extension if not given).",
+          "type": "string"
+        },
+        "name": {
+          "description": "The figure, by name or ID (the only one if not given).",
+          "type": "string"
+        },
+        "overwrite": {
+          "description": "Replace the file if it exists.",
+          "type": "boolean"
+        },
+        "path": {
+          "description": "The absolute path of the file to write.",
+          "type": "string"
+        },
+        "time": {
+          "description": "The time written, ISO 8601 (now if not given): the same time, the same bytes.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Write a figure"
+    }
+  },
+  {
+    "name": "record",
+    "title": "What made a result",
+    "description": "Answers what made a result, as the Reports view shows it: each step from the bundles to it (a bundle, a segmentation, a clustering, a marker set, labels, a graph, an analysis, a design, a summary, a comparison, a figure…), in an order where each comes after the steps it was made from, with its method and version, its parameters and seed, the software that ran it, the decisions about it, and the publications it follows (numbered as first cited, each with its DOI). The result is any analysis, comparison, summary, label set, clustering, map, graph, segmentation, alignment, filter or figure of the project; or the record is of a dataset's results (dataset) or the whole project's (project). format markdown or bibtex also answers the record as that text; export (what: record) writes it to a file, and export (what: certificate) certifies it.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "dataset": {
+          "description": "A dataset instead (its results), by name or ID.",
+          "type": "string"
+        },
+        "format": {
+          "description": "json (the default), markdown or bibtex.",
+          "type": "string"
+        },
+        "project": {
+          "description": "The whole project instead.",
+          "type": "boolean"
+        },
+        "result": {
+          "description": "The result, by ID or name.",
+          "type": "string"
+        },
+        "time": {
+          "description": "The time recorded, ISO 8601 (now if not given).",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "What made a result"
+    }
+  },
+  {
+    "name": "verify_records",
+    "title": "Compute the page's records again",
+    "description": "Used by situcraft verify: the page's own records named (a design, a filter, a figure, by ID) computed again in the project open, a design from its samples, a filter's cells from their attributes, a figure's drawing; answers each one's id, whether it was computed (checked), whether it is the same (same), how (detail) and what differs (differ).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "steps": {
+          "description": "Each {id, kind (design, filter or figure), drawing (a figure's drawing as its certificate records it: {drawing, panels: [{id, letter, drawing}]})}.",
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "steps"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true,
+      "title": "Compute the page's records again"
+    }
+  },
+  {
+    "name": "verify_certificate",
+    "title": "Verify a certificate",
+    "description": "Verifies a certificate, a report or a result package as situcraft verify does, in SituCraft itself: each step SituCraft made is made again, in a SituCraft of its own, from the bundles this library knows (each project's datasets and the examples, found by their files' SHA-256), and every file compared bit for bit; the page's records are checked by their digests and its designs, filters and figures computed again in a headless browser. With path, the file there; with result, dataset or project, what made it, certified first. Answers the verdict (verified, differs or not checkable), each bundle found and each step's verdict, as verify's --report writes them. Needs the token with path (it reads the file).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "dataset": {
+          "description": "A dataset of the project by name or id; the one in focus, else the first, if not given.",
+          "type": "string"
+        },
+        "path": {
+          "description": "The absolute path of a certificate (.zip), a report (.html) or a result package (its folder or .zip).",
+          "type": "string"
+        },
+        "project": {
+          "description": "Or the whole project's results: certified, then verified.",
+          "type": "boolean"
+        },
+        "result": {
+          "description": "Or a result, by ID or name: certified, then verified.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Verify a certificate"
+    }
+  },
+  {
+    "name": "read_figure",
+    "title": "Read a figure back",
+    "description": "Reads a figure SituCraft wrote (SVG, PDF, PNG or JSON) and compares it with the project: whether its manifest is as written, what changed since in each panel's view, dataset and artifacts, and whether each panel draws the same now.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "description": "The figure file on this computer.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Read a figure back"
+    }
+  }
+]

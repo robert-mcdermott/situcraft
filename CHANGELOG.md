@@ -1,5 +1,240 @@
 # Changelog
 
+## 0.9.0 (2026-10-20)
+
+Wave 9 of the [roadmap](situcraft-spec/roadmap.md): agents and scripts. What a program can do with
+SituCraft, and what it may not: an agent asks through typed tools and gets answers that name their
+sources, a script runs the same steps from Python or R, and a recipe makes a result again without
+a window. `situcraft mcp` makes SituCraft's 86 actions tools for an AI agent such as Claude Code,
+working in the window you watch with the leave you give it; cells and transcripts are asked for by
+a tree of conditions, never a query string; every agent's and script's call is logged; `situcraft
+run` makes a result's recipe on a server or a cluster's nodes, one bundle or a hundred; R and Python
+packages make each action a function; and an agent benchmark grades agents against known answers.
+The guide's *Agents and scripts* follows an agent through two sessions whose every number CI
+checks. 0.9.0 keeps a Lung project with a filter of a tree and an enrichment's recipe, which every
+later version must reopen and make again with the same ids.
+
+### Added
+
+- **The MCP server (wave 9, slice 1).** `situcraft mcp` is a Model Context Protocol server for AI
+  agents such as Claude Code: JSON-RPC on stdin and stdout, MCP 2024-11-05 to 2025-11-25.
+  - **Its tools are the remote-control actions,** under the same names and arguments, with MCP's
+    hints (read-only, destructive, reaching the network).
+  - **Read-only unless allowed.** By default the agent is offered the tools that read and show.
+    `--allow edits` adds those that change the project, `--allow compute` those that run jobs,
+    `--allow files` those that read or write this computer's files by path or download an
+    example (`--allow all` for every one). A call needing more leave than was given is refused
+    with the leave it needs, and some arguments ask for more (`jobs` with `do`, `open_paths`
+    with `add`, `import_labels` with a `path`).
+  - **In your window, or one of its own.** With SituCraft already running on the library with
+    remote control, the agent works in its window. Otherwise `situcraft mcp` starts SituCraft,
+    opens its window when a tool needs it, takes no script's actions meanwhile, and stops when
+    the agent's session ends.
+  - **Named in the history.** Every change an agent or a script makes is labeled with its name in
+    the History drawer, and undoes as any other.
+  - **Long calls** report progress and can be cancelled.
+  - **Documented:** [docs/MCP.md](docs/MCP.md) (Claude Code, Claude Desktop, Cursor, Gemini CLI,
+    VS Code and Codex; what an agent may do; every tool by the leave it needs) and the guide's
+    *AI agents* page.
+  - **Validated:** the protocol's edges, the leave of every tool and every refusal, the agent's
+    name reaching the window, files by path, cancellation and progress (never after the reply),
+    the real command's stdout carrying only the protocol, and attaching to a running SituCraft; in
+    the browser, an agent's changes named in the History drawer.
+
+- **Answers that name their sources (wave 9, slice 2).** Three actions the program answers itself,
+  from the library and the results' folders, with or without a window:
+  - **`list_projects`:** the library's projects, the most recently changed first.
+  - **`describe_project`:** what a project holds without opening it: its datasets, every result
+    with its id, kind, method and the ids of what it was made from, the page's records, regions,
+    saved views, figures and decisions.
+  - **`get_result`:** a result's record (method, parameters, what it was made from, software,
+    job, findings, the projects holding it) and its numbers as tables, a page at a time: each
+    spatial question's (an enrichment's pairs, Ripley's curves, the bands across an edge, Moran's
+    I by gene…), a clustering's clusters, a label set's labels, a cohort comparison's tests and a
+    cohort summary's table, and its summary as the report shows it.
+  - **Pictures:** `show_tissue`, `show_map` and `figure` with `picture` also give a picture of what
+    they show, drawn as a figure draws it (the tissue with its scale bar and legend, a map by
+    cluster or label, a figure), which an agent receives as an image.
+  - **A read-only agent sees maps:** `show_map` now needs no leave, and the window does not make a
+    map for an agent not given compute.
+  - **Validated:** the tables against the numbers in the results' files, paging, a project's
+    results and records, the program answering a script and an agent with no window open; on the
+    development library, every kind of result read and two pictures looked at.
+
+- **Asking which cells and transcripts (wave 9, slice 3).** Questions put as a tree of conditions
+  in JSON, never a query string: `all`, `any` and `not` of conditions on a cell's QC numbers, its
+  count of a gene, its label, cluster or niche, its region or its distance from one, a box, or a
+  saved filter; on a transcript's gene, region, distance, cell and quality. SituCraft checks the
+  tree, refuses one it cannot read with the reason, and evaluates it over the dataset's columns.
+  - **`query_cells`:** the cells a tree keeps, counted, with the checksum a filter would record, a
+    page of them with the columns asked for, and how they divide among a label set's labels, a
+    clustering's clusters or a niches analysis's niches against all the cells.
+  - **`query_transcripts`:** the transcripts a tree keeps, counted by gene.
+  - **`summarize_region`:** a region's or box's area, its cells and their density, its labels
+    against the whole tissue, and the genes most abundant in it and most above the rest.
+  - All three are answered by the program from the library, with or without a window, on the
+    segmentation asked for (by default the one promoted).
+  - **Saved as a filter:** `save_filter` takes the same tree (`where`), and the cells it keeps
+    become a filter that clusterings, graphs and spatial analyses use, shown, compared and verified
+    in the QC view as any other.
+  - **Validated:** every kind of condition against counts made directly from the bundle's
+    columns; 500 random trees against a reading of each one cell at a time; the 17 filters the
+    page saved on the Lung bundle (0.1.0 to 0.6.0) reproduced cell for cell by the program; on the
+    development library, questions about the Lung's tumor nest through `situcraft mcp`, and a
+    filter saved from a tree used by a graph and verified again.
+
+- **Every call logged (wave 9, slice 4).** Each call an agent or a script makes of SituCraft is a
+  line of the library's log (`calls/YYYY-MM.jsonl`), refusals and failures too.
+  - **What a line holds:** when; who called and how (an agent through `situcraft mcp`, with its
+    leave, or a script); the tool and its arguments; whether it was done, refused or failed, and
+    the sentence it answered; the records it added, changed or removed in the project; the ids
+    its answer named; and how long it took.
+  - **The Calls tab** of the drawer (`⌘J`) shows the log as calls arrive, the newest first:
+    searched by words, chosen by caller, tool and outcome, each call opening to its arguments and
+    what it changed, the records of the open project a click away. It exports as CSV or JSON
+    lines, and scripts read it at `/api/calls`. The log never leaves this computer.
+  - **An action's answer** now says what it changed in the project (`changed`).
+  - **One line for each call:** an agent working in the window of a running SituCraft waits for
+    its page before sending a call, rather than sending it again.
+  - **Validated:** every outcome a script's or an agent's call can have, logged once, in the
+    window's SituCraft or one attached to; long arguments cut short; the ids an answer names;
+    searching, paging across months and exporting; in the browser, the calls of a script and an
+    agent shown as they came, and a filter a call added opened from its line.
+
+- **Recipes, made again without a window (wave 9, slice 5).** A result's recipe is every step from
+  its bundles to it: each the job that made it and its parameters, as readable JSON.
+  - **Writing one:** the **Recipe** button in the Reports view's *What made a result*, or the
+    `recipe` tool for agents and scripts. Nothing of your computer is in it: a bundle is named by
+    its role, another file by its name, and what an earlier step made by that step.
+  - **`situcraft run --recipe … --bundle … --out …`** makes it in a SituCraft of its own, so that
+    it runs on a cluster's nodes as on your computer. It writes the artifacts, `run.json` (the
+    inputs and outputs by SHA-256, each step, and why it stopped if it did not finish) and a
+    certificate that `situcraft verify` checks. Exit status: 0 made, 1 a step failed, 2 it could
+    not run.
+  - **On the same bundle,** the very same results, with the same ids and files. **On another
+    bundle,** the steps that are the program's alone (segmentations, clusters, maps, labels).
+    A step that carries cells the window chose (a filter's, each cell's label, a region's) is
+    made only on its own bundle, and the run says so before making anything.
+  - **The same files** on any number of threads (`--threads`) and on any processor; with
+    `--clock` the same recipe gives the same certificate, byte for byte. `--dry-run` checks a
+    recipe without making it.
+  - **Validated:** recipes written and read back, with no path of the computer in them; made
+    again with the same ids and files and verified by `situcraft verify`; the same files twice, on
+    one thread and on many, with the same certificate under a fixed clock; the files pinned as
+    made on arm64 and made again on x86-64; on another bundle, a map made and an enrichment
+    refused; every refusal of the command line. On the Lung bundle, its enrichment's recipe
+    (segmentation, graph, clusters, labels, enrichment) made again in 2 seconds, its derived
+    data already built, and verified.
+
+- **Runs at scale (wave 9, slice 6).**
+  - **The window's choices, made again on other bundles.** A step carrying cells the window chose
+    is now made on any bundle when the program can choose them as the window did: every cell, a
+    saved filter's cells (its conditions or tree), and each cell's label of a label set the recipe
+    makes. A recipe says so only when the program, choosing them on the bundle it was written
+    from, gets the very cells the window chose. A region's cells, a review's, curated labels and
+    niches are still made only on their own bundle.
+  - **The report, without a window:** `situcraft run --report` writes, in a headless Chrome,
+    Chromium, Edge or Brave, the result's report and methods, and the run's project (its bundle
+    and every result) in its library, to open in SituCraft. A new `add_results` action adds
+    results of the library to the open project.
+  - **Batches:** `--bundle-dir` or `--bundles` makes a recipe on many bundles, each in a folder of
+    its own, with `batch.json`; `--index` makes one, as a cluster's array task does.
+  - **Clusters and containers:** the headless browser runs without its sandbox as root and does
+    not rely on a small `/dev/shm`. On Linux it ends with the run. One that stops answering is
+    started again. A scheduler's SIGTERM ends a run, and `run.json` says so.
+  - **Documented:** the guide's new page *Running at scale* (recipes, `situcraft run`, the report,
+    batches, array jobs on Slurm, Grid Engine, PBS, LSF and AWS Batch, containers).
+  - **Validated:** a filtered clustering and an enrichment by a label set's labels made on another
+    bundle and verified; a batch, one of its bundles alone and a list of bundles; in the viewer
+    suite, the Lung enrichment's recipe written from the window's results with every carried
+    step chosen again as the window chose it, made again with the same ids, its report written
+    in a headless page and its certificate verified.
+
+- **Python and R clients (wave 9, slice 7).** The `situcraft` packages for Python and R
+  (`clients/`) drive a running SituCraft from a script or a notebook.
+  - **Each action a function,** with its arguments and help, generated from the list of actions
+    so that every one is there: `sc.query_cells(...)` in Python, `sc_query_cells(...)` in R.
+  - **Results:** tables as data frames, each column of one type; pictures saved as files (the
+    tissue's a JPEG, a map's and a figure's a PNG); what an action changed; SituCraft's reason
+    when it refuses one. The running SituCraft is found through its `remote.json`.
+  - **Two worked examples:** a Python notebook on the simulated tissue (its labels against the
+    true types, 97% agreeing; which labels neighbor each other; its recipe), and an R script on
+    the simulated cohort (the gene the simulator changed in one cell type, found between the
+    conditions, and nothing else).
+  - **Found on the way:** a script asking the library right after an action could miss what the
+    action did (the project was saved a moment later); the window now saves a changed project
+    before it answers. A picture of the whole tissue from a window not shown was not of the
+    whole tissue; it is now.
+  - **Validated:** both clients against SituCraft in headless Chrome (results equal to the HTTP
+    API's, tables, pictures, errors, the connection file); the notebook executed and the R
+    script run, every check passing; `R CMD check` clean.
+
+- **The agent benchmark (wave 9, slice 8).** `benchmark/` measures whether an AI agent working
+  through SituCraft's tools gets an analysis right.
+  - **Ten tasks with known answers,** worded as a user would ask them: label every cell with its
+    type; find the two cell types that neighbor each other; find the sample with a quality
+    problem; find the gene a treatment changes; compare groups that do not differ; find the cell
+    type that changes after treatment, each subject sampled before and after; count and save the
+    endothelial cells of the Lung section; read a run's quality; make a figure of the cell types
+    and write its methods; certify an analysis so that others can check it.
+  - **Data whose truth is known:** simulated tissues and cohorts made for each task with a seed
+    of its own, each planted effect moved from the examples' (another gene, cell type or sample),
+    the simulator's truth taken out of the bundles before the agent starts; and the Lung bundle,
+    its answers read from its own CSV tables, apart from SituCraft's readers.
+  - **Graded by code,** with partial credit: the answer, what the agent left in the project (label
+    sets, filters, comparisons, analyses), read through SituCraft's tools, and the files it wrote
+    (a figure read back by SituCraft, a certificate checked by `situcraft verify`).
+  - **A reference solution for each,** through the same tools without a model, scores 100%; an
+    agent that answers nothing scores 0. Both run in CI.
+  - **Models' runs** (`node benchmark/run.mjs --agent claude-code --model …`): Claude Code with
+    SituCraft's MCP server as its only tools, in an empty folder, without the user's settings,
+    each run recorded with the model, Claude Code's version, the tool calls, tokens, cost, time
+    and reply.
+  - **On the website:** the *Agent benchmark* page, its results as a leaderboard and by task.
+  - **Found on the way:** `query_cells` given an offset of 0 skipped every cell; it now starts at
+    the first.
+  - **Validated:** every grader given right, partly right and wrong answers; the reference
+    solutions and doing nothing on every task, through `situcraft mcp` in headless Chrome; the
+    Lung's endothelial cells counted by SituCraft as the bundle's transcripts CSV counts them.
+
+- **Examples, documentation and release (wave 9, slice 9).**
+  - **An agent's session in CI, without a model** (`validation/agent-session.mjs`, after MaveScape
+    0.8.0's, the same author's): `situcraft mcp` driven over stdin and stdout as an agent's client
+    drives it, in a headless window. With no leave, only the tools that read and show are offered,
+    and a job is refused, naming the leave it needs. With every leave, all 86 tools are called on
+    the simulated tissue, the simulated cohort and the Lung, every one answering: pictures come as
+    images, progress only before an answer, the tools said to read only leave the project's history
+    as it was, every change carries the agent's name, and every call is a line of the log. Stdout
+    carries nothing but the protocol, and SituCraft stops when stdin closes.
+  - **The guide's *Agents and scripts*** (formerly *AI agents*, at the same address) follows an
+    agent through two sessions. On the simulated tissue: its cells labeled by type, which types
+    neighbor each other, the immune-like cells holding epithelial transcripts counted and kept as a
+    filter, and the enrichment's recipe made again by `situcraft run` with the same id, then
+    verified. On the simulated cohort: the one gene the treatment changes, SIM033 in the
+    epithelial-like cells, found alone with the subject as the replicate. Every call is real and
+    every number checked by the agent session. Also: Python and R with their worked examples, the
+    log of calls, the benchmark, and a picture of an agent's session in the window, its calls in the
+    drawer.
+  - **The MCP reference finished** (`docs/MCP.md`): what an answer changed, recipes, the sessions,
+    the benchmark, and how it is checked.
+  - **Agents told what changed:** a tool's result now says what the action changed in the project
+    (`changed`), as a script's answer does.
+  - **The drawer's tabs for screen readers:** its tab list held the close button too, which a tab
+    list may not; the tabs are now a list of their own, the button beside it.
+  - **Updated for the release:** the README, the website's front page (agents and scripts, with the
+    picture), the installing guide, `CITATION.cff`. Version 0.9.0.
+  - **Validated:** the agent session, 24 checks; the Lung project saved by 0.9.0
+    (`validation/projects/0.9.0-lung.situcraft.json`) and its enrichment's recipe
+    (`0.9.0-lung.recipe.json`): the project reopened, its filter of a tree keeping the very cells it
+    recorded, and the recipe made again by `situcraft run` on the bundle, every step with the
+    recipe's id, its certificate verified.
+
+### Changed
+
+- **Files named by an argument need the token.** A script that has `import_labels` or
+  `reference_labels` read a table by its `path`, or `cohort_steps` or `summarize_samples` read a
+  reference by its path, now needs remote control's token, as opening and writing files did.
+
 ## 0.8.0 (2026-10-19)
 
 Wave 8 of the [roadmap](situcraft-spec/roadmap.md): figures and a provable record. What others can

@@ -1,9 +1,13 @@
 package main
 
+import "strings"
+
 // The remote-control actions (remote.go): what a program on this computer can ask the open
 // SituCraft page to do. The page performs them (web/ui/remote.js, whose action table must name
 // exactly these; TestEveryActionHasAPageHandler checks it). GET /api/remote/tools lists them with
-// their arguments' JSON schemas; the MCP server (wave 9) will offer the same list to agents.
+// their arguments' JSON schemas, and the MCP server (mcp.go) offers the same list to agents as its
+// tools: each with the leave it needs beyond reading (actionHints), so that an agent is offered only
+// the tools it was allowed.
 
 // apiVersion is the version of what these actions are: their names, their arguments and what their
 // results hold (GET /api/info and /api/remote/tools give it). It changes when an action is removed
@@ -16,6 +20,9 @@ type remoteAction struct {
 	Title       string         `json:"title"`
 	Description string         `json:"description"`
 	InputSchema map[string]any `json:"inputSchema"`
+	// Annotations are MCP's hints of what the tool does (from actionHints).
+	Annotations map[string]any `json:"annotations,omitempty"`
+	hint        actionHint
 	// long: may run for minutes (checking a bundle, building its derived data, a download).
 	long bool
 	// output: writes a file at args.path (output.go), so it needs the token.
@@ -26,6 +33,9 @@ type remoteAction struct {
 	readsAt bool
 	// writes: a job writes files on this computer where the arguments say, so it needs the token.
 	writes bool
+	// program: the program answers it itself, from the library and the artifacts (results.go),
+	// without a page.
+	program bool
 }
 
 func schema(properties map[string]any, required ...string) map[string]any {
@@ -50,8 +60,58 @@ func numberArg(description string) map[string]any {
 
 var datasetArg = textArg("A dataset of the project by name or id; the one in focus, else the first, if not given.")
 
+// The project and dataset of an action the program answers from the library (no focus).
+var (
+	projectArg        = textArg("The project's name (or part of it) or id; the most recently changed if not given.")
+	libraryDatasetArg = textArg("A dataset of the project by name or id; its only one if not given.")
+)
+
+// cellTreeHelp is the grammar of a tree of cells (internal/query).
+const cellTreeHelp = "A tree is {all: [trees]}, {any: [trees]}, {not: tree} or one condition: {attribute: transcripts, genes, total, controls, area, nucleusArea, nucleusShare, density or nuclearShare, min, max} (bounds included; a cell without a value fails); {attribute: method, in: [names or numbers from 0]} (the instrument's segmentation's alone); {gene: name, min, max} (its transcripts in the cell; at least 1 when no bound); {labels: label set id, level, in: [names or numbers from 0]}; {clusters: clustering id, in: [names or numbers from 1]}; {niches: niches analysis id, in: [numbers from 1]}; {region: name or id} (its centroid inside); {distance: region, min, max} (µm from the region's edge, negative inside); {box: [x0, y0, x1, y1]} (µm); {filter: a saved filter's name or id} (the instrument's segmentation's alone)."
+
 var remoteActions = []remoteAction{
 	{Name: "get_state", Title: "Describe the project", Description: "The open project: its datasets (each bundle's place, whether it is found, its check, its derived data), filters and saved views; the view shown, the item in focus, the cells chosen, what the Viewer or QC view shows (dataset, place, zoom, genes, map); the items on this computer; the examples; the jobs running.", InputSchema: schema(map[string]any{})},
+	{Name: "list_projects", Title: "List the projects", Description: "The library's projects, the most recently changed first: each one's id, name, when it was made and changed, its datasets, and how many results, figures and saved views it has. Answered by the program from the library, with or without a window.", InputSchema: schema(map[string]any{}), program: true},
+	{Name: "describe_project", Title: "Describe a project", Description: "What a project of the library holds, without opening it: its datasets (each bundle's place, run, panel, tissue, cells and transcripts), its results (each one's id, kind, name, dataset, method and the ids of what it was made from: segmentations, comparisons, clusterings and maps, label sets, graphs, spatial analyses, cohort summaries and comparisons, images and alignments), the page's records (filters, designs, marker sets, curated and consensus labels), its regions, saved views, figures and decisions. get_result gives a result's record and numbers by its id. Answered by the program from the library, with or without a window.", InputSchema: schema(map[string]any{
+		"project": projectArg,
+	}), program: true},
+	{Name: "get_result", Title: "Read a result", Description: "A result by its id (describe_project lists them): its record (kind, name, dataset, state, method with its version and citation, parameters, what it was made from, the software and the job, the checks' findings, the projects holding it), its summary, and its numbers as tables, a page of one table's rows at a time: a spatial analysis's by its question (an enrichment's or nearest distances' pairs, a co-occurrence's ratios by distance, Ripley's tests and curves, regions compared and their ratios, the bands, zones and ratios across an edge, the niches and their composition, Moran's I by gene), a clustering's clusters with their leading markers, a label set's labels, a cohort comparison's tests and a cohort summary's table (as their CSV files hold them), and every result's summary as the report shows it. Numbers are numbers, null where there is none. Answered by the program from the artifacts, with or without a window.", InputSchema: schema(map[string]any{
+		"id":     textArg("The result's id, such as spa-…, clu-…, lab-…, seg-…, coh-…, abu-…"),
+		"table":  textArg("The table to read (its first if not given; the answer lists them)."),
+		"offset": map[string]any{"type": "integer", "minimum": 0, "description": "The first row (0)."},
+		"limit":  map[string]any{"type": "integer", "minimum": 0, "description": "Rows to answer (100; 0 for all, up to 10,000)."},
+	}, "id"), program: true},
+	{Name: "query_cells", Title: "Ask which cells", Description: "The cells of a dataset that a tree of conditions keeps (where), counted, with the SHA-256 of which they are (as a saved filter records it), a page of them (each one's row, id and centroid, and the columns asked for), and, with by, how they divide among a label set's labels, a clustering's clusters or a niches analysis's niches against all the cells. " + cellTreeHelp + " Answered by the program from the library, with or without a window; save_filter with the same tree saves them as a filter.", InputSchema: schema(map[string]any{
+		"where":        map[string]any{"type": "object", "description": "The tree of conditions."},
+		"project":      projectArg,
+		"dataset":      libraryDatasetArg,
+		"segmentation": textArg("The segmentation whose cells are asked about, by id or name, or instrument: the dataset's default (the one promoted, else the instrument's) if not given."),
+		"by":           textArg("A label set's, clustering's or niches analysis's id: the cells kept divided among its labels, clusters or niches."),
+		"level":        map[string]any{"type": "integer", "minimum": 0, "description": "The label set's level for by (0)."},
+		"columns":      map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Attributes or genes to give for each cell of the page."},
+		"offset":       map[string]any{"type": "integer", "minimum": 0, "description": "The first cell kept of the page (0)."},
+		"limit":        map[string]any{"type": "integer", "minimum": 0, "description": "Cells of the page (20; 0 for the most, 10,000)."},
+	}, "where"), program: true},
+	{Name: "query_transcripts", Title: "Ask which transcripts", Description: "The transcripts of a dataset that a tree of conditions keeps (where), of quality min_quality or more (20), counted by gene. A transcript condition is one of: {gene: name or [names]}; {region: name or id}; {distance: region, min, max} (µm from its edge, negative inside); {box: [x0, y0, x1, y1]} (µm); {assigned: true or false} (to a cell of the instrument's segmentation); {cells: a tree of cells} (assigned to a cell it keeps; the same conditions as query_cells). Combine them with {all: [...]}, {any: [...]} and {not: ...}. Bound the tree with a region, a distance's max or a box on a large dataset. Answered by the program from the library, with or without a window.", InputSchema: schema(map[string]any{
+		"where":       map[string]any{"type": "object", "description": "The tree of conditions."},
+		"project":     projectArg,
+		"dataset":     libraryDatasetArg,
+		"min_quality": map[string]any{"type": "number", "minimum": 0, "description": "The least quality (Q) a transcript has (20)."},
+		"limit":       map[string]any{"type": "integer", "minimum": 0, "description": "Genes to list (20; 0 for all)."},
+	}, "where"), program: true},
+	{Name: "summarize_region", Title: "Summarize a region", Description: "What a region of a dataset (or a box) holds: its area, its cells (by centroid) and their density, how they divide among a label set's labels against the whole tissue (by default the latest label set of the segmentation), and its genes: the most transcripts, and those most above the rest of the tissue (mean transcripts per cell inside against outside, among genes with ten or more inside). Answered by the program from the library, with or without a window.", InputSchema: schema(map[string]any{
+		"region":       textArg("The region by name or id (regions lists them); or give box."),
+		"box":          map[string]any{"type": "array", "items": map[string]any{"type": "number"}, "minItems": 4, "maxItems": 4, "description": "[x0, y0, x1, y1] in µm, in place of a region."},
+		"project":      projectArg,
+		"dataset":      libraryDatasetArg,
+		"segmentation": textArg("The segmentation, by id or name, or instrument: the dataset's default if not given."),
+		"labels":       textArg("A label set's id: its labels' cells inside, against all its cells."),
+		"level":        map[string]any{"type": "integer", "minimum": 0, "description": "The label set's level (0)."},
+		"genes":        map[string]any{"type": "integer", "minimum": 0, "description": "Genes in each list (10; up to 200)."},
+	}), program: true},
+	{Name: "recipe", Title: "Write a result's recipe", Description: "A result's recipe: every step from its bundles to it, each the job that made it and its spec as readable JSON, with the bundles named by their roles, other files read by their names and each step's inputs by the steps that make them (no path or id of this computer). situcraft run --recipe makes it again on a bundle without a window, with its artifacts, run.json and a certificate. A step carrying cells the window chose (a filter's, labels', regions') is made again only on the bundle the recipe was made from. Answered by the program from the library, with or without a window.", InputSchema: schema(map[string]any{
+		"id": textArg("The result's id (describe_project lists them)."),
+	}, "id"), program: true},
 	{Name: "new_project", Title: "Start a new project", Description: "Starts a new, empty project (the open one is saved in the library first).", InputSchema: schema(map[string]any{
 		"name": textArg("A name for it."),
 	})},
@@ -107,6 +167,8 @@ var remoteActions = []remoteAction{
 		"images":          map[string]any{"type": "object", "description": "Post-Xenium images, by name or artifact ID: {visible, opacity (0 to 1), channels: {by name: {visible, color, window, gamma}} (immunofluorescence)}, each optional."},
 		"graph":           textArg("A graph of the segmentation drawn, its edges drawn over the cells when zoomed in: by artifact ID, latest for the last built, none for none."),
 		"cells_of":        map[string]any{"type": "object", "description": "A spatial analysis's cells: {analysis (its ID, or latest), a, b (labels by name), distance (a co-occurrence's, a nearest distance's or a Ripley radius, µm)}: an enrichment's pair, their cells neighboring each other and the edges between them; or label b's cells within the distance of a's. Regions compared: {analysis, a, region (a region's name, or the row of the tissue in none)}: label a's cells in it. Across an edge: {analysis, a (any label if not given), zone (core, margin, around or all)}: label a's cells there. Niches: {analysis, niche (its number from 1)}: the niche's cells, filled by niche. Moran's I: {analysis, gene (one whose local Moran's I was kept), class (high, low, high-low, low-high or all)}: the gene's cells of that local class. The cells filled by the analysis's labels."},
+		"picture":         flagArg("Answer a picture of what the Viewer shows too, drawn as a figure's tissue panel draws it, with its scale bar and legend (a JPEG): an agent gets it as an image."),
+		"picture_width":   numberArg("The picture's width in pixels (1,000; 300 to 2,000)."),
 	}), long: true},
 	{Name: "add_image", Title: "Add a post-Xenium image", Description: "Adds an H&E or immunofluorescence image of a dataset's section, stained and scanned after the Xenium run, as a job: a pyramidal, tiled OME-TIFF (as Xenium Explorer requires; RGB, or channels of 8 or 16 bits; deflate, LZW, JPEG or JPEG 2000), read where it lies, never copied, and recorded as an image artifact with its SHA-256. Its alignment, the transformation matrix or keypoints Xenium Explorer saves (found beside the image when 10x named it, else named; null for none), is recorded as the image's first transform and places it; without one the image is not aligned until align_image places it. The Viewer draws an aligned image under the transcripts and cells. Needs the token (it reads files). Answers what the image is and how it is placed.", InputSchema: schema(map[string]any{
 		"dataset":   datasetArg,
@@ -226,11 +288,15 @@ var remoteActions = []remoteAction{
 		"dataset":   datasetArg,
 		"clear":     flagArg("Clear the choice."),
 	}), long: true},
-	{Name: "save_filter", Title: "Save a cell filter", Description: "Saves a cell filter as a new version (a filter's earlier versions are kept): conditions on the cells' attributes, each {attribute, min, max} (bounds included, either optional) or {attribute: \"method\", values: [segmentation methods by name or number]}. Returns its version and result: the cells it keeps and the SHA-256 of which.", InputSchema: schema(map[string]any{
+	{Name: "save_filter", Title: "Save a cell filter", Description: "Saves a cell filter of the instrument's segmentation's cells as a new version (a filter's earlier versions are kept), which clusterings, graphs and spatial analyses can use: conditions on the cells' attributes, each {attribute, min, max} (bounds included, either optional) or {attribute: \"method\", values: [segmentation methods by name or number]}; or where, a tree of conditions as query_cells takes it (its labels, clusters, niches, regions, genes; SituCraft applies it). Returns its version and result: the cells it keeps and the SHA-256 of which.", InputSchema: schema(map[string]any{
 		"name":       textArg("The filter's name."),
 		"conditions": map[string]any{"type": "array", "items": map[string]any{"type": "object"}, "description": "The conditions, all of which a cell must meet."},
+		"where":      map[string]any{"type": "object", "description": "A tree of conditions (query_cells), in place of conditions."},
 		"dataset":    datasetArg,
-	}, "name", "conditions"), long: true},
+	}, "name"), long: true},
+	{Name: "add_results", Title: "Add results to the project", Description: "Adds results of the library (segmentations, clusterings and their maps, label sets, graphs, spatial analyses, by id) to the open project, each to the dataset of its bundle, as the view that made it adds it: situcraft run --report adds those it made, and a result made in another project can be brought into this one. One already in the project, of no dataset of it, or of another kind is passed over, said why.", InputSchema: schema(map[string]any{
+		"ids": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "The results' ids."},
+	}, "ids")},
 	{Name: "segmentations", Title: "List the segmentations", Description: "A dataset's segmentations (all datasets' if none is named), each an artifact with its lineage (method and version, software, the job that made or registered it, what it was made from), its files by SHA-256, what its check found, its state, and whether it is the dataset's default (promoted, with the decision's reason). show: true shows the first in the inspector.", InputSchema: schema(map[string]any{
 		"dataset": textArg("A dataset by name or id; every dataset's if not given."),
 		"show":    flagArg("Show it in the inspector."),
@@ -319,11 +385,13 @@ var remoteActions = []remoteAction{
 		"segmentation": textArg("The other segmentation, by name or artifact id."),
 	}, "segmentation"), long: true},
 	{Name: "show_map", Title: "Show the map", Description: "Shows a clustering in the Cell types view, with its map (UMAP; made first if it has none) beside the tissue, linked: the cells colored by a clustering's clusters, a gene's expression, their gene transcripts, area or how faithfully the map keeps their neighbors, and a selection of cells (by cluster, or inside a polygon on the map or the tissue) drawn on both. Answers the map's trustworthiness, the selection's size and its composition by cluster.", InputSchema: schema(map[string]any{
-		"dataset":    datasetArg,
-		"clustering": textArg("A clustering, by artifact id or name; SituCraft's latest if not given."),
-		"map":        textArg("The map: a map's artifact id, or instrument for the instrument's; the clustering's own if not given."),
-		"color_by":   textArg("clusters (the clustering's), clusters:<clustering>, labels (its latest label set, the first level), labels:<level>, labels:<label set>:<level>, confidence, a gene's name, transcripts, area or reliability."),
-		"select":     map[string]any{"description": "{\"clusters\": [numbers from 1]}, {\"polygon\": [[x, y], …], \"on\": \"map\" or \"tissue\" (µm)}, or \"none\"."},
+		"dataset":       datasetArg,
+		"clustering":    textArg("A clustering, by artifact id or name; SituCraft's latest if not given."),
+		"map":           textArg("The map: a map's artifact id, or instrument for the instrument's; the clustering's own if not given."),
+		"color_by":      textArg("clusters (the clustering's), clusters:<clustering>, labels (its latest label set, the first level), labels:<level>, labels:<label set>:<level>, confidence, a gene's name, transcripts, area or reliability."),
+		"select":        map[string]any{"description": "{\"clusters\": [numbers from 1]}, {\"polygon\": [[x, y], …], \"on\": \"map\" or \"tissue\" (µm)}, or \"none\"."},
+		"picture":       flagArg("Answer a picture of the map too, by its clusters or a label set (a PNG): an agent gets it as an image."),
+		"picture_width": numberArg("The picture's width in pixels (1,000; 300 to 2,000)."),
 	}), long: true},
 	{Name: "name_clusters", Title: "Name clusters", Description: "Names a clustering's clusters (a new version of its names, appended; the clusters keep their numbers). Clusters given the same name are merged on the map and the tissue. An empty name removes one.", InputSchema: schema(map[string]any{
 		"dataset":    datasetArg,
@@ -586,18 +654,20 @@ var remoteActions = []remoteAction{
 		"names":       flagArg("For a report or a package: leave out the samples' and subjects' names (each written Sample 1, Subject 1, …)."),
 	}, "what", "path"), long: true, output: true},
 	{Name: "figure", Title: "Make or change a figure", Description: "Makes or changes a figure of the project, in the Reports view: a page of panels (a journal's column, 85, 114 or 174 mm wide, or a 16:9 slide), each a saved view of the tissue at the figure's size (its stains composited from their samples, its cells' outlines and fill and its genes' transcripts, in µm, with a scale bar and a legend), lettered A, B, C in reading order. With views, the figure's panels are those views side by side; with panels, any panels (the tissue, a QC distribution, the cells' map, a spatial answer, a cohort's comparison, text) laid out in rows; either makes a new figure when none has the name. The tissue panels of a row share their images' height. Answers what it shows, each panel's letter, region in µm, µm a point, scale bar and the cells and transcripts it draws, and notes (a fill not drawn, too many transcripts). remove: true removes it.", InputSchema: schema(map[string]any{
-		"name":       textArg("The figure, by name or ID (a new one with views)."),
-		"views":      map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Saved views of the tissue, by name or ID, each a panel, side by side."},
-		"panels":     map[string]any{"type": "array", "items": map[string]any{"type": "object"}, "description": "The panels, in order, each an object of its kind: {kind: tissue, view, width_um?, center?, regions? (true for all, or their names)}; {kind: qc, dataset, metric (transcripts, total, area, nucleusArea), log?, filter?, segmentation?}; {kind: map, map, color? (clusters, or labels:<label set ID>:<level>)}; {kind: spatial, analysis (enrichment, distances or Moran's I)}; {kind: cohort, comparison, plot (forest, units, volcano, gene), family?, label?, gene?, contrast?, key?}; {kind: text, text}. Each names what it draws by name or ID; the title of any."},
-		"columns":    numberArg("How many panels a row holds (as many as the panels, up to 3, if not given)."),
-		"size":       textArg("single (85 mm), onehalf (114 mm), double (174 mm, the default) or slide."),
-		"height_mm":  numberArg("The page's height in mm (the size's if not given)."),
-		"text":       numberArg("The text's size in pt (6 to 36; 7 if not given, 14 on a slide)."),
-		"width_um":   numberArg("Each tissue panel's width of tissue in µm (what the view shows in a Viewer 1,000 CSS pixels wide if not given)."),
-		"center":     map[string]any{"type": "array", "items": map[string]any{"type": "number"}, "minItems": 2, "maxItems": 2, "description": "Each tissue panel's center, [x, y] in µm (its view's if not given)."},
-		"scale_bar":  numberArg("The scale bar's length in µm (a round length about a fifth of the width if not given)."),
-		"point_size": numberArg("The transcripts' points, in pt across (1.2 if not given)."),
-		"remove":     flagArg("Remove the figure."),
+		"name":          textArg("The figure, by name or ID (a new one with views)."),
+		"views":         map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Saved views of the tissue, by name or ID, each a panel, side by side."},
+		"panels":        map[string]any{"type": "array", "items": map[string]any{"type": "object"}, "description": "The panels, in order, each an object of its kind: {kind: tissue, view, width_um?, center?, regions? (true for all, or their names)}; {kind: qc, dataset, metric (transcripts, total, area, nucleusArea), log?, filter?, segmentation?}; {kind: map, map, color? (clusters, or labels:<label set ID>:<level>)}; {kind: spatial, analysis (enrichment, distances or Moran's I)}; {kind: cohort, comparison, plot (forest, units, volcano, gene), family?, label?, gene?, contrast?, key?}; {kind: text, text}. Each names what it draws by name or ID; the title of any."},
+		"columns":       numberArg("How many panels a row holds (as many as the panels, up to 3, if not given)."),
+		"size":          textArg("single (85 mm), onehalf (114 mm), double (174 mm, the default) or slide."),
+		"height_mm":     numberArg("The page's height in mm (the size's if not given)."),
+		"text":          numberArg("The text's size in pt (6 to 36; 7 if not given, 14 on a slide)."),
+		"width_um":      numberArg("Each tissue panel's width of tissue in µm (what the view shows in a Viewer 1,000 CSS pixels wide if not given)."),
+		"center":        map[string]any{"type": "array", "items": map[string]any{"type": "number"}, "minItems": 2, "maxItems": 2, "description": "Each tissue panel's center, [x, y] in µm (its view's if not given)."},
+		"scale_bar":     numberArg("The scale bar's length in µm (a round length about a fifth of the width if not given)."),
+		"point_size":    numberArg("The transcripts' points, in pt across (1.2 if not given)."),
+		"remove":        flagArg("Remove the figure."),
+		"picture":       flagArg("Answer a picture of the figure too, as it draws now (a PNG): an agent gets it as an image."),
+		"picture_width": numberArg("The picture's width in pixels (1,000; 300 to 2,000)."),
 	}), long: true},
 	{Name: "write_figure", Title: "Write a figure", Description: "Writes a figure as SVG, PDF (vector, its text in Helvetica) or PNG (300 dpi by default), or its manifest as JSON, with its manifest inside: the figure, what each panel shows and was drawn from (the dataset by its bundle's run and fingerprint, the saved view, the artifacts drawn), a digest of each panel's drawing, SituCraft's version and commit, and a fingerprint. Answers the manifest's fingerprint and digests and each panel's facts. The same figure written at the same time is the same bytes in SVG and PDF.", InputSchema: schema(map[string]any{
 		"name":      textArg("The figure, by name or ID (the only one if not given)."),
@@ -661,4 +731,192 @@ func refineArgs() map[string]any {
 		"seed_check": flagArg("Run again with the next seed and report how many transcripts both runs put in the same cell."),
 		"threads":    map[string]any{"type": "integer", "minimum": 1, "description": "Threads to run on (every core if not given); the result does not depend on them."},
 	}
+}
+
+// Leaves: what an agent must be allowed (situcraft mcp --allow) to use an action beyond reading.
+// Reading includes showing things in the window (a view, a cell, a map already made): nothing in
+// the project changes and nothing is computed that is kept.
+const (
+	leaveEdits   uint8 = 1 << iota // it changes the project: a region, a view, a filter, names, a decision, a figure
+	leaveCompute                   // it starts jobs that make artifacts (and adds them to the project)
+	leaveFiles                     // it reads or writes this computer's files by path, or downloads an example
+)
+
+// leaveNames, in the order --allow lists them.
+var leaveNames = []struct {
+	bit  uint8
+	name string
+}{{leaveEdits, "edits"}, {leaveCompute, "compute"}, {leaveFiles, "files"}}
+
+// leaveText names a leave's parts: "compute and files".
+func leaveText(leave uint8) string {
+	var names []string
+	for _, l := range leaveNames {
+		if leave&l.bit != 0 {
+			names = append(names, l.name)
+		}
+	}
+	switch len(names) {
+	case 0:
+		return "none"
+	case 1:
+		return names[0]
+	}
+	return strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1]
+}
+
+// actionHint is an action's leave and MCP's hints. files are the arguments naming a file on this
+// computer that it reads where it lies (it needs the token, and an agent the files leave, when one
+// is given); flags are arguments that ask for more leave when given (true, or a text).
+type actionHint struct {
+	leave       uint8
+	files       []string
+	flags       map[string]uint8
+	destructive bool
+	openWorld   bool
+}
+
+var actionHints = map[string]actionHint{
+	// Reading, and showing in the window.
+	"get_state":            {},
+	"list_projects":        {},
+	"describe_project":     {},
+	"get_result":           {},
+	"query_cells":          {},
+	"query_transcripts":    {},
+	"summarize_region":     {},
+	"recipe":               {},
+	"open_project":         {},
+	"set_mode":             {},
+	"focus":                {},
+	"show_tissue":          {},
+	"show_alignment":       {},
+	"regions":              {},
+	"select_cell":          {},
+	"open_view":            {},
+	"qc_metrics":           {},
+	"set_qc_map":           {},
+	"select_cells":         {},
+	"segmentations":        {},
+	"refinement_preflight": {},
+	"review_labels":        {},
+	"label_impact":         {},
+	"label_evidence":       {},
+	"reviews":              {},
+	"show_comparison":      {},
+	// It makes a map when the segmentation has none: the page does not for an agent without compute.
+	"show_map":          {},
+	"jobs":              {flags: map[string]uint8{"do": leaveCompute}},
+	"methods":           {},
+	"samples":           {},
+	"cohort_table":      {},
+	"cohort_qc":         {},
+	"show_gene":         {},
+	"show_sample_cells": {},
+	"compare_panels":    {},
+	"record":            {},
+	"verify_records":    {},
+	// Changing the project.
+	"new_project":         {leave: leaveEdits},
+	"use_transform":       {leave: leaveEdits},
+	"draw_region":         {leave: leaveEdits},
+	"edit_region":         {leave: leaveEdits, destructive: true},
+	"save_view":           {leave: leaveEdits},
+	"remove_view":         {leave: leaveEdits, destructive: true},
+	"save_filter":         {leave: leaveEdits},
+	"add_results":         {leave: leaveEdits},
+	"name_clusters":       {leave: leaveEdits},
+	"curate_labels":       {leave: leaveEdits},
+	"review":              {leave: leaveEdits},
+	"decide_segmentation": {leave: leaveEdits},
+	"set_samples":         {leave: leaveEdits},
+	"design":              {leave: leaveEdits},
+	"figure":              {leave: leaveEdits},
+	// Jobs.
+	"add_dataset":            {leave: leaveCompute},
+	"open_example":           {leave: leaveCompute, flags: map[string]uint8{"download": leaveFiles, "remake": leaveFiles}, openWorld: true},
+	"tour":                   {leave: leaveCompute},
+	"align_image":            {leave: leaveCompute},
+	"register_image":         {leave: leaveCompute},
+	"check_alignment":        {leave: leaveCompute},
+	"expand_nuclei":          {leave: leaveCompute},
+	"refine_segmentation":    {leave: leaveCompute},
+	"compare_segmentations":  {leave: leaveCompute},
+	"cluster_cells":          {leave: leaveCompute},
+	"build_graph":            {leave: leaveCompute},
+	"spatial_analysis":       {leave: leaveCompute},
+	"remake_analysis":        {leave: leaveCompute},
+	"instrument_clusters":    {leave: leaveCompute},
+	"label_cells":            {leave: leaveCompute},
+	"reference_labels":       {leave: leaveCompute | leaveFiles, files: []string{"path"}},
+	"import_labels":          {leave: leaveCompute, files: []string{"path"}},
+	"repeat_on_segmentation": {leave: leaveCompute},
+	"consensus_labels":       {leave: leaveCompute},
+	"plant_errors":           {leave: leaveCompute},
+	"cohort_steps":           {leave: leaveCompute, files: []string{"reference"}},
+	"summarize_samples":      {leave: leaveCompute, files: []string{"reference"}},
+	"compare_abundance":      {leave: leaveCompute},
+	"compare_expression":     {leave: leaveCompute},
+	"compare_spatial":        {leave: leaveCompute},
+	// This computer's files.
+	"open_paths":          {leave: leaveFiles, flags: map[string]uint8{"add": leaveCompute}},
+	"add_image":           {leave: leaveFiles | leaveCompute},
+	"import_regions":      {leave: leaveFiles | leaveEdits},
+	"import_segmentation": {leave: leaveFiles | leaveCompute},
+	"export_segmentation": {leave: leaveFiles},
+	"export":              {leave: leaveFiles, destructive: true},
+	"write_figure":        {leave: leaveFiles, destructive: true},
+	"verify_certificate":  {leave: leaveFiles | leaveCompute},
+	"read_figure":         {leave: leaveFiles},
+}
+
+func init() {
+	for i := range remoteActions {
+		a := &remoteActions[i]
+		a.hint = actionHints[a.Name]
+		// A tool some of whose arguments ask for more leave (jobs' do) is not read-only to a client.
+		read := a.hint.leave == 0 && len(a.hint.flags) == 0
+		a.Annotations = map[string]any{"title": a.Title, "readOnlyHint": read, "openWorldHint": a.hint.openWorld}
+		if !read {
+			a.Annotations["destructiveHint"] = a.hint.destructive
+		}
+	}
+}
+
+// namesFile says whether the arguments name a file on this computer that the action reads where it
+// lies: one of its file arguments given (a SHA-256 names a file the library already keeps, not a
+// path).
+func (a remoteAction) namesFile(args map[string]any) bool {
+	for _, name := range a.hint.files {
+		if text, ok := args[name].(string); ok && strings.TrimSpace(text) != "" && !sha256Pattern.MatchString(strings.TrimSpace(text)) {
+			return true
+		}
+	}
+	return false
+}
+
+// touchesFiles: the action reads or writes this computer's files (a script needs the token).
+func (a remoteAction) touchesFiles(args map[string]any) bool {
+	return a.output || a.reads || a.readsAt || a.writes || a.namesFile(args)
+}
+
+// leave is the leave an agent needs for the action with these arguments.
+func (a remoteAction) leave(args map[string]any) uint8 {
+	leave := a.hint.leave
+	if a.namesFile(args) {
+		leave |= leaveFiles
+	}
+	for name, more := range a.hint.flags {
+		switch value := args[name].(type) {
+		case bool:
+			if value {
+				leave |= more
+			}
+		case string:
+			if strings.TrimSpace(value) != "" {
+				leave |= more
+			}
+		}
+	}
+	return leave
 }

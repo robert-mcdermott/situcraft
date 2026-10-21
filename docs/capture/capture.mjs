@@ -120,6 +120,44 @@ async function reportResults() {
   return { figure: figure.data?.id, enrichment: enrichment.data?.id };
 }
 
+// An agent's session: situcraft mcp started as an agent's client starts it, attached to this
+// SituCraft (its library's remote.json) so that the agent works in the window, each call made
+// under the client's name.
+async function agentSession(client, work) {
+  const child = spawn(binary, ['mcp', '--allow', 'all', '--window', 'none', '--data-dir', places.library], { cwd: temp, stdio: ['pipe', 'pipe', 'ignore'] });
+  const pending = new Map();
+  let next = 1;
+  let buffered = '';
+  child.stdout.on('data', (chunk) => {
+    buffered += chunk;
+    for (let at = buffered.indexOf('\n'); at >= 0; at = buffered.indexOf('\n')) {
+      const message = JSON.parse(buffered.slice(0, at));
+      buffered = buffered.slice(at + 1);
+      pending.get(message.id)?.(message);
+      pending.delete(message.id);
+    }
+  });
+  const rpc = (method, params) => new Promise((done) => {
+    const id = next++;
+    pending.set(id, done);
+    child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`);
+  });
+  const call = async (name, args = {}) => {
+    const result = (await rpc('tools/call', { name, arguments: args })).result;
+    if (result?.isError) throw new Error(`${name}: ${result.content?.[0]?.text}`);
+    return result.structuredContent;
+  };
+  try {
+    await rpc('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'claude-code', title: client, version: '2' } });
+    child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' })}\n`);
+    await work(call);
+  } finally {
+    const exited = new Promise((done) => child.once('exit', done));
+    child.stdin.end();
+    await Promise.race([exited, sleep(5000)]);
+  }
+}
+
 let b;
 const js = (expression) => b.eval(expression);
 
@@ -731,6 +769,29 @@ const scenes = {
     await act('show_gene', { gene: 'SIM033', label: 'epithelial-like' });
     await waitFor(`Boolean(document.querySelector('.cohort-expression .cohort-volcano')) && Boolean(document.querySelector('.cohort-expression .cohort-pick .cohort-dots'))`);
     await js(`document.getElementById('app').classList.add('inspector-closed')`);
+    await sleep(600);
+    await scrollTo('.cohort-expression .cohort-results');
+    await clearToasts();
+  },
+  // An agent's session (wave 9, slice 9): situcraft mcp attached to this SituCraft, as Claude Code's
+  // client starts it, asking the guide's question of the simulated cohort (Agents and scripts): the
+  // Cohort view's comparison it made, and the drawer's Calls tab listing its calls.
+  async agent() {
+    await agentSession('Claude Code', async (call) => {
+      await call('open_example', { example: 'cohort' });
+      await call('samples');
+      await call('design', { unit: 'subject', group: 'condition', reference: 'control', save: 'By condition' });
+      await call('cohort_steps', { markers: 'simulated' });
+      await call('summarize_samples', {});
+      await call('cohort_qc', {});
+      const compared = await call('compare_expression', { design: 'By condition' });
+      await call('get_result', { id: compared.data.id, limit: 0 });
+      await call('show_gene', { gene: 'SIM033', label: 'epithelial-like' });
+    });
+    await waitFor(`Boolean(document.querySelector('.cohort-expression .cohort-volcano')) && Boolean(document.querySelector('.cohort-expression .cohort-pick .cohort-dots'))`);
+    await js(`document.getElementById('app').classList.add('inspector-closed')`);
+    await js(`window.situcraft.toggleDrawer(true, 'calls')`);
+    await waitFor(`document.querySelectorAll('.calls-tab .call-row').length >= 9`);
     await sleep(600);
     await scrollTo('.cohort-expression .cohort-results');
     await clearToasts();

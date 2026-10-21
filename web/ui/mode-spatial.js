@@ -17,7 +17,7 @@ import { toast } from './overlays.js';
 import { comparisonsOf, promotedSegmentation, segmentationsOf } from '../lib/segmentations.js';
 import { int32sOf, originOf, sideOf } from '../lib/impact.js';
 import { remakeOnSegmentation } from './remake.js';
-import { evaluate, keepChecksum } from '../lib/filters.js';
+import { filterKeep } from './filter-keeps.js';
 import { readCells } from '../lib/viewer-data.js';
 import { readSegCells } from '../lib/segview.js';
 import { cellsIn, regionsOf } from '../lib/regions.js';
@@ -122,8 +122,9 @@ export function mountSpatial(app, container) {
     if (session.cells !== 'all') {
       const f = filtersOf(t).find((x) => x.id === session.cells);
       if (!f) throw new Error('the filter chosen is no longer in the project');
-      ({ keep } = evaluate(f.conditions, cells));
-      if (keepChecksum(keep) !== f.result.sha256) throw new Error(`the filter ${f.name} v${f.version} no longer keeps the cells it recorded`);
+      const applied = await filterKeep(t.item.url, project, f, cells);
+      if (applied.sha256 !== f.result.sha256) throw new Error(`the filter ${f.name} v${f.version} no longer keeps the cells it recorded`);
+      ({ keep } = applied);
       filter = { id: f.id, name: `${f.name} v${f.version}`, checksum: f.result.sha256 };
     }
     const regions = regionsOf(project, t.dataset.id).filter((r) => session.regions.has(r.id));

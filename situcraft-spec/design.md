@@ -530,8 +530,8 @@ the same result.
   earlier run is refused and asked to reload.
 - **The actions** are listed once in `actions.go` with JSON schemas for their arguments (served at
   `/api/remote/tools`, under an API version), and performed by the page's table of the same names;
-  a test keeps the two, and `docs/REMOTE-CONTROL.md`, in step. Wave 9's MCP server offers the same
-  list to agents.
+  a test keeps the two, and `docs/REMOTE-CONTROL.md`, in step. The MCP server offers the same
+  list to agents (below).
 - **Paths and files:** `open_paths` and `export` need the token in `remote.json` (mode 0600, in
   the data folder, removed on stop). The program checks a file's path before asking the page, and
   the page uploads the bytes to a one-use slot that writes them through a temporary file.
@@ -540,6 +540,24 @@ the same result.
   then captures it.
 - **The documentation's screenshots** (`docs/capture/capture.mjs`) are scenes of actions on the
   development bundles, captured in headless Chrome in both themes and audited by axe-core.
+
+### Agents (MCP)
+
+`situcraft mcp` (`mcp.go`, adapted from MaveScape 0.8) speaks the Model Context Protocol on stdin and
+stdout; its tools are the remote actions, so an agent and a script do the same things the same
+way, in a window the user watches.
+
+- **Leave.** Each action is marked in `actions.go` as reading (and showing), editing the project,
+  computing (starting jobs) or touching this computer's files; some arguments ask for more. The
+  server offers the reading tools unless started with `--allow edits`, `compute` or `files`, and
+  refuses a call needing more than it was given before the page sees it. The leave is the
+  program's to check, not the agent's to respect.
+- **Which window.** A SituCraft already serving the library with remote control is attached to
+  (its `remote.json`), so the agent works where the user is; otherwise the server starts one,
+  with no script routes and no `remote.json` while the agent drives it. One program per library
+  is the aim: the jobs folder and the projects are not made for two writers.
+- **Names.** The client's name goes with each action to the page, which labels every change the
+  action makes with it in the history.
 
 ### The host, from the siblings
 

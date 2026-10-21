@@ -490,7 +490,13 @@ func TestEveryActionHasAPageHandler(t *testing.T) {
 	for _, m := range regexp.MustCompile(`(?m)^    async (\w+)\(`).FindAllStringSubmatch(text[start:start+end], -1) {
 		page = append(page, m[1])
 	}
-	hub := actionNames()
+	// The program answers some itself (results.go); the page performs the rest.
+	var hub []string
+	for _, action := range remoteActions {
+		if !action.program {
+			hub = append(hub, action.Name)
+		}
+	}
 	sort.Strings(page)
 	sort.Strings(hub)
 	if strings.Join(page, ",") != strings.Join(hub, ",") {

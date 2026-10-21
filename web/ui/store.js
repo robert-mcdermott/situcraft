@@ -19,6 +19,9 @@ export function createStore(initialProject) {
     past: [],
     future: [],
     labels: { past: [], future: [] },
+    // Who is changing the project while a program's action runs (an agent, a script): their name
+    // goes with each change's label in the history.
+    actor: null,
     ui: {
       mode: 'welcome',
       // The item of the project tree in focus: { kind: 'dataset' | 'artifact' | 'view' | 'local', id }.
@@ -75,7 +78,7 @@ export function createStore(initialProject) {
       // A project built from another one (captured before that one was replaced).
       if (next.id !== state.project.id) throw new ProjectChangedError();
       state.past.push(state.project);
-      state.labels.past.push(label);
+      state.labels.past.push(state.actor ? `${label} (by ${state.actor})` : label);
       if (state.past.length > MAX_HISTORY) {
         state.past.shift();
         state.labels.past.shift();
@@ -104,6 +107,10 @@ export function createStore(initialProject) {
       state.labels = { past: [], future: [] };
       state.saved = next;
       notify(['project', 'history', 'project-loaded']);
+    },
+    // Names who makes the changes that follow (null: the person at the window).
+    setActor(name) {
+      state.actor = name || null;
     },
     canUndo: () => state.past.length > 0,
     canRedo: () => state.future.length > 0,

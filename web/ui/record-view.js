@@ -102,6 +102,28 @@ export function mountRecord(app) {
     }
   }
 
+  // A result's recipe (recipes.go): its steps from the bundles as readable JSON, which situcraft run
+  // makes again without a window.
+  async function writeRecipe(result) {
+    try {
+      const response = await fetch(`api/artifacts/${encodeURIComponent(result.id)}/recipe`, { cache: 'no-store' });
+      const text = await response.text();
+      if (!response.ok) {
+        let why = `HTTP ${response.status}`;
+        try {
+          why = JSON.parse(text).error ?? why;
+        } catch {
+          // not JSON: the status says it
+        }
+        throw new Error(why);
+      }
+      downloadBlob(new Blob([text], { type: 'application/json' }), `${result.id}.recipe.json`);
+      toast(`Wrote the recipe of ${result.name}: situcraft run makes it again without a window.`, { kind: 'ok', timeout: 8000 });
+    } catch (error) {
+      toast(`Its recipe could not be written: ${error.message}`, { kind: 'error', timeout: 10000 });
+    }
+  }
+
   function recordView(record, scope) {
     const refText = (list) => (list.length ? `[${numbers(list)}]` : '');
     const steps = groupSteps(record).map((g) => {
@@ -139,7 +161,8 @@ export function mountRecord(app) {
         h('span.field-label', 'Write it as'),
         ...Object.entries(RECORD_FORMATS).map(([id, f]) => h('button.btn.small', { type: 'button', onclick: () => write(id) }, icon('download'), f.label)),
         h('button.btn.small', { type: 'button', title: 'A zip of what it rests on and what it reports, fingerprinted, with a README saying how to check it', onclick: () => writeCertificateFile(scope) }, icon('download'), 'Certificate'),
-        h('button.btn.small', { type: 'button', title: 'Certify it, then make each step again from the bundles and compare every file, as situcraft verify does', onclick: () => verifyScope(scope) }, icon('check'), 'Verify')),
+        h('button.btn.small', { type: 'button', title: 'Certify it, then make each step again from the bundles and compare every file, as situcraft verify does', onclick: () => verifyScope(scope) }, icon('check'), 'Verify'),
+        ['project', 'dataset'].includes(record.result.kind) ? null : h('button.btn.small', { type: 'button', title: 'Its steps from the bundles as readable JSON, which situcraft run makes again without a window, on this bundle or another', onclick: () => writeRecipe(record.result) }, icon('download'), 'Recipe')),
       h('ol.record-steps', ...steps),
       record.software.length ? h('div.record-software', h('div.muted', 'Software'), h('ul.inspector-list', ...record.software.map((x) => h('li', `${x.name} ${x.version}`.trim())))) : null,
       record.references.length ? h('div.record-references', h('div.muted', 'References'), h('ol.record-refs', ...record.references.map((r) => h('li', { value: r.n }, r.text, r.doi && !r.text.includes(r.doi) ? ` doi:${r.doi}` : '')))) : null,

@@ -1,0 +1,56 @@
+---
+title: Agent benchmark
+layout: page
+heading: Agent benchmark
+description: A benchmark of AI agents analyzing imaging spatial transcriptomics with SituCraft's tools, graded by code against tissues and cohorts whose truth is known.
+lede: AI agents can drive SituCraft through its MCP server. This benchmark measures whether they get the analysis right: tasks worded as a user would ask them, on simulated tissues and cohorts whose every cell is known and on the Lung bundle, with nothing but SituCraft's tools, graded by code.
+---
+      <h2 id="what">What it measures</h2>
+      <p>Each task is a request a user could make of an agent: label every cell with its type, find which cell types neighbor each other, find the sample with a quality problem, find the gene a treatment changes, compare groups that do not differ, read a paired design, count and save cells by their transcripts, read a run's quality, make a figure and write its methods, certify an analysis so others can check it. The simulated tissues and cohorts are made for each task with a seed of their own, and where they carry a planted effect it is moved from SituCraft's examples (another gene, cell type or sample), so that an answer cannot be recalled from the examples' descriptions. The simulator's truth (every cell's true type, the planted effect, the sample planted far out) is read and then taken out of the bundles before the agent starts, so that no tool can open it. The Lung tasks' answers come from the bundle's own CSV copies of its tables and its metrics, read independently of SituCraft's readers.</p>
+      <p>Grading is deterministic: code reads the answer line the task asks for, what the agent left in the project (its label sets, filters, comparisons, analyses) through the same tools, and the files it wrote, and gives partial credit by a fixed rubric. No model judges another.</p>
+
+      <h2 id="results">Results</h2>
+      <p>The score is the mean over tasks of each task's mean score over runs. The reference solution, scripted through the same tools without a model, shows that every task can be solved with SituCraft's tools; an agent that answers nothing scores 0%. Models' runs are added as they are made, each with the model's version and Claude Code's own estimate of its cost (on a subscription, usage of the plan).</p>
+      <benchmark-results></benchmark-results>
+
+      <h2 id="how">How a run works</h2>
+      <ol>
+        <li>The harness builds SituCraft from the benchmark's commit and starts its MCP server with an empty library, its page in a headless Chrome. It makes the task's data (<code>situcraft simulate</code> with the task's seed and parameters, or the Lung bundle) and opens it as the project "Experiment", a cohort's samples with their subjects and conditions, every bundle's derived data built.</li>
+        <li>The agent is started as a program of its own, in an empty folder, with SituCraft's MCP server as its only tools, every leave given (edits, compute, files): no shell, files or web of its own. Claude Code runs with <code>--tools ""</code>, <code>--strict-mcp-config</code>, the settings of that empty folder only (not the user's hooks, plugins or defaults) and the model and effort given; each run is a fresh session.</li>
+        <li>The agent gets the task's prompt, which starts as every one does: the data are already open in SituCraft, in the project "Experiment". It works through SituCraft's tools in the page the harness watches and ends its reply with the answer line the prompt asks for. A run stops after 60 turns or 20 minutes.</li>
+        <li>The harness grades the answer, the project and the files in the task's output folder, and records the score with its rubric, the tool calls, the tokens, the cost and the time. A run that opened other data (an example, say) is counted as such.</li>
+      </ol>
+
+      <h2 id="tasks">Tasks</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Task</th><th>Data</th><th>Graded against</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Label every cell with its type</strong></td><td>A simulated tissue, 500 µm square, its types in uneven shares (6% to 61%)</td><td>A label set in the project against every cell's true type (full credit from 90% of the cells), and each type's percentage (within 3 points)</td></tr>
+            <tr><td><strong>Find the two cell types that neighbor each other</strong></td><td>A simulated tissue, fibroblast-like cells planted six times as likely where immune-like cells lead</td><td>The planted pair, and a neighborhood enrichment in the project</td></tr>
+            <tr><td><strong>Find the sample with a quality problem</strong></td><td>A simulated cohort of eight subjects, the third sample detecting 40% of its transcripts</td><td>That sample and no other, what is wrong with it, and the samples summarized in the project</td></tr>
+            <tr><td><strong>Find the gene a treatment changes</strong></td><td>A simulated cohort of eight subjects, SIM072 raised three times in the treated subjects' fibroblast-like cells</td><td>The gene, its cell type, its direction, no other change claimed, and the groups' expression compared in the project</td></tr>
+            <tr><td><strong>Compare groups that do not differ</strong></td><td>A simulated cohort of eight subjects without any effect</td><td>Abundance and expression both compared, and no change claimed in either</td></tr>
+            <tr><td><strong>Find the cell type that changes after treatment</strong></td><td>A simulated cohort of six subjects before and after, the immune-like cells' odds a quarter after</td><td>The cell type, its direction, and a comparison pairing each subject with itself</td></tr>
+            <tr><td><strong>Count and save the endothelial cells of a lung section</strong></td><td>The Lung 2-FOV bundle (10x Genomics)</td><td>The cells with two VWF or two PLVAP transcripts and no EPCAM (within 1%), those of them with ACE, and a filter keeping exactly them (by the Jaccard index), all from the bundle's transcripts CSV</td></tr>
+            <tr><td><strong>Read a run's quality</strong></td><td>The Lung 2-FOV bundle</td><td>The cells detected and median transcripts per cell as the run recorded them, and the share of cells under 30 transcripts from the bundle's cells CSV</td></tr>
+            <tr><td><strong>Make a figure of the cell types and write its methods</strong></td><td>A simulated tissue</td><td>The PDF written where asked, read back by SituCraft as its own figure of the project, unchanged, its cells filled by their labels; the methods written, citing how the cells were labeled</td></tr>
+            <tr><td><strong>Certify an analysis so others can check it</strong></td><td>A simulated tissue</td><td>The certificate written where asked, of a neighborhood enrichment, and verified by <code>situcraft verify</code>, every step made again</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Before results are published, the benchmark checks itself: every reference solution must score at least 90% (all score 100%), an agent that answers nothing must score 0, and unit tests give each grader right, partly right and wrong answers. These checks run in continuous integration with the rest of the validation.</p>
+
+      <h2 id="limits">Limits</h2>
+      <ul>
+        <li><strong>Mostly simulated data.</strong> The truth is the simulator's: four cell types named for what they resemble, marker genes the simulator chose. Real tissue is messier, and an agent good here may still be wrong on a real one; SituCraft's own analyses are validated on real data separately (<a href="science.html">Science</a>).</li>
+        <li><strong>The simulator is public.</strong> Its code is on GitHub. Seeds change every task's cells, and the planted effects are moved from the examples', but a model could still know how the simulator names its types and which genes it makes markers.</li>
+        <li><strong>The Lung tasks read the run.</strong> Their answers are counts and metrics, known exactly from the bundle's files; they test whether an agent asks SituCraft the right question, not its biology.</li>
+        <li><strong>SituCraft's tools.</strong> The benchmark measures agents through SituCraft: segmentation and refinement, image alignment and region review have no task yet, and a tool's wording can lead an agent astray as well as help it.</li>
+        <li><strong>Few runs.</strong> Agents vary from run to run; results give the number of runs per task, and differences of a few points between models are within that variation.</li>
+      </ul>
+
+      <h2 id="run">Run it, or submit results</h2>
+      <p>The benchmark is in the repository's <a href="{{github}}/tree/main/benchmark"><code>benchmark</code></a> folder. With Go, Chrome, the Lung bundle (<code>node validation/fetch.mjs xenium-lung-2fov</code>) and Claude Code installed and logged in:</p>
+      <div class="code wrap"><pre><code><span class="prompt">$ </span>node benchmark/run.mjs --agent claude-code --model sonnet --repeat 3</code></pre></div>
+      <p>writes a results file to <code>benchmark/results/</code>. Other agents that speak MCP can be added as adapters in <code>benchmark/harness.mjs</code>. To submit results, open a pull request with the results file: it records the agent's program and model, the SituCraft commit, every run's score with its rubric, tool calls, tokens, cost and time, and the reply.</p>

@@ -10,7 +10,7 @@ import { cacheJobKey } from './bundles.js';
 import { datasetFilters, showMethods, writeMethods } from './methods.js';
 import { methodsMarkdown } from '../lib/methods-text.js';
 import { ATTRIBUTES } from '../lib/cell-attributes.js';
-import { decideSegmentation, DECISIONS, EXPORT_FORMATS, promotedSegmentation } from '../lib/segmentations.js';
+import { addSegmentation, decideSegmentation, DECISIONS, EXPORT_FORMATS, promotedSegmentation, segmentationRecord } from '../lib/segmentations.js';
 import { CLASS_INFO, RANKS, cellNames, warnings } from '../lib/review.js';
 import { workedExamples } from '../lib/tours.js';
 import { describeImage, describePlacement, imagesOf } from '../lib/images.js';
@@ -22,14 +22,14 @@ import { defaultImageLayer } from '../lib/overlays.js';
 import { parseProject, rename, serializeProject } from '../lib/project.js';
 import { removeView, sameView, viewLink } from '../lib/views.js';
 import { SEG_FILLS, defaultChoice, segmentationChoices } from '../lib/segview.js';
-import { clusterName, clusterNames, clusteringsOf, mapsOf, nameClusters } from '../lib/clusterings.js';
-import { composition as labelComposition, labelSetName, labelSetsFor, lowConfidenceDefault, namesFromLabels } from '../lib/labels.js';
+import { addClustering, addEmbedding, clusteringRecord, clusterName, clusterNames, clusteringsOf, embeddingRecord, mapsOf, nameClusters } from '../lib/clusterings.js';
+import { addLabels, composition as labelComposition, labelSetName, labelSetsFor, labelsRecord, lowConfidenceDefault, namesFromLabels } from '../lib/labels.js';
 import { RULES, createCurated, crossTable, curatedSetsOf, saveConsensus } from '../lib/curation.js';
 import { labelSource, labelVersions, refOf } from './label-sources.js';
 import { defaultPair, impactLines, sideOf } from '../lib/impact.js';
 import { remakeOnSegmentation } from './remake.js';
-import { KINDS as GRAPH_KINDS, describeGraph, graphsOf } from '../lib/graphs.js';
-import { NICHES_DEFAULTS, analysesOf, analysisNumbers, bandsOf, compareNumbers, nicheNames, rankCorrelation, rankPairs, rowNames, zoneBands } from '../lib/spatial.js';
+import { KINDS as GRAPH_KINDS, addGraph, describeGraph, graphRecord, graphsOf } from '../lib/graphs.js';
+import { NICHES_DEFAULTS, addAnalysis, analysesOf, analysisNumbers, analysisRecord, bandsOf, compareNumbers, nicheNames, rankCorrelation, rankPairs, rowNames, zoneBands } from '../lib/spatial.js';
 import { ratioText } from './spatial-results.js';
 import { showAnalysisCells } from './spatial-cells.js';
 import { addDesign, designRecord, designsOf, makeDesign } from '../lib/design.js';
@@ -39,11 +39,13 @@ import { spatialEffectWords, testsOf } from '../lib/expression.js';
 import { expressionDocument as expressionDocumentOf } from './cohort-expression.js';
 import { FIGURE_SIZES, addPanel, checkFigure, createFigure, figuresOf, mm, panelLetters, panelSummary, removeFigure, saveFigure, toMM } from '../lib/figures.js';
 import { drawFigure, readBackFigure, writeFigure } from './figures.js';
+import { figurePicture, panelPicture, pictureWidth, tissuePicture } from './pictures.js';
 import { tissueViews, viewRegion } from './mode-reports.js';
 import { RECORD_FORMATS, recordOf } from './record-view.js';
 import { certify } from './certificate.js';
 import { writePackage, writeReport } from './report.js';
 import { verdictText, verifyCertificateFile } from './verify.js';
+import { projectChanges } from '../lib/calls.js';
 import { certificateSummary, shortFingerprint } from '../lib/certificate.js';
 import { recordableResults } from '../lib/record.js';
 import { BUNDLE_FIELDS, addSampleField, fieldValue, readSamplesTable, removeSampleField, renameSample, sampleFields, samplesCSV, samplesOf, setFieldKind, setRegionSamples, setSampleField } from '../lib/samples.js';
@@ -126,6 +128,10 @@ export function installRemote(app) {
   const project = () => store.project;
   // Who sent the action being performed (what the script calls itself).
   let author = 'a program on this computer';
+  // The leave of the action's sender (an agent's, situcraft mcp's --allow); null for a script, whose
+  // actions are the person's own.
+  let leave = null;
+  const allowed = (what) => !leave || leave.has(what);
   let counter = 0;
 
   // The samples as answers give them: each with its dataset, region, cells (under its dataset's
@@ -336,7 +342,8 @@ export function installRemote(app) {
   const datasetName = (id) => project().datasets.find((d) => d.id === id)?.name ?? id;
 
   function filterData(f) {
-    return { id: f.id, name: f.name, version: f.version, dataset: datasetName(f.dataset), conditions: f.conditions, cells: f.result.cells, kept: f.result.kept, sha256: f.result.sha256 };
+    const definition = f.tree ? { tree: f.tree, text: f.text } : { conditions: f.conditions };
+    return { id: f.id, name: f.name, version: f.version, dataset: datasetName(f.dataset), ...definition, cells: f.result.cells, kept: f.result.kept, sha256: f.result.sha256 };
   }
 
   const link = (view) => viewLink(location.href, project().id, view.id);
@@ -717,7 +724,17 @@ export function installRemote(app) {
         await waitFor(() => window.situcraftViewer?.focus?.()?.title === shownCells.title, 30000, 'the cells to be shown');
       }
       const now = showing();
-      return { message: `${dataset.name} in the Viewer${now.camera ? ` at (${now.camera.cx.toFixed(0)}, ${now.camera.cy.toFixed(0)}) µm, ${now.camera.umPerCss.toPrecision(3)} µm per pixel` : ''}${now.transcripts.genes.length ? `, ${now.transcripts.genes.join(', ')}` : ''}${missing.length ? `. Not in this dataset: ${missing.join(', ')}` : ''}.`, data: { showing: now, missing } };
+      // A picture of it, as a figure's tissue panel draws the view the Viewer shows (ui/pictures.js).
+      let picture = null;
+      if (args.picture) {
+        const shown = { ...(shownNow.captureView?.('') ?? view), id: `remote-${(counter += 1)}` };
+        try {
+          picture = await tissuePicture(app, shown, shownNow.stageSize?.(), { width: pictureWidth(args), caption: `${dataset.name} as the Viewer shows it` });
+        } catch (error) {
+          throw new ActionError(`The picture could not be drawn: ${error.message}`);
+        }
+      }
+      return { message: `${dataset.name} in the Viewer${now.camera ? ` at (${now.camera.cx.toFixed(0)}, ${now.camera.cy.toFixed(0)}) µm, ${now.camera.umPerCss.toPrecision(3)} µm per pixel` : ''}${now.transcripts.genes.length ? `, ${now.transcripts.genes.join(', ')}` : ''}${missing.length ? `. Not in this dataset: ${missing.join(', ')}` : ''}${picture ? `; a picture of it, ${picture.width} × ${picture.height} pixels` : ''}.`, data: { showing: now, missing, ...(picture ? { picture } : {}) } };
     },
 
     async add_image(args) {
@@ -1089,7 +1106,19 @@ export function installRemote(app) {
       const dataset = resolveDataset(args.dataset);
       const name = String(args.name ?? '').trim();
       if (!name) throw new ActionError('Give the filter a name.');
-      if (!Array.isArray(args.conditions) || !args.conditions.length) throw new ActionError('conditions is a list: [{"attribute": "transcripts", "min": 20}, …].');
+      if (args.where !== undefined && args.where !== null) {
+        if (args.conditions !== undefined) throw new ActionError('Give conditions or where (a tree of conditions), not both.');
+        const q = await openIn('qc', dataset);
+        let filter;
+        try {
+          filter = await q.saveTreeFilter(name, typeof args.where === 'string' ? JSON.parse(args.where) : args.where);
+        } catch (err) {
+          throw new ActionError(`The tree was not applied: ${err.message}`);
+        }
+        await frames();
+        return { message: `Saved ${filter.name}, version ${filter.version}: it keeps ${plural(filter.result.kept, 'cell')} of ${filter.result.cells.toLocaleString('en-US')}, those ${filter.text}.`, data: filterData(filter) };
+      }
+      if (!Array.isArray(args.conditions) || !args.conditions.length) throw new ActionError('conditions is a list: [{"attribute": "transcripts", "min": 20}, …]; or give where, a tree of conditions.');
       const q = await openIn('qc', dataset);
       const methods = q.desc.cells?.methods ?? [];
       const conditions = args.conditions.map((c) => {
@@ -1107,6 +1136,50 @@ export function installRemote(app) {
       const filter = q.saveFilter(name, conditions);
       await frames();
       return { message: `Saved ${filter.name}, version ${filter.version}: it keeps ${plural(filter.result.kept, 'cell')} of ${filter.result.cells.toLocaleString('en-US')}.`, data: filterData(filter) };
+    },
+
+    // Results of the library added to the open project (situcraft run --report adds those it made):
+    // each by its manifest, to the dataset of its bundle, as the view that made it adds it.
+    async add_results(args) {
+      const ids = Array.isArray(args.ids) ? args.ids.map((x) => String(x).trim()).filter(Boolean) : [];
+      if (!ids.length) throw new ActionError('ids is a list of results\' ids, such as those describe_project lists.');
+      const RECORDS = {
+        segmentation: [segmentationRecord, addSegmentation],
+        clustering: [clusteringRecord, addClustering],
+        embedding: [embeddingRecord, addEmbedding],
+        labels: [(d, m) => labelsRecord(d, m), addLabels],
+        graph: [graphRecord, addGraph],
+        spatial: [analysisRecord, addAnalysis],
+      };
+      let p = project();
+      const added = [];
+      const skipped = [];
+      for (const id of ids) {
+        if (p.artifacts.some((a) => a.id === id)) {
+          skipped.push({ id, why: 'already in the project' });
+          continue;
+        }
+        const response = await fetch(`api/artifacts/${encodeURIComponent(id)}`, { cache: 'no-store' });
+        if (!response.ok) {
+          skipped.push({ id, why: 'not in the library' });
+          continue;
+        }
+        const manifest = await response.json();
+        const run = (manifest.lineage?.parents ?? []).find((x) => x.kind === 'bundle')?.id;
+        const dataset = p.datasets.find((d) => run && d.analysisUuid === run) ?? (p.datasets.length === 1 ? p.datasets[0] : null);
+        const make = RECORDS[manifest.kind];
+        if (!make) skipped.push({ id, why: `a ${manifest.kind}, which is not added this way` });
+        else if (manifest.state !== 'complete') skipped.push({ id, why: manifest.state });
+        else if (!dataset) skipped.push({ id, why: 'of no dataset of the project' });
+        else {
+          p = make[1](p, make[0](dataset, manifest));
+          added.push({ id, kind: manifest.kind, name: manifest.name, dataset: dataset.name });
+        }
+      }
+      if (added.length) app.store.commit(p, `Add ${plural(added.length, 'result')} of the library`);
+      await frames();
+      const said = skipped.length ? `; ${skipped.map((x) => `${x.id} not (${x.why})`).join('; ')}` : '';
+      return { message: `Added ${plural(added.length, 'result')} of the library to ${p.name}${said}.`, data: { added, skipped } };
     },
 
     async segmentations(args) {
@@ -1535,6 +1608,7 @@ export function installRemote(app) {
       const list = clusteringsOf(project(), dataset.id).filter((c) => c.state === 'complete');
       if (!list.length) throw new ActionError(`${dataset.name} has no clustering: cluster_cells makes one.`);
       const c = clusteringRef(list, args.clustering);
+      if (!allowed('compute') && !mapsOf(project(), dataset.id, c.segmentation).length) throw new ActionError(`${dataset.name}'s cells have no map yet, and making one runs a job: this agent was not given leave to (situcraft mcp --allow compute).`);
       await settleMode('celltypes');
       let map;
       try {
@@ -1593,9 +1667,21 @@ export function installRemote(app) {
         }
       }
       const shownMap = maps.find((m) => m.id === st.mapId);
+      // A picture of the map, as a figure's map panel draws it: by its clusters or a label set.
+      let picture = null;
+      if (args.picture) {
+        if (!st.mapId) throw new ActionError('No map is shown to picture.');
+        const color = st.color.kind === 'labels' ? `labels:${st.color.labels}:${st.color.level ?? 0}` : 'clusters';
+        try {
+          picture = await panelPicture(app, { kind: 'map', map: st.mapId, color }, { width: pictureWidth(args), caption: `${shownMap?.name ?? 'The map'}, ${color === 'clusters' ? 'by cluster' : 'by label'}` });
+        } catch (error) {
+          throw new ActionError(`The picture could not be drawn: ${error.message}`);
+        }
+        if (!['clusters', 'labels'].includes(st.color.kind)) picture.notes = [...picture.notes, 'A picture colors the map by its clusters or a label set; the window colors it otherwise.'];
+      }
       return {
-        message: `${c.name} on ${shownMap?.name.toLowerCase() ?? 'no map'} and the tissue${st.count ? `: ${plural(st.count, 'cell')} selected` : ''}.`,
-        data: { clustering: c.id, map: st.mapId, trustworthiness: shownMap?.summary?.trustworthiness ?? null, color: st.color, selected: st.count, composition },
+        message: `${c.name} on ${shownMap?.name.toLowerCase() ?? 'no map'} and the tissue${st.count ? `: ${plural(st.count, 'cell')} selected` : ''}${picture ? `; a picture of the map, ${picture.width} × ${picture.height} pixels` : ''}.`,
+        data: { clustering: c.id, map: st.mapId, trustworthiness: shownMap?.summary?.trustworthiness ?? null, color: st.color, selected: st.count, composition, ...(picture ? { picture } : {}) },
       };
     },
 
@@ -2732,9 +2818,18 @@ export function installRemote(app) {
       app.reportsView?.select(fig.id);
       const { drawn } = await drawFigure(app, fig, { dpi: 300 });
       const letters = panelLetters(fig);
+      let picture = null;
+      if (args.picture) {
+        try {
+          picture = await figurePicture(app, fig, { width: pictureWidth(args), drawn });
+        } catch (error) {
+          throw new ActionError(`The picture could not be drawn: ${error.message}`);
+        }
+      }
       return {
         message: `${drawn.description}${drawn.notes.length ? ` Notes: ${drawn.notes.join(' ')}` : ''}`,
         data: {
+          ...(picture ? { picture } : {}),
           id: fig.id, name: fig.name, size: fig.size, width_mm: toMM(fig.width), height_mm: toMM(fig.height), text: fig.text, description: drawn.description, notes: drawn.notes, smallest: drawn.smallest,
           panels: fig.panels.map((p, i) => ({ id: p.id, letter: letters.get(p.id) ?? null, kind: p.kind, shows: panelSummary(p, project()), x: p.x, y: p.y, w: p.w, h: p.h, ...(p.region ? { region: p.region } : {}), ...(drawn.panels[i].facts ? { facts: drawn.panels[i].facts } : {}), notes: drawn.panels[i].notes })),
         },
@@ -2983,7 +3078,7 @@ export function installRemote(app) {
       if (!record) return { checked: false, same: null, detail: 'the project has no such filter' };
       const dataset = p.datasets.find((d) => d.id === record.dataset);
       const q = await openIn('qc', dataset);
-      const again = q.verifyFilter(record);
+      const again = await q.verifyFilter(record);
       return { checked: true, same: again.same, detail: again.same ? `applied again to the cells, it keeps the same ${again.kept.toLocaleString('en-US')} cells` : `applied again, it keeps ${again.kept.toLocaleString('en-US')} cells (recorded ${record.result.kept.toLocaleString('en-US')}), SHA-256 ${again.sha256 === record.result.sha256 ? 'the same' : 'another'}`, differ: again.same ? [] : ['its cells'] };
     }
     if (s.kind === 'figure') {
@@ -3318,11 +3413,14 @@ export function installRemote(app) {
 
   async function perform(event) {
     let outcome;
+    // What it changes in the project, for the library's log of programs' calls (calls.go).
+    const before = app.store.project;
     try {
       const handler = Object.hasOwn(actions, event.action) ? actions[event.action] : null;
       if (!handler) throw new ActionError(`Unknown action "${event.action}". Actions: ${Object.keys(actions).join(', ')}.`);
       const args = typeof event.args === 'object' && event.args && !Array.isArray(event.args) ? event.args : {};
       author = event.client || 'a program on this computer';
+      leave = event.restricted ? new Set(event.leave ?? []) : null;
       app.log(`${author}: ${event.action}${Object.keys(args).length ? ` ${JSON.stringify(args).slice(0, 200)}` : ''}`);
       // A dialog left open (one an earlier action showed, or the user's) would hide what this
       // action shows: it is closed as Escape closes it, its question unanswered.
@@ -3330,7 +3428,13 @@ export function installRemote(app) {
         document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
         await frames();
       }
-      const result = await handler(args, event);
+      app.store.setActor?.(author);
+      let result;
+      try {
+        result = await handler(args, event);
+      } finally {
+        app.store.setActor?.(null);
+      }
       let message = result.message ?? 'Done.';
       // A file: the program writes it where the caller asked.
       if (result.file !== undefined) {
@@ -3345,6 +3449,11 @@ export function installRemote(app) {
       outcome = { ok: false, message: error.message ?? String(error) };
       if (!(error instanceof ActionError)) console.error(error);
     }
+    const changed = projectChanges(before, app.store.project);
+    if (changed.length) outcome.changed = changed;
+    // A changed project saved before the answer, so that what the program answers from the library
+    // (describe_project, query_cells, a recipe) is what the action left.
+    if (app.store.project !== before) await app.saveNow?.().catch(() => {});
     await fetch(`api/remote/result/${encodeURIComponent(event.id)}`, { method: 'POST', body: JSON.stringify(outcome), headers: { 'Content-Type': 'application/json' } }).catch(() => {});
   }
 
@@ -3359,6 +3468,14 @@ export function installRemote(app) {
     source.addEventListener('open', () => {
       if (!announced) app.log('Remote control is on: programs on this computer can drive this window (situcraft --remote-control).');
       announced = true;
+    });
+    // A program's call logged: the drawer's Calls tab shows it.
+    source.addEventListener('call', (message) => {
+      try {
+        app.drawer.callLogged?.(JSON.parse(message.data));
+      } catch {
+        // a notice not read is shown when the tab is opened again
+      }
     });
     source.addEventListener('action', (message) => {
       let event;

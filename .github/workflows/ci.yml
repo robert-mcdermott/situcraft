@@ -109,7 +109,7 @@ jobs:
       - name: Syntax check
         run: |
           shopt -s nullglob
-          for file in web/app.js web/ui/*.js web/lib/*.js web/workers/*.js validation/*.mjs docs/capture/*.mjs docs/site/*.mjs docs/site/assets/*.js; do node --check "$file"; done
+          for file in web/app.js web/ui/*.js web/lib/*.js web/workers/*.js validation/*.mjs docs/capture/*.mjs docs/site/*.mjs docs/site/assets/*.js clients/*.mjs benchmark/*.mjs; do node --check "$file"; done
       - name: node --test
         run: node --test "web/lib/**/*.test.mjs"
       - name: The website built, every link, anchor and screenshot checked (docs/site/build.mjs)
@@ -191,6 +191,80 @@ jobs:
           for certificate in certificates/*.zip certificates/*.html; do
             ./situcraft verify --data validation/cache "$certificate"
           done
+
+  clients:
+    name: R and Python clients
+    needs: changed
+    if: needs.changed.outputs.test == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+      - name: R and Python packages the tests and examples use
+        run: |
+          Rscript -e 'install.packages(c("curl", "jsonlite", "testthat"))'
+          python -m pip install pandas matplotlib nbclient ipykernel
+      - name: The clients' functions match the actions, their versions SituCraft's
+        run: node clients/generate.mjs --check
+      - name: R CMD check
+        run: |
+          R CMD build clients/r
+          _R_CHECK_FORCE_SUGGESTS_=false R CMD check --no-manual situcraft_*.tar.gz
+      - name: Both clients against a running SituCraft, in headless Chrome, then the examples (the simulated tissue's notebook, the simulated cohort's script)
+        run: node clients/test-clients.mjs --require
+        env:
+          CHROME: /usr/bin/google-chrome
+          PYTHON: python
+          SITUCRAFT_CHROME_ARGS: --use-angle=swiftshader --enable-unsafe-swiftshader --no-sandbox
+
+  agents:
+    name: Agents, without a model
+    needs: changed
+    if: needs.changed.outputs.test == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Cache the Lung 2-FOV bundle (10x Genomics, CC BY 4.0)
+        uses: actions/cache@v4
+        with:
+          path: validation/cache/xenium-lung-2fov
+          key: xenium-lung-2fov-${{ hashFiles('validation/sources.json') }}
+      - name: Fetch it (checked by its MD5, then every extracted file by its SHA-256)
+        run: node validation/fetch.mjs xenium-lung-2fov
+      - name: An agent's session over stdio, every tool called in a headless window and the guide's sessions checked
+        run: node validation/agent-session.mjs --verbose
+        env:
+          CHROME: /usr/bin/google-chrome
+          SITUCRAFT_CHROME_ARGS: --use-angle=swiftshader --enable-unsafe-swiftshader --no-sandbox
+      - name: The benchmark's graders given right, partly right and wrong answers
+        run: node --test benchmark/tasks.test.mjs
+      - name: The benchmark's reference solutions, through the MCP tools, each scoring at least 0.9
+        run: node benchmark/run.mjs --agent expert --check
+        env:
+          CHROME: /usr/bin/google-chrome
+          SITUCRAFT_CHROME_ARGS: --use-angle=swiftshader --enable-unsafe-swiftshader --no-sandbox
+      - name: The benchmark's agent that answers nothing scoring 0
+        run: node benchmark/run.mjs --agent none --check
+        env:
+          CHROME: /usr/bin/google-chrome
+          SITUCRAFT_CHROME_ARGS: --use-angle=swiftshader --enable-unsafe-swiftshader --no-sandbox
 
   installers:
     name: Installer syntax

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ATTRIBUTES, attributeValues } from './cell-attributes.js';
-import { addFilter, compareKeeps, createFilter, describeCondition, effect, evaluate, keepChecksum, removeFilter, verifyFilter, versions } from './filters.js';
+import { addFilter, compareKeeps, createFilter, createTreeFilter, describeCondition, describeFilter, effect, evaluate, isTreeFilter, keepBytes, keepChecksum, keepFromBytes, removeFilter, verifyFilter, versions } from './filters.js';
 import { bin2d, binOf, boxStats, countMarked, finiteSorted, histogram, histogramBins, quantile, selectRange, selectRect } from './plots.js';
 import { sha256 } from './sha256.js';
 import { createProject } from './project.js';
@@ -143,4 +143,23 @@ test('run metrics are listed with their explanation and SituCraft\'s value', asy
   assert.equal(formatMetric(NaN, 'number'), '—');
   // Every explained metric belongs to a group and says how it is computed or why not.
   for (const [name, m] of Object.entries(METRICS)) assert.ok(m.group && m.label && m.help && (m.how || m.why), name);
+});
+
+// A filter saved from a tree: the tree, the program's words for it and its result; which cells are
+// kept read back from the program's bytes (the bytes internal/query's test pins).
+test('a filter saved from a tree of conditions', () => {
+  const tree = { all: [{ region: 'Nest' }, { labels: 'lab-1', in: ['Tumor'] }] };
+  const first = createTreeFilter({ dataset: 'd-1', name: 'Nest tumor', tree, text: 'in the region Nest and labeled Tumor by lab-1', result: { cells: 9, kept: 4, sha256: 'ab', extra: 1 }, now: '2026-10-20T10:00:00Z', id: 'f-1' });
+  assert.deepEqual(first, { kind: 'filter', id: 'f-1', name: 'Nest tumor', version: 1, parent: null, dataset: 'd-1', created: '2026-10-20T10:00:00Z', tree, text: 'in the region Nest and labeled Tumor by lab-1', result: { cells: 9, kept: 4, sha256: 'ab' } });
+  const second = createTreeFilter({ dataset: 'd-1', name: 'Nest tumor', tree, text: 't', result: first.result, previous: first, id: 'f-2' });
+  assert.equal(second.version, 2);
+  assert.equal(second.parent, 'f-1');
+  assert.ok(isTreeFilter(first));
+  assert.ok(!isTreeFilter({ conditions: [] }));
+  assert.equal(describeFilter(first), 'in the region Nest and labeled Tumor by lab-1');
+  assert.equal(describeFilter({ conditions: [{ attribute: 'genes', min: 5, max: null }] }), 'Genes detected ≥ 5');
+  const keep = Uint8Array.from([1, 0, 0, 1, 1, 0, 0, 0, 1]);
+  assert.deepEqual([...keepBytes(keep)], [9, 0, 0, 0, 0x19, 0x01]);
+  assert.deepEqual(keepFromBytes(keepBytes(keep)), keep);
+  assert.throws(() => keepFromBytes(Uint8Array.from([9, 0, 0, 0, 0x19])), /5 bytes/);
 });

@@ -580,7 +580,11 @@ export function mountViewer(app, container) {
     const limits = () => ({ minScale: (renderer.ratio || 1) / 400, maxScale: (renderer.ratio || 1) * 60 });
 
     function fitAll() {
-      const [w, h2] = renderer.size();
+      // A page not shown (a hidden window, an agent's) has no size: the tissue is fitted to a
+      // nominal one, so that a picture of it is still of the whole tissue.
+      const box = stage.getBoundingClientRect();
+      const ratio = renderer.ratio || window.devicePixelRatio || 1;
+      const [w, h2] = box.width > 0 && box.height > 0 ? renderer.size() : [1600 * ratio, 1000 * ratio];
       renderer.setCamera(fitCamera(tissueRect(), w, h2));
     }
 
@@ -910,7 +914,11 @@ export function mountViewer(app, container) {
         state.placed = true;
         renderer.setCamera(viewCamera(view, window.devicePixelRatio || 1));
       } else if (state.placed) fitAll();
-      else state.wholeSection = true;
+      else {
+        // Not placed yet (a page without a size): fitted now, and again once it has one.
+        state.wholeSection = true;
+        fitAll();
+      }
       drawn.then(() => {
         if (view.cell) {
           selectRow(view.cell.row).then(() => {

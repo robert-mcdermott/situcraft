@@ -1,0 +1,123 @@
+---
+title: Agents and scripts
+description: Let an AI agent such as Claude Code work in SituCraft through the Model Context Protocol, read-only unless you give it more; drive SituCraft from Python and R; and make a result again without a window from its recipe.
+lede: An AI agent such as Claude Code can ask SituCraft about your projects and results, show you the tissue and, given leave, run the analyses, through situcraft mcp, a Model Context Protocol server. It works in a SituCraft window you see, every change it makes carries its name, and every call is logged. Scripts in Python and R call the same actions, and a recipe makes any result again without a window.
+---
+      <h2 id="setup">Setting it up</h2>
+      <p>Give your agent's client the full path to SituCraft and the argument <code>mcp</code>. For Claude Code, for all your projects:</p>
+      <div class="code"><pre><code><span class="prompt">$ </span>claude mcp add situcraft --scope user -- ~/.local/bin/situcraft mcp</code></pre></div>
+      <p>For Claude Desktop, under <code>mcpServers</code> in <code>claude_desktop_config.json</code> (Settings, Developer, Edit Config):</p>
+      <div class="code"><pre><code>{
+  "mcpServers": {
+    "situcraft": { "command": "/Users/you/.local/bin/situcraft", "args": ["mcp"] }
+  }
+}</code></pre></div>
+      <p>Cursor, Gemini CLI, VS Code and Codex take the same command and arguments; the <a href="{{github}}/blob/main/docs/MCP.md">MCP reference</a> shows each one's file, and how to check the connection without a client.</p>
+
+      <h2 id="leave">What an agent may do</h2>
+      <p>By default an agent may only read and show: describe the project, list what was made, read results and their records, ask which cells meet conditions, write the methods, and show things in the window. You give it more when you start the server:</p>
+      <table>
+        <thead><tr><th>Leave</th><th>What it adds</th></tr></thead>
+        <tbody>
+          <tr><td><code>--allow edits</code></td><td>Changing the project: regions, saved views and filters, cluster names, curated labels and reviews, decisions, samples and designs, figures</td></tr>
+          <tr><td><code>--allow compute</code></td><td>Running jobs: segmentations, clusterings, labels, graphs, spatial analyses, cohort summaries and comparisons, opening examples; stopping or resuming jobs</td></tr>
+          <tr><td><code>--allow files</code></td><td>This computer's files by path: opening bundles, reading tables, references and images, writing exports; downloading an example</td></tr>
+        </tbody>
+      </table>
+      <p>Give several at once, <code>--allow edits,compute</code>, or <code>--allow all</code>. In Claude Code, the flags go after <code>mcp</code>: <code>claude mcp add situcraft --scope user -- ~/.local/bin/situcraft mcp --allow edits,compute</code>. The agent's client offers only the tools it may use, and SituCraft refuses a call that needs more leave than you gave, saying which.</p>
+
+      <h2 id="window">Your window, or one of its own</h2>
+      <p>When SituCraft is already running with your library and <a href="remote-control.html">remote control</a> on, the agent works in its window, where you are working. Otherwise <code>situcraft mcp</code> starts a SituCraft of its own with your library, opens its window when a tool first needs it, and stops it when the agent's session ends; jobs it did not finish can be resumed in the Jobs view.</p>
+      <p>The History drawer (<kbd>⌘J</kbd>) names the agent with each change it made, and Undo takes any of them back. Its <b>Calls</b> tab lists every call the agent makes, as it makes them.</p>
+
+      <h2 id="tissue">A session on the simulated tissue</h2>
+      <p>What working with an agent looks like, on the simulated tissue any computer can make: 500 µm square, four cell types in domains of their own. Each tool call below is real: <code>validation/agent-session.mjs</code> makes them through <code>situcraft mcp</code> in CI and checks every number the answers quote. The answers were written by Claude from those results; another agent's wording will differ, its numbers not.</p>
+      <div class="session">
+        <p class="ask"><span class="who">You</span>Open the simulated tissue. Label its cells by type, and tell me which types sit next to each other more, or less, often than chance would have them.</p>
+        <ul class="calls">
+          <li><code>open_example</code> <code>{"example": "simulated"}</code></li>
+          <li><code>get_state</code></li>
+          <li><code>cluster_cells</code> <code>{}</code></li>
+          <li><code>label_cells</code> <code>{"markers": "simulated"}</code></li>
+          <li><code>build_graph</code> <code>{}</code></li>
+          <li><code>spatial_analysis</code> <code>{"question": "enrichment", "labels": "lab-…"}</code></li>
+          <li><code>get_result</code> <code>{"id": "spa-…", "limit": 0}</code>, every pair</li>
+        </ul>
+        <div class="answer"><span class="who">The agent</span>
+          <p>The tissue holds 2,925 cells. Clustered, they fall into 5 clusters, and labeled from the simulated panel's own marker set 2,887 take a type: 621 epithelial-like, 636 fibroblast-like, 996 immune-like and 634 endothelial-like (38 are left unlabeled).</p>
+          <p>Over the graph of their neighbors, each type is next to its own kind more often than if the labels were dealt at random: epithelial-like cells 2.27 times as often, endothelial-like 2.18, fibroblast-like 1.61 and immune-like 1.34, as cells in domains of their own would be. Of two types, four pairs meet less often than at random, endothelial-like and epithelial-like least (0.26 times, z −26.0), then epithelial-like and immune-like (0.49), endothelial-like and fibroblast-like (0.41) and fibroblast-like and immune-like (0.77); two meet more often, epithelial-like with fibroblast-like (1.38 times, z 12.8) and endothelial-like with immune-like (1.12, z 5.4). Every one of these is below an adjusted p of 0.05.</p>
+        </div>
+        <p class="ask"><span class="who">You</span>Do any immune-like cells carry epithelial transcripts? Count those with two or more of an epithelial marker, and keep them as a filter.</p>
+        <ul class="calls">
+          <li><code>query_cells</code> <code>{"where": {"all": [{"labels": "lab-…", "in": ["immune-like"]}, {"any": [{"gene": "SIM001", "min": 2}, {"gene": "SIM002", "min": 2}, {"gene": "SIM003", "min": 2}]}]}, "columns": ["transcripts", "SIM001"], "limit": 5}</code></li>
+          <li><code>save_filter</code> <code>{"name": "Immune-like with epithelial transcripts", "where": …}</code>, the same tree</li>
+        </ul>
+        <div class="answer"><span class="who">The agent</span>
+          <p>256 of the 996 immune-like cells hold two or more transcripts of SIM001, SIM002 or SIM003, the first three of the epithelial-like type's markers. I kept them as the filter "Immune-like with epithelial transcripts" (256 cells): the QC view shows them, and a clustering or a graph can leave them out.</p>
+        </div>
+        <p class="ask"><span class="who">You</span>Write the enrichment's recipe, so that I can make it again on our cluster.</p>
+        <ul class="calls">
+          <li><code>recipe</code> <code>{"id": "spa-…"}</code>, written to <code>enrichment.recipe.json</code></li>
+        </ul>
+        <div class="answer"><span class="who">The agent</span>
+          <p><code>enrichment.recipe.json</code> holds the enrichment's 5 steps from the bundle: the instrument's segmentation, the graph, the clustering, the labels from the marker set and the enrichment, each with its parameters. The bundle is named by its role, and nothing of this computer's paths is in it.</p>
+        </div>
+      </div>
+
+      <h2 id="recipe">A recipe, made again</h2>
+      <p>The recipe makes the same result anywhere SituCraft runs, without a window. On the cluster, or here:</p>
+      <div class="code"><pre><code><span class="prompt">$ </span>situcraft run --recipe enrichment.recipe.json --bundle /data/simulated-standard --out /results/simulated
+<span class="prompt">$ </span>situcraft verify /results/simulated/certificate.zip</code></pre></div>
+      <p>Made again on the same bundle, the enrichment has the same id as the agent's, its files the same bits, and the run's certificate is verified; the agent session checks both. On other bundles, a recipe makes each in a folder of its own, or one as an array job's task (<a href="running.html">Running at scale</a>).</p>
+
+      <h2 id="cohort">A session on the simulated cohort</h2>
+      <p>The simulated cohort: eight sections of eight subjects, four control and four treated, on two slides. In the treated subjects the simulator raised one gene in one cell type; SituCraft is not told which.</p>
+      <div class="session">
+        <p class="ask"><span class="who">You</span>Open the simulated cohort. Does the treatment change any gene's expression in any cell type?</p>
+        <ul class="calls">
+          <li><code>open_example</code> <code>{"example": "cohort"}</code></li>
+          <li><code>samples</code></li>
+          <li><code>design</code> <code>{"unit": "subject", "group": "condition", "reference": "control", "save": "By condition"}</code></li>
+          <li><code>cohort_steps</code> <code>{"markers": "simulated"}</code></li>
+          <li><code>summarize_samples</code> <code>{}</code></li>
+          <li><code>cohort_qc</code> <code>{}</code></li>
+          <li><code>compare_expression</code> <code>{"design": "By condition"}</code></li>
+          <li><code>get_result</code> <code>{"id": "exp-…", "limit": 0}</code>, every test</li>
+          <li><code>show_gene</code> <code>{"gene": "SIM033", "label": "epithelial-like"}</code></li>
+        </ul>
+        <div class="answer"><span class="who">The agent</span>
+          <p>With the subject as the replicate, the design compares four treated subjects with four controls, 6 degrees of freedom left for the variation between them. Every sample went through the same steps (its cells clustered and labeled from the simulated marker set, a graph and its enrichment), and their summary's quality control finds no sample far out.</p>
+          <p>Comparing each label's pseudobulk between the conditions, 424 tests in 4 labels, one gene changes: SIM033 in the epithelial-like cells, up 0.94 log2 in the treated subjects (0.59 to 1.30; adjusted p 0.0046). No other gene in any label comes below an adjusted p of 0.05. The Cohort view shows SIM033's subjects by group.</p>
+        </div>
+      </div>
+      <shot name="agent" alt="SituCraft's Cohort view after an agent's session on the simulated cohort: the differential expression with SIM033 in the epithelial-like cells found, and the drawer's Calls tab listing the agent's calls, each done, with its tool and what it answered">An agent's session in your window: the comparison it made, and the drawer's Calls tab listing each of its calls as it came.</shot>
+
+      <h2 id="ask">What to ask</h2>
+      <ul>
+        <li>"What is open in SituCraft, and is each bundle healthy?"</li>
+        <li>"List the Lung dataset's segmentations and say how each was made."</li>
+        <li>"Show the tissue around the tumor nest region with CD3E and EPCAM."</li>
+        <li>"How many T cells lie within 50 µm of the tumor nest, and which genes stand out inside it?"</li>
+        <li>"Which labels are enriched near each other, and is the answer the same on the refined segmentation?" (with <code>--allow compute</code>)</li>
+        <li>"Write the methods for the whole project, with their references."</li>
+      </ul>
+      <p>An agent can read your library without opening anything: <code>list_projects</code>, <code>describe_project</code> (a project's datasets and every result, with what each was made from) and <code>get_result</code> (a result's record and its numbers as tables: an enrichment's pairs, Moran's I by gene, a comparison's tests). It asks which cells and transcripts meet conditions with <code>query_cells</code> and <code>query_transcripts</code>, and what a region holds with <code>summarize_region</code>: the conditions are a tree of JSON (all, any and not of a cell's QC numbers, genes, labels, clusters, niches, regions and distances from them), checked and evaluated by SituCraft, never a query string or a command. With <code>--allow edits</code>, <code>save_filter</code> keeps the same cells as a filter your analyses can use. Asked with <code>picture</code>, <code>show_tissue</code>, <code>show_map</code> and <code>figure</code> also give it a picture of what they show, so it sees what you see. Each answer says what it changed in the project.</p>
+      <p>The tools are SituCraft's remote-control actions, under the same names; the <a href="{{github}}/blob/main/docs/MCP.md#tools">MCP reference</a> lists them by the leave each needs. SituCraft's results are research findings about a tissue, never a diagnosis, and its instructions to the agent say so.</p>
+
+      <h2 id="scripts">From Python and R</h2>
+      <p>The <code>situcraft</code> packages for Python and R make each action a function, with its arguments and help, generated from the same list of actions: tables come back as data frames, pictures as files, and an action SituCraft refuses as an error carrying its reason. A script drives the window of a SituCraft started with <code>--remote-control</code>, found through its <code>remote.json</code> (<a href="remote-control.html#clients">Python and R</a>).</p>
+      <p>Two worked examples come with them, and CI runs both against a build of SituCraft: a Python notebook on the simulated tissue (<a href="{{github}}/blob/main/clients/examples/simulated-tissue.ipynb">simulated-tissue.ipynb</a>: its labels against the true types, 97% agreeing, as a confusion matrix; which labels neighbor each other, as a heatmap; the tissue as a picture; the enrichment's recipe) and an R script on the simulated cohort (<a href="{{github}}/blob/main/clients/examples/simulated-cohort.R">simulated-cohort.R</a>: the session above from R, the 424 tests as a data frame, SIM033 found alone, a volcano and the methods).</p>
+
+      <h2 id="log">The log of calls</h2>
+      <p>Every call an agent or a script makes is a line of your library's log, refusals and failures too: when, who called and how (an agent with its leave, or a script), the tool and its arguments, whether it was done, refused or failed, what it changed in the project, the ids it answered with and how long it took. The drawer's <b>Calls</b> tab (<kbd>⌘J</kbd>) shows the log as calls arrive, searches it and exports it as CSV or JSON lines; scripts read it at <code>/api/calls</code>. It never leaves this computer.</p>
+
+      <h2 id="benchmark">How well agents do</h2>
+      <p>The <a href="../benchmark.html">agent benchmark</a> gives agents tasks whose answers are known, on simulated tissues and cohorts and on the Lung bundle, worded as you would ask them, and grades by code what they answer and what they leave in the project.</p>
+
+      <h2 id="security">Privacy and security</h2>
+      <ul>
+        <li>Everything runs on this computer, and your data never leave it; the only outbound requests are example downloads, which need <code>--allow files</code>.</li>
+        <li>The leave is checked by SituCraft, not left to the agent.</li>
+        <li>While an agent drives a SituCraft that <code>situcraft mcp</code> started, that SituCraft takes no actions from scripts.</li>
+        <li>An agent's changes go into the project's history under its name, and undo as anyone's.</li>
+      </ul>

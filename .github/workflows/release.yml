@@ -44,6 +44,8 @@ jobs:
             echo "CHANGELOG.md has no section for $version."
             exit 1
           fi
+          # The R and Python clients: their functions the actions', their version this one.
+          node clients/generate.mjs --check
           echo "VERSION=$version" >> "$GITHUB_ENV"
       - name: CI passed on the tagged files
         env:
