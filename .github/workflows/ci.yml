@@ -109,7 +109,7 @@ jobs:
       - name: Syntax check
         run: |
           shopt -s nullglob
-          for file in web/app.js web/ui/*.js web/lib/*.js web/workers/*.js validation/*.mjs docs/capture/*.mjs docs/site/*.mjs docs/site/assets/*.js clients/*.mjs; do node --check "$file"; done
+          for file in web/app.js web/ui/*.js web/lib/*.js web/workers/*.js validation/*.mjs docs/capture/*.mjs docs/site/*.mjs docs/site/assets/*.js clients/*.mjs benchmark/*.mjs; do node --check "$file"; done
       - name: node --test
         run: node --test "web/lib/**/*.test.mjs"
       - name: The website built, every link, anchor and screenshot checked (docs/site/build.mjs)
@@ -226,6 +226,39 @@ jobs:
         env:
           CHROME: /usr/bin/google-chrome
           PYTHON: python
+          SITUCRAFT_CHROME_ARGS: --use-angle=swiftshader --enable-unsafe-swiftshader --no-sandbox
+
+  benchmark:
+    name: Agent benchmark, without a model
+    needs: changed
+    if: needs.changed.outputs.test == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Cache the Lung 2-FOV bundle (10x Genomics, CC BY 4.0)
+        uses: actions/cache@v4
+        with:
+          path: validation/cache/xenium-lung-2fov
+          key: xenium-lung-2fov-${{ hashFiles('validation/sources.json') }}
+      - name: Fetch it (checked by its MD5, then every extracted file by its SHA-256)
+        run: node validation/fetch.mjs xenium-lung-2fov
+      - name: The graders given right, partly right and wrong answers
+        run: node --test benchmark/tasks.test.mjs
+      - name: Every reference solution, through the MCP tools, scores at least 0.9
+        run: node benchmark/run.mjs --agent expert --check
+        env:
+          CHROME: /usr/bin/google-chrome
+          SITUCRAFT_CHROME_ARGS: --use-angle=swiftshader --enable-unsafe-swiftshader --no-sandbox
+      - name: An agent that answers nothing scores 0
+        run: node benchmark/run.mjs --agent none --check
+        env:
+          CHROME: /usr/bin/google-chrome
           SITUCRAFT_CHROME_ARGS: --use-angle=swiftshader --enable-unsafe-swiftshader --no-sandbox
 
   installers:

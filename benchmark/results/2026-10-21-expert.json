@@ -1,0 +1,622 @@
+{
+ "benchmark": {
+  "version": "1",
+  "tasks": [
+   {
+    "id": "tissue-cell-types",
+    "category": "cell types",
+    "title": "Label every cell with its type",
+    "data": "tissue",
+    "seed": 51001
+   },
+   {
+    "id": "tissue-neighbors",
+    "category": "spatial",
+    "title": "Find the two cell types that neighbor each other",
+    "data": "tissue",
+    "seed": 51002
+   },
+   {
+    "id": "cohort-outlier",
+    "category": "cohort QC",
+    "title": "Find the sample with a quality problem",
+    "data": "cohort",
+    "seed": 51003
+   },
+   {
+    "id": "cohort-expression",
+    "category": "differential expression",
+    "title": "Find the gene a treatment changes",
+    "data": "cohort",
+    "seed": 51004
+   },
+   {
+    "id": "cohort-null",
+    "category": "statistics",
+    "title": "Compare groups that do not differ",
+    "data": "cohort",
+    "seed": 51005
+   },
+   {
+    "id": "cohort-paired",
+    "category": "study design",
+    "title": "Find the cell type that changes after treatment",
+    "data": "cohort",
+    "seed": 51006
+   },
+   {
+    "id": "lung-endothelial",
+    "category": "querying cells",
+    "title": "Count and save the endothelial cells of a lung section",
+    "data": "lung",
+    "seed": null
+   },
+   {
+    "id": "lung-qc",
+    "category": "quality control",
+    "title": "Read a run's quality",
+    "data": "lung",
+    "seed": null
+   },
+   {
+    "id": "tissue-report",
+    "category": "reporting",
+    "title": "Make a figure of the cell types and write its methods",
+    "data": "tissue",
+    "seed": 51007
+   },
+   {
+    "id": "tissue-certificate",
+    "category": "the record",
+    "title": "Certify an analysis so others can check it",
+    "data": "tissue",
+    "seed": 51008
+   }
+  ]
+ },
+ "agent": {
+  "id": "expert",
+  "program": null,
+  "model": null,
+  "requestedModel": null,
+  "effort": null,
+  "maxTurns": 60
+ },
+ "situcraft": {
+  "version": "0.8.0",
+  "commit": "067e803",
+  "dirty": true
+ },
+ "date": "2026-10-21T02:44:34.156Z",
+ "repeat": 1,
+ "score": 1,
+ "byTask": {
+  "tissue-cell-types": 1,
+  "tissue-neighbors": 1,
+  "cohort-outlier": 1,
+  "cohort-expression": 1,
+  "cohort-null": 1,
+  "cohort-paired": 1,
+  "lung-endothelial": 1,
+  "lung-qc": 1,
+  "tissue-report": 1,
+  "tissue-certificate": 1
+ },
+ "runs": [
+  {
+   "task": "tissue-cell-types",
+   "category": "cell types",
+   "repeat": 1,
+   "score": 1,
+   "parts": [
+    {
+     "name": "a label set agreeing with the true types (full credit from 90% of the cells)",
+     "weight": 0.6,
+     "score": 1,
+     "detail": "96.9% of the cells labeled as their true type"
+    },
+    {
+     "name": "each type's percentage (within 3 points)",
+     "weight": 0.4,
+     "score": 1,
+     "detail": "epithelial-like 21.05263157894737 (true 19.9), fibroblast-like 13.602668643439586 (true 13.2), immune-like 5.893254262416605 (true 5.9), endothelial-like 58.15418828762046 (true 61.1)"
+    }
+   ],
+   "answer": {
+    "percentages": {
+     "epithelial-like": 21.05263157894737,
+     "fibroblast-like": 13.602668643439586,
+     "immune-like": 5.893254262416605,
+     "endothelial-like": 58.15418828762046
+    }
+   },
+   "answered": true,
+   "replacedWorkspace": false,
+   "toolCalls": 2,
+   "failedToolCalls": 0,
+   "tools": [
+    "cluster_cells",
+    "label_cells"
+   ],
+   "turns": null,
+   "tokens": null,
+   "costUSD": null,
+   "model": null,
+   "timedOut": false,
+   "error": null,
+   "seconds": 12,
+   "reply": "ANSWER: {\"percentages\":{\"epithelial-like\":21.05263157894737,\"fibroblast-like\":13.602668643439586,\"immune-like\":5.893254262416605,\"endothelial-like\":58.15418828762046}}",
+   "attempts": 1
+  },
+  {
+   "task": "tissue-neighbors",
+   "category": "spatial",
+   "repeat": 1,
+   "score": 1,
+   "parts": [
+    {
+     "name": "the pair (immune-like and fibroblast-like)",
+     "weight": 0.7,
+     "score": 1,
+     "detail": "fibroblast-like and immune-like"
+    },
+    {
+     "name": "a neighborhood enrichment in the project",
+     "weight": 0.3,
+     "score": 1,
+     "detail": "made"
+    }
+   ],
+   "answer": {
+    "pair": [
+     "fibroblast-like",
+     "immune-like"
+    ]
+   },
+   "answered": true,
+   "replacedWorkspace": false,
+   "toolCalls": 5,
+   "failedToolCalls": 0,
+   "tools": [
+    "cluster_cells",
+    "label_cells",
+    "build_graph",
+    "spatial_analysis",
+    "get_result"
+   ],
+   "turns": null,
+   "tokens": null,
+   "costUSD": null,
+   "model": null,
+   "timedOut": false,
+   "error": null,
+   "seconds": 12,
+   "reply": "ANSWER: {\"pair\":[\"fibroblast-like\",\"immune-like\"]}",
+   "attempts": 1
+  },
+  {
+   "task": "cohort-outlier",
+   "category": "cohort QC",
+   "repeat": 1,
+   "score": 1,
+   "parts": [
+    {
+     "name": "the sample (S03, and no other)",
+     "weight": 0.6,
+     "score": 1,
+     "detail": "S03"
+    },
+    {
+     "name": "what is wrong (it detected fewer transcripts)",
+     "weight": 0.2,
+     "score": 1,
+     "detail": "median transcripts 49.0, 0.437 times the samples' median of 112 (robust z -19.5); transcripts per 100 µm² 64.9, 0.421 times the samples' median of 154 (robust z -14.7); median genes 26.0, 0.642 times the samples' median of 40.5 (robust z -8.1)"
+    },
+    {
+     "name": "the samples summarized in the project, with their quality",
+     "weight": 0.2,
+     "score": 1,
+     "detail": "a cohort summary"
+    }
+   ],
+   "answer": {
+    "outliers": [
+     "S03"
+    ],
+    "problem": "median transcripts 49.0, 0.437 times the samples' median of 112 (robust z -19.5); transcripts per 100 µm² 64.9, 0.421 times the samples' median of 154 (robust z -14.7); median genes 26.0, 0.642 times the samples' median of 40.5 (robust z -8.1)"
+   },
+   "answered": true,
+   "replacedWorkspace": false,
+   "toolCalls": 3,
+   "failedToolCalls": 0,
+   "tools": [
+    "cohort_steps",
+    "summarize_samples",
+    "cohort_qc"
+   ],
+   "turns": null,
+   "tokens": null,
+   "costUSD": null,
+   "model": null,
+   "timedOut": false,
+   "error": null,
+   "seconds": 17,
+   "reply": "ANSWER: {\"outliers\":[\"S03\"],\"problem\":\"median transcripts 49.0, 0.437 times the samples' median of 112 (robust z -19.5); transcripts per 100 µm² 64.9, 0.421 times the samples' median of 154 (robust z -14.7); median genes 26.0, 0.642 times the samples' median of 40.5 (robust z -8.1)\"}",
+   "attempts": 1
+  },
+  {
+   "task": "cohort-expression",
+   "category": "differential expression",
+   "repeat": 1,
+   "score": 1,
+   "parts": [
+    {
+     "name": "the gene (SIM072)",
+     "weight": 0.35,
+     "score": 1,
+     "detail": "SIM072"
+    },
+    {
+     "name": "its cell type (fibroblast-like)",
+     "weight": 0.25,
+     "score": 1,
+     "detail": "fibroblast-like"
+    },
+    {
+     "name": "its direction (up)",
+     "weight": 0.1,
+     "score": 1,
+     "detail": "up"
+    },
+    {
+     "name": "no other change claimed",
+     "weight": 0.1,
+     "score": 1,
+     "detail": "1 claimed"
+    },
+    {
+     "name": "the groups' expression compared in the project",
+     "weight": 0.2,
+     "score": 1,
+     "detail": "compared"
+    }
+   ],
+   "answer": {
+    "changes": [
+     {
+      "gene": "SIM072",
+      "cellType": "fibroblast-like",
+      "direction": "up"
+     }
+    ]
+   },
+   "answered": true,
+   "replacedWorkspace": false,
+   "toolCalls": 5,
+   "failedToolCalls": 0,
+   "tools": [
+    "design",
+    "cohort_steps",
+    "summarize_samples",
+    "compare_expression",
+    "get_result"
+   ],
+   "turns": null,
+   "tokens": null,
+   "costUSD": null,
+   "model": null,
+   "timedOut": false,
+   "error": null,
+   "seconds": 17,
+   "reply": "ANSWER: {\"changes\":[{\"gene\":\"SIM072\",\"cellType\":\"fibroblast-like\",\"direction\":\"up\"}]}",
+   "attempts": 1
+  },
+  {
+   "task": "cohort-null",
+   "category": "statistics",
+   "repeat": 1,
+   "score": 1,
+   "parts": [
+    {
+     "name": "cell types' abundance compared, and nothing claimed",
+     "weight": 0.5,
+     "score": 1,
+     "detail": "compared; 0 claimed"
+    },
+    {
+     "name": "genes' expression compared, and nothing claimed",
+     "weight": 0.5,
+     "score": 1,
+     "detail": "compared; 0 claimed"
+    }
+   ],
+   "answer": {
+    "abundance": [],
+    "expression": []
+   },
+   "answered": true,
+   "replacedWorkspace": false,
+   "toolCalls": 7,
+   "failedToolCalls": 0,
+   "tools": [
+    "design",
+    "cohort_steps",
+    "summarize_samples",
+    "compare_abundance",
+    "compare_expression",
+    "get_result"
+   ],
+   "turns": null,
+   "tokens": null,
+   "costUSD": null,
+   "model": null,
+   "timedOut": false,
+   "error": null,
+   "seconds": 17,
+   "reply": "ANSWER: {\"abundance\":[],\"expression\":[]}",
+   "attempts": 1
+  },
+  {
+   "task": "cohort-paired",
+   "category": "study design",
+   "repeat": 1,
+   "score": 1,
+   "parts": [
+    {
+     "name": "the cell type (immune-like)",
+     "weight": 0.5,
+     "score": 1,
+     "detail": "immune-like"
+    },
+    {
+     "name": "its direction (down)",
+     "weight": 0.2,
+     "score": 1,
+     "detail": "down"
+    },
+    {
+     "name": "abundance compared with each subject paired with itself",
+     "weight": 0.3,
+     "score": 1,
+     "detail": "paired by subject"
+    }
+   ],
+   "answer": {
+    "changes": [
+     {
+      "cellType": "immune-like",
+      "direction": "down"
+     }
+    ]
+   },
+   "answered": true,
+   "replacedWorkspace": false,
+   "toolCalls": 5,
+   "failedToolCalls": 0,
+   "tools": [
+    "design",
+    "cohort_steps",
+    "summarize_samples",
+    "compare_abundance",
+    "get_result"
+   ],
+   "turns": null,
+   "tokens": null,
+   "costUSD": null,
+   "model": null,
+   "timedOut": false,
+   "error": null,
+   "seconds": 23,
+   "reply": "ANSWER: {\"changes\":[{\"cellType\":\"immune-like\",\"direction\":\"down\"}]}",
+   "attempts": 1
+  },
+  {
+   "task": "lung-endothelial",
+   "category": "querying cells",
+   "repeat": 1,
+   "score": 1,
+   "parts": [
+    {
+     "name": "the number of endothelial cells (within 1%)",
+     "weight": 0.3,
+     "score": 1,
+     "detail": "238 (true 238)"
+    },
+    {
+     "name": "how many of them hold ACE (within 1)",
+     "weight": 0.2,
+     "score": 1,
+     "detail": "125 (true 125)"
+    },
+    {
+     "name": "a filter \"Endothelial cells\" keeping exactly them",
+     "weight": 0.5,
+     "score": 1,
+     "detail": "238 cells, Jaccard index 1.000"
+    }
+   ],
+   "answer": {
+    "endothelial": 238,
+    "withACE": 125
+   },
+   "answered": true,
+   "replacedWorkspace": false,
+   "toolCalls": 3,
+   "failedToolCalls": 0,
+   "tools": [
+    "query_cells",
+    "save_filter"
+   ],
+   "turns": null,
+   "tokens": null,
+   "costUSD": null,
+   "model": null,
+   "timedOut": false,
+   "error": null,
+   "seconds": 9,
+   "reply": "ANSWER: {\"endothelial\":238,\"withACE\":125}",
+   "attempts": 1
+  },
+  {
+   "task": "lung-qc",
+   "category": "quality control",
+   "repeat": 1,
+   "score": 1,
+   "parts": [
+    {
+     "name": "the cells detected",
+     "weight": 0.3,
+     "score": 1,
+     "detail": "11898 (true 11898)"
+    },
+    {
+     "name": "the median transcripts per cell (within 1)",
+     "weight": 0.3,
+     "score": 1,
+     "detail": "56 (true 56)"
+    },
+    {
+     "name": "the percentage of cells with fewer than 30 transcripts (within 0.5 points)",
+     "weight": 0.4,
+     "score": 1,
+     "detail": "14.111615397545807 (true 14.11)"
+    }
+   ],
+   "answer": {
+    "cells": 11898,
+    "medianTranscripts": 56,
+    "under30Percent": 14.111615397545807
+   },
+   "answered": true,
+   "replacedWorkspace": false,
+   "toolCalls": 2,
+   "failedToolCalls": 0,
+   "tools": [
+    "qc_metrics",
+    "query_cells"
+   ],
+   "turns": null,
+   "tokens": null,
+   "costUSD": null,
+   "model": null,
+   "timedOut": false,
+   "error": null,
+   "seconds": 5,
+   "reply": "ANSWER: {\"cells\":11898,\"medianTranscripts\":56,\"under30Percent\":14.111615397545807}",
+   "attempts": 1
+  },
+  {
+   "task": "tissue-report",
+   "category": "reporting",
+   "repeat": 1,
+   "score": 1,
+   "parts": [
+    {
+     "name": "the figure written as a PDF",
+     "weight": 0.2,
+     "score": 1,
+     "detail": "cell-types.pdf"
+    },
+    {
+     "name": "SituCraft's figure of this project, unchanged",
+     "weight": 0.2,
+     "score": 1,
+     "detail": "intact true, this project true"
+    },
+    {
+     "name": "its cells filled by their labels",
+     "weight": 0.2,
+     "score": 1,
+     "detail": "Cell types, 174 × 120 mm, 1 panel. Panel A: The tissue of section (the saved view \"Cell types\"), 1.26984 mm across: the DAPI stain; 2,842 cells outlined and filled by the label set \"Labels by Simulate"
+    },
+    {
+     "name": "the methods written",
+     "weight": 0.2,
+     "score": 1,
+     "detail": "3369 characters"
+    },
+    {
+     "name": "citing how the cells were labeled (Tirosh et al. 2016)",
+     "weight": 0.2,
+     "score": 1,
+     "detail": "cited"
+    }
+   ],
+   "answer": {
+    "figure": "/var/folders/lc/lsy0fn113r9394qmn0xmj5zc0000gn/T/situcraft-bench-faTUfm/outputs/cell-types.pdf",
+    "methods": "/var/folders/lc/lsy0fn113r9394qmn0xmj5zc0000gn/T/situcraft-bench-faTUfm/outputs/methods.md"
+   },
+   "answered": true,
+   "replacedWorkspace": false,
+   "toolCalls": 7,
+   "failedToolCalls": 0,
+   "tools": [
+    "cluster_cells",
+    "label_cells",
+    "show_tissue",
+    "save_view",
+    "figure",
+    "write_figure",
+    "export"
+   ],
+   "turns": null,
+   "tokens": null,
+   "costUSD": null,
+   "model": null,
+   "timedOut": false,
+   "error": null,
+   "seconds": 13,
+   "reply": "ANSWER: {\"figure\":\"/var/folders/lc/lsy0fn113r9394qmn0xmj5zc0000gn/T/situcraft-bench-faTUfm/outputs/cell-types.pdf\",\"methods\":\"/var/folders/lc/lsy0fn113r9394qmn0xmj5zc0000gn/T/situcraft-bench-faTUfm/outputs/methods.md\"}",
+   "attempts": 1
+  },
+  {
+   "task": "tissue-certificate",
+   "category": "the record",
+   "repeat": 1,
+   "score": 1,
+   "parts": [
+    {
+     "name": "the certificate written",
+     "weight": 0.3,
+     "score": 1,
+     "detail": "neighbors-certificate.zip"
+    },
+    {
+     "name": "of a neighborhood enrichment",
+     "weight": 0.3,
+     "score": 1,
+     "detail": "{\"id\":\"spa-f8172c9e643bb3089b15\",\"kind\":\"spatial\",\"name\":\"Neighborhood enrichment of Labels by Simulated tissue's types: type, Delaunay graph of Instrument segmentation, edges to 50 µm\"}"
+    },
+    {
+     "name": "verified by situcraft verify",
+     "weight": 0.4,
+     "score": 1,
+     "detail": "verified"
+    }
+   ],
+   "answer": {
+    "certificate": "/var/folders/lc/lsy0fn113r9394qmn0xmj5zc0000gn/T/situcraft-bench-1GLEaj/outputs/neighbors-certificate.zip"
+   },
+   "answered": true,
+   "replacedWorkspace": false,
+   "toolCalls": 5,
+   "failedToolCalls": 0,
+   "tools": [
+    "cluster_cells",
+    "label_cells",
+    "build_graph",
+    "spatial_analysis",
+    "export"
+   ],
+   "turns": null,
+   "tokens": null,
+   "costUSD": null,
+   "model": null,
+   "timedOut": false,
+   "error": null,
+   "seconds": 14,
+   "reply": "ANSWER: {\"certificate\":\"/var/folders/lc/lsy0fn113r9394qmn0xmj5zc0000gn/T/situcraft-bench-1GLEaj/outputs/neighbors-certificate.zip\"}",
+   "attempts": 1
+  }
+ ]
+}

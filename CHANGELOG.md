@@ -162,6 +162,34 @@ a window.
     API's, tables, pictures, errors, the connection file); the notebook executed and the R
     script run, every check passing; `R CMD check` clean.
 
+- **The agent benchmark (wave 9, slice 8).** `benchmark/` measures whether an AI agent working
+  through SituCraft's tools gets an analysis right.
+  - **Ten tasks with known answers,** worded as a user would ask them: label every cell with its
+    type; find the two cell types that neighbor each other; find the sample with a quality
+    problem; find the gene a treatment changes; compare groups that do not differ; find the cell
+    type that changes after treatment, each subject sampled before and after; count and save the
+    endothelial cells of the Lung section; read a run's quality; make a figure of the cell types
+    and write its methods; certify an analysis so that others can check it.
+  - **Data whose truth is known:** simulated tissues and cohorts made for each task with a seed
+    of its own, each planted effect moved from the examples' (another gene, cell type or sample),
+    the simulator's truth taken out of the bundles before the agent starts; and the Lung bundle,
+    its answers read from its own CSV tables, apart from SituCraft's readers.
+  - **Graded by code,** with partial credit: the answer, what the agent left in the project (label
+    sets, filters, comparisons, analyses), read through SituCraft's tools, and the files it wrote
+    (a figure read back by SituCraft, a certificate checked by `situcraft verify`).
+  - **A reference solution for each,** through the same tools without a model, scores 100%; an
+    agent that answers nothing scores 0. Both run in CI.
+  - **Models' runs** (`node benchmark/run.mjs --agent claude-code --model …`): Claude Code with
+    SituCraft's MCP server as its only tools, in an empty folder, without the user's settings,
+    each run recorded with the model, Claude Code's version, the tool calls, tokens, cost, time
+    and reply.
+  - **On the website:** the *Agent benchmark* page, its results as a leaderboard and by task.
+  - **Found on the way:** `query_cells` given an offset of 0 skipped every cell; it now starts at
+    the first.
+  - **Validated:** every grader given right, partly right and wrong answers; the reference
+    solutions and doing nothing on every task, through `situcraft mcp` in headless Chrome; the
+    Lung's endothelial cells counted by SituCraft as the bundle's transcripts CSV counts them.
+
 ### Changed
 
 - **Files named by an argument need the token.** A script that has `import_labels` or

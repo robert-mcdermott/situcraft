@@ -207,6 +207,11 @@ func TestQueriesKeepWhatTheySay(t *testing.T) {
 	if !inNest(second) || rows[0].([]any)[1] != cells.IDs[second] || !sameNumber(rows[0].([]any)[4], float64(float32(cells.CellArea[second]))) || !sameNumber(rows[0].([]any)[5], geneCount(second, 0)) {
 		t.Fatalf("the page's first row: %v", rows[0])
 	}
+	// Every cell kept with a limit of 0, from the first with an offset of 0 (as without one).
+	_, data = call("query_cells", `{"project":"Queries","where":{"region":"Nest"},"limit":0,"offset":0}`)
+	if page := data["rows"].(map[string]any); len(page["rows"].([]any)) != inside || page["offset"].(float64) != 0 {
+		t.Fatalf("a limit and offset of 0: %d rows of %d", len(page["rows"].([]any)), inside)
+	}
 
 	// Refused, saying why: a region, filter, label or gene the dataset has not; a malformed tree.
 	for where, says := range map[string]string{

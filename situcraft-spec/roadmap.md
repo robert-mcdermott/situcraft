@@ -4121,9 +4121,32 @@ without a model, in CI.
    - **Validated** (`clients/test-clients.mjs`, a CI job): both clients against SituCraft in
      headless Chrome, results equal to the HTTP API's; the notebook executed with nbclient and
      the R script run, their checks passing; `R CMD check` clean.
-8. **The agent benchmark (A7).** `benchmark/`: tasks on the simulated tissues and cohorts and on the
-   Lung, graded by code; reference solutions run in CI; the harness for a model's runs (Claude Code
-   with the server alone), results recorded and shown on the site.
+8. **The agent benchmark (A7): done.**
+   - **The harness** (`benchmark/harness.mjs`, after CytoWeave 0.8.0's, the same author's):
+     `situcraft mcp --allow all` with an empty library and its page in headless Chrome; the task's
+     data made (`situcraft simulate` with its seed and parameters) or the Lung bundle, the
+     simulator's truth read and then removed from the bundles, and opened as the project
+     "Experiment" through the tools (`new_project`, `open_paths` with `add`, `set_samples`); the
+     MCP conversations relayed one after another on a local socket: the harness's, the agent's
+     (Claude Code with `--tools ""`, `--strict-mcp-config`, the empty folder's settings alone)
+     and the grader's.
+   - **Ten tasks** (`benchmark/tasks.mjs`): labels against the true types of a tissue of uneven
+     shares; the pair of types planted as neighbors (fibroblast-like where immune-like lead);
+     the sample planted far out in a cohort (the third, not the examples' sixth); the gene
+     planted in a cohort (SIM072 in the fibroblast-like cells, not the examples' SIM033 in the
+     epithelial-like); a null cohort; a paired cohort's shift (the immune-like falling, not the
+     endothelial-like rising); the Lung's endothelial cells counted and saved as a filter and its
+     run's quality, both against the bundle's CSV tables; a figure and methods; a certificate
+     verified by `situcraft verify`. Each graded by code with partial credit, from the answer
+     line, the project read through the tools and the files written; each with a reference
+     solution through the tools.
+   - **Runs and results** (`benchmark/run.mjs`, `report.mjs`): `--agent claude-code`, `expert` or
+     `none`, `--check`; each run's score, rubric, tool calls, tokens, cost, time and reply, with
+     the model's and SituCraft's versions; the website's *Agent benchmark* page.
+   - **Found on the way:** `query_cells` given an offset of 0 skipped every cell.
+   - **Validated** (`benchmark/tasks.test.mjs`, a CI job): the graders on right, partly right and
+     wrong answers; every reference solution 100% and doing nothing 0, the Lung's cells counted by
+     SituCraft as its CSV counts them. Models' runs are the maintainer's, by hand.
 9. **Examples, documentation, release 0.9.0.** An agent's session over stdio in CI, without a model;
    worked examples of an agent's questions, a recipe made again and the clients; `docs/MCP.md`
    finished; the guide's Agents and scripts page; the fixture `validation/projects/0.9.0-*`;

@@ -1018,7 +1018,11 @@ func (a *app) queryCellsAction(ctx context.Context, args map[string]any) (remote
 	}
 	// A page of the cells kept: each one's row, id and centroid, and the columns asked for.
 	limit := intArg(args, "limit", 20, resultRowsMost)
-	offset := max(0, intArg(args, "offset", 0, math.MaxInt32))
+	// An offset of 0 is the first cell (intArg's 0 is the most, a limit's).
+	offset := 0
+	if v, ok := args["offset"].(float64); ok {
+		offset = int(min(max(0, v), math.MaxInt32))
+	}
 	columns := []string{"row", "id", "x", "y"}
 	var extra [][]float64
 	if list, ok := args["columns"].([]any); ok {

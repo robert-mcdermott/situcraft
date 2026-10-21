@@ -44,7 +44,8 @@ no Python, R or account, and keeps your data on your computer.
   remote control.
 - **Work with AI agents.** An agent such as Claude Code asks SituCraft about your projects and
   results through `situcraft mcp`, a Model Context Protocol server, in a window you watch:
-  read-only unless you allow it to change the project, run jobs or touch files.
+  read-only unless you allow it to change the project, run jobs or touch files. An
+  [agent benchmark](benchmark/) grades agents on tasks whose answers are known.
 
 Every method is checked against an independent implementation or a known truth (scanpy, Squidpy,
 SingleR, limma, edgeR, QuPath and simulated tissues among them): see
