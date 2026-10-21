@@ -360,6 +360,11 @@ with remote control's token does ([Remote control](REMOTE-CONTROL.md)).
   may use. The leave is checked by SituCraft, not left to the agent.
 - While an agent drives a SituCraft that `situcraft mcp` started, that SituCraft takes no actions
   from scripts, and writes no `remote.json`.
+- Every call the agent makes is logged in your library, refusals and failures too: the tool and
+  its arguments, whether it was done, refused or failed, what it changed in the project, the ids
+  it answered with and how long it took. The drawer's **Calls** tab (`⌘J`) shows and searches the
+  log and exports it ([remote control](REMOTE-CONTROL.md#the-log-of-calls)); it never leaves
+  this computer.
 
 ## Troubleshooting
 

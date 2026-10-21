@@ -1,16 +1,19 @@
-// The bottom drawer, under the view: the history of the project, the session's log, and (as views
-// are built) job logs, tables and evidence too long for the inspector. ⌘J or the status bar opens
-// it. Adapted from MaveScape 0.8.0 web/ui/drawer.js.
+// The bottom drawer, under the view: the history of the project, the session's log, the library's
+// log of programs' calls, and (as views are built) job logs, tables and evidence too long for the
+// inspector. ⌘J or the status bar opens it. Adapted from MaveScape 0.8.0 web/ui/drawer.js.
 
 import { h, clear, iconButton } from './dom.js';
 import { prefs } from './storage.js';
+import { callsTab } from './calls-tab.js';
 
 export function mountDrawer(app) {
   const root = document.getElementById('drawer');
   // Tabs views add: id → { label, render(app) → Node }.
+  const calls = callsTab(app);
   const tabs = new Map([
     ['history', { label: 'History', render: renderHistory }],
     ['log', { label: 'Log', render: renderLog }],
+    ['calls', calls],
   ]);
   const log = [];
   let height = prefs.get('drawerHeight', 240);
@@ -74,8 +77,14 @@ export function mountDrawer(app) {
       tabs.set(id, tab);
       render();
     },
+    // A program's call just logged (remote.js, the hub's notice).
+    callLogged(entry) {
+      calls.logged(entry);
+    },
     update(topics) {
-      if (topics.has('drawer') || topics.has('history') || topics.has('project-loaded')) render();
+      // The Calls tab reads the library's log, not the project: a change of the project leaves it.
+      const project = topics.has('history') || topics.has('project-loaded');
+      if (topics.has('drawer') || (project && app.store.ui.drawer.tab !== 'calls')) render();
     },
   };
 }

@@ -26,7 +26,9 @@ that scripts reach a window they can drive.
 ## Sending an action
 
 POST `{"action": …, "args": {…}, "client": …}` to `/api/remote/action`; the answer is
-`{"ok": …, "message": …, "data": …}`. `client` names the sender in the window's log.
+`{"ok": …, "message": …, "data": …}`, and `changed` when the action added, changed or removed
+records of the project (each `{id, kind, name, change}`). `client` names the sender in the
+project's history and the library's log of calls.
 
 ```sh
 curl -s -X POST http://127.0.0.1:8840/api/remote/action \
@@ -91,6 +93,24 @@ an optional argument or a field does not change it.
   replaced only with `overwrite`, and only when it is a SituCraft export.
 - Only a window opened from this run of SituCraft takes actions; a tab left open from an earlier
   run is asked to reload.
+
+## The log of calls
+
+Every call a script or an agent makes is a line of the library's log, refused and failed ones too:
+when, the caller's `client` name and whether it came as a script or an agent (with the leave it
+was given), the action and its arguments (long texts and lists cut short), whether it was `done`,
+`refused` (SituCraft would not perform it: no token, a request it could not read, an action it
+does not know, or an agent's leave or required argument missing) or `failed` (performed, or tried,
+and answered why not, or no window answered), the sentence it answered, what it changed in the
+project, the ids its answer named, and how long it took. The log is
+`calls/YYYY-MM.jsonl` in the data folder, a month a file ([formats](FORMATS.md#the-log-of-calls));
+it never leaves this computer.
+
+The drawer's **Calls** tab (`⌘J`) shows it, the newest first, as calls arrive: searched by words,
+chosen by caller, action and outcome, each call opening to its arguments, what it changed and the
+ids it answered with (those of the open project open their records), and exported as CSV or JSON
+lines. Scripts read it too: `GET /api/calls?q=&tool=&by=&outcome=&offset=&limit=` (100 a page)
+and `GET /api/calls/export?format=csv` (or `jsonl`).
 
 ## Actions
 

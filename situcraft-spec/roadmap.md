@@ -4015,8 +4015,32 @@ without a model, in CI.
      program through the page's route. In the browser, a filter saved from a tree reproduced in the
      QC view, compared with another, used for a graph and verified again; on the audit library,
      the Lung's tumor nest asked about through `situcraft mcp`.
-4. **The audit log (A4).** Every agent's and script's call logged in the library, refusals and
-   errors too; shown, filtered and exported in the app; a call's artifacts linked to their records.
+4. **The audit log (A4): done.**
+   - **The log** (`calls.go`): each call a line of `calls/YYYY-MM.jsonl` in the library, appended
+     whole (an attached `situcraft mcp` writes the same file): time, caller, `agent` or `script`
+     and an agent's leave, the tool, its arguments (texts cut at 500 characters, lists at 50
+     items), `done`, `refused` or `failed` with the sentence answered, the records changed, the
+     ids the answer named (SituCraft's id forms, a digit in them), its duration and the session.
+   - **Where calls are logged:** the hub logs every script's call and every call an attached
+     agent sends, refusals (no token, a request not read, an unknown action, an output path
+     refused) and failures (no page, a page gone or slow, the caller gone) too; `situcraft mcp`
+     logs its own calls and refusals (leave, required arguments, unknown tools), and, attached,
+     those it refuses or cannot send. An attached agent now waits for a page
+     (`/api/remote/pages`) and sends a call once, rather than sending it again until one answers.
+   - **What changed:** the page compares the project before and after an action (records by
+     identity, then content; decisions appended) and answers `changed`, which the log keeps and
+     scripts receive.
+   - **Shown:** the drawer's Calls tab (`web/ui/calls-tab.js`), told of each call by the event
+     stream as it is logged; searched, chosen by caller, tool and outcome, a call opening to its
+     arguments, changes and ids, those of the open project opening their records (the project
+     tree's `openItem`); exported as CSV (no cell read as a formula) or JSON lines;
+     `GET /api/calls` and `/api/calls/export` for scripts.
+   - **Validated** (`calls_test.go`, `mcp_test.go`, `web/lib/calls.test.mjs`, the viewer suite):
+     every outcome of a script's call; an agent's calls in its own SituCraft and attached, each
+     logged once; arguments cut short; the ids found and words not taken for them; searching,
+     paging across months, exporting; the project's changes found. In the browser, a script's and
+     an attached agent's calls shown as they came, a filter a call added opened from its line,
+     searching and exporting.
 5. **Recipes (E5).** A result's recipe from its record, saved as JSON and read back; `situcraft run
    --recipe` making the program's jobs on a bundle without a browser, in a SituCraft of its own,
    with its outputs, certificate and `run.json`; exit codes; threads and a fixed clock; the same

@@ -45,6 +45,7 @@ import { RECORD_FORMATS, recordOf } from './record-view.js';
 import { certify } from './certificate.js';
 import { writePackage, writeReport } from './report.js';
 import { verdictText, verifyCertificateFile } from './verify.js';
+import { projectChanges } from '../lib/calls.js';
 import { certificateSummary, shortFingerprint } from '../lib/certificate.js';
 import { recordableResults } from '../lib/record.js';
 import { BUNDLE_FIELDS, addSampleField, fieldValue, readSamplesTable, removeSampleField, renameSample, sampleFields, samplesCSV, samplesOf, setFieldKind, setRegionSamples, setSampleField } from '../lib/samples.js';
@@ -3368,6 +3369,8 @@ export function installRemote(app) {
 
   async function perform(event) {
     let outcome;
+    // What it changes in the project, for the library's log of programs' calls (calls.go).
+    const before = app.store.project;
     try {
       const handler = Object.hasOwn(actions, event.action) ? actions[event.action] : null;
       if (!handler) throw new ActionError(`Unknown action "${event.action}". Actions: ${Object.keys(actions).join(', ')}.`);
@@ -3402,6 +3405,8 @@ export function installRemote(app) {
       outcome = { ok: false, message: error.message ?? String(error) };
       if (!(error instanceof ActionError)) console.error(error);
     }
+    const changed = projectChanges(before, app.store.project);
+    if (changed.length) outcome.changed = changed;
     await fetch(`api/remote/result/${encodeURIComponent(event.id)}`, { method: 'POST', body: JSON.stringify(outcome), headers: { 'Content-Type': 'application/json' } }).catch(() => {});
   }
 
@@ -3416,6 +3421,14 @@ export function installRemote(app) {
     source.addEventListener('open', () => {
       if (!announced) app.log('Remote control is on: programs on this computer can drive this window (situcraft --remote-control).');
       announced = true;
+    });
+    // A program's call logged: the drawer's Calls tab shows it.
+    source.addEventListener('call', (message) => {
+      try {
+        app.drawer.callLogged?.(JSON.parse(message.data));
+      } catch {
+        // a notice not read is shown when the tab is opened again
+      }
     });
     source.addEventListener('action', (message) => {
       let event;

@@ -782,6 +782,31 @@ td div.studio-problem { padding: 2px 6px; margin-top: 4px; font-size: 11.5px; }
 .history-list li { display: grid; grid-template-columns: 70px minmax(0, 1fr); gap: 10px; padding: 4px 0; border-bottom: 1px solid var(--line); }
 .history-list li.undone { color: var(--text-3); text-decoration: line-through; }
 .history-list time { color: var(--text-3); font-variant-numeric: tabular-nums; }
+.calls-bar { display: grid; gap: 4px; padding: 6px 0 4px; position: sticky; top: 0; background: var(--panel); z-index: 1; border-bottom: 1px solid var(--line); }
+.calls-choose { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; }
+.calls-choose .input[type="search"] { width: 200px; }
+.calls-choose select.input { width: auto; max-width: 160px; }
+.calls-choose .spacer { flex: 1; }
+.calls-list { list-style: none; margin: 0; padding: 0; font-size: 12px; }
+.calls-list li { border-bottom: 1px solid var(--line); }
+.call-row {
+  display: grid; grid-template-columns: 76px 60px minmax(80px, 150px) minmax(60px, 120px) minmax(0, 1fr) 56px; gap: 8px; align-items: center;
+  width: 100%; padding: 5px 2px; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.call-row:hover { background: var(--hover); }
+.call-row time, .call-ms { color: var(--text-3); font-variant-numeric: tabular-nums; }
+.call-ms { text-align: right; }
+.call-tool, .call-by, .call-message { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.call-detail { padding: 4px 4px 10px 84px; }
+.call-detail .kv { margin: 0 0 6px; grid-template-columns: 110px minmax(0, 1fr); }
+.call-detail .kv dd { text-align: left; overflow: visible; word-break: break-word; }
+.call-ids { margin: 0; padding: 0; list-style: none; }
+.call-args { margin: 2px 0 0; max-height: 220px; overflow: auto; padding: 6px 8px; border-radius: 6px; background: var(--panel-2); white-space: pre-wrap; word-break: break-word; }
+@media (max-width: 700px) {
+  .call-row { grid-template-columns: 70px 58px minmax(0, 1fr); }
+  .call-row .call-by, .call-row .call-message, .call-row .call-ms { display: none; }
+  .call-detail { padding-left: 4px; }
+}
 
 /* ---------- SituCraft: the project tree (ui/sidebar.js) ---------- */
 

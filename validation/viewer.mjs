@@ -21,7 +21,8 @@
 //   own, the same artifact; the jobs all complete;
 // - remote control (wave 2, slice 1): the window driven by a program through the program's
 //   remote-control hub: the state described, the tissue shown as asked, a view saved and reopened
-//   exactly, a filter, the methods, and a file written only with the token;
+//   exactly, a filter, the methods, and a file written only with the token; every call in the
+//   library's log and the drawer's Calls tab, the refusal too (wave 9, slice 4);
 // - nucleus expansion (wave 2, slice 3): the Lung bundle's nuclei grown by 5 µm by a program, in
 //   the Segmentation view, nearly as the instrument's segmentation; recorded in the project; the
 //   same distance again the same artifact, with no job;
@@ -645,6 +646,24 @@ export async function viewerSuite({ check, MissingData, verbose }) {
         const exported = await act('export', { what: 'project', path: target });
         const written = existsSync(target) ? JSON.parse(readFileSync(target, 'utf8')) : null;
         check('viewer', 'remote control: export writes the project only with the token', `${refused.status} without, ${exported.ok ? 'written' : exported.message} with`, refused.status === 401 && exported.ok && written?.views?.length === 4 && written.artifacts.filter((a) => a.kind === 'filter').length === 3 && written.artifacts.filter((a) => a.kind === 'segmentation').length === 1, '401, then the project written');
+        // The log of calls (wave 9, slice 4): the drawer's Calls tab lists this suite's calls as the
+        // library's log holds them, the export refused for want of the token among them, and the
+        // filter saved with the record it added.
+        const logged = await chrome.eval(`(async () => {
+          window.situcraft.toggleDrawer(true, 'calls');
+          let rows = [];
+          for (let k = 0; k < 100; k += 1) {
+            rows = [...document.querySelectorAll('.calls-list .call-row')];
+            if (rows.some((r) => r.querySelector('.call-tool')?.textContent === 'export')) break;
+            await new Promise((r) => setTimeout(r, 100));
+          }
+          const shown = rows.map((r) => r.querySelector('.call-tool').textContent + ' ' + r.querySelector('.badge').textContent);
+          const log = await fetch('/api/calls?by=validation&limit=1000').then((r) => r.json());
+          const saved = log.calls.find((c) => c.tool === 'save_filter');
+          window.situcraft.toggleDrawer(false, 'history');
+          return { shown: shown.slice(0, 4), total: log.total, refused: log.calls.filter((c) => c.outcome === 'refused').map((c) => c.tool), saved: saved?.changed?.[0] ?? null };
+        })()`);
+        check('viewer', 'remote control: every call is in the library\'s log and the Calls tab, the export refused for want of the token among them', `${logged.total} calls; shown first: ${logged.shown.join(', ')}; refused: ${logged.refused.join(', ')}; the filter ${logged.saved ? `${logged.saved.change} ${logged.saved.id}` : 'not recorded'}`, logged.shown[0] === 'export done' && logged.shown[1] === 'export refused' && logged.refused.join() === 'export' && logged.saved?.change === 'added' && logged.saved.id === filter.data?.id && logged.total >= 10, 'the newest first, the refusal logged, the filter added');
         // Clusters (wave 4, slice 1): the instrument's segmentation clustered by a program, and its
         // clusters drawn on the tissue: each cell in its cluster's color, cells not analyzed clear.
         const clustered = await act('cluster_cells', { dataset: 'xenium-lung-2fov' });

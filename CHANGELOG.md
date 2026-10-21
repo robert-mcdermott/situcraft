@@ -76,6 +76,24 @@ a window.
     development library, questions about the Lung's tumor nest through `situcraft mcp`, and a
     filter saved from a tree used by a graph and verified again.
 
+- **Every call logged (wave 9, slice 4).** Each call an agent or a script makes of SituCraft is a
+  line of the library's log (`calls/YYYY-MM.jsonl`), refusals and failures too.
+  - **What a line holds:** when; who called and how (an agent through `situcraft mcp`, with its
+    leave, or a script); the tool and its arguments; whether it was done, refused or failed, and
+    the sentence it answered; the records it added, changed or removed in the project; the ids
+    its answer named; and how long it took.
+  - **The Calls tab** of the drawer (`⌘J`) shows the log as calls arrive, the newest first:
+    searched by words, chosen by caller, tool and outcome, each call opening to its arguments and
+    what it changed, the records of the open project a click away. It exports as CSV or JSON
+    lines, and scripts read it at `/api/calls`. The log never leaves this computer.
+  - **An action's answer** now says what it changed in the project (`changed`).
+  - **One line for each call:** an agent working in the window of a running SituCraft waits for
+    its page before sending a call, rather than sending it again.
+  - **Validated:** every outcome a script's or an agent's call can have, logged once, in the
+    window's SituCraft or one attached to; long arguments cut short; the ids an answer names;
+    searching, paging across months and exporting; in the browser, the calls of a script and an
+    agent shown as they came, and a filter a call added opened from its line.
+
 ### Changed
 
 - **Files named by an argument need the token.** A script that has `import_labels` or

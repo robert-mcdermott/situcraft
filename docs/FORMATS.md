@@ -869,6 +869,24 @@ Each job is kept in `<data dir>/jobs/<id>.json`: its kind, title, spec (every ef
 parameter), state, times, number of runs, error and log. A job interrupted by SituCraft stopping is
 `orphaned` when it starts again, to be resumed or discarded.
 
+### The log of calls
+
+Every call an agent or a script makes of SituCraft is a line of `<data dir>/calls/YYYY-MM.jsonl`
+(the month in UTC), a JSON object a line, appended:
+
+| Field | Value |
+| --- | --- |
+| `time` | When it was asked, UTC, RFC 3339 with milliseconds |
+| `by`, `via` | The caller's name (an agent's client, a script's `client`), and `agent` or `script` |
+| `leave` | An agent's leave (`edits`, `compute`, `files`; none: it may only read) |
+| `tool`, `args` | The action and its arguments, texts cut at 500 characters and lists at 50 items |
+| `outcome` | `done`, `refused` (not performed) or `failed` (performed, or tried, and not done) |
+| `message` | The sentence it answered, or why not (cut at 1,000 characters) |
+| `changed` | The project's records it added, changed or removed: `{id, kind, name, change}` |
+| `ids` | The ids of records its answer named, each once |
+| `ms` | How long it took |
+| `session` | The run of SituCraft that took it |
+
 ### Reviews
 
 A dataset's reviews (from 0.5.0) are written from the Viewer's **Reviews** or by `export` (`what:

@@ -84,6 +84,8 @@ type mcpServer struct {
 	cancels      map[string]context.CancelFunc
 	clientMu     sync.Mutex
 	client       string
+	// ownLog: the library's log, kept here when attached to another SituCraft.
+	ownLog *callLog
 }
 
 // mcpOptions are the flags of situcraft mcp beyond SituCraft's own.
@@ -177,7 +179,7 @@ func runMCP(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	// A SituCraft already serving this library, with remote control: the agent works in its window.
 	if attached := findAttachable(cfg.dataDir); attached != nil {
 		fmt.Fprintf(stderr, "SituCraft %s is already running at %s with this library (%s): the agent works in its window.\n", attached.version, attached.url, cfg.dataDir)
-		server := &mcpServer{attached: attached, url: attached.url, allowed: opts.allowed, out: stdout, pageWait: mcpPageWait}
+		server := &mcpServer{attached: attached, url: attached.url, allowed: opts.allowed, out: stdout, pageWait: mcpPageWait, ownLog: newCallLog(cfg.dataDir, "")}
 		server.openPage = server.pageOpener(attached.url, window, cfg.dataDir)
 		if err := server.serveStream(context.Background(), stdin); err != nil {
 			fmt.Fprintln(stderr, "MCP:", err)
@@ -402,6 +404,7 @@ func (s *mcpServer) handle(ctx context.Context, request mcpMessage) {
 		action, ok := findAction(params.Name)
 		if !ok {
 			failure = &mcpError{Code: -32602, Message: fmt.Sprintf("Unknown tool: %s", params.Name)}
+			s.callLog().end(s.callLog().start(s.clientNow(), viaAgent, leaveList(s.allowed), params.Name, params.Arguments), callRefused, remoteResult{Message: failure.Message}, nil)
 			break
 		}
 		stop := s.reportProgress(params.Meta.ProgressToken)
@@ -510,81 +513,117 @@ func (s *mcpServer) write(message map[string]any, id json.RawMessage) {
 // prepares the files the action reads or writes (the agent on stdio is the person's, as a script
 // with the token is), sends it to the page under the agent's name and shapes the reply.
 func (s *mcpServer) callTool(ctx context.Context, action remoteAction, raw json.RawMessage) map[string]any {
-	var args map[string]any
-	if len(raw) > 0 && string(raw) != "null" {
-		if err := json.Unmarshal(raw, &args); err != nil {
-			return toolError("The arguments are not a JSON object.")
-		}
+	client := s.clientNow()
+	call := s.callLog().start(client, viaAgent, leaveList(s.allowed), action.Name, raw)
+	outcome, logged, err := s.runTool(ctx, action, raw, client)
+	if logged != "" {
+		s.callLog().end(call, logged, outcome, err)
 	}
-	if args == nil {
-		args = map[string]any{}
-	}
-	if missing := action.leave(args) &^ s.allowed; missing != 0 {
-		return toolError(fmt.Sprintf("%s needs leave to use %s, which this server was not given: the user starts situcraft mcp with --allow %s to give it.", action.Name, leaveText(missing), strings.ReplaceAll(leaveText(missing), " and ", ",")))
-	}
-	required, _ := action.InputSchema["required"].([]string)
-	for _, name := range required {
-		if value, ok := args[name]; !ok || value == nil || value == "" {
-			return toolError(fmt.Sprintf("%s is required.", name))
-		}
-	}
-	encoded, _ := json.Marshal(args)
-	s.clientMu.Lock()
-	client := clientName(s.client, "an AI agent")
-	s.clientMu.Unlock()
-	if s.attached != nil {
-		outcome, err := s.callAttached(ctx, action, encoded, client)
-		if err != nil {
-			return toolError(err.Error())
-		}
-		return commandResult(outcome)
-	}
-	if action.program && s.hub.program != nil {
-		if outcome, ok := s.hub.program(ctx, action.Name, encoded); ok {
-			return commandResult(outcome)
-		}
-	}
-	if s.hub.latest() == nil && s.openPage != nil {
-		s.openPage()
-	}
-	if !s.hub.waitForPage(ctx, s.pageWait) {
-		return toolError(fmt.Sprintf("No SituCraft page is connected. Open %s in a browser, then try again.", s.url))
-	}
-	event, release, err := s.hub.prepare(remoteEvent{Action: action.Name, Args: encoded, Client: client, Restricted: true, Leave: leaveList(s.allowed)}, action)
-	if err != nil {
-		return toolError(err.Error())
-	}
-	defer release()
-	outcome, err := s.hub.dispatch(ctx, event)
 	if err != nil {
 		return toolError(err.Error())
 	}
 	return commandResult(outcome)
 }
 
-// callAttached sends the action to the SituCraft attached to; when it has no page, its window is
-// opened and the call tried again until one connects.
-func (s *mcpServer) callAttached(ctx context.Context, action remoteAction, args json.RawMessage, client string) (remoteResult, error) {
-	deadline := time.Now().Add(s.pageWait)
-	opened := false
-	for {
-		outcome, status, err := s.attached.call(ctx, action.Name, args, client, leaveList(s.allowed))
-		if status != http.StatusServiceUnavailable || !strings.Contains(err.Error(), "No SituCraft page") {
-			return outcome, err
-		}
-		if !opened && s.openPage != nil {
-			s.openPage()
-			opened = true
-		}
-		if time.Now().After(deadline) {
-			return remoteResult{}, fmt.Errorf("No SituCraft page is connected. Open %s in a browser, then try again.", s.url)
-		}
-		select {
-		case <-ctx.Done():
-			return remoteResult{}, ctx.Err()
-		case <-time.After(500 * time.Millisecond):
+// clientNow is the agent's name, as its client gave it.
+func (s *mcpServer) clientNow() string {
+	s.clientMu.Lock()
+	defer s.clientMu.Unlock()
+	return clientName(s.client, "an AI agent")
+}
+
+// callLog is the library's log: SituCraft's own's, or the one this server keeps beside the
+// SituCraft it attached to (the same file) for the calls it refuses or cannot send.
+func (s *mcpServer) callLog() *callLog {
+	if s.hub != nil {
+		return s.hub.log
+	}
+	return s.ownLog
+}
+
+// runTool performs a call: its outcome, or why it was refused or failed, and how to log it (""
+// when the SituCraft attached to answered it, and logged it itself).
+func (s *mcpServer) runTool(ctx context.Context, action remoteAction, raw json.RawMessage, client string) (remoteResult, string, error) {
+	var args map[string]any
+	if len(raw) > 0 && string(raw) != "null" {
+		if err := json.Unmarshal(raw, &args); err != nil {
+			return remoteResult{}, callRefused, errors.New("The arguments are not a JSON object.")
 		}
 	}
+	if args == nil {
+		args = map[string]any{}
+	}
+	if missing := action.leave(args) &^ s.allowed; missing != 0 {
+		return remoteResult{}, callRefused, fmt.Errorf("%s needs leave to use %s, which this server was not given: the user starts situcraft mcp with --allow %s to give it.", action.Name, leaveText(missing), strings.ReplaceAll(leaveText(missing), " and ", ","))
+	}
+	required, _ := action.InputSchema["required"].([]string)
+	for _, name := range required {
+		if value, ok := args[name]; !ok || value == nil || value == "" {
+			return remoteResult{}, callRefused, fmt.Errorf("%s is required.", name)
+		}
+	}
+	encoded, _ := json.Marshal(args)
+	if s.attached != nil {
+		outcome, status, err := s.callAttached(ctx, action, encoded, client)
+		logged := ""
+		if status == 0 {
+			logged = callFailed // it never reached the SituCraft attached to
+		}
+		return outcome, logged, err
+	}
+	if action.program && s.hub.program != nil {
+		if outcome, ok := s.hub.program(ctx, action.Name, encoded); ok {
+			return outcome, outcomeOf(outcome), nil
+		}
+	}
+	if s.hub.latest() == nil && s.openPage != nil {
+		s.openPage()
+	}
+	if !s.hub.waitForPage(ctx, s.pageWait) {
+		return remoteResult{}, callFailed, fmt.Errorf("No SituCraft page is connected. Open %s in a browser, then try again.", s.url)
+	}
+	event, release, err := s.hub.prepare(remoteEvent{Action: action.Name, Args: encoded, Client: client, Restricted: true, Leave: leaveList(s.allowed)}, action)
+	if err != nil {
+		return remoteResult{}, callRefused, err
+	}
+	defer release()
+	outcome, err := s.hub.dispatch(ctx, event)
+	if errors.Is(err, context.Canceled) {
+		err = errors.New("the agent canceled the call")
+	}
+	if err != nil {
+		return remoteResult{}, callFailed, err
+	}
+	return outcome, outcomeOf(outcome), nil
+}
+
+// callAttached sends the action to the SituCraft attached to: one that needs a page waits for one,
+// its window opened, so that the call is sent (and logged there) once. Its status is 0 when it was
+// not sent or not answered.
+func (s *mcpServer) callAttached(ctx context.Context, action remoteAction, args json.RawMessage, client string) (remoteResult, int, error) {
+	if !action.program {
+		deadline := time.Now().Add(s.pageWait)
+		opened := false
+		for {
+			pages, known := s.attached.pages(ctx)
+			if !known || pages > 0 {
+				break
+			}
+			if !opened && s.openPage != nil {
+				s.openPage()
+				opened = true
+			}
+			if time.Now().After(deadline) {
+				return remoteResult{}, 0, fmt.Errorf("No SituCraft page is connected. Open %s in a browser, then try again.", s.url)
+			}
+			select {
+			case <-ctx.Done():
+				return remoteResult{}, 0, errors.New("the agent canceled the call")
+			case <-time.After(250 * time.Millisecond):
+			}
+		}
+	}
+	return s.attached.call(ctx, action.Name, args, client, leaveList(s.allowed))
 }
 
 // leaveList names the leave given, for the page (never null: an agent given none is still
@@ -772,6 +811,27 @@ func sameFolder(a, b string) bool {
 		return filepath.Clean(p)
 	}
 	return clean(a) == clean(b)
+}
+
+// pages are how many pages the SituCraft attached to has connected; known false when it cannot say
+// (a version before 0.9.0).
+func (a *attachedSituCraft) pages(ctx context.Context) (int, bool) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, a.url+"/api/remote/pages", nil)
+	if err != nil {
+		return 0, false
+	}
+	response, err := a.client.Do(request)
+	if err != nil {
+		return 0, false
+	}
+	defer response.Body.Close()
+	var body struct {
+		Pages *int `json:"pages"`
+	}
+	if response.StatusCode != http.StatusOK || json.NewDecoder(io.LimitReader(response.Body, 1<<16)).Decode(&body) != nil || body.Pages == nil {
+		return 0, false
+	}
+	return *body.Pages, true
 }
 
 // call sends an action as a script with the token does: its outcome, or the HTTP status and why

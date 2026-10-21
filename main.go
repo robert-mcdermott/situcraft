@@ -98,6 +98,8 @@ type app struct {
 	examples *examples.Library
 	// control is the remote-control hub (remote.go), with --remote-control.
 	control *remoteHub
+	// calls is the library's log of programs' calls (calls.go).
+	calls *callLog
 	// verifications are the folders of the certificates verified here, by job (api_verify.go).
 	verifyMu      sync.Mutex
 	verifications map[string]string
@@ -466,6 +468,11 @@ func newApp(cfg config) (*app, error) {
 		return nil, fmt.Errorf("the project library (%s): %w", cfg.dataDir, err)
 	}
 	a.store = s
+	a.calls = newCallLog(s.dir, a.session)
+	if a.control != nil {
+		a.control.log = a.calls
+		a.calls.logged = a.control.logged
+	}
 	if !cfg.dev {
 		return a, nil
 	}
@@ -562,6 +569,7 @@ func (a *app) registerAPI(mux *http.ServeMux) {
 	a.registerJobs(mux)
 	a.registerView(mux)
 	a.registerQueries(mux)
+	a.registerCalls(mux)
 	a.registerProject(mux)
 	a.registerExamples(mux)
 	a.registerSegmentations(mux)

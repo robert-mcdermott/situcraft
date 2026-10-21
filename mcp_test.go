@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -310,7 +311,9 @@ func TestMCPToolCallsReachThePageUnderTheAgentsName(t *testing.T) {
 
 func TestMCPRequiredArgumentsMissingPageAndUnknownTools(t *testing.T) {
 	server := &mcpServer{hub: newRemoteHub(), pageWait: 20 * time.Millisecond, url: "http://127.0.0.1:8840", allowed: allLeave}
+	server.hub.log = newCallLog(t.TempDir(), "")
 	replies := byID(runLines(t, server,
+		`{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2025-06-18","clientInfo":{"name":"claude-code","title":"Claude Code"}}}`,
 		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"open_project","arguments":{}}}`,
 		`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_state","arguments":{}}}`,
 		`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"unknown_tool"}}`,
@@ -329,6 +332,18 @@ func TestMCPRequiredArgumentsMissingPageAndUnknownTools(t *testing.T) {
 	}
 	if fourth := replies[4]["result"].(map[string]any); fourth["isError"] != true || !strings.Contains(textOf(t, fourth), "not a JSON object") {
 		t.Fatalf("arguments not an object: %v", replies[4])
+	}
+	// Each call logged, under the agent's name with its leave: refused, or failed for want of a page.
+	var got []string
+	for _, c := range readCalls(t, server.hub.log) {
+		if c.By != "Claude Code" || c.Via != viaAgent || fmt.Sprint(c.Leave) != "[edits compute files]" {
+			t.Errorf("logged as %s, %s, %v", c.By, c.Via, c.Leave)
+		}
+		got = append(got, c.Tool+" "+c.Outcome)
+	}
+	sort.Strings(got) // the calls run at once
+	if strings.Join(got, ", ") != "get_state failed, get_state refused, open_project refused, unknown_tool refused" {
+		t.Errorf("the log: %s", strings.Join(got, ", "))
 	}
 }
 
@@ -555,6 +570,16 @@ func TestMCPAttachesToTheSituCraftServingTheLibrary(t *testing.T) {
 	}
 	if len(seen) != 1 || seen[0].Action != "get_state" || seen[0].Client != "Claude Code" || !seen[0].Restricted {
 		t.Fatalf("the page saw %+v", seen)
+	}
+	// The library's log holds each call once: the one sent, as the SituCraft attached to logged it,
+	// and the one refused here.
+	var got []string
+	for _, c := range readCalls(t, newCallLog(dir, "")) {
+		got = append(got, fmt.Sprintf("%s %s %s %s %v", c.Tool, c.Outcome, c.Via, c.By, c.Leave))
+	}
+	sort.Strings(got)
+	if strings.Join(got, "; ") != "cluster_cells refused agent Claude Code []; get_state done agent Claude Code []" {
+		t.Errorf("the log: %s", strings.Join(got, "; "))
 	}
 }
 
