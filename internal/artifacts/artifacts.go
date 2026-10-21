@@ -143,6 +143,9 @@ var (
 // Store is a folder of artifacts.
 type Store struct {
 	dir string
+	// Clock gives the time an artifact is recorded as made (nil: the time now); a fixed clock
+	// makes a run's manifests the same each time (situcraft run --clock).
+	Clock func() time.Time
 }
 
 // Open opens (making it if needed) the store in dir.
@@ -223,6 +226,9 @@ func (s *Store) Promote(m Manifest, check Check) (Manifest, error) {
 	m.Format, m.Version = format, version
 	if m.Created.IsZero() {
 		m.Created = time.Now().UTC()
+		if s.Clock != nil {
+			m.Created = s.Clock().UTC()
+		}
 	}
 	m.Findings = []Finding{}
 	listed := map[string]bool{}

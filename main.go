@@ -129,6 +129,9 @@ func main() {
 	if len(os.Args) > 1 && os.Args[1] == "verify" {
 		os.Exit(runVerify(os.Args[2:], os.Stdout, os.Stderr))
 	}
+	if len(os.Args) > 1 && os.Args[1] == "run" {
+		os.Exit(runRun(os.Args[2:], os.Stdout, os.Stderr))
+	}
 	if len(os.Args) > 1 && os.Args[1] == "mcp" {
 		os.Exit(runMCP(os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
 	}
@@ -570,6 +573,7 @@ func (a *app) registerAPI(mux *http.ServeMux) {
 	a.registerView(mux)
 	a.registerQueries(mux)
 	a.registerCalls(mux)
+	a.registerRecipes(mux)
 	a.registerProject(mux)
 	a.registerExamples(mux)
 	a.registerSegmentations(mux)

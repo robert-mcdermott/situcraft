@@ -165,6 +165,9 @@ walks through the examples and every view.
 - `situcraft verify --data <folder of bundles> <certificate, report or package>` makes a
   certificate's results again from the bundles and compares every file bit for bit
   ([the record](https://robert-mcdermott.github.io/situcraft/docs/record.html#verify)).
+- `situcraft run --recipe <recipe> --bundle <bundle> --out <new folder>` makes a result's recipe,
+  saved from the app, without the window: its artifacts, `run.json` and a certificate
+  ([the record](https://robert-mcdermott.github.io/situcraft/docs/record.html#recipes)).
 - `situcraft refine <bundle> <new folder>` runs SituCraft's transcript-informed segmentation
   without the window, from a preset or a recipe saved in the app
   ([Formats](docs/FORMATS.md#refinements-in-the-terminal-situcraft-refine)).

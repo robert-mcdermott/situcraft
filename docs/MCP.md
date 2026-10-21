@@ -204,6 +204,8 @@ Start with what is in your library, or what is open, and say what you want to kn
   `describe_project`, `get_result`, without opening anything)
 - "How many T cells are within 50 µm of the tumor nest, and which genes stand out in it?"
   (`query_cells`, `summarize_region`, without opening anything)
+- "Write the recipe of the Lung's enrichment, so that I can make it again on our cluster."
+  (`recipe`; `situcraft run` makes it)
 - "What is in SituCraft now? Which datasets, and is each bundle healthy?" (`get_state`,
   `qc_metrics`)
 - "List the Lung dataset's segmentations and say how each was made." (`segmentations`, `record`)
@@ -227,7 +229,7 @@ may replace or remove something, and whether it may reach the network (downloadi
 
 | Area | Tools |
 | --- | --- |
-| The library | `list_projects`, `describe_project`, `get_result`, `query_cells`, `query_transcripts`, `summarize_region` (answered without the window) |
+| The library | `list_projects`, `describe_project`, `get_result`, `query_cells`, `query_transcripts`, `summarize_region`, `recipe` (answered without the window) |
 | The project | `get_state` (start here), `open_project`, `set_mode`, `focus`, `jobs` (with `do`, needs compute) |
 | The tissue | `show_tissue` (with `picture`), `select_cell`, `open_view`, `regions`, `show_alignment` |
 | Quality control | `qc_metrics`, `set_qc_map`, `select_cells` |

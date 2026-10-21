@@ -179,6 +179,9 @@ type Manager struct {
 	// dir keeps each job as <id>.json ("": jobs live in memory only).
 	dir    string
 	writes sync.Mutex
+	// IDClock gives the time a new job's id is named by (nil: the time now): a fixed clock names
+	// the jobs of a run the same each time (situcraft run --clock).
+	IDClock func() time.Time
 }
 
 // NewManager starts a manager whose jobs live in memory only.
@@ -250,13 +253,29 @@ func (m *Manager) Handle(kindName string, resume Handler, discard func(id string
 	m.kinds[kindName] = kind{resume: resume, discard: discard}
 }
 
+// Remake answers the work of a job of a kind made again from its spec, as resuming it does (the
+// kind's handler); an error when the kind has none or the spec is not its.
+func (m *Manager) Remake(kindName string, spec json.RawMessage) (Func, error) {
+	m.mu.Lock()
+	k, ok := m.kinds[kindName]
+	m.mu.Unlock()
+	if !ok || k.resume == nil {
+		return nil, fmt.Errorf("a %s job is not made again from its spec", kindName)
+	}
+	return k.resume(spec)
+}
+
 // newID names a job uniquely across runs of the program: its time and a count, never an id a
 // job already has (one kept from a run started within the same millisecond, whose count also
 // began at 1), nor one whose file is in the folder. m.mu is held.
 func (m *Manager) newID() string {
 	for {
 		m.next++
-		id := "j" + strconv.FormatInt(time.Now().UnixMilli(), 36) + "-" + strconv.Itoa(m.next)
+		now := time.Now()
+		if m.IDClock != nil {
+			now = m.IDClock()
+		}
+		id := "j" + strconv.FormatInt(now.UnixMilli(), 36) + "-" + strconv.Itoa(m.next)
 		if _, taken := m.jobs[id]; taken {
 			continue
 		}

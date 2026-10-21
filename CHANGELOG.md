@@ -94,6 +94,31 @@ a window.
     searching, paging across months and exporting; in the browser, the calls of a script and an
     agent shown as they came, and a filter a call added opened from its line.
 
+- **Recipes, made again without a window (wave 9, slice 5).** A result's recipe is every step from
+  its bundles to it: each the job that made it and its parameters, as readable JSON.
+  - **Writing one:** the **Recipe** button in the Reports view's *What made a result*, or the
+    `recipe` tool for agents and scripts. Nothing of your computer is in it: a bundle is named by
+    its role, another file by its name, and what an earlier step made by that step.
+  - **`situcraft run --recipe … --bundle … --out …`** makes it in a SituCraft of its own, so that
+    it runs on a cluster's nodes as on your computer. It writes the artifacts, `run.json` (the
+    inputs and outputs by SHA-256, each step, and why it stopped if it did not finish) and a
+    certificate that `situcraft verify` checks. Exit status: 0 made, 1 a step failed, 2 it could
+    not run.
+  - **On the same bundle,** the very same results, with the same ids and files. **On another
+    bundle,** the steps that are the program's alone (segmentations, clusters, maps, labels).
+    A step that carries cells the window chose (a filter's, each cell's label, a region's) is
+    made only on its own bundle, and the run says so before making anything.
+  - **The same files** on any number of threads (`--threads`) and on any processor; with
+    `--clock` the same recipe gives the same certificate, byte for byte. `--dry-run` checks a
+    recipe without making it.
+  - **Validated:** recipes written and read back, with no path of the computer in them; made
+    again with the same ids and files and verified by `situcraft verify`; the same files twice, on
+    one thread and on many, with the same certificate under a fixed clock; the files pinned as
+    made on arm64 and made again on x86-64; on another bundle, a map made and an enrichment
+    refused; every refusal of the command line. On the Lung bundle, its enrichment's recipe
+    (segmentation, graph, clusters, labels, enrichment) made again in 2 seconds, its derived
+    data already built, and verified.
+
 ### Changed
 
 - **Files named by an argument need the token.** A script that has `import_labels` or

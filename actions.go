@@ -109,6 +109,9 @@ var remoteActions = []remoteAction{
 		"level":        map[string]any{"type": "integer", "minimum": 0, "description": "The label set's level (0)."},
 		"genes":        map[string]any{"type": "integer", "minimum": 0, "description": "Genes in each list (10; up to 200)."},
 	}), program: true},
+	{Name: "recipe", Title: "Write a result's recipe", Description: "A result's recipe: every step from its bundles to it, each the job that made it and its spec as readable JSON, with the bundles named by their roles, other files read by their names and each step's inputs by the steps that make them (no path or id of this computer). situcraft run --recipe makes it again on a bundle without a window, with its artifacts, run.json and a certificate. A step carrying cells the window chose (a filter's, labels', regions') is made again only on the bundle the recipe was made from. Answered by the program from the library, with or without a window.", InputSchema: schema(map[string]any{
+		"id": textArg("The result's id (describe_project lists them)."),
+	}, "id"), program: true},
 	{Name: "new_project", Title: "Start a new project", Description: "Starts a new, empty project (the open one is saved in the library first).", InputSchema: schema(map[string]any{
 		"name": textArg("A name for it."),
 	})},
@@ -779,6 +782,7 @@ var actionHints = map[string]actionHint{
 	"query_cells":          {},
 	"query_transcripts":    {},
 	"summarize_region":     {},
+	"recipe":               {},
 	"open_project":         {},
 	"set_mode":             {},
 	"focus":                {},

@@ -128,10 +128,11 @@ case, then the one name that starts with or contains what was given. An error li
 | `query_cells` | `where` (a tree of conditions), `project`, `dataset` (its only one if not given), `segmentation` (by id or name, or `instrument`; the one promoted, else the instrument's, if not given), `by` (a label set's, clustering's or niches analysis's id), `level` (0), `columns` (attributes or genes), `offset` (0), `limit` (20) | The cells the tree keeps: how many of all, the SHA-256 of which (as a saved filter records it), a page of them (row, id, centroid and the columns asked for), and with `by` how they divide among its labels, clusters or niches against all the cells |
 | `query_transcripts` | `where` (a tree of conditions), `project`, `dataset`, `min_quality` (20), `limit` (20 genes; 0 for all) | The transcripts the tree keeps, of that quality or more, counted by gene |
 | `summarize_region` | `region` (name or id) or `box` ([x0, y0, x1, y1] in µm), `project`, `dataset`, `segmentation`, `labels` (a label set's id; the latest of the segmentation in the project if not given), `level` (0), `genes` (10 a list) | A region's area, its cells by centroid and their density, how they divide among the labels against the whole tissue (with each label's density), and its genes: the most transcripts, and those most above the rest of the tissue |
+| `recipe` | `id` (a result's) | Its recipe: every step from its bundles to it, each the job that made it and its spec as readable JSON, the bundles by their roles and each step's inputs by the steps that make them; `situcraft run --recipe` makes it again without a window ([formats](FORMATS.md#recipes-of-results)) |
 
-`list_projects`, `describe_project`, `get_result`, `query_cells`, `query_transcripts` and
-`summarize_region` are answered by the program itself, from the library and the results' folders,
-whether or not a window is open; every other action is performed by the window.
+`list_projects`, `describe_project`, `get_result`, `query_cells`, `query_transcripts`,
+`summarize_region` and `recipe` are answered by the program itself, from the library and the
+results' folders, whether or not a window is open; every other action is performed by the window.
 
 A tree of conditions (`where`) is JSON, never a query string: `{"all": [trees]}`, `{"any":
 [trees]}`, `{"not": tree}`, or one condition. On cells: `{"attribute": …, "min", "max"}` (a QC

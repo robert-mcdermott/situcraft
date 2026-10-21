@@ -55,6 +55,8 @@ func (a *app) programAction(ctx context.Context, name string, raw json.RawMessag
 		result, err = a.queryTranscriptsAction(ctx, args)
 	case "summarize_region":
 		result, err = a.summarizeRegionAction(ctx, args)
+	case "recipe":
+		result, err = a.recipeAction(args)
 	default:
 		return remoteResult{}, false
 	}

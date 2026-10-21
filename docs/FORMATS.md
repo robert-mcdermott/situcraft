@@ -984,6 +984,44 @@ beside its output):
 The same recipe on the same bundle gives the same segmentation, byte for byte, in the app or the
 terminal, on any computer and any number of threads.
 
+### Recipes of results
+
+A result's recipe (the Reports view's **Recipe**, `recipe`, `GET /api/artifacts/<id>/recipe`) is
+every step from its bundles to it, made again by `situcraft run`:
+
+| Field | Holds |
+| --- | --- |
+| `format`, `version`, `kind` | `"situcraft-recipe"`, 1, `"result"`. A newer version, another kind or a field this SituCraft does not know is refused |
+| `name`, `software` | The result's name, and the SituCraft that wrote the recipe |
+| `result` | The step that makes the result (the last) |
+| `bundles` | Each bundle by its `role` (its folder's name), `name` and `analysis` (its run's analysis UUID), and the `files` its steps read, by `path` and `sha256`, so that the same bundle is known again |
+| `files` | Other files its steps read (a table of labels, a reference), by `name` and `sha256` |
+| `steps` | Each step: `n`, the artifact's `kind` and `name`, the id it `made` where the recipe was written, the `job` that makes it, its `method`, the steps it is made `inputs` from, whether it `carries` cells the window chose (made again only on the same bundle), and the job's `spec` |
+| `run` | How to make it again |
+
+A spec is the job's, as its artifact's manifest records it, with `situcraft:bundle/<role>[/<path
+in it>]` for a bundle's folder, `situcraft:file/<name>` for another file, and
+`situcraft:step/<n>` for what an earlier step made.
+
+### Runs (`situcraft run`)
+
+`situcraft run --recipe <recipe> --bundle [<role>=]<folder> --out <new folder>` writes, in its
+output folder, `library/` (its SituCraft's library, the artifacts it made in `library/artifacts`),
+`certificate.zip` (a certificate of the result, as the window writes one, which `situcraft
+verify` checks) and `run.json`:
+
+| Field | Holds |
+| --- | --- |
+| `format`, `version` | `"situcraft-run"`, 1 |
+| `software`, `recipe` | The SituCraft that ran it; the recipe's `name`, `sha256` and the SituCraft that wrote it (`madeBy`) |
+| `clock`, `threads` | The time it recorded everything as made (`--clock`), and the threads it was given (0, every core) |
+| `bundles` | Each bundle by its `role` and `analysis`, whether it is the one the recipe was made from (`sameAsRecipe`, else the files that `differ`), and its `files` by SHA-256 |
+| `files` | The other files it read, by name and SHA-256 |
+| `steps` | Each step: `n`, `kind`, `name`, `job`, its `state` (`made`, `failed`, `not made`), the `id` it made and the one the recipe's step made (`recipeMade`, `sameAsRecipe`), its `files` by SHA-256, a clustering's, map's or labels' `content` digest, its `error`, and `seconds` |
+| `result`, `certificate` | The result's step, and the certificate's `path` and `fingerprint` |
+| `exit` | Its exit status (`code`: 0 made, 1 a step failed, 2 not run) and the `reason` |
+| `seconds` | How long it took |
+
 ### Refinements in the terminal (`situcraft refine`)
 
 `situcraft refine [flags] <bundle> <new folder>` refines a bundle's segmentation as the app does,

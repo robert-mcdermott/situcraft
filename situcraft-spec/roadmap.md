@@ -4041,10 +4041,34 @@ without a model, in CI.
      paging across months, exporting; the project's changes found. In the browser, a script's and
      an attached agent's calls shown as they came, a filter a call added opened from its line,
      searching and exporting.
-5. **Recipes (E5).** A result's recipe from its record, saved as JSON and read back; `situcraft run
-   --recipe` making the program's jobs on a bundle without a browser, in a SituCraft of its own,
-   with its outputs, certificate and `run.json`; exit codes; threads and a fixed clock; the same
-   bytes again, and on the other processor.
+5. **Recipes (E5): done.**
+   - **A result's recipe** (`recipes.go`; `GET /api/artifacts/<id>/recipe`, the `recipe` action,
+     the record's **Recipe**): every artifact it is made from, those its lineage names and those
+     its spec names (the label set whose labels an enrichment was given), inputs first; each step
+     the job's kind and spec as its manifest records them, rewritten string by string (every
+     other byte kept): a bundle's folder `situcraft:bundle/<role>`, another file
+     `situcraft:file/<name>` with its SHA-256, an earlier step's artifact `situcraft:step/<n>`;
+     each bundle known again by its analysis and its files' SHA-256; whether a step carries cells
+     the window chose (a number for each cell). Read back strictly (format, version, kind, steps
+     in order, every stand-in naming a role, a file or an earlier step).
+   - **`situcraft run`** (`run.go`): the recipe, its bundles by role and its files (`--file`,
+     `--data`, by SHA-256) checked first; a step carrying the window's cells refused on another
+     bundle before anything is made; a SituCraft of its own in `<out>/library`, derived data in a
+     temporary folder or `--cache`; each step's job made from its spec by the job's own handler
+     (`jobs.Manager.Remake`, as resuming one does), its artifact found by the job its lineage
+     names; `--threads` (the refinement's too) and `--clock` (the artifacts' and jobs' times);
+     `run.json`; exit 0, 1 or 2; `--dry-run`.
+   - **Its certificate** (`run_certificate.go`): the window's format, written by the program: the
+     bundles and each step's manifest with this computer's paths stood in for, every file by
+     SHA-256, a clustering's, map's and labels' content digest, a project, record and methods of
+     the run; fingerprinted as the window fingerprints; a zip with fixed times, the same bytes for
+     the same recipe, bundle and clock.
+   - **Validated** (`run_test.go`): a map's and an enrichment's recipes written and read back,
+     with no path of the computer; made again with the same ids and files and verified by
+     `situcraft verify`; the same files again on one thread, the same certificate under a fixed
+     clock; their files pinned as made on arm64 and made again on x86-64 (Rosetta, and CI); on
+     another bundle the map made and the enrichment refused; the command line's refusals. On the
+     Lung bundle, its enrichment's recipe made again in 2 seconds and verified.
 6. **Headless runs and batches (A5).** The page's steps in a headless page (filters, designs,
    figures, reports, exports); a recipe applied to many bundles, one a process for a cluster's array
    jobs; containers and clusters (no sandbox as root, little shared memory, a browser that stalls
