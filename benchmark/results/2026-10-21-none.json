@@ -83,11 +83,11 @@
   "maxTurns": 60
  },
  "situcraft": {
-  "version": "0.8.0",
-  "commit": "067e803",
-  "dirty": true
+  "version": "0.9.0",
+  "commit": "78897c0",
+  "dirty": false
  },
- "date": "2026-10-21T02:46:00.996Z",
+ "date": "2026-10-21T04:44:06.939Z",
  "repeat": 1,
  "score": 0,
  "byTask": {
@@ -298,7 +298,7 @@
    "model": null,
    "timedOut": false,
    "error": null,
-   "seconds": 9,
+   "seconds": 10,
    "reply": "",
    "attempts": 1
   },
@@ -339,7 +339,7 @@
    "model": null,
    "timedOut": false,
    "error": null,
-   "seconds": 13,
+   "seconds": 12,
    "reply": "",
    "attempts": 1
   },

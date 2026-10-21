@@ -83,11 +83,11 @@
   "maxTurns": 60
  },
  "situcraft": {
-  "version": "0.8.0",
-  "commit": "067e803",
-  "dirty": true
+  "version": "0.9.0",
+  "commit": "78897c0",
+  "dirty": false
  },
- "date": "2026-10-21T02:44:34.156Z",
+ "date": "2026-10-21T04:42:39.624Z",
  "repeat": 1,
  "score": 1,
  "byTask": {
@@ -144,7 +144,7 @@
    "model": null,
    "timedOut": false,
    "error": null,
-   "seconds": 12,
+   "seconds": 18,
    "reply": "ANSWER: {\"percentages\":{\"epithelial-like\":21.05263157894737,\"fibroblast-like\":13.602668643439586,\"immune-like\":5.893254262416605,\"endothelial-like\":58.15418828762046}}",
    "attempts": 1
   },
@@ -190,7 +190,7 @@
    "model": null,
    "timedOut": false,
    "error": null,
-   "seconds": 12,
+   "seconds": 13,
    "reply": "ANSWER: {\"pair\":[\"fibroblast-like\",\"immune-like\"]}",
    "attempts": 1
   },
@@ -307,7 +307,7 @@
    "model": null,
    "timedOut": false,
    "error": null,
-   "seconds": 17,
+   "seconds": 18,
    "reply": "ANSWER: {\"changes\":[{\"gene\":\"SIM072\",\"cellType\":\"fibroblast-like\",\"direction\":\"up\"}]}",
    "attempts": 1
   },
@@ -453,7 +453,7 @@
    "model": null,
    "timedOut": false,
    "error": null,
-   "seconds": 9,
+   "seconds": 8,
    "reply": "ANSWER: {\"endothelial\":238,\"withACE\":125}",
    "attempts": 1
   },
@@ -543,8 +543,8 @@
     }
    ],
    "answer": {
-    "figure": "/var/folders/lc/lsy0fn113r9394qmn0xmj5zc0000gn/T/situcraft-bench-faTUfm/outputs/cell-types.pdf",
-    "methods": "/var/folders/lc/lsy0fn113r9394qmn0xmj5zc0000gn/T/situcraft-bench-faTUfm/outputs/methods.md"
+    "figure": "/var/folders/lc/lsy0fn113r9394qmn0xmj5zc0000gn/T/situcraft-bench-G7oq6J/outputs/cell-types.pdf",
+    "methods": "/var/folders/lc/lsy0fn113r9394qmn0xmj5zc0000gn/T/situcraft-bench-G7oq6J/outputs/methods.md"
    },
    "answered": true,
    "replacedWorkspace": false,
@@ -565,8 +565,8 @@
    "model": null,
    "timedOut": false,
    "error": null,
-   "seconds": 13,
-   "reply": "ANSWER: {\"figure\":\"/var/folders/lc/lsy0fn113r9394qmn0xmj5zc0000gn/T/situcraft-bench-faTUfm/outputs/cell-types.pdf\",\"methods\":\"/var/folders/lc/lsy0fn113r9394qmn0xmj5zc0000gn/T/situcraft-bench-faTUfm/outputs/methods.md\"}",
+   "seconds": 14,
+   "reply": "ANSWER: {\"figure\":\"/var/folders/lc/lsy0fn113r9394qmn0xmj5zc0000gn/T/situcraft-bench-G7oq6J/outputs/cell-types.pdf\",\"methods\":\"/var/folders/lc/lsy0fn113r9394qmn0xmj5zc0000gn/T/situcraft-bench-G7oq6J/outputs/methods.md\"}",
    "attempts": 1
   },
   {
@@ -585,7 +585,7 @@
      "name": "of a neighborhood enrichment",
      "weight": 0.3,
      "score": 1,
-     "detail": "{\"id\":\"spa-f8172c9e643bb3089b15\",\"kind\":\"spatial\",\"name\":\"Neighborhood enrichment of Labels by Simulated tissue's types: type, Delaunay graph of Instrument segmentation, edges to 50 µm\"}"
+     "detail": "{\"id\":\"spa-1ef9c4ba594e5cd88cb5\",\"kind\":\"spatial\",\"name\":\"Neighborhood enrichment of Labels by Simulated tissue's types: type, Delaunay graph of Instrument segmentation, edges to 50 µm\"}"
     },
     {
      "name": "verified by situcraft verify",
@@ -595,7 +595,7 @@
     }
    ],
    "answer": {
-    "certificate": "/var/folders/lc/lsy0fn113r9394qmn0xmj5zc0000gn/T/situcraft-bench-1GLEaj/outputs/neighbors-certificate.zip"
+    "certificate": "/var/folders/lc/lsy0fn113r9394qmn0xmj5zc0000gn/T/situcraft-bench-efpm31/outputs/neighbors-certificate.zip"
    },
    "answered": true,
    "replacedWorkspace": false,
@@ -614,8 +614,8 @@
    "model": null,
    "timedOut": false,
    "error": null,
-   "seconds": 14,
-   "reply": "ANSWER: {\"certificate\":\"/var/folders/lc/lsy0fn113r9394qmn0xmj5zc0000gn/T/situcraft-bench-1GLEaj/outputs/neighbors-certificate.zip\"}",
+   "seconds": 15,
+   "reply": "ANSWER: {\"certificate\":\"/var/folders/lc/lsy0fn113r9394qmn0xmj5zc0000gn/T/situcraft-bench-efpm31/outputs/neighbors-certificate.zip\"}",
    "attempts": 1
   }
  ]
