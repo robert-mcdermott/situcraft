@@ -510,6 +510,16 @@
   "violations": []
  },
  {
+  "scene": "agent",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "agent",
+  "theme": "light",
+  "violations": []
+ },
+ {
   "scene": "spatial-tests",
   "theme": "dark",
   "violations": []

@@ -228,8 +228,8 @@ jobs:
           PYTHON: python
           SITUCRAFT_CHROME_ARGS: --use-angle=swiftshader --enable-unsafe-swiftshader --no-sandbox
 
-  benchmark:
-    name: Agent benchmark, without a model
+  agents:
+    name: Agents, without a model
     needs: changed
     if: needs.changed.outputs.test == 'true'
     runs-on: ubuntu-latest
@@ -248,14 +248,19 @@ jobs:
           key: xenium-lung-2fov-${{ hashFiles('validation/sources.json') }}
       - name: Fetch it (checked by its MD5, then every extracted file by its SHA-256)
         run: node validation/fetch.mjs xenium-lung-2fov
-      - name: The graders given right, partly right and wrong answers
+      - name: An agent's session over stdio, every tool called in a headless window and the guide's sessions checked
+        run: node validation/agent-session.mjs --verbose
+        env:
+          CHROME: /usr/bin/google-chrome
+          SITUCRAFT_CHROME_ARGS: --use-angle=swiftshader --enable-unsafe-swiftshader --no-sandbox
+      - name: The benchmark's graders given right, partly right and wrong answers
         run: node --test benchmark/tasks.test.mjs
-      - name: Every reference solution, through the MCP tools, scores at least 0.9
+      - name: The benchmark's reference solutions, through the MCP tools, each scoring at least 0.9
         run: node benchmark/run.mjs --agent expert --check
         env:
           CHROME: /usr/bin/google-chrome
           SITUCRAFT_CHROME_ARGS: --use-angle=swiftshader --enable-unsafe-swiftshader --no-sandbox
-      - name: An agent that answers nothing scores 0
+      - name: The benchmark's agent that answers nothing scoring 0
         run: node benchmark/run.mjs --agent none --check
         env:
           CHROME: /usr/bin/google-chrome

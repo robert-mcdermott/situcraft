@@ -52,5 +52,5 @@ lede: AI agents can drive SituCraft through its MCP server. This benchmark measu
 
       <h2 id="run">Run it, or submit results</h2>
       <p>The benchmark is in the repository's <a href="{{github}}/tree/main/benchmark"><code>benchmark</code></a> folder. With Go, Chrome, the Lung bundle (<code>node validation/fetch.mjs xenium-lung-2fov</code>) and Claude Code installed and logged in:</p>
-      <pre><code>node benchmark/run.mjs --agent claude-code --model sonnet --repeat 3</code></pre>
+      <div class="code wrap"><pre><code><span class="prompt">$ </span>node benchmark/run.mjs --agent claude-code --model sonnet --repeat 3</code></pre></div>
       <p>writes a results file to <code>benchmark/results/</code>. Other agents that speak MCP can be added as adapters in <code>benchmark/harness.mjs</code>. To submit results, open a pull request with the results file: it records the agent's program and model, the SituCraft commit, every run's score with its rubric, tool calls, tokens, cost and time, and the reply.</p>

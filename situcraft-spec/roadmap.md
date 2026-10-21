@@ -4147,10 +4147,43 @@ without a model, in CI.
    - **Validated** (`benchmark/tasks.test.mjs`, a CI job): the graders on right, partly right and
      wrong answers; every reference solution 100% and doing nothing 0, the Lung's cells counted by
      SituCraft as its CSV counts them. Models' runs are the maintainer's, by hand.
-9. **Examples, documentation, release 0.9.0.** An agent's session over stdio in CI, without a model;
-   worked examples of an agent's questions, a recipe made again and the clients; `docs/MCP.md`
-   finished; the guide's Agents and scripts page; the fixture `validation/projects/0.9.0-*`;
-   CHANGELOG; release, and the product site published for it.
+9. **Examples, documentation, release 0.9.0: done.** An agent's session over stdio in CI, without a
+   model; worked examples of an agent's questions, a recipe made again and the clients;
+   `docs/MCP.md` finished; the guide's Agents and scripts page; the fixture
+   `validation/projects/0.9.0-*`; CHANGELOG; release, and the product site published for it.
+   - **An agent's session** (`validation/agent-session.mjs`, after MaveScape 0.8.0's, the same
+     author's; a step of CI's job *Agents, without a model*, with the benchmark's): `situcraft mcp`
+     over stdio in a headless window, with no model. The protocol and its errors; with no leave,
+     only the tools that read and show, a job refused naming its leave; with every leave, all 86
+     tools called on the simulated tissue, the simulated cohort and the Lung (a symbolic link to the
+     validation cache as the examples' download), each answering; a gene's cells as the bundle's
+     matrix counts them; pictures as images; progress before the answer; the read-only tools
+     leaving the history, every change under the agent's name, every call a line of the log once;
+     stdout the protocol alone; SituCraft stopping, its connection file removed, when stdin closes.
+   - **Worked examples of an agent's questions** (the guide's *Agents and scripts*, the old *AI
+     agents* at the same address): a session on the simulated tissue (labels and neighbors, the
+     immune-like cells with epithelial transcripts kept as a filter, the enrichment's recipe made
+     again by `situcraft run` with the same id and verified) and one on the simulated cohort
+     (SIM033 found alone, +0.94 log2, 0.59 to 1.30), every call made and every number checked by
+     the agent session; the clients' notebook and R script; the log; the benchmark. A screenshot of
+     an agent's session in the window (`docs/capture`, the scene `agent`: `situcraft mcp` attached
+     to the capture's SituCraft as Claude Code's client starts it, the drawer's Calls tab).
+   - **`docs/MCP.md` finished:** what an answer changed, recipes, the sessions, the benchmark, the
+     agent session in CI.
+   - **The release fixture** (`validation/projects/0.9.0-lung.situcraft.json` and
+     `0.9.0-lung.recipe.json`, written by the viewer suite with `SITUCRAFT_WRITE_FIXTURE=0.9.0`):
+     a filter of a tree, those cells clustered, labeled, a graph and an enrichment, and its recipe;
+     every later version reopens the project, its filter keeping the cells it recorded, and makes
+     the recipe again with the same ids, verified.
+   - **Release:** version 0.9.0; the README, the site's front page, the installing guide,
+     CITATION.cff; the clients' versions.
+   - Found by slice 9:
+     - **An agent was not told what changed:** slice 4 gave every action's answer the records it
+       added, changed or removed, but `situcraft mcp` passed only the message and the data; a
+       tool's result now carries `changed` too.
+     - **The drawer's tab list:** the first scene with the drawer open (`agent`) found, by axe-core,
+       its close button inside the tab list (`aria-required-children`); the tabs are a list of their
+       own.
 
 ## 0.10.0: whole slides and other platforms (wave 10)
 

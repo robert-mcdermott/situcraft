@@ -670,6 +670,16 @@ func commandResult(outcome remoteResult) map[string]any {
 			}
 		}
 	}
+	// What it added, changed or removed in the project, as a script's answer says it.
+	if len(outcome.Changed) > 0 {
+		structured["changed"] = outcome.Changed
+		if listed, err := json.Marshal(outcome.Changed); err == nil {
+			if text != "" {
+				text += "\n\n"
+			}
+			text += "Changed in the project: " + string(listed)
+		}
+	}
 	if text == "" {
 		text = "Done."
 	}

@@ -55,11 +55,13 @@ export function mountDrawer(app) {
       resize.addEventListener('pointermove', move);
       resize.addEventListener('pointerup', up, { once: true });
     });
-    const head = h('div.drawer-head', { role: 'tablist', 'aria-label': 'Drawer' },
-      ...[...tabs].map(([id, tab]) => h(`button.drawer-tab${id === active ? '.active' : ''}`, {
-        type: 'button', role: 'tab', 'aria-selected': id === active ? 'true' : 'false',
-        onclick: () => app.store.setUI({ drawer: { open: true, tab: id } }, ['drawer']),
-      }, tab.label)),
+    // The tabs alone in the tab list; the close button beside it.
+    const head = h('div.drawer-head',
+      h('div.drawer-tabs', { role: 'tablist', 'aria-label': 'Drawer' },
+        ...[...tabs].map(([id, tab]) => h(`button.drawer-tab${id === active ? '.active' : ''}`, {
+          type: 'button', role: 'tab', 'aria-selected': id === active ? 'true' : 'false',
+          onclick: () => app.store.setUI({ drawer: { open: true, tab: id } }, ['drawer']),
+        }, tab.label))),
       h('span.spacer'),
       iconButton('close', 'Close the drawer (⌘J)', () => app.toggleDrawer(false), { class: 'small' }));
     root.append(resize, head, h('div.drawer-body', { role: 'tabpanel' }, tabs.get(active).render(app)));

@@ -17,10 +17,13 @@ the project's history with its name, and you can undo it or take over at any tim
 - [Checking the connection](#checking-the-connection)
 - [Your window, or one of its own](#your-window-or-one-of-its-own)
 - [What to ask](#what-to-ask)
+- [A session](#a-session)
 - [Tools](#tools)
 - [Results as tables](#results-as-tables)
 - [Pictures](#pictures)
 - [Files](#files)
+- [Recipes](#recipes)
+- [How well agents do](#how-well-agents-do)
 - [Privacy and security](#privacy-and-security)
 - [Troubleshooting](#troubleshooting)
 - [How it works](#how-it-works)
@@ -218,6 +221,16 @@ Start with what is in your library, or what is open, and say what you want to kn
 SituCraft's results are research findings about a tissue, never a diagnosis, and its instructions
 to the agent say so.
 
+## A session
+
+The guide's [Agents and scripts](https://robert-mcdermott.github.io/situcraft/docs/agents.html)
+page follows an agent through two sessions: on the simulated tissue (its cells labeled by type,
+which types neighbor each other, a question of which cells, kept as a filter, and the enrichment's
+recipe made again by `situcraft run`) and on the simulated cohort (the one gene the treatment
+changes, found with the subject as the replicate). Every call in them is real:
+`validation/agent-session.mjs` makes them through `situcraft mcp` in CI, and checks every number
+their answers quote.
+
 ## Tools
 
 The tools are SituCraft's remote-control actions, under the same names and with the same arguments
@@ -259,8 +272,10 @@ may replace or remove something, and whether it may reach the network (downloadi
 `verify_certificate`.
 
 A result is the action's sentence and its data: as text (the data's JSON after the sentence) and
-as structured content. An action SituCraft refuses is a tool error carrying its reason (`No
-dataset "liver" in the project.`), which the agent can act on.
+as structured content. A result also says what the action changed in the project (`changed`: each
+record added, changed or removed, with its id, kind and name), as a script's answer does. An action
+SituCraft refuses is a tool error carrying its reason (`No dataset "liver" in the project.`), which
+the agent can act on.
 
 The tools SituCraft's product requirements name, and the tool that does each:
 
@@ -351,6 +366,23 @@ With `--allow files`, the agent opens and reads files where they lie and writes 
 paths in folders that exist, never over an existing file unless `overwrite` is given, as a script
 with remote control's token does ([Remote control](REMOTE-CONTROL.md)).
 
+## Recipes
+
+`recipe` gives a result's recipe: every step from its bundles to it, each the job that made it and
+its parameters, as readable JSON, with nothing of this computer's paths in it. Saved to a file (the
+agent's own tools write it, or a script's), `situcraft run --recipe … --bundle … --out …` makes it
+again without a window, on this computer, a server or a cluster's nodes: on the same bundle, the
+same result with the same id, and a certificate `situcraft verify` checks
+([Running at scale](https://robert-mcdermott.github.io/situcraft/docs/running.html)).
+
+## How well agents do
+
+The [agent benchmark](../benchmark/README.md) gives agents tasks whose answers are known, on
+simulated tissues and cohorts and on the Lung bundle, and grades by code what they answer and what
+they leave in the project; the website's
+[Agent benchmark](https://robert-mcdermott.github.io/situcraft/benchmark.html) page shows the
+results.
+
 ## Privacy and security
 
 - Everything runs on this computer: SituCraft answers only requests from this computer, and your
@@ -394,4 +426,7 @@ a time; a long call reports progress while it runs, and the agent may cancel it.
 closes stdin, a SituCraft that `situcraft mcp` started stops.
 
 The tools, their arguments and their leave are `actions.go`'s, the same list scripts use; a test
-keeps this page naming every one.
+keeps this page naming every one. In CI, `validation/agent-session.mjs` drives `situcraft mcp` over
+stdio as an agent's client does, with no model: every tool called in a headless window, those that
+only read leaving the project as they found it, every change under the agent's name, every call in
+the log, and the guide's sessions with their numbers.

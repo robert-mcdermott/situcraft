@@ -347,6 +347,24 @@ func TestMCPRequiredArgumentsMissingPageAndUnknownTools(t *testing.T) {
 	}
 }
 
+// What an action changed in the project reaches the agent, as a script's answer carries it.
+func TestMCPResultsSayWhatTheyChanged(t *testing.T) {
+	hub := newRemoteHub()
+	stop := fakePage(t, hub, func(remoteEvent) remoteResult {
+		return remoteResult{OK: true, Message: "Saved Good cells.", Changed: []callChange{{ID: "f-1", Kind: "filter", Name: "Good cells", Change: "added"}}}
+	})
+	defer stop()
+	server := &mcpServer{hub: hub, pageWait: time.Second, allowed: leaveEdits}
+	replies := runLines(t, server, `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"save_filter","arguments":{"name":"Good cells","where":{"attribute":"transcripts","min":20}}}}`)
+	result := replies[0]["result"].(map[string]any)
+	raw, _ := json.Marshal(result["structuredContent"].(map[string]any)["changed"])
+	var changed []callChange
+	json.Unmarshal(raw, &changed)
+	if len(changed) != 1 || changed[0] != (callChange{ID: "f-1", Kind: "filter", Name: "Good cells", Change: "added"}) || !strings.Contains(textOf(t, result), `Changed in the project: [{"id":"f-1"`) {
+		t.Fatalf("%v", result)
+	}
+}
+
 func TestMCPPageRefusalsBecomeToolErrors(t *testing.T) {
 	hub := newRemoteHub()
 	stop := fakePage(t, hub, func(remoteEvent) remoteResult {

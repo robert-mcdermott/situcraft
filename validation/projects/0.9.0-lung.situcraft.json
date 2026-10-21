@@ -1,0 +1,1152 @@
+{
+ "format": "situcraft-project",
+ "version": 1,
+ "id": "p-situcraft-0-9-0-lung",
+ "name": "The Lung, as SituCraft 0.9.0 saved it",
+ "created": "2026-10-21T03:27:29.782Z",
+ "modified": "2026-10-21T03:27:34.230Z",
+ "datasets": [
+  {
+   "id": "d-e6a17ff5195a48d3",
+   "name": "xenium-lung-2fov",
+   "platform": "Xenium",
+   "path": "/data/xenium-lung-2fov",
+   "zipped": false,
+   "software": "xenium-2.0.0.10",
+   "version": "2.0.0",
+   "experimentUuid": "b3d47512-49f1-4932-8182-577862c181e7",
+   "analysisUuid": "38f7f730-e4f3-4484-ac26-ec89cf061ac5",
+   "panel": "Xenium Human Lung Gene Expression",
+   "organism": "Human",
+   "tissue": "Lung",
+   "run": "run",
+   "region": "region",
+   "slide": "slide",
+   "panelDesign": "hLung_v1.1",
+   "runStart": "2023-05-05T20:50:27Z",
+   "cells": 11898,
+   "transcripts": 825885,
+   "pixelSizeUm": 0.2125,
+   "extentUm": [
+    1230.587,
+    755.012
+   ],
+   "channels": [
+    "DAPI (Nuclear)"
+   ],
+   "zPlanes": 11,
+   "fingerprint": [
+    {
+     "path": "analysis.tar.gz",
+     "size": 2499611
+    },
+    {
+     "path": "analysis.zarr.zip",
+     "size": 72566
+    },
+    {
+     "path": "analysis_summary.html",
+     "size": 9162592
+    },
+    {
+     "path": "aux_outputs.tar.gz",
+     "size": 4995907
+    },
+    {
+     "path": "cell_boundaries.csv.gz",
+     "size": 2750450
+    },
+    {
+     "path": "cell_boundaries.parquet",
+     "size": 1022286
+    },
+    {
+     "path": "cell_feature_matrix.h5",
+     "size": 407323
+    },
+    {
+     "path": "cell_feature_matrix.tar.gz",
+     "size": 1390310
+    },
+    {
+     "path": "cell_feature_matrix.zarr.zip",
+     "size": 563383
+    },
+    {
+     "path": "cells.csv.gz",
+     "size": 701012
+    },
+    {
+     "path": "cells.parquet",
+     "size": 233148
+    },
+    {
+     "path": "cells.zarr.zip",
+     "size": 6879546
+    },
+    {
+     "path": "experiment.xenium",
+     "size": 1673,
+     "sha256": "0d52de3573bbf6071bd7edb9a7bdc099672ddae8cddc612d7bec959bb361f380"
+    },
+    {
+     "path": "gene_panel.json",
+     "size": 158827,
+     "sha256": "77a8964e4c4be31473b984bf3a078553a1dc56f626c1b824b2e4ba96ebb05209"
+    },
+    {
+     "path": "metrics_summary.csv",
+     "size": 1818,
+     "sha256": "c4198fb000ed9afb778550b0512a53a81079ada33f265ca82df96c061a716e45"
+    },
+    {
+     "path": "morphology.ome.tif",
+     "size": 164869537
+    },
+    {
+     "path": "morphology_focus/morphology_focus_0000.ome.tif",
+     "size": 17487838
+    },
+    {
+     "path": "nucleus_boundaries.csv.gz",
+     "size": 2619718
+    },
+    {
+     "path": "nucleus_boundaries.parquet",
+     "size": 919858
+    },
+    {
+     "path": "transcripts.csv.gz",
+     "size": 34757095
+    },
+    {
+     "path": "transcripts.parquet",
+     "size": 15254903
+    },
+    {
+     "path": "transcripts.zarr.zip",
+     "size": 17593688
+    }
+   ],
+   "validation": {
+    "checked": "2026-10-21T03:21:00Z",
+    "support": "supported",
+    "fatal": 0,
+    "warnings": 0,
+    "info": 3,
+    "metricsCompared": 22,
+    "metricsAgreeing": 22,
+    "findings": [
+     {
+      "severity": "info",
+      "code": "transcripts.at-edge",
+      "title": "Transcripts just past the images' edge",
+      "count": 7
+     },
+     {
+      "severity": "info",
+      "code": "boundaries.self-intersecting",
+      "title": "Cell boundaries with edges that cross (not a simple polygon)",
+      "count": 44
+     },
+     {
+      "severity": "info",
+      "code": "boundaries.self-intersecting",
+      "title": "Nucleus boundaries with edges that cross (not a simple polygon)",
+      "count": 54
+     }
+    ]
+   },
+   "added": "2026-10-21T03:27:29.786Z"
+  }
+ ],
+ "artifacts": [
+  {
+   "kind": "segmentation",
+   "id": "seg-2fec30e8d6bb2310839d",
+   "name": "Instrument segmentation",
+   "dataset": "d-e6a17ff5195a48d3",
+   "source": "instrument",
+   "state": "complete",
+   "created": "2026-10-21T03:21:03.743694Z",
+   "registered": "2026-10-21T03:27:29.788Z",
+   "method": {
+    "name": "Xenium cell segmentation (Xenium Onboard Analysis)",
+    "version": "xenium-2.0.0.10",
+    "citation": "Janesick A, Shelansky R, Gottscho AD, et al. High resolution mapping of the tumor microenvironment using integrated single-cell, spatial and in situ analysis. Nat Commun. 2023;14:8353. doi:10.1038/s41467-023-43458-x",
+    "methods": [
+     {
+      "method": "Segmented by nucleus expansion of 5.0µm",
+      "cells": 11898
+     }
+    ]
+   },
+   "parameters": null,
+   "software": [
+    {
+     "name": "Xenium Onboard Analysis",
+     "version": "xenium-2.0.0.10"
+    },
+    {
+     "name": "situcraft",
+     "version": "0.9.0",
+     "commit": "2defb60784a54860d60da1bff33686f463b1f5a3-dirty"
+    }
+   ],
+   "job": {
+    "id": "jmvhjoxja-3",
+    "kind": "segmentation"
+   },
+   "parents": [
+    {
+     "kind": "bundle",
+     "id": "38f7f730-e4f3-4484-ac26-ec89cf061ac5",
+     "name": "xenium-lung-2fov",
+     "sha256": "0d52de3573bbf6071bd7edb9a7bdc099672ddae8cddc612d7bec959bb361f380"
+    }
+   ],
+   "files": [
+    {
+     "path": "cell_boundaries.parquet",
+     "role": "cell boundaries",
+     "size": 1022286,
+     "sha256": "c95d4fe79b80b8d92261437245190bb5dec76abdbab340bc2f17dec27cf8330a",
+     "location": "bundle"
+    },
+    {
+     "path": "cell_feature_matrix.zarr.zip",
+     "role": "counts",
+     "size": 563383,
+     "sha256": "853dac57a9b052564749f799d48f2908259d4431340695a2914c9416286e1916",
+     "location": "bundle"
+    },
+    {
+     "path": "cells.parquet",
+     "role": "cells",
+     "size": 233148,
+     "sha256": "b24a6cc4b176f76d16f3a153a44fbd86214a7a6a03b5a5c6bcf776c0cac2568a",
+     "location": "bundle"
+    },
+    {
+     "path": "cells.zarr.zip",
+     "role": "segmentation masks and methods",
+     "size": 6879546,
+     "sha256": "d6b8d0e503ea115f2b56122614f4aa7258d10f7c3d3bd714f4117a4d081fe320",
+     "location": "bundle"
+    },
+    {
+     "path": "nucleus_boundaries.parquet",
+     "role": "nucleus boundaries",
+     "size": 919858,
+     "sha256": "b34dc28366cf476fbb6e020db96fe5a929ba272aad96957cb95da9084b2ddf9b",
+     "location": "bundle"
+    },
+    {
+     "path": "transcripts.parquet",
+     "role": "transcript assignments",
+     "size": 15254903,
+     "sha256": "9e41a0fbf11520a15e59957ffa21dca17ccf08a66dfdeb663e16b813075a4cf9",
+     "location": "bundle"
+    }
+   ],
+   "sources": [],
+   "summary": {
+    "assignedFraction": 0.979724,
+    "cells": 11898,
+    "medianAreaUm2": 48.52039238624275,
+    "medianTranscriptsPerCell": 56,
+    "methods": [
+     {
+      "method": "Segmented by nucleus expansion of 5.0µm",
+      "cells": 11898
+     }
+    ],
+    "q20GeneTranscripts": 746213
+   },
+   "findings": [
+    {
+     "severity": "info",
+     "code": "boundaries.self-intersecting",
+     "message": "Cell boundaries with edges that cross (not a simple polygon)",
+     "count": 44
+    },
+    {
+     "severity": "info",
+     "code": "boundaries.self-intersecting",
+     "message": "Nucleus boundaries with edges that cross (not a simple polygon)",
+     "count": 54
+    }
+   ]
+  },
+  {
+   "kind": "filter",
+   "id": "f-dd85b85a3328414b",
+   "name": "Not epithelial",
+   "version": 1,
+   "parent": null,
+   "dataset": "d-e6a17ff5195a48d3",
+   "created": "2026-10-21T03:27:29.922Z",
+   "tree": {
+    "all": [
+     {
+      "attribute": "transcripts",
+      "min": 20
+     },
+     {
+      "not": {
+       "gene": "EPCAM"
+      }
+     }
+    ]
+   },
+   "text": "with transcripts at least 20 and not with EPCAM transcripts at least 1",
+   "result": {
+    "cells": 11898,
+    "kept": 2357,
+    "sha256": "7bba6733ae912f7b8a27f0dc4058f0511b4fcb1bbc1d2bfdf34bbfd7053a61b3"
+   }
+  },
+  {
+   "kind": "clustering",
+   "id": "clu-088912d6b0ddf150c5d3",
+   "name": "Clusters of Instrument segmentation, resolution 1, filter Not epithelial v1",
+   "dataset": "d-e6a17ff5195a48d3",
+   "segmentation": "seg-2fec30e8d6bb2310839d",
+   "state": "complete",
+   "created": "2026-10-21T03:27:30.120418Z",
+   "registered": "2026-10-21T03:27:30.199Z",
+   "method": {
+    "name": "SituCraft clustering",
+    "version": "1",
+    "citation": "Wolf FA, Angerer P, Theis FJ. SCANPY: large-scale single-cell gene expression data analysis. Genome Biol 2018;19:15. doi:10.1186/s13059-017-1382-0; Traag VA, Waltman L, van Eck NJ. From Louvain to Leiden: guaranteeing well-connected communities. Sci Rep 2019;9:5233. doi:10.1038/s41598-019-41695-z; Reichardt J, Bornholdt S. Statistical mechanics of community detection. Phys Rev E 2006;74:016110 (the resolution); McInnes L, Healy J, Melville J. UMAP: Uniform Manifold Approximation and Projection for dimension reduction. arXiv:1802.03426, 2018 (the neighbor graph); Mann HB, Whitney DR. On a test of whether one of two random variables is stochastically larger than the other. Ann Math Stat 1947;18:50–60 (the markers)"
+   },
+   "parameters": {
+    "minTranscripts": 10,
+    "components": 50,
+    "neighbors": 15,
+    "resolution": 1,
+    "seed": 20250
+   },
+   "software": [
+    {
+     "name": "situcraft",
+     "version": "0.9.0",
+     "commit": "2defb60784a54860d60da1bff33686f463b1f5a3-dirty"
+    }
+   ],
+   "job": {
+    "id": "jmvhjx7t2-68",
+    "kind": "clustering"
+   },
+   "summary": {
+    "segmentation": {
+     "id": "seg-2fec30e8d6bb2310839d",
+     "name": "Instrument segmentation"
+    },
+    "cells": 2357,
+    "clusters": 25,
+    "sizes": [
+     267,
+     233,
+     212,
+     170,
+     144,
+     128,
+     116,
+     115,
+     111,
+     97,
+     96,
+     82,
+     76,
+     66,
+     53,
+     50,
+     50,
+     48,
+     46,
+     42,
+     38,
+     38,
+     30,
+     27,
+     22
+    ],
+    "modularity": 0.5709120493182708,
+    "components": 50,
+    "varianceShare": 0.45783192986605364,
+    "resolution": 1,
+    "filter": {
+     "id": "f-dd85b85a3328414b",
+     "name": "Not epithelial v1",
+     "checksum": "7bba6733ae912f7b8a27f0dc4058f0511b4fcb1bbc1d2bfdf34bbfd7053a61b3"
+    }
+   },
+   "findings": []
+  },
+  {
+   "kind": "marker-set",
+   "id": "ms-d96c65a024d9-1",
+   "family": "ms-d96c65a024d9-1",
+   "version": 1,
+   "parent": null,
+   "name": "Human lung (Xenium Human Lung panel)",
+   "set": {
+    "format": "situcraft-markers",
+    "version": 1,
+    "name": "Human lung (Xenium Human Lung panel)",
+    "about": "The lung's main cell types from well-established markers, every one in the Xenium Human Lung Gene Expression panel (hLung_v1.1), chosen to be specific in this panel's development data set (where tumor cells express COL5A2 and PROX1). The panel has no pan-immune marker (PTPRC), so the immune class is scored by leading markers of each immune lineage. A starting point, to be checked against each cluster's markers and edited: tumor cells are labeled by the lineage they resemble.",
+    "panel": "hLung_v1.1",
+    "levels": [
+     "Class",
+     "Lineage",
+     "Subtype"
+    ],
+    "labels": [
+     {
+      "name": "Epithelial",
+      "positive": [
+       "EPCAM",
+       "CDH1",
+       "ELF3"
+      ],
+      "negative": [
+       "CD68",
+       "AIF1",
+       "VWF",
+       "PDGFRB",
+       "CD3E"
+      ],
+      "references": [
+       "10.1038/s41586-020-2922-4",
+       "10.1038/s41591-023-02327-2"
+      ]
+     },
+     {
+      "name": "Alveolar type 1",
+      "parent": "Epithelial",
+      "positive": [
+       "AGER",
+       "SCEL"
+      ],
+      "references": [
+       "10.1038/s41586-020-2922-4"
+      ]
+     },
+     {
+      "name": "Alveolar type 2",
+      "parent": "Epithelial",
+      "positive": [
+       "SFTPD",
+       "SFTA2",
+       "PEBP4",
+       "ETV5"
+      ],
+      "references": [
+       "10.1038/s41586-020-2922-4",
+       "10.1038/s41591-023-02327-2"
+      ]
+     },
+     {
+      "name": "Ciliated",
+      "parent": "Epithelial",
+      "positive": [
+       "FOXJ1",
+       "CCDC78"
+      ],
+      "references": [
+       "10.1038/s41586-020-2922-4"
+      ]
+     },
+     {
+      "name": "Secretory (club and goblet)",
+      "parent": "Epithelial",
+      "positive": [
+       "MUC5B",
+       "CYP2F1"
+      ],
+      "references": [
+       "10.1038/s41586-020-2922-4"
+      ]
+     },
+     {
+      "name": "Basal",
+      "parent": "Epithelial",
+      "positive": [
+       "TP63",
+       "KRT15"
+      ],
+      "references": [
+       "10.1038/s41586-020-2922-4"
+      ]
+     },
+     {
+      "name": "Immune",
+      "positive": [
+       "CD3E",
+       "CD2",
+       "MS4A1",
+       "MZB1",
+       "CD68",
+       "AIF1",
+       "MPEG1",
+       "MS4A2"
+      ],
+      "negative": [
+       "EPCAM"
+      ],
+      "references": [
+       "10.1038/s41586-020-2922-4"
+      ]
+     },
+     {
+      "name": "T cell",
+      "parent": "Immune",
+      "positive": [
+       "CD3E",
+       "CD3D",
+       "CD2",
+       "LCK"
+      ],
+      "negative": [
+       "MS4A1",
+       "CD68"
+      ],
+      "references": [
+       "10.1038/s41586-020-2922-4"
+      ]
+     },
+     {
+      "name": "CD4 T cell",
+      "parent": "T cell",
+      "positive": [
+       "CD4",
+       "CD40LG"
+      ],
+      "negative": [
+       "CD8A",
+       "CD8B"
+      ],
+      "references": [
+       "10.1038/s41586-020-2922-4"
+      ]
+     },
+     {
+      "name": "CD8 T cell",
+      "parent": "T cell",
+      "positive": [
+       "CD8A",
+       "CD8B"
+      ],
+      "negative": [
+       "CD4",
+       "CD40LG"
+      ],
+      "references": [
+       "10.1038/s41586-020-2922-4"
+      ]
+     },
+     {
+      "name": "Regulatory T cell",
+      "parent": "T cell",
+      "positive": [
+       "FOXP3",
+       "CTLA4",
+       "TNFRSF18"
+      ],
+      "negative": [
+       "CD8A",
+       "CD8B"
+      ],
+      "references": [
+       "10.1038/s41586-020-2922-4"
+      ]
+     },
+     {
+      "name": "NK cell",
+      "parent": "Immune",
+      "positive": [
+       "KLRD1",
+       "KLRC1",
+       "NKG7",
+       "FGFBP2"
+      ],
+      "negative": [
+       "CD3E",
+       "CD3D"
+      ],
+      "references": [
+       "10.1038/s41586-020-2922-4"
+      ]
+     },
+     {
+      "name": "B cell",
+      "parent": "Immune",
+      "positive": [
+       "MS4A1",
+       "CD19",
+       "BANK1",
+       "TNFRSF13C"
+      ],
+      "negative": [
+       "CD3E"
+      ],
+      "references": [
+       "10.1038/s41586-020-2922-4"
+      ]
+     },
+     {
+      "name": "Plasma cell",
+      "parent": "Immune",
+      "positive": [
+       "MZB1",
+       "TNFRSF17",
+       "FKBP11"
+      ],
+      "negative": [
+       "MS4A1"
+      ],
+      "references": [
+       "10.1038/s41586-020-2922-4"
+      ]
+     },
+     {
+      "name": "Myeloid",
+      "parent": "Immune",
+      "positive": [
+       "CD68",
+       "AIF1",
+       "CD14",
+       "CD163",
+       "MPEG1"
+      ],
+      "negative": [
+       "CD3E"
+      ],
+      "references": [
+       "10.1038/s41586-020-2922-4"
+      ]
+     },
+     {
+      "name": "Macrophage",
+      "parent": "Myeloid",
+      "positive": [
+       "CD68",
+       "MARCO",
+       "CD163",
+       "MCEMP1"
+      ],
+      "references": [
+       "10.1038/s41586-020-2922-4",
+       "10.1038/s41591-023-02327-2"
+      ]
+     },
+     {
+      "name": "Monocyte",
+      "parent": "Myeloid",
+      "positive": [
+       "FCN1",
+       "S100A12",
+       "CD14",
+       "CD300E"
+      ],
+      "negative": [
+       "MARCO"
+      ],
+      "references": [
+       "10.1038/s41586-020-2922-4"
+      ]
+     },
+     {
+      "name": "Dendritic cell",
+      "parent": "Myeloid",
+      "positive": [
+       "CD1C",
+       "CLEC10A",
+       "FCER1A"
+      ],
+      "references": [
+       "10.1038/s41586-020-2922-4"
+      ]
+     },
+     {
+      "name": "Mast cell",
+      "parent": "Immune",
+      "positive": [
+       "MS4A2",
+       "KIT",
+       "HPGDS"
+      ],
+      "references": [
+       "10.1038/s41586-020-2922-4"
+      ]
+     },
+     {
+      "name": "Endothelial",
+      "positive": [
+       "CLDN5",
+       "VWF",
+       "ADGRL4",
+       "ECSCR",
+       "RAMP2"
+      ],
+      "negative": [
+       "EPCAM"
+      ],
+      "references": [
+       "10.1038/s41586-020-2922-4",
+       "10.1038/s41591-023-02327-2"
+      ]
+     },
+     {
+      "name": "Blood vessel endothelial",
+      "parent": "Endothelial",
+      "positive": [
+       "PLVAP",
+       "ACKR1",
+       "CA4",
+       "FCN3"
+      ],
+      "negative": [
+       "MMRN1"
+      ],
+      "references": [
+       "10.1038/s41586-020-2922-4"
+      ]
+     },
+     {
+      "name": "Lymphatic endothelial",
+      "parent": "Endothelial",
+      "positive": [
+       "MMRN1",
+       "PDPN",
+       "LYVE1"
+      ],
+      "negative": [
+       "PLVAP"
+      ],
+      "references": [
+       "10.1038/s41586-020-2922-4"
+      ]
+     },
+     {
+      "name": "Stromal",
+      "positive": [
+       "PDGFRA",
+       "PDGFRB",
+       "FBN1",
+       "MYH11",
+       "DES"
+      ],
+      "negative": [
+       "EPCAM"
+      ],
+      "references": [
+       "10.1038/s41586-020-2922-4",
+       "10.1038/s41591-023-02327-2"
+      ]
+     },
+     {
+      "name": "Fibroblast",
+      "parent": "Stromal",
+      "positive": [
+       "PDGFRA",
+       "FBN1",
+       "MFAP5",
+       "SFRP2",
+       "SVEP1"
+      ],
+      "references": [
+       "10.1038/s41586-020-2922-4"
+      ]
+     },
+     {
+      "name": "Smooth muscle",
+      "parent": "Stromal",
+      "positive": [
+       "MYH11",
+       "DES",
+       "CNN1",
+       "LMOD1"
+      ],
+      "references": [
+       "10.1038/s41586-020-2922-4"
+      ]
+     },
+     {
+      "name": "Pericyte",
+      "parent": "Stromal",
+      "positive": [
+       "RGS5",
+       "HIGD1B",
+       "CSPG4",
+       "PDGFRB"
+      ],
+      "negative": [
+       "MYH11"
+      ],
+      "references": [
+       "10.1038/s41586-020-2922-4"
+      ]
+     }
+    ],
+    "states": [
+     {
+      "name": "Proliferating",
+      "positive": [
+       "MKI67",
+       "TOP2A",
+       "CDK1",
+       "UBE2C",
+       "CENPF"
+      ],
+      "references": [
+       "10.1038/s41586-020-2922-4"
+      ]
+     }
+    ],
+    "references": [
+     {
+      "doi": "10.1038/s41586-020-2922-4",
+      "citation": "Travaglini KJ, et al. A molecular cell atlas of the human lung from single-cell RNA sequencing. Nature 2020;587:619–625."
+     },
+     {
+      "doi": "10.1038/s41591-023-02327-2",
+      "citation": "Sikkema L, et al. An integrated cell atlas of the lung in health and disease. Nat Med 2023;29:1563–1577."
+     }
+    ]
+   },
+   "checksum": "d96c65a024d9df1bb3001d9da65ca06cd650a5ba78bb9d78894704e38d5825e6",
+   "source": {
+    "starter": "lung"
+   },
+   "by": "remote control",
+   "created": "2026-10-21T03:27:30.263Z"
+  },
+  {
+   "kind": "embedding",
+   "id": "emb-cfc7f96d5ee33f327cbd",
+   "name": "Map of Clusters of Instrument segmentation, resolution 1, filter Not epithelial v1",
+   "dataset": "d-e6a17ff5195a48d3",
+   "segmentation": "seg-2fec30e8d6bb2310839d",
+   "clustering": "clu-088912d6b0ddf150c5d3",
+   "state": "complete",
+   "created": "2026-10-21T03:27:33.443821Z",
+   "registered": "2026-10-21T03:27:33.664Z",
+   "method": {
+    "name": "SituCraft UMAP",
+    "version": "1",
+    "citation": "McInnes L, Healy J, Melville J. UMAP: Uniform Manifold Approximation and Projection for dimension reduction. arXiv:1802.03426, 2018; Venna J, Kaski S. Neighborhood preservation in nonlinear projection methods: an experimental study. ICANN 2001:485–491 (trustworthiness); Venna J, Peltonen J, Nybo K, Aidos H, Kaski S. Information retrieval perspective to nonlinear dimensionality reduction for data visualization. J Mach Learn Res 2010;11:451–490 (each cell's neighborhoods)"
+   },
+   "parameters": {
+    "minDist": 0.5,
+    "spread": 1,
+    "epochs": 0,
+    "negativeRate": 5,
+    "seed": 20250
+   },
+   "summary": {
+    "clustering": {
+     "id": "clu-088912d6b0ddf150c5d3",
+     "name": "Clusters of Instrument segmentation, resolution 1, filter Not epithelial v1"
+    },
+    "cells": 2357,
+    "trustworthiness": 0.7729240074264496,
+    "precision": 0.3310988544760308,
+    "recall": 0.42913307877245305
+   },
+   "findings": []
+  },
+  {
+   "kind": "labels",
+   "id": "lab-494dacca670cb02effd3",
+   "name": "Labels of Clusters of Instrument segmentation, resolution 1, filter Not epithelial v1 by Human lung (Xenium Human Lung panel)",
+   "dataset": "d-e6a17ff5195a48d3",
+   "segmentation": "seg-2fec30e8d6bb2310839d",
+   "clustering": "clu-088912d6b0ddf150c5d3",
+   "markerSet": "ms-d96c65a024d9-1",
+   "markers": {
+    "name": "Human lung (Xenium Human Lung panel)",
+    "checksum": "d96c65a024d9df1bb3001d9da65ca06cd650a5ba78bb9d78894704e38d5825e6"
+   },
+   "source": null,
+   "reference": null,
+   "state": "complete",
+   "created": "2026-10-21T03:27:33.460457Z",
+   "registered": "2026-10-21T03:27:33.669Z",
+   "method": {
+    "name": "SituCraft labels from markers",
+    "version": "1",
+    "citation": "Tirosh I, et al. Dissecting the multicellular ecosystem of metastatic melanoma by single-cell RNA-seq. Science 2016;352:189–196. doi:10.1126/science.aad0501 (scores against control genes binned by expression); Wolf FA, Angerer P, Theis FJ. SCANPY: large-scale single-cell gene expression data analysis. Genome Biol 2018;19:15. doi:10.1186/s13059-017-1382-0 (score_genes)"
+   },
+   "parameters": {
+    "margin": 0.1,
+    "minimum": 0,
+    "state": 0.25,
+    "bins": 25,
+    "controls": 50,
+    "lineage": true,
+    "seed": 20250,
+    "markers": {
+     "name": "Human lung (Xenium Human Lung panel)",
+     "checksum": "d96c65a024d9df1bb3001d9da65ca06cd650a5ba78bb9d78894704e38d5825e6"
+    }
+   },
+   "software": [
+    {
+     "name": "situcraft",
+     "version": "0.9.0",
+     "commit": "2defb60784a54860d60da1bff33686f463b1f5a3-dirty"
+    }
+   ],
+   "job": {
+    "id": "jmvhjx80u-70",
+    "kind": "labels"
+   },
+   "summary": {
+    "segmentation": {
+     "id": "seg-2fec30e8d6bb2310839d",
+     "name": "Instrument segmentation"
+    },
+    "clustering": {
+     "id": "clu-088912d6b0ddf150c5d3",
+     "name": "Clusters of Instrument segmentation, resolution 1, filter Not epithelial v1"
+    },
+    "markers": "Human lung (Xenium Human Lung panel)",
+    "checksum": "d96c65a024d9df1bb3001d9da65ca06cd650a5ba78bb9d78894704e38d5825e6",
+    "cells": 2357,
+    "levels": [
+     "Class",
+     "Lineage",
+     "Subtype"
+    ],
+    "labeled": [
+     780,
+     373,
+     50
+    ],
+    "unlabeled": 1577,
+    "labels": 26,
+    "states": 1,
+    "margin": 0.1
+   },
+   "findings": []
+  },
+  {
+   "kind": "graph",
+   "id": "gra-ff8da4e15aa9360c5259",
+   "name": "Delaunay graph of Instrument segmentation, edges to 50 µm, filter Not epithelial v1",
+   "dataset": "d-e6a17ff5195a48d3",
+   "segmentation": "seg-2fec30e8d6bb2310839d",
+   "state": "complete",
+   "created": "2026-10-21T03:27:33.741452Z",
+   "registered": "2026-10-21T03:27:33.944Z",
+   "method": {
+    "name": "SituCraft cell graph",
+    "version": "1",
+    "citation": "Lee DT, Schachter BJ. Two algorithms for constructing a Delaunay triangulation. Int J Comput Inf Sci 1980;9:219–242. doi:10.1007/BF00977785; Bowyer A. Computing Dirichlet tessellations. Comput J 1981;24:162–166; Watson DF. Computing the n-dimensional Delaunay tessellation with application to Voronoi polytopes. Comput J 1981;24:167–172; Shewchuk JR. Adaptive precision floating-point arithmetic and fast robust geometric predicates. Discrete Comput Geom 1997;18:305–363. doi:10.1007/PL00009321"
+   },
+   "parameters": {
+    "kind": "delaunay",
+    "longest": 50
+   },
+   "software": [
+    {
+     "name": "situcraft",
+     "version": "0.9.0",
+     "commit": "2defb60784a54860d60da1bff33686f463b1f5a3-dirty"
+    }
+   ],
+   "job": {
+    "id": "jmvhjxaov-71",
+    "kind": "graph"
+   },
+   "summary": {
+    "segmentation": {
+     "id": "seg-2fec30e8d6bb2310839d",
+     "name": "Instrument segmentation"
+    },
+    "kind": "delaunay",
+    "parameters": {
+     "kind": "delaunay",
+     "longest": 50
+    },
+    "cells": 2357,
+    "edges": 6820,
+    "meanDegree": 5.787017394993636,
+    "isolated": 2,
+    "components": 4,
+    "medianLength": 16.97422218322754,
+    "choice": {
+     "checksum": "7bba6733ae912f7b8a27f0dc4058f0511b4fcb1bbc1d2bfdf34bbfd7053a61b3",
+     "filter": {
+      "id": "f-dd85b85a3328414b",
+      "name": "Not epithelial v1",
+      "checksum": "7bba6733ae912f7b8a27f0dc4058f0511b4fcb1bbc1d2bfdf34bbfd7053a61b3"
+     }
+    }
+   },
+   "findings": []
+  },
+  {
+   "kind": "spatial",
+   "id": "spa-814dd6666cffa20421b4",
+   "name": "Neighborhood enrichment of Labels by Human lung (Xenium Human Lung panel): class, Delaunay graph of Instrument segmentation, edges to 50 µm, filter Not epithelial v1",
+   "dataset": "d-e6a17ff5195a48d3",
+   "segmentation": "seg-2fec30e8d6bb2310839d",
+   "graph": "gra-ff8da4e15aa9360c5259",
+   "question": "enrichment",
+   "state": "complete",
+   "created": "2026-10-21T03:27:34.030744Z",
+   "registered": "2026-10-21T03:27:34.230Z",
+   "method": {
+    "name": "SituCraft spatial analysis",
+    "version": "1",
+    "citation": "Schapiro D, Jackson HW, Raghuraman S, et al. histoCAT: analysis of cell phenotypes and interactions in multiplex image cytometry data. Nat Methods 2017;14:873–876. doi:10.1038/nmeth.4391; Palla G, Spitzer H, Klein M, et al. Squidpy: a scalable framework for spatial omics analysis. Nat Methods 2022;19:171–178. doi:10.1038/s41592-021-01358-2; Benjamini Y, Hochberg Y. Controlling the false discovery rate: a practical and powerful approach to multiple testing. J R Stat Soc B 1995;57:289–300"
+   },
+   "parameters": {
+    "permutations": 1000,
+    "seed": 20250,
+    "weight": "edges"
+   },
+   "software": [
+    {
+     "name": "situcraft",
+     "version": "0.9.0",
+     "commit": "2defb60784a54860d60da1bff33686f463b1f5a3-dirty"
+    }
+   ],
+   "job": {
+    "id": "jmvhjxawu-72",
+    "kind": "spatial"
+   },
+   "summary": {
+    "question": "enrichment",
+    "segmentation": {
+     "id": "seg-2fec30e8d6bb2310839d",
+     "name": "Instrument segmentation"
+    },
+    "graph": {
+     "id": "gra-ff8da4e15aa9360c5259",
+     "name": "Delaunay graph of Instrument segmentation, edges to 50 µm, filter Not epithelial v1",
+     "parameters": {
+      "kind": "delaunay",
+      "longest": 50
+     }
+    },
+    "labels": {
+     "id": "lab-494dacca670cb02effd3",
+     "name": "Labels by Human lung (Xenium Human Lung panel): class",
+     "level": 0,
+     "count": 4
+    },
+    "cells": 2357,
+    "labeled": 780,
+    "enriched": [
+     {
+      "a": "Stromal",
+      "b": "Stromal",
+      "ratio": 2.6109557917126582,
+      "z": 9.010588160303959,
+      "padj": 0.001998001998001998
+     },
+     {
+      "a": "Endothelial",
+      "b": "Endothelial",
+      "ratio": 1.651210334880221,
+      "z": 5.210865856181515,
+      "padj": 0.001998001998001998
+     },
+     {
+      "a": "Endothelial",
+      "b": "Stromal",
+      "ratio": 1.4032263651729349,
+      "z": 3.8885883459251973,
+      "padj": 0.001998001998001998
+     }
+    ],
+    "depleted": [
+     {
+      "a": "Epithelial",
+      "b": "Stromal",
+      "ratio": 0.5881389724031205,
+      "z": -5.573333538659977,
+      "padj": 0.001998001998001998
+     },
+     {
+      "a": "Epithelial",
+      "b": "Endothelial",
+      "ratio": 0.7761207771974198,
+      "z": -3.5499900939086597,
+      "padj": 0.001998001998001998
+     }
+    ],
+    "significant": 5
+   },
+   "findings": []
+  }
+ ],
+ "decisions": [
+  {
+   "kind": "promote-segmentation",
+   "dataset": "d-e6a17ff5195a48d3",
+   "artifact": "seg-2fec30e8d6bb2310839d",
+   "rationale": "The instrument's segmentation: the dataset's only segmentation when it was added.",
+   "by": "SituCraft",
+   "time": "2026-10-21T03:27:29.788Z"
+  }
+ ],
+ "views": [],
+ "history": [
+  {
+   "time": "2026-10-21T03:27:29.786Z",
+   "action": "add-dataset",
+   "detail": "xenium-lung-2fov (/data/xenium-lung-2fov)"
+  },
+  {
+   "time": "2026-10-21T03:27:29.788Z",
+   "action": "segmentation",
+   "detail": "Registered instrument segmentation of xenium-lung-2fov (artifact seg-2fec30e8d6bb2310839d, 6 files by SHA-256)"
+  },
+  {
+   "time": "2026-10-21T03:27:29.788Z",
+   "action": "decision",
+   "detail": "Promoted instrument segmentation as xenium-lung-2fov's segmentation: The instrument's segmentation: the dataset's only segmentation when it was added."
+  },
+  {
+   "time": "2026-10-21T03:27:29.922Z",
+   "action": "filter",
+   "detail": "Saved filter Not epithelial (version 1): 2357 of 11898 cells kept"
+  },
+  {
+   "time": "2026-10-21T03:27:30.199Z",
+   "action": "clustering",
+   "detail": "Clustered the cells of instrument segmentation of xenium-lung-2fov: 25 clusters of 2357 cells at resolution 1 (artifact clu-088912d6b0ddf150c5d3)"
+  },
+  {
+   "time": "2026-10-21T03:27:30.263Z",
+   "action": "marker-set",
+   "detail": "Added the marker set \"Human lung (Xenium Human Lung panel)\" from SituCraft's starter set \"lung\" (version 1: 26 labels, 1 state; checksum d96c65a024d9)"
+  },
+  {
+   "time": "2026-10-21T03:27:33.664Z",
+   "action": "embedding",
+   "detail": "Made map of Clusters of Instrument segmentation, resolution 1, filter Not epithelial v1 of xenium-lung-2fov: trustworthiness 0.773 (artifact emb-cfc7f96d5ee33f327cbd)"
+  },
+  {
+   "time": "2026-10-21T03:27:33.669Z",
+   "action": "labels",
+   "detail": "Labeled the cells of clusters of instrument segmentation, resolution 1, filter not epithelial v1 by the marker set \"Human lung (Xenium Human Lung panel)\" (version 1): 780 of 2357 cells at the class level, margin 0.1 (artifact lab-494dacca670cb02effd3)"
+  },
+  {
+   "time": "2026-10-21T03:27:33.944Z",
+   "action": "graph",
+   "detail": "Built a graph of the cells of xenium-lung-2fov: Delaunay graph of Instrument segmentation, edges to 50 µm, filter Not epithelial v1; 2357 cells, 6820 edges (artifact gra-ff8da4e15aa9360c5259)"
+  },
+  {
+   "time": "2026-10-21T03:27:34.230Z",
+   "action": "spatial",
+   "detail": "Neighborhood enrichment of Labels by Human lung (Xenium Human Lung panel): class, Delaunay graph of Instrument segmentation, edges to 50 µm, filter Not epithelial v1 of xenium-lung-2fov (artifact spa-814dd6666cffa20421b4)"
+  }
+ ]
+}

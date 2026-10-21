@@ -1,11 +1,18 @@
 # Changelog
 
-## Unreleased (0.9.0)
+## 0.9.0 (2026-10-20)
 
 Wave 9 of the [roadmap](situcraft-spec/roadmap.md): agents and scripts. What a program can do with
 SituCraft, and what it may not: an agent asks through typed tools and gets answers that name their
 sources, a script runs the same steps from Python or R, and a recipe makes a result again without
-a window.
+a window. `situcraft mcp` makes SituCraft's 86 actions tools for an AI agent such as Claude Code,
+working in the window you watch with the leave you give it; cells and transcripts are asked for by
+a tree of conditions, never a query string; every agent's and script's call is logged; `situcraft
+run` makes a result's recipe on a server or a cluster's nodes, one bundle or a hundred; R and Python
+packages make each action a function; and an agent benchmark grades agents against known answers.
+The guide's *Agents and scripts* follows an agent through two sessions whose every number CI
+checks. 0.9.0 keeps a Lung project with a filter of a tree and an enrichment's recipe, which every
+later version must reopen and make again with the same ids.
 
 ### Added
 
@@ -189,6 +196,38 @@ a window.
   - **Validated:** every grader given right, partly right and wrong answers; the reference
     solutions and doing nothing on every task, through `situcraft mcp` in headless Chrome; the
     Lung's endothelial cells counted by SituCraft as the bundle's transcripts CSV counts them.
+
+- **Examples, documentation and release (wave 9, slice 9).**
+  - **An agent's session in CI, without a model** (`validation/agent-session.mjs`, after MaveScape
+    0.8.0's, the same author's): `situcraft mcp` driven over stdin and stdout as an agent's client
+    drives it, in a headless window. With no leave, only the tools that read and show are offered,
+    and a job is refused, naming the leave it needs. With every leave, all 86 tools are called on
+    the simulated tissue, the simulated cohort and the Lung, every one answering: pictures come as
+    images, progress only before an answer, the tools said to read only leave the project's history
+    as it was, every change carries the agent's name, and every call is a line of the log. Stdout
+    carries nothing but the protocol, and SituCraft stops when stdin closes.
+  - **The guide's *Agents and scripts*** (formerly *AI agents*, at the same address) follows an
+    agent through two sessions. On the simulated tissue: its cells labeled by type, which types
+    neighbor each other, the immune-like cells holding epithelial transcripts counted and kept as a
+    filter, and the enrichment's recipe made again by `situcraft run` with the same id, then
+    verified. On the simulated cohort: the one gene the treatment changes, SIM033 in the
+    epithelial-like cells, found alone with the subject as the replicate. Every call is real and
+    every number checked by the agent session. Also: Python and R with their worked examples, the
+    log of calls, the benchmark, and a picture of an agent's session in the window, its calls in the
+    drawer.
+  - **The MCP reference finished** (`docs/MCP.md`): what an answer changed, recipes, the sessions,
+    the benchmark, and how it is checked.
+  - **Agents told what changed:** a tool's result now says what the action changed in the project
+    (`changed`), as a script's answer does.
+  - **The drawer's tabs for screen readers:** its tab list held the close button too, which a tab
+    list may not; the tabs are now a list of their own, the button beside it.
+  - **Updated for the release:** the README, the website's front page (agents and scripts, with the
+    picture), the installing guide, `CITATION.cff`. Version 0.9.0.
+  - **Validated:** the agent session, 24 checks; the Lung project saved by 0.9.0
+    (`validation/projects/0.9.0-lung.situcraft.json`) and its enrichment's recipe
+    (`0.9.0-lung.recipe.json`): the project reopened, its filter of a tree keeping the very cells it
+    recorded, and the recipe made again by `situcraft run` on the bundle, every step with the
+    recipe's id, its certificate verified.
 
 ### Changed
 

@@ -7,7 +7,7 @@ description: A local-first workbench for imaging-based spatial transcriptomics, 
       <div class="container hero-grid">
         <a class="eyebrow" href="{{github}}/releases/tag/v{{version}}"><span class="pill">v{{version}}</span> Figures and a provable record: figures drawn from the project, the methods written, and certificates that make a result again</a>
         <h1>Spatial transcriptomics <span class="accent">you can check</span></h1>
-        <p class="lede">SituCraft opens the output of a 10x Genomics Xenium run, checks it, and shows the tissue, its transcripts and its cells at any zoom. It makes and compares cell segmentations, types and reviews the cells, brings in the H&amp;E, asks how the tissue is organized, compares groups of subjects, and writes figures, methods and certificates that anyone can check by making the results again, keeping every decision on record. It runs on your own computer as one self-contained program, installed with a single command: no account, Python or R, and your data never leave your machine.</p>
+        <p class="lede">SituCraft opens the output of a 10x Genomics Xenium run, checks it, and shows the tissue, its transcripts and its cells at any zoom. It makes and compares cell segmentations, types and reviews the cells, brings in the H&amp;E, asks how the tissue is organized, compares groups of subjects, and writes figures, methods and certificates that anyone can check by making the results again, keeping every decision on record, and an AI agent or a script can drive it in a window you watch. It runs on your own computer as one self-contained program, installed with a single command: no account, Python or R, and your data never leave your machine.</p>
         <shot name="viewer-genes" alt="SituCraft's Viewer on the Lung example: transcripts of EPCAM, COL5A2, PLVAP and CD68 over the gray DAPI stain and the cells' outlines, a selected cell's transcripts by gene in the inspector" window eager>The Xenium human Lung section (10x Genomics, CC BY 4.0), one of the examples: four genes' transcripts over the DAPI stain and the cells, one cell in the inspector.</shot>
         <div class="btn-row">
           <a class="btn btn-primary" href="install.html">
@@ -187,6 +187,21 @@ description: A local-first workbench for imaging-based spatial transcriptomics, 
           </div>
           <shot name="figure-results" alt="The Reports view's preview of a figure of the Lung's results: its transcripts per cell, the cells' map by cluster, the classes' neighborhood enrichment and the genes in a pattern, lettered A to D">A figure of the Lung's results, drawn from the project and previewed as it will print.</shot>
         </article>
+
+        <article class="feature">
+          <div class="feature-text">
+            <span class="kicker">Agents and scripts</span>
+            <h3>An agent works in your window</h3>
+            <p>An AI agent such as Claude Code asks SituCraft about your projects through <code>situcraft mcp</code>, a Model Context Protocol server: it reads results and their records, asks which cells meet conditions as a typed tree, never a query string, shows you the tissue and, with the leave you give it, runs the analyses, each change in the history under its name and every call in your library's log. Python and R packages call the same actions, and <code>situcraft run</code> makes any result again from its recipe, on a server or a cluster's nodes.</p>
+            <ul class="checklist">
+              <li>Every tool driven through <code>situcraft mcp</code> in CI, those that only read leaving the project as it was</li>
+              <li>Recipes made again without a window, every result with the same id, and verified</li>
+              <li>An agent benchmark graded by code against known answers</li>
+            </ul>
+            <a class="more-link" href="docs/agents.html">Agents and scripts</a>
+          </div>
+          <shot name="agent" alt="SituCraft's Cohort view after an agent's session on the simulated cohort: the differential expression with SIM033 found, and the drawer's Calls tab listing the agent's calls">An agent's session on the simulated cohort, in your window: the comparison it made, and each of its calls in the drawer's log.</shot>
+        </article>
       </div>
     </section>
 
@@ -205,7 +220,7 @@ description: A local-first workbench for imaging-based spatial transcriptomics, 
           <a class="card" href="docs/remote-control.html">
             <span class="icon-badge"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 9-4 3 4 3M16 9l4 3-4 3M13 6l-2 12"/></svg></span>
             <h3>Scripts and notebooks</h3>
-            <p>Remote control lets a program on your computer drive the open window, each action undoable in the project's history; <code>situcraft refine</code> and <code>situcraft simulate</code> run without it.</p>
+            <p>Python and R packages drive the open window by remote control, tables coming back as data frames and each action undoable in the project's history; <code>situcraft run</code>, <code>refine</code> and <code>simulate</code> work without it.</p>
           </a>
           <a class="card" href="docs/niches.html#large">
             <span class="icon-badge pink"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 6-6"/></svg></span>
@@ -277,7 +292,8 @@ description: A local-first workbench for imaging-based spatial transcriptomics, 
               <tr><td><strong>0.6.0</strong></td><td>Niches and spatial statistics: graphs, enrichment, distances, regions measured, niches, spatially variable genes, and any answer made again on another segmentation</td></tr>
               <tr><td><strong>0.7.0</strong></td><td>Samples and cohorts: several sections in a project, their QC and design, and abundances, expression and spatial statistics compared between groups with the subject as the unit, their error rates measured</td></tr>
               <tr><td><strong>0.8.0</strong></td><td>Figures and a provable record: figures with scale bars, legends and provenance, the methods text, certificates made again by <code>situcraft verify</code>, and reports and packages that check themselves</td></tr>
-              <tr><td><strong>0.9.0</strong> (coming)</td><td>Agents and scripts: an MCP server, headless runs for batch and HPC, and R and Python clients</td></tr>
+              <tr><td><strong>0.9.0</strong></td><td>Agents and scripts: an MCP server whose agents work in your window with the leave you give them, cells asked for by a typed tree, every call logged, recipes made again without a window on a cluster, R and Python clients, and an agent benchmark</td></tr>
+              <tr><td><strong>0.10.0</strong> (coming)</td><td>Whole slides and other platforms: whole-slide performance, CosMx and MERSCOPE readers, and the newer Xenium software</td></tr>
             </tbody>
           </table>
         </div>
